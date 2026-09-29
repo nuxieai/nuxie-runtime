@@ -1194,6 +1194,11 @@ impl RenderContextVulkanImpl {
                 base.m_platformFeatures.supportsClockwiseMode
                     && !options.disableClockwiseFixedFunctionMode;
         }
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+        {
+            // Neither atomic mode has compiled-in SPIR-V in this configuration.
+            base.m_platformFeatures.supportsAtomicMode = false;
+        }
         base.m_platformFeatures.supportsClockwiseAtomicMode =
             base.m_platformFeatures.supportsAtomicMode;
         base.m_platformFeatures.supportsClipPlanes =
@@ -2851,6 +2856,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     );
     if desc.interlockMode == InterlockMode::clockwiseAtomic {
         if let Some(buffer) = implementation.m_coverageBuffer.as_ref() {
+            #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+            unreachable!();
+            #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
             write_buffer(
                 &implementation.m_vk,
                 per_flush,
@@ -3498,33 +3506,51 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 .new_layout(vk::ImageLayout::GENERAL)
                 .image(storage_image),
         );
-        let clear_range = vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            level_count: 1,
-            layer_count: if desc.interlockMode == InterlockMode::atomics {
-                1
-            } else if desc.combinedShaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0 != 0 {
-                2
-            } else {
-                1
-            },
-            ..Default::default()
-        };
-        let clear = if desc.interlockMode == InterlockMode::atomics {
-            vkutil::color_clear_r32ui(desc.coverageClearValue)
+        if desc.interlockMode == InterlockMode::atomics {
+            #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+            unreachable!();
+            #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+            {
+                let clear = vkutil::color_clear_r32ui(desc.coverageClearValue);
+                let clear_range = vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                };
+                unsafe {
+                    implementation.m_vk.ashDevice().cmd_clear_color_image(
+                        command,
+                        storage_image,
+                        vk::ImageLayout::GENERAL,
+                        &clear,
+                        &[clear_range],
+                    )
+                };
+            }
         } else {
             debug_assert_eq!(desc.coverageClearValue, 0);
-            vk::ClearColorValue::default()
-        };
-        unsafe {
-            implementation.m_vk.ashDevice().cmd_clear_color_image(
-                command,
-                storage_image,
-                vk::ImageLayout::GENERAL,
-                &clear,
-                &[clear_range],
-            )
-        };
+            let clear = vk::ClearColorValue::default();
+            let clear_range = vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                level_count: 1,
+                layer_count: if desc.combinedShaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0 != 0 {
+                    2
+                } else {
+                    1
+                },
+                ..Default::default()
+            };
+            unsafe {
+                implementation.m_vk.ashDevice().cmd_clear_color_image(
+                    command,
+                    storage_image,
+                    vk::ImageLayout::GENERAL,
+                    &clear,
+                    &[clear_range],
+                )
+            };
+        }
         implementation.m_vk.imageMemoryBarrier(
             command,
             vk::PipelineStageFlags::TRANSFER,
@@ -3561,46 +3587,51 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         };
     }
     if desc.interlockMode == InterlockMode::clockwiseAtomic {
-        let mut last_stage = vk::PipelineStageFlags::FRAGMENT_SHADER;
-        let mut last_access = vk::AccessFlags::SHADER_WRITE;
-        if desc.needsCoverageBufferClear {
-            let coverage = implementation
-                .m_coverageBuffer
-                .as_ref()
-                .expect("coverage buffer clear");
-            implementation.m_vk.bufferMemoryBarrier(
-                command,
-                last_stage,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                vk::BufferMemoryBarrier::default()
-                    .src_access_mask(last_access)
-                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                    .buffer(coverage.vkBuffer()),
-            );
-            unsafe {
-                implementation.m_vk.ashDevice().cmd_fill_buffer(
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+        unreachable!();
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+        {
+            let mut last_stage = vk::PipelineStageFlags::FRAGMENT_SHADER;
+            let mut last_access = vk::AccessFlags::SHADER_WRITE;
+            if desc.needsCoverageBufferClear {
+                let coverage = implementation
+                    .m_coverageBuffer
+                    .as_ref()
+                    .expect("coverage buffer clear");
+                implementation.m_vk.bufferMemoryBarrier(
                     command,
-                    coverage.vkBuffer(),
-                    0,
-                    coverage.info().size,
-                    0,
-                )
-            };
-            last_stage = vk::PipelineStageFlags::TRANSFER;
-            last_access = vk::AccessFlags::TRANSFER_WRITE;
-        }
-        if let Some(coverage) = implementation.m_coverageBuffer.as_ref() {
-            implementation.m_vk.bufferMemoryBarrier(
-                command,
-                last_stage,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                vk::BufferMemoryBarrier::default()
-                    .src_access_mask(last_access)
-                    .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                    .buffer(coverage.vkBuffer()),
-            );
+                    last_stage,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    vk::BufferMemoryBarrier::default()
+                        .src_access_mask(last_access)
+                        .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                        .buffer(coverage.vkBuffer()),
+                );
+                unsafe {
+                    implementation.m_vk.ashDevice().cmd_fill_buffer(
+                        command,
+                        coverage.vkBuffer(),
+                        0,
+                        coverage.info().size,
+                        0,
+                    )
+                };
+                last_stage = vk::PipelineStageFlags::TRANSFER;
+                last_access = vk::AccessFlags::TRANSFER_WRITE;
+            }
+            if let Some(coverage) = implementation.m_coverageBuffer.as_ref() {
+                implementation.m_vk.bufferMemoryBarrier(
+                    command,
+                    last_stage,
+                    vk::PipelineStageFlags::FRAGMENT_SHADER,
+                    vk::DependencyFlags::empty(),
+                    vk::BufferMemoryBarrier::default()
+                        .src_access_mask(last_access)
+                        .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                        .buffer(coverage.vkBuffer()),
+                );
+            }
         }
     }
     let mut tile_width = draw_bounds.width();

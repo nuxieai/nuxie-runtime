@@ -962,6 +962,9 @@ fn forEachUbershaderPermutation(
                     }
                 }
                 InterlockMode::clockwise => {}
+                #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+                InterlockMode::clockwiseAtomic => unreachable!(),
+                #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
                 InterlockMode::clockwiseAtomic => {
                     if shaderMiscFlags.has(ShaderMiscFlags::fixedFunctionColorOutput) {
                         validPassOptions |= RenderPassOptionsVulkan::fixedFunctionColorOutput;

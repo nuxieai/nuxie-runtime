@@ -67,6 +67,23 @@ impl Deref for ShaderRead<'_> {
 
 // Exact source extern denominator, re-exported from the implementation owner.
 pub(crate) use super::vulkan_shaders_impl::{
+    color_ramp_frag, color_ramp_vert, draw_atlas_blit_frag, draw_atlas_blit_vert,
+    draw_depthstencil_atlas_blit_fixedcolor_frag, draw_depthstencil_atlas_blit_frag,
+    draw_depthstencil_atlas_blit_noclipdistance_vert, draw_depthstencil_atlas_blit_vert,
+    draw_depthstencil_image_mesh_fixedcolor_frag, draw_depthstencil_image_mesh_frag,
+    draw_depthstencil_image_mesh_noclipdistance_vert, draw_depthstencil_image_mesh_vert,
+    draw_depthstencil_path_fixedcolor_frag, draw_depthstencil_path_frag,
+    draw_depthstencil_path_noclipdistance_vert, draw_depthstencil_path_vert,
+    draw_depthstencil_triangles_nocolor_fixedcolor_frag, draw_depthstencil_triangles_nocolor_frag,
+    draw_depthstencil_triangles_nocolor_vert, draw_fullscreen_quad_vert, draw_image_mesh_frag,
+    draw_image_mesh_vert, draw_input_attachment_frag, draw_interior_triangles_frag,
+    draw_interior_triangles_vert, draw_msaa_color_seed_attachment_frag, draw_msaa_resolve_frag,
+    draw_path_frag, draw_path_vert, hotload_shaders, render_atlas_fill_frag,
+    render_atlas_stroke_frag, render_atlas_vert, tessellate_frag, tessellate_vert,
+};
+
+#[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+pub(crate) use super::vulkan_shaders_impl::{
     atomic_draw_atlas_blit_fixedcolor_frag, atomic_draw_atlas_blit_frag,
     atomic_draw_atlas_blit_vert, atomic_draw_image_mesh_fixedcolor_frag,
     atomic_draw_image_mesh_frag, atomic_draw_image_mesh_vert,
@@ -74,55 +91,40 @@ pub(crate) use super::vulkan_shaders_impl::{
     atomic_draw_image_rect_vert, atomic_draw_interior_triangles_fixedcolor_frag,
     atomic_draw_interior_triangles_frag, atomic_draw_interior_triangles_vert,
     atomic_draw_path_fixedcolor_frag, atomic_draw_path_frag, atomic_draw_path_vert,
-    atomic_resolve_coalesced_frag, atomic_resolve_coalesced_vert,
-    atomic_resolve_fixedcolor_frag, atomic_resolve_frag, atomic_resolve_vert,
-    clear_clockwise_atomic_clip_fixedcolor_frag, clear_clockwise_atomic_clip_frag,
-    clear_clockwise_atomic_clip_vert, color_ramp_frag, color_ramp_vert,
-    draw_atlas_blit_frag, draw_atlas_blit_vert,
-    draw_clockwise_atomic_atlas_blit_fixedcolor_frag,
-    draw_clockwise_atomic_atlas_blit_frag, draw_clockwise_atomic_atlas_blit_vert,
-    draw_clockwise_atomic_borrowed_coverage_frag,
+    atomic_resolve_coalesced_frag, atomic_resolve_coalesced_vert, atomic_resolve_fixedcolor_frag,
+    atomic_resolve_frag, atomic_resolve_vert, clear_clockwise_atomic_clip_fixedcolor_frag,
+    clear_clockwise_atomic_clip_frag, clear_clockwise_atomic_clip_vert,
+    draw_clockwise_atomic_atlas_blit_fixedcolor_frag, draw_clockwise_atomic_atlas_blit_frag,
+    draw_clockwise_atomic_atlas_blit_vert, draw_clockwise_atomic_borrowed_coverage_frag,
     draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag,
     draw_clockwise_atomic_clip_fixedcolor_frag, draw_clockwise_atomic_clip_frag,
     draw_clockwise_atomic_clip_interior_triangles_fixedcolor_frag,
     draw_clockwise_atomic_clip_interior_triangles_frag,
-    draw_clockwise_atomic_image_mesh_fixedcolor_frag,
-    draw_clockwise_atomic_image_mesh_frag, draw_clockwise_atomic_image_mesh_vert,
+    draw_clockwise_atomic_image_mesh_fixedcolor_frag, draw_clockwise_atomic_image_mesh_frag,
+    draw_clockwise_atomic_image_mesh_vert,
     draw_clockwise_atomic_interior_triangles_fixedcolor_frag,
-    draw_clockwise_atomic_interior_triangles_frag,
-    draw_clockwise_atomic_interior_triangles_vert,
+    draw_clockwise_atomic_interior_triangles_frag, draw_clockwise_atomic_interior_triangles_vert,
     draw_clockwise_atomic_path_fixedcolor_frag, draw_clockwise_atomic_path_frag,
-    draw_clockwise_atomic_path_vert, draw_fullscreen_quad_vert, draw_image_mesh_frag,
-    draw_image_mesh_vert, draw_input_attachment_frag, draw_interior_triangles_frag,
-    draw_interior_triangles_vert, draw_depthstencil_atlas_blit_fixedcolor_frag,
-    draw_depthstencil_atlas_blit_frag, draw_depthstencil_atlas_blit_noclipdistance_vert,
-    draw_depthstencil_atlas_blit_vert, draw_msaa_color_seed_attachment_frag,
-    draw_depthstencil_image_mesh_fixedcolor_frag, draw_depthstencil_image_mesh_frag,
-    draw_depthstencil_image_mesh_noclipdistance_vert, draw_depthstencil_image_mesh_vert,
-    draw_depthstencil_path_fixedcolor_frag, draw_depthstencil_path_frag,
-    draw_depthstencil_path_noclipdistance_vert, draw_depthstencil_path_vert, draw_msaa_resolve_frag,
-    draw_depthstencil_triangles_nocolor_fixedcolor_frag, draw_depthstencil_triangles_nocolor_frag, draw_depthstencil_triangles_nocolor_vert,
-    draw_path_frag, draw_path_vert, hotload_shaders,
-    init_clockwise_atomic_workaround_fixedcolor_frag,
+    draw_clockwise_atomic_path_vert, init_clockwise_atomic_workaround_fixedcolor_frag,
     init_clockwise_atomic_workaround_frag, init_clockwise_atomic_workaround_vert,
-    render_atlas_fill_frag, render_atlas_stroke_frag, render_atlas_vert, tessellate_frag,
-    tessellate_vert,
 };
 
 #[cfg(not(target_os = "android"))]
 pub(crate) use super::vulkan_shaders_impl::{
     draw_clockwise_atlas_blit_fixedcolor_frag, draw_clockwise_atlas_blit_frag,
-    draw_clockwise_atlas_blit_vert, draw_clockwise_clip_fixedcolor_frag,
-    draw_clockwise_clip_frag, draw_clockwise_clip_interior_triangles_fixedcolor_frag,
-    draw_clockwise_clip_interior_triangles_frag,
-    draw_clockwise_image_mesh_fixedcolor_frag, draw_clockwise_image_mesh_frag,
-    draw_clockwise_image_mesh_vert, draw_clockwise_interior_triangles_fixedcolor_frag,
-    draw_clockwise_interior_triangles_frag, draw_clockwise_interior_triangles_vert,
-    draw_clockwise_path_fixedcolor_frag, draw_clockwise_path_frag, draw_clockwise_path_vert,
+    draw_clockwise_atlas_blit_vert, draw_clockwise_clip_fixedcolor_frag, draw_clockwise_clip_frag,
+    draw_clockwise_clip_interior_triangles_fixedcolor_frag,
+    draw_clockwise_clip_interior_triangles_frag, draw_clockwise_image_mesh_fixedcolor_frag,
+    draw_clockwise_image_mesh_frag, draw_clockwise_image_mesh_vert,
+    draw_clockwise_interior_triangles_fixedcolor_frag, draw_clockwise_interior_triangles_frag,
+    draw_clockwise_interior_triangles_vert, draw_clockwise_path_fixedcolor_frag,
+    draw_clockwise_path_frag, draw_clockwise_path_vert,
 };
 
 pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 94;
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
 pub(crate) const TARGET_SHADER_SYMBOL_COUNT: usize = DECLARED_SHADER_SYMBOL_COUNT - 16;
+#[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+pub(crate) const TARGET_SHADER_SYMBOL_COUNT: usize = DECLARED_SHADER_SYMBOL_COUNT - 16 - 44;
 #[cfg(not(target_os = "android"))]
 pub(crate) const TARGET_SHADER_SYMBOL_COUNT: usize = DECLARED_SHADER_SYMBOL_COUNT;

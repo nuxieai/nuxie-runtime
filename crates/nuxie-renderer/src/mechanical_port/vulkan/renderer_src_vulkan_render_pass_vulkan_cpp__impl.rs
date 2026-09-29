@@ -443,26 +443,32 @@ impl RenderPassVulkan {
                 ));
             }
         } else if interlockMode == InterlockMode::atomics {
-            if renderPassOptions.has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer) {
-                assert_eq!(attachments.len(), COALESCED_ATOMIC_RESOLVE_IDX);
-                attachments.push(
-                    vk::AttachmentDescription::default()
-                        .format(renderTargetFormat)
-                        .samples(vk::SampleCountFlags::TYPE_1)
-                        .load_op(vk::AttachmentLoadOp::DONT_CARE)
-                        .store_op(vk::AttachmentStoreOp::STORE)
-                        .initial_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
-                        .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-                );
-                assert!(resolveAttachmentRef.is_none());
-                resolveAttachmentRef = Some(attachment_ref(
-                    COALESCED_ATOMIC_RESOLVE_IDX,
-                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                ));
-            } else {
-                const _: () = assert!(COLOR_PLANE_IDX == 0);
-                assert!(resolveAttachmentRef.is_none());
-                resolveAttachmentRef = Some(colorAttachmentRefs[0]);
+            #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+            unreachable!();
+            #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+            {
+                if renderPassOptions.has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
+                {
+                    assert_eq!(attachments.len(), COALESCED_ATOMIC_RESOLVE_IDX);
+                    attachments.push(
+                        vk::AttachmentDescription::default()
+                            .format(renderTargetFormat)
+                            .samples(vk::SampleCountFlags::TYPE_1)
+                            .load_op(vk::AttachmentLoadOp::DONT_CARE)
+                            .store_op(vk::AttachmentStoreOp::STORE)
+                            .initial_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+                            .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+                    );
+                    assert!(resolveAttachmentRef.is_none());
+                    resolveAttachmentRef = Some(attachment_ref(
+                        COALESCED_ATOMIC_RESOLVE_IDX,
+                        vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                    ));
+                } else {
+                    const _: () = assert!(COLOR_PLANE_IDX == 0);
+                    assert!(resolveAttachmentRef.is_none());
+                    resolveAttachmentRef = Some(colorAttachmentRefs[0]);
+                }
             }
         } else if interlockMode == InterlockMode::depthStencil {
             assert_eq!(attachments.len(), MSAA_DEPTH_STENCIL_IDX);
@@ -638,13 +644,21 @@ impl RenderPassVulkan {
         }
 
         if interlockMode == InterlockMode::clockwiseAtomic {
-            subpassDescs.push(vk::SubpassDescription {
-                pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-                color_attachment_count: colorAttachmentRefs.len() as u32,
-                p_color_attachments: colorAttachmentRefs.as_ptr(),
-                ..Default::default()
-            });
-            addStandardColorDependencyToNextSubpass(&mut subpassDeps, subpassDescs.len() as u32);
+            #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+            unreachable!();
+            #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+            {
+                subpassDescs.push(vk::SubpassDescription {
+                    pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+                    color_attachment_count: colorAttachmentRefs.len() as u32,
+                    p_color_attachments: colorAttachmentRefs.as_ptr(),
+                    ..Default::default()
+                });
+                addStandardColorDependencyToNextSubpass(
+                    &mut subpassDeps,
+                    subpassDescs.len() as u32,
+                );
+            }
         }
 
         let mainSubpassIdx = subpassDescs.len() as u32;
@@ -706,21 +720,29 @@ impl RenderPassVulkan {
             ));
         }
         if interlockMode == InterlockMode::atomics {
-            addStandardColorDependencyToNextSubpass(&mut subpassDeps, subpassDescs.len() as u32);
-            assert_eq!(subpassDescs.len(), 1);
-            assert_eq!(
-                drawPipelineLayout.colorAttachmentCount(1, renderPassOptions),
-                1
-            );
-            let resolve = resolveAttachmentRef.as_ref().unwrap();
-            subpassDescs.push(vk::SubpassDescription {
-                pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-                input_attachment_count: inputAttachmentRefs.len() as u32,
-                p_input_attachments: inputAttachmentRefs.as_ptr(),
-                color_attachment_count: 1,
-                p_color_attachments: resolve,
-                ..Default::default()
-            });
+            #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+            unreachable!();
+            #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+            {
+                addStandardColorDependencyToNextSubpass(
+                    &mut subpassDeps,
+                    subpassDescs.len() as u32,
+                );
+                assert_eq!(subpassDescs.len(), 1);
+                assert_eq!(
+                    drawPipelineLayout.colorAttachmentCount(1, renderPassOptions),
+                    1
+                );
+                let resolve = resolveAttachmentRef.as_ref().unwrap();
+                subpassDescs.push(vk::SubpassDescription {
+                    pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+                    input_attachment_count: inputAttachmentRefs.len() as u32,
+                    p_input_attachments: inputAttachmentRefs.as_ptr(),
+                    color_attachment_count: 1,
+                    p_color_attachments: resolve,
+                    ..Default::default()
+                });
+            }
         } else if renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved) {
             assert!(!renderPassOptions.has(RenderPassOptionsVulkan::fixedFunctionColorOutput));
             assert!(!renderPassOptions.has(RenderPassOptionsVulkan::rasterOrderingInterruptible));

@@ -31,6 +31,10 @@ embedded_shaders!(
     draw_atlas_blit_frag,
     draw_image_mesh_vert,
     draw_image_mesh_frag,
+);
+
+#[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+embedded_shaders!(
     atomic_draw_path_vert,
     atomic_draw_path_frag,
     atomic_draw_path_fixedcolor_frag,
@@ -73,6 +77,7 @@ embedded_shaders!(
     draw_clockwise_image_mesh_fixedcolor_frag,
 );
 
+#[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
 embedded_shaders!(
     draw_clockwise_atomic_path_vert,
     draw_clockwise_atomic_path_frag,
@@ -97,6 +102,9 @@ embedded_shaders!(
     draw_clockwise_atomic_image_mesh_fixedcolor_frag,
     init_clockwise_atomic_workaround_frag,
     init_clockwise_atomic_workaround_fixedcolor_frag,
+);
+
+embedded_shaders!(
     draw_depthstencil_path_vert,
     draw_depthstencil_path_frag,
     draw_depthstencil_path_fixedcolor_frag,
@@ -119,6 +127,7 @@ embedded_shaders!(
 );
 
 // Pinned header declaration with no definition/include in vulkan_shaders.cpp.
+#[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
 pub(crate) static init_clockwise_atomic_workaround_vert: ShaderSlot = ShaderSlot::undefined();
 
 fn readNextBytecodeSpan(spirvData: &'static [u32], spirvIndex: &mut usize) -> &'static [u32] {
@@ -159,26 +168,29 @@ fn visit_hotload_shaders(
     read!(draw_image_mesh_vert);
     read!(draw_image_mesh_frag);
 
-    read!(atomic_draw_path_vert);
-    read!(atomic_draw_path_frag);
-    read!(atomic_draw_path_fixedcolor_frag);
-    read!(atomic_draw_interior_triangles_vert);
-    read!(atomic_draw_interior_triangles_frag);
-    read!(atomic_draw_interior_triangles_fixedcolor_frag);
-    read!(atomic_draw_atlas_blit_vert);
-    read!(atomic_draw_atlas_blit_frag);
-    read!(atomic_draw_atlas_blit_fixedcolor_frag);
-    read!(atomic_draw_image_rect_vert);
-    read!(atomic_draw_image_rect_frag);
-    read!(atomic_draw_image_rect_fixedcolor_frag);
-    read!(atomic_draw_image_mesh_vert);
-    read!(atomic_draw_image_mesh_frag);
-    read!(atomic_draw_image_mesh_fixedcolor_frag);
-    read!(atomic_resolve_vert);
-    read!(atomic_resolve_frag);
-    read!(atomic_resolve_fixedcolor_frag);
-    read!(atomic_resolve_coalesced_vert);
-    read!(atomic_resolve_coalesced_frag);
+    #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+    {
+        read!(atomic_draw_path_vert);
+        read!(atomic_draw_path_frag);
+        read!(atomic_draw_path_fixedcolor_frag);
+        read!(atomic_draw_interior_triangles_vert);
+        read!(atomic_draw_interior_triangles_frag);
+        read!(atomic_draw_interior_triangles_fixedcolor_frag);
+        read!(atomic_draw_atlas_blit_vert);
+        read!(atomic_draw_atlas_blit_frag);
+        read!(atomic_draw_atlas_blit_fixedcolor_frag);
+        read!(atomic_draw_image_rect_vert);
+        read!(atomic_draw_image_rect_frag);
+        read!(atomic_draw_image_rect_fixedcolor_frag);
+        read!(atomic_draw_image_mesh_vert);
+        read!(atomic_draw_image_mesh_frag);
+        read!(atomic_draw_image_mesh_fixedcolor_frag);
+        read!(atomic_resolve_vert);
+        read!(atomic_resolve_frag);
+        read!(atomic_resolve_fixedcolor_frag);
+        read!(atomic_resolve_coalesced_vert);
+        read!(atomic_resolve_coalesced_frag);
+    }
 
     #[cfg(not(target_os = "android"))]
     {
@@ -200,33 +212,33 @@ fn visit_hotload_shaders(
         read!(draw_clockwise_image_mesh_fixedcolor_frag);
     }
 
-    read!(draw_clockwise_atomic_path_vert);
-    read!(draw_clockwise_atomic_path_frag);
-    read!(draw_clockwise_atomic_path_fixedcolor_frag);
-    read!(draw_clockwise_atomic_clip_frag);
-    read!(draw_clockwise_atomic_clip_fixedcolor_frag);
-    read!(draw_clockwise_atomic_borrowed_coverage_frag);
-    read!(draw_clockwise_atomic_interior_triangles_vert);
-    read!(draw_clockwise_atomic_interior_triangles_frag);
-    read!(draw_clockwise_atomic_interior_triangles_fixedcolor_frag);
-    read!(draw_clockwise_atomic_clip_interior_triangles_frag);
-    read!(draw_clockwise_atomic_clip_interior_triangles_fixedcolor_frag);
-    read!(draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag);
+    #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+    {
+        read!(draw_clockwise_atomic_path_vert);
+        read!(draw_clockwise_atomic_path_frag);
+        read!(draw_clockwise_atomic_path_fixedcolor_frag);
+        read!(draw_clockwise_atomic_clip_frag);
+        read!(draw_clockwise_atomic_clip_fixedcolor_frag);
+        read!(draw_clockwise_atomic_borrowed_coverage_frag);
+        read!(draw_clockwise_atomic_interior_triangles_vert);
+        read!(draw_clockwise_atomic_interior_triangles_frag);
+        read!(draw_clockwise_atomic_interior_triangles_fixedcolor_frag);
+        read!(draw_clockwise_atomic_clip_interior_triangles_frag);
+        read!(draw_clockwise_atomic_clip_interior_triangles_fixedcolor_frag);
+        read!(draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag);
 
-    // Exact pinned assignment order: the first write targets atlas-blit-vert,
-    // not the declaration-only init-workaround-vert, and is overwritten below.
-    read!(draw_clockwise_atomic_atlas_blit_vert);
-    read!(clear_clockwise_atomic_clip_vert);
-    read!(clear_clockwise_atomic_clip_frag);
-    read!(clear_clockwise_atomic_clip_fixedcolor_frag);
-    read!(draw_clockwise_atomic_atlas_blit_vert);
-    read!(draw_clockwise_atomic_atlas_blit_frag);
-    read!(draw_clockwise_atomic_atlas_blit_fixedcolor_frag);
-    read!(draw_clockwise_atomic_image_mesh_vert);
-    read!(draw_clockwise_atomic_image_mesh_frag);
-    read!(draw_clockwise_atomic_image_mesh_fixedcolor_frag);
-    read!(init_clockwise_atomic_workaround_frag);
-    read!(init_clockwise_atomic_workaround_fixedcolor_frag);
+        read!(clear_clockwise_atomic_clip_vert);
+        read!(clear_clockwise_atomic_clip_frag);
+        read!(clear_clockwise_atomic_clip_fixedcolor_frag);
+        read!(draw_clockwise_atomic_atlas_blit_vert);
+        read!(draw_clockwise_atomic_atlas_blit_frag);
+        read!(draw_clockwise_atomic_atlas_blit_fixedcolor_frag);
+        read!(draw_clockwise_atomic_image_mesh_vert);
+        read!(draw_clockwise_atomic_image_mesh_frag);
+        read!(draw_clockwise_atomic_image_mesh_fixedcolor_frag);
+        read!(init_clockwise_atomic_workaround_frag);
+        read!(init_clockwise_atomic_workaround_fixedcolor_frag);
+    }
 
     read!(draw_depthstencil_path_vert);
     read!(draw_depthstencil_path_noclipdistance_vert);
@@ -256,31 +268,36 @@ pub(crate) fn hotload_shaders(spirvData: &'static [u32]) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::vulkan_shaders_decl::{
-        DECLARED_SHADER_SYMBOL_COUNT, ShaderUnavailable, TARGET_SHADER_SYMBOL_COUNT,
+        ShaderUnavailable, DECLARED_SHADER_SYMBOL_COUNT, TARGET_SHADER_SYMBOL_COUNT,
     };
+    use super::*;
 
     #[test]
     fn embedded_and_declared_shader_denominators_are_exact() {
         assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 94);
         #[cfg(not(target_os = "android"))]
         assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 94);
-        #[cfg(target_os = "android")]
+        #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
         assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 78);
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 34);
         let color_ramp = color_ramp_vert.read().expect("embedded shader");
         assert_eq!(color_ramp.first(), Some(&0x0723_0203));
         assert!(color_ramp.len() > 4);
         drop(color_ramp);
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         assert!(matches!(
             init_clockwise_atomic_workaround_vert.read(),
             Err(ShaderUnavailable::UndefinedSourceSymbol)
         ));
 
-        // The duplicate atlas-blit assignment still consumes a span, so the
-        // hotload denominator equals the 94 declarations (78 on Android), not
-        // the 93 embedded definitions (77 on Android).
-        let serialized_shader_count = if cfg!(target_os = "android") { 78 } else { 94 };
+        // The declaration-only workaround vertex has no embedded or hotload entry.
+        let serialized_shader_count = TARGET_SHADER_SYMBOL_COUNT
+            - usize::from(cfg!(any(
+                not(target_os = "android"),
+                feature = "android-vulkan-atomics"
+            )));
         let mut hotload = Vec::with_capacity(serialized_shader_count * 2);
         for index in 0..serialized_shader_count {
             hotload.push(1);
@@ -292,15 +309,19 @@ mod tests {
         assert_eq!(assignments.len(), serialized_shader_count);
         assert!(std::ptr::eq(assignments[0].0, &color_ramp_vert));
         assert_eq!(assignments[0].1, &[0x1000]);
-        let atlas_blit_assignments = assignments
-            .iter()
-            .filter(|(slot, _)| std::ptr::eq(*slot, &draw_clockwise_atomic_atlas_blit_vert))
-            .collect::<Vec<_>>();
-        assert_eq!(atlas_blit_assignments.len(), 2);
-        #[cfg(not(target_os = "android"))]
-        assert_eq!(atlas_blit_assignments[1].1, &[0x1043]);
-        #[cfg(target_os = "android")]
-        assert_eq!(atlas_blit_assignments[1].1, &[0x1033]);
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
+        {
+            let atlas_blit_assignments = assignments
+                .iter()
+                .filter(|(slot, _)| std::ptr::eq(*slot, &draw_clockwise_atomic_atlas_blit_vert))
+                .collect::<Vec<_>>();
+            assert_eq!(atlas_blit_assignments.len(), 1);
+            #[cfg(not(target_os = "android"))]
+            assert_eq!(atlas_blit_assignments[0].1, &[0x1042]);
+            #[cfg(target_os = "android")]
+            assert_eq!(atlas_blit_assignments[0].1, &[0x1032]);
+        }
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         assert!(matches!(
             init_clockwise_atomic_workaround_vert.read(),
             Err(ShaderUnavailable::UndefinedSourceSymbol)
@@ -316,8 +337,10 @@ mod tests {
             &draw_msaa_resolve_frag,
         ));
         #[cfg(not(target_os = "android"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x105d]);
-        #[cfg(target_os = "android")]
-        assert_eq!(assignments.last().unwrap().1, &[0x104d]);
+        assert_eq!(assignments.last().unwrap().1, &[0x105c]);
+        #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
+        assert_eq!(assignments.last().unwrap().1, &[0x104c]);
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+        assert_eq!(assignments.last().unwrap().1, &[0x1021]);
     }
 }

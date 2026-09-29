@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `621f2a2e295f79a52c5fcf8c617327803f28d3c7`
+- LAST_SYNCED_SHA: `ea15876025689f4d7a8b20b03ab636a78c250763`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 115 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 115 require a Rust translation.
+  There are 114 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 114 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ea15876025689f4d7a8b20b03ab636a78c250763` | Exclude Vulkan atomic/clockwise-atomic shader data and execution branches on Android by default, with the explicit android-vulkan-atomics opt-in matching upstream's build option. Preserve non-Android behavior and hotload stream order, including removal of the duplicate atlas vertex read. Remove atomic GLSL inclusion from the admitted WebGL profile; no shader bytecode regeneration is required. | — |
 | `621f2a2e295f79a52c5fcf8c617327803f28d3c7` | Move layout tween and inherited interpolation state into a lazy retained owner, seed both animation buffers from current layout, preserve default-cascade/no-allocation and interruption behavior, and translate the interrupted-animation Silver regression. Scroll physics, range-mapper interpolator and layout-style interpolator already initialize to Rust None, matching the three explicit upstream null initializers. | — |
 | `3b2c51e2dd957722fd3061112667d884b1ec60c3` | Add NestedArtboardLeaf fitToLayoutParent boolean property 1098 with upstream false default, byte-sized fit storage, registry dispatch and cloning/deserialization. Preserve legacy direct-parent sizing unless opted into layout reach through transparent containers. Translate solo/opt-in Silver scenarios and updated matrix fixtures without changing authored expectations. | — |
 | `d90dfa396913a89472ca5f14aab3045dfa5101f5` | **DEFERRED:** Wasm VM AOT boot imports, C++ exception trapping, and pristine module-byte retention for the tier compiler/cache. All executable changes are confined to the parked Wasm scripting owner; no shared runtime, native Luau, or browser renderer delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

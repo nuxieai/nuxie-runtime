@@ -4088,7 +4088,7 @@ mod tests {
             .with_downcast::<ViewModelInstanceAssetFont, _>(|value| value.asset().font())
             .flatten()
             .expect("Lua assignment installed a live font owner");
-        assert!(Rc::ptr_eq(&retained, &host_font));
+        assert!(std::sync::Arc::ptr_eq(&retained, &host_font));
         let retained_bytes = retained
             .as_any()
             .downcast_ref::<HbFont>()

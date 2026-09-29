@@ -465,6 +465,20 @@ impl CommandServer {
         result
     }
 
+    pub fn focus_next_synchronized(&self, handle: StateMachineHandle) -> bool {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return false;
+        };
+        wrapper.lock().focus_next()
+    }
+
+    pub fn focus_previous_synchronized(&self, handle: StateMachineHandle) -> bool {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return false;
+        };
+        wrapper.lock().focus_previous()
+    }
+
     pub fn pointer_move_synchronized(
         &self,
         handle: StateMachineHandle,
@@ -2322,6 +2336,88 @@ impl CommandServer {
                     lock.unlock();
                     self.was_disconnect_received = true;
                     return false;
+                }
+                Command::FocusNext | Command::FocusPrevious => {
+                    let move_next = command == Command::FocusNext;
+                    let handle = self.command_queue.read();
+                    let request_id = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        let mut instance = wrapper.lock();
+                        if move_next {
+                            instance.focus_next();
+                        } else {
+                            instance.focus_previous();
+                        }
+                    } else {
+                        let operation = if move_next {
+                            "focusNext"
+                        } else {
+                            "focusPrevious"
+                        };
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!("State machine {handle} not found for {operation}."),
+                        );
+                    }
+                }
+                Command::RequestHasFocusNodes => {
+                    let handle = self.command_queue.read();
+                    let request_id = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        let has_focus_nodes = wrapper.lock().has_focus_nodes();
+                        let mut messages = self.command_queue.message_lock();
+                        messages.write(Message::HasFocusNodesReceived);
+                        messages.write(handle);
+                        messages.write(request_id);
+                        messages.write(has_focus_nodes);
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!("State machine {handle} not found for requestHasFocusNodes."),
+                        );
+                    }
+                }
+                Command::ClearFocus => {
+                    let handle = self.command_queue.read();
+                    let request_id = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        wrapper.lock().clear_focus();
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!("State machine {handle} not found for clearFocus."),
+                        );
+                    }
+                }
+                Command::RequestFocusState => {
+                    let handle = self.command_queue.read();
+                    let request_id = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        let focus_state = wrapper.lock().focus_state();
+                        let mut messages = self.command_queue.message_lock();
+                        messages.write(Message::FocusStateReceived);
+                        messages.write(handle);
+                        messages.write(request_id);
+                        messages.write(focus_state.has_focus);
+                        messages.write(focus_state.expects_keyboard_input);
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!("State machine {handle} not found for requestFocusState."),
+                        );
+                    }
                 }
             }
             assert!(!lock.owns_lock());

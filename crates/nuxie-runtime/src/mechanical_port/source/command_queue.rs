@@ -548,6 +548,13 @@ pub trait ViewModelInstanceListener: Send {
     }
 }
 
+/// Mirrors `StateMachineInstance` focus state for command queue responses.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FocusState {
+    pub has_focus: bool,
+    pub expects_keyboard_input: bool,
+}
+
 pub trait StateMachineListener: Send {
     fn listener_base(&mut self) -> &mut ListenerBase<StateMachineHandle>;
     fn on_state_machine_error(
@@ -564,6 +571,20 @@ pub trait StateMachineListener: Send {
         _handle: StateMachineHandle,
         _request_id: u64,
         _diff: SemanticsDiff,
+    ) {
+    }
+    fn on_has_focus_nodes_received(
+        &mut self,
+        _handle: StateMachineHandle,
+        _request_id: u64,
+        _has_focus_nodes: bool,
+    ) {
+    }
+    fn on_focus_state_received(
+        &mut self,
+        _handle: StateMachineHandle,
+        _request_id: u64,
+        _focus_state: FocusState,
     ) {
     }
 }
@@ -672,6 +693,11 @@ pub(crate) enum Command {
     SetArtboardVolume,
     GetArtboardVolume,
     GetArtboardSize,
+    FocusNext,
+    FocusPrevious,
+    RequestHasFocusNodes,
+    ClearFocus,
+    RequestFocusState,
 }
 
 #[derive(Clone, Copy)]
@@ -720,6 +746,8 @@ pub(crate) enum Message {
     BlobError,
     StateMachineError,
     ArtboardVolumeReceived,
+    HasFocusNodesReceived,
+    FocusStateReceived,
 }
 
 impl Default for Message {
@@ -2140,6 +2168,47 @@ impl CommandQueue {
         self.callbacks.write(callback);
         self.notify_command();
     }
+    /// Requires an active server processing this queue on another thread.
+    /// Calling after disconnect, or without a processing server, blocks indefinitely.
+    pub fn focus_next_synchronized(&mut self, handle: StateMachineHandle) -> bool {
+        let (result, future) = std::sync::mpsc::channel();
+        self.run_once(Box::new(move |server| {
+            result.send(server.focus_next_synchronized(handle)).unwrap();
+        }));
+        future.recv().unwrap()
+    }
+
+    /// Requires an active server processing this queue on another thread.
+    /// Calling after disconnect, or without a processing server, blocks indefinitely.
+    pub fn focus_previous_synchronized(&mut self, handle: StateMachineHandle) -> bool {
+        let (result, future) = std::sync::mpsc::channel();
+        self.run_once(Box::new(move |server| {
+            result
+                .send(server.focus_previous_synchronized(handle))
+                .unwrap();
+        }));
+        future.recv().unwrap()
+    }
+
+    pub fn focus_next(&mut self, handle: StateMachineHandle, request_id: u64) {
+        self.record_handle(Command::FocusNext, handle, request_id);
+    }
+
+    pub fn focus_previous(&mut self, handle: StateMachineHandle, request_id: u64) {
+        self.record_handle(Command::FocusPrevious, handle, request_id);
+    }
+
+    pub fn request_has_focus_nodes(&mut self, handle: StateMachineHandle, request_id: u64) {
+        self.record_handle(Command::RequestHasFocusNodes, handle, request_id);
+    }
+
+    pub fn clear_focus(&mut self, handle: StateMachineHandle, request_id: u64) {
+        self.record_handle(Command::ClearFocus, handle, request_id);
+    }
+
+    pub fn request_focus_state(&mut self, handle: StateMachineHandle, request_id: u64) {
+        self.record_handle(Command::RequestFocusState, handle, request_id);
+    }
     pub fn draw(&mut self, key: DrawKey, callback: CommandServerDrawCallback) {
         let _lock = self.command_gate.acquire();
         self.command_stream.write(Command::Draw).write(key);
@@ -3183,6 +3252,53 @@ impl CommandQueue {
                         listener
                             .borrow_mut()
                             .on_state_machine_error(handle, request_id, error);
+                    }
+                }
+                Message::HasFocusNodesReceived => {
+                    let handle = self.read_message_pod::<StateMachineHandle>();
+                    let request_id = self.read_message_pod::<u64>();
+                    let has_focus_nodes = self.read_message_pod::<bool>();
+                    drop(lock);
+                    if let Some(listener) =
+                        Self::global_listener(&self.global_state_machine_listener)
+                    {
+                        listener.borrow_mut().on_has_focus_nodes_received(
+                            handle,
+                            request_id,
+                            has_focus_nodes,
+                        );
+                    }
+                    if let Some(listener) = Self::listener(&self.state_machine_listeners, &handle) {
+                        listener.borrow_mut().on_has_focus_nodes_received(
+                            handle,
+                            request_id,
+                            has_focus_nodes,
+                        );
+                    }
+                }
+                Message::FocusStateReceived => {
+                    let handle = self.read_message_pod::<StateMachineHandle>();
+                    let request_id = self.read_message_pod::<u64>();
+                    let focus_state = FocusState {
+                        has_focus: self.read_message_pod::<bool>(),
+                        expects_keyboard_input: self.read_message_pod::<bool>(),
+                    };
+                    drop(lock);
+                    if let Some(listener) =
+                        Self::global_listener(&self.global_state_machine_listener)
+                    {
+                        listener.borrow_mut().on_focus_state_received(
+                            handle,
+                            request_id,
+                            focus_state,
+                        );
+                    }
+                    if let Some(listener) = Self::listener(&self.state_machine_listeners, &handle) {
+                        listener.borrow_mut().on_focus_state_received(
+                            handle,
+                            request_id,
+                            focus_state,
+                        );
                     }
                 }
                 Message::ArtboardError => {

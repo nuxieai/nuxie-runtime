@@ -58,7 +58,7 @@ impl ViewModelInstanceAssetFont {
 
     pub fn set_value(&mut self, font: Option<FontRef>) {
         let previous = self.font_asset.font();
-        if matches!((&previous, &font), (Some(left), Some(right)) if Rc::ptr_eq(left, right))
+        if matches!((&previous, &font), (Some(left), Some(right)) if std::sync::Arc::ptr_eq(left, right))
             || previous.is_none() && font.is_none()
         {
             self.set_property_value(u32::MAX);

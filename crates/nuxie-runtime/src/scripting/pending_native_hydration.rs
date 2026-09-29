@@ -86,12 +86,17 @@ impl ScriptInstance for RecordingScript {
 }
 
 struct RecordingVm {
+    backend: crate::source::scripted::script_backend::ScriptBackend,
     owner: CoreHandle,
     events: Rc<RefCell<Vec<LifecycleEvent>>>,
     init_succeeds: Rc<Cell<bool>>,
 }
 
 impl ScriptingVm for RecordingVm {
+    fn script_backend(&self) -> &crate::source::scripted::script_backend::ScriptBackend {
+        &self.backend
+    }
+
     fn instantiate_program(
         &self,
         program: &RuntimeScriptProgram,
@@ -168,6 +173,7 @@ impl NativeHydration {
         let events = Rc::new(RefCell::new(Vec::new()));
         let init_succeeds = Rc::new(Cell::new(true));
         let vm = RuntimeScriptingVmHandle::new(Box::new(RecordingVm {
+            backend: Default::default(),
             owner: owner.clone(),
             events: events.clone(),
             init_succeeds: init_succeeds.clone(),

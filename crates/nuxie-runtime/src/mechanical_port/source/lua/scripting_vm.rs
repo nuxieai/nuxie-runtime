@@ -12,6 +12,38 @@ pub struct RuntimeScriptingVmHandle {
 }
 
 impl RuntimeScriptingVmHandle {
+    pub fn display_scale(&self) -> f32 {
+        self.inner.script_backend().display_scale()
+    }
+
+    pub fn set_display_scale(&self, scale: f32) {
+        self.inner.script_backend().set_display_scale(scale);
+    }
+
+    pub fn register_scripted_object(
+        &self,
+        object: crate::mechanical_port::source::core::CoreHandle,
+    ) {
+        self.inner.script_backend().register_scripted_object(object);
+    }
+
+    pub fn unregister_scripted_object(
+        &self,
+        object: &crate::mechanical_port::source::core::CoreHandle,
+    ) {
+        self.inner
+            .script_backend()
+            .unregister_scripted_object(object);
+    }
+
+    pub fn call_layout_resize(
+        &self,
+        instance: &mut dyn crate::scripting::ScriptInstance,
+        size: crate::mechanical_port::source::math::vec2d::Vec2D,
+        host: &mut dyn crate::scripting::ScriptHost,
+    ) -> Result<crate::scripting::ScriptOptionalMethodResult, crate::scripting::ScriptError> {
+        self.inner.call_layout_resize(instance, size, host)
+    }
     pub fn new(vm: Box<dyn crate::scripting::ScriptingVm>) -> Self {
         Self { inner: Rc::new(vm) }
     }

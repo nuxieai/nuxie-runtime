@@ -727,6 +727,9 @@ impl ScriptedObject {
     ) {
         self.script_dispose();
         self.runtime_instance = Some(RuntimeScriptInstanceHandle::new(instance));
+        if let Some(owner) = self.file_asset_referencer.referencer() {
+            vm.register_scripted_object(owner);
+        }
         self.runtime_vm = Some(vm);
         self.self_ref = 1;
         self.context_ref = 1;
@@ -831,6 +834,10 @@ impl ScriptedObject {
         self.context_ref = 0;
         self.inputs.clear();
         self.tracked_properties.clear();
+        if let (Some(vm), Some(owner)) = (&self.runtime_vm, self.file_asset_referencer.referencer())
+        {
+            vm.unregister_scripted_object(&owner);
+        }
         self.runtime_vm = None;
         self.user_init_done = false;
         self.callback_update_requested = false;
@@ -1066,6 +1073,10 @@ impl ScriptedObject {
     }
 
     pub fn clear_scripting_vm(&mut self) {
+        if let (Some(vm), Some(owner)) = (&self.runtime_vm, self.file_asset_referencer.referencer())
+        {
+            vm.unregister_scripted_object(&owner);
+        }
         self.runtime_instance = None;
         self.runtime_vm = None;
         self.self_ref = 0;
@@ -1074,6 +1085,8 @@ impl ScriptedObject {
     pub fn user_lua_init_done(&self) -> bool {
         self.user_init_done
     }
+
+    pub fn display_scale_changed(&mut self) {}
 }
 
 fn runtime_script_value(value: &ScriptValue) -> Option<RuntimeScriptValue> {

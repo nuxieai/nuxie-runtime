@@ -2651,6 +2651,17 @@ pub trait ScriptProgramAdapter: std::fmt::Debug {
 /// Runtime-owned VM seam implemented by concrete scripting backends.
 
 impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
+    fn call_layout_resize(
+        &self,
+        instance: &mut dyn ScriptInstance,
+        size: crate::mechanical_port::source::math::vec2d::Vec2D,
+        host: &mut dyn ScriptHost,
+    ) -> Result<ScriptOptionalMethodResult, ScriptError> {
+        (**self).call_layout_resize(instance, size, host)
+    }
+    fn script_backend(&self) -> &crate::mechanical_port::source::scripted::script_backend::ScriptBackend {
+        (**self).script_backend()
+    }
     fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {
         (**self).route_to_import_factory(factory)
     }
@@ -2715,6 +2726,23 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
 }
 
 pub trait ScriptingVm {
+    fn script_backend(&self) -> &crate::mechanical_port::source::scripted::script_backend::ScriptBackend;
+
+    fn call_layout_resize(
+        &self,
+        instance: &mut dyn ScriptInstance,
+        size: crate::mechanical_port::source::math::vec2d::Vec2D,
+        host: &mut dyn ScriptHost,
+    ) -> Result<ScriptOptionalMethodResult, ScriptError> {
+        instance.call_optional_method(
+            ScriptMethod::Resize,
+            &[
+                ScriptValue::Vec2 { x: size.x, y: size.y },
+                ScriptValue::Number(f64::from(self.script_backend().display_scale())),
+            ],
+            host,
+        )
+    }
     fn route_to_import_factory(&self, _factory: &mut dyn RenderFactory) {}
     /// Install the importing file's asset catalog without making a File → VM
     /// → catalog → File ownership cycle. Executing chunks comes afterward.

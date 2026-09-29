@@ -22,6 +22,9 @@ impl ListenerInputTypeSemantic {
             self.semantic_inputs.push(input);
         }
     }
+    /// A typed semantic input with no rows matches any action; otherwise at
+    /// least one row must match. A bare ListenerInputType with semanticAction
+    /// builds a listener group but never fires: only this typed subclass matches.
     pub fn semantic_listener_constraints_met(
         listener: Option<&dyn SemanticConstraintListener>,
         action: SemanticActionType,

@@ -12726,7 +12726,9 @@ fn cpp_file_read_loop_matches_import_stack_model() {
             "ImportStackimportStack;",
             "Core*lastBindableObject=nullptr;",
             "while(!reader.reachedEnd()){",
-            "autoobject=readRuntimeObject(reader,header);",
+            "boolmalformed=false;",
+            "autoobject=readRuntimeObject(reader,header,malformed);",
+            "if(malformed){returnImportResult::malformed;}",
             "if(object==nullptr){importStack.readNullObject();continue;}",
             "if(!object->is<DataBind>()){lastBindableObject=object;}elseif(lastBindableObject!=nullptr){object->as<DataBind>()->target(lastBindableObject);}",
             "if(object->import(importStack)==StatusCode::Ok){",
@@ -13546,7 +13548,7 @@ fn cpp_read_runtime_object_fallback_switch_matches_skip_model() {
     let compact = compact_cpp_source(&source);
     let body = compact_cpp_function_body(
         &compact,
-        "readRuntimeObject(BinaryReader&reader,constRuntimeHeader&header)",
+        "readRuntimeObject(BinaryReader&reader,constRuntimeHeader&header,bool&malformed)",
     )
     .unwrap_or_else(|| panic!("missing readRuntimeObject in {}", path.display()));
 
@@ -13566,6 +13568,7 @@ fn cpp_read_runtime_object_fallback_switch_matches_skip_model() {
             "id=header.propertyFieldId(propertyKey);}",
             "if(id==-1){",
             "deleteobject;",
+            "malformed=true;",
             "returnnullptr;",
             "switch(id){",
         ],
@@ -13595,6 +13598,7 @@ fn cpp_read_runtime_object_fallback_switch_matches_skip_model() {
         )
     });
     let expected = [
+        "CoreBoolType::id",
         "CoreColorType::id",
         "CoreDoubleType::id",
         "CoreStringType::id",
@@ -13614,6 +13618,8 @@ fn cpp_read_runtime_object_fallback_switch_matches_skip_model() {
             "caseCoreUintType::id:",
             "reader.readVarUint64();",
             "break;",
+            "caseCoreBoolType::id:",
+            "CoreBoolType::deserialize(reader);break;",
             "caseCoreStringType::id:CoreStringType::deserialize(reader);break;",
             "caseCoreDoubleType::id:CoreDoubleType::deserialize(reader);break;",
             "caseCoreColorType::id:CoreColorType::deserialize(reader);break;",
@@ -14036,7 +14042,7 @@ fn cpp_probe_agrees_on_unknown_property_null_object_fallback_when_available() {
             }),
         ),
         (
-            "property_key_u16_max_missing_toc_imports_as_null",
+            "property_key_u16_max_missing_toc_is_malformed",
             synthetic_runtime_file(6023, |bytes| {
                 push_var_uint(bytes, 70_000);
                 push_var_uint(bytes, u16::MAX as u64);

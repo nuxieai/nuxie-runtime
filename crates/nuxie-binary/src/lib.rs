@@ -11485,9 +11485,10 @@ fn read_runtime_object(
             let field = match skip_unknown_property(reader, header, property_key)
                 .with_context(|| format!("skipping property {property_key} on unknown object"))?
             {
-                UnknownPropertySkip::Skipped { field }
-                | UnknownPropertySkip::UnhandledKnownField { field } => field,
-                UnknownPropertySkip::MissingToc => return Ok(None),
+                UnknownPropertySkip::Skipped { field } => field,
+                UnknownPropertySkip::MissingToc => {
+                    bail!("Unknown property key {property_key}, missing from property ToC.")
+                }
             };
             skipped_properties.push(SkippedProperty {
                 key: property_key,
@@ -11505,9 +11506,10 @@ fn read_runtime_object(
             property_by_primary_key_in_hierarchy(definition, property_key)
         else {
             let field = match skip_unknown_property(reader, header, property_key)? {
-                UnknownPropertySkip::Skipped { field }
-                | UnknownPropertySkip::UnhandledKnownField { field } => field,
-                UnknownPropertySkip::MissingToc => return Ok(None),
+                UnknownPropertySkip::Skipped { field } => field,
+                UnknownPropertySkip::MissingToc => {
+                    bail!("Unknown property key {property_key}, missing from property ToC.")
+                }
             };
             skipped_properties.push(SkippedProperty {
                 key: property_key,
@@ -11538,8 +11540,9 @@ fn read_runtime_object(
                 skip_known_non_deserialized_property(reader, header, property_key, property)?;
             let (field, value) = match skipped {
                 KnownPropertySkip::Skipped { field, value } => (field, value),
-                KnownPropertySkip::UnhandledKnownField { field } => (field, None),
-                KnownPropertySkip::MissingToc => return Ok(None),
+                KnownPropertySkip::MissingToc => {
+                    bail!("Unknown property key {property_key}, missing from property ToC.")
+                }
             };
             skipped_properties.push(SkippedProperty {
                 key: property_key,
@@ -11633,7 +11636,6 @@ fn property_by_name_in_hierarchy(
 
 enum UnknownPropertySkip {
     Skipped { field: Option<&'static str> },
-    UnhandledKnownField { field: Option<&'static str> },
     MissingToc,
 }
 
@@ -11641,9 +11643,6 @@ enum KnownPropertySkip {
     Skipped {
         field: Option<&'static str>,
         value: Option<FieldValue>,
-    },
-    UnhandledKnownField {
-        field: Option<&'static str>,
     },
     MissingToc,
 }
@@ -11710,9 +11709,7 @@ fn skip_core_registry_value(
             reader.read_u32()?;
         }
         CoreRegistryFieldKind::Bool => {
-            return Ok(UnknownPropertySkip::UnhandledKnownField {
-                field: Some(core_registry_field_name(field)),
-            });
+            reader.read_byte()?;
         }
     }
 
@@ -11738,11 +11735,7 @@ fn read_core_registry_fallback_value(
         CoreRegistryFieldKind::StringOrBytes => read_string_or_bytes_value(reader, property)?,
         CoreRegistryFieldKind::Double => FieldValue::Double(reader.read_f32()?),
         CoreRegistryFieldKind::Color => FieldValue::Color(reader.read_u32()?),
-        CoreRegistryFieldKind::Bool => {
-            return Ok(KnownPropertySkip::UnhandledKnownField {
-                field: Some(core_registry_field_name(field)),
-            });
-        }
+        CoreRegistryFieldKind::Bool => FieldValue::Bool(reader.read_byte()? == 1),
     };
 
     Ok(KnownPropertySkip::Skipped {
@@ -12360,9 +12353,7 @@ mod file_global_state_machine_import_tests {
         ])
         .expect_err("a state authored after initialization cannot repair the failed layer");
         assert!(
-            error
-                .to_string()
-                .contains("missing required EntryState"),
+            error.to_string().contains("missing required EntryState"),
             "{error:#}",
         );
     }

@@ -12651,7 +12651,7 @@ fn cpp_runtime_header_read_matches_binary_header_model() {
             "if(reader.didOverflow()){returnfalse;}",
             "header.m_MinorVersion=reader.readVarUintAs<int>();",
             "if(reader.didOverflow()){returnfalse;}",
-            "header.m_FileId=reader.readVarUintAs<int>();",
+            "header.m_FileId=reader.readVarUint64();",
             "if(reader.didOverflow()){returnfalse;}",
             "std::vector<int>propertyKeys;",
             "for(intpropertyKey=reader.readVarUintAs<int>();propertyKey!=0;propertyKey=reader.readVarUintAs<int>())",
@@ -13978,8 +13978,20 @@ fn cpp_probe_agrees_on_unknown_property_null_object_fallback_when_available() {
             synthetic_runtime_header(7, i32::MAX as u64 + 1, 0, &[]),
         ),
         (
-            "header_file_id_i32_overflow",
+            "header_file_id_above_i32_imports",
             synthetic_runtime_header(7, 0, i32::MAX as u64 + 1, &[]),
+        ),
+        (
+            "header_file_id_above_u32_imports",
+            synthetic_runtime_header(7, 0, u32::MAX as u64 + 1, &[]),
+        ),
+        (
+            "header_file_id_u64_max_imports",
+            synthetic_runtime_header(7, 0, u64::MAX, &[]),
+        ),
+        (
+            "truncated_header_file_id",
+            b"RIVE\x07\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff".to_vec(),
         ),
         (
             "header_toc_key_i32_overflow",

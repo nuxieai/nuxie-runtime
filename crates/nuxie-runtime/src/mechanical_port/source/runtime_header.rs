@@ -8,7 +8,7 @@ pub const RUNTIME_HEADER_FINGERPRINT: &[u8; 4] = b"RIVE";
 pub struct RuntimeHeader {
     major_version: i32,
     minor_version: i32,
-    file_id: i32,
+    file_id: u64,
     property_to_field_index: HashMap<i32, i32>,
 }
 
@@ -21,7 +21,7 @@ impl RuntimeHeader {
         self.minor_version
     }
 
-    pub fn file_id(&self) -> i32 {
+    pub fn file_id(&self) -> u64 {
         self.file_id
     }
 
@@ -47,7 +47,7 @@ impl RuntimeHeader {
         if reader.did_overflow() {
             return false;
         }
-        header.file_id = reader.read_var_uint_as::<i32>();
+        header.file_id = reader.read_var_uint64();
         if reader.did_overflow() {
             return false;
         }
@@ -81,5 +81,43 @@ impl RuntimeHeader {
             }
         }
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_id_preserves_full_unsigned_width_and_reader_position() {
+        for file_id in [0, i32::MAX as u64 + 1, u32::MAX as u64 + 1, u64::MAX] {
+            let mut bytes = b"RIVE\x07\x00".to_vec();
+            let mut remaining = file_id;
+            while remaining >= 0x80 {
+                bytes.push((remaining as u8 & 0x7f) | 0x80);
+                remaining >>= 7;
+            }
+            bytes.push(remaining as u8);
+            // One property-table entry followed by the object-stream sentinel.
+            bytes.extend_from_slice(&[42, 0, 2, 0, 0, 0, 0xab]);
+            let mut reader = BinaryReader::new(&bytes);
+            let mut header = RuntimeHeader::default();
+            assert!(RuntimeHeader::read(&mut reader, &mut header));
+            assert_eq!(header.file_id(), file_id);
+            assert_eq!(header.property_field_id(42), 2);
+            assert!(!reader.has_error());
+            assert_eq!(reader.position(), &[0xab]);
+        }
+    }
+
+    #[test]
+    fn truncated_file_id_reports_overflow_without_integer_range_error() {
+        let mut reader = BinaryReader::new(b"RIVE\x07\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff");
+        let mut header = RuntimeHeader::default();
+        assert!(!RuntimeHeader::read(&mut reader, &mut header));
+        assert!(reader.did_overflow());
+        assert!(!reader.did_int_range_error());
+        assert_eq!(header.file_id(), 0);
+        assert!(reader.position().is_empty());
     }
 }

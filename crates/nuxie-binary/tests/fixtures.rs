@@ -385,16 +385,20 @@ fn header_integer_semantics_match_cpp_runtime() {
         .is_err(),
         "C++ treats minor version values outside signed int range as malformed"
     );
-    assert!(
-        read_runtime_file(&synthetic_runtime_file_with_header(
+    for file_id in [i32::MAX as u64 + 1, u32::MAX as u64 + 1, u64::MAX] {
+        let file = read_runtime_file(&synthetic_runtime_file_with_header(
             7,
             0,
-            i32::MAX as u64 + 1,
+            file_id,
             &[],
-            |_| {}
+            |_| {},
         ))
-        .is_err(),
-        "C++ treats file id values outside signed int range as malformed"
+        .expect("C++ accepts the full unsigned 64-bit file id range");
+        assert_eq!(file.header.file_id, file_id);
+    }
+    assert!(
+        read_runtime_file(b"RIVE\x07\x00\xff\xff\xff\xff\xff\xff\xff\xff\xff").is_err(),
+        "C++ rejects a truncated file id"
     );
 
     let high_toc_key = read_runtime_file(&synthetic_runtime_file_with_header(

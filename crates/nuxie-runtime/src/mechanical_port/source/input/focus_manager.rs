@@ -10,13 +10,14 @@ use std::cell::{Cell, Ref, RefCell};
 use std::rc::{Rc, Weak};
 
 #[derive(Clone)]
-pub struct RuntimeFocusManagerHandle(Rc<RefCell<FocusManager>>, Rc<Cell<bool>>);
+pub struct RuntimeFocusManagerHandle(Rc<RefCell<FocusManager>>, Rc<Cell<bool>>, Rc<Cell<bool>>);
 
 #[derive(Clone, Default)]
 pub struct RuntimeFocusManagerWeakHandle {
     manager: Weak<RefCell<FocusManager>>,
     focusable_content_dirty: Weak<Cell<bool>>,
     root_nodes: Weak<RefCell<Vec<FocusNodeRef>>>,
+    traversing: Weak<Cell<bool>>,
 }
 
 impl RuntimeFocusManagerWeakHandle {
@@ -26,13 +27,18 @@ impl RuntimeFocusManagerWeakHandle {
             .focusable_content_dirty
             .upgrade()
             .expect("live FocusManager owns its content dirty flag");
-        Some(RuntimeFocusManagerHandle(manager, dirty))
+        let traversing = self.traversing.upgrade()?;
+        Some(RuntimeFocusManagerHandle(manager, dirty, traversing))
     }
 
     pub(crate) fn invalidate_focusable_content(&self) {
         if let Some(dirty) = self.focusable_content_dirty.upgrade() {
             dirty.set(true);
         }
+    }
+
+    pub(crate) fn is_traversing(&self) -> bool {
+        self.traversing.upgrade().is_some_and(|value| value.get())
     }
 
     fn ptr_eq(&self, other: &Self) -> bool {
@@ -58,15 +64,17 @@ impl RuntimeFocusManagerWeakHandle {
 impl RuntimeFocusManagerHandle {
     pub fn new(mut manager: FocusManager) -> Self {
         let dirty = manager.focusable_content_dirty.clone();
+        let traversing = manager.traversing.clone();
         let owner = Rc::new_cyclic(|owner| {
             manager.runtime_self = RuntimeFocusManagerWeakHandle {
                 manager: owner.clone(),
                 focusable_content_dirty: Rc::downgrade(&dirty),
                 root_nodes: Rc::downgrade(&manager.root_nodes),
+                traversing: Rc::downgrade(&traversing),
             };
             RefCell::new(manager)
         });
-        Self(owner, dirty)
+        Self(owner, dirty, traversing)
     }
 
     pub fn downgrade(&self) -> RuntimeFocusManagerWeakHandle {
@@ -75,6 +83,7 @@ impl RuntimeFocusManagerHandle {
             manager: Rc::downgrade(&self.0),
             focusable_content_dirty: Rc::downgrade(&self.1),
             root_nodes,
+            traversing: Rc::downgrade(&self.2),
         }
     }
 
@@ -88,6 +97,10 @@ impl RuntimeFocusManagerHandle {
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
+    }
+
+    pub fn is_traversing(&self) -> bool {
+        self.2.get()
     }
 
     pub fn gamepad_dispatch(
@@ -173,6 +186,9 @@ pub struct FocusManager {
     // The same canonical flag is reachable by attached nodes even while a
     // manager method is mutably borrowed; invalidation has no user callbacks.
     focusable_content_dirty: Rc<Cell<bool>>,
+    // Shared with the handle so focused callbacks can read it while the
+    // manager is mutably borrowed by the traversal that delivered focus.
+    traversing: Rc<Cell<bool>>,
     #[cfg(feature = "tools")]
     focus_changed_callback: Option<FocusChangedCallback>,
     #[cfg(feature = "tools")]
@@ -188,11 +204,32 @@ impl Default for FocusManager {
             pending_focus_requests: Vec::new(),
             has_focusable_content: false,
             focusable_content_dirty: Rc::new(Cell::new(true)),
+            traversing: Rc::new(Cell::new(false)),
             #[cfg(feature = "tools")]
             focus_changed_callback: None,
             #[cfg(feature = "tools")]
             scroll_into_view_callback: None,
         }
+    }
+}
+
+struct TraversalScope {
+    traversing: Rc<Cell<bool>>,
+    previous: bool,
+}
+
+impl TraversalScope {
+    fn new(traversing: &Rc<Cell<bool>>) -> Self {
+        Self {
+            traversing: traversing.clone(),
+            previous: traversing.replace(true),
+        }
+    }
+}
+
+impl Drop for TraversalScope {
+    fn drop(&mut self) {
+        self.traversing.set(self.previous);
     }
 }
 
@@ -461,6 +498,7 @@ impl FocusManager {
             manager: self.runtime_self.manager.clone(),
             focusable_content_dirty: Rc::downgrade(&self.focusable_content_dirty),
             root_nodes: Rc::downgrade(&self.root_nodes),
+            traversing: Rc::downgrade(&self.traversing),
         }
     }
 
@@ -761,10 +799,13 @@ impl FocusManager {
             {
                 break;
             }
-            {
+            let focusable = {
                 let mut node = node.borrow_mut();
                 node.set_has_focus(true);
-                node.focused();
+                node.focusable()
+            };
+            if let Some(focusable) = focusable {
+                focusable.borrow_mut().focused();
             }
             current = node.borrow().parent();
         }
@@ -1034,12 +1075,14 @@ impl FocusManager {
 
     pub fn focus_next(&mut self) -> bool {
         self.drop_focus_if_focus_target_hidden();
+        let _traversal = TraversalScope::new(&self.traversing);
         self.find_next_focusable(self.primary_focus.clone(), true)
             .is_some()
     }
 
     pub fn focus_previous(&mut self) -> bool {
         self.drop_focus_if_focus_target_hidden();
+        let _traversal = TraversalScope::new(&self.traversing);
         self.find_next_focusable(self.primary_focus.clone(), false)
             .is_some()
     }
@@ -1090,6 +1133,7 @@ impl FocusManager {
 
     fn focus_direction(&mut self, direction: Direction) -> bool {
         self.drop_focus_if_focus_target_hidden();
+        let _traversal = TraversalScope::new(&self.traversing);
         let Some(current) = self.primary_focus.clone() else {
             return false;
         };
@@ -1114,6 +1158,10 @@ impl FocusManager {
 
     pub fn focus_down(&mut self) -> bool {
         self.focus_direction(Direction::Down)
+    }
+
+    pub fn is_traversing(&self) -> bool {
+        self.traversing.get()
     }
 
     pub fn key_input(

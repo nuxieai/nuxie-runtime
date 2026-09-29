@@ -10,6 +10,7 @@ pub trait TextInputBaseCallbacks:
     fn selection_radius_changed(&mut self) {}
     fn multiline_changed(&mut self) {}
     fn obscured_changed(&mut self) {}
+    fn select_all_on_focus_changed(&mut self) {}
     fn align_value_changed(&mut self) {}
     fn vertical_align_value_changed(&mut self) {}
 }
@@ -20,6 +21,7 @@ pub struct TextInputBase {
     selection_radius: f32,
     multiline: bool,
     obscured: bool,
+    select_all_on_focus: bool,
     align_value: u32,
     vertical_align_value: u32,
 }
@@ -32,6 +34,7 @@ impl Default for TextInputBase {
             selection_radius: 5.0,
             multiline: true,
             obscured: false,
+            select_all_on_focus: false,
             align_value: 0,
             vertical_align_value: 0,
         }
@@ -44,6 +47,7 @@ impl TextInputBase {
     pub const SELECTION_RADIUS_PROPERTY_KEY: u16 = 818;
     pub const MULTILINE_PROPERTY_KEY: u16 = 979;
     pub const OBSCURED_PROPERTY_KEY: u16 = 1095;
+    pub const SELECT_ALL_ON_FOCUS_PROPERTY_KEY: u16 = 1099;
     pub const ALIGN_VALUE_PROPERTY_KEY: u16 = 222;
     pub const VERTICAL_ALIGN_VALUE_PROPERTY_KEY: u16 = 1094;
 
@@ -178,11 +182,35 @@ impl TextInputBase {
         self.obscured = value;
         true
     }
+    pub fn select_all_on_focus(&self) -> bool {
+        self.select_all_on_focus
+    }
+    pub fn set_select_all_on_focus(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl TextInputBaseCallbacks,
+    ) {
+        if self.set_select_all_on_focus_value(value) {
+            callbacks.select_all_on_focus_changed();
+            TextInputBaseCallbacks::notify_property_changed(
+                callbacks,
+                Self::SELECT_ALL_ON_FOCUS_PROPERTY_KEY,
+            );
+        }
+    }
+    pub(crate) fn set_select_all_on_focus_value(&mut self, value: bool) -> bool {
+        if self.select_all_on_focus == value {
+            return false;
+        }
+        self.select_all_on_focus = value;
+        true
+    }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextInputBaseCallbacks) {
         self.text.clone_from(&object.text);
         self.selection_radius = object.selection_radius;
         self.multiline = object.multiline;
         self.obscured = object.obscured;
+        self.select_all_on_focus = object.select_all_on_focus;
         self.align_value = object.align_value;
         self.vertical_align_value = object.vertical_align_value;
         self.base.copy(&object.base, callbacks);
@@ -204,6 +232,10 @@ impl TextInputBase {
             }
             Self::OBSCURED_PROPERTY_KEY => {
                 self.obscured = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::SELECT_ALL_ON_FOCUS_PROPERTY_KEY => {
+                self.select_all_on_focus = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true
             }
             Self::TEXT_PROPERTY_KEY => {

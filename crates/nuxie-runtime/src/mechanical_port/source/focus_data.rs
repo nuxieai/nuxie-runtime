@@ -232,6 +232,13 @@ impl FocusData {
     /// go stale when an ancestor host moves this artboard instance.
     pub fn world_bounds(&self) -> Option<Bounds> {
         let bounds = self.component().parent_handle().and_then(|parent| {
+            // Test type metadata before borrowing: a TextInput can lazily
+            // create this focus node from its own focused callback.
+            if !parent.is_type_of(
+                crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
+            ) {
+                return None;
+            }
             parent
                 .with(|parent| {
                     parent
@@ -818,7 +825,7 @@ impl FocusData {
         if let Some(parent) = self.component().parent_handle() {
             parent.with_mut(|parent| {
                 if let Some(text_input) = parent.as_text_input_mut() {
-                    text_input.focused();
+                    text_input.focused_with_focus_data(Some(self));
                 }
             });
         }

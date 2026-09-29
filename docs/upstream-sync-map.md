@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `69f887bb9279d13e1d72126186676526fcfed537`
+- LAST_SYNCED_SHA: `8551ef2b1f0fd288dea9ad99182b61c3537f8523`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 110 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 110 require a Rust translation.
+  There are 109 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 109 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `8551ef2b1f0fd288dea9ad99182b61c3537f8523` | Select all text on keyboard traversal, or on any newly granted focus when selectAllOnFocus is enabled. Translate the nested-restoring traversal flag, boolean property 1099 with false default, registry/schema/copy/deserialization wiring and all three upstream regressions, retaining ordinary pointer caret behavior. TransformComponent additions are editor-only copy/deserialization hooks, outside the admitted runtime profile. | — |
 | `69f887bb9279d13e1d72126186676526fcfed537` | **DEFERRED:** route Wasm artboard/view-model inputs through the cached slot-or-legacy-name ABI and release only owned guest names. The public delta is limited to those two Wasm VM setters; native Luau, shared input owners and browser renderers are unchanged. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `e50a67032b1e9c092b9485bafe52e508d8e2ea1d` | **DEFERRED:** Wasm guest path/contour measurement handles and lifetime management, generated native/web ABI imports, typed AssemblyScript wrapper generation, and element-to-byte sizing corrections in the guest-memory web bridge. These are Wasm script execution bindings, not the admitted browser renderer; no shared runtime geometry, native Luau or renderer owner changes. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `95110280a85b4fcbf9917cfa87a432052f000e33` | **DEFERRED:** pin Wasm debug boots to the O0 tier, suppress background compilation/upgrades, and cache per-instance input slots while preserving the legacy guest input ABI. All executable changes are confined to the parked Wasm scripting VM; no native Luau, shared runtime or browser renderer delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

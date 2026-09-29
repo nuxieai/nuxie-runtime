@@ -44,6 +44,134 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
 }
 
 #[test]
+fn tab_traversal_into_a_text_input_selects_all() {
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into());
+    });
+    let focus = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+        })
+        .expect("authored FocusData");
+
+    // Target focus keeps the caret where it was.
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert!(with_input(&input, |input| input
+        .raw_text_input()
+        .cursor()
+        .is_collapsed()));
+
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(machine.with_instance_mut(|machine| machine.focus_next()));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert_eq!(
+        with_input(&input, |input| input.raw_text_input().selected_text()),
+        "hello world"
+    );
+}
+
+#[test]
+fn select_all_on_focus_selects_on_target_focus_too() {
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into());
+        input.set_select_all_on_focus(true);
+    });
+    let focus = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+        })
+        .expect("authored FocusData");
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus.clone())));
+    assert_eq!(
+        with_input(&input, |input| input.raw_text_input().selected_text()),
+        "hello world"
+    );
+
+    // Losing focus drops the selection, so the next focus selects again.
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(with_input(&input, |input| input
+        .raw_text_input()
+        .cursor()
+        .is_collapsed()));
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert_eq!(
+        with_input(&input, |input| input.raw_text_input().selected_text()),
+        "hello world"
+    );
+}
+
+#[test]
+fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
+    use nuxie_runtime::source::math::{aabb::Aabb, vec2d::Vec2D};
+
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into());
+        input.set_select_all_on_focus(true);
+    });
+    machine.advance_and_apply(0.0);
+
+    // Press inside the input wherever the asset lays it out.
+    let mut bounds = Aabb::default();
+    assert!(with_input(&input, |input| input.world_bounds(&mut bounds)));
+    let press_position = Vec2D::new(bounds.left() + 8.0, bounds.top() + 8.0);
+    machine.with_instance_mut(|machine| machine.pointer_down(press_position, 0));
+    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0));
+    machine.advance_and_apply(0.0);
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert_eq!(
+        with_input(&input, |input| input.raw_text_input().selected_text()),
+        "hello world"
+    );
+
+    // Already focused, a press places the caret and a drag extends from it.
+    // Far enough from the first press not to count as a double click.
+    let second_press = Vec2D::new(bounds.left() + 40.0, bounds.top() + 8.0);
+    machine.with_instance_mut(|machine| machine.pointer_down(second_press, 0));
+    machine.advance_and_apply(0.0);
+    assert!(with_input(&input, |input| input
+        .raw_text_input()
+        .cursor()
+        .is_collapsed()));
+    machine.with_instance_mut(|machine| machine.pointer_move(press_position, 0.0, 0));
+    machine.advance_and_apply(0.0);
+    assert!(with_input(&input, |input| input
+        .raw_text_input()
+        .cursor()
+        .has_selection()));
+    assert_ne!(
+        with_input(&input, |input| input.raw_text_input().selected_text()),
+        "hello world"
+    );
+    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0));
+}
+
+#[test]
 fn collapsing_an_artboard_ends_a_text_input_drag() {
     use nuxie_runtime::source::{
         generated::transform_component_base::TransformComponentBase, math::vec2d::Vec2D,

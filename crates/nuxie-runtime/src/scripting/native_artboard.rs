@@ -53,6 +53,8 @@ pub fn native_script_artboard(
     parent_context: Option<RuntimeDataContextHandle>,
 ) -> Result<Box<dyn ScriptArtboard>, ScriptError> {
     let machine = artboard.default_state_machine_handle();
+    // Scripted artboards are roots rather than children of another focus tree.
+    artboard.build_focus_tree(Some(artboard.ensure_focus_manager()), None);
     let view_model = view_model.or_else(|| {
         file.with_file(|file| file.create_view_model_instance_for_artboard(artboard.core_handle()))
     });
@@ -295,7 +297,9 @@ impl ScriptArtboard for NativeScriptArtboard {
         let invocation = gamepad_invocation(invocation)?;
         let focus = machine.with_instance(|machine| machine.focus_manager());
         let mut dispatched = None;
-        focus.gamepad_dispatch(&invocation, Some(&mut dispatched));
+        if let Some(focus) = focus {
+            focus.gamepad_dispatch(&invocation, Some(&mut dispatched));
+        }
         Ok(
             machine.broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref())
                 as u32,

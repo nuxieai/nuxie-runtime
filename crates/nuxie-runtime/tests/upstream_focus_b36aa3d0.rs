@@ -157,7 +157,9 @@ fn focus_bounds_track_a_nested_artboard_host_that_moves() {
     state_machine.advance_and_apply(0.0);
     state_machine.advance_and_apply(0.0);
 
-    let focus_manager = state_machine.with_instance(|machine| machine.focus_manager());
+    let focus_manager = state_machine
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     assert!(focus_manager.with_focus_manager(|manager| manager.primary_focus().is_some()));
     let at_rest = focus_manager
         .with_focus_manager(FocusManager::primary_focus_bounds)

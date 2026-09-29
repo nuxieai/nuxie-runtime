@@ -33,6 +33,9 @@ impl TransitionFocusCondition {
         else {
             return false;
         };
+        let Some(manager) = machine.focus_manager() else {
+            return false;
+        };
         let mut focused = false;
         if let Some(target) = machine.resolve_artboard_object(object_id) {
             if let Some(children) = target
@@ -46,9 +49,7 @@ impl TransitionFocusCondition {
                     if let Some(node) =
                         child.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
                     {
-                        focused = machine
-                            .focus_manager()
-                            .with_focus_manager(|manager| manager.has_focus(&node));
+                        focused = manager.with_focus_manager(|manager| manager.has_focus(&node));
                         break;
                     }
                 }

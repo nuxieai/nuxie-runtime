@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1f1a7c593e154a7856b70cbad95033ca516ee296`
+- LAST_SYNCED_SHA: `c55840a8f4a400b3572875a186e0dda0708e7718`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 147 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 147 require a Rust translation.
+  There are 146 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 146 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c55840a8f4a400b3572875a186e0dda0708e7718` | Move focus-manager ownership from state machines to root artboards; preserve lazy root creation, adopted-manager identity, cleanup/fallback and destruction ordering, nullable state-machine forwarding, and file/scripted root initialization. Translate the focus lifetime and text-input/component-list regression changes. The parallel Wasm-script HostArtboard initialization remains deferred with its execution owner under UNIV-3728. | — |
 | `1f1a7c593e154a7856b70cbad95033ca516ee296` | Restrict Metal Depth24Unorm_Stencil8 to non-ARM64 macOS and include tvOS 16.4 in compressed-texture availability. Preserve the new command-server scripting-context routing regression through the actual queue/import boundary. The public delta does not contain the Apple Concurrency API wrapper changes described by the title; those are not claimed as imported. | — |
 | `a81a46debcec6110d7866ccbf123e935db1f4f5d` | Translate the scoped autorelease-pool helper with Rust's closure-scoped Objective-C pool boundary and the non-Apple no-op branch; preserve the bare-thread and nested-pool retain-count regressions. The public delta contains no playback callsite edits, so the commit message's private CLI/native changes are not claimed as imported. | — |
 | `f1ec753f1ad9e64f0844f845ffc8d68d16d15bdb` | Translate the SVG factory and renderer utility owners, including path/gradient/image serialization, significant-digit precision, save/restore, opacity, blend grouping and deduplicated clip groups; preserve all upstream SVG regression cases. The upstream Emscripten-only SVG testing-window adapter and Canvas2D harness changes have no downstream testing-window counterpart; no Emscripten or Canvas2D backend is introduced or claimed. | — |

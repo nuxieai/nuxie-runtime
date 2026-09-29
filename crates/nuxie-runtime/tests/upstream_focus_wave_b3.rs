@@ -302,7 +302,9 @@ fn instance(file: &RuntimeFileHandle, name: Option<&str>) -> RuntimeArtboardInst
     .expect("selected native artboard instance")
 }
 fn focus_manager(machine: &RuntimeStateMachineInstanceHandle) -> RuntimeFocusManagerHandle {
-    machine.with_instance(|machine| machine.focus_manager())
+    machine
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager")
 }
 fn real_focus_fixture(
     asset: &str,
@@ -1899,6 +1901,229 @@ fn upstream_707c_state_machine_routes_key_and_text_input_to_focus() {
 }
 
 #[test]
+fn state_machines_over_one_artboard_share_its_focus_manager() {
+    let file = import_fixture("assets/list_focus_order.riv");
+    let artboard = instance(&file, None);
+    // File instances own their manager before any state machine exists.
+    let manager = artboard
+        .with_artboard(|artboard| artboard.focus_manager_handle())
+        .expect("root artboard focus manager");
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .expect("default view-model instance");
+    artboard.bind_view_model_instance(Some(view_model));
+    let first = artboard
+        .state_machine_instance_handle(0)
+        .expect("first state machine");
+    assert!(focus_manager(&first).ptr_eq(&manager));
+    first.advance_and_apply(0.016);
+    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists());
+    assert_eq!(lists.len(), 1);
+    let list = &lists[0];
+    let scope = list
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::list_scope_focus_node)
+        .flatten()
+        .expect("list scope");
+    assert!(
+        scope
+            .borrow()
+            .manager()
+            .expect("scope manager")
+            .ptr_eq(&manager)
+    );
+
+    let second = artboard
+        .state_machine_instance_handle(0)
+        .expect("second state machine");
+    assert!(focus_manager(&second).ptr_eq(&manager));
+    assert!(focus_manager(&first).ptr_eq(&manager));
+    assert!(
+        artboard
+            .with_artboard(|artboard| artboard.focus_manager_handle())
+            .expect("artboard manager")
+            .ptr_eq(&manager)
+    );
+    let scope = list
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::list_scope_focus_node)
+        .flatten()
+        .expect("persistent list scope");
+    assert!(
+        scope
+            .borrow()
+            .manager()
+            .expect("scope manager")
+            .ptr_eq(&manager)
+    );
+    for row in scope.borrow().children() {
+        assert!(
+            row.borrow()
+                .manager()
+                .expect("row manager")
+                .ptr_eq(&manager)
+        );
+    }
+    assert!(manager.with_focus_manager_mut(FocusManager::focus_next));
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_some()
+    );
+}
+
+#[test]
+fn destroying_one_state_machine_leaves_anothers_focus_tree_intact() {
+    let file = import_fixture("assets/list_focus_order.riv");
+    let artboard = instance(&file, None);
+    let manager = artboard
+        .with_artboard(|artboard| artboard.focus_manager_handle())
+        .expect("root artboard focus manager");
+    let view_model = file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+        })
+        .expect("default view-model instance");
+    artboard.bind_view_model_instance(Some(view_model));
+    let first = artboard
+        .state_machine_instance_handle(0)
+        .expect("first state machine");
+    first.advance_and_apply(0.016);
+    let second = artboard
+        .state_machine_instance_handle(0)
+        .expect("second state machine");
+    let lists = artboard.with_artboard(|artboard| artboard.artboard_component_lists());
+    assert_eq!(lists.len(), 1);
+    let list = &lists[0];
+    assert!(
+        list.with_downcast::<ArtboardComponentList, _>(
+            ArtboardComponentList::list_scope_focus_node
+        )
+        .flatten()
+        .is_some()
+    );
+
+    drop(first);
+
+    assert!(
+        artboard
+            .with_artboard(|artboard| artboard.focus_manager_handle())
+            .expect("surviving artboard manager")
+            .ptr_eq(&manager)
+    );
+    assert!(focus_manager(&second).ptr_eq(&manager));
+    let scope = list
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::list_scope_focus_node)
+        .flatten()
+        .expect("surviving list scope");
+    assert!(
+        scope
+            .borrow()
+            .manager()
+            .expect("scope manager")
+            .ptr_eq(&manager)
+    );
+    assert!(manager.with_focus_manager_mut(FocusManager::focus_next));
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_some()
+    );
+    second.advance_and_apply(0.016);
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_some()
+    );
+}
+
+// Rust ownership regression: CoreHandle temporarily retains the root while
+// the callback releases the caller's final RuntimeArtboardInstanceHandle.
+fn final_root_drop_inside_core_callback(mutable: bool) {
+    struct ObserveBlur {
+        root: CoreHandle,
+        saw_live_root: Rc<Cell<bool>>,
+    }
+    impl Focusable for ObserveBlur {
+        fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+            false
+        }
+        fn text_input(&mut self, _: &str) -> bool {
+            false
+        }
+        fn focused(&mut self) {}
+        fn blurred(&mut self) {
+            // Cleanup must run before the final Rc dies and without a root
+            // Ref/RefMut held, as real focus callbacks can inspect the root.
+            self.saw_live_root
+                .set(self.root.with(|_| true).unwrap_or(false));
+        }
+    }
+    let file = import_fixture("assets/text_input.riv");
+    let artboard = instance(&file, Some("Text Input - Multiline"));
+    let root = artboard.core_handle();
+    let manager = artboard
+        .with_artboard(|artboard| artboard.focus_manager_handle())
+        .expect("root manager");
+    let focus_data = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+        })
+        .expect("authored FocusData");
+    let node = focus_data
+        .with_downcast_mut::<FocusData, _>(FocusData::focus_node)
+        .expect("focus node");
+    let saw_live_root = Rc::new(Cell::new(false));
+    node.borrow_mut()
+        .set_focusable(Some(Rc::new(RefCell::new(ObserveBlur {
+            root: root.clone(),
+            saw_live_root: saw_live_root.clone(),
+        }))));
+    manager.with_focus_manager_mut(|manager| {
+        manager.add_child(None, node.clone(), None);
+        manager.set_focus(node.clone());
+    });
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_some()
+    );
+    if mutable {
+        root.with_mut(move |_| drop(artboard))
+            .expect("live mutable root callback");
+    } else {
+        root.with(move |_| drop(artboard))
+            .expect("live root callback");
+    }
+    assert!(
+        saw_live_root.get(),
+        "blur must resolve the still-live, unborrowed root"
+    );
+    assert!(!root.is_alive());
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_none()
+    );
+    assert!(node.borrow().manager().is_none());
+}
+
+#[test]
+fn core_with_final_root_release_cleans_focus_before_root_dies() {
+    final_root_drop_inside_core_callback(false);
+}
+
+#[test]
+fn core_with_mut_final_root_release_cleans_focus_before_root_dies() {
+    final_root_drop_inside_core_callback(true);
+}
+
+#[test]
 fn upstream_707c_state_machine_reports_unhandled_focused_input() {
     let (_file, _artboard, machine) = real_focus_fixture("assets/text_input_event.riv", None);
     let manager = focus_manager(&machine);
@@ -1918,8 +2143,8 @@ fn upstream_707c_state_machine_reports_unhandled_focused_input() {
 
 #[test]
 fn upstream_707c_state_machine_routes_input_through_external_focus_manager() {
-    let (_file, _artboard, machine) = real_focus_fixture("assets/text_input_event.riv", None);
-    let internal = machine.with_instance(|machine| machine.internal_focus_manager());
+    let (_file, artboard, machine) = real_focus_fixture("assets/text_input_event.riv", None);
+    let internal = artboard.ensure_focus_manager();
     internal.with_focus_manager_mut(FocusManager::clear_focus);
 
     let internal_observations = Rc::new(RoutedInputObservations::default());

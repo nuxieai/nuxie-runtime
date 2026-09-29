@@ -1721,8 +1721,9 @@ impl CommandServer {
                     lock.unlock();
                     if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
                         let instance = wrapper.lock();
-                        let manager = instance.focus_manager();
-                        manager.with_focus_manager_mut(|manager| manager.clear_focus());
+                        if let Some(manager) = instance.focus_manager() {
+                            manager.with_focus_manager_mut(|manager| manager.clear_focus());
+                        }
                     } else {
                         self.error(
                             handle,

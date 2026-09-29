@@ -406,8 +406,9 @@ fn advance_native_state_machines(
     let mut changed = false;
     for machine in machines {
         changed |= machine.with_instance_mut(|machine| machine.advance(seconds, true));
-        let focus = machine.with_instance(|machine| machine.focus_manager());
-        focus.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+        if let Some(focus) = machine.with_instance(|machine| machine.focus_manager()) {
+            focus.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+        }
     }
     changed |= artboard.advance_internal(seconds, frame_flags);
     for _ in 0..5 {

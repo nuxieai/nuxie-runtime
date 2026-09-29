@@ -2093,7 +2093,9 @@ impl RuntimeStateMachineInstanceHandle {
         let mut keep_going =
             self.with_instance_mut(|machine| machine.advance(seconds, true)) || seconds == 0.0;
         let manager = self.with_instance(StateMachineInstance::focus_manager);
-        manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+        if let Some(manager) = manager {
+            manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+        }
         // A nested machine may synchronously notify this machine during each
         // artboard phase. Retain the actual owners, not their RefMut guards.
         if artboard.advance_internal(seconds, root_flags) {
@@ -2105,7 +2107,10 @@ impl RuntimeStateMachineInstanceHandle {
             }
             let (manager, root) =
                 self.with_instance(|machine| (machine.focus_manager(), machine.root_artboard()));
-            manager.with_focus_manager_mut(|manager| manager.process_pending_focus_requests(root));
+            if let Some(manager) = manager {
+                manager
+                    .with_focus_manager_mut(|manager| manager.process_pending_focus_requests(root));
+            }
             if self.with_instance_mut(StateMachineInstance::try_change_state) {
                 self.with_instance_mut(|machine| machine.advance(0.0, false));
                 keep_going = true;
@@ -2126,7 +2131,9 @@ impl RuntimeStateMachineInstanceHandle {
         }
         let (manager, root) =
             self.with_instance(|machine| (machine.focus_manager(), machine.root_artboard()));
-        manager.with_focus_manager_mut(|manager| manager.finish_pending_focus_requests(root));
+        if let Some(manager) = manager {
+            manager.with_focus_manager_mut(|manager| manager.finish_pending_focus_requests(root));
+        }
         if advance_view_models {
             Artboard::advance_scripted_view_models_handle(&artboard.core_handle());
         }
@@ -2291,8 +2298,6 @@ pub struct StateMachineInstance {
     data_context_handle: Rc<RefCell<Option<RuntimeDataContextHandle>>>,
     pub(crate) data_bind_container: DataBindContainer,
     draw_order_change_counter: u8,
-    focus_manager: RuntimeFocusManagerHandle,
-    external_focus_manager: Option<RuntimeFocusManagerHandle>,
     reporting: Sidecar<SMIReporting>,
     bindables: Sidecar<SMIBindables>,
     // Shared cell preserves synchronous focus enqueue while the SMI is borrowed.
@@ -2309,7 +2314,7 @@ pub struct StateMachineInstance {
 
 struct StateMachineGamepadDispatcher {
     machine: RuntimeStateMachineInstanceHandle,
-    focus_manager: RuntimeFocusManagerHandle,
+    focus_manager: Option<RuntimeFocusManagerHandle>,
 }
 
 impl GamepadDispatcher for StateMachineGamepadDispatcher {
@@ -2326,8 +2331,9 @@ impl GamepadDispatcher for StateMachineGamepadDispatcher {
                 }),
         };
         let mut dispatched = None;
-        self.focus_manager
-            .gamepad_dispatch(&invocation, Some(&mut dispatched));
+        if let Some(manager) = &self.focus_manager {
+            manager.gamepad_dispatch(&invocation, Some(&mut dispatched));
+        }
         self.machine
             .broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref());
     }
@@ -2379,8 +2385,6 @@ impl StateMachineInstance {
             data_context_handle: Rc::new(RefCell::new(None)),
             data_bind_container: DataBindContainer::default(),
             draw_order_change_counter: 0,
-            focus_manager: RuntimeFocusManagerHandle::new(FocusManager::new()),
-            external_focus_manager: None,
             reporting: Sidecar::default(),
             bindables: Sidecar::default(),
             input_extras: Rc::new(RefCell::new(Sidecar::default())),
@@ -2450,10 +2454,6 @@ impl StateMachineInstance {
             instance.initialize_text_inputs();
             instance.initialize_scripted_objects();
             instance.sort_hit_components();
-            let manager = instance.focus_manager();
-            if let Some(artboard) = artboard_instance.upgrade() {
-                artboard.build_focus_tree(Some(manager), None);
-            }
         });
         handle
     }
@@ -3312,21 +3312,8 @@ impl StateMachineInstance {
     }
 
     pub fn set_external_focus_manager(&mut self, manager: Option<RuntimeFocusManagerHandle>) {
-        let unchanged = match (&self.external_focus_manager, &manager) {
-            (Some(current), Some(manager)) => current.ptr_eq(manager),
-            (None, None) => true,
-            _ => false,
-        };
-        if unchanged {
-            return;
-        }
         if let Some(artboard) = self.artboard_instance.upgrade() {
-            artboard.cleanup_focus_tree();
-        }
-        self.external_focus_manager = manager;
-        let focus_manager = self.focus_manager();
-        if let Some(artboard) = self.artboard_instance.upgrade() {
-            artboard.build_focus_tree(Some(focus_manager), None);
+            artboard.adopt_focus_manager(manager);
         }
     }
 
@@ -3334,18 +3321,10 @@ impl StateMachineInstance {
         self.set_external_focus_manager(Some(manager));
     }
 
-    pub fn focus_manager(&self) -> RuntimeFocusManagerHandle {
-        self.external_focus_manager
-            .clone()
-            .unwrap_or_else(|| self.focus_manager.clone())
-    }
-
-    pub fn internal_focus_manager(&self) -> RuntimeFocusManagerHandle {
-        self.focus_manager.clone()
-    }
-
-    pub fn has_external_focus_manager(&self) -> bool {
-        self.external_focus_manager.is_some()
+    pub fn focus_manager(&self) -> Option<RuntimeFocusManagerHandle> {
+        self.artboard_instance
+            .with_artboard(|artboard| artboard.focus_manager())
+            .flatten()
     }
 
     pub fn enable_semantics(&mut self) {
@@ -3414,7 +3393,9 @@ impl StateMachineInstance {
     }
 
     pub fn set_focus(&mut self, focus_data: Option<CoreHandle>) {
-        let manager = self.focus_manager();
+        let Some(manager) = self.focus_manager() else {
+            return;
+        };
         if let Some(node) = focus_data.and_then(|focus_data| {
             focus_data.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
         }) {
@@ -3449,29 +3430,38 @@ impl StateMachineInstance {
         let Some(focus_data) = focus_data else {
             return;
         };
+        let Some(manager) = self.focus_manager() else {
+            return;
+        };
         let node = focus_data.with_downcast_mut::<FocusData, _>(FocusData::focus_node);
         let root = self.root_artboard();
-        self.focus_manager()
-            .with_focus_manager_mut(|manager| manager.request_focus(node, root));
+        manager.with_focus_manager_mut(|manager| manager.request_focus(node, root));
         self.needs_advance.set(true);
     }
 
     pub fn queue_clear_focus(&mut self) {
+        let Some(manager) = self.focus_manager() else {
+            return;
+        };
         let root = self.root_artboard();
-        self.focus_manager()
-            .with_focus_manager_mut(|manager| manager.request_clear_focus(root));
+        manager.with_focus_manager_mut(|manager| manager.request_clear_focus(root));
         self.needs_advance.set(true);
     }
 
     pub fn queue_focus_traversal(&mut self, traversal_kind: u32) {
+        let Some(manager) = self.focus_manager() else {
+            return;
+        };
         let root = self.root_artboard();
-        self.focus_manager()
-            .with_focus_manager_mut(|manager| manager.request_traversal(traversal_kind, root));
+        manager.with_focus_manager_mut(|manager| manager.request_traversal(traversal_kind, root));
         self.needs_advance.set(true);
     }
 
     pub fn focus_state(&self) -> FocusState {
-        self.focus_manager().with_focus_manager(|manager| {
+        let Some(manager) = self.focus_manager() else {
+            return FocusState::default();
+        };
+        manager.with_focus_manager(|manager| {
             let primary = manager.primary_focus();
             let expects_keyboard_input = primary
                 .as_ref()
@@ -4279,43 +4269,45 @@ impl StateMachineInstance {
     }
 
     pub fn has_focus_nodes(&self) -> bool {
-        self.focus_manager()
-            .with_focus_manager_mut(FocusManager::has_focusable_content)
+        self.focus_manager().is_some_and(|manager| {
+            manager.with_focus_manager_mut(FocusManager::has_focusable_content)
+        })
     }
 
     pub fn focus_next(&mut self) -> bool {
         self.focus_manager()
-            .with_focus_manager_mut(FocusManager::focus_next)
+            .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_next))
     }
 
     pub fn focus_previous(&mut self) -> bool {
         self.focus_manager()
-            .with_focus_manager_mut(FocusManager::focus_previous)
+            .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_previous))
     }
 
     pub fn focus_up(&mut self) -> bool {
         self.focus_manager()
-            .with_focus_manager_mut(FocusManager::focus_up)
+            .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_up))
     }
 
     pub fn focus_down(&mut self) -> bool {
         self.focus_manager()
-            .with_focus_manager_mut(FocusManager::focus_down)
+            .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_down))
     }
 
     pub fn focus_left(&mut self) -> bool {
         self.focus_manager()
-            .with_focus_manager_mut(FocusManager::focus_left)
+            .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_left))
     }
 
     pub fn focus_right(&mut self) -> bool {
         self.focus_manager()
-            .with_focus_manager_mut(FocusManager::focus_right)
+            .is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_right))
     }
 
     pub fn clear_focus(&mut self) {
-        self.focus_manager()
-            .with_focus_manager_mut(FocusManager::clear_focus);
+        if let Some(manager) = self.focus_manager() {
+            manager.with_focus_manager_mut(FocusManager::clear_focus);
+        }
     }
 
     pub fn key_input(
@@ -4325,14 +4317,17 @@ impl StateMachineInstance {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        self.focus_manager().with_focus_manager_mut(|manager| {
-            manager.key_input(key, modifiers, is_pressed, is_repeat)
+        self.focus_manager().is_some_and(|manager| {
+            manager.with_focus_manager_mut(|manager| {
+                manager.key_input(key, modifiers, is_pressed, is_repeat)
+            })
         })
     }
 
     pub fn text_input(&mut self, text: &str) -> bool {
-        self.focus_manager()
-            .with_focus_manager_mut(|manager| manager.text_input(text))
+        self.focus_manager().is_some_and(|manager| {
+            manager.with_focus_manager_mut(|manager| manager.text_input(text))
+        })
     }
 
     pub fn duration_seconds(&self) -> f32 {
@@ -4888,11 +4883,6 @@ impl StateMachineInstance {
 
 impl Drop for StateMachineInstance {
     fn drop(&mut self) {
-        if self.external_focus_manager.is_none() {
-            if let Some(artboard) = self.artboard_instance.upgrade() {
-                artboard.cleanup_focus_tree();
-            }
-        }
         let owns_semantic_manager = self.input_extras().is_some_and(|extras| {
             extras.external_semantic_manager.is_none() && extras.semantic_manager.is_some()
         });

@@ -43,7 +43,10 @@ use crate::mechanical_port::source::{
     },
     hit_info::HitInfo,
     importers::{backboard_importer::BackboardImporter, import_stack::ImportStack},
-    input::{focus_manager::RuntimeFocusManagerHandle, focus_node::FocusNodeRef},
+    input::{
+        focus_manager::{FocusManager, RuntimeFocusManagerHandle, RuntimeFocusManagerWeakHandle},
+        focus_node::FocusNodeRef,
+    },
     joystick::Joystick,
     layout::layout_style_applier::LayoutParentStyleSnapshot,
     layout_component::LayoutComponent,
@@ -182,7 +185,8 @@ pub struct Artboard {
     original_height: f32,
     updates_own_layout: bool,
     host_transform_marked_dirty: bool,
-    active_focus_manager: Option<RuntimeFocusManagerHandle>,
+    owned_focus_manager: Option<RuntimeFocusManagerHandle>,
+    active_focus_manager: Option<RuntimeFocusManagerWeakHandle>,
     active_semantic_manager: Option<RuntimeSemanticManagerHandle>,
     semantic_boundary_node: Option<SemanticNodeRef>,
     #[cfg(feature = "tools")]
@@ -254,6 +258,7 @@ impl Default for Artboard {
             original_height: 0.0,
             updates_own_layout: true,
             host_transform_marked_dirty: false,
+            owned_focus_manager: None,
             active_focus_manager: None,
             active_semantic_manager: None,
             semantic_boundary_node: None,
@@ -431,11 +436,58 @@ impl Artboard {
     }
 
     pub fn set_active_focus_manager(&mut self, manager: Option<RuntimeFocusManagerHandle>) {
-        self.active_focus_manager = manager;
+        self.active_focus_manager = manager.as_ref().map(RuntimeFocusManagerHandle::downgrade);
     }
 
     pub fn focus_manager(&self) -> Option<RuntimeFocusManagerHandle> {
-        self.active_focus_manager.clone()
+        self.active_focus_manager
+            .as_ref()
+            .and_then(RuntimeFocusManagerWeakHandle::upgrade)
+    }
+
+    pub fn ensure_focus_manager(&mut self) -> RuntimeFocusManagerHandle {
+        if let Some(manager) = &self.active_focus_manager {
+            return manager
+                .upgrade()
+                .expect("adopted focus manager must outlive its artboard");
+        }
+        let manager = self
+            .owned_focus_manager
+            .get_or_insert_with(|| RuntimeFocusManagerHandle::new(FocusManager::new()))
+            .clone();
+        self.active_focus_manager = Some(manager.downgrade());
+        manager
+    }
+
+    pub fn adopt_focus_manager_handle(
+        root: &CoreHandle,
+        manager: Option<RuntimeFocusManagerHandle>,
+    ) {
+        let (manager, current) = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                (
+                    manager.or_else(|| artboard.owned_focus_manager.clone()),
+                    artboard.focus_manager(),
+                )
+            })
+            .expect("live Artboard");
+        let unchanged = match (&current, &manager) {
+            (Some(current), Some(manager)) => current.ptr_eq(manager),
+            (None, None) => true,
+            _ => false,
+        };
+        if unchanged {
+            return;
+        }
+        if current.is_some() {
+            Self::cleanup_focus_tree_handle(root);
+        }
+        root.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.set_active_focus_manager(manager.clone())
+        });
+        if manager.is_some() {
+            Self::build_focus_tree_handle(root, manager, None);
+        }
     }
 
     pub fn focus_manager_handle(&self) -> Option<RuntimeFocusManagerHandle> {
@@ -3326,7 +3378,10 @@ impl Artboard {
                 animation.with_downcast_mut::<NestedStateMachine, _>(|nested_state_machine| {
                     if let Some(instance) = nested_state_machine.state_machine_instance() {
                         instance.with_instance_mut(|instance| {
-                            if !instance.focus_manager().ptr_eq(focus_manager) {
+                            if !instance
+                                .focus_manager()
+                                .is_some_and(|current| current.ptr_eq(focus_manager))
+                            {
                                 instance.set_external_focus_manager_handle(focus_manager.clone());
                                 rewired = true;
                             }
@@ -3400,7 +3455,7 @@ impl Artboard {
         };
         let effective_parent = root
             .with_downcast_mut::<Artboard, _>(|artboard| {
-                artboard.active_focus_manager = Some(focus_manager.clone());
+                artboard.active_focus_manager = Some(focus_manager.downgrade());
                 #[cfg(feature = "tools")]
                 {
                     if let Some(parent) = parent_focus_node.clone() {
@@ -3431,7 +3486,7 @@ impl Artboard {
         let Some((manager, objects, nested_artboards, component_lists)) = root
             .with_downcast::<Artboard, _>(|artboard| {
                 Some((
-                    artboard.active_focus_manager.clone()?,
+                    artboard.focus_manager()?,
                     artboard.objects.clone(),
                     artboard.nested_artboards.clone(),
                     artboard.component_lists.clone(),
@@ -3441,6 +3496,21 @@ impl Artboard {
         else {
             return;
         };
+        Self::cleanup_focus_tree_contents(&manager, objects, nested_artboards, component_lists);
+        root.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.active_focus_manager = artboard
+                .owned_focus_manager
+                .as_ref()
+                .map(RuntimeFocusManagerHandle::downgrade)
+        });
+    }
+
+    fn cleanup_focus_tree_contents(
+        manager: &RuntimeFocusManagerHandle,
+        objects: Vec<Option<CoreHandle>>,
+        nested_artboards: Vec<CoreHandle>,
+        component_lists: Vec<CoreHandle>,
+    ) {
         for object in objects.iter().flatten() {
             if !object.is_type_of(FocusData::TYPE_KEY) {
                 continue;
@@ -3451,7 +3521,7 @@ impl Artboard {
             let should_remove = {
                 let node = node.borrow();
                 match node.manager() {
-                    Some(owner) => owner.ptr_eq(&manager),
+                    Some(owner) => owner.ptr_eq(manager),
                     None => false,
                 }
             };
@@ -3471,7 +3541,7 @@ impl Artboard {
             if let Some(nested) = nested {
                 let shares_manager = nested.with_artboard(|nested| {
                     nested
-                        .active_focus_manager
+                        .focus_manager()
                         .as_ref()
                         .is_some_and(|nested_manager| nested_manager.ptr_eq(&manager))
                 });
@@ -3495,7 +3565,7 @@ impl Artboard {
             for nested in instances {
                 let shares_manager = nested.with_artboard(|nested| {
                     nested
-                        .active_focus_manager
+                        .focus_manager()
                         .as_ref()
                         .is_some_and(|nested_manager| nested_manager.ptr_eq(&manager))
                 });
@@ -3509,7 +3579,6 @@ impl Artboard {
                 ArtboardComponentList::remove_list_scope_focus_node,
             );
         }
-        root.with_downcast_mut::<Artboard, _>(|artboard| artboard.active_focus_manager = None);
     }
 
     #[cfg(feature = "tools")]
@@ -4545,8 +4614,33 @@ impl AdvancingComponent for Artboard {
 
 impl Drop for Artboard {
     fn drop(&mut self) {
-        // Focus cleanup is deliberately explicit. A StateMachineInstance may
-        // already have destroyed the manager before its artboard is dropped.
+        // Retained instances clean up before their final Rc release so blur
+        // callbacks can still resolve the root. This also covers unretained
+        // source artboards on which a caller explicitly allocated a manager.
+        if let Some(manager) = self
+            .owned_focus_manager
+            .as_ref()
+            .filter(|owned| {
+                Weak::ptr_eq(&self.runtime_self.0, &Weak::new())
+                    && self
+                        .focus_manager()
+                        .as_ref()
+                        .is_some_and(|active| active.ptr_eq(owned))
+            })
+            .cloned()
+        {
+            #[cfg(feature = "tools")]
+            manager.with_focus_manager_mut(|manager| {
+                manager.set_focus_changed_callback(None);
+                manager.set_scroll_into_view_callback(None);
+            });
+            Self::cleanup_focus_tree_contents(
+                &manager,
+                self.objects.clone(),
+                self.nested_artboards.clone(),
+                self.component_lists.clone(),
+            );
+        }
         if let (Some(engine), Some(identity)) = (
             self.audio_engine.as_ref(),
             self.runtime_self.audio_identity(),
@@ -4656,6 +4750,34 @@ pub struct ArtboardInstance {
 /// instances and other helpers from retaining pointers into a movable `Box`.
 #[derive(Clone)]
 pub struct RuntimeArtboardInstanceHandle(Rc<RefCell<ArtboardInstance>>);
+
+impl Drop for RuntimeArtboardInstanceHandle {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.0) != 1 {
+            return;
+        }
+        let manager = self.with_artboard(|artboard| {
+            artboard
+                .owned_focus_manager
+                .as_ref()
+                .filter(|owned| {
+                    artboard
+                        .focus_manager()
+                        .as_ref()
+                        .is_some_and(|active| active.ptr_eq(owned))
+                })
+                .cloned()
+        });
+        if let Some(manager) = manager {
+            #[cfg(feature = "tools")]
+            manager.with_focus_manager_mut(|manager| {
+                manager.set_focus_changed_callback(None);
+                manager.set_scroll_into_view_callback(None);
+            });
+            self.cleanup_focus_tree();
+        }
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct RuntimeArtboardInstanceWeakHandle(Weak<RefCell<ArtboardInstance>>);
@@ -4793,6 +4915,12 @@ impl RuntimeArtboardInstanceHandle {
     }
     pub fn cleanup_focus_tree(&self) {
         Artboard::cleanup_focus_tree_handle(&self.core_handle());
+    }
+    pub fn ensure_focus_manager(&self) -> RuntimeFocusManagerHandle {
+        self.with_artboard_mut(|artboard| artboard.ensure_focus_manager())
+    }
+    pub fn adopt_focus_manager(&self, manager: Option<RuntimeFocusManagerHandle>) {
+        Artboard::adopt_focus_manager_handle(&self.core_handle(), manager);
     }
     pub fn build_semantic_tree(
         &self,

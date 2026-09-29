@@ -960,6 +960,9 @@ impl File {
             instance.set_scripting_vm(self.scripting_vm.clone());
             instance.set_file(Some(self.self_handle.clone()));
         });
+        // Root instances own the manager for their entire focus tree, before
+        // any state machine is created. Nested instances adopt this manager.
+        instance.build_focus_tree(Some(instance.ensure_focus_manager()), None);
         Some(instance)
     }
 

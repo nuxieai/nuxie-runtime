@@ -254,6 +254,7 @@ pub(crate) enum SourceFragment {
     Common,
     AdvancedBlend,
     DrawPathCommon,
+    GradientPackingCommon,
     DrawPathVertex,
     DrawRasterOrderPathFragment,
     AtomicDraw,
@@ -271,6 +272,7 @@ impl SourceFragment {
             Self::Common => "gpu::glsl::common",
             Self::AdvancedBlend => "gpu::glsl::advanced_blend",
             Self::DrawPathCommon => "gpu::glsl::draw_path_common",
+            Self::GradientPackingCommon => "gpu::glsl::gradient_packing_common",
             Self::DrawPathVertex => "gpu::glsl::draw_path_vert",
             Self::DrawRasterOrderPathFragment => "gpu::glsl::draw_raster_order_path_frag",
             Self::AtomicDraw => "gpu::glsl::atomic_draw",
@@ -309,6 +311,10 @@ impl SourceFragment {
             Self::DrawPathVertex => include_str!(concat!(
                 env!("OUT_DIR"),
                 "/mechanical_shader_generated/draw_path.minified.vert.runtime"
+            )),
+            Self::GradientPackingCommon => include_str!(concat!(
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/gradient_packing_common.minified.glsl.runtime"
             )),
             Self::DrawRasterOrderPathFragment => include_str!(concat!(
                 env!("OUT_DIR"),
@@ -591,6 +597,7 @@ fn append_interlock_sources(
                 return Err(BackgroundCompilePlanError::AtomicInterlockUnavailableOnIos);
             }
             source_fragments.push(SourceFragment::DrawPathCommon);
+            source_fragments.push(SourceFragment::GradientPackingCommon);
             source_fragments.push(SourceFragment::AtomicDraw);
         }
         InterlockMode::RasterOrdering => match job.draw_type {
@@ -599,11 +606,13 @@ fn append_interlock_sources(
             | DrawType::OuterCurvePatches
             | DrawType::InteriorTriangulation => {
                 source_fragments.push(SourceFragment::DrawPathCommon);
+                source_fragments.push(SourceFragment::GradientPackingCommon);
                 source_fragments.push(SourceFragment::DrawPathVertex);
                 source_fragments.push(SourceFragment::DrawRasterOrderPathFragment);
             }
             DrawType::AtlasBlit => {
                 source_fragments.push(SourceFragment::DrawPathCommon);
+                source_fragments.push(SourceFragment::GradientPackingCommon);
                 source_fragments.push(SourceFragment::DrawPathVertex);
                 source_fragments.push(SourceFragment::DrawMeshFragment);
             }
@@ -913,6 +922,7 @@ mod tests {
     fn every_raster_order_draw_branch_matches_upstream() {
         let path_sources = [
             SourceFragment::DrawPathCommon,
+            SourceFragment::GradientPackingCommon,
             SourceFragment::DrawPathVertex,
             SourceFragment::DrawRasterOrderPathFragment,
         ];
@@ -962,6 +972,7 @@ mod tests {
         let mut atlas_sources = BASE_SOURCES.to_vec();
         atlas_sources.extend([
             SourceFragment::DrawPathCommon,
+            SourceFragment::GradientPackingCommon,
             SourceFragment::DrawPathVertex,
             SourceFragment::DrawMeshFragment,
         ]);
@@ -996,7 +1007,11 @@ mod tests {
 
     #[test]
     fn every_atomic_draw_branch_matches_upstream() {
-        let atomic_sources = [SourceFragment::DrawPathCommon, SourceFragment::AtomicDraw];
+        let atomic_sources = [
+            SourceFragment::DrawPathCommon,
+            SourceFragment::GradientPackingCommon,
+            SourceFragment::AtomicDraw,
+        ];
         let cases: &[(DrawType, &[(ShaderMacro, MacroValue)])] = &[
             (
                 DrawType::MidpointFanPatches,
@@ -1320,6 +1335,7 @@ mod tests {
                 SourceFragment::Common.symbol(),
                 SourceFragment::AdvancedBlend.symbol(),
                 SourceFragment::DrawPathCommon.symbol(),
+                SourceFragment::GradientPackingCommon.symbol(),
                 SourceFragment::DrawPathVertex.symbol(),
                 SourceFragment::DrawRasterOrderPathFragment.symbol(),
                 SourceFragment::AtomicDraw.symbol(),
@@ -1333,6 +1349,7 @@ mod tests {
                 "gpu::glsl::common",
                 "gpu::glsl::advanced_blend",
                 "gpu::glsl::draw_path_common",
+                "gpu::glsl::gradient_packing_common",
                 "gpu::glsl::draw_path_vert",
                 "gpu::glsl::draw_raster_order_path_frag",
                 "gpu::glsl::atomic_draw",

@@ -1,35 +1,35 @@
 struct BC {
-    jc: f32,
-    sd: f32,
-    of_: f32,
-    pf: f32,
-    p6_: u32,
-    Pg: u32,
-    Ze: u32,
-    af: u32,
-    U7_: vec4<i32>,
-    Lg: vec2<f32>,
-    td: vec2<f32>,
-    c2_: u32,
-    Qg: f32,
-    d6_: u32,
-    R2_: f32,
-    ud: f32,
-    Ue: u32,
-    A3_: f32,
+    qc: f32,
+    Ad: f32,
+    Ef: f32,
+    Ff: f32,
+    q6_: u32,
+    Nb: u32,
+    qf: u32,
+    rf: u32,
+    V7_: vec4<i32>,
+    bh: vec2<f32>,
+    Bd: vec2<f32>,
+    d2_: u32,
+    fh: f32,
+    e6_: u32,
+    T2_: f32,
+    Cd: f32,
+    lf: u32,
     B3_: f32,
-    vd: f32,
-    Ig: u32,
+    C3_: f32,
+    Dd: f32,
+    Yg: u32,
 }
 
-var<private> A6_1: vec4<f32>;
 var<private> B6_1: vec4<f32>;
+var<private> C6_1: vec4<f32>;
 var<private> O4_1: vec4<f32>;
 var<private> I7_1: u32;
 var<private> P4_1: vec3<f32>;
-var<private> Tg: vec4<u32>;
+var<private> ih: vec4<u32>;
 @group(0) @binding(0)
-var<uniform> m: BC;
+var<uniform> n: BC;
 
 fn main_1() {
     var phi_837_: vec2<f32>;
@@ -72,10 +72,10 @@ fn main_1() {
     var phi_1058_: vec4<u32>;
     var local_2: f32;
 
-    let _e43 = A6_1;
+    let _e43 = B6_1;
     let _e44 = _e43.xy;
     let _e45 = _e43.zw;
-    let _e46 = B6_1;
+    let _e46 = C6_1;
     let _e47 = _e46.xy;
     let _e48 = _e46.zw;
     if any((_e44 != _e45)) {
@@ -315,18 +315,18 @@ fn main_1() {
         phi_1058_ = vec4<u32>(_e337.x, _e337.y, bitcast<u32>((_e322 - (floor((_e322 / 6.2831855f)) * 6.2831855f))), _e337.w);
     }
     let _e361 = phi_1058_;
-    Tg = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
+    ih = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
     return;
 }
 
 @fragment
-fn main(@location(0) A6_: vec4<f32>, @location(1) B6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
-    A6_1 = A6_;
+fn main(@location(0) B6_: vec4<f32>, @location(1) C6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
     B6_1 = B6_;
+    C6_1 = C6_;
     O4_1 = O4_;
     I7_1 = I7_;
     P4_1 = P4_;
     main_1();
-    let _e11 = Tg;
+    let _e11 = ih;
     return _e11;
 }

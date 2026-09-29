@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_image_mesh.vert";
-pub const PINNED_SOURCE_SHA256: &str = "8f514846f08a19b9089136bb8c51cb615ca79c26e85d0e195fc27e2e29afc4f7";
+pub const PINNED_SOURCE_SHA256: &str = "b0fff7fe9498a42d90faebbfc58bc3242b73e9fc18ca824e1e0d35bb882af19d";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_image_mesh";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 132;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 4103;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 4176;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_draw_image_mesh_vert__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

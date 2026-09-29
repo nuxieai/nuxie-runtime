@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "5976f7f40da9487ed8b0da506fe4745ac924dc1ec5a127f078317dc563473df8";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 548;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18970;
+    "d47650357e849042cdaa4a74800dc6c831515d72e9c0849bee87e137a8b4c5bf";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 515;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17520;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -310,44 +310,17 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         float4 paintTranslate =
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
                                  pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 1u);
-        float2 paintCoord = MUL(paintMatrix, fragCoord) + paintTranslate.xy;
 
-        // v_paint.a contains "-row" of the gradient ramp at texel center,
-        // in normalized space.
-        v_paint.a = -uintBitsToFloat(paintData.y);
-        // abs(v_paint.b) contains either:
-        //   - 2 if the gradient ramp spans an entire row.
-        //   - x0 of the gradient ramp in normalized space, if it's a simple
-        //   2-texel ramp.
-        float gradientSpan = paintTranslate.z;
-        // gradientSpan is either ~1 (complex gradients span the whole width
-        // of the texture minus 1px), or 1/GRAD_TEXTURE_WIDTH (simple
-        // gradients span 1px).
-        if (gradientSpan > .9)
-        {
-            // Complex ramps span an entire row. Set it to 2 to convey this.
-            v_paint.b = 2.;
-        }
-        else
-        {
-            // This is a simple ramp.
-            v_paint.b = paintTranslate.w;
-        }
-        if (paintType == LINEAR_GRADIENT_PAINT_TYPE)
-        {
-            // The paint is a linear gradient.
-            v_paint.g = .0;
-            v_paint.r = paintCoord.x;
-        }
-        else
-        {
-            // The paint is a radial gradient. Mark v_paint.b negative to
-            // indicate this to the fragment shader. (v_paint.b can't be
-            // zero because the gradient ramp is aligned on pixel centers,
-            // so negating it will always produce a negative number.)
-            v_paint.b = -v_paint.b;
-            v_paint.rg = paintCoord.xy;
-        }
+        v_paint = packGradientData(fragCoord,
+                                   paintMatrix,
+                                   paintTranslate.xy,
+                                   float(paintType),
+                                   paintTranslate.zw,
+                                   uintBitsToFloat(paintData.y));
+
+        // Make this negative to signal to the fragment shader that it's a
+        // gradient
+        v_paint.a = -v_paint.a;
     }
 #ifdef @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
     if (@EMULATE_DYNAMIC_COLOR_WRITE_DISABLE)
@@ -468,20 +441,14 @@ INLINE half4 find_paint_color(float4 paint,
     }
     else // Paint is a gradient (linear or radial)?
     {
-        float t =
-            paint.b > .0 ? /*linear*/ paint.r : /*radial*/ length(paint.rg);
-        t = clamp(t, .0, 1.);
-        float span = abs(paint.b);
-        float x = span > 1.
-                      ? /*entire row*/ (1. - 1. / GRAD_TEXTURE_WIDTH) * t +
-                            (.5 / GRAD_TEXTURE_WIDTH)
-                      : /*two texels*/ (1. / GRAD_TEXTURE_WIDTH) * t + span;
-        float row = -paint.a;
-        // Our gradient texture is not mipmapped. Issue a texture-sample that
-        // explicitly does not find derivatives for LOD computation.
+        // Flip this back to positive (it was only negative to signal that this
+        // is a gradient)
+        paint.a = -paint.a;
+        float2 gradientTexCoord = getGradientCoord(paint);
         color =
-            TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, row), .0);
+            TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, gradientTexCoord, .0);
         color.a *= coverage;
+
         // Gradients are always unmultiplied so we don't lose color data while
         // doing the hardware filter.
         if (GENERATE_UNMULTIPLIED_PAINT_COLORS)

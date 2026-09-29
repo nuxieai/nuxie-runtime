@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "964c514f1d5a69a7caaca1b80b0774654711fa001dff9c175b7750d1b1df16d7";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 341;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14214;
+    "ac63c67f85237f430126e9defb63c0134cf129e1d916f8ee1d5e70b7b191c4d5";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 345;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14425;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -221,7 +221,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define IMAGE_VIEW_MATRIX_ATTRIB_IDX 2
 #define IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX 3
 #define IMAGE_TRANSLATES_ATTRIB_IDX 4
-#define IMAGE_OPACITY_ATTRIB_IDX 5
+#define IMAGE_MODULATED_COLOR_ATTRIB_IDX 5
 #define IMAGE_CLIP_ID_ATTRIB_IDX 6
 #define IMAGE_BLEND_MODE_ATTRIB_IDX 7
 #define IMAGE_ZINDEX_ATTRIB_IDX 8
@@ -230,7 +230,11 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define IMAGE_COMMON_ATTRIB_COUNT                                              \
     (IMAGE_COMMON_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
-#define IMAGE_RECT_LAST_ATTRIB_IDX IMAGE_COMMON_LAST_ATTRIB_IDX
+#define IMAGE_RECT_IMAGE_MATRIX_ATTRIB_IDX 9
+#define IMAGE_RECT_GRADIENT_MATRIX_ATTRIB_IDX 10
+#define IMAGE_RECT_IMAGE_AND_GRADIENT_TRANSLATES_ATTRIB_IDX 11
+#define IMAGE_RECT_PACKED_GRADIENT_DATA 12
+#define IMAGE_RECT_LAST_ATTRIB_IDX IMAGE_RECT_PACKED_GRADIENT_DATA
 #define IMAGE_RECT_ATTRIB_COUNT                                                \
     (IMAGE_RECT_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 

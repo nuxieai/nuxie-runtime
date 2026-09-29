@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/atomic_base.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "4f929858680a03c74e88b85b676d8020c7a588146367c7189eec791b2412365a";
+pub const PINNED_SOURCE_SHA256: &str = "9c01a4730239527c2f7303b569c6a68202d8559070acf855c0818bdfd9d900c9";
 pub const OWNERSHIP_UNIT: &str = "shader:source:atomic_base";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 19;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 658;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 20;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 707;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_spirv_atomic_base_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

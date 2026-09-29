@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_depthstencil_object.frag.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_object.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "3b61972533dfebe2c908d98ef42b50c615d4ead4115fecc43a53cca6007de64f";
+    "57319713f93ac14ddb22d6a6ea13ea2cfa727648645edd02c9ed7250689297c8";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 110;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 3616;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 3631;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE: &str = r###"/*
@@ -43,7 +43,7 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 {
 #ifdef @DRAW_IMAGE_MESH
     VARYING_UNPACK(v_imageTexCoord, float2);
-    VARYING_UNPACK(v_imageOpacity, half);
+    VARYING_UNPACK(v_imageModulatedColor, half4);
 #ifdef @ENABLE_ADVANCED_BLEND
     VARYING_UNPACK(v_imageBlendMode, ushort);
 #endif
@@ -65,7 +65,7 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
                                                  imageSampler,
                                                  v_imageTexCoord,
                                                  uniforms.mipMapLODBias) *
-                  v_imageOpacity;
+                  v_imageModulatedColor;
 #else
     half coverage =
 #ifdef @FEATHER_ATLAS_BLIT

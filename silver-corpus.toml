@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "d8727299e08ba8517887a8a9f0fae80819208294"
+upstream_ref = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946"
 expected_entries = 269
 expected_runtime = 221
 expected_scripted = 45
@@ -206,7 +206,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/artboard_transform_test.cpp"
 provenance_test = "Artboard transform and opacity"
-producer_line = 203
+producer_line = 207
 note = "Unsupported feature: missing runtime surface pointer-expression-encoding; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]

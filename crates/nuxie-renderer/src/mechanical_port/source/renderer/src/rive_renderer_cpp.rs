@@ -1,6 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  * The literal source is retained below in declaration/order form.
  */
 
@@ -10,6 +10,7 @@
 //
 // #include "rive/renderer/rive_renderer.hpp"
 //
+// #include "gradient.hpp"
 // #include "rive_render_paint.hpp"
 // #include "rive_render_path.hpp"
 // #include "rive/math/math_types.hpp"
@@ -163,6 +164,72 @@
 //     Mat2D* imageMatrixPtr = nullptr;
 //     if (paint->getImageTexture() != nullptr)
 //     {
+//         if (!m_context->frameSupportsImagePaintForPaths())
+//         {
+//             // If we don't have image paint support we need to do this using
+//             // ImageRect (which can do all of the drawing of image +
+//             // color/gradient), clipped to the current path.
+//             save();
+//
+//             AABB bounds;
+//             bool isAABB = IsAABB(path->getRawPath(), &bounds);
+//             if (!isAABB)
+//             {
+//                 // If this is not an AABB directly we need to get the actual
+//                 // bounds and then clip against the path.
+//                 // TODO: stroked/feathered paths
+//                 bounds = path->getBounds();
+//                 clipPath(renderPath);
+//             }
+//
+//             // TODO: Multiply the paint's gradient matrix with this once it
+//             // exists
+//             const auto gradientMatrix = m_renderStateStack.back().matrix;
+//
+//             // ImageRectDraw draws as a unit square with upper-left corner of 0,
+//             // 0 so we need to adjust our transform to set that up.
+//             Mat2D adjust = Mat2D::fromScaleAndTranslation(bounds.width(),
+//                                                           bounds.height(),
+//                                                           bounds.left(),
+//                                                           bounds.top());
+//             transform(adjust);
+//
+//             const auto& m = m_renderStateStack.back().matrix;
+//
+//             // The image matrix needs to map from the desired image space to the
+//             // "box space" (where the upper-left and lower-right coordinates are
+//             // (0, 0) and (1, 1) respectively). This is effectively the inverse
+//             // of undoing the adjust matrix then applying the paint's
+//             // imageMatrix, which becomes the following:
+//             const auto imageMatrix =
+//                 paint->getImageTransform().invertOrIdentity() * adjust;
+//
+//             ColorInt paintColor = paint->getColor();
+//             if (paint->getGradient() != nullptr)
+//             {
+//                 // Paints with gradients have no color data so use solid white.
+//                 paintColor = 0xFFFFFFFF;
+//             }
+//
+//             clipAndPushDraw(
+//                 gpu::DrawUniquePtr(m_context->make<gpu::ImageRectDraw>(
+//                     m_context,
+//                     m.mapBoundingBox(AABB{0, 0, 1, 1}).roundOut(),
+//                     m,
+//                     paint->getBlendMode(),
+//                     ref_rcp(paint->getImageTexture()),
+//                     ref_rcp(paint->getGradient()),
+//                     paint->getImageSampler(),
+//                     colorModulateOpacity(
+//                         paintColor,
+//                         m_renderStateStack.back().modulatedOpacity),
+//                     imageMatrix,
+//                     gradientMatrix)));
+//
+//             restore();
+//             return;
+//         }
+//
 //         imageMatrix =
 //             m_renderStateStack.back().matrix * paint->getImageTransform();
 //         imageMatrixPtr = &imageMatrix;
@@ -425,8 +492,11 @@
 //                     m,
 //                     blendMode,
 //                     std::move(imageTexture),
+//                     nullptr, // gradient
 //                     imageSampler,
-//                     finalOpacity)));
+//                     colorModulateOpacity(0xFFFFFFFF, finalOpacity),
+//                     Mat2D{},    // imageMatrix
+//                     Mat2D{}))); // gradientMatrix
 //         }
 //     }
 //     else
@@ -798,7 +868,8 @@
 //
 //         if (parentClipID != 0)
 //         {
-//             if (m_context->frameInterlockMode() == gpu::InterlockMode::depthStencil)
+//             if (m_context->frameInterlockMode() ==
+//                 gpu::InterlockMode::depthStencil)
 //             {
 //                 // When drawing nested stencil clips, we need to intersect them,
 //                 // which involves erasing the region of the current clip in the
@@ -829,7 +900,6 @@
 //     return ApplyClipResult::success;
 // }
 // } // namespace rive
-//
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -1533,6 +1603,58 @@ impl RendererContract for RiveRenderer {
         {
             return;
         }
+        if !q.getImageTexture().is_null()
+            && !unsafe { (&*self.m_context).frameSupportsImagePaintForPathsExecutable() }
+        {
+            self.save();
+            let mut bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
+            if !Self::IsAABB(p.getRawPath(), &mut bounds) {
+                bounds = p.getBounds();
+                // Upstream adds stroked/feathered image paths in a later commit.
+                unsafe { self.clipPath(path) };
+            }
+            let gradient_matrix = self.current_state().matrix;
+            let adjust = Mat2D([
+                bounds.max_x - bounds.min_x,
+                0.0,
+                0.0,
+                bounds.max_y - bounds.min_y,
+                bounds.min_x,
+                bounds.min_y,
+            ]);
+            self.transform(&adjust);
+            let matrix = self.current_state().matrix;
+            let image_matrix = mul(
+                invert(*q.getImageTransform()).unwrap_or(Mat2D::IDENTITY),
+                adjust,
+            );
+            let color = if q.getGradient().is_null() {
+                q.getColor()
+            } else {
+                0xffffffff
+            };
+            self.clipAndPushDrawSource(own_image_rect(unsafe {
+                make_image_rect_draw(
+                    matrix.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0)).round_out(),
+                    matrix,
+                    q.getBlendMode(),
+                    super::draw_cpp::color_modulate_opacity(
+                        color,
+                        self.current_state().modulatedOpacity,
+                    ),
+                    ref_rcp(q.getImageTexture()),
+                    ref_rcp(q.getGradient().cast_mut()),
+                    q.getImageSampler(),
+                    gpu::DrawContents::none,
+                    0,
+                    None,
+                    image_matrix,
+                    gradient_matrix,
+                )
+            }));
+            self.restore();
+            return;
+        }
         let image_matrix = (!q.getImageTexture().is_null())
             .then(|| mul(self.current_state().matrix, *q.getImageTransform()));
         if q.getFeather() != 0.0 && !q.getIsStroked() {
@@ -1639,12 +1761,15 @@ impl RendererContract for RiveRenderer {
                     b,
                     self.current_state().matrix,
                     blend,
-                    final_opacity,
+                    super::draw_cpp::color_modulate_opacity(0xffffffff, final_opacity),
                     texture,
+                    rcp::new(),
                     sampler,
                     gpu::DrawContents::none,
                     0,
                     None,
+                    Mat2D::IDENTITY,
+                    Mat2D::IDENTITY,
                 )
             }));
         } else {

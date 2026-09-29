@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/gpu.cpp.
-// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
+// Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -895,6 +895,19 @@
 //     m_coverageBufferRange.offsetY = coverageBufferRange.offsetY;
 // }
 //
+// float getGradientY(ColorRampLocation rampLocation,
+//                    GradTextureLayout gradTextureLayout)
+// {
+//     uint32_t row = rampLocation.row;
+//     if (rampLocation.isComplex())
+//     {
+//         // Complex gradients rows are offset after the simple gradients.
+//         row += gradTextureLayout.complexOffsetY;
+//     }
+//
+//     return (static_cast<float>(row) + .5f) * gradTextureLayout.inverseHeight;
+// }
+//
 // void PaintData::set(DrawContents singleDrawContents,
 //                     PaintType paintType,
 //                     SimplePaintValue simplePaintValue,
@@ -920,14 +933,8 @@
 //         case PaintType::linearGradient:
 //         case PaintType::radialGradient:
 //         {
-//             uint32_t row = simplePaintValue.colorRampLocation.row;
-//             if (simplePaintValue.colorRampLocation.isComplex())
-//             {
-//                 // Complex gradients rows are offset after the simple gradients.
-//                 row += gradTextureLayout.complexOffsetY;
-//             }
-//             m_gradTextureY = (static_cast<float>(row) + .5f) *
-//                              gradTextureLayout.inverseHeight;
+//             m_gradTextureY = getGradientY(simplePaintValue.colorRampLocation,
+//                                           gradTextureLayout);
 //             localParams |= shiftedClipID | shiftedBlendMode;
 //             break;
 //         }
@@ -957,6 +964,66 @@
 //     m_params = localParams;
 // }
 //
+// void getGradientMatrixAndSpan(const Gradient* gradient,
+//                               ColorRampLocation rampLocation,
+//                               const Mat2D& viewMatrix,
+//                               const PlatformFeatures& platformFeatures,
+//                               uint32_t renderTargetHeight,
+//                               Mat2D& paintMatrixOut,
+//                               float (&gradTextureHorizontalSpanOut)[2])
+// {
+//     assert(gradient != nullptr);
+//     const float* gradCoeffs = gradient->coeffs();
+//
+//     // TODO: This inverse actually failed in the fuzz tests because the view
+//     // scale was all 0s - we could probably detect that case and just skip
+//     // drawing (at a higher level than here) if the scale is 0. Either way,
+//     // this would end up as a degenerate draw and it doesn't matter that it
+//     // failed.
+//     paintMatrixOut = viewMatrix.invertOrIdentity();
+//
+//     if (platformFeatures.framebufferBottomUp)
+//     {
+//         // Flip _fragCoord.y.
+//         paintMatrixOut *= Mat2D(1, 0, 0, -1, 0, renderTargetHeight);
+//     }
+//
+//     if (gradient->paintType() == PaintType::linearGradient)
+//     {
+//         paintMatrixOut =
+//             Mat2D(gradCoeffs[0], 0, gradCoeffs[1], 0, gradCoeffs[2], 0) *
+//             paintMatrixOut;
+//     }
+//     else
+//     {
+//         assert(gradient->paintType() == PaintType::radialGradient);
+//         float w = 1 / gradCoeffs[2];
+//         paintMatrixOut =
+//             Mat2D(w, 0, 0, w, -gradCoeffs[0] * w, -gradCoeffs[1] * w) *
+//             paintMatrixOut;
+//     }
+//
+//     float left, right;
+//     if (rampLocation.isComplex())
+//     {
+//         left = 0;
+//         right = kGradTextureWidth;
+//     }
+//     else
+//     {
+//         left = rampLocation.col;
+//         right = left + 2;
+//     }
+//
+//     // TODO: This could be simplified (both here and in the shader) - the shader
+//     // only uses value [0] to check whether or not it's a full span (i.e.
+//     // complex) - which could be done just as effectively with a single value
+//     // ("-1" for complex, positive left coordinate for simple gradients).
+//     gradTextureHorizontalSpanOut[0] =
+//         (right - left - 1) * GRAD_TEXTURE_INVERSE_WIDTH;
+//     gradTextureHorizontalSpanOut[1] = (left + .5f) * GRAD_TEXTURE_INVERSE_WIDTH;
+// }
+//
 // void PaintAuxData::set(const Mat2D& viewMatrix,
 //                        const Mat2D& imageMatrix,
 //                        PaintType paintType,
@@ -973,50 +1040,19 @@
 //         case PaintType::radialGradient:
 //         {
 //             assert(gradient != nullptr);
-//             const float* gradCoeffs = gradient->coeffs();
 //             Mat2D paintMatrix;
 //             viewMatrix.invert(&paintMatrix);
 //
-//             if (platformFeatures.framebufferBottomUp)
-//             {
-//                 // Flip _fragCoord.y.
-//                 paintMatrix *= Mat2D(1, 0, 0, -1, 0, renderTarget->height());
-//             }
-//
-//             if (paintType == PaintType::linearGradient)
-//             {
-//                 paintMatrix = Mat2D(gradCoeffs[0],
-//                                     0,
-//                                     gradCoeffs[1],
-//                                     0,
-//                                     gradCoeffs[2],
-//                                     0) *
-//                               paintMatrix;
-//             }
-//             else
-//             {
-//                 assert(paintType == PaintType::radialGradient);
-//                 float w = 1 / gradCoeffs[2];
-//                 paintMatrix =
-//                     Mat2D(w, 0, 0, w, -gradCoeffs[0] * w, -gradCoeffs[1] * w) *
-//                     paintMatrix;
-//             }
-//             float left, right;
-//             if (simplePaintValue.colorRampLocation.isComplex())
-//             {
-//                 left = 0;
-//                 right = kGradTextureWidth;
-//             }
-//             else
-//             {
-//                 left = simplePaintValue.colorRampLocation.col;
-//                 right = left + 2;
-//             }
-//             m_gradTextureHorizontalSpan[0] =
-//                 (right - left - 1) * GRAD_TEXTURE_INVERSE_WIDTH;
-//             m_gradTextureHorizontalSpan[1] =
-//                 (left + .5f) * GRAD_TEXTURE_INVERSE_WIDTH;
-//
+//             float gradTextureHorizontalSpan[2];
+//             getGradientMatrixAndSpan(gradient,
+//                                      simplePaintValue.colorRampLocation,
+//                                      viewMatrix,
+//                                      platformFeatures,
+//                                      renderTarget->height(),
+//                                      paintMatrix,
+//                                      gradTextureHorizontalSpan);
+//             m_gradTextureHorizontalSpan[0] = gradTextureHorizontalSpan[0];
+//             m_gradTextureHorizontalSpan[1] = gradTextureHorizontalSpan[1];
 //             write_matrix(m_paintMatrix, paintMatrix);
 //         }
 //
@@ -1088,7 +1124,7 @@
 //
 // ImageDrawInstanceBase::ImageDrawInstanceBase(
 //     const Mat2D& matrix,
-//     float opacity,
+//     ColorInt color,
 //     const ClipRectInverseMatrix* clipRectInverseMatrix,
 //     uint32_t clipID,
 //     BlendMode blendMode,
@@ -1108,8 +1144,8 @@
 //                          m_translate,
 //                          IMAGE_TRANSLATES_ATTRIB_IDX);
 //     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
-//                          m_opacity,
-//                          IMAGE_OPACITY_ATTRIB_IDX);
+//                          m_modulatedColor,
+//                          IMAGE_MODULATED_COLOR_ATTRIB_IDX);
 //     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
 //                          m_clipID,
 //                          IMAGE_CLIP_ID_ATTRIB_IDX);
@@ -1134,7 +1170,7 @@
 //     write2x2(m_clipRectInverseMatrix, clipRectInverseMatrixToWrite);
 //     writeTranslate(m_translate, matrix);
 //     writeTranslate(m_clipRectInverseTranslate, clipRectInverseMatrixToWrite);
-//     m_opacity = opacity;
+//     m_modulatedColor = SwizzleRiveColorToRGBAPremul(color);
 //     m_clipID = clipID;
 //     m_blendMode = ConvertBlendModeToPLSBlendMode(blendMode);
 //     m_zIndex = zIndex;
@@ -1148,14 +1184,55 @@
 //
 // ImageRectInstance::ImageRectInstance(
 //     const Mat2D& matrix,
-//     float opacity,
+//     ColorInt color,
 //     const ClipRectInverseMatrix* clipRectInverseMatrix,
 //     uint32_t clipID,
 //     BlendMode blendMode,
-//     uint32_t zIndex) :
-//     m_commons{matrix, opacity, clipRectInverseMatrix, clipID, blendMode, zIndex}
+//     uint32_t zIndex,
+//     const Mat2D& imageMatrix,
+//     const Mat2D& gradientMatrix,
+//     uint32_t gradientType,
+//     const float (&gradTextureHorizontalSpan)[2],
+//     float gradTextureY) :
+//     m_commons{matrix, color, clipRectInverseMatrix, clipID, blendMode, zIndex}
 // {
 //     static_assert(offsetof(ImageRectInstance, m_commons) == 0);
+//     STATIC_ASSERT_ATTRIB(ImageRectInstance,
+//                          m_imageMatrix,
+//                          IMAGE_RECT_IMAGE_MATRIX_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageRectInstance,
+//                          m_gradientMatrix,
+//                          IMAGE_RECT_GRADIENT_MATRIX_ATTRIB_IDX);
+//
+//     // These next two are packed together so validate the offset matches our
+//     // attribute data *and* the attributes are packed into the correct memory
+//     // locations
+//     STATIC_ASSERT_ATTRIB(ImageRectInstance,
+//                          m_imageTranslate,
+//                          IMAGE_RECT_IMAGE_AND_GRADIENT_TRANSLATES_ATTRIB_IDX);
+//     static_assert(offsetof(ImageRectInstance, m_gradientTranslate) ==
+//                   offsetof(ImageRectInstance, m_imageTranslate) +
+//                       2 * sizeof(float));
+//
+//     // Same with these three values
+//     STATIC_ASSERT_ATTRIB(ImageRectInstance,
+//                          m_gradTextureHorizontalSpan,
+//                          IMAGE_RECT_PACKED_GRADIENT_DATA);
+//     static_assert(offsetof(ImageRectInstance, m_gradTextureY) ==
+//                   offsetof(ImageRectInstance, m_gradTextureHorizontalSpan) +
+//                       2 * sizeof(float));
+//     static_assert(offsetof(ImageRectInstance, m_gradientType) ==
+//                   offsetof(ImageRectInstance, m_gradTextureHorizontalSpan) +
+//                       3 * sizeof(float));
+//
+//     write2x2(m_imageMatrix, imageMatrix);
+//     write2x2(m_gradientMatrix, gradientMatrix);
+//     writeTranslate(m_imageTranslate, imageMatrix);
+//     writeTranslate(m_gradientTranslate, gradientMatrix);
+//     m_gradTextureHorizontalSpan[0] = gradTextureHorizontalSpan[0];
+//     m_gradTextureHorizontalSpan[1] = gradTextureHorizontalSpan[1];
+//     m_gradTextureY = gradTextureY;
+//     m_gradientType = float(gradientType);
 // }
 //
 // const std::array<VertexAttribute, ImageRectInstance::AttributeCount>&
@@ -1171,7 +1248,12 @@
 //     uint32_t clipID,
 //     BlendMode blendMode,
 //     uint32_t zIndex) :
-//     m_commons{matrix, opacity, clipRectInverseMatrix, clipID, blendMode, zIndex}
+//     m_commons{matrix,
+//               colorModulateOpacity(0xFFFFFFFF, opacity),
+//               clipRectInverseMatrix,
+//               clipID,
+//               blendMode,
+//               zIndex}
 // {
 //     static_assert(offsetof(ImageMeshInstance, m_commons) == 0);
 // }
@@ -2856,7 +2938,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3044,14 +3126,7 @@ impl PaintData {
                 }
                 PaintType::linearGradient | PaintType::radialGradient => {
                     let loc = simplePaintValue.colorRampLocation;
-                    let row = loc.row as u32
-                        + if loc.isComplex() {
-                            gradTextureLayout.complexOffsetY
-                        } else {
-                            0
-                        };
-                    self.value.m_gradTextureY =
-                        (row as f32 + 0.5) * gradTextureLayout.inverseHeight;
+                    self.value.m_gradTextureY = getGradientY(loc, gradTextureLayout);
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::clipUpdate => {
@@ -3075,6 +3150,53 @@ impl PaintData {
     }
 }
 
+pub fn getGradientY(location: ColorRampLocation, layout: GradTextureLayout) -> f32 {
+    let row = location.row as u32
+        + if location.isComplex() {
+            layout.complexOffsetY
+        } else {
+            0
+        };
+    (row as f32 + 0.5) * layout.inverseHeight
+}
+
+pub fn getGradientMatrixAndSpan(
+    paint_type: PaintType,
+    coeffs: [f32; 3],
+    location: ColorRampLocation,
+    view_matrix: Mat2D,
+    framebuffer_bottom_up: bool,
+    render_target_height: u32,
+) -> (Mat2D, [f32; 2]) {
+    let mut matrix = inverse_mat2d(view_matrix).unwrap_or(Mat2D::IDENTITY);
+    if framebuffer_bottom_up {
+        matrix = multiply_mat2d(
+            matrix,
+            Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, render_target_height as f32]),
+        );
+    }
+    if paint_type == PaintType::linearGradient {
+        matrix = multiply_mat2d(
+            Mat2D([coeffs[0], 0.0, coeffs[1], 0.0, coeffs[2], 0.0]),
+            matrix,
+        );
+    } else {
+        debug_assert_eq!(paint_type, PaintType::radialGradient);
+        let w = 1.0 / coeffs[2];
+        matrix = multiply_mat2d(
+            Mat2D([w, 0.0, 0.0, w, -coeffs[0] * w, -coeffs[1] * w]),
+            matrix,
+        );
+    }
+    let (left, right) = if location.isComplex() {
+        (0.0, 512.0)
+    } else {
+        let left = location.col as f32;
+        (left, left + 2.0)
+    };
+    (matrix, [(right - left - 1.0) / 512.0, (left + 0.5) / 512.0])
+}
+
 /// Source-shaped image/gradient paint auxiliary writer. The native texture
 /// and render-target owners are intentionally borrowed for this call only.
 pub fn set_paint_aux_data(
@@ -3094,34 +3216,15 @@ pub fn set_paint_aux_data(
         PaintType::linearGradient | PaintType::radialGradient
     ) {
         let coeffs = gradientCoeffs.expect("gradient is required");
-        let mut paintMatrix = inverse_mat2d(viewMatrix).unwrap_or(Mat2D::IDENTITY);
-        if framebufferBottomUp {
-            paintMatrix = multiply_mat2d(
-                paintMatrix,
-                Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, renderTargetHeight as f32]),
-            );
-        }
-        if paintType == PaintType::linearGradient {
-            paintMatrix = multiply_mat2d(
-                Mat2D([coeffs[0], 0.0, coeffs[1], 0.0, coeffs[2], 0.0]),
-                paintMatrix,
-            );
-        } else {
-            let w = 1.0 / coeffs[2];
-            paintMatrix = multiply_mat2d(
-                Mat2D([w, 0.0, 0.0, w, -coeffs[0] * w, -coeffs[1] * w]),
-                paintMatrix,
-            );
-        }
-        let (left, right) = unsafe {
-            if simplePaintValue.colorRampLocation.isComplex() {
-                (0.0, 512.0)
-            } else {
-                let left = simplePaintValue.colorRampLocation.col as f32;
-                (left, left + 2.0)
-            }
-        };
-        out.m_gradTextureHorizontalSpan = [(right - left - 1.0) / 512.0, (left + 0.5) / 512.0];
+        let (paintMatrix, span) = getGradientMatrixAndSpan(
+            paintType,
+            coeffs,
+            unsafe { simplePaintValue.colorRampLocation },
+            viewMatrix,
+            framebufferBottomUp,
+            renderTargetHeight,
+        );
+        out.m_gradTextureHorizontalSpan = span;
         out.m_paintMatrix = paintMatrix.0;
     }
     if paintType != PaintType::clipUpdate {
@@ -3193,7 +3296,7 @@ impl PaintAuxData {
 
 pub fn image_draw_instance_base(
     matrix: Mat2D,
-    opacity: f32,
+    color: ColorInt,
     clipRectInverseMatrix: Option<Mat2D>,
     clipID: u32,
     blendMode: BlendMode,
@@ -3205,7 +3308,7 @@ pub fn image_draw_instance_base(
         m_clipRectInverseMatrix: [0.0; 4],
         m_translate: [0.0; 2],
         m_clipRectInverseTranslate: [0.0; 2],
-        m_opacity: opacity,
+        m_modulatedColor: SwizzleRiveColorToRGBAPremul(color),
         m_clipID: clipID,
         m_blendMode: ConvertBlendModeToPLSBlendMode(blendMode),
         m_zIndex: zIndex,
@@ -3310,7 +3413,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{AABB, Mat2D, find_transformed_area};
+    use super::{find_transformed_area, Mat2D, AABB};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -3492,7 +3595,7 @@ impl FlushUniforms {
 impl ImageDrawInstanceBase {
     pub fn new(
         matrix: Mat2D,
-        opacity: f32,
+        color: ColorInt,
         clipRectInverseMatrix: Option<Mat2D>,
         clipID: u32,
         blendMode: BlendMode,
@@ -3500,7 +3603,7 @@ impl ImageDrawInstanceBase {
     ) -> Self {
         image_draw_instance_base(
             matrix,
-            opacity,
+            color,
             clipRectInverseMatrix,
             clipID,
             blendMode,
@@ -3512,21 +3615,33 @@ impl ImageDrawInstanceBase {
 impl ImageRectInstance {
     pub fn new(
         matrix: Mat2D,
-        opacity: f32,
+        color: ColorInt,
         clipRectInverseMatrix: Option<Mat2D>,
         clipID: u32,
         blendMode: BlendMode,
         zIndex: u32,
+        imageMatrix: Mat2D,
+        gradientMatrix: Mat2D,
+        gradientType: u32,
+        gradTextureHorizontalSpan: [f32; 2],
+        gradTextureY: f32,
     ) -> Self {
         Self {
             m_commons: image_draw_instance_base(
                 matrix,
-                opacity,
+                color,
                 clipRectInverseMatrix,
                 clipID,
                 blendMode,
                 zIndex,
             ),
+            m_imageMatrix: imageMatrix.0[..4].try_into().unwrap(),
+            m_gradientMatrix: gradientMatrix.0[..4].try_into().unwrap(),
+            m_imageTranslate: imageMatrix.0[4..].try_into().unwrap(),
+            m_gradientTranslate: gradientMatrix.0[4..].try_into().unwrap(),
+            m_gradTextureHorizontalSpan: gradTextureHorizontalSpan,
+            m_gradTextureY: gradTextureY,
+            m_gradientType: gradientType as f32,
         }
     }
 }
@@ -3543,7 +3658,7 @@ impl ImageMeshInstance {
         Self {
             m_commons: image_draw_instance_base(
                 matrix,
-                opacity,
+                super::draw_cpp::color_modulate_opacity(0xffffffff, opacity),
                 clipRectInverseMatrix,
                 clipID,
                 blendMode,

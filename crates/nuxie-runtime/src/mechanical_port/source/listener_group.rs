@@ -20,6 +20,7 @@ use crate::mechanical_port::source::{
 pub struct PointerData {
     pub is_hovered: Cell<bool>,
     pub is_prev_hovered: Cell<bool>,
+    pub has_dragged: Cell<bool>,
     pub phase: Cell<GestureClickPhase>,
     previous_position: Cell<Vec2D>,
 }
@@ -29,6 +30,7 @@ impl Default for PointerData {
         Self {
             is_hovered: Cell::new(false),
             is_prev_hovered: Cell::new(false),
+            has_dragged: Cell::new(false),
             phase: Cell::new(GestureClickPhase::Out),
             previous_position: Cell::new(Vec2D::new(0.0, 0.0)),
         }
@@ -43,7 +45,6 @@ impl PointerData {
 
 pub struct ListenerGroup {
     is_consumed: Cell<bool>,
-    has_dragged: Cell<bool>,
     listener: Option<CoreHandle>,
     pointers: RefCell<HashMap<i32, Rc<PointerData>>>,
     pointers_pool: RefCell<Vec<Rc<PointerData>>>,
@@ -57,7 +58,6 @@ impl ListenerGroup {
     pub fn new_optional(listener: Option<CoreHandle>) -> Self {
         Self {
             is_consumed: Cell::new(false),
-            has_dragged: Cell::new(false),
             listener,
             pointers: RefCell::new(HashMap::new()),
             pointers_pool: RefCell::new(Vec::new()),
@@ -97,10 +97,36 @@ impl ListenerGroup {
         }
     }
 
+    pub fn find_pointer_data(&self, id: i32) -> Option<Rc<PointerData>> {
+        self.pointers.borrow().get(&id).cloned()
+    }
+
+    pub fn tracked_pointer_ids(&self) -> Vec<i32> {
+        self.pointers.borrow().keys().copied().collect()
+    }
+
+    pub fn cancel_pointer(&self, pointer_id: i32, _position: Vec2D, _timestamp: f32) -> bool {
+        let Some(pointer) = self.find_pointer_data(pointer_id) else {
+            return false;
+        };
+        if matches!(
+            pointer.phase.get(),
+            GestureClickPhase::Disabled | GestureClickPhase::Out
+        ) {
+            return false;
+        }
+        let was_dragging =
+            pointer.has_dragged.get() && pointer.phase.get() == GestureClickPhase::Down;
+        pointer.phase.set(GestureClickPhase::Out);
+        pointer.has_dragged.set(false);
+        was_dragging
+    }
+
     pub fn release_event(&self, pointer_id: i32) {
         if let Some(pointer) = self.pointers.borrow_mut().remove(&pointer_id) {
             pointer.is_hovered.set(false);
             pointer.is_prev_hovered.set(false);
+            pointer.has_dragged.set(false);
             pointer.phase.set(GestureClickPhase::Out);
             pointer.previous_position.set(Vec2D::new(0.0, 0.0));
             self.pointers_pool.borrow_mut().push(pointer);
@@ -194,10 +220,10 @@ impl ListenerGroup {
                 pointer.phase.get(),
                 GestureClickPhase::Clicked | GestureClickPhase::Out
             )
-            && self.has_dragged.get()
+            && pointer.has_dragged.get()
         {
             state_machine_instance.drag_end(position, time_stamp, pointer_id);
-            self.has_dragged.set(false);
+            pointer.has_dragged.set(false);
         }
 
         let listener = self
@@ -233,9 +259,9 @@ impl ListenerGroup {
         {
             should_perform_changes = true;
             listener_type_matched = ListenerType::Drag;
-            if !self.has_dragged.get() {
+            if !pointer.has_dragged.get() {
                 state_machine_instance.drag_start(position, time_stamp, false, pointer_id);
-                self.has_dragged.set(true);
+                pointer.has_dragged.set(true);
             }
         }
 
@@ -314,6 +340,15 @@ impl HitTarget {
 }
 
 pub trait ListenerGroupBehavior {
+    fn tracked_pointer_ids(&self) -> Vec<i32>;
+    fn cancel_pointer(&self, pointer_id: i32, position: Vec2D, timestamp: f32) -> bool;
+    fn cancel_pointers(&self, position: Vec2D, timestamp: f32, drag_ended: &mut Vec<i32>) {
+        for id in self.tracked_pointer_ids() {
+            if self.cancel_pointer(id, position, timestamp) && !drag_ended.contains(&id) {
+                drag_ended.push(id);
+            }
+        }
+    }
     fn reset(&self, pointer_id: i32);
     fn release_event(&self, pointer_id: i32);
     fn hover(&self, pointer_id: i32);
@@ -354,6 +389,12 @@ impl RuntimeListenerGroupHandle {
 }
 
 impl ListenerGroupBehavior for ListenerGroup {
+    fn tracked_pointer_ids(&self) -> Vec<i32> {
+        Self::tracked_pointer_ids(self)
+    }
+    fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
+        Self::cancel_pointer(self, id, position, timestamp)
+    }
     fn reset(&self, pointer_id: i32) {
         ListenerGroup::reset(self, pointer_id);
     }
@@ -407,6 +448,10 @@ impl ListenerGroupBehavior for ListenerGroup {
 impl ListenerGroupBehavior
     for crate::mechanical_port::source::constraints::draggable_constraint::DraggableConstraintListenerGroup
 {
+    fn tracked_pointer_ids(&self) -> Vec<i32> { Self::tracked_pointer_ids(self) }
+    fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
+        Self::cancel_pointer(self, id, position, timestamp)
+    }
     fn reset(&self, pointer_id: i32) {
         Self::reset(self, pointer_id);
     }

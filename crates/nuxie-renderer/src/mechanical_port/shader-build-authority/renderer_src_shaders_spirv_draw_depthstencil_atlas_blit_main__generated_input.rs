@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_depthstencil_atlas_blit.main";
-pub const PINNED_SOURCE_SHA256: &str = "900e4f9e7d3d5106289afe7609022f1b6cd9ee3df8e2fe7defeaeadf6c9b855f";
+pub const PINNED_SOURCE_SHA256: &str = "67ef4c4c86bef44b4687443990c71bdd977ab8e1a9ac1428a7fb2455d7383350";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_depthstencil_atlas_blit";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 16;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 586;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 17;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 635;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_spirv_draw_depthstencil_atlas_blit_main__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

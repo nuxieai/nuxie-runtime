@@ -1,4 +1,4 @@
-//! Mechanical translation of renderer/src/image_draw_attributes.hpp at 2210ed87.
+//! Mechanical translation of renderer/src/image_draw_attributes.hpp at 9463ff7b.
 //! Semantic names come from the same ordered minifier batch as the shader owners.
 #![allow(non_upper_case_globals)]
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
@@ -25,7 +25,7 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         semanticName: "NB",
     },
     VertexAttribute {
-        format: VertexElementFormat::float1,
+        format: VertexElementFormat::uint32,
         attributeIndex: 5,
         byteOffset: 48,
         semanticName: "XB",
@@ -49,7 +49,19 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         semanticName: "MC",
     },
 ];
-pub const ImageRectInstanceAttributes: [VertexAttribute; 7] = ImageDrawInstanceBaseAttributes;
+pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [
+    ImageDrawInstanceBaseAttributes[0],
+    ImageDrawInstanceBaseAttributes[1],
+    ImageDrawInstanceBaseAttributes[2],
+    ImageDrawInstanceBaseAttributes[3],
+    ImageDrawInstanceBaseAttributes[4],
+    ImageDrawInstanceBaseAttributes[5],
+    ImageDrawInstanceBaseAttributes[6],
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "PD" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 10, byteOffset: 80, semanticName: "QD" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 11, byteOffset: 96, semanticName: "BD" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 12, byteOffset: 112, semanticName: "OC" },
+];
 pub const ImageMeshInstanceAttributes: [VertexAttribute; 7] = ImageDrawInstanceBaseAttributes;
 
 const _: () = {
@@ -58,7 +70,7 @@ const _: () = {
     };
     use core::mem::{offset_of, size_of};
     assert!(size_of::<ImageDrawInstanceBase>() == 64);
-    assert!(size_of::<ImageRectInstance>() == 64);
+    assert!(size_of::<ImageRectInstance>() == 128);
     assert!(size_of::<ImageMeshInstance>() == 64);
     assert!(
         offset_of!(ImageDrawInstanceBase, m_viewMatrix)
@@ -77,7 +89,7 @@ const _: () = {
             == offset_of!(ImageDrawInstanceBase, m_translate) + 2 * size_of::<f32>()
     );
     assert!(
-        offset_of!(ImageDrawInstanceBase, m_opacity)
+        offset_of!(ImageDrawInstanceBase, m_modulatedColor)
             == ImageDrawInstanceBaseAttributes[3].byteOffset as usize
     );
     assert!(
@@ -93,5 +105,12 @@ const _: () = {
             == ImageDrawInstanceBaseAttributes[6].byteOffset as usize
     );
     assert!(offset_of!(ImageRectInstance, m_commons) == 0);
+    assert!(offset_of!(ImageRectInstance, m_imageMatrix) == 64);
+    assert!(offset_of!(ImageRectInstance, m_gradientMatrix) == 80);
+    assert!(offset_of!(ImageRectInstance, m_imageTranslate) == 96);
+    assert!(offset_of!(ImageRectInstance, m_gradientTranslate) == 104);
+    assert!(offset_of!(ImageRectInstance, m_gradTextureHorizontalSpan) == 112);
+    assert!(offset_of!(ImageRectInstance, m_gradTextureY) == 120);
+    assert!(offset_of!(ImageRectInstance, m_gradientType) == 124);
     assert!(offset_of!(ImageMeshInstance, m_commons) == 0);
 };

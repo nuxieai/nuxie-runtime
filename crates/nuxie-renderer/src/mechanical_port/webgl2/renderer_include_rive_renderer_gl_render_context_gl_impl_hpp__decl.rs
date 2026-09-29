@@ -40,18 +40,7 @@ pub(crate) const PINNED_SOURCE: &str =
 
 /// Exact declaration imported from `shader_compilation_mode.hpp` by the
 /// source's AsyncPipelineManager include.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum ShaderCompilationMode {
-    #[default]
-    allowAsynchronous = 0,
-    alwaysSynchronous = 1,
-    onlyUbershaders = 2,
-}
-
-impl ShaderCompilationMode {
-    pub(crate) const standard: Self = Self::allowAsynchronous;
-}
+pub(crate) use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PipelineCreateType {
@@ -316,6 +305,19 @@ pub(crate) struct AsyncPipelineManagerGLState {
 }
 
 impl AsyncPipelineManagerGLState {
+    #[cfg(feature = "with-rive-tools")]
+    pub(crate) fn shaderCompilationMode(&self) -> ShaderCompilationMode {
+        self.m_mode
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub(crate) fn testingOnly_setShaderCompilationMode(
+        &mut self,
+        mode: ShaderCompilationMode,
+    ) -> ShaderCompilationMode {
+        std::mem::replace(&mut self.m_mode, mode)
+    }
+
     pub(crate) fn new(mode: ShaderCompilationMode) -> Self {
         Self {
             m_vertexShaderMap: BTreeMap::new(),
@@ -624,6 +626,26 @@ const _: [(); 22172] = [(); PINNED_SOURCE.len()];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "with-rive-tools")]
+    #[test]
+    fn shader_compilation_mode_changes_preserve_pending_and_cached_state() {
+        let mut manager = AsyncPipelineManagerGLState::new(ShaderCompilationMode::standard);
+        manager.m_pipelines.insert(17, None);
+        manager.m_currentThreadPipelineKey = Some(17);
+        manager.m_activePipelineCreationCount = 1;
+        for (old, new) in [
+            (ShaderCompilationMode::standard, ShaderCompilationMode::onlyUbershaders),
+            (ShaderCompilationMode::onlyUbershaders, ShaderCompilationMode::alwaysSynchronous),
+            (ShaderCompilationMode::alwaysSynchronous, ShaderCompilationMode::standard),
+        ] {
+            assert_eq!(manager.testingOnly_setShaderCompilationMode(new), old);
+            assert_eq!(manager.shaderCompilationMode(), new);
+            assert!(manager.m_pipelines[&17].is_none());
+            assert_eq!(manager.m_currentThreadPipelineKey, Some(17));
+            assert_eq!(manager.m_activePipelineCreationCount, 1);
+        }
+    }
 
     #[test]
     fn frozen_header_and_field_denominators_are_locked() {

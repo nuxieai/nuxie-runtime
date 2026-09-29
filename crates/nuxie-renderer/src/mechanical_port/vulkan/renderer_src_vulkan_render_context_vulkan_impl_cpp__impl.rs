@@ -4515,6 +4515,17 @@ macro_rules! unmap_buffer {
 }
 
 impl RenderContextImplContract for RenderContextVulkanImpl {
+    #[cfg(feature = "with-rive-tools")]
+    fn testingOnly_setShaderCompilationMode(
+        &mut self,
+        mode: ShaderCompilationMode,
+    ) -> ShaderCompilationMode {
+        self.m_pipelineManager
+            .as_ref()
+            .expect("initialized Vulkan pipeline manager")
+            .testingOnly_setShaderCompilationMode(mode)
+    }
+
     fn renderContextImpl(&self) -> &RenderContextImpl {
         &self.base
     }

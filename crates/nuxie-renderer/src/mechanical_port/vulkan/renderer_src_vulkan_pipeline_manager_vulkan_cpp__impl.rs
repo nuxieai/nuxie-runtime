@@ -91,7 +91,7 @@ impl PipelineManagerVulkan {
     ) -> Option<Pin<Box<Self>>> {
         let mut manager = Box::pin(Self {
             m_state: Default::default(),
-            m_mode: mode,
+            m_mode: std::sync::atomic::AtomicI32::new(mode as i32),
             m_jobThread: Default::default(),
             m_newJobCV: Default::default(),
             m_jobCompleteCV: Default::default(),
@@ -704,7 +704,7 @@ pub(crate) fn tryGetPipeline<'a>(
         props.shaderMiscFlags,
         platformFeatures,
     );
-    let createType = match manager.m_mode {
+    let createType = match manager.shaderCompilationMode() {
         ShaderCompilationMode::allowAsynchronous => {
             if props.shaderFeatures == ubershaderFeatures {
                 PipelineCreateType::sync

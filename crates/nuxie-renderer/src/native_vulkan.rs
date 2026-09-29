@@ -127,6 +127,74 @@ impl NativeVulkanFactory {
             .map(|core| NativeVulkanFrame { core })
     }
 
+    /// Convert a decoded video frame held in an AHardwareBuffer into one of
+    /// `textures` and return it as an image the ordinary image paint draws.
+    /// The buffer is imported with no copy and converted from YUV to RGBA with
+    /// its own matrix and range in one draw on the GPU, which completes before
+    /// this returns, so the caller may release the buffer right after.
+    ///
+    /// `crop` is the picture's left, top, right and bottom edges in buffer
+    /// pixels, all zero for the whole buffer, and `quarter_turns` the
+    /// clockwise quarter turns from buffer to display. The image has the
+    /// turned crop's extent. `color` is the matrix and range the decoder tags
+    /// its output with; `None` falls back to the driver's suggestion, which
+    /// some drivers get wrong.
+    ///
+    /// # Safety
+    /// `buffer` is a live AHardwareBuffer with GPU sampled-image usage whose
+    /// producer has finished writing it (its acquire fence has signalled).
+    /// Calls are serialized with rendering on the native lane.
+    #[cfg(target_os = "android")]
+    pub unsafe fn import_hardware_buffer(
+        &self,
+        textures: &mut crate::ExternalImageTextures,
+        buffer: std::ptr::NonNull<std::ffi::c_void>,
+        crop: [u32; 4],
+        quarter_turns: u32,
+        color: Option<crate::VideoColor>,
+    ) -> Result<std::rc::Rc<dyn RenderImage>, RendererError> {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+        use crate::mechanical_port::vulkan::hardware_buffer::{hardware_buffer_size, FrameRegion};
+        let crop = if crop == [0; 4] {
+            let (width, height) = unsafe { hardware_buffer_size(buffer) }.ok_or(
+                RendererError::Unsupported("AHardwareBuffer_describe (Android 8)"),
+            )?;
+            [0, 0, width, height]
+        } else {
+            crop
+        };
+        let region = FrameRegion {
+            crop,
+            quarter_turns,
+        };
+        let [left, top, right, bottom] = crop;
+        if quarter_turns > 3 || left >= right || top >= bottom {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "invalid video frame crop {crop:?} or turn {quarter_turns}"
+            )));
+        }
+        let (width, height) = region.display_extent();
+        self.core
+            .check_texture_extent("video frame", width, height)?;
+        let image = textures.0.next(
+            |image| {
+                self.core.owns_image(image) && (image.width(), image.height()) == (width, height)
+            },
+            RiveRenderImageHandle::is_sole_owner,
+            || {
+                let texture = self
+                    .core
+                    .with_backend_mut(|backend| backend.make_frame_texture(width, height))?;
+                // SAFETY: the backend returned a live texture of this device.
+                unsafe { self.core.adopt_texture(texture) }
+            },
+        )?;
+        self.core.with_backend_mut(|backend| unsafe {
+            backend.convert_hardware_buffer(buffer, region, color, &image)
+        })?;
+        Ok(image as std::rc::Rc<dyn RenderImage>)
+    }
+
     /// Uploads tightly packed, premultiplied RGBA8 through the exact Vulkan
     /// image-texture constructor.
     pub fn upload_canonical_rgba8_premul_srgb(

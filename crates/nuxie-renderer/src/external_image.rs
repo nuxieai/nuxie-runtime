@@ -1,7 +1,28 @@
 //! Reusable textures for GPU-to-GPU uploads of external images, such as a
-//! browser video's decoded frames.
+//! browser video's decoded frames or an Android decoder's hardware buffers.
 
 use std::rc::Rc;
+
+/// Textures that receive one stream of external images, such as one video's
+/// decoded frames, through `NativeWebGpuFactory::copy_external_image` or
+/// `NativeVulkanFactory::import_hardware_buffer`. The stream never rewrites an
+/// image someone still holds, so an image handed out earlier keeps its pixels.
+/// In steady state it alternates between two textures and allocates again only
+/// when the image size changes.
+#[cfg(any(
+    all(
+        feature = "renderer-webgpu",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ),
+    all(feature = "native-vulkan-experimental", target_os = "android")
+))]
+#[derive(Default)]
+pub struct ExternalImageTextures(
+    pub(crate)  TextureRing<
+        crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle,
+    >,
+);
 
 /// One image stream's textures, oldest first. The next image is written only
 /// into a texture nobody outside the ring holds, so an image handed out

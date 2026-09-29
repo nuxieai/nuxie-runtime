@@ -61,7 +61,7 @@
 #![allow(non_upper_case_globals)]
 
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    RefCntTarget, rcp, static_rcp_cast,
+    rcp, static_rcp_cast, RefCntTarget,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
@@ -314,10 +314,15 @@ impl RiveRenderImageHandle {
         resource_domain: RenderResourceDomain,
         domain_guard: Rc<dyn Any>,
     ) {
-        assert!(self.execution_domain.set(AttachedImageExecutionDomain {
-            resource_domain,
-            _domain_guard: domain_guard,
-        }).is_ok(), "image execution domain already attached");
+        assert!(
+            self.execution_domain
+                .set(AttachedImageExecutionDomain {
+                    resource_domain,
+                    _domain_guard: domain_guard,
+                })
+                .is_ok(),
+            "image execution domain already attached"
+        );
     }
 
     /// Returns whether this resource was created by the queried execution
@@ -353,10 +358,13 @@ impl RiveRenderImageHandle {
     /// canvas import retains either, so rewriting the texture changes nothing
     /// another owner can see. The counts are exact on the renderer's owner
     /// thread, the only thread these resources are used on.
-    #[cfg(all(
-        feature = "native-webgpu-experimental",
-        target_arch = "wasm32",
-        target_os = "unknown"
+    #[cfg(any(
+        all(
+            feature = "native-webgpu-experimental",
+            target_arch = "wasm32",
+            target_os = "unknown"
+        ),
+        all(feature = "native-vulkan-experimental", target_os = "android")
     ))]
     pub(crate) fn is_sole_owner(&self) -> bool {
         let image = self.source();
@@ -477,19 +485,15 @@ mod tests {
         let matching_anchor: Rc<dyn Any> = Rc::new(());
         let foreign_anchor: Rc<dyn Any> = Rc::new(());
         let unattached = RiveRenderImageHandle::from_exact(image.clone()).expect("source image");
-        assert!(
-            unattached
-                .source_texture_for_execution_anchor(&matching_anchor)
-                .is_none()
-        );
+        assert!(unattached
+            .source_texture_for_execution_anchor(&matching_anchor)
+            .is_none());
 
         let attached = RiveRenderImageHandle::from_exact(image)
             .expect("source image")
             .with_execution_domain(RenderResourceDomain::new(), Rc::clone(&matching_anchor));
-        assert!(
-            attached
-                .source_texture_for_execution_anchor(&foreign_anchor)
-                .is_none()
-        );
+        assert!(attached
+            .source_texture_for_execution_anchor(&foreign_anchor)
+            .is_none());
     }
 }

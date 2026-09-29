@@ -35,10 +35,13 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
     RiveRenderImage, RiveRenderImageHandle,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
-#[cfg(all(
-    feature = "native-webgpu-experimental",
-    target_arch = "wasm32",
-    target_os = "unknown"
+#[cfg(any(
+    all(
+        feature = "native-webgpu-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ),
+    all(feature = "native-vulkan-experimental", target_os = "android")
 ))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as GpuTexture;
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
@@ -494,10 +497,13 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
     ///
     /// # Safety
     /// `texture` must be non-null and belong to this factory's device.
-    #[cfg(all(
-        feature = "native-webgpu-experimental",
-        target_arch = "wasm32",
-        target_os = "unknown"
+    #[cfg(any(
+        all(
+            feature = "native-webgpu-experimental",
+            target_arch = "wasm32",
+            target_os = "unknown"
+        ),
+        all(feature = "native-vulkan-experimental", target_os = "android")
     ))]
     pub(crate) unsafe fn adopt_texture(
         &self,
@@ -515,10 +521,13 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
     }
 
     /// Whether `image` was created by this factory's device.
-    #[cfg(all(
-        feature = "native-webgpu-experimental",
-        target_arch = "wasm32",
-        target_os = "unknown"
+    #[cfg(any(
+        all(
+            feature = "native-webgpu-experimental",
+            target_arch = "wasm32",
+            target_os = "unknown"
+        ),
+        all(feature = "native-vulkan-experimental", target_os = "android")
     ))]
     pub(crate) fn owns_image(&self, image: &RiveRenderImageHandle) -> bool {
         image.belongs_to(&self.resource_domain)

@@ -92,8 +92,6 @@ pub(crate) mod webgl2 {
     // boundary. Only the cross-backend load/store dependency and opaque
     // ContextGL type escape; coupled GL owner records stay unnameable outside
     // this translation zone.
-    #[path = "renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"]
-    mod gles3_decl;
     #[path = "renderer_include_rive_renderer_gl_gl_state_hpp__decl.rs"]
     mod gl_state_decl;
     #[path = "renderer_src_gl_gl_state_cpp__impl.rs"]
@@ -102,25 +100,8 @@ pub(crate) mod webgl2 {
     mod gl_utils_decl;
     #[path = "renderer_src_gl_gl_utils_cpp__impl.rs"]
     mod gl_utils_impl;
-    #[path = "renderer_include_rive_renderer_gl_render_buffer_gl_impl_hpp__decl.rs"]
-    mod render_buffer_gl_impl_decl;
-    #[path = "renderer_src_gl_render_buffer_gl_impl_cpp__impl.rs"]
-    mod render_buffer_gl_impl_impl;
-    #[cfg(feature = "ore-gl")]
-    #[path = "renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs"]
-    mod render_context_gl_decl;
-    #[cfg(feature = "ore-gl")]
-    #[path = "renderer_src_gl_render_context_gl_impl_cpp__impl.rs"]
-    mod render_context_gl_impl;
-    #[cfg(feature = "ore-gl")]
-    #[path = "renderer_src_gl_pls_impl_webgl_cpp__impl.rs"]
-    mod pls_impl_webgl_impl;
-    #[cfg(feature = "ore-gl")]
-    #[path = "renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"]
-    mod render_target_gl_decl;
-    #[cfg(feature = "ore-gl")]
-    #[path = "renderer_src_gl_render_target_gl_cpp__impl.rs"]
-    mod render_target_gl_impl;
+    #[path = "renderer_include_rive_renderer_gl_gles3_hpp__decl.rs"]
+    mod gles3_decl;
     #[path = "renderer_include_rive_renderer_gl_load_gles_extensions_hpp__decl.rs"]
     mod load_gles_extensions_decl;
     #[path = "renderer_include_rive_renderer_gl_load_store_actions_ext_hpp__decl.rs"]
@@ -163,6 +144,25 @@ pub(crate) mod webgl2 {
     mod ore_texture_gl_decl;
     #[path = "renderer_src_ore_gl_ore_texture_gl_cpp__impl.rs"]
     mod ore_texture_gl_impl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_gl_pls_impl_webgl_cpp__impl.rs"]
+    mod pls_impl_webgl_impl;
+    #[path = "renderer_include_rive_renderer_gl_render_buffer_gl_impl_hpp__decl.rs"]
+    mod render_buffer_gl_impl_decl;
+    #[path = "renderer_src_gl_render_buffer_gl_impl_cpp__impl.rs"]
+    mod render_buffer_gl_impl_impl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_include_rive_renderer_gl_render_context_gl_impl_hpp__decl.rs"]
+    mod render_context_gl_decl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_gl_render_context_gl_impl_cpp__impl.rs"]
+    mod render_context_gl_impl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_include_rive_renderer_gl_render_target_gl_hpp__decl.rs"]
+    mod render_target_gl_decl;
+    #[cfg(feature = "ore-gl")]
+    #[path = "renderer_src_gl_render_target_gl_cpp__impl.rs"]
+    mod render_target_gl_impl;
 
     #[cfg(feature = "ore-gl")]
     pub(crate) use ore_context_gl_decl::ContextGL;
@@ -179,10 +179,10 @@ pub(crate) mod webgpu {
     // Keep raw WebGPU handles, ManuallyDrop graphs, caches, and paired
     // texture/view owners inside one source-member/friend translation zone.
     // The crate sees only the opaque ContextWGPU root below.
-    #[path = "renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"]
-    mod render_context_webgpu_decl;
-    #[path = "renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs"]
-    mod render_context_webgpu_impl;
+    #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"]
+    mod library_webgpu_stubs_build_input;
+    #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_wagyu_stubs_js__compat_build_input.rs"]
+    mod library_webgpu_wagyu_stubs_build_input;
     #[path = "renderer_src_ore_wgpu_ore_bind_group_layout_wgpu_hpp__decl.rs"]
     mod ore_bind_group_layout_wgpu_decl;
     #[path = "renderer_src_ore_wgpu_ore_bind_group_wgpu_hpp__decl.rs"]
@@ -219,26 +219,26 @@ pub(crate) mod webgpu {
     mod ore_texture_wgpu_impl;
     #[path = "renderer_src_ore_wgpu_ore_wgpu_layout_hpp__decl.rs"]
     mod ore_wgpu_layout_decl;
-    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"]
-    mod webgpu_decl;
-    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"]
-    mod webgpu_wagyu_decl;
-    #[path = "renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs"]
-    mod webgpu_impl;
+    #[path = "renderer_include_rive_renderer_webgpu_render_context_webgpu_impl_hpp__decl.rs"]
+    mod render_context_webgpu_decl;
+    #[path = "renderer_src_webgpu_render_context_webgpu_impl_cpp__impl.rs"]
+    mod render_context_webgpu_impl;
+    #[path = "renderer_src_webgpu_webgpu_compat_h__decl.rs"]
+    mod webgpu_compat_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_chained_struct_h__decl.rs"]
     mod webgpu_cpp_chained_struct_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_cpp_h__decl.rs"]
     mod webgpu_cpp_decl;
+    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_h__decl.rs"]
+    mod webgpu_decl;
     #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_enum_class_bitmasks_h__decl.rs"]
     mod webgpu_enum_class_bitmasks_decl;
-    #[path = "renderer_src_webgpu_webgpu_compat_h__decl.rs"]
-    mod webgpu_compat_decl;
-    #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_stubs_js__compat_build_input.rs"]
-    mod library_webgpu_stubs_build_input;
-    #[path = "renderer_src_webgpu_wagyu_port_src_library_webgpu_wagyu_stubs_js__compat_build_input.rs"]
-    mod library_webgpu_wagyu_stubs_build_input;
+    #[path = "renderer_src_webgpu_wagyu_port_src_webgpu_c__impl.rs"]
+    mod webgpu_impl;
     #[path = "renderer_src_webgpu_wagyu_port_webgpu_port_py__generator.rs"]
     mod webgpu_port_generator;
+    #[path = "renderer_src_webgpu_wagyu_port_include_webgpu_webgpu_wagyu_h__decl.rs"]
+    mod webgpu_wagyu_decl;
 
     #[path = "product_root.rs"]
     mod product_root;
@@ -249,10 +249,10 @@ pub(crate) mod webgpu {
 
 #[cfg(feature = "native-vulkan-experimental")]
 pub(crate) mod vulkan {
-    #[path = "renderer_rive_vk_bootstrap_src_vulkan_frame_synchronizer_cpp__impl.rs"]
-    mod frame_synchronizer_impl;
     #[path = "renderer_rive_vk_bootstrap_include_rive_vk_bootstrap_vulkan_frame_sync_coordinator_hpp__decl.rs"]
     mod frame_sync_coordinator_decl;
+    #[path = "renderer_rive_vk_bootstrap_src_vulkan_frame_synchronizer_cpp__impl.rs"]
+    mod frame_synchronizer_impl;
     // Vulkan native handles and reverse-teardown owner graphs are a sealed
     // translation zone. The crate sees only the opaque ContextVulkan root.
     #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]
@@ -309,6 +309,8 @@ pub(crate) mod vulkan {
     mod pipeline_manager_vulkan_decl;
     #[path = "renderer_src_vulkan_pipeline_manager_vulkan_cpp__impl.rs"]
     mod pipeline_manager_vulkan_impl;
+    #[path = "product_root.rs"]
+    mod product_root;
     #[path = "renderer_include_rive_renderer_vulkan_render_context_vulkan_impl_hpp__decl.rs"]
     mod render_context_vulkan_decl;
     #[path = "renderer_src_vulkan_render_context_vulkan_impl_cpp__impl.rs"]
@@ -325,31 +327,32 @@ pub(crate) mod vulkan {
     mod vkutil_decl;
     #[path = "renderer_src_vulkan_vkutil_cpp__impl.rs"]
     mod vkutil_impl;
+    #[cfg(test)]
+    #[path = "vulkan_allocation_failure_test.rs"]
+    mod vulkan_allocation_failure_test;
     #[path = "renderer_include_rive_renderer_vulkan_vulkan_context_hpp__decl.rs"]
     mod vulkan_context_decl;
     #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]
     mod vulkan_context_impl;
-    #[cfg(test)]
-    #[path = "vulkan_allocation_failure_test.rs"]
-    mod vulkan_allocation_failure_test;
     #[path = "renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"]
     mod vulkan_memory_allocator_impl;
     #[path = "renderer_src_vulkan_vulkan_shaders_hpp__decl.rs"]
     mod vulkan_shaders_decl;
     #[path = "renderer_src_vulkan_vulkan_shaders_cpp__impl.rs"]
     mod vulkan_shaders_impl;
-    #[path = "product_root.rs"]
-    mod product_root;
 
+    #[cfg(target_os = "android")]
+    #[path = "android_surface.rs"]
+    mod android_surface;
+    #[cfg(any(test, target_os = "android"))]
+    #[path = "hardware_buffer/mod.rs"]
+    pub(crate) mod hardware_buffer;
     #[path = "surface_config.rs"]
     mod surface_config;
     #[path = "surface_swapchain.rs"]
     mod surface_swapchain;
     #[path = "surface_transfer.rs"]
     mod surface_transfer;
-    #[cfg(target_os = "android")]
-    #[path = "android_surface.rs"]
-    mod android_surface;
 
     pub(crate) use ore_context_vulkan_decl::ContextVulkan;
     pub(crate) use product_root::VulkanProductBackend;
@@ -393,17 +396,17 @@ pub(crate) mod source {
                     pub(crate) mod buffer_ring_hpp;
                     pub(crate) mod draw_hpp;
                     pub(crate) mod gpu_hpp;
-                    pub(crate) mod scoped_autorelease_pool_hpp;
                     pub(crate) mod render_canvas_hpp;
                     pub(crate) mod render_context_helper_impl_hpp;
                     pub(crate) mod render_context_hpp;
-                    pub(crate) mod shader_compilation_mode_hpp;
                     pub(crate) mod render_context_impl_hpp;
                     pub(crate) mod render_target_hpp;
                     pub(crate) mod rive_render_buffer_hpp;
                     pub(crate) mod rive_render_factory_hpp;
                     pub(crate) mod rive_render_image_hpp;
                     pub(crate) mod rive_renderer_hpp;
+                    pub(crate) mod scoped_autorelease_pool_hpp;
+                    pub(crate) mod shader_compilation_mode_hpp;
                     pub(crate) mod texture_hpp;
                     pub(crate) mod triangulation_controller_hpp;
 
@@ -426,9 +429,9 @@ pub(crate) mod source {
         pub(crate) mod src {
             pub(crate) mod draw_cpp;
             pub(crate) mod gpu_cpp;
-            pub(crate) mod image_draw_attributes_hpp;
             pub(crate) mod gradient_cpp;
             pub(crate) mod gradient_hpp;
+            pub(crate) mod image_draw_attributes_hpp;
             pub(crate) mod render_context_cpp;
             pub(crate) mod render_context_helper_impl_cpp;
             pub(crate) mod rive_render_factory_cpp;
@@ -458,7 +461,6 @@ pub(crate) mod source {
             pub(crate) mod shaders {
                 pub(crate) mod advanced_blend_glsl;
                 pub(crate) mod atomic_draw_glsl;
-                pub(crate) mod gradient_packing_common_glsl;
                 pub(crate) mod bezier_utils_glsl;
                 pub(crate) mod blit_texture_as_draw_glsl;
                 pub(crate) mod clear_clockwise_atomic_clip_glsl;
@@ -470,17 +472,18 @@ pub(crate) mod source {
                 pub(crate) mod draw_clockwise_atomic_path_frag;
                 pub(crate) mod draw_clockwise_clip_frag;
                 pub(crate) mod draw_clockwise_path_frag;
+                pub(crate) mod draw_depthstencil_object_frag;
                 pub(crate) mod draw_fullscreen_quad_vert;
                 pub(crate) mod draw_image_mesh_vert;
                 pub(crate) mod draw_input_attachment_frag;
                 pub(crate) mod draw_mesh_frag;
-                pub(crate) mod draw_depthstencil_object_frag;
                 pub(crate) mod draw_msaa_resolve_frag;
                 pub(crate) mod draw_path_common_glsl;
                 pub(crate) mod draw_path_vert;
                 pub(crate) mod draw_raster_order_path_frag;
                 pub(crate) mod flush_uniforms_glsl;
                 pub(crate) mod glsl_glsl;
+                pub(crate) mod gradient_packing_common_glsl;
                 pub(crate) mod hlsl_glsl;
                 pub(crate) mod init_clockwise_atomic_workaround_frag;
                 pub(crate) mod makefile;

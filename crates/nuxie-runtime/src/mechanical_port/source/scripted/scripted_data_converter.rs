@@ -62,7 +62,6 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 pub struct ScriptedDataConverter {
     pub base: ScriptedDataConverterBase,
     pub scripted: ScriptedObject,
-    data_context: Option<RuntimeDataContextHandle>,
     data_value: Option<Box<dyn DataValue>>,
     pub properties: Vec<CoreHandle>,
 }
@@ -77,7 +76,6 @@ impl ScriptedDataConverter {
     pub(crate) fn clear_binding_context(&mut self) {
         // The projected script model owns a File lease. Once detached, this
         // File-owned converter must not retain its former binding's lease.
-        self.data_context = None;
         self.scripted.set_data_context(None);
     }
 
@@ -152,7 +150,7 @@ impl ScriptedDataConverter {
         None
     }
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
-        self.data_context.clone()
+        self.base.base.data_binds.data_bind_context()
     }
 
     pub fn did_hydrate_script_inputs(&mut self) {
@@ -249,16 +247,15 @@ impl ScriptedDataConverter {
     pub fn bind_from_context_occurrence(
         owner: &CoreHandle,
         context: RuntimeDataContextHandle,
-        data_bind: CoreHandle,
+        data_bind: Option<CoreHandle>,
     ) {
+        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::bind_from_context_handle(owner, context.clone(), data_bind);
         let properties = owner
             .with_downcast_mut::<Self, _>(|converter| {
-                converter.data_context = Some(context.clone());
                 converter.scripted.set_data_context(Some(context.clone()));
                 converter.properties.clone()
             })
             .expect("a retained scripted converter keeps its type");
-        crate::mechanical_port::source::data_bind::converters::data_converter::DataConverter::bind_from_context_handle(owner, context.clone(), data_bind);
         let mut host = ScriptUpdateRequestHost::default();
         ScriptedObject::reinit_occurrence(owner, &properties, &mut host);
         for property in properties {

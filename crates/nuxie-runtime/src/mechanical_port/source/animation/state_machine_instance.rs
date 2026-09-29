@@ -2032,7 +2032,6 @@ pub struct RuntimeStateMachineInstanceHandle(
     Rc<RefCell<StateMachineInstance>>,
     DataBindContainer,
     RuntimeArtboardInstanceWeakHandle,
-    Rc<RefCell<Option<RuntimeDataContextHandle>>>,
     Rc<RefCell<Sidecar<SMIInputExtras>>>,
     Rc<Cell<bool>>,
 );
@@ -2042,7 +2041,6 @@ pub struct RuntimeStateMachineInstanceWeakHandle(
     Weak<RefCell<StateMachineInstance>>,
     crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerWeak,
     RuntimeArtboardInstanceWeakHandle,
-    Weak<RefCell<Option<RuntimeDataContextHandle>>>,
     Weak<RefCell<Sidecar<SMIInputExtras>>>,
     Weak<Cell<bool>>,
 );
@@ -2217,7 +2215,7 @@ impl RuntimeStateMachineInstanceHandle {
                 keep_going = true;
             }
             if advance_view_models {
-                let context = self.3.borrow().clone();
+                let context = self.1.data_bind_context();
                 if let Some(context) = context {
                     context.with_context(DataContext::advanced);
                 }
@@ -2267,14 +2265,12 @@ impl RuntimeStateMachineInstanceHandle {
     fn new(instance: StateMachineInstance) -> Self {
         let container = instance.data_bind_container.clone();
         let artboard = instance.artboard_instance.clone();
-        let context = instance.data_context_handle.clone();
         let input_extras = instance.input_extras.clone();
         let needs_advance = instance.needs_advance.clone();
         Self(
             Rc::new(RefCell::new(instance)),
             container,
             artboard,
-            context,
             input_extras,
             needs_advance,
         )
@@ -2287,7 +2283,6 @@ impl RuntimeStateMachineInstanceHandle {
             self.2.clone(),
             Rc::downgrade(&self.3),
             Rc::downgrade(&self.4),
-            Rc::downgrade(&self.5),
         )
     }
 
@@ -2311,11 +2306,8 @@ impl RuntimeStateMachineInstanceWeakHandle {
                 self.2.clone(),
                 self.3
                     .upgrade()
-                    .expect("live machine owns its data-context field"),
-                self.4
-                    .upgrade()
                     .expect("live machine owns its input-extras cell"),
-                self.5
+                self.4
                     .upgrade()
                     .expect("live machine owns its advance flag"),
             )
@@ -2344,8 +2336,9 @@ impl RuntimeStateMachineInstanceWeakHandle {
 
     pub(crate) fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
         let machine = self.upgrade()?;
-        let context = machine.3.borrow().clone();
-        context
+        // The retained container exposes the single owning context without
+        // reborrowing a machine that may be active in a pointer callback.
+        machine.1.data_bind_context()
     }
 
     pub(crate) fn queue_focus_event(&self, group: RuntimeFocusListenerGroupHandle, is_focus: bool) {
@@ -2356,12 +2349,12 @@ impl RuntimeStateMachineInstanceWeakHandle {
         // machine is borrowed. These are its actual queue and advance flag,
         // so upstream's synchronous enqueue needs no second machine borrow.
         machine
-            .4
+            .3
             .borrow_mut()
             .ensure_allocated()
             .queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
-        machine.5.set(true);
+        machine.4.set(true);
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> Option<R> {
@@ -2391,9 +2384,6 @@ pub struct StateMachineInstance {
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
-    // Canonical m_DataContext field. Callback-capable property relinking reads
-    // this same cell without reborrowing the active pointer-event owner.
-    data_context_handle: Rc<RefCell<Option<RuntimeDataContextHandle>>>,
     pub(crate) data_bind_container: DataBindContainer,
     draw_order_change_counter: u8,
     reporting: Sidecar<SMIReporting>,
@@ -2480,7 +2470,6 @@ impl StateMachineInstance {
             listener_groups: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
-            data_context_handle: Rc::new(RefCell::new(None)),
             data_bind_container: DataBindContainer::default(),
             draw_order_change_counter: 0,
             reporting: Sidecar::default(),
@@ -4477,10 +4466,11 @@ impl StateMachineInstance {
         if self.data_context().is_none() {
             let data_context =
                 RuntimeDataContextHandle::new(DataContext::new(Some(view_model_instance)));
+            self.data_bind_container
+                .set_data_bind_context(Some(data_context.clone()));
             data_context.with_context_mut(|context| {
                 context.add_state_machine_dependent_container(self.occurrence.clone());
             });
-            self.data_context_handle.replace(Some(data_context));
             return;
         }
         self.data_context().unwrap().with_context_mut(|context| {
@@ -4527,10 +4517,11 @@ impl StateMachineInstance {
                 return true;
             }
             let data_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            self.data_bind_container
+                .set_data_bind_context(Some(data_context.clone()));
             data_context.with_context_mut(|context| {
                 context.add_state_machine_dependent_container(self.occurrence.clone());
             });
-            self.data_context_handle.replace(Some(data_context));
         }
         self.data_context().unwrap().with_context_mut(|context| {
             context.set_view_model_instance_for_slot(slot_key, view_model_instance);
@@ -4541,10 +4532,11 @@ impl StateMachineInstance {
     pub fn bind(&mut self) {
         if self.data_context().is_none() {
             let data_context = RuntimeDataContextHandle::new(DataContext::new(None));
+            self.data_bind_container
+                .set_data_bind_context(Some(data_context.clone()));
             data_context.with_context_mut(|context| {
                 context.add_state_machine_dependent_container(self.occurrence.clone());
             });
-            self.data_context_handle.replace(Some(data_context));
         }
         self.complete_view_model_instances();
         let data_context = self.data_context().unwrap();
@@ -4674,7 +4666,7 @@ impl StateMachineInstance {
     }
 
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
-        self.data_context_handle.borrow().clone()
+        self.data_bind_container.data_bind_context()
     }
 
     pub fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
@@ -4712,7 +4704,6 @@ impl StateMachineInstance {
     }
 
     fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
-        self.data_context_handle.replace(Some(data_context.clone()));
         self.data_bind_container
             .bind_data_binds_from_context(data_context.clone());
         for listener in self
@@ -4754,7 +4745,7 @@ impl StateMachineInstance {
             data_context.with_context_mut(|context| {
                 context.remove_state_machine_dependent_container(&self.occurrence);
             });
-            self.data_context_handle.replace(None);
+            self.data_bind_container.set_data_bind_context(None);
         }
         for listener in self
             .reporting

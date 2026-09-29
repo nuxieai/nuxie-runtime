@@ -42,6 +42,10 @@ impl RuntimeDataContextHandle {
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
+
+    pub fn debugging_refcnt(&self) -> usize {
+        Rc::strong_count(&self.0)
+    }
 }
 
 impl Drop for DataContext {

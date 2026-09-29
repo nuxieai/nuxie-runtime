@@ -426,23 +426,25 @@ impl DataConverterFormula {
     pub fn bind_from_context(
         &mut self,
         data_context: RuntimeDataContextHandle,
-        data_bind: CoreHandle,
+        data_bind: Option<CoreHandle>,
     ) {
         self.base
             .base
             .bind_from_context(data_context, data_bind.clone());
         let source = data_bind
-            .with(|data_bind| {
-                data_bind
-                    .as_data_bind()
-                    .and_then(|data_bind| data_bind.source())
+            .and_then(|data_bind| {
+                data_bind.with(|data_bind| {
+                    data_bind
+                        .as_data_bind()
+                        .and_then(|data_bind| data_bind.source())
+                })
             })
             .flatten();
-        self.source = source.clone();
-        let Some(dependent) = self.base.base.base.base.handle() else {
-            return;
-        };
         if let Some(source) = source {
+            self.source = Some(source.clone());
+            let Some(dependent) = self.base.base.base.base.handle() else {
+                return;
+            };
             source.with_mut(|source| {
                 if let Some(source) = source.as_view_model_instance_value_mut() {
                     source.add_dependent(ValueDependentHandle::core(dependent));
@@ -456,15 +458,19 @@ impl DataConverterFormula {
         }
     }
     pub fn unbind(&mut self) {
+        self.detach_source_dependency();
+        self.base.base.unbind();
+    }
+
+    pub(crate) fn detach_source_dependency(&mut self) {
         if let Some(source) = self.source.take() {
-            let Some(dependent) = self.base.base.base.base.handle() else {
-                return;
-            };
-            source.with_mut(|source| {
-                if let Some(source) = source.as_view_model_instance_value_mut() {
-                    source.remove_dependent(&ValueDependentHandle::core(dependent));
-                }
-            });
+            if let Some(dependent) = self.base.base.base.base.handle() {
+                source.with_mut(|source| {
+                    if let Some(source) = source.as_view_model_instance_value_mut() {
+                        source.remove_dependent(&ValueDependentHandle::core(dependent));
+                    }
+                });
+            }
         }
     }
     pub fn set_is_instance(&mut self, value: bool) {
@@ -538,10 +544,10 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
                 data_bind.clone(),
             );
             let source = data_bind
-                .with(|bind| bind.as_data_bind().unwrap().source())
+                .and_then(|bind| bind.with(|bind| bind.as_data_bind().unwrap().source()))
                 .flatten();
-            owner.with_downcast_mut::<Self, _>(|owner| owner.source = source.clone());
             if let Some(source) = source {
+                owner.with_downcast_mut::<Self, _>(|owner| owner.source = Some(source.clone()));
                 source.with_mut(|source| {
                     source
                         .as_view_model_instance_value_mut()

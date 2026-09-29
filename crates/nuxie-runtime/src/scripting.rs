@@ -1901,7 +1901,7 @@ mod scripted_context_source_tests {
         ScriptedDataConverter::bind_from_context_occurrence(
             &converter,
             converter_context.clone(),
-            data_bind,
+            Some(data_bind),
         );
         converter.with_mut(|converter| {
             converter

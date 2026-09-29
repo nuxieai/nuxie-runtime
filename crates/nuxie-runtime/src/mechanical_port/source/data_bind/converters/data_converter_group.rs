@@ -18,7 +18,11 @@ pub trait GroupConverter {
         output: &mut dyn FnMut(&dyn DataValue),
     );
     fn output_type(&self) -> DataType;
-    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle);
+    fn bind_from_context(
+        &mut self,
+        context: RuntimeDataContextHandle,
+        data_bind: Option<CoreHandle>,
+    );
     fn unbind(&mut self);
     fn update(&mut self);
     fn reset(&mut self);
@@ -115,7 +119,11 @@ impl DataConverterGroup {
         }
         true
     }
-    pub fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
+    pub fn bind_from_context(
+        &mut self,
+        context: RuntimeDataContextHandle,
+        data_bind: Option<CoreHandle>,
+    ) {
         self.base
             .base
             .bind_from_context(context.clone(), data_bind.clone());
@@ -144,13 +152,10 @@ impl DataConverterGroup {
                 })
                 .flatten();
             if let Some(converter) = converter {
-                converter.with_mut(|converter| {
-                    if let Some(converter) = converter.as_data_converter_capability_mut() {
-                        converter.unbind();
-                    }
-                });
+                super::data_converter::DataConverter::unbind_handle(&converter);
             }
         }
+        self.base.base.unbind();
     }
     pub fn update(&mut self) {
         for item in &self.items {

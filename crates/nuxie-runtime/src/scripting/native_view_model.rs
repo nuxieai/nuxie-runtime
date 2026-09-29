@@ -429,7 +429,7 @@ impl NativeScriptViewModel {
             let previous = owner.asset().font();
             let changed = owner.base.property_value() != u32::MAX
                 || !match (&previous, &native) {
-                    (Some(previous), Some(native)) => Rc::ptr_eq(previous, native),
+                    (Some(previous), Some(native)) => Arc::ptr_eq(previous, native),
                     (None, None) => true,
                     _ => false,
                 };

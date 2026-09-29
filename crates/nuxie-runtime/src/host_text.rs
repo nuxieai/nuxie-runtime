@@ -183,12 +183,12 @@ pub fn embedded_font_is_parseable(font_bytes: &[u8]) -> bool {
 #[derive(Clone)]
 pub struct RawTextFont {
     native: FontRef,
-    fallbacks: Rc<[RawTextFont]>,
+    fallbacks: Arc<[RawTextFont]>,
 }
 impl std::fmt::Debug for RawTextFont {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RawTextFont")
-            .field("identity", &Rc::as_ptr(&self.native))
+            .field("identity", &Arc::as_ptr(&self.native))
             .field("fallback_count", &self.fallbacks.len())
             .finish()
     }
@@ -207,7 +207,7 @@ impl RawTextFont {
     pub fn from_native(native: FontRef) -> Self {
         Self {
             native,
-            fallbacks: Rc::from([]),
+            fallbacks: Arc::from([]),
         }
     }
     pub fn native_handle(&self) -> FontRef {

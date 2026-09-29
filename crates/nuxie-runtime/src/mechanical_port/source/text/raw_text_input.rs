@@ -341,7 +341,7 @@ impl RawTextInput {
 
     pub fn set_font(&mut self, value: Option<FontRef>) {
         let unchanged = match (&self.text_run.font, &value) {
-            (Some(left), Some(right)) => Rc::ptr_eq(left, right),
+            (Some(left), Some(right)) => std::sync::Arc::ptr_eq(left, right),
             (None, None) => true,
             _ => false,
         };

@@ -1,8 +1,6 @@
 use std::{
-    cell::RefCell,
     collections::{HashMap, HashSet},
-    rc::Rc,
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use harfrust::{
@@ -69,7 +67,7 @@ pub struct HbFont {
     has_color_paint: bool,
     has_png: bool,
     palette_colors: Vec<skrifa::color::Color>,
-    color_layer_cache: RefCell<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
+    color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
 }
 
 impl HbFont {
@@ -87,7 +85,7 @@ impl HbFont {
         let shaping = ShapingFont::from_index(bytes, face_index).ok()?;
         let outline = OutlineFont::from_index(bytes, face_index).ok()?;
         let _ = (shaping, outline);
-        Some(Rc::new(Self::with_stored_options(
+        Some(Arc::new(Self::with_stored_options(
             Arc::from(bytes),
             face_index,
             HashMap::new(),
@@ -172,7 +170,7 @@ impl HbFont {
             has_color_paint,
             has_png,
             palette_colors,
-            color_layer_cache: RefCell::new(HashMap::new()),
+            color_layer_cache: Mutex::new(HashMap::new()),
         }
     }
 
@@ -303,7 +301,7 @@ impl Font for HbFont {
         for feature in features {
             values.insert(feature.tag, feature.value);
         }
-        Rc::new(Self::with_stored_options(
+        Arc::new(Self::with_stored_options(
             Arc::clone(&self.bytes),
             self.face_index,
             axes,
@@ -337,7 +335,7 @@ impl Font for HbFont {
         if !self.has_color_glyphs() {
             return 0;
         }
-        if let Some(cached) = self.color_layer_cache.borrow().get(&glyph).cloned() {
+        if let Some(cached) = self.color_layer_cache.lock().unwrap().get(&glyph).cloned() {
             let count = cached.len();
             out.extend(cached.into_iter().map(|mut layer| {
                 if layer.use_foreground {
@@ -398,7 +396,8 @@ impl Font for HbFont {
         }
         let count = layers.len();
         self.color_layer_cache
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .insert(glyph, layers.clone());
         out.extend(layers);
         count

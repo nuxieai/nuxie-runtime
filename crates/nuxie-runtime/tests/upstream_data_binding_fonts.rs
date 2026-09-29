@@ -1,5 +1,5 @@
 //! Direct ports of both pinned `data_binding_fonts_test.cpp` cases.
-use std::{path::PathBuf, rc::Rc};
+use std::path::PathBuf;
 
 use nuxie_render_api::{Factory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
@@ -174,7 +174,7 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     set_font(&property, Some(font.clone()));
     fixture.advance(0.0);
     let installed_kablammo = stored_font(&property).expect("backing FontAsset retains kablammo");
-    assert!(Rc::ptr_eq(&installed_kablammo, &font));
+    assert!(std::sync::Arc::ptr_eq(&installed_kablammo, &font));
     assert_eq!(
         source_bytes(&installed_kablammo).as_ref(),
         kablammo.as_slice()
@@ -185,9 +185,12 @@ fn font_data_bind_stores_and_clears_the_font_on_the_property() {
     set_font(&property, Some(font2.clone()));
     fixture.advance(0.0);
     let installed_nabla = stored_font(&property).expect("backing FontAsset retains nabla");
-    assert!(Rc::ptr_eq(&installed_nabla, &font2));
+    assert!(std::sync::Arc::ptr_eq(&installed_nabla, &font2));
     assert_eq!(source_bytes(&installed_nabla).as_ref(), nabla.as_slice());
-    assert!(!Rc::ptr_eq(&installed_kablammo, &installed_nabla));
+    assert!(!std::sync::Arc::ptr_eq(
+        &installed_kablammo,
+        &installed_nabla
+    ));
 
     set_font(&property, None);
     fixture.advance(0.0);

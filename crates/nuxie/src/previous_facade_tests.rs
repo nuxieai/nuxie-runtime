@@ -885,7 +885,7 @@ mod owned_instance_tests {
             .with_downcast::<ViewModelInstanceAssetFont, _>(|property| property.asset().font())
             .flatten()
             .expect("backing FontAsset retains kablammo");
-        assert!(Rc::ptr_eq(&installed, &kablammo));
+        assert!(std::sync::Arc::ptr_eq(&installed, &kablammo));
 
         let nabla = HbFont::decode(&external_fixture("nabla.ttf")).expect("nabla decoded");
         property
@@ -898,8 +898,8 @@ mod owned_instance_tests {
             .with_downcast::<ViewModelInstanceAssetFont, _>(|property| property.asset().font())
             .flatten()
             .expect("backing FontAsset retains nabla");
-        assert!(Rc::ptr_eq(&installed, &nabla));
-        assert!(!Rc::ptr_eq(&installed, &kablammo));
+        assert!(std::sync::Arc::ptr_eq(&installed, &nabla));
+        assert!(!std::sync::Arc::ptr_eq(&installed, &kablammo));
 
         property
             .with_downcast_mut::<ViewModelInstanceAssetFont, _>(|property| property.set_value(None))

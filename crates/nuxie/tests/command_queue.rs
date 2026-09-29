@@ -4,6 +4,9 @@
 //! `tests/unit_tests/runtime/command_queue_test.cpp` at `4ac7b327`.
 //! The test cases below are the executable correspondence to that source.
 
+#[path = "command_queue/focus_503eab63.rs"]
+mod focus_503eab63;
+
 use std::{
     any::Any,
     cell::RefCell,

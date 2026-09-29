@@ -569,13 +569,19 @@ fn wave_b_data_binding_fonts_test_002_direct_port_expected_red() {
     let font = HbFont::decode(&bytes).expect("native font");
     binding_set_font(&property, Some(font.clone()));
     machine.advance_and_apply(0.0);
-    assert!(Rc::ptr_eq(&asset.font().expect("stored font"), &font));
+    assert!(std::sync::Arc::ptr_eq(
+        &asset.font().expect("stored font"),
+        &font
+    ));
 
     let bytes = std::fs::read(binding_path("assets/nabla.ttf")).expect("nabla.ttf");
     let font2 = HbFont::decode(&bytes).expect("second native font");
     binding_set_font(&property, Some(font2.clone()));
     machine.advance_and_apply(0.0);
-    assert!(Rc::ptr_eq(&asset.font().expect("replaced font"), &font2));
+    assert!(std::sync::Arc::ptr_eq(
+        &asset.font().expect("replaced font"),
+        &font2
+    ));
 
     binding_set_font(&property, None);
     machine.advance_and_apply(0.0);

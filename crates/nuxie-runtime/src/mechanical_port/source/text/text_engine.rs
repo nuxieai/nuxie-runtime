@@ -1,7 +1,7 @@
 // Pinned implementation: src/text/text_engine.cpp;
 // primary header: include/rive/text_engine.hpp.
 use std::any::Any;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::mechanical_port::source::math::raw_path::RawPath;
 use crate::mechanical_port::source::math::vec2d::Vec2D;
@@ -288,7 +288,7 @@ impl FontBase {
     }
 }
 
-pub trait Font: Any {
+pub trait Font: Any + Send + Sync {
     fn as_any(&self) -> &dyn Any;
     fn base(&self) -> &FontBase;
     fn get_axis_count(&self) -> u16;
@@ -433,7 +433,7 @@ pub trait Font: Any {
     }
 }
 
-pub type FontRef = Rc<dyn Font>;
+pub type FontRef = Arc<dyn Font>;
 pub type FallbackProc = fn(Unichar, u32, &dyn Font) -> Option<FontRef>;
 thread_local! {
     // A host RawText occurrence may provide a scoped fallback chain without
@@ -824,7 +824,7 @@ impl OrderedLine {
         for i in line.start_run_index..line.end_run_index + 1 {
             let run = &glyph_runs[i as usize];
             let fonts_differ = match (&run.font, &ellipsis_font) {
-                (Some(left), Some(right)) => !Rc::ptr_eq(left, right),
+                (Some(left), Some(right)) => !Arc::ptr_eq(left, right),
                 (None, None) => false,
                 _ => true,
             };

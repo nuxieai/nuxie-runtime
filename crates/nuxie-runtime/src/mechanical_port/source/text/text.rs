@@ -1599,7 +1599,7 @@ impl Text {
                     self.emoji_image_cache
                         .iter()
                         .find(|(cached_font, cached_glyph, _)| {
-                            Rc::ptr_eq(cached_font, &font) && *cached_glyph == glyph_id
+                            std::sync::Arc::ptr_eq(cached_font, &font) && *cached_glyph == glyph_id
                         }) {
                     image.clone()
                 } else {

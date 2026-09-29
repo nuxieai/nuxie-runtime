@@ -224,7 +224,7 @@ impl DataBindContextTargetValue {
                         .and_then(|v| v.as_any_mut().downcast_mut::<DataValueAssetFont>())
                     {
                         let next = binding.font_value();
-                        if !same_rc(&value.font_value(), &next) {
+                        if !same_arc(&value.font_value(), &next) {
                             value.set_font_value(next);
                             changed = true;
                         }

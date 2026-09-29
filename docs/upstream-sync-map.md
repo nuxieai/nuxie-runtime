@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c18b32511bfeaeee6b7c54e35152aea3fdbb5964`
+- LAST_SYNCED_SHA: `bec99be4e4fecee71d0db012edeffdc561da319a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 151 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 151 require a Rust translation.
+  There are 150 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 150 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `bec99be4e4fecee71d0db012edeffdc561da319a` | Reconcile ahead-ported obscured text input with the complete upstream commit: bullet shaping, intact editing, word navigation, cursor/journal re-resolution, and handled-empty selection export that blocks ancestor clipboard fallback. Move reached property 1095 into runtime schema reconciliation and retire its forward overlay; preserve the full upstream regression cases. | [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852) |
 | `c18b32511bfeaeee6b7c54e35152aea3fdbb5964` | Rename the depth/stencil interlock mechanism and its draw/shader vocabulary across shared renderer and supported backends, retaining MSAA sample-count and resolve concepts where upstream does. Preserve numeric enum and shader behavior; regenerate GLSL and update bindings, retain equivalent SPIR-V/WGSL payloads with renamed symbols, and record Metal's macro-only adaptation separately from historical captures. Enumerate build inputs from current translated owners so stale pre-rename cached files cannot enter the shader batch. Correct GL render-pass feature gates to match their owning context; no legacy aliases or new D3D backend. | — |
 | `503eab633367d00ad3627770e7898d22379cc2e2` | Add queued and synchronized focus traversal, focus clearing, focus-node/state queries and listener responses; preserve request IDs, error routing and lock boundaries. Correct the existing font-sharing adaptation to atomic shared ownership and a synchronized color-layer cache so the queue can cross threads without recreating font identity. Translate all five upstream command-queue regressions, including the actual threaded synchronized case. | — |
 | `0d8ca59dac1b67c35d03a79cb29c595ccddab8d9` | Replace independent checked/mixed booleans with the upstream two-bit integer check-state field, integer binding dispatch and tri-state decoder. Remove the superseded mixed property and flag APIs while preserving packed wire bits; translate all five upstream check-state tests. | — |
@@ -173,12 +174,12 @@ Move covered properties into reconciliation before retiring an overlay.
 
 | Upstream SHA | Ported slice | Work |
 | --- | --- | --- |
-| `bec99be4e4fecee71d0db012edeffdc561da319a` | Obscured TextInput, masking and selection-export behavior, added in local `1bcf034716`. See [obscured-text-input-port.md](obscured-text-input-port.md). | [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852) |
 | `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Cache as bitmap: the BitmapCache core type, the Artboard offscreen raster and composite, `Renderer::current_transform`/`current_modulated_opacity`, `Factory::canvas_content_host`, the three new `DeferredCanvasHost` methods, and the deferred recorder's CTM shadow. The serializing/replay utilities, player and deploy harness, and the silver-factory test are not ported. See [cache-as-bitmap-port.md](cache-as-bitmap-port.md). | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
 
-The alignment and obscured-input schema definitions share
-`defs/upstream-overlay/text/text_input.json`; reaching `7098a7c8` does not
-retire the still-forward `obscured` property from `bec99be4`.
+The alignment and obscured-input properties are now both reached and live in
+`defs/upstream-reconciliation/text/text_input.json`. The former shared forward
+overlay is retired. See [obscured-text-input-port.md](obscured-text-input-port.md)
+for the original ahead port and its chronological reconciliation.
 
 ## One upstream commit at a time
 

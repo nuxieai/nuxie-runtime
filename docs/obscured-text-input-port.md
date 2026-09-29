@@ -5,6 +5,13 @@ Tracks [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852).
 Authority: upstream Rive commit
 [`bec99be4e4fecee71d0db012edeffdc561da319a`](https://github.com/rive-app/rive-runtime/commit/bec99be4e4fecee71d0db012edeffdc561da319a).
 
+The sequential sync has now reached this commit. Property 1095 lives in
+`defs/upstream-reconciliation/text/text_input.json` alongside the reached
+alignment properties 222 and 1094; the redundant forward TextInput overlay has
+been removed. The effective schema is unchanged from the ahead-port, and the
+historical definition seed remains untouched. Qualification results below are
+the original ahead-port results, not a fresh sync validation claim.
+
 The port adds TextInput property 1095 (`obscured`, default false), its schema,
 registry, deserialization, copy, and property-change callback. RawTextInput masks
 at shaping and measurement, leaving its editable buffer and undo history intact.

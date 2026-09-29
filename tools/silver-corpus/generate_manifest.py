@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate silver-corpus.toml from the pinned upstream C++ producers.
 
-Active literal matches() calls are discovered mechanically. The layout-scroll
+Active literal matches() and checkTextLayoutSilver() calls are discovered mechanically. The layout-scroll
 and grid-stack names assembled through helper arguments are deliberately
 listed below, and producerless files are deliberately classified as
 provenance-unknown.
@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "2210ed8799c0128504dd664a7179f4f8f299e85a"
+UPSTREAM_REF = "4ca3b88a34e02d534bb800a803e81217ee11cc60"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,10 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "layout_text_match",
+    "layout_text_match_7_3",
+    "text_layout_pre_7_3",
+    "text_layout_7_3",
     "gamepad_inputs_test",
     "gamepad_inputs_test-collapsing",
     "layout_order_pointer_test",
@@ -2184,7 +2188,6 @@ DIVERGENCES = dict(
 bidirectional_binding_source|frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save
 data_binding_artboards_test|frame 7, op 582 (frame): expected frame, got makeRenderPaint
 juice|frame 1, op 360 (addRawPath): expected 40 fields, got 42
-layout_text_match|frame 0, op 61 (save): expected save, got frame
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
 collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672
 focus_traversal|frame 0, op 95 (color): expected color, got save
@@ -2527,6 +2530,14 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
     for path in files:
         relative = path.relative_to(runtime_dir).as_posix()
         source = strip_cpp_comments(path.read_text(encoding="utf-8", errors="replace"))
+        # This helper sits between TEST_CASEs. Keep its body out of the preceding
+        # Vertical Trim producer while preserving upstream provenance line numbers.
+        source = re.sub(
+            r"static void checkTextLayoutSilver\([^)]*\)\s*\{.*?^\}",
+            lambda match: "\n" * match.group(0).count("\n"),
+            source,
+            flags=re.MULTILINE | re.DOTALL,
+        )
         for test_name, test_line, chunk in test_chunks(source):
             for match in LITERAL_MATCH.finditer(chunk):
                 silver_id = match.group(1)
@@ -3112,8 +3123,64 @@ def unknown_producers() -> list[Producer]:
     ]
 
 
+def text_layout_producers(runtime_dir: Path) -> list[Producer]:
+    relative = "tests/unit_tests/runtime/text_test.cpp"
+    source = strip_cpp_comments((runtime_dir / relative).read_text(encoding="utf-8"))
+    calls = re.compile(
+        r'checkTextLayoutSilver\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)'
+    )
+    # checkTextLayoutSilver: optional default VMI, advance zero and draw, then
+    # four addFrame/advance(.016)/draw iterations. The selected default machine
+    # is optional; without it the helper advances the artboard instead.
+    actions = (
+        action("bind-default-view-model-if-present"),
+        action("advance", target="state-machine-or-artboard", seconds=0.0),
+        action("draw"),
+        *(
+            item
+            for _ in range(4)
+            for item in (
+                action("frame"),
+                action("advance", target="state-machine-or-artboard", seconds=0.016),
+                action("draw"),
+            )
+        ),
+    )
+    producers = []
+    for test_name, test_line, chunk in test_chunks(source):
+        for match in calls.finditer(chunk):
+            asset, silver_id = match.groups()
+            producers.append(Producer(
+                id=silver_id,
+                source=strip_asset_prefix(asset),
+                dependencies=(),
+                artboard="default",
+                animation="none",
+                state_machine="default-if-present",
+                lane="runtime",
+                deterministic="cpp-test-defined",
+                random="cpp-test-defined",
+                view_model="bind-default-if-present",
+                sample_times=(0.0, 0.016),
+                actions=actions,
+                status="exact",
+                producer_class="text-layout-dynamic",
+                provenance_file=relative,
+                provenance_test=test_name,
+                producer_line=test_line + chunk.count("\n", 0, match.start()),
+                note=(
+                    "Exact comparison contract for the five-frame checkTextLayoutSilver "
+                    "helper at 4ca3b88a. Enrollment alone is not a validation result."
+                ),
+            ))
+    return producers
+
+
 def discover(runtime_dir: Path) -> list[Producer]:
-    producers = literal_producers(runtime_dir) + dynamic_producers() + unknown_producers()
+    producers = (
+        literal_producers(runtime_dir) + dynamic_producers()
+        + text_layout_producers(runtime_dir) + unknown_producers()
+    )
     ids = [producer.id for producer in producers]
     duplicates = sorted({silver_id for silver_id in ids if ids.count(silver_id) > 1})
     if duplicates:
@@ -3185,7 +3252,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (266, 218, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (269, 221, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3198,8 +3265,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 266",
-        "expected_runtime = 218",
+        "expected_entries = 269",
+        "expected_runtime = 221",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

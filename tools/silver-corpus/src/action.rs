@@ -41,6 +41,7 @@ use std::path::Path;
 pub enum ActionTarget {
     Artboard,
     StateMachine,
+    StateMachineOrArtboard,
     Animation,
 }
 
@@ -145,6 +146,7 @@ pub enum Action {
         fps: f32,
     },
     BindDefaultViewModel,
+    BindDefaultViewModelIfPresent,
     BindFreshViewModel,
     BindAuthoredViewModel,
     BindAuthoredViewModelInstance {
@@ -501,10 +503,13 @@ impl Execution {
                 Action::ReplayPointerLog { .. } => {
                     unreachable!("pointer logs are expanded before execution")
                 }
-                Action::BindDefaultViewModel => {
+                Action::BindDefaultViewModel | Action::BindDefaultViewModelIfPresent => {
                     let main = file.with_file_mut(|file| {
                         file.create_default_view_model_instance_for_artboard(source.clone())
                     });
+                    if main.is_none() && matches!(action, Action::BindDefaultViewModelIfPresent) {
+                        continue;
+                    }
                     let context = complete_context(&file, main);
                     bind_context(&instance, state_machine.as_ref(), &context);
                     owned_context = Some(context);
@@ -969,6 +974,13 @@ impl Execution {
                     }
                 }
                 Action::Advance { target, seconds } => match target {
+                    StateMachineOrArtboard => {
+                        if let Some(machine) = state_machine.as_ref() {
+                            machine.advance_and_apply(*seconds);
+                        } else {
+                            instance.advance_default(*seconds);
+                        }
+                    }
                     StateMachine => {
                         machine(&state_machine)?.advance_and_apply(*seconds);
                     }
@@ -1202,6 +1214,9 @@ fn select_state_machine(
 ) -> anyhow::Result<Option<RuntimeStateMachineInstanceHandle>> {
     if selector == "none" {
         return Ok(None);
+    }
+    if selector == "default-if-present" {
+        return Ok(instance.default_state_machine());
     }
     let selected = if selector == "default" {
         instance.state_machine_at(0)

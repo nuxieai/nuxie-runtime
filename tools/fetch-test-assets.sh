@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-2210ed8799c0128504dd664a7179f4f8f299e85a}
+ref=${RIVE_RUNTIME_REF:-4ca3b88a34e02d534bb800a803e81217ee11cc60}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -81,7 +81,10 @@ assets=(
   "sync/paused_nested_artboard_opacity.riv|642c9f7fd909b9955a875e0bb745d0998d3ac4b64a11b863b09e3b0ee5682944"
   "sync/solo_index_test.riv|e857c0d1f76cec0be8d8b9d8308ea9a0f581de29ed752b952940d90b5f6a16f2|38c924123ffb8ad9541ad724ef4de860e5705482"
   "sync/stateful_component_image_test.riv|47dcbcd02cd228f0e4ec71eaac84748f46f95b24737818f61b04d46242b48393|353ef4fccbf6f1801def7d737a4103657dc63a1c"
-  "sync/layout_text_match.riv|1fea1a6102259aacd9b164cfac0b4a2f67d4fa4587b78f5eb25a2f195de7bcdb|f5cfee3a5d6a6728167b58a71b47455ace063690"
+  "sync/layout_text_match.riv|de46b6fe8121d0b32e88e9caba9d99a08f2479b24d0bcffc5ed0353c84c33aff|4ca3b88a34e02d534bb800a803e81217ee11cc60"
+  "sync/layout_text_match_7_3.riv|c460e9498a6f89e0c63f12cadbc37a786436c1f928ec9e959bbccf1e5623e81c|4ca3b88a34e02d534bb800a803e81217ee11cc60"
+  "sync/layout/text_layout_pre_7_3.riv|7c79edec5985c44a2474310e6d38a2ab569a59a7a92689d042feaf402d5db71a|4ca3b88a34e02d534bb800a803e81217ee11cc60|layout/text_layout_pre_7_3.riv"
+  "sync/layout/text_layout_7_3.riv|59b6a12f901b4eeff7abbba045313f5b210d7b79125ad3e261f93ce7a78a57f9|4ca3b88a34e02d534bb800a803e81217ee11cc60|layout/text_layout_7_3.riv"
   "sync/artboard_opacity_and_transform_test.riv|100dbf5c04159ea7e8e6f12ce16daf1ee6f15a74c2d3dc074e2dbde4e877af80|e0d4913fa0f88d9f4b57c53006e7f9712417205f"
   "sync/databind_null_artboard_swap.riv|0160b4572f217271df84072b08476d433a71c5bf78a9917f39fbc03239560a1f|30a0e2d42e2e6d091350d6edb816e165e27f7988"
   "sync/component_list_clipped_viewport.riv|a20c9fd4936c2b7f435011e7afddd276797e95d68b574ec2c914331afd092bac|482b24a188bb9e367e983bf05235761707a89718"

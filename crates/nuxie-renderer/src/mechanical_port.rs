@@ -389,6 +389,7 @@ pub(crate) mod source {
                     pub(crate) mod buffer_ring_hpp;
                     pub(crate) mod draw_hpp;
                     pub(crate) mod gpu_hpp;
+                    pub(crate) mod scoped_autorelease_pool_hpp;
                     pub(crate) mod render_canvas_hpp;
                     pub(crate) mod render_context_helper_impl_hpp;
                     pub(crate) mod render_context_hpp;

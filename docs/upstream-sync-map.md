@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3f7495c6eb29f73885374682bea8d589dc94c3b2`
+- LAST_SYNCED_SHA: `293eaf002cdda1ab6ec20316ee2d67ebd2854775`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 120 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 120 require a Rust translation.
+  There are 119 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 119 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `293eaf002cdda1ab6ec20316ee2d67ebd2854775` | Compare all seven semantic content fields during full re-flattening and invalidate derived labels when explicit labels change or clear. Translate the three diff-field regressions and four authored zero-area fixture scenarios. Flutter widget/platform changes described in the commit message are absent from the public delta and are not claimed imported. | — |
 | `3f7495c6eb29f73885374682bea8d589dc94c3b2` | Reset all four GL color-write masks immediately before each ORE color-attachment clear so state inherited from another renderer cannot suppress clearing. | — |
 | `0d8bb5a342f84a53119a6817c46ad1739cb7b696` | Support stroked and feathered image paints in atomic mode through internal clip stroke/feather state, shared path pixel-bound calculations and bounds outsets. Move feather-radius conversion to the shared GPU owner and preserve clip-paint construction order. This upstream commit does not expose a public clipStroke API. | — |
 | `39afeca44449b12d41c91aaf78f1ed96913ed69a` | Do not consume deferred ORE commands until a screen frame opens successfully; translate the exact failed-screen regression. Add GL scratch-framebuffer invalidation and depth-only draw/read-buffer disabling. Thread the default-enabled Vulkan debug-name option through context construction and avoid loading the optional function when disabled. Bootstrap edits only add trailing newlines; private Android host changes mentioned by the title are not present in the public delta or claimed imported. | — |

@@ -45,8 +45,8 @@ fn source_static_function_name(name: &str) -> Option<&'static NSString> {
     Some(match name {
         "HF" => objc2_foundation::ns_string!("HF"),
         "IF" => objc2_foundation::ns_string!("IF"),
-        "AG" => objc2_foundation::ns_string!("AG"),
         "BG" => objc2_foundation::ns_string!("BG"),
+        "CG" => objc2_foundation::ns_string!("CG"),
         "UF" => objc2_foundation::ns_string!("UF"),
         "WE" => objc2_foundation::ns_string!("WE"),
         "XE" => objc2_foundation::ns_string!("XE"),

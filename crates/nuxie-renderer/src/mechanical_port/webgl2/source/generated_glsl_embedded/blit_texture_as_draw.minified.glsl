@@ -13,21 +13,21 @@ g W=g(n2,0,1);A1(W);}
 #ifdef GB
 E3
 #ifdef QD
-kf(d5,W3,KC);
+kf(e5,W3,KC);
 #else
-Z2(d5,W3,KC);
+Z2(e5,W3,KC);
 #endif
 F3
 #ifdef DD
-e5 X3(lf)f5
+f5 X3(lf)g5
 #endif
-a3(i,NE){i l8;
+a3(i,NE){i m8;
 #ifdef DD
-r(Y1,d);l8=U6(KC,lf,Y1,.0);
+r(Y1,d);m8=V6(KC,lf,Y1,.0);
 #elif defined(QD)
-l8=(m8(KC,0,Y(floor(a0.xy)))+m8(KC,1,Y(floor(a0.xy)))+m8(KC,2,Y(floor(a0.xy)))+m8(KC,3,Y(floor(a0.xy))))*0.25;
+m8=(n8(KC,0,Y(floor(a0.xy)))+n8(KC,1,Y(floor(a0.xy)))+n8(KC,2,Y(floor(a0.xy)))+n8(KC,3,Y(floor(a0.xy))))*0.25;
 #else
-l8=q1(KC,Y(floor(a0.xy)));
+m8=q1(KC,Y(floor(a0.xy)));
 #endif
-I2(l8);}
+I2(m8);}
 #endif

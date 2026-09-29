@@ -25,14 +25,14 @@ __pixel_local_inEXT S1
 #else
 __pixel_local_outEXT S1
 #endif
-{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 l4;layout(r32ui)highp uint H7;};
+{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 l4;layout(r32ui)highp uint I7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef LOAD_COLOR
-layout(location=0)inout mediump vec4 Xa;
+layout(location=0)inout mediump vec4 Za;
 #endif
 #endif
 #ifdef STORE_COLOR
-layout(location=0)out mediump vec4 Xa;
+layout(location=0)out mediump vec4 Za;
 #endif
 void main(){
 #ifdef CLEAR_COLOR
@@ -46,17 +46,17 @@ j0=TE;
 #ifdef GL_ARM_shader_framebuffer_fetch
 j0=gl_LastFragColorARM;
 #else
-j0=Xa;
+j0=Za;
 #endif
 #endif
 #ifdef CLEAR_COVERAGE
-H7=0u;
+I7=0u;
 #endif
 #ifdef CLEAR_CLIP
 h0=0u;
 #endif
 #ifdef STORE_COLOR
-Xa=j0;
+Za=j0;
 #endif
 }
 #else

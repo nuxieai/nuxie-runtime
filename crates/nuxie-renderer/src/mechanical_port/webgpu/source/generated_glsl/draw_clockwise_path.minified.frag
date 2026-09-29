@@ -5,9 +5,9 @@ x0(S2,j0);
 #endif
 j1(T2,h0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Ta(h6,E6);
+Va(h6,F6);
 #endif
-j1(K6,P0);K1
+j1(L6,P0);K1
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
 p2(JB)
 #else
@@ -36,19 +36,19 @@ c v0=
 #ifdef DRAW_INTERIOR_TRIANGLES
 i1;
 #else
-rb(O);
+sb(O);
 #endif
 i w0;c G1;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
 if(!BORROWED_COVERAGE_PASS)
 #endif
-{w0=M7(f1,
+{w0=N7(f1,
 #ifdef ENABLE_MODULATED_IMAGE
 A2,
 #endif
 1. U2);G1=1.;
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){c wb=h3(c5(M0));G1=min(wb,G1);}
+if(ENABLE_CLIP_RECT){c xb=h3(d5(M0));G1=min(xb,G1);}
 #endif
 }x2;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
@@ -58,33 +58,33 @@ w2(j0);
 #endif
 }else
 #endif
-{E R4=unpackHalf2x16(Y0(P0));c i9=R4.y;c S4=i9==B0?R4.x:G0(.0);c ue=
+{E S4=unpackHalf2x16(Y0(P0));c j9=S4.y;c T4=j9==B0?S4.x:G0(.0);c ue=
 #ifndef DRAW_INTERIOR_TRIANGLES
-V5(O)?max(S4,v0):
+V5(O)?max(T4,v0):
 #endif
-S4+v0;
+T4+v0;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&V1.x!=.0){E N0=unpackHalf2x16(Y0(h0));c M5=N0.y;c xb=M5==V1.x?N0.x:G0(.0);G1=min(xb,G1);}
+if(ENABLE_CLIPPING&&V1.x!=.0){E N0=unpackHalf2x16(Y0(h0));c M5=N0.y;c yb=M5==V1.x?N0.x:G0(.0);G1=min(yb,G1);}
 #endif
-G1=max(G1,.0);c a2=da(S4,.0,G1);c F1=da(ue,.0,G1);
+G1=max(G1,.0);c a2=ea(T4,.0,G1);c F1=ea(ue,.0,G1);
 #ifdef ENABLE_DITHER
-c L5;if(ENABLE_DITHER){L5=ga(a0.xy,m.B3,m.C3);}
+c L5;if(ENABLE_DITHER){L5=ha(a0.xy,m.B3,m.C3);}
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 i L1=I0(j0);
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND){if(f2!=a6(R5)&&F1!=.0){if(a2==.0){w0.xyz=U4(w0.xyz,L1,c6(f2));
+if(ENABLE_ADVANCED_BLEND){if(f2!=a6(R5)&&F1!=.0){if(a2==.0){w0.xyz=V4(w0.xyz,L1,c6(f2));
 #ifndef DRAW_INTERIOR_TRIANGLES
-if(F1<G1){A P7=w0.xyz;
+if(F1<G1){A Q7=w0.xyz;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){P7+=L5*m.vd;}
+if(ENABLE_DITHER){Q7+=L5*m.vd;}
 #endif
-y0(E6,C0(P7,0.0));}
+y0(F6,C0(Q7,0.0));}
 #endif
-}else{w0.xyz=I0(E6).xyz;w2(E6);}}w0.xyz*=w0.w;}
+}else{w0.xyz=I0(F6).xyz;w2(F6);}}w0.xyz*=w0.w;}
 #endif
 #endif
-w0*=K8(a2,F1,w0.w);
+w0*=L8(a2,F1,w0.w);
 #ifdef ENABLE_DITHER
 w0.xyz=F2(w0.xyz,w0.w,L5);
 #endif

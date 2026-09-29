@@ -1253,6 +1253,14 @@ typedef struct NuxVideoHardwareBufferFrame {
    */
   uint32_t rotation_degrees;
   /**
+   * The size the picture displays at after the rotation, as
+   * `MediaPlayer`'s video size reports it; both zero for the rotated crop.
+   * Video with non-square pixels displays wider or taller than its crop,
+   * and the frame is stretched to this size.
+   */
+  uint32_t display_width;
+  uint32_t display_height;
+  /**
    * The Y'CbCr matrix the decoder tags its output with: 1 BT.601, 2 BT.709,
    * 3 BT.2020, or 0 to use the driver's suggestion, which some drivers get
    * wrong. Streams without color metadata decode with Android's defaults:

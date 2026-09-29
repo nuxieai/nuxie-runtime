@@ -1594,7 +1594,10 @@ fn android_hardware_buffer_frames_validate_before_importing() {
             NuxStatus::Ok
         );
         nux_capi_result_free(result);
-        assert_eq!(nux_artboard_instance_new(file, 0, &mut artboard), NuxStatus::Ok);
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
         assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
 
         // Any non-null pointer reaches the checks; none of these read it.
@@ -1609,6 +1612,8 @@ fn android_hardware_buffer_frames_validate_before_importing() {
             crop_right: 64,
             crop_bottom: 32,
             rotation_degrees: 0,
+            display_width: 0,
+            display_height: 0,
             color_matrix: 1,
             color_range: 1,
         };
@@ -1630,10 +1635,21 @@ fn android_hardware_buffer_frames_validate_before_importing() {
         frame.rotation_degrees = 45;
         assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument);
         frame.rotation_degrees = 90;
+        frame.display_width = 64;
+        assert_eq!(
+            present(renderer, &frame),
+            NuxStatus::InvalidArgument,
+            "a display size is both zero or both set"
+        );
+        frame.display_height = 128;
         for (matrix, range) in [(0, 1), (1, 0), (4, 1), (1, 3)] {
             frame.color_matrix = matrix;
             frame.color_range = range;
-            assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument, "{matrix}/{range}");
+            assert_eq!(
+                present(renderer, &frame),
+                NuxStatus::InvalidArgument,
+                "{matrix}/{range}"
+            );
         }
         frame.color_matrix = 2;
         frame.color_range = 1;

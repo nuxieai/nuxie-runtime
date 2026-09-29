@@ -34,13 +34,19 @@ public final class VideoPlayer {
     public final int cropLeft, cropTop, cropRight, cropBottom;
     /** Clockwise rotation from buffer to display: 0, 90, 180 or 270. */
     public final int rotationDegrees;
+    /**
+     * Displayed width and height after the rotation, as MediaPlayer reports
+     * them. Video with non-square pixels displays wider or taller than its
+     * crop.
+     */
+    public final int displayWidth, displayHeight;
     /** Y'CbCr matrix: 1 BT.601, 2 BT.709, 3 BT.2020. */
     public final int colorMatrix;
     /** 1 limited range, 2 full range. */
     public final int colorRange;
     private final Image image;
     Frame(long generation, double seconds, Image image, int rotationDegrees,
-          int colorMatrix, int colorRange) {
+          int displayWidth, int displayHeight, int colorMatrix, int colorRange) {
       this.generation = generation;
       this.seconds = seconds;
       this.image = image;
@@ -51,6 +57,8 @@ public final class VideoPlayer {
       this.cropRight = crop.right;
       this.cropBottom = crop.bottom;
       this.rotationDegrees = rotationDegrees;
+      this.displayWidth = displayWidth;
+      this.displayHeight = displayHeight;
       this.colorMatrix = colorMatrix;
       this.colorRange = colorRange;
     }
@@ -146,7 +154,7 @@ public final class VideoPlayer {
   private Frame latest;
   private MediaPlayer player;
   private ImageReader reader;
-  private int rotationDegrees, colorMatrix, colorRange;
+  private int rotationDegrees, displayWidth, displayHeight, colorMatrix, colorRange;
   private long generation;
   private boolean seeking, wantsPlay;
   private double queuedSeek = -1;
@@ -213,6 +221,8 @@ public final class VideoPlayer {
       player.setOnVideoSizeChangedListener((p, w, h) -> {
         try {
           checkBudget(w, h);
+          displayWidth = w;
+          displayHeight = h;
         } catch (Exception e) {
           fail(e.toString());
         }
@@ -285,6 +295,13 @@ public final class VideoPlayer {
         int width = integer(format, MediaFormat.KEY_WIDTH, 0);
         int height = integer(format, MediaFormat.KEY_HEIGHT, 0);
         rotationDegrees = integer(format, MediaFormat.KEY_ROTATION, 0);
+        // Non-square pixels widen the picture. MediaPlayer's own video size
+        // replaces this estimate once it reports one.
+        int sarWidth = integer(format, "sar-width", 1), sarHeight = integer(format, "sar-height", 1);
+        int shown = sarWidth > 0 && sarHeight > 0 ? (int)((long)width * sarWidth / sarHeight) : width;
+        boolean turned = rotationDegrees % 180 != 0;
+        displayWidth = Math.max(1, turned ? height : shown);
+        displayHeight = Math.max(1, turned ? shown : height);
         colorMatrix = matrix(integer(format, MediaFormat.KEY_COLOR_STANDARD, 0), width, height);
         colorRange = integer(format, MediaFormat.KEY_COLOR_RANGE, 0) ==
                              MediaFormat.COLOR_RANGE_FULL ? 2 : 1;
@@ -328,10 +345,10 @@ public final class VideoPlayer {
       if (image == null || seeking || !ready)
         return;
       observeDecoderInfo();
-      Rect crop = image.getCropRect();
-      checkBudget(crop.width(), crop.height());
+      checkBudget(displayWidth, displayHeight);
       Frame frame = new Frame(generation, player.getCurrentPosition() / 1000.0,
-                              image, rotationDegrees, colorMatrix, colorRange);
+                              image, rotationDegrees, displayWidth, displayHeight,
+                              colorMatrix, colorRange);
       image = null;
       synchronized (this) {
         if (latest != null)

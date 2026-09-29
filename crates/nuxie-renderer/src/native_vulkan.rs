@@ -133,12 +133,10 @@ impl NativeVulkanFactory {
     /// its own matrix and range in one draw on the GPU, which completes before
     /// this returns, so the caller may release the buffer right after.
     ///
-    /// `crop` is the picture's left, top, right and bottom edges in buffer
-    /// pixels, all zero for the whole buffer, and `quarter_turns` the
-    /// clockwise quarter turns from buffer to display. The image has the
-    /// turned crop's extent. `color` is the matrix and range the decoder tags
-    /// its output with; `None` falls back to the driver's suggestion, which
-    /// some drivers get wrong.
+    /// `geometry` says where the picture sits in the buffer, how it turns and
+    /// the size it displays at, which is the image's extent. `color` is the
+    /// matrix and range the decoder tags its output with; `None` falls back to
+    /// the driver's suggestion, which some drivers get wrong.
     ///
     /// # Safety
     /// `buffer` is a live AHardwareBuffer with GPU sampled-image usage whose
@@ -149,30 +147,17 @@ impl NativeVulkanFactory {
         &self,
         textures: &mut crate::ExternalImageTextures,
         buffer: std::ptr::NonNull<std::ffi::c_void>,
-        crop: [u32; 4],
-        quarter_turns: u32,
+        geometry: crate::VideoFrameGeometry,
         color: Option<crate::VideoColor>,
     ) -> Result<std::rc::Rc<dyn RenderImage>, RendererError> {
         use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
-        use crate::mechanical_port::vulkan::hardware_buffer::{hardware_buffer_size, FrameRegion};
-        let crop = if crop == [0; 4] {
-            let (width, height) = unsafe { hardware_buffer_size(buffer) }.ok_or(
-                RendererError::Unsupported("AHardwareBuffer_describe (Android 8)"),
-            )?;
-            [0, 0, width, height]
-        } else {
-            crop
-        };
-        let region = FrameRegion {
-            crop,
-            quarter_turns,
-        };
-        let [left, top, right, bottom] = crop;
-        if quarter_turns > 3 || left >= right || top >= bottom {
-            return Err(RendererError::InvalidImageUpload(format!(
-                "invalid video frame crop {crop:?} or turn {quarter_turns}"
-            )));
-        }
+        use crate::mechanical_port::vulkan::hardware_buffer::hardware_buffer_size;
+        use crate::video_frame_geometry::FrameRegion;
+        let buffer_size = unsafe { hardware_buffer_size(buffer) }.ok_or(
+            RendererError::Unsupported("AHardwareBuffer_describe (Android 8)"),
+        )?;
+        let region = FrameRegion::resolve(geometry, buffer_size)
+            .map_err(RendererError::InvalidImageUpload)?;
         let (width, height) = region.display_extent();
         self.core
             .check_texture_extent("video frame", width, height)?;

@@ -653,6 +653,12 @@ pub struct NuxVideoHardwareBufferFrame {
     /// Clockwise rotation from buffer to display in degrees: 0, 90, 180 or 270,
     /// such as the video track's rotation metadata.
     pub rotation_degrees: u32,
+    /// The size the picture displays at after the rotation, as
+    /// `MediaPlayer`'s video size reports it; both zero for the rotated crop.
+    /// Video with non-square pixels displays wider or taller than its crop,
+    /// and the frame is stretched to this size.
+    pub display_width: u32,
+    pub display_height: u32,
     /// The Y'CbCr matrix the decoder tags its output with: 1 BT.601, 2 BT.709,
     /// 3 BT.2020, or 0 to use the driver's suggestion, which some drivers get
     /// wrong. Streams without color metadata decode with Android's defaults:

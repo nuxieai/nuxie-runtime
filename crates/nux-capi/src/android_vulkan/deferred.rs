@@ -70,18 +70,13 @@ impl AndroidVulkanFactory {
         &mut self,
         textures: &mut nuxie_renderer::ExternalImageTextures,
         buffer: std::ptr::NonNull<std::ffi::c_void>,
-        crop: [u32; 4],
-        quarter_turns: u32,
+        geometry: nuxie_renderer::VideoFrameGeometry,
         color: Option<nuxie_renderer::VideoColor>,
     ) -> Result<std::rc::Rc<dyn RenderImage>, RendererError> {
         unsafe {
-            self.native.borrow_mut().import_hardware_buffer(
-                textures,
-                buffer,
-                crop,
-                quarter_turns,
-                color,
-            )
+            self.native
+                .borrow_mut()
+                .import_hardware_buffer(textures, buffer, geometry, color)
         }
     }
 }

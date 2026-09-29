@@ -500,6 +500,20 @@ TEST_CASE("renders selected board", "[silver]")
         if not runtime_dir.is_dir() or not manifest.is_file():
             self.skipTest("pinned upstream or checked-in manifest is unavailable")
         producers = generate_manifest.discover(runtime_dir)
+        interrupted = next(item for item in producers if item.id == "layout_animation_transition_test")
+        self.assertEqual(interrupted.source, "layout_animation_transition_test.riv")
+        self.assertEqual(interrupted.state_machine, "default")
+        self.assertEqual(interrupted.actions[:5], (
+            {"kind": "frame-size"},
+            {"kind": "select-state-machine"},
+            {"kind": "bind-selected-artboard-authored-view-model", "if_present": False},
+            {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+            {"kind": "draw"},
+        ))
+        self.assertEqual(generate_manifest.cpp_float_division_to_int("2.0", "0.016"), 124)
+        self.assertEqual(interrupted.actions[5:], tuple(generate_manifest.repeated_frames(125, 0.016)))
+        self.assertEqual(sum(item["kind"] == "draw" for item in interrupted.actions), 126)
+        self.assertEqual(interrupted.provenance_test, "Layout animation interrupted mid animation")
         ik = next(item for item in producers if item.id == "ik_anim_test")
         self.assertEqual(ik.source, "ik_anim_test.riv")
         self.assertEqual(ik.lane, "runtime")

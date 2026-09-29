@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-3b2c51e2dd957722fd3061112667d884b1ec60c3}
+ref=${RIVE_RUNTIME_REF:-621f2a2e295f79a52c5fcf8c617327803f28d3c7}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/layout_animation_transition_test.riv|9d9912b30f621ca8ac35f47ee35aa2070749646f2b3b888bfa8402b95a52be48|621f2a2e295f79a52c5fcf8c617327803f28d3c7|layout_animation_transition_test.riv"
   "sync/solo_nested_artboard_leaf.riv|50e22279a323c5880eefcc971437b6f8d514ff6e4018d82529749cc9a5b66e89|3b2c51e2dd957722fd3061112667d884b1ec60c3|solo_nested_artboard_leaf.riv"
   "semantic/zero_area_semantics.riv|7f53903646eb07548f68d349fd31833c81aa0ccb623d4665f530829ec6a5f2b8|293eaf002cdda1ab6ec20316ee2d67ebd2854775|semantic/zero_area_semantics.riv"
   "sync/layout/matrix/matrix.expect|6ae71099b8a03f18e3002d934d39abc1735157ad11d47a81c89cfa45ae82f09c|3b2c51e2dd957722fd3061112667d884b1ec60c3|layout/matrix/matrix.expect"

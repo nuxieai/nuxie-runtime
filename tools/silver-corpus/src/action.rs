@@ -151,7 +151,7 @@ pub enum Action {
     BindAuthoredViewModel,
     BindAuthoredViewModelIfPresent,
     SelectStateMachine,
-    BindSoloAuthoredViewModel {
+    BindSelectedArtboardAuthoredViewModel {
         if_present: bool,
     },
     OptInNestedLeavesToLayoutParent,
@@ -521,10 +521,10 @@ impl Execution {
                     state_machine = select_state_machine(&instance, &case.state_machine)?;
                     anyhow::ensure!(
                         state_machine.is_some(),
-                        "solo producer requires a state machine"
+                        "producer requires a state machine"
                     );
                 }
-                Action::BindSoloAuthoredViewModel { if_present } => {
+                Action::BindSelectedArtboardAuthoredViewModel { if_present } => {
                     let id = instance.with_artboard(|artboard| artboard.base.view_model_id());
                     let main = file.with_file_mut(|file| {
                         if id == u32::MAX {

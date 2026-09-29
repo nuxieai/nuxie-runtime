@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "3b2c51e2dd957722fd3061112667d884b1ec60c3"
+UPSTREAM_REF = "621f2a2e295f79a52c5fcf8c617327803f28d3c7"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -196,6 +196,7 @@ EXACT = (
     "gamepad_inputs_test",
     "gamepad_inputs_test-collapsing",
     "layout_order_pointer_test",
+    "layout_animation_transition_test",
     "text_background_feather_test",
     "joystick_databound_keyframe_test",
     "text_fit_test",
@@ -962,7 +963,7 @@ def p1q_view_model_actions(
             action("frame-size"),
             *((action("opt-in-nested-leaves-to-layout-parent"),) if silver_id.endswith("fit_to_layout_parent") else ()),
             action("select-state-machine"),
-            action("bind-solo-authored-view-model", if_present=False),
+            action("bind-selected-artboard-authored-view-model", if_present=False),
             action("render-view-model-enum-states", property="states", seconds=0.016),
         )
 
@@ -2727,6 +2728,18 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "layout_animation_transition_test":
+                        # layout_test.cpp: authored VM 0 (or artboard-created
+                        # default), direct machine binding; draw at zero, then
+                        # .016 and int(2.0f/.016f) additional frames.
+                        actions = (
+                            action("frame-size"),
+                            action("select-state-machine"),
+                            action("bind-selected-artboard-authored-view-model", if_present=False),
+                            action("advance", target="state-machine", seconds=0.0),
+                            action("draw"),
+                        ) + tuple(repeated_frames(1 + cpp_float_division_to_int("2.0", "0.016"), 0.016))
+                        blocker = None
                     if silver_id == "layout_order_pointer_test":
                         # layout_test.cpp: fresh VMI, initial draw, then five
                         # pointer clicks and .1-second advances before drawing.
@@ -2833,6 +2846,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         note = (
                             "Exact comparison contract for the literal gamepad/focus "
                             "producer at 9cb2205f. Enrollment alone is not a validation result."
+                        )
+                    if silver_id == "layout_animation_transition_test":
+                        note = (
+                            "Exact comparison contract for the interrupted layout animation "
+                            "producer at 621f2a2e: direct authored VM binding, initial zero "
+                            "advance/draw, then 125 .016-second advance/draw frames. "
+                            "Enrollment alone is not a validation result."
                         )
                     if silver_id == "layout_order_pointer_test":
                         note = (
@@ -3198,7 +3218,7 @@ def solo_leaf_producers(runtime_dir: Path) -> list[Producer]:
                 view_model="bind-authored-if-present", sample_times=(0.016,),
                 actions=(action("frame-size"), action("assert-solo-leaf", expect_solo=solo == "true", expect_fit_to_layout_parent=fit == "true"),
                          action("select-state-machine"),
-                         action("bind-solo-authored-view-model", if_present=True),
+                         action("bind-selected-artboard-authored-view-model", if_present=True),
                          action("advance", target="state-machine", seconds=0.016),
                          action("draw"), action("frame")),
                 status="exact", producer_class="solo-leaf-dynamic",
@@ -3285,7 +3305,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (273, 225, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (274, 226, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3298,8 +3318,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 273",
-        "expected_runtime = 225",
+        "expected_entries = 274",
+        "expected_runtime = 226",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

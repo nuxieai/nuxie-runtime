@@ -1691,6 +1691,7 @@ fn beginRenderPassCurrent(
     for index in 0..desc.colorCount as usize {
         let attachment = &desc.colorAttachments[index];
         if attachment.loadOp == LoadOp::clear {
+            submit(context, GLCommand::ColorMask(true, true, true, true));
             submit(
                 context,
                 GLCommand::ClearBufferFloat {
@@ -2184,7 +2185,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 51976] = [(); PINNED_SOURCE.len()];
+const _: [(); 52037] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2671,7 +2672,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1438);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1439);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 22);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);

@@ -7,6 +7,420 @@
 #[path = "command_queue/focus_503eab63.rs"]
 mod focus_503eab63;
 
+// Upstream 25db4792: live global assets across every loaded file. The existing
+// Rc-backed harness drains the same FIFO on this thread instead of spawning a
+// C++ server thread; checkpoints correspond to upstream runOnce callbacks.
+#[cfg(feature = "test-support")]
+mod global_assets_25db4792 {
+    use super::*;
+    use nuxie::runtime::assets::{
+        audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset,
+    };
+
+    fn asset(name: &str) -> Vec<u8> {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let path = std::path::PathBuf::from(root)
+            .join("tests/unit_tests/assets")
+            .join(name);
+        std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+    }
+
+    fn first_asset(server: &CommandServer, file: FileHandle) -> nuxie::CoreHandle {
+        server
+            .get_file(file)
+            .expect("loaded file")
+            .with_file(|file| file.assets()[0].clone())
+    }
+
+    fn image_identity(server: &CommandServer, file: FileHandle) -> Option<usize> {
+        first_asset(server, file)
+            .with_downcast::<ImageAsset, _>(|asset| {
+                asset.render_image().map(|image| image.image_identity())
+            })
+            .expect("image asset")
+    }
+
+    fn font_identity(server: &CommandServer, file: FileHandle) -> Option<usize> {
+        first_asset(server, file)
+            .with_downcast::<FontAsset, _>(|asset| {
+                asset
+                    .font()
+                    .map(|font| Arc::as_ptr(&font) as *const () as usize)
+            })
+            .expect("font asset")
+    }
+
+    fn audio_identity(server: &CommandServer, file: FileHandle) -> Option<usize> {
+        first_asset(server, file)
+            .with_downcast::<AudioAsset, _>(|asset| {
+                asset
+                    .audio_source()
+                    .map(|audio| Arc::as_ptr(&audio) as usize)
+            })
+            .expect("audio asset")
+    }
+
+    // Each expansion is the six corresponding upstream TEST_CASEs, retaining
+    // their command order, file count, identity/null checks and error delivery.
+    macro_rules! asset_cases {
+        ($module:ident, $fixture:literal, $bytes:ident, $name:literal,
+         $decode:ident, $add:ident, $remove:ident, $delete:ident, $get:ident,
+         $identity:ident, $expected:expr, $handle:ident, $set_listener:ident,
+         $listener:ident, $error:ident, $contains:ident) => {
+            mod $module {
+                use super::*;
+                #[test]
+                fn resolves_across_all_files() {
+                    let mut queue = CommandQueue::new();
+                    let (listeners1, _) = event_log();
+                    let (listeners2, _) = event_log();
+                    let file1 = queue.load_file(asset($fixture), Some(&listeners1.file), 0, None);
+                    let file2 = queue.load_file(asset($fixture), Some(&listeners2.file), 0, None);
+                    let handle = queue.$decode($bytes.to_vec(), None, 0);
+                    queue.$add($name.into(), handle, 0);
+                    let mut server = server(&queue);
+                    assert!(server.process_commands());
+                    let expected = ($expected)(server.$get(handle).expect("decoded asset"));
+                    assert_eq!($identity(&server, file1), Some(expected));
+                    assert_eq!($identity(&server, file2), Some(expected));
+                }
+                #[test]
+                fn replaces_across_all_files() {
+                    let mut queue = CommandQueue::new();
+                    let (listeners1, _) = event_log();
+                    let (listeners2, _) = event_log();
+                    let file1 = queue.load_file(asset($fixture), Some(&listeners1.file), 0, None);
+                    let file2 = queue.load_file(asset($fixture), Some(&listeners2.file), 0, None);
+                    let first = queue.$decode($bytes.to_vec(), None, 0);
+                    queue.$add($name.into(), first, 0);
+                    let second = queue.$decode($bytes.to_vec(), None, 0);
+                    queue.$add($name.into(), second, 0);
+                    let mut server = server(&queue);
+                    assert!(server.process_commands());
+                    let expected = ($expected)(server.$get(second).expect("replacement asset"));
+                    assert_eq!($identity(&server, file1), Some(expected));
+                    assert_eq!($identity(&server, file2), Some(expected));
+                }
+                #[test]
+                fn removes_across_all_files() {
+                    let mut queue = CommandQueue::new();
+                    let (listeners1, _) = event_log();
+                    let (listeners2, _) = event_log();
+                    let file1 = queue.load_file(asset($fixture), Some(&listeners1.file), 0, None);
+                    let file2 = queue.load_file(asset($fixture), Some(&listeners2.file), 0, None);
+                    let handle = queue.$decode($bytes.to_vec(), None, 0);
+                    queue.$add($name.into(), handle, 0);
+                    queue.$remove($name.into(), 0);
+                    let mut server = server(&queue);
+                    assert!(server.process_commands());
+                    assert_eq!($identity(&server, file1), None);
+                    assert_eq!($identity(&server, file2), None);
+                }
+                #[test]
+                fn non_matching_name_does_not_resolve() {
+                    let mut queue = CommandQueue::new();
+                    let (listeners, _) = event_log();
+                    let file = queue.load_file(asset($fixture), Some(&listeners.file), 0, None);
+                    let handle = queue.$decode($bytes.to_vec(), None, 0);
+                    queue.$add("wrong-name".into(), handle, 0);
+                    let mut server = server(&queue);
+                    assert!(server.process_commands());
+                    assert_eq!($identity(&server, file), None);
+                }
+                #[test]
+                fn invalid_handle_reports_error() {
+                    let mut queue = CommandQueue::new();
+                    let (listeners, log) = event_log();
+                    queue.$set_listener(Some(&listeners.$listener));
+                    let file = queue.load_file(asset($fixture), Some(&listeners.file), 0, None);
+                    queue.$add($name.into(), $handle::NULL, 0);
+                    let mut server = server(&queue);
+                    assert!(server.process_commands());
+                    assert_eq!($identity(&server, file), None);
+                    queue.process_messages();
+                    assert!(events(&log).iter().any(|event| matches!(event,
+                        ObservedEvent::$error { handle, .. } if *handle == $handle::NULL)));
+                    queue.$set_listener(None);
+                }
+                #[test]
+                fn deleting_resource_clears_applied_global_asset() {
+                    let mut queue = CommandQueue::new();
+                    let (listeners, _) = event_log();
+                    let file = queue.load_file(asset($fixture), Some(&listeners.file), 0, None);
+                    let handle = queue.$decode($bytes.to_vec(), None, 0);
+                    queue.$add($name.into(), handle, 0);
+                    let mut server = server(&queue);
+                    assert!(server.process_commands());
+                    let expected = ($expected)(server.$get(handle).expect("decoded asset"));
+                    assert_eq!($identity(&server, file), Some(expected));
+                    queue.$delete(handle, 0);
+                    assert!(server.process_commands());
+                    assert_eq!($identity(&server, file), None);
+                    assert!(!server.$contains($name));
+                }
+            }
+        };
+    }
+
+    asset_cases!(
+        image,
+        "hosted_image_file.riv",
+        IMAGE_FIXTURE,
+        "one-45008",
+        decode_image,
+        add_global_image_asset,
+        remove_global_image_asset,
+        delete_image,
+        get_image,
+        image_identity,
+        |image: std::rc::Rc<dyn RenderImage>| image.image_identity(),
+        RenderImageHandle,
+        set_global_render_image_listener,
+        image,
+        ImageError,
+        testing_global_image_contains
+    );
+    asset_cases!(
+        font,
+        "hosted_font_file.riv",
+        FONT_FIXTURE,
+        "Inter-43276",
+        decode_font,
+        add_global_font_asset,
+        remove_global_font_asset,
+        delete_font,
+        get_font,
+        font_identity,
+        |font: nuxie::runtime::text::text_engine::FontRef| Arc::as_ptr(&font) as *const () as usize,
+        FontHandle,
+        set_global_font_listener,
+        font,
+        FontError,
+        testing_global_font_contains
+    );
+    asset_cases!(
+        audio,
+        "hosted_audio_file.riv",
+        AUDIO_FIXTURE,
+        "sound-55368",
+        decode_audio,
+        add_global_audio_asset,
+        remove_global_audio_asset,
+        delete_audio,
+        get_audio_source,
+        audio_identity,
+        |audio: Arc<RuntimeAudioSource>| Arc::as_ptr(&audio) as usize,
+        AudioSourceHandle,
+        set_global_audio_source_listener,
+        audio,
+        AudioError,
+        testing_global_audio_contains
+    );
+
+    #[test]
+    fn registered_global_image_applies_to_files_loaded_afterward() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        let file = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners.file),
+            0,
+            None,
+        );
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        assert_eq!(
+            image_identity(&server, file),
+            Some(server.get_image(image).unwrap().image_identity())
+        );
+    }
+
+    #[test]
+    fn deleting_file_does_not_disturb_another_files_global_asset() {
+        let mut queue = CommandQueue::new();
+        let (listeners1, _) = event_log();
+        let (listeners2, _) = event_log();
+        let file1 = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners1.file),
+            0,
+            None,
+        );
+        let file2 = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners2.file),
+            0,
+            None,
+        );
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        queue.delete_file(file1, 0);
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        assert!(server.get_file(file1).is_none());
+        assert_eq!(
+            image_identity(&server, file2),
+            Some(server.get_image(image).unwrap().image_identity())
+        );
+        let replacement = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), replacement, 0);
+        assert!(server.process_commands());
+        assert_eq!(
+            image_identity(&server, file2),
+            Some(server.get_image(replacement).unwrap().image_identity())
+        );
+    }
+
+    #[test]
+    fn global_asset_changes_after_deleting_only_file_are_safe_no_op() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let file = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners.file),
+            0,
+            None,
+        );
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        queue.delete_file(file, 0);
+        queue.remove_global_image_asset("one-45008".into(), 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        assert!(server.get_file(file).is_none());
+        assert!(server.get_image(image).is_some());
+    }
+
+    #[test]
+    fn failed_load_does_not_contaminate_later_files_global_assets() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let bad = queue.load_file(vec![0; 100 * 1024], None, 0, None);
+        let good = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners.file),
+            0,
+            None,
+        );
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        assert!(server.get_file(bad).is_none());
+        assert_eq!(
+            image_identity(&server, good),
+            Some(server.get_image(image).unwrap().image_identity())
+        );
+    }
+
+    #[test]
+    fn global_image_does_not_override_embedded_asset() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("1x1-45022".into(), image, 0);
+        let file = queue.load_file(asset("in_band_asset.riv"), Some(&listeners.file), 0, None);
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        let embedded = image_identity(&server, file).expect("embedded image");
+        assert_ne!(embedded, server.get_image(image).unwrap().image_identity());
+        queue.remove_global_image_asset("1x1-45022".into(), 0);
+        queue.add_global_image_asset("1x1-45022".into(), image, 0);
+        assert!(server.process_commands());
+        let embedded = image_identity(&server, file).expect("embedded image after global changes");
+        assert_ne!(embedded, server.get_image(image).unwrap().image_identity());
+    }
+
+    #[test]
+    fn deleting_image_registered_under_multiple_names_clears_all() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let file = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners.file),
+            0,
+            None,
+        );
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        queue.add_global_image_asset("two-45009".into(), image, 0);
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        assert_eq!(
+            image_identity(&server, file),
+            Some(server.get_image(image).unwrap().image_identity())
+        );
+        queue.delete_image(image, 0);
+        assert!(server.process_commands());
+        assert_eq!(image_identity(&server, file), None);
+        assert!(!server.testing_global_image_contains("one-45008"));
+        assert!(!server.testing_global_image_contains("two-45009"));
+    }
+
+    #[test]
+    fn deleting_replaced_image_does_not_clear_former_name() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let file = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners.file),
+            0,
+            None,
+        );
+        let first = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        let second = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), first, 0);
+        queue.add_global_image_asset("one-45008".into(), second, 0);
+        queue.delete_image(first, 0);
+        let mut server = server(&queue);
+        assert!(server.process_commands());
+        assert_eq!(
+            image_identity(&server, file),
+            Some(server.get_image(second).unwrap().image_identity())
+        );
+        assert!(server.testing_global_image_contains("one-45008"));
+    }
+
+    struct ClaimingImageAssetLoader;
+    impl FileAssetLoader for ClaimingImageAssetLoader {
+        fn load_contents(
+            &mut self,
+            asset: nuxie::CoreHandle,
+            _: &[u8],
+            _: &RuntimeFactoryHandle,
+        ) -> bool {
+            asset.with_downcast::<ImageAsset, _>(|_| ()).is_some()
+        }
+    }
+
+    #[test]
+    fn internal_loader_claimed_asset_not_overridden_by_global_asset() {
+        let mut queue = CommandQueue::new();
+        let (listeners, _) = event_log();
+        let loader = FileAssetLoaderRef::new(Box::new(ClaimingImageAssetLoader));
+        let mut factory = PersistentFactory::new(CommandQueueTestFactory::new());
+        let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let mut server = CommandServer::new(queue.clone(), factory, Some(loader));
+        let image = queue.decode_image(IMAGE_FIXTURE.to_vec(), None, 0);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        let file = queue.load_file(
+            HOSTED_IMAGE_FIXTURE.to_vec(),
+            Some(&listeners.file),
+            0,
+            None,
+        );
+        assert!(server.process_commands());
+        assert_eq!(image_identity(&server, file), None);
+        queue.add_global_image_asset("one-45008".into(), image, 0);
+        assert!(server.process_commands());
+        assert_eq!(image_identity(&server, file), None);
+    }
+}
+
 use std::{
     any::Any,
     cell::RefCell,

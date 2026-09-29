@@ -292,9 +292,19 @@ fn generate_vulkan_spirv_module() -> io::Result<()> {
 }
 
 fn shader_batch_inputs(shader_dir: &std::path::Path) -> io::Result<Vec<PathBuf>> {
-    let mut inputs = fs::read_dir(shader_dir)?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
+    // OUT_DIR survives source renames. Enumerate the authoritative translated
+    // owners, not stale materialized files from an earlier upstream revision.
+    let mut inputs = TRANSLATED_SHADER_SOURCES
+        .iter()
+        .map(|source| {
+            let upstream_path = embedded_source_path(source)?;
+            let relative = upstream_path
+                .strip_prefix("renderer/src/shaders/")
+                .ok_or_else(|| io::Error::other("unexpected translated shader source path"))?;
+            Ok(shader_dir.join(relative))
+        })
+        .collect::<io::Result<Vec<_>>>()?
+        .into_iter()
         .filter(|path| {
             matches!(
                 path.extension().and_then(|extension| extension.to_str()),
@@ -578,7 +588,7 @@ const TRANSLATED_SHADER_RUST_PATHS: &[&str] = &[
     "src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs",
-    "src/mechanical_port/source/renderer/src/shaders/draw_msaa_object_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_object_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs",
@@ -624,7 +634,7 @@ const TRANSLATED_SHADER_SOURCES: &[&str] = &[
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_msaa_object_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_object_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs"),

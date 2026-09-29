@@ -1,8 +1,8 @@
 /*
  * Exact pinned upstream source bytes and provenance for
- * renderer/src/shaders/draw_msaa_object.frag.
+ * renderer/src/shaders/draw_depthstencil_object.frag.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,15 +10,15 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
-pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_msaa_object.frag";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_object.frag";
 pub const PINNED_SOURCE_SHA256: &str =
     "3b61972533dfebe2c908d98ef42b50c615d4ead4115fecc43a53cca6007de64f";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 110;
 pub const PINNED_SOURCE_BYTE_COUNT: usize = 3616;
 
 /// Exact pinned upstream source bytes.
-pub const PINNED_DRAW_MSAA_OBJECT_FRAG_SOURCE: &str = r###"/*
+pub const PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE: &str = r###"/*
  * Copyright 2022 Rive
  */
 
@@ -131,13 +131,13 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 "###;
 
 /// Stable source aliases.
-pub const PINNED_DRAW_MSAA_OBJECT_SOURCE: &str = PINNED_DRAW_MSAA_OBJECT_FRAG_SOURCE;
-pub const DRAW_MSAA_OBJECT_FRAG_SOURCE: &str = PINNED_DRAW_MSAA_OBJECT_FRAG_SOURCE;
+pub const PINNED_DRAW_DEPTHSTENCIL_OBJECT_SOURCE: &str = PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE;
+pub const DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE: &str = PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE;
 
 pub const SOURCE_SHA256: &str = PINNED_SOURCE_SHA256;
 pub const SOURCE_LINE_COUNT: usize = PINNED_SOURCE_LINE_COUNT;
 pub const SOURCE_BYTE_COUNT: usize = PINNED_SOURCE_BYTE_COUNT;
 
 pub const fn pinned_source() -> &'static str {
-    PINNED_DRAW_MSAA_OBJECT_FRAG_SOURCE
+    PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE
 }

@@ -18,7 +18,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp:
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    AABBu16, IAABB, LogicalFlush, RenderContext,
+    AABBu16, LogicalFlush, RenderContext, IAABB,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
@@ -66,7 +66,8 @@ pub fn select_path_coverage_type(
         && crate::draw::feather_requires_atlas(
             paint_feather,
             matrix,
-            platform_features.alwaysFeatherToAtlas || interlock_mode == gpu::InterlockMode::msaa,
+            platform_features.alwaysFeatherToAtlas
+                || interlock_mode == gpu::InterlockMode::depthStencil,
         )
     {
         return PathCoverageType::featherAtlas;
@@ -77,7 +78,7 @@ pub fn select_path_coverage_type(
         }
         gpu::InterlockMode::clockwise => PathCoverageType::clockwise,
         gpu::InterlockMode::clockwiseAtomic => PathCoverageType::clockwiseAtomic,
-        gpu::InterlockMode::msaa => PathCoverageType::msaa,
+        gpu::InterlockMode::depthStencil => PathCoverageType::depthStencil,
     }
 }
 
@@ -902,11 +903,9 @@ unsafe fn allocate_path_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> 
     debug_assert_eq!(owner.raw_path_mutation_id, unsafe {
         (&*owner.path_ref.get()).getRawPathMutationID()
     });
-    debug_assert!(
-        !unsafe { (&*owner.path_ref.get()).getRawPath() }
-            .verbs()
-            .is_empty()
-    );
+    debug_assert!(!unsafe { (&*owner.path_ref.get()).getRawPath() }
+        .verbs()
+        .is_empty());
     if !owner.gradient.get().is_null()
         && !unsafe {
             flush_ref.allocateGradientExecutable(
@@ -1009,7 +1008,7 @@ unsafe fn count_path_subpasses(draw: *mut Draw, features: &gpu::PlatformFeatures
             }
             subpass_count
         }
-        PathCoverageType::msaa => {
+        PathCoverageType::depthStencil => {
             if owner.draw.isStroke()
                 || ((owner.draw.base.draw_contents
                     & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
@@ -1025,7 +1024,7 @@ unsafe fn count_path_subpasses(draw: *mut Draw, features: &gpu::PlatformFeatures
             }
         }
     };
-    if owner.coverage_type == PathCoverageType::msaa
+    if owner.coverage_type == PathCoverageType::depthStencil
         && owner.draw.base.isOpaque()
         && (owner.draw.base.draw_contents.0
             & (gpu::DrawContents::activeClip | gpu::DrawContents::clipUpdate).0)
@@ -1330,7 +1329,7 @@ unsafe fn push_path(
                 _ => core::ptr::null_mut(),
             }
         }
-        PathCoverageType::msaa => {
+        PathCoverageType::depthStencil => {
             let pass_count = owner.draw.base.prepass_count | owner.draw.base.subpass_count;
             let pass_index = subpass + owner.draw.base.prepass_count;
             if pass_index == 0 {
@@ -1348,20 +1347,20 @@ unsafe fn push_path(
                         & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
                         == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip)
                     {
-                        gpu::DrawType::msaaOuterCubicPathsStencil
+                        gpu::DrawType::stencilOuterCubicWinding
                     } else {
-                        gpu::DrawType::msaaDynamicOuterCubics
+                        gpu::DrawType::stencilDynamicOuterCubics
                     }
                 } else if pass_count == 2 {
                     [
-                        gpu::DrawType::msaaOuterCubicPathsStencil,
-                        gpu::DrawType::msaaOuterCubicPathsCover,
+                        gpu::DrawType::stencilOuterCubicWinding,
+                        gpu::DrawType::stencilOuterCubicCover,
                     ][pass_index as usize]
                 } else {
                     [
-                        gpu::DrawType::msaaOuterCubicBorrowedCoverage,
-                        gpu::DrawType::msaaOuterCubics,
-                        gpu::DrawType::msaaOuterCubicStencilReset,
+                        gpu::DrawType::stencilOuterCubicBorrowedCoverage,
+                        gpu::DrawType::stencilOuterCubics,
+                        gpu::DrawType::stencilOuterCubicReset,
                     ][pass_index as usize]
                 };
                 return unsafe {
@@ -1376,25 +1375,25 @@ unsafe fn push_path(
             }
             let draw_type = if pass_count == 1 {
                 if owner.draw.isStroke() {
-                    gpu::DrawType::msaaStrokes
+                    gpu::DrawType::depthStrokes
                 } else if (owner.draw.base.draw_contents
                     & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
                     == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip)
                 {
-                    gpu::DrawType::msaaMidpointFanPathsStencil
+                    gpu::DrawType::stencilMidpointFanWinding
                 } else {
-                    gpu::DrawType::msaaDynamicMidpointFans
+                    gpu::DrawType::stencilDynamicMidpointFans
                 }
             } else if pass_count == 2 {
                 [
-                    gpu::DrawType::msaaMidpointFanPathsStencil,
-                    gpu::DrawType::msaaMidpointFanPathsCover,
+                    gpu::DrawType::stencilMidpointFanWinding,
+                    gpu::DrawType::stencilMidpointFanCover,
                 ][pass_index as usize]
             } else {
                 [
-                    gpu::DrawType::msaaMidpointFanBorrowedCoverage,
-                    gpu::DrawType::msaaMidpointFans,
-                    gpu::DrawType::msaaMidpointFanStencilReset,
+                    gpu::DrawType::stencilMidpointFanBorrowedCoverage,
+                    gpu::DrawType::stencilMidpointFans,
+                    gpu::DrawType::stencilMidpointFanReset,
                 ][pass_index as usize]
             };
             unsafe {
@@ -1520,7 +1519,7 @@ fn contour_directions_for_path(
         if determinant < 0.0 {
             if matches!(
                 coverage_type,
-                PathCoverageType::msaa | PathCoverageType::featherAtlas
+                PathCoverageType::depthStencil | PathCoverageType::featherAtlas
             ) {
                 gpu::ContourDirections::reverse
             } else {
@@ -1528,13 +1527,13 @@ fn contour_directions_for_path(
             }
         } else if matches!(
             coverage_type,
-            PathCoverageType::msaa | PathCoverageType::featherAtlas
+            PathCoverageType::depthStencil | PathCoverageType::featherAtlas
         ) {
             gpu::ContourDirections::forward
         } else {
             gpu::ContourDirections::reverseThenForward
         }
-    } else if coverage_type != PathCoverageType::msaa {
+    } else if coverage_type != PathCoverageType::depthStencil {
         if clockwise_fill_override && crate::draw::path_coarse_area(path) * determinant < 0.0 {
             if coverage_type == PathCoverageType::featherAtlas {
                 gpu::ContourDirections::reverse
@@ -1640,7 +1639,7 @@ pub unsafe fn make_path_draw_from_source(
             initial_fill_rule,
             clockwise_fill_override,
             triangulator,
-            coverage_type == PathCoverageType::msaa,
+            coverage_type == PathCoverageType::depthStencil,
         )?)
     } else if paint.getFeather() != 0.0 {
         let direction = match directions {
@@ -1782,8 +1781,8 @@ pub unsafe fn make_path_draw_from_source(
 #[cfg(test)]
 mod transformed_area_consumer_tests {
     use super::{
-        FillRule, Mat2D, PathCoverageType, RawPath, contour_directions_for_path, gpu,
-        transformed_cubic_segment_count,
+        contour_directions_for_path, gpu, transformed_cubic_segment_count, FillRule, Mat2D,
+        PathCoverageType, RawPath,
     };
     use nuxie_render_api::Vec2D;
 
@@ -1842,7 +1841,7 @@ mod transformed_area_consumer_tests {
                 matrix,
                 FillRule::Clockwise,
                 false,
-                PathCoverageType::msaa,
+                PathCoverageType::depthStencil,
                 false,
             ),
             gpu::ContourDirections::reverse,

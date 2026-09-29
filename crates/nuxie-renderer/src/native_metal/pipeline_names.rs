@@ -68,19 +68,19 @@ pub(crate) fn precompiled_function_name(
         }
         DrawType::ImageMesh => 'm',
         DrawType::ImageRect
-        | DrawType::MsaaStrokes
-        | DrawType::MsaaMidpointFanBorrowedCoverage
-        | DrawType::MsaaMidpointFans
-        | DrawType::MsaaMidpointFanStencilReset
-        | DrawType::MsaaDynamicMidpointFans
-        | DrawType::MsaaDynamicOuterCubics
-        | DrawType::MsaaMidpointFanPathsStencil
-        | DrawType::MsaaMidpointFanPathsCover
-        | DrawType::MsaaOuterCubicBorrowedCoverage
-        | DrawType::MsaaOuterCubicStencilReset
-        | DrawType::MsaaOuterCubicPathsStencil
-        | DrawType::MsaaOuterCubicPathsCover
-        | DrawType::MsaaOuterCubics
+        | DrawType::DepthStrokes
+        | DrawType::StencilMidpointFanBorrowedCoverage
+        | DrawType::StencilMidpointFans
+        | DrawType::StencilMidpointFanReset
+        | DrawType::StencilDynamicMidpointFans
+        | DrawType::StencilDynamicOuterCubics
+        | DrawType::StencilMidpointFanWinding
+        | DrawType::StencilMidpointFanCover
+        | DrawType::StencilOuterCubicBorrowedCoverage
+        | DrawType::StencilOuterCubicReset
+        | DrawType::StencilOuterCubicWinding
+        | DrawType::StencilOuterCubicCover
+        | DrawType::StencilOuterCubics
         | DrawType::ClipReset
         | DrawType::RenderPassInitialize
         | DrawType::RenderPassResolve => return None,
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn unsupported_draw_types_do_not_claim_precompiled_functions() {
         assert_eq!(
-            precompiled_function_name(DrawType::MsaaDynamicMidpointFans, 0, 0, "drawPath"),
+            precompiled_function_name(DrawType::StencilDynamicMidpointFans, 0, 0, "drawPath"),
             None
         );
         assert_eq!(

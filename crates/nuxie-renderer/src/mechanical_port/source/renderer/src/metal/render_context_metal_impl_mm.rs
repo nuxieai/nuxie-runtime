@@ -3457,21 +3457,23 @@ pub mod source_execution {
             DrawType::FeatherAtlasBlit => gpu::DrawType::featherAtlasBlit,
             DrawType::ImageRect => gpu::DrawType::imageRect,
             DrawType::ImageMesh => gpu::DrawType::imageMesh,
-            DrawType::MsaaStrokes => gpu::DrawType::msaaStrokes,
-            DrawType::MsaaMidpointFanBorrowedCoverage => {
-                gpu::DrawType::msaaMidpointFanBorrowedCoverage
+            DrawType::DepthStrokes => gpu::DrawType::depthStrokes,
+            DrawType::StencilMidpointFanBorrowedCoverage => {
+                gpu::DrawType::stencilMidpointFanBorrowedCoverage
             }
-            DrawType::MsaaMidpointFans => gpu::DrawType::msaaMidpointFans,
-            DrawType::MsaaMidpointFanStencilReset => gpu::DrawType::msaaMidpointFanStencilReset,
-            DrawType::MsaaDynamicMidpointFans => gpu::DrawType::msaaDynamicMidpointFans,
-            DrawType::MsaaDynamicOuterCubics => gpu::DrawType::msaaDynamicOuterCubics,
-            DrawType::MsaaMidpointFanPathsStencil => gpu::DrawType::msaaMidpointFanPathsStencil,
-            DrawType::MsaaMidpointFanPathsCover => gpu::DrawType::msaaMidpointFanPathsCover,
-            DrawType::MsaaOuterCubics => gpu::DrawType::msaaOuterCubics,
-            DrawType::MsaaOuterCubicBorrowedCoverage => gpu::DrawType::msaaOuterCubicBorrowedCoverage,
-            DrawType::MsaaOuterCubicStencilReset => gpu::DrawType::msaaOuterCubicStencilReset,
-            DrawType::MsaaOuterCubicPathsStencil => gpu::DrawType::msaaOuterCubicPathsStencil,
-            DrawType::MsaaOuterCubicPathsCover => gpu::DrawType::msaaOuterCubicPathsCover,
+            DrawType::StencilMidpointFans => gpu::DrawType::stencilMidpointFans,
+            DrawType::StencilMidpointFanReset => gpu::DrawType::stencilMidpointFanReset,
+            DrawType::StencilDynamicMidpointFans => gpu::DrawType::stencilDynamicMidpointFans,
+            DrawType::StencilDynamicOuterCubics => gpu::DrawType::stencilDynamicOuterCubics,
+            DrawType::StencilMidpointFanWinding => gpu::DrawType::stencilMidpointFanWinding,
+            DrawType::StencilMidpointFanCover => gpu::DrawType::stencilMidpointFanCover,
+            DrawType::StencilOuterCubics => gpu::DrawType::stencilOuterCubics,
+            DrawType::StencilOuterCubicBorrowedCoverage => {
+                gpu::DrawType::stencilOuterCubicBorrowedCoverage
+            }
+            DrawType::StencilOuterCubicReset => gpu::DrawType::stencilOuterCubicReset,
+            DrawType::StencilOuterCubicWinding => gpu::DrawType::stencilOuterCubicWinding,
+            DrawType::StencilOuterCubicCover => gpu::DrawType::stencilOuterCubicCover,
             DrawType::ClipReset => gpu::DrawType::clipReset,
             DrawType::RenderPassInitialize => gpu::DrawType::renderPassInitialize,
             DrawType::RenderPassResolve => gpu::DrawType::renderPassResolve,
@@ -3481,7 +3483,7 @@ pub mod source_execution {
             InterlockMode::Atomics => gpu::InterlockMode::atomics,
             InterlockMode::Clockwise => gpu::InterlockMode::clockwise,
             InterlockMode::ClockwiseAtomic => gpu::InterlockMode::clockwiseAtomic,
-            InterlockMode::Msaa => gpu::InterlockMode::msaa,
+            InterlockMode::DepthStencil => gpu::InterlockMode::depthStencil,
         };
         crate::mechanical_port::source::renderer::src::gpu_cpp::ShaderUniqueKey(
             draw,
@@ -5189,7 +5191,9 @@ pub mod source_execution {
         ) {
             debug_assert!(!matches!(
                 desc.interlockMode,
-                InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic | InterlockMode::Msaa
+                InterlockMode::Clockwise
+                    | InterlockMode::ClockwiseAtomic
+                    | InterlockMode::DepthStencil
             ));
 
             // The source `__bridge` command-buffer local is a strong local
@@ -6656,19 +6660,19 @@ pub mod source_execution {
                             vec![h(encoder), u(MTL_PRIMITIVE_TYPE_TRIANGLE_STRIP), u(0), u(4)],
                         );
                     }
-                    DrawType::MsaaStrokes
-                    | DrawType::MsaaMidpointFanBorrowedCoverage
-                    | DrawType::MsaaDynamicMidpointFans
-                    | DrawType::MsaaDynamicOuterCubics
-                    | DrawType::MsaaMidpointFans
-                    | DrawType::MsaaMidpointFanStencilReset
-                    | DrawType::MsaaMidpointFanPathsStencil
-                    | DrawType::MsaaMidpointFanPathsCover
-                    | DrawType::MsaaOuterCubicBorrowedCoverage
-                    | DrawType::MsaaOuterCubicStencilReset
-                    | DrawType::MsaaOuterCubicPathsStencil
-                    | DrawType::MsaaOuterCubicPathsCover
-                    | DrawType::MsaaOuterCubics
+                    DrawType::DepthStrokes
+                    | DrawType::StencilMidpointFanBorrowedCoverage
+                    | DrawType::StencilDynamicMidpointFans
+                    | DrawType::StencilDynamicOuterCubics
+                    | DrawType::StencilMidpointFans
+                    | DrawType::StencilMidpointFanReset
+                    | DrawType::StencilMidpointFanWinding
+                    | DrawType::StencilMidpointFanCover
+                    | DrawType::StencilOuterCubicBorrowedCoverage
+                    | DrawType::StencilOuterCubicReset
+                    | DrawType::StencilOuterCubicWinding
+                    | DrawType::StencilOuterCubicCover
+                    | DrawType::StencilOuterCubics
                     | DrawType::ClipReset => rive_unreachable(),
                 }
                 if let Some(state_owner) = state_owner {
@@ -6841,7 +6845,7 @@ pub mod source_execution {
             InterlockMode::Atomics => 0xdf,
             InterlockMode::Clockwise => 0x1ef,
             InterlockMode::ClockwiseAtomic => 0x1cf,
-            InterlockMode::Msaa => 0x1c6,
+            InterlockMode::DepthStencil => 0x1c6,
         }
     }
     fn features_mask_for(draw: DrawType, interlock: InterlockMode) -> u32 {
@@ -6854,26 +6858,26 @@ pub mod source_execution {
             | DrawType::MidpointFanCenterAAPatches
             | DrawType::OuterCurvePatches
             | DrawType::InteriorTriangulation
-            | DrawType::MsaaStrokes
-            | DrawType::MsaaMidpointFanBorrowedCoverage
-            | DrawType::MsaaDynamicMidpointFans
-            | DrawType::MsaaDynamicOuterCubics
-            | DrawType::MsaaMidpointFans
-            | DrawType::MsaaMidpointFanStencilReset
-            | DrawType::MsaaMidpointFanPathsStencil
-            | DrawType::MsaaMidpointFanPathsCover
-            | DrawType::MsaaOuterCubicBorrowedCoverage
-            | DrawType::MsaaOuterCubicStencilReset
-            | DrawType::MsaaOuterCubicPathsStencil
-            | DrawType::MsaaOuterCubicPathsCover
-            | DrawType::MsaaOuterCubics
+            | DrawType::DepthStrokes
+            | DrawType::StencilMidpointFanBorrowedCoverage
+            | DrawType::StencilDynamicMidpointFans
+            | DrawType::StencilDynamicOuterCubics
+            | DrawType::StencilMidpointFans
+            | DrawType::StencilMidpointFanReset
+            | DrawType::StencilMidpointFanWinding
+            | DrawType::StencilMidpointFanCover
+            | DrawType::StencilOuterCubicBorrowedCoverage
+            | DrawType::StencilOuterCubicReset
+            | DrawType::StencilOuterCubicWinding
+            | DrawType::StencilOuterCubicCover
+            | DrawType::StencilOuterCubics
             | DrawType::ImageRect
             | DrawType::ImageMesh
             | DrawType::FeatherAtlasBlit => 0x1ff,
             DrawType::ClipReset => 0x80,
             DrawType::RenderPassInitialize => match interlock {
                 InterlockMode::Atomics => 0x85,
-                InterlockMode::Msaa => 0x80,
+                InterlockMode::DepthStencil => 0x80,
                 _ => 0,
             },
             DrawType::RenderPassResolve if interlock == InterlockMode::Atomics => 0x1ff,
@@ -13334,14 +13338,14 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //             case DrawType::imageMesh:
 //                 namespacePrefix = 'm';
 //                 break;
-//             case DrawType::msaaStrokes:
-//             case DrawType::msaaMidpointFanBorrowedCoverage:
-//             case DrawType::msaaDynamicMidpointFans:
-//             case DrawType::msaaMidpointFans:
-//             case DrawType::msaaMidpointFanStencilReset:
-//             case DrawType::msaaMidpointFanPathsStencil:
-//             case DrawType::msaaMidpointFanPathsCover:
-//             case DrawType::msaaOuterCubics:
+//             case DrawType::depthStrokes:
+//             case DrawType::stencilMidpointFanBorrowedCoverage:
+//             case DrawType::stencilDynamicMidpointFans:
+//             case DrawType::stencilMidpointFans:
+//             case DrawType::stencilMidpointFanReset:
+//             case DrawType::stencilMidpointFanWinding:
+//             case DrawType::stencilMidpointFanCover:
+//             case DrawType::stencilOuterCubics:
 //             case DrawType::clipReset:
 //             case DrawType::renderPassInitialize:
 //             case DrawType::renderPassResolve:
@@ -13448,7 +13452,7 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //
 //                 case gpu::InterlockMode::clockwise:
 //                 case gpu::InterlockMode::clockwiseAtomic:
-//                 case gpu::InterlockMode::msaa:
+//                 case gpu::InterlockMode::depthStencil:
 //                     RIVE_UNREACHABLE();
 //             }
 //             return make_pipeline_state(gpu, desc);
@@ -14490,7 +14494,7 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 // {
 //     assert(desc.interlockMode != gpu::InterlockMode::clockwise);
 //     assert(desc.interlockMode != gpu::InterlockMode::clockwiseAtomic);
-//     assert(desc.interlockMode != gpu::InterlockMode::msaa); // TODO: msaa.
+//     assert(desc.interlockMode != gpu::InterlockMode::depthStencil); // TODO: msaa.
 //
 //     auto* renderTarget = static_cast<RenderTargetMetal*>(desc.renderTarget);
 //     id<MTLCommandBuffer> commandBuffer =
@@ -15102,14 +15106,14 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //                             vertexCount:4];
 //                 break;
 //             }
-//             case DrawType::msaaStrokes:
-//             case DrawType::msaaMidpointFanBorrowedCoverage:
-//             case DrawType::msaaDynamicMidpointFans:
-//             case DrawType::msaaMidpointFans:
-//             case DrawType::msaaMidpointFanStencilReset:
-//             case DrawType::msaaMidpointFanPathsStencil:
-//             case DrawType::msaaMidpointFanPathsCover:
-//             case DrawType::msaaOuterCubics:
+//             case DrawType::depthStrokes:
+//             case DrawType::stencilMidpointFanBorrowedCoverage:
+//             case DrawType::stencilDynamicMidpointFans:
+//             case DrawType::stencilMidpointFans:
+//             case DrawType::stencilMidpointFanReset:
+//             case DrawType::stencilMidpointFanWinding:
+//             case DrawType::stencilMidpointFanCover:
+//             case DrawType::stencilOuterCubics:
 //             case DrawType::clipReset:
 //             {
 //                 RIVE_UNREACHABLE();

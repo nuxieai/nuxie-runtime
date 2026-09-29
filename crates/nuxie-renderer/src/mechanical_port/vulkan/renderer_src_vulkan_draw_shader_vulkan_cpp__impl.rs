@@ -39,7 +39,7 @@ fn source_unreachable() -> ! {
     panic!("RIVE_UNREACHABLE in pinned draw_shader_vulkan.cpp")
 }
 
-fn assert_msaa_color_output_configuration(
+fn assert_depth_stencil_color_output_configuration(
     shader_type: DrawShaderVulkanType,
     drawType: DrawType,
     shaderFeatures: ShaderFeatures,
@@ -47,12 +47,12 @@ fn assert_msaa_color_output_configuration(
     shaderMiscFlags: ShaderMiscFlags,
 ) {
     if shader_type == DrawShaderVulkanType::fragment
-        && interlockMode == InterlockMode::msaa
+        && interlockMode == InterlockMode::depthStencil
         && drawType != DrawType::renderPassInitialize
         && drawType != DrawType::renderPassResolve
     {
         // Fixed function output and advanced blend are mutually exclusive and
-        // the source requires exactly one for fragment draws in MSAA mode.
+        // the source requires exactly one for fragment draws in depthStencil mode.
         assert_ne!(
             misc_is_set(
                 shaderMiscFlags,
@@ -99,19 +99,19 @@ fn select_shader_pair(
                 frag: &spirv::draw_input_attachment_frag,
             },
             DrawType::imageRect
-            | DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaDynamicMidpointFans
-            | DrawType::msaaDynamicOuterCubics
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover
-            | DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
+            | DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilDynamicMidpointFans
+            | DrawType::stencilDynamicOuterCubics
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover
+            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
             | DrawType::clipReset
             | DrawType::renderPassInitialize => source_unreachable(),
         },
@@ -179,19 +179,19 @@ fn select_shader_pair(
                     }
                 }
             }
-            DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaDynamicMidpointFans
-            | DrawType::msaaDynamicOuterCubics
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover
-            | DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
+            DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilDynamicMidpointFans
+            | DrawType::stencilDynamicOuterCubics
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover
+            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
             | DrawType::clipReset
             | DrawType::renderPassInitialize => source_unreachable(),
         },
@@ -251,19 +251,19 @@ fn select_shader_pair(
                     },
                 },
                 DrawType::imageRect
-                | DrawType::msaaStrokes
-                | DrawType::msaaMidpointFanBorrowedCoverage
-                | DrawType::msaaDynamicMidpointFans
-                | DrawType::msaaDynamicOuterCubics
-                | DrawType::msaaMidpointFanStencilReset
-                | DrawType::msaaMidpointFans
-                | DrawType::msaaMidpointFanPathsStencil
-                | DrawType::msaaMidpointFanPathsCover
-                | DrawType::msaaOuterCubicBorrowedCoverage
-                | DrawType::msaaOuterCubicStencilReset
-                | DrawType::msaaOuterCubicPathsStencil
-                | DrawType::msaaOuterCubicPathsCover
-                | DrawType::msaaOuterCubics
+                | DrawType::depthStrokes
+                | DrawType::stencilMidpointFanBorrowedCoverage
+                | DrawType::stencilDynamicMidpointFans
+                | DrawType::stencilDynamicOuterCubics
+                | DrawType::stencilMidpointFanReset
+                | DrawType::stencilMidpointFans
+                | DrawType::stencilMidpointFanWinding
+                | DrawType::stencilMidpointFanCover
+                | DrawType::stencilOuterCubicBorrowedCoverage
+                | DrawType::stencilOuterCubicReset
+                | DrawType::stencilOuterCubicWinding
+                | DrawType::stencilOuterCubicCover
+                | DrawType::stencilOuterCubics
                 | DrawType::clipReset
                 | DrawType::renderPassResolve
                 | DrawType::renderPassInitialize => source_unreachable(),
@@ -369,79 +369,79 @@ fn select_shader_pair(
                     },
                 },
                 DrawType::imageRect
-                | DrawType::msaaStrokes
-                | DrawType::msaaMidpointFanBorrowedCoverage
-                | DrawType::msaaDynamicMidpointFans
-                | DrawType::msaaDynamicOuterCubics
-                | DrawType::msaaMidpointFanStencilReset
-                | DrawType::msaaMidpointFans
-                | DrawType::msaaMidpointFanPathsStencil
-                | DrawType::msaaMidpointFanPathsCover
-                | DrawType::msaaOuterCubicBorrowedCoverage
-                | DrawType::msaaOuterCubicStencilReset
-                | DrawType::msaaOuterCubicPathsStencil
-                | DrawType::msaaOuterCubicPathsCover
-                | DrawType::msaaOuterCubics
+                | DrawType::depthStrokes
+                | DrawType::stencilMidpointFanBorrowedCoverage
+                | DrawType::stencilDynamicMidpointFans
+                | DrawType::stencilDynamicOuterCubics
+                | DrawType::stencilMidpointFanReset
+                | DrawType::stencilMidpointFans
+                | DrawType::stencilMidpointFanWinding
+                | DrawType::stencilMidpointFanCover
+                | DrawType::stencilOuterCubicBorrowedCoverage
+                | DrawType::stencilOuterCubicReset
+                | DrawType::stencilOuterCubicWinding
+                | DrawType::stencilOuterCubicCover
+                | DrawType::stencilOuterCubics
                 | DrawType::renderPassResolve => source_unreachable(),
             }
         }
 
-        InterlockMode::msaa => match drawType {
+        InterlockMode::depthStencil => match drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
             | DrawType::interiorTriangulation
             | DrawType::imageRect => source_unreachable(),
-            DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
-            | DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaDynamicMidpointFans
-            | DrawType::msaaDynamicOuterCubics
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover => ShaderPair {
+            DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
+            | DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilDynamicMidpointFans
+            | DrawType::stencilDynamicOuterCubics
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover => ShaderPair {
                 vert: if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
-                    &spirv::draw_msaa_path_vert
+                    &spirv::draw_depthstencil_path_vert
                 } else {
-                    &spirv::draw_msaa_path_noclipdistance_vert
+                    &spirv::draw_depthstencil_path_noclipdistance_vert
                 },
                 frag: if fixedFunctionColorOutput {
-                    &spirv::draw_msaa_path_fixedcolor_frag
+                    &spirv::draw_depthstencil_path_fixedcolor_frag
                 } else {
-                    &spirv::draw_msaa_path_frag
+                    &spirv::draw_depthstencil_path_frag
                 },
             },
             DrawType::clipReset => ShaderPair {
-                vert: &spirv::draw_msaa_stencil_vert,
-                frag: &spirv::draw_msaa_stencil_frag,
+                vert: &spirv::draw_depthstencil_triangles_nocolor_vert,
+                frag: &spirv::draw_depthstencil_triangles_nocolor_frag,
             },
             DrawType::featherAtlasBlit => ShaderPair {
                 vert: if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
-                    &spirv::draw_msaa_atlas_blit_vert
+                    &spirv::draw_depthstencil_atlas_blit_vert
                 } else {
-                    &spirv::draw_msaa_atlas_blit_noclipdistance_vert
+                    &spirv::draw_depthstencil_atlas_blit_noclipdistance_vert
                 },
                 frag: if fixedFunctionColorOutput {
-                    &spirv::draw_msaa_atlas_blit_fixedcolor_frag
+                    &spirv::draw_depthstencil_atlas_blit_fixedcolor_frag
                 } else {
-                    &spirv::draw_msaa_atlas_blit_frag
+                    &spirv::draw_depthstencil_atlas_blit_frag
                 },
             },
             DrawType::imageMesh => ShaderPair {
                 vert: if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
-                    &spirv::draw_msaa_image_mesh_vert
+                    &spirv::draw_depthstencil_image_mesh_vert
                 } else {
-                    &spirv::draw_msaa_image_mesh_noclipdistance_vert
+                    &spirv::draw_depthstencil_image_mesh_noclipdistance_vert
                 },
                 frag: if fixedFunctionColorOutput {
-                    &spirv::draw_msaa_image_mesh_fixedcolor_frag
+                    &spirv::draw_depthstencil_image_mesh_fixedcolor_frag
                 } else {
-                    &spirv::draw_msaa_image_mesh_frag
+                    &spirv::draw_depthstencil_image_mesh_frag
                 },
             },
             DrawType::renderPassInitialize => ShaderPair {
@@ -465,7 +465,7 @@ impl DrawShaderVulkan {
         interlockMode: InterlockMode,
         shaderMiscFlags: ShaderMiscFlags,
     ) -> Self {
-        assert_msaa_color_output_configuration(
+        assert_depth_stencil_color_output_configuration(
             shader_type,
             drawType,
             shaderFeatures,
@@ -580,17 +580,17 @@ mod tests {
             select_shader_pair(
                 DrawType::featherAtlasBlit,
                 ShaderFeatures::ENABLE_CLIP_RECT,
-                InterlockMode::msaa,
+                InterlockMode::depthStencil,
                 ShaderMiscFlags::fixedFunctionColorOutput,
             ),
-            &spirv::draw_msaa_atlas_blit_vert,
-            &spirv::draw_msaa_atlas_blit_fixedcolor_frag,
+            &spirv::draw_depthstencil_atlas_blit_vert,
+            &spirv::draw_depthstencil_atlas_blit_fixedcolor_frag,
         );
         assert_pair(
             select_shader_pair(
                 DrawType::renderPassResolve,
                 no_features,
-                InterlockMode::msaa,
+                InterlockMode::depthStencil,
                 none,
             ),
             &spirv::draw_fullscreen_quad_vert,
@@ -622,12 +622,12 @@ mod tests {
 
     #[test]
     #[should_panic]
-    fn msaa_fragment_requires_exactly_one_color_output_path() {
-        assert_msaa_color_output_configuration(
+    fn depth_stencil_fragment_requires_exactly_one_color_output_path() {
+        assert_depth_stencil_color_output_configuration(
             DrawShaderVulkanType::fragment,
             DrawType::imageMesh,
             ShaderFeatures::NONE,
-            InterlockMode::msaa,
+            InterlockMode::depthStencil,
             ShaderMiscFlags::none,
         );
     }

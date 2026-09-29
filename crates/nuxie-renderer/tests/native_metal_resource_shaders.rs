@@ -141,16 +141,43 @@ fn pinned_resource_sources_match_generated_batch() {
         Some("675703b9fd71e982eaf97c034b313eba9bde63f4")
     );
     let expected = fixture_entries("source:");
+    let adapted = fixture_entries("adapted_source:");
+    let adapted_bytes = fixture_entries("adapted_bytes:");
+    assert_eq!(adapted.len(), 1);
+    assert_eq!(adapted_bytes.len(), 1);
+    assert_eq!(
+        fixture_value("adaptation_upstream_commit"),
+        Some("c18b32511bfeaeee6b7c54e35152aea3fdbb5964")
+    );
+    assert_eq!(fixture_value("adaptation_from"), Some("RENDER_MODE_MSAA"));
+    assert_eq!(
+        fixture_value("adaptation_to"),
+        Some("RENDER_MODE_DEPTH_STENCIL")
+    );
     assert_eq!(expected.len(), SOURCES.len());
     for (name, bytes) in SOURCES {
         let expected = expected
             .get(name)
             .copied()
             .unwrap_or_else(|| panic!("missing provenance for {name}"));
-        assert!(
-            source_matches_digest(name, bytes, expected),
-            "source bytes for {name} differ from pinned generated batch",
-        );
+        if let Some(current_digest) = adapted.get(name) {
+            assert_eq!(sha256(bytes), *current_digest, "current source {name}");
+            assert_eq!(bytes.len(), adapted_bytes[name].parse::<usize>().unwrap());
+            let current = std::str::from_utf8(bytes).unwrap();
+            assert!(!current.contains("RENDER_MODE_MSAA"));
+            assert!(current.contains("RENDER_MODE_DEPTH_STENCIL"));
+            let historical = current.replace("RENDER_MODE_DEPTH_STENCIL", "RENDER_MODE_MSAA");
+            assert_eq!(
+                sha256(historical.as_bytes()),
+                expected,
+                "historical source {name}"
+            );
+        } else {
+            assert!(
+                source_matches_digest(name, bytes, expected),
+                "source bytes for {name} differ from pinned generated batch",
+            );
+        }
     }
 }
 

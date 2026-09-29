@@ -521,7 +521,7 @@ pub(crate) const SOURCE_TOP_LEVEL_CLASS_COUNT: usize = 3;
 pub(crate) const SOURCE_NESTED_CLASS_COUNT: usize = 11;
 pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 36;
 pub(crate) const SOURCE_RENDER_TARGET_FIELD_COUNT: usize = 19;
-const _: [(); 12778] = [(); PINNED_SOURCE.len()];
+const _: [(); 12739] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 344);
+        assert_eq!(PINNED_SOURCE.lines().count(), 343);
         assert_eq!(SOURCE_TOP_LEVEL_CLASS_COUNT, 3);
         assert_eq!(SOURCE_NESTED_CLASS_COUNT, 11);
         assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 36);

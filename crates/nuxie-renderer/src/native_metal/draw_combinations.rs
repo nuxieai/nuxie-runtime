@@ -20,7 +20,7 @@
 //! that the upstream script has deterministic bytes.
 
 use super::pipeline_names::{
-    DRAW_INTERIOR_TRIANGLES, ENABLE_ADVANCED_BLEND, ENABLE_CLIP_RECT, ENABLE_CLIPPING,
+    DRAW_INTERIOR_TRIANGLES, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
     ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
     ENABLE_NESTED_CLIPPING, FEATHER_ATLAS_BLIT,
 };
@@ -406,7 +406,7 @@ const ALL_FEATURES_ARRAY: [Feature; 9] = [
 mod tests {
     use super::*;
     use crate::gpu::DrawType;
-    use crate::native_metal::pipeline_names::{CLOCKWISE_FILL, precompiled_function_name};
+    use crate::native_metal::pipeline_names::{precompiled_function_name, CLOCKWISE_FILL};
 
     // The raw fixture deliberately has no provenance header because the test
     // compares every captured upstream byte. Its provenance and the reason a
@@ -503,7 +503,7 @@ mod tests {
             None
         );
         assert_eq!(
-            precompiled_function_name(DrawType::MsaaDynamicMidpointFans, 0, 0, "drawPath"),
+            precompiled_function_name(DrawType::StencilDynamicMidpointFans, 0, 0, "drawPath"),
             None
         );
     }

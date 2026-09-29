@@ -681,7 +681,7 @@
 //             : m_clipStack[clipIdxCurrentlyInClipBuffer].clipID;
 //     if (m_context->frameInterlockMode() ==
 //             gpu::InterlockMode::clockwiseAtomic ||
-//         m_context->frameInterlockMode() == gpu::InterlockMode::msaa)
+//         m_context->frameInterlockMode() == gpu::InterlockMode::depthStencil)
 //     {
 //         if (parentClipID == 0 && m_context->getClipContentID() != 0)
 //         {
@@ -798,7 +798,7 @@
 //
 //         if (parentClipID != 0)
 //         {
-//             if (m_context->frameInterlockMode() == gpu::InterlockMode::msaa)
+//             if (m_context->frameInterlockMode() == gpu::InterlockMode::depthStencil)
 //             {
 //                 // When drawing nested stencil clips, we need to intersect them,
 //                 // which involves erasing the region of the current clip in the
@@ -905,7 +905,7 @@ fn invert(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod renderer_mat2d_owner_tests {
-    use super::{Mat2D, RendererContract, RiveRenderer, determinant, invert, max_scale, mul};
+    use super::{determinant, invert, max_scale, mul, Mat2D, RendererContract, RiveRenderer};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -917,14 +917,7 @@ mod renderer_mat2d_owner_tests {
 
     #[test]
     fn renderer_inverse_preserves_pinned_finite_cancellation_and_nonfinite_determinants() {
-        let cancellation = from_bits([
-            0x26cd_29b3,
-            0x2533_fdc2,
-            0xd01a_d4bb,
-            0xce87_d5a9,
-            0,
-            0,
-        ]);
+        let cancellation = from_bits([0x26cd_29b3, 0x2533_fdc2, 0xd01a_d4bb, 0xce87_d5a9, 0, 0]);
         assert_eq!(determinant(cancellation).to_bits(), 0xa7ee_c560);
         assert_eq!(
             bits(invert(cancellation).expect("pinned finite determinant is nonzero")),
@@ -994,14 +987,7 @@ mod renderer_mat2d_owner_tests {
 
     #[test]
     fn feather_path_uses_pinned_find_max_scale_bits() {
-        let matrix = from_bits([
-            0xc32d_8148,
-            0xc2d1_a0c5,
-            0x42d9_3be7,
-            0x4345_c7ae,
-            0,
-            0,
-        ]);
+        let matrix = from_bits([0xc32d_8148, 0xc2d1_a0c5, 0x42d9_3be7, 0x4345_c7ae, 0, 0]);
         let matrix_max_scale = max_scale(matrix);
         assert_eq!(matrix_max_scale.to_bits(), 0x4392_8724);
         assert!(100.0 * matrix_max_scale > 1.0);
@@ -1022,11 +1008,7 @@ fn max_scale(m: Mat2D) -> f32 {
         a.max(c)
     } else {
         let a_minus_c = a - c;
-        (a + c) * 0.5
-            + a_minus_c
-                .mul_add(a_minus_c, 4.0 * b_squared)
-                .sqrt()
-                * 0.5
+        (a + c) * 0.5 + a_minus_c.mul_add(a_minus_c, 4.0 * b_squared).sqrt() * 0.5
     };
     if !result.is_finite() {
         result = 0.0;
@@ -1096,9 +1078,7 @@ fn invert_clockwise_path(
 
 #[cfg(test)]
 mod map_points_caller_tests {
-    use super::{
-        FillRule, Mat2D, RiveRenderPath, determinant, gpu, invert_clockwise_path,
-    };
+    use super::{determinant, gpu, invert_clockwise_path, FillRule, Mat2D, RiveRenderPath};
 
     #[test]
     fn inverse_clockwise_path_uses_pinned_four_point_in_place_batch() {
@@ -1127,17 +1107,8 @@ mod map_points_caller_tests {
 
     #[test]
     fn inverse_clockwise_path_uses_pinned_contracted_winding_determinant() {
-        let view_matrix = Mat2D(
-            [
-                0x26cd_29b3,
-                0x2533_fdc2,
-                0xd01a_d4bb,
-                0xce87_d5a9,
-                0,
-                0,
-            ]
-            .map(f32::from_bits),
-        );
+        let view_matrix =
+            Mat2D([0x26cd_29b3, 0x2533_fdc2, 0xd01a_d4bb, 0xce87_d5a9, 0, 0].map(f32::from_bits));
         assert_eq!(determinant(view_matrix).to_bits(), 0xa7ee_c560);
 
         let path = RiveRenderPath::default();
@@ -1185,11 +1156,7 @@ fn simd_max(first: f32, second: f32) -> f32 {
     }
 }
 
-fn transform_rect_to_new_space(
-    rect: &mut Aabb,
-    current_matrix: Mat2D,
-    new_matrix: Mat2D,
-) -> bool {
+fn transform_rect_to_new_space(rect: &mut Aabb, current_matrix: Mat2D, new_matrix: Mat2D) -> bool {
     if current_matrix == new_matrix {
         return true;
     }
@@ -1197,12 +1164,8 @@ fn transform_rect_to_new_space(
         return false;
     };
     current_to_new = mul(current_to_new, current_matrix);
-    let max_skew = current_to_new.0[2]
-        .abs()
-        .max(current_to_new.0[1].abs());
-    let max_scale = current_to_new.0[0]
-        .abs()
-        .max(current_to_new.0[3].abs());
+    let max_skew = current_to_new.0[2].abs().max(current_to_new.0[1].abs());
+    let max_scale = current_to_new.0[0].abs().max(current_to_new.0[3].abs());
     if max_skew > MATH_EPSILON && max_scale > MATH_EPSILON {
         return false;
     }
@@ -1222,7 +1185,7 @@ fn transform_rect_to_new_space(
 
 #[cfg(test)]
 mod transform_rect_to_new_space_tests {
-    use super::{Aabb, Mat2D, transform_rect_to_new_space};
+    use super::{transform_rect_to_new_space, Aabb, Mat2D};
 
     #[test]
     fn tiny_skew_maps_only_the_pinned_diagonal_points() {
@@ -1243,8 +1206,7 @@ mod transform_rect_to_new_space_tests {
             [0x0000_0000, 0x0000_0000, 0x3f7f_ff58, 0x3f80_0000],
         );
 
-        let four_corner_substitute =
-            admitted_tiny_skew.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
+        let four_corner_substitute = admitted_tiny_skew.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0));
         assert_eq!(four_corner_substitute.min_x.to_bits(), 0xb727_c5ac);
         assert_ne!(rect, four_corner_substitute);
     }
@@ -1348,9 +1310,7 @@ impl RiveRenderer {
             return;
         }
         let state = self.current_state().clone();
-        let mapped = state
-            .matrix
-            .map_bounding_box(path.getRawPath().points());
+        let mapped = state.matrix.map_bounding_box(path.getRawPath().points());
         let pixel = mapped.round_out();
         let combined = state.overallClipPixelBounds.intersect(pixel);
         if combined.empty() {
@@ -1443,7 +1403,7 @@ impl RiveRenderer {
         };
         let interlock = unsafe { (&*self.m_context).frameInterlockMode() };
         if (interlock == gpu::InterlockMode::clockwiseAtomic
-            || interlock == gpu::InterlockMode::msaa)
+            || interlock == gpu::InterlockMode::depthStencil)
             && current == 0
             && current_id != 0
         {
@@ -1515,7 +1475,7 @@ impl RiveRenderer {
                     self.m_internalDrawBatch.push(ptr);
                 }
             }
-            if current != 0 && interlock == gpu::InterlockMode::msaa {
+            if current != 0 && interlock == gpu::InterlockMode::depthStencil {
                 let reset_bounds = *unsafe { (&*self.m_context).getClipContentBounds(current) };
                 let reset=make_clip_reset(reset_bounds,current,contents,crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::ClipResetAction::intersectPreviousClip);
                 if !unsafe {
@@ -1573,9 +1533,8 @@ impl RendererContract for RiveRenderer {
         {
             return;
         }
-        let image_matrix = (!q.getImageTexture().is_null()).then(|| {
-            mul(self.current_state().matrix, *q.getImageTransform())
-        });
+        let image_matrix = (!q.getImageTexture().is_null())
+            .then(|| mul(self.current_state().matrix, *q.getImageTransform()));
         if q.getFeather() != 0.0 && !q.getIsStroked() {
             if p.getFillRule() != FillRule::Clockwise && !frame.clockwiseFillOverride {
                 return;

@@ -97,21 +97,21 @@ embedded_shaders!(
     draw_clockwise_atomic_image_mesh_fixedcolor_frag,
     init_clockwise_atomic_workaround_frag,
     init_clockwise_atomic_workaround_fixedcolor_frag,
-    draw_msaa_path_vert,
-    draw_msaa_path_frag,
-    draw_msaa_path_fixedcolor_frag,
-    draw_msaa_path_noclipdistance_vert,
-    draw_msaa_stencil_vert,
-    draw_msaa_stencil_frag,
-    draw_msaa_stencil_fixedcolor_frag,
-    draw_msaa_atlas_blit_vert,
-    draw_msaa_atlas_blit_frag,
-    draw_msaa_atlas_blit_fixedcolor_frag,
-    draw_msaa_atlas_blit_noclipdistance_vert,
-    draw_msaa_image_mesh_vert,
-    draw_msaa_image_mesh_frag,
-    draw_msaa_image_mesh_fixedcolor_frag,
-    draw_msaa_image_mesh_noclipdistance_vert,
+    draw_depthstencil_path_vert,
+    draw_depthstencil_path_frag,
+    draw_depthstencil_path_fixedcolor_frag,
+    draw_depthstencil_path_noclipdistance_vert,
+    draw_depthstencil_triangles_nocolor_vert,
+    draw_depthstencil_triangles_nocolor_frag,
+    draw_depthstencil_triangles_nocolor_fixedcolor_frag,
+    draw_depthstencil_atlas_blit_vert,
+    draw_depthstencil_atlas_blit_frag,
+    draw_depthstencil_atlas_blit_fixedcolor_frag,
+    draw_depthstencil_atlas_blit_noclipdistance_vert,
+    draw_depthstencil_image_mesh_vert,
+    draw_depthstencil_image_mesh_frag,
+    draw_depthstencil_image_mesh_fixedcolor_frag,
+    draw_depthstencil_image_mesh_noclipdistance_vert,
     draw_fullscreen_quad_vert,
     draw_input_attachment_frag,
     draw_msaa_color_seed_attachment_frag,
@@ -228,21 +228,21 @@ fn visit_hotload_shaders(
     read!(init_clockwise_atomic_workaround_frag);
     read!(init_clockwise_atomic_workaround_fixedcolor_frag);
 
-    read!(draw_msaa_path_vert);
-    read!(draw_msaa_path_noclipdistance_vert);
-    read!(draw_msaa_path_frag);
-    read!(draw_msaa_path_fixedcolor_frag);
-    read!(draw_msaa_stencil_vert);
-    read!(draw_msaa_stencil_frag);
-    read!(draw_msaa_stencil_fixedcolor_frag);
-    read!(draw_msaa_atlas_blit_vert);
-    read!(draw_msaa_atlas_blit_noclipdistance_vert);
-    read!(draw_msaa_atlas_blit_frag);
-    read!(draw_msaa_atlas_blit_fixedcolor_frag);
-    read!(draw_msaa_image_mesh_vert);
-    read!(draw_msaa_image_mesh_noclipdistance_vert);
-    read!(draw_msaa_image_mesh_frag);
-    read!(draw_msaa_image_mesh_fixedcolor_frag);
+    read!(draw_depthstencil_path_vert);
+    read!(draw_depthstencil_path_noclipdistance_vert);
+    read!(draw_depthstencil_path_frag);
+    read!(draw_depthstencil_path_fixedcolor_frag);
+    read!(draw_depthstencil_triangles_nocolor_vert);
+    read!(draw_depthstencil_triangles_nocolor_frag);
+    read!(draw_depthstencil_triangles_nocolor_fixedcolor_frag);
+    read!(draw_depthstencil_atlas_blit_vert);
+    read!(draw_depthstencil_atlas_blit_noclipdistance_vert);
+    read!(draw_depthstencil_atlas_blit_frag);
+    read!(draw_depthstencil_atlas_blit_fixedcolor_frag);
+    read!(draw_depthstencil_image_mesh_vert);
+    read!(draw_depthstencil_image_mesh_noclipdistance_vert);
+    read!(draw_depthstencil_image_mesh_frag);
+    read!(draw_depthstencil_image_mesh_fixedcolor_frag);
     read!(draw_fullscreen_quad_vert);
     read!(draw_input_attachment_frag);
     read!(draw_msaa_color_seed_attachment_frag);

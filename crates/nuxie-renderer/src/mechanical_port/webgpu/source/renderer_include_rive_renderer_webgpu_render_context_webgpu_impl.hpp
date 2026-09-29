@@ -103,8 +103,7 @@ public:
                                   bool generateRemainingMips = false) override;
 
 #ifdef RIVE_CANVAS
-    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
-                                       uint32_t height) override;
+    void ensureCanvasBacking(gpu::RenderCanvas* canvas) override;
 
     std::unique_ptr<rive::ore::Context> makeOreContext() override;
 #endif
@@ -135,7 +134,7 @@ private:
 
     // Specifies how to store MSAA color/depth/stencil attachments when ending
     // an MSAA render pass.
-    enum class MSAAEndType : bool
+    enum class DepthStencilEndType : bool
     {
         finish,
         breakForDstCopy,
@@ -148,7 +147,7 @@ private:
     class DrawRenderPass;
     class PLSDrawRenderPass;
     class AtomicDrawRenderPass;
-    class MSAADrawRenderPass;
+    class DepthStencilDrawRenderPass;
 
     // Construct the DrawRenderPass for the flush's InterlockMode and begin it
     // (the MSAA pass may defer its begin until the first barrier).

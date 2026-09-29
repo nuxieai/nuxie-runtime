@@ -56,7 +56,7 @@ use crate::mechanical_port::source::renderer::src::shaders::draw_fullscreen_quad
 use crate::mechanical_port::source::renderer::src::shaders::draw_image_mesh_vert as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_input_attachment_frag as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_mesh_frag as _;
-use crate::mechanical_port::source::renderer::src::shaders::draw_msaa_object_frag as _;
+use crate::mechanical_port::source::renderer::src::shaders::draw_depthstencil_object_frag as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_msaa_resolve_frag as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_path_common_glsl as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_path_vert as _;

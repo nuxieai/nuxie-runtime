@@ -1989,7 +1989,7 @@ int main(int argc, char** argv)
     {
         const bool hasDrawBatches = !facts.drawBatches.empty();
         if (facts.interlockMode !=
-                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+                static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) ||
             hasDrawBatches != msaaReference->expectsDrawBatches)
         {
             fail("MSAA reference replay draw-batch presence drifted from the registry");
@@ -2008,16 +2008,16 @@ int main(int argc, char** argv)
                               : rive::gpu::DrawContents::nonZeroFill);
             const std::array<uint32_t, 3> fastTypes = {
                 static_cast<uint32_t>(
-                    rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
-                static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+                    rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage),
+                static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFans),
                 static_cast<uint32_t>(
-                    rive::gpu::DrawType::msaaMidpointFanStencilReset),
+                    rive::gpu::DrawType::stencilMidpointFanReset),
             };
             const std::array<uint32_t, 2> evenOddTypes = {
                 static_cast<uint32_t>(
-                    rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                    rive::gpu::DrawType::stencilMidpointFanWinding),
                 static_cast<uint32_t>(
-                    rive::gpu::DrawType::msaaMidpointFanPathsCover),
+                    rive::gpu::DrawType::stencilMidpointFanCover),
             };
             const size_t expectedCount = polyEvenOdd ? evenOddTypes.size()
                                                      : fastTypes.size();
@@ -2049,20 +2049,20 @@ int main(int argc, char** argv)
             static_cast<uint32_t>(rive::gpu::DrawContents::clockwiseFill);
         const std::array<uint32_t, kIntersectionGroupBatchCount> expectedTypes = {
             static_cast<uint32_t>(
-                rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
-            static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+                rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage),
+            static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFans),
             static_cast<uint32_t>(
-                rive::gpu::DrawType::msaaMidpointFanStencilReset),
+                rive::gpu::DrawType::stencilMidpointFanReset),
             static_cast<uint32_t>(
-                rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
-            static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+                rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage),
+            static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFans),
             static_cast<uint32_t>(
-                rive::gpu::DrawType::msaaMidpointFanStencilReset),
+                rive::gpu::DrawType::stencilMidpointFanReset),
             static_cast<uint32_t>(
-                rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
-            static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
+                rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage),
+            static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFans),
             static_cast<uint32_t>(
-                rive::gpu::DrawType::msaaMidpointFanStencilReset),
+                rive::gpu::DrawType::stencilMidpointFanReset),
         };
         const std::array<uint32_t, kIntersectionGroupBatchCount>
             expectedContents = {
@@ -2085,7 +2085,7 @@ int main(int argc, char** argv)
             rive::gpu::ShaderMiscFlags::fixedFunctionColorOutput);
         bool scheduleMatches =
             facts.interlockMode ==
-                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) &&
+                static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) &&
             facts.fixedFunctionColorOutput &&
             facts.drawBatches.size() == kIntersectionGroupBatchCount;
         for (size_t i = 0; scheduleMatches && i != facts.drawBatches.size(); ++i)
@@ -2119,7 +2119,7 @@ int main(int argc, char** argv)
         const uint32_t advancedBlend =
             static_cast<uint32_t>(rive::gpu::DrawContents::advancedBlend);
         if (facts.interlockMode !=
-                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+                static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) ||
             facts.fixedFunctionColorOutput || facts.drawBatches.size() != 1 ||
             facts.drawBatches[0].drawType !=
                 static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
@@ -2248,7 +2248,7 @@ int main(int argc, char** argv)
     {
         const uint32_t expectedPatchDrawType = static_cast<uint32_t>(
             directDegenerateCubicCase
-                ? rive::gpu::DrawType::msaaStrokes
+                ? rive::gpu::DrawType::depthStrokes
             : directStrokesRoundCase || directOverstrokeQuadCase ||
                     directRawTextCase
                 ? rive::gpu::DrawType::midpointFanPatches
@@ -2314,7 +2314,7 @@ int main(int argc, char** argv)
              facts.drawBatches[0].baseElement == 1 &&
              facts.drawBatches[0].elementCount != 0);
         const uint32_t expectedInterlockMode = static_cast<uint32_t>(
-            directDegenerateCubicCase ? rive::gpu::InterlockMode::msaa
+            directDegenerateCubicCase ? rive::gpu::InterlockMode::depthStencil
                                       : rive::gpu::InterlockMode::atomics);
         if (facts.interlockMode != expectedInterlockMode ||
             !directScheduleValid || !strokesRoundScheduleValid ||
@@ -2370,17 +2370,17 @@ int main(int argc, char** argv)
         const std::vector<uint32_t> expectedTypes =
             nestedEvenOddPathClippedCase
                 ? std::vector<uint32_t>{
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage),
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFans),
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanStencilReset),
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFans),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFanReset),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFanWinding),
                       static_cast<uint32_t>(rive::gpu::DrawType::clipReset),
                       static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit),
                   }
                 : std::vector<uint32_t>{
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsStencil),
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsCover),
-                      static_cast<uint32_t>(rive::gpu::DrawType::msaaMidpointFanPathsStencil),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFanWinding),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFanCover),
+                      static_cast<uint32_t>(rive::gpu::DrawType::stencilMidpointFanWinding),
                       static_cast<uint32_t>(rive::gpu::DrawType::clipReset),
                       static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit),
                   };
@@ -2411,7 +2411,7 @@ int main(int argc, char** argv)
                 : std::vector<uint32_t>{2, 2, 2, 6, 6};
         bool scheduleMatches =
             facts.interlockMode ==
-                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) &&
+                static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) &&
             facts.fixedFunctionColorOutput &&
             facts.drawBatches.size() == expectedTypes.size();
         for (size_t i = 0; scheduleMatches && i != expectedTypes.size(); ++i)
@@ -2442,16 +2442,16 @@ int main(int argc, char** argv)
         const uint32_t activeClip =
             static_cast<uint32_t>(rive::gpu::DrawContents::activeClip);
         if (facts.interlockMode !=
-                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+                static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) ||
             !facts.fixedFunctionColorOutput || facts.drawBatches.size() != 6 ||
             facts.drawBatches[0].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+                                                   rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage) ||
             facts.drawBatches[1].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFans) ||
+                                                   rive::gpu::DrawType::stencilMidpointFans) ||
             facts.drawBatches[2].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+                                                   rive::gpu::DrawType::stencilMidpointFanReset) ||
             facts.drawBatches[3].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFanPathsStencil) ||
+                                                   rive::gpu::DrawType::stencilMidpointFanWinding) ||
             facts.drawBatches[4].drawType !=
                 static_cast<uint32_t>(rive::gpu::DrawType::clipReset) ||
             facts.drawBatches[5].drawType !=
@@ -2493,15 +2493,15 @@ int main(int argc, char** argv)
             static_cast<uint32_t>(rive::gpu::DrawContents::clipUpdate);
         const size_t expectedBatchCount = changingPathClippedCase ? 9 : 4;
         if (facts.interlockMode !=
-                static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+                static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) ||
             !facts.fixedFunctionColorOutput ||
             facts.drawBatches.size() != expectedBatchCount ||
             facts.drawBatches[0].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+                                                   rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage) ||
             facts.drawBatches[1].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFans) ||
+                                                   rive::gpu::DrawType::stencilMidpointFans) ||
             facts.drawBatches[2].drawType != static_cast<uint32_t>(
-                                                   rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+                                                   rive::gpu::DrawType::stencilMidpointFanReset) ||
             facts.drawBatches[3].drawType !=
                 static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
             facts.drawBatches[0].drawContents != clipUpdate ||
@@ -2525,11 +2525,11 @@ int main(int argc, char** argv)
                   static_cast<uint32_t>(rive::gpu::DrawType::clipReset) ||
               facts.drawBatches[4].drawContents != clipReset ||
               facts.drawBatches[5].drawType != static_cast<uint32_t>(
-                                                     rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+                                                     rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage) ||
               facts.drawBatches[6].drawType != static_cast<uint32_t>(
-                                                     rive::gpu::DrawType::msaaMidpointFans) ||
+                                                     rive::gpu::DrawType::stencilMidpointFans) ||
               facts.drawBatches[7].drawType != static_cast<uint32_t>(
-                                                     rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+                                                     rive::gpu::DrawType::stencilMidpointFanReset) ||
               facts.drawBatches[8].drawType !=
                   static_cast<uint32_t>(rive::gpu::DrawType::atlasBlit) ||
               facts.drawBatches[5].drawContents != clipUpdate ||
@@ -2557,16 +2557,16 @@ int main(int argc, char** argv)
         }
     }
     else if (facts.interlockMode !=
-            static_cast<uint32_t>(rive::gpu::InterlockMode::msaa) ||
+            static_cast<uint32_t>(rive::gpu::InterlockMode::depthStencil) ||
         !facts.fixedFunctionColorOutput ||
         (emptyStrokeOverlapCase
              ? (facts.drawBatches.size() != 4 ||
                 facts.drawBatches[0].drawType != static_cast<uint32_t>(
-                                                      rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage) ||
+                                                      rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage) ||
                 facts.drawBatches[1].drawType != static_cast<uint32_t>(
-                                                      rive::gpu::DrawType::msaaMidpointFans) ||
+                                                      rive::gpu::DrawType::stencilMidpointFans) ||
                 facts.drawBatches[2].drawType != static_cast<uint32_t>(
-                                                      rive::gpu::DrawType::msaaMidpointFanStencilReset) ||
+                                                      rive::gpu::DrawType::stencilMidpointFanReset) ||
                 facts.drawBatches[0].baseElement != 1 ||
                 facts.drawBatches[1].baseElement != 1 ||
                 facts.drawBatches[2].baseElement != 1 ||

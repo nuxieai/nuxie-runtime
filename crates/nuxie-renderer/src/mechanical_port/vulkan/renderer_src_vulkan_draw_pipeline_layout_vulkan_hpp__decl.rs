@@ -30,7 +30,7 @@ impl DrawPipelineLayoutVulkan {
     // Specialization cannot remove a push-constant declaration, so every
     // MSAA layout includes it even on devices with native color-write state.
     pub(crate) fn hasColorWriteDisablePushConstant(&self) -> bool {
-        self.m_interlockMode == InterlockMode::msaa
+        self.m_interlockMode == InterlockMode::depthStencil
     }
 
     pub(crate) fn plsLayout(&self) -> vk::DescriptorSetLayout {

@@ -16,8 +16,10 @@ use std::ffi::c_void;
 use std::fmt;
 use std::ptr::NonNull;
 
-/// The upstream revision of the current shader batch.
+/// Historical generated-batch revision, before the explicit macro adaptation below.
 pub const UPSTREAM_SHA: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
+/// Current inputs retain that batch's naming and apply only this upstream macro rename.
+pub const MACRO_ADAPTATION_UPSTREAM_SHA: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 
 /// The Cargo build-script output consumed by [`DrawShaderLibrary`]. This name
 /// intentionally differs from the existing tracer artifact.
@@ -101,16 +103,16 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         name: "common.minified.glsl",
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/common.minified.glsl",
-        byte_len: 4826,
-        sha256: "95e562edab842c27db30650880f48efd2690118b23ac35da46d0051d2fefee1c",
+        byte_len: 4853,
+        sha256: "b729c29b37f1b0068562180d8e2a7cbbb7ec594432ea61b470c0c51016198b5e",
         bytes: include_bytes!("shaders/common.minified.glsl"),
     },
     ShaderArtifact {
         name: "draw_path_common.minified.glsl",
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_path_common.minified.glsl",
-        byte_len: 6464,
-        sha256: "04b241b5300392fd5f6f7aa8e830cc2ab5e17065974f9e71845344fc5c57398e",
+        byte_len: 6563,
+        sha256: "1aaeea204e28c6582c9748e663639426a576ee4393e1e2e6f5381242a4865227",
         bytes: include_bytes!("shaders/draw_path_common.minified.glsl"),
     },
     ShaderArtifact {
@@ -141,8 +143,8 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         name: "draw_path.minified.vert",
         kind: ArtifactKind::CombinationInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_path.minified.vert",
-        byte_len: 5189,
-        sha256: "deb11c22b40505379a8208ae04384f92abe4b35e82d79f28a159b1f3e2e774a8",
+        byte_len: 5315,
+        sha256: "d346fe23c9d8a56ef6c5ce159f5461efdb30dc2cf92488bcbcf4e750531644cb",
         bytes: include_bytes!("shaders/draw_path.minified.vert"),
     },
     ShaderArtifact {
@@ -165,8 +167,8 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         name: "draw_image_mesh.minified.vert",
         kind: ArtifactKind::CombinationInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_image_mesh.minified.vert",
-        byte_len: 1439,
-        sha256: "8b93b525f34e1543a900b36c344e3dd5ed919d57c0c684108fd15f8f6a975ee3",
+        byte_len: 1484,
+        sha256: "a43ab478e3009a7de924c65b78d7b0276b8a0a50b12dd36ae1cadf617968c537",
         bytes: include_bytes!("shaders/draw_image_mesh.minified.vert"),
     },
 ];
@@ -339,6 +341,41 @@ mod tests {
     }
 
     #[test]
+    fn depth_stencil_macro_adaptation_preserves_historical_batch() {
+        assert_eq!(
+            MACRO_ADAPTATION_UPSTREAM_SHA,
+            "c18b32511bfeaeee6b7c54e35152aea3fdbb5964"
+        );
+        let inventory = include_str!(
+            "../../tests/fixtures/native_metal/offline_draw_shader/source_inventory.txt"
+        );
+        let captured = inventory
+            .lines()
+            .filter_map(|line| line.strip_prefix("# captured_source|"))
+            .collect::<Vec<_>>();
+        assert_eq!(captured.len(), 4);
+        for row in captured {
+            let fields = row.split('|').collect::<Vec<_>>();
+            assert_eq!(fields.len(), 3);
+            let artifact = DRAW_SHADER_ARTIFACTS
+                .iter()
+                .find(|artifact| artifact.name == fields[0])
+                .unwrap();
+            let current = std::str::from_utf8(artifact.bytes).unwrap();
+            assert!(!current.contains("RENDER_MODE_MSAA"));
+            assert!(current.contains("RENDER_MODE_DEPTH_STENCIL"));
+            let historical = current.replace("RENDER_MODE_DEPTH_STENCIL", "RENDER_MODE_MSAA");
+            assert_eq!(historical.len(), fields[1].parse::<usize>().unwrap());
+            assert_eq!(
+                sha256_hex(historical.as_bytes()),
+                fields[2],
+                "{}",
+                artifact.name
+            );
+        }
+    }
+
+    #[test]
     fn draw_source_preserves_upstream_include_order() {
         let source = std::str::from_utf8(DrawShaderSource::load().entry_point.bytes).unwrap();
         let includes: Vec<_> = source
@@ -393,15 +430,25 @@ mod tests {
             exports::GLSL_atlasVertexMain,
             exports::GLSL_atlasFillFragmentMain,
             exports::GLSL_atlasStrokeFragmentMain,
-        ].into_iter().map(str::to_owned).collect();
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
         for namespace in [
-            "m11100000000", "p11100000111", "p11110000100", "p11110000110",
+            "m11100000000",
+            "p11100000111",
+            "p11110000100",
+            "p11110000110",
         ] {
             expected.push(format!("{namespace}::{}", exports::GLSL_drawVertexMain));
         }
         for namespace in [
-            "c11111111100", "c11111111110", "m11100011000",
-            "p11100011111", "p11111111100", "p11111111110",
+            "c11111111100",
+            "c11111111110",
+            "m11100011000",
+            "p11100011111",
+            "p11111111100",
+            "p11111111110",
         ] {
             expected.push(format!("{namespace}::{}", exports::GLSL_drawFragmentMain));
         }
@@ -419,12 +466,13 @@ mod tests {
             format!("p11110000100::{}", exports::GLSL_drawVertexMain),
             format!("p11111111100::{}", exports::GLSL_drawFragmentMain),
         ] {
-            library.function(&name).unwrap_or_else(|error| panic!("{error}"));
+            library
+                .function(&name)
+                .unwrap_or_else(|error| panic!("{error}"));
         }
         assert_eq!(
             library.function("not-a-draw-function").unwrap_err(),
             DrawShaderLibraryError::MissingFunction("not-a-draw-function".to_owned())
         );
     }
-
 }

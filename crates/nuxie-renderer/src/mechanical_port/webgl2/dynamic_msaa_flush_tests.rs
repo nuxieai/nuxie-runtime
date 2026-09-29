@@ -9,7 +9,7 @@ fn dynamic_msaa_descriptor(
     gpu::FlushDescriptor {
         renderTarget: Some(target),
         combinedShaderFeatures: gpu::ShaderFeatures::NONE,
-        interlockMode: gpu::InterlockMode::msaa,
+        interlockMode: gpu::InterlockMode::depthStencil,
         msaaSampleCount: 4,
         colorLoadAction: gpu::LoadAction::clear,
         colorClearValue: 0,
@@ -81,7 +81,7 @@ fn dynamic_msaa_flush_commands(draw_type: gpu::DrawType) -> Vec<GLCommand> {
     let props = StandardPipelineProps {
         drawType: draw_type,
         shaderFeatures: gpu::ShaderFeatures::NONE,
-        interlockMode: gpu::InterlockMode::msaa,
+        interlockMode: gpu::InterlockMode::depthStencil,
         shaderMiscFlags: gpu::ShaderMiscFlags::none,
         #[cfg(feature = "with-rive-tools")]
         synthesizedFailureType: gpu::SynthesizedFailureType::none,
@@ -140,8 +140,8 @@ fn dynamic_msaa_flush_commands(draw_type: gpu::DrawType) -> Vec<GLCommand> {
 #[test]
 fn dynamic_msaa_batches_use_three_exact_states_without_changing_draw_or_scissor() {
     for draw_type in [
-        gpu::DrawType::msaaDynamicMidpointFans,
-        gpu::DrawType::msaaDynamicOuterCubics,
+        gpu::DrawType::stencilDynamicMidpointFans,
+        gpu::DrawType::stencilDynamicOuterCubics,
     ] {
         let commands = dynamic_msaa_flush_commands(draw_type);
         let draws: Vec<_> = commands
@@ -260,7 +260,7 @@ fn dynamic_msaa_batches_use_three_exact_states_without_changing_draw_or_scissor(
 
 #[test]
 fn ordinary_msaa_batch_still_issues_one_draw() {
-    let commands = dynamic_msaa_flush_commands(gpu::DrawType::msaaMidpointFans);
+    let commands = dynamic_msaa_flush_commands(gpu::DrawType::stencilMidpointFans);
     assert_eq!(
         commands
             .iter()

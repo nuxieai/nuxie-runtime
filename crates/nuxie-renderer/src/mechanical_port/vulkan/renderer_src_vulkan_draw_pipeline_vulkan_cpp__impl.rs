@@ -164,7 +164,7 @@ pub(crate) fn subpass_index(
         };
     }
     let mainSubpassIdx = u32::from(
-        interlockMode == InterlockMode::msaa && colorLoadAction == LoadAction::preserveRenderTarget,
+        interlockMode == InterlockMode::depthStencil && colorLoadAction == LoadAction::preserveRenderTarget,
     );
     match drawType {
         DrawType::renderPassInitialize => {
@@ -178,19 +178,19 @@ pub(crate) fn subpass_index(
         | DrawType::featherAtlasBlit
         | DrawType::imageRect
         | DrawType::imageMesh
-        | DrawType::msaaStrokes
-        | DrawType::msaaMidpointFanBorrowedCoverage
-        | DrawType::msaaDynamicMidpointFans
-        | DrawType::msaaDynamicOuterCubics
-        | DrawType::msaaMidpointFans
-        | DrawType::msaaMidpointFanStencilReset
-        | DrawType::msaaMidpointFanPathsStencil
-        | DrawType::msaaMidpointFanPathsCover
-        | DrawType::msaaOuterCubicBorrowedCoverage
-        | DrawType::msaaOuterCubicStencilReset
-        | DrawType::msaaOuterCubicPathsStencil
-        | DrawType::msaaOuterCubicPathsCover
-        | DrawType::msaaOuterCubics
+        | DrawType::depthStrokes
+        | DrawType::stencilMidpointFanBorrowedCoverage
+        | DrawType::stencilDynamicMidpointFans
+        | DrawType::stencilDynamicOuterCubics
+        | DrawType::stencilMidpointFans
+        | DrawType::stencilMidpointFanReset
+        | DrawType::stencilMidpointFanWinding
+        | DrawType::stencilMidpointFanCover
+        | DrawType::stencilOuterCubicBorrowedCoverage
+        | DrawType::stencilOuterCubicReset
+        | DrawType::stencilOuterCubicWinding
+        | DrawType::stencilOuterCubicCover
+        | DrawType::stencilOuterCubics
         | DrawType::clipReset => mainSubpassIdx,
         DrawType::renderPassResolve => mainSubpassIdx + 1,
     }
@@ -396,7 +396,7 @@ impl DrawPipelineVulkan {
             depthStencilState.back = back;
         }
         let msaaState = vk::PipelineMultisampleStateCreateInfo::default().rasterization_samples(
-            if interlockMode == InterlockMode::msaa && props.drawType != DrawType::renderPassResolve
+            if interlockMode == InterlockMode::depthStencil && props.drawType != DrawType::renderPassResolve
             {
                 vk::SampleCountFlags::TYPE_4
             } else {
@@ -408,19 +408,19 @@ impl DrawPipelineVulkan {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
-            | DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
-            | DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaDynamicMidpointFans
-            | DrawType::msaaDynamicOuterCubics
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover => (
+            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
+            | DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilDynamicMidpointFans
+            | DrawType::stencilDynamicOuterCubics
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover => (
                 &*layout::PATH_VERTEX_INPUT_STATE,
                 &*layout::INPUT_ASSEMBLY_TRIANGLE_LIST,
             ),
@@ -472,7 +472,7 @@ impl DrawPipelineVulkan {
             .layout(pipelineLayout.vkPipelineLayout())
             .render_pass(vkRenderPass)
             .subpass(subpassIndex);
-        if interlockMode == InterlockMode::msaa {
+        if interlockMode == InterlockMode::depthStencil {
             pipelineCreateInfo = pipelineCreateInfo.depth_stencil_state(&depthStencilState);
         }
         let vkPipeline = match unsafe {
@@ -579,7 +579,7 @@ mod tests {
             subpass_index(
                 DrawType::renderPassInitialize,
                 LoadAction::preserveRenderTarget,
-                InterlockMode::msaa,
+                InterlockMode::depthStencil,
                 ShaderMiscFlags::none,
             ),
             0
@@ -588,7 +588,7 @@ mod tests {
             subpass_index(
                 DrawType::renderPassResolve,
                 LoadAction::preserveRenderTarget,
-                InterlockMode::msaa,
+                InterlockMode::depthStencil,
                 ShaderMiscFlags::none,
             ),
             2
@@ -616,9 +616,9 @@ mod tests {
     #[test]
     fn dynamic_state_choice_has_a_distinct_pipeline_key() {
         let features = PlatformFeatures::default();
-        let dynamic = props(DrawType::msaaDynamicMidpointFans, InterlockMode::msaa);
+        let dynamic = props(DrawType::stencilDynamicMidpointFans, InterlockMode::depthStencil);
         let mut baked = dynamic;
-        baked.drawType = DrawType::msaaMidpointFans;
+        baked.drawType = DrawType::stencilMidpointFans;
         assert_ne!(createKey(&dynamic, &features), createKey(&baked, &features));
     }
 

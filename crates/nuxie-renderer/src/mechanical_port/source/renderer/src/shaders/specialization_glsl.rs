@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/specialization.glsl.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "824f2cd90fb21ea9ff447d1d215cd0071aff8d635f440fe7abdf706a364c5d92";
+    "71aa0115c2fceae04efe7a46261d0c2f0845c9299466814afc410661629faa12";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 60;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2899;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2908;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_SPECIALIZATION_GLSL_SOURCE: &str = r###"layout(constant_id = CLIPPING_SPECIALIZATION_IDX) const
@@ -74,7 +74,7 @@ layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
 #ifndef @TARGET_WGSL
 // Since SPIR-V can't omit declarations via specialization constants, only
 // define @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE where it is used (i.e., MSAA).
-#if defined(@RENDER_MODE_MSAA)
+#if defined(@RENDER_MODE_DEPTH_STENCIL)
 #define @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE EmulateDynamicColorWriteDisable
 #endif
 #endif

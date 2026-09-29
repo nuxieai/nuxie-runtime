@@ -14,7 +14,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140)uniform Ji{uniform highp vec4 Yg;}Zg;
+layout(binding=0,std140)uniform Oi{uniform highp vec4 ch;}dh;
 #else
 uniform mediump vec4 TE;
 #endif
@@ -25,7 +25,7 @@ __pixel_local_inEXT R1
 #else
 __pixel_local_outEXT R1
 #endif
-{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 k4;layout(r32ui)highp uint H7;};
+{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 l4;layout(r32ui)highp uint H7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef LOAD_COLOR
 layout(location=0)inout mediump vec4 Xa;
@@ -37,7 +37,7 @@ layout(location=0)out mediump vec4 Xa;
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-j0=Zg.Yg;
+j0=dh.ch;
 #else
 j0=TE;
 #endif
@@ -60,6 +60,6 @@ Xa=j0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 ah;void main(){ah=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 eh;void main(){eh=vec4(0,1,0,1);}
 #endif
 #endif

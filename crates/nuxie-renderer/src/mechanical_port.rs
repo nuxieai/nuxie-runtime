@@ -145,8 +145,10 @@ pub(crate) mod webgl2 {
     mod ore_pipeline_gl_decl;
     #[path = "renderer_src_ore_gl_ore_pipeline_gl_cpp__impl.rs"]
     mod ore_pipeline_gl_impl;
+    #[cfg(feature = "ore-gl")]
     #[path = "renderer_src_ore_gl_ore_render_pass_gl_hpp__decl.rs"]
     mod ore_render_pass_gl_decl;
+    #[cfg(feature = "ore-gl")]
     #[path = "renderer_src_ore_gl_ore_render_pass_gl_cpp__impl.rs"]
     mod ore_render_pass_gl_impl;
     #[path = "renderer_src_ore_gl_ore_sampler_gl_hpp__decl.rs"]
@@ -464,7 +466,7 @@ pub(crate) mod source {
                 pub(crate) mod draw_image_mesh_vert;
                 pub(crate) mod draw_input_attachment_frag;
                 pub(crate) mod draw_mesh_frag;
-                pub(crate) mod draw_msaa_object_frag;
+                pub(crate) mod draw_depthstencil_object_frag;
                 pub(crate) mod draw_msaa_resolve_frag;
                 pub(crate) mod draw_path_common_glsl;
                 pub(crate) mod draw_path_vert;

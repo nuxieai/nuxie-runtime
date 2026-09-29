@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `503eab633367d00ad3627770e7898d22379cc2e2`
+- LAST_SYNCED_SHA: `c18b32511bfeaeee6b7c54e35152aea3fdbb5964`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 152 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 152 require a Rust translation.
+  There are 151 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 151 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c18b32511bfeaeee6b7c54e35152aea3fdbb5964` | Rename the depth/stencil interlock mechanism and its draw/shader vocabulary across shared renderer and supported backends, retaining MSAA sample-count and resolve concepts where upstream does. Preserve numeric enum and shader behavior; regenerate GLSL and update bindings, retain equivalent SPIR-V/WGSL payloads with renamed symbols, and record Metal's macro-only adaptation separately from historical captures. Enumerate build inputs from current translated owners so stale pre-rename cached files cannot enter the shader batch. Correct GL render-pass feature gates to match their owning context; no legacy aliases or new D3D backend. | — |
 | `503eab633367d00ad3627770e7898d22379cc2e2` | Add queued and synchronized focus traversal, focus clearing, focus-node/state queries and listener responses; preserve request IDs, error routing and lock boundaries. Correct the existing font-sharing adaptation to atomic shared ownership and a synchronized color-layer cache so the queue can cross threads without recreating font identity. Translate all five upstream command-queue regressions, including the actual threaded synchronized case. | — |
 | `0d8ca59dac1b67c35d03a79cb29c595ccddab8d9` | Replace independent checked/mixed booleans with the upstream two-bit integer check-state field, integer binding dispatch and tri-state decoder. Remove the superseded mixed property and flag APIs while preserving packed wire bits; translate all five upstream check-state tests. | — |
 | `7d59acedbf37270e538a3093ec777f5b66b7ffb9` | Deduplicate and sort the shader minifier’s reserved-name set in the owned Rust tool and exact Python source snapshot. All 345 reserved names are unchanged; shader output semantics are unchanged. | — |

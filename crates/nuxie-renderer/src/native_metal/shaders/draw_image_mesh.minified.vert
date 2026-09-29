@@ -11,7 +11,7 @@ m2 H0 X(0,d,G5);
 #ifdef ENABLE_CLIPPING
 OPTIONALLY_FLAT X(1,c,K3);
 #endif
-#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_MSAA)
+#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 H0 X(2,g,M0);
 #endif
 OPTIONALLY_FLAT X(3,c,H1);
@@ -30,7 +30,7 @@ V(G5,d);
 #ifdef ENABLE_CLIPPING
 V(K3,c);
 #endif
-#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_MSAA)
+#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 V(M0,g);
 #endif
 V(H1,c);
@@ -43,7 +43,7 @@ if(ENABLE_CLIPPING){K3=r8(IB.y,m.d6);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
-#ifndef RENDER_MODE_MSAA
+#ifndef RENDER_MODE_DEPTH_STENCIL
 M0=T7(h2(SB),OB.zw,m0 x5);
 #else
 Bc(h2(SB),OB.zw,m0 x5);
@@ -54,7 +54,7 @@ g W=M3(m0);
 #ifdef POST_INVERT_Y
 W.y=-W.y;
 #endif
-#ifdef RENDER_MODE_MSAA
+#ifdef RENDER_MODE_DEPTH_STENCIL
 W.z=ja(IB.w);
 #endif
 H1=uintBitsToFloat(IB.x);
@@ -65,7 +65,7 @@ a0(G5);
 #ifdef ENABLE_CLIPPING
 a0(K3);
 #endif
-#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_MSAA)
+#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 a0(M0);
 #endif
 a0(H1);

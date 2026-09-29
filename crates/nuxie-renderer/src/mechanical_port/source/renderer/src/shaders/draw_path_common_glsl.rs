@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "63553caaec313a5f03fc284835c15e02506ff1380a4750ae7414a3c9d46a562e";
+    "d01a41c75ec416285d91c8f43f5aaed9572745318527bd4f5dd1f7abcada121a";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 914;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 39511;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 39619;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -84,7 +84,7 @@ TEXTURE_R16F(PER_FLUSH_BINDINGS_SET,
 TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
 // The Qualcomm compiler can't handle line breaks in #ifs.
 // clang-format off
-#if defined(@RENDER_MODE_MSAA) && defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
+#if defined(@RENDER_MODE_DEPTH_STENCIL) && defined(@ENABLE_ADVANCED_BLEND) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
 // clang-format on
 DST_COLOR_TEXTURE(@dstColorTexture);
 #endif
@@ -297,7 +297,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
                                            int _instanceID,
                                            OUT(uint) outPathID,
                                            OUT(float2) outVertexPosition
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
                                            ,
                                            OUT(float4) outCoverages
 #else
@@ -534,7 +534,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         float2 vertexOffset =
             norm * (strokeRadius + aaRadius); // Bloat stroke width for AA.
 
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
         // Calculate the AA distance to both the outset and inset edges of the
         // stroke. The fragment shader will use whichever is lesser.
         float x = outset * (strokeRadius + aaRadius);
@@ -641,7 +641,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
             float2 pt = abs(outset) * vertexOffset;
             float clipDistance = (clipAARadius - dot(pt, bisector)) /
                                  (bisectPixelWidth * (AA_RADIUS * 2.));
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
             if ((contourIDWithFlags & LEFT_JOIN_CONTOUR_FLAG) != 0u)
                 outCoverages.y = clipDistance;
             else
@@ -649,7 +649,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
 #endif
         }
 
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
         outCoverages.xy *= globalCoverage;
 
         // Bias outCoverages.y slightly upwards in order to guarantee
@@ -673,7 +673,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
     }
     else // This is a fill.
     {
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
         // "outCoverages.y < 0" indicates to the fragment shader that this is
         // a fill, as opposed to a stroke.
         outCoverages = float4(fillCoverage, -1., .0, .0);
@@ -777,7 +777,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
             // compiler that also negates Y.
             outCoverages *= float4(-1., +1., +1., +1.);
         }
-#endif // !RENDER_MODE_MSAA
+#endif // !RENDER_MODE_DEPTH_STENCIL
 
         // Place the fan point.
         if (vertexType == FAN_MIDPOINT_VERTEX)
@@ -794,7 +794,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
 
     outVertexPosition = MUL(M, origin) + postTransformVertexOffset + translate;
 
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
     uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
     outPathZIndex = cast_uint_to_ushort(pathData2.r);
 #else
@@ -812,7 +812,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
 #if defined(@VERTEX) && defined(@DRAW_INTERIOR_TRIANGLES)
 INLINE float2 unpack_interior_triangle_vertex(float3 triangleVertex,
                                               OUT(uint) outPathID
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
                                               ,
                                               OUT(ushort) outPathZIndex
 #else
@@ -822,7 +822,7 @@ INLINE float2 unpack_interior_triangle_vertex(float3 triangleVertex,
                                                   VERTEX_CONTEXT_DECL)
 {
     outPathID = floatBitsToUint(triangleVertex.z) & 0xffffu;
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
     uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
     outPathZIndex = cast_uint_to_ushort(pathData2.x);
 #else
@@ -843,14 +843,14 @@ INLINE float2 unpack_interior_triangle_vertex(float3 triangleVertex,
 INLINE float2
 unpack_atlas_coverage_vertex(float3 triangleVertex,
                              OUT(uint) outPathID,
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
                              OUT(ushort) outPathZIndex,
 #endif
                              OUT(float2) outAtlasCoord VERTEX_CONTEXT_DECL)
 {
     outPathID = floatBitsToUint(triangleVertex.z) & 0xffffu;
     uint4 pathData2 = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 2u);
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
     outPathZIndex = cast_uint_to_ushort(pathData2.x);
 #endif
     float2 vertexPos = triangleVertex.xy;

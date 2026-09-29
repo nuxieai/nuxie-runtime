@@ -14,7 +14,7 @@ L(B9,G,IB);
 #endif
 h1
 #endif
-m2 H0 X(0,d,G5);
+m2 H0 X(0,d,H5);
 #ifdef I
 NB X(1,c,K3);
 #endif
@@ -27,13 +27,13 @@ Q2 X(4,N,A1);
 #endif
 g2
 #ifdef DB
-U3 V3 I6(HC,i3,j3,y3,z3,n1,g0,B){M(B,j3,PC,d);M(B,z3,QC,d);M(v,g0,XB,g);M(v,g0,SB,g);M(v,g0,OB,g);
+U3 V3 J6(HC,i3,j3,y3,z3,n1,g0,B){M(B,j3,PC,d);M(B,z3,QC,d);M(v,g0,XB,g);M(v,g0,SB,g);M(v,g0,OB,g);
 #ifdef O3
 M(v,g0,YB,uint);M(v,g0,ZB,uint);M(v,g0,AC,uint);M(v,g0,BC,uint);G IB=G(YB,ZB,AC,BC);
 #else
 M(v,g0,IB,G);
 #endif
-V(G5,d);
+V(H5,d);
 #ifdef I
 V(K3,c);
 #endif
@@ -44,16 +44,16 @@ V(H1,c);
 #ifdef AB
 V(A1,N);
 #endif
-d m0=R0(h2(XB),PC)+OB.xy;G5=QC;
+d m0=R0(h2(XB),PC)+OB.xy;H5=QC;
 #ifdef I
-if(I){K3=r8(IB.y,m.d6);}
+if(I){K3=r8(IB.y,m.e6);}
 #endif
 #ifdef BB
 if(BB){
 #ifndef CB
-M0=T7(h2(SB),OB.zw,m0 x5);
+M0=T7(h2(SB),OB.zw,m0 y5);
 #else
-Bc(h2(SB),OB.zw,m0 x5);
+Cc(h2(SB),OB.zw,m0 y5);
 #endif
 }
 #endif
@@ -68,16 +68,16 @@ H1=uintBitsToFloat(IB.x);
 #ifdef AB
 A1=X1(IB.z);
 #endif
-a0(G5);
+c0(H5);
 #ifdef I
-a0(K3);
+c0(K3);
 #endif
 #if defined(BB)&&!defined(CB)
-a0(M0);
+c0(M0);
 #endif
-a0(H1);
+c0(H1);
 #ifdef AB
-a0(A1);
+c0(A1);
 #endif
 z1(W);}
 #endif

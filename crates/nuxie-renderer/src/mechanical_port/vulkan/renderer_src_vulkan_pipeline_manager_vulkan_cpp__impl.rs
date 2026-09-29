@@ -21,7 +21,7 @@ use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_
     ImageFilter, ImageSampler, ImageWrap,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE, DrawContents, DrawType, InterlockMode, LoadAction,
+    DrawContentsForDepthStencilPipelineState, DrawContents, DrawType, InterlockMode, LoadAction,
     PlatformFeatures, ShaderFeatures, ShaderMiscFlags, UbershaderFeaturesMaskFor,
     kVertexShaderFeaturesMask,
 };
@@ -896,7 +896,7 @@ fn get_relevant_blend_modes_for_pipeline_creation(
         | InterlockMode::atomics
         | InterlockMode::clockwise
         | InterlockMode::clockwiseAtomic => SRC_OVER_ONLY,
-        InterlockMode::msaa => {
+        InterlockMode::depthStencil => {
             assert!(
                 drawContents.0 & DrawContents::opaquePaint.0 != 0
                     || !platformFeatures.supportsBlendAdvancedKHR
@@ -934,14 +934,14 @@ fn forEachUbershaderPermutation(
                 #[cfg(feature = "with-rive-tools")]
                 synthesizedFailureType: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SynthesizedFailureType::none,
             };
-            let validDrawContents = if interlockMode == InterlockMode::msaa {
-                DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE.0
+            let validDrawContents = if interlockMode == InterlockMode::depthStencil {
+                DrawContentsForDepthStencilPipelineState.0
             } else {
                 DrawContents::none.0
             };
             let mut fixedPassOptions = RenderPassOptionsVulkan::none;
             if interlockMode != InterlockMode::clockwiseAtomic
-                && interlockMode != InterlockMode::msaa
+                && interlockMode != InterlockMode::depthStencil
                 && shaderMiscFlags.has(ShaderMiscFlags::fixedFunctionColorOutput)
             {
                 fixedPassOptions |= RenderPassOptionsVulkan::fixedFunctionColorOutput;
@@ -967,7 +967,7 @@ fn forEachUbershaderPermutation(
                         validPassOptions |= RenderPassOptionsVulkan::fixedFunctionColorOutput;
                     }
                 }
-                InterlockMode::msaa => {
+                InterlockMode::depthStencil => {
                     validPassOptions |= RenderPassOptionsVulkan::manuallyResolved
                         | RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture;
                     if shaderMiscFlags.has(ShaderMiscFlags::fixedFunctionColorOutput) {

@@ -15,10 +15,11 @@
 use super::context_options::NativeMetalSynthesizedFailureType;
 pub(crate) use super::context_options::{NativeMetalContextOptions, ShaderCompilationMode};
 use super::shader_compile_plan::{
-    BORROWED_COVERAGE_PASS, COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND,
-    ENABLE_CLIP_RECT, ENABLE_CLIPPING, ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES,
-    ENABLE_MODULATED_IMAGE, ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, InterlockMode,
-    STORE_COLOR_CLEAR, SWIZZLE_COLOR_BGRA_TO_RGBA, ShaderFeatures, ShaderMiscFlags,
+    InterlockMode, ShaderFeatures, ShaderMiscFlags, BORROWED_COVERAGE_PASS,
+    COALESCED_RESOLVE_AND_TRANSFER, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT,
+    ENABLE_DITHER, ENABLE_EVEN_ODD, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
+    ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, STORE_COLOR_CLEAR,
+    SWIZZLE_COLOR_BGRA_TO_RGBA,
 };
 use crate::gpu::DrawType;
 use std::collections::HashMap;
@@ -160,7 +161,7 @@ pub(crate) fn shader_features_mask_for(
         InterlockMode::ClockwiseAtomic => {
             ALL_SHADER_FEATURES & !ENABLE_EVEN_ODD & !ENABLE_NESTED_CLIPPING
         }
-        InterlockMode::Msaa => {
+        InterlockMode::DepthStencil => {
             ENABLE_CLIP_RECT
                 | ENABLE_ADVANCED_BLEND
                 | ENABLE_HSL_BLEND_MODES
@@ -190,23 +191,23 @@ pub(crate) fn shader_features_mask_for(
         | DrawType::ImageRect
         | DrawType::ImageMesh
         | DrawType::AtlasBlit
-        | DrawType::MsaaStrokes
-        | DrawType::MsaaMidpointFanBorrowedCoverage
-        | DrawType::MsaaDynamicMidpointFans
-        | DrawType::MsaaDynamicOuterCubics
-        | DrawType::MsaaMidpointFans
-        | DrawType::MsaaMidpointFanStencilReset
-        | DrawType::MsaaMidpointFanPathsStencil
-        | DrawType::MsaaMidpointFanPathsCover
-        | DrawType::MsaaOuterCubicBorrowedCoverage
-        | DrawType::MsaaOuterCubicStencilReset
-        | DrawType::MsaaOuterCubicPathsStencil
-        | DrawType::MsaaOuterCubicPathsCover
-        | DrawType::MsaaOuterCubics => ALL_SHADER_FEATURES,
+        | DrawType::DepthStrokes
+        | DrawType::StencilMidpointFanBorrowedCoverage
+        | DrawType::StencilDynamicMidpointFans
+        | DrawType::StencilDynamicOuterCubics
+        | DrawType::StencilMidpointFans
+        | DrawType::StencilMidpointFanReset
+        | DrawType::StencilMidpointFanWinding
+        | DrawType::StencilMidpointFanCover
+        | DrawType::StencilOuterCubicBorrowedCoverage
+        | DrawType::StencilOuterCubicReset
+        | DrawType::StencilOuterCubicWinding
+        | DrawType::StencilOuterCubicCover
+        | DrawType::StencilOuterCubics => ALL_SHADER_FEATURES,
         DrawType::ClipReset => ENABLE_DITHER,
         DrawType::RenderPassInitialize => match interlock_mode {
             InterlockMode::Atomics => ENABLE_CLIPPING | ENABLE_ADVANCED_BLEND | ENABLE_DITHER,
-            InterlockMode::Msaa => ENABLE_DITHER,
+            InterlockMode::DepthStencil => ENABLE_DITHER,
             InterlockMode::ClockwiseAtomic => 0,
             _ => {
                 return Err(PipelineCacheError::InvalidRequest(
@@ -216,7 +217,7 @@ pub(crate) fn shader_features_mask_for(
         },
         DrawType::RenderPassResolve => match interlock_mode {
             InterlockMode::Atomics => ALL_SHADER_FEATURES,
-            InterlockMode::RasterOrdering | InterlockMode::Msaa => ENABLE_DITHER,
+            InterlockMode::RasterOrdering | InterlockMode::DepthStencil => ENABLE_DITHER,
             _ => {
                 return Err(PipelineCacheError::InvalidRequest(
                     "render-pass resolve requires raster ordering, atomics, or MSAA",
@@ -242,7 +243,7 @@ pub(crate) fn ubershader_features_mask_for(
             "requested shader features are not supported by this draw/interlock pair",
         ));
     }
-    if request.interlock_mode == InterlockMode::Msaa && !platform.supports_clip_planes {
+    if request.interlock_mode == InterlockMode::DepthStencil && !platform.supports_clip_planes {
         output &= !ENABLE_CLIP_RECT;
     }
     if request.shader_misc_flags & (BORROWED_COVERAGE_PASS | FIXED_FUNCTION_COLOR_OUTPUT) != 0 {
@@ -284,19 +285,19 @@ pub(crate) fn pipeline_key(
         DrawType::MidpointFanPatches
         | DrawType::MidpointFanCenterAaPatches
         | DrawType::OuterCurvePatches
-        | DrawType::MsaaStrokes
-        | DrawType::MsaaMidpointFanBorrowedCoverage
-        | DrawType::MsaaDynamicMidpointFans
-        | DrawType::MsaaDynamicOuterCubics
-        | DrawType::MsaaMidpointFans
-        | DrawType::MsaaMidpointFanStencilReset
-        | DrawType::MsaaMidpointFanPathsStencil
-        | DrawType::MsaaMidpointFanPathsCover
-        | DrawType::MsaaOuterCubicBorrowedCoverage
-        | DrawType::MsaaOuterCubicStencilReset
-        | DrawType::MsaaOuterCubicPathsStencil
-        | DrawType::MsaaOuterCubicPathsCover
-        | DrawType::MsaaOuterCubics => 0,
+        | DrawType::DepthStrokes
+        | DrawType::StencilMidpointFanBorrowedCoverage
+        | DrawType::StencilDynamicMidpointFans
+        | DrawType::StencilDynamicOuterCubics
+        | DrawType::StencilMidpointFans
+        | DrawType::StencilMidpointFanReset
+        | DrawType::StencilMidpointFanWinding
+        | DrawType::StencilMidpointFanCover
+        | DrawType::StencilOuterCubicBorrowedCoverage
+        | DrawType::StencilOuterCubicReset
+        | DrawType::StencilOuterCubicWinding
+        | DrawType::StencilOuterCubicCover
+        | DrawType::StencilOuterCubics => 0,
         DrawType::InteriorTriangulation => 1,
         DrawType::AtlasBlit => 2,
         DrawType::ImageRect => 3,
@@ -304,7 +305,9 @@ pub(crate) fn pipeline_key(
         DrawType::RenderPassInitialize => {
             if !matches!(
                 interlock_mode,
-                InterlockMode::Atomics | InterlockMode::Msaa | InterlockMode::ClockwiseAtomic
+                InterlockMode::Atomics
+                    | InterlockMode::DepthStencil
+                    | InterlockMode::ClockwiseAtomic
             ) {
                 return Err(PipelineCacheError::InvalidRequest(
                     "render-pass initialize has an invalid interlock",
@@ -315,7 +318,9 @@ pub(crate) fn pipeline_key(
         DrawType::RenderPassResolve => {
             if !matches!(
                 interlock_mode,
-                InterlockMode::RasterOrdering | InterlockMode::Atomics | InterlockMode::Msaa
+                InterlockMode::RasterOrdering
+                    | InterlockMode::Atomics
+                    | InterlockMode::DepthStencil
             ) {
                 return Err(PipelineCacheError::InvalidRequest(
                     "render-pass resolve has an invalid interlock",
@@ -326,7 +331,7 @@ pub(crate) fn pipeline_key(
         DrawType::ClipReset => {
             if !matches!(
                 interlock_mode,
-                InterlockMode::ClockwiseAtomic | InterlockMode::Msaa
+                InterlockMode::ClockwiseAtomic | InterlockMode::DepthStencil
             ) {
                 return Err(PipelineCacheError::InvalidRequest(
                     "clip reset requires clockwise-atomic or MSAA",
@@ -340,7 +345,7 @@ pub(crate) fn pipeline_key(
         InterlockMode::Atomics => 1,
         InterlockMode::Clockwise => 2,
         InterlockMode::ClockwiseAtomic => 3,
-        InterlockMode::Msaa => 4,
+        InterlockMode::DepthStencil => 4,
     };
     let masked_features = shader_features & shader_features_mask_for(draw_type, interlock_mode)?;
     let key = ((((shader_misc_flags << INTERLOCK_MODE_BIT_COUNT) | interlock_key)
@@ -1106,7 +1111,7 @@ mod tests {
         let msaa_midpoint = PipelineRequest::new(
             DrawType::MidpointFanPatches,
             ENABLE_DITHER,
-            InterlockMode::Msaa,
+            InterlockMode::DepthStencil,
             0,
         );
         assert_eq!(
@@ -1169,12 +1174,10 @@ mod tests {
         let _ = cache.select(atomic_midpoint(0)).unwrap();
         let state = state.lock().unwrap();
         assert!(!state.scheduled.is_empty());
-        assert!(
-            state
-                .scheduled
-                .iter()
-                .all(|job| job.failure_injection == PipelineFailureInjection::None)
-        );
+        assert!(state
+            .scheduled
+            .iter()
+            .all(|job| job.failure_injection == PipelineFailureInjection::None));
     }
 
     #[test]
@@ -1408,11 +1411,9 @@ mod tests {
             atomic_midpoint(ENABLE_DITHER).with_failure(PipelineFailureInjection::PipelineCreation);
         let _ = cache.select(request).unwrap();
         let state = state.lock().unwrap();
-        assert!(
-            !state
-                .realized
-                .iter()
-                .any(|job| job.key() == unrelated.key())
-        );
+        assert!(!state
+            .realized
+            .iter()
+            .any(|job| job.key() == unrelated.key()));
     }
 }

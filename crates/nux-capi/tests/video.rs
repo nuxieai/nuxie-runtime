@@ -1547,3 +1547,112 @@ fn published_video_is_visible_before_decode() {
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
     }
 }
+
+/// Argument, renderer-domain and generation rules of the hardware buffer
+/// entry point. Host builds have no hardware buffers, so a frame that passes
+/// every check reports RuntimeError; frames of an old generation are ignored
+/// before any buffer is touched.
+#[cfg(feature = "android-vulkan")]
+#[test]
+fn android_hardware_buffer_frames_validate_before_importing() {
+    unsafe {
+        let (mut renderer, mut other, mut result) =
+            (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        let status = nux_renderer_new_android_vulkan(64, 32, &mut renderer, &mut result);
+        nux_capi_result_free(result);
+        if status != NuxStatus::Ok {
+            assert!(
+                std::env::var_os("NUXIE_REQUIRE_LIVE_VULKAN_TESTS").is_none(),
+                "Vulkan unavailable: {status:?}"
+            );
+            return;
+        }
+        assert_eq!(
+            nux_renderer_new_android_vulkan(64, 32, &mut other, &mut result),
+            NuxStatus::Ok
+        );
+        nux_capi_result_free(result);
+        let bytes = scene();
+        let capabilities = NuxVideoPlaybackCapabilities {
+            playback_available: 1,
+            ..Default::default()
+        };
+        let (mut file, mut artboard, mut player) =
+            (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        assert_eq!(
+            nux_file_import_android_vulkan(
+                renderer,
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxFileImportConfig {
+                    video_playback: &capabilities,
+                    ..Default::default()
+                },
+                &mut file,
+                &mut result
+            ),
+            NuxStatus::Ok
+        );
+        nux_capi_result_free(result);
+        assert_eq!(nux_artboard_instance_new(file, 0, &mut artboard), NuxStatus::Ok);
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+
+        // Any non-null pointer reaches the checks; none of these read it.
+        let mut stand_in = 0u8;
+        let mut frame = NuxVideoHardwareBufferFrame {
+            struct_size: std::mem::size_of::<NuxVideoHardwareBufferFrame>() as u32,
+            generation: 0,
+            presentation_seconds: 0.5,
+            hardware_buffer: ptr::from_mut(&mut stand_in).cast(),
+            crop_left: 0,
+            crop_top: 0,
+            crop_right: 64,
+            crop_bottom: 32,
+            rotation_degrees: 0,
+            color_matrix: 1,
+            color_range: 1,
+        };
+        let present = |renderer, frame: &NuxVideoHardwareBufferFrame| {
+            nux_player_video_present_android_hardware_buffer(renderer, player, 1, frame)
+        };
+        assert_eq!(present(other, &frame), NuxStatus::HandleMismatch);
+        assert_eq!(
+            nux_player_video_present_android_hardware_buffer(renderer, player, 1, ptr::null()),
+            NuxStatus::NullArgument
+        );
+        frame.struct_size -= 4;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidStructSize);
+        frame.struct_size += 4;
+        let buffer = frame.hardware_buffer;
+        frame.hardware_buffer = ptr::null_mut();
+        assert_eq!(present(renderer, &frame), NuxStatus::NullArgument);
+        frame.hardware_buffer = buffer;
+        frame.rotation_degrees = 45;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument);
+        frame.rotation_degrees = 90;
+        for (matrix, range) in [(0, 1), (1, 0), (4, 1), (1, 3)] {
+            frame.color_matrix = matrix;
+            frame.color_range = range;
+            assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument, "{matrix}/{range}");
+        }
+        frame.color_matrix = 2;
+        frame.color_range = 1;
+        frame.presentation_seconds = -1.0;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument);
+        frame.presentation_seconds = 0.5;
+        frame.generation = 999;
+        assert_eq!(
+            present(renderer, &frame),
+            NuxStatus::Ok,
+            "an old generation's frame is ignored"
+        );
+        frame.generation = 0;
+        assert_eq!(present(renderer, &frame), NuxStatus::RuntimeError);
+
+        nux_player_free(player);
+        nux_artboard_instance_free(artboard);
+        nux_file_free(file);
+        nux_renderer_android_vulkan_free(renderer);
+        nux_renderer_android_vulkan_free(other);
+    }
+}

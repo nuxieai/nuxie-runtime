@@ -2176,7 +2176,7 @@ pub unsafe extern "C" fn nux_player_video_present_metal_pixel_buffer(
                     if bytes > 64 * 1024 * 1024 {
                         return Err(NuxStatus::LimitExceeded);
                     }
-                    Ok(image)
+                    Ok(Rc::from(image))
                 },
             )
         },

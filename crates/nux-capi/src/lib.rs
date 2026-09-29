@@ -383,6 +383,11 @@ struct ArtboardOccurrence {
         feature = "android-vulkan"
     ))]
     observed_renderer_generation: Cell<u64>,
+    /// Each video's reused frame textures, by component id, for frames the
+    /// renderer converts on the GPU. They go with the player.
+    #[cfg(all(feature = "android-vulkan", target_os = "android"))]
+    video_frame_textures:
+        RefCell<std::collections::HashMap<usize, nuxie_renderer::ExternalImageTextures>>,
     active: Cell<bool>,
     poisoned: Cell<bool>,
 }
@@ -2765,6 +2770,8 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                             feature = "android-vulkan"
                         ))]
                         observed_renderer_generation: Cell::new(0),
+                        #[cfg(all(feature = "android-vulkan", target_os = "android"))]
+                        video_frame_textures: RefCell::default(),
                         active: Cell::new(false),
                         poisoned: Cell::new(false),
                     }),

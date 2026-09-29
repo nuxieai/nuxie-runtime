@@ -1222,6 +1222,51 @@ typedef struct NuxVideoEvent {
 } NuxVideoEvent;
 
 /**
+ * A decoded video frame held in an Android hardware buffer.
+ */
+typedef struct NuxVideoHardwareBufferFrame {
+  /**
+   * Must be initialized to `sizeof(NuxVideoHardwareBufferFrame)`.
+   */
+  uint32_t struct_size;
+  uint64_t generation;
+  double presentation_seconds;
+  /**
+   * Borrowed `AHardwareBuffer*` with `AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE`,
+   * as an `AImageReader` created with that usage hands out. Its producer
+   * must have finished writing it: images from `AImageReader_acquire*Image`
+   * (not the `Async` variants) qualify. The call has finished reading it
+   * when it returns.
+   */
+  void *hardware_buffer;
+  /**
+   * The picture's left, top, right and bottom edges in buffer pixels, as
+   * `AImage_getCropRect` reports; all zero means the whole buffer.
+   */
+  uint32_t crop_left;
+  uint32_t crop_top;
+  uint32_t crop_right;
+  uint32_t crop_bottom;
+  /**
+   * Clockwise rotation from buffer to display in degrees: 0, 90, 180 or 270,
+   * such as the video track's rotation metadata.
+   */
+  uint32_t rotation_degrees;
+  /**
+   * The Y'CbCr matrix the decoder tags its output with: 1 BT.601, 2 BT.709,
+   * 3 BT.2020, or 0 to use the driver's suggestion, which some drivers get
+   * wrong. Streams without color metadata decode with Android's defaults:
+   * BT.2020 from 4K, BT.601 up to 720x576 and BT.709 between.
+   */
+  uint32_t color_matrix;
+  /**
+   * 1 limited range or 2 full range; zero exactly when `color_matrix` is.
+   * Streams without color metadata are limited range.
+   */
+  uint32_t color_range;
+} NuxVideoHardwareBufferFrame;
+
+/**
  * Top-row-first opaque SDR RGBA8, or premultiplied RGBA8 sRGB. Caller storage
  * is borrowed for this call only; the renderer owns the uploaded frame.
  */
@@ -2359,6 +2404,22 @@ NuxStatus nux_player_video_is_visible(const struct NuxPlayer *player,
 NuxStatus nux_player_video_next_event(const struct NuxPlayer *player,
                                       size_t component_id,
                                       struct NuxVideoEvent *out_event);
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Present a video frame without copying its pixels through the CPU: the
+ * renderer imports the hardware buffer and converts it from YUV to RGBA on
+ * the GPU with the buffer's own matrix and range, into textures it reuses
+ * for this video. Generation and renderer-domain rules match
+ * `nux_player_video_present_android_vulkan`; the same 64 MiB frame limit
+ * applies to the displayed width * height * 4. Returns `RuntimeError` when
+ * the Vulkan device cannot import hardware buffers.
+ */
+NuxStatus nux_player_video_present_android_hardware_buffer(const struct NuxAndroidVulkanRenderer *renderer,
+                                                           const struct NuxPlayer *player,
+                                                           size_t component_id,
+                                                           const struct NuxVideoHardwareBufferFrame *frame);
+#endif
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 /**

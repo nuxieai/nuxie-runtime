@@ -25,8 +25,8 @@ impl From<jni::errors::Error> for AndroidError {
 }
 pub use crate::scene::{Frame, FramePixels};
 
-/// An Android frame in the decoder's hardware buffer. Pass its buffer, crop,
-/// turns and color to `NativeVulkanFactory::import_hardware_buffer`, which
+/// An Android frame in the decoder's hardware buffer. Pass its buffer,
+/// geometry and color to `NativeVulkanFactory::import_hardware_buffer`, which
 /// converts it on the GPU before returning. Dropping the frame returns the
 /// buffer to the decoder.
 pub struct HardwareBufferFrame {
@@ -37,6 +37,9 @@ pub struct HardwareBufferFrame {
     pub crop: [u32; 4],
     /// Clockwise rotation from buffer to display: 0, 90, 180 or 270.
     pub rotation_degrees: u32,
+    /// Displayed width and height after the rotation, as MediaPlayer reports
+    /// them; wider or taller than the crop for video with non-square pixels.
+    pub display: [u32; 2],
     /// The Y'CbCr matrix the decoder tags its output with: 1 BT.601, 2 BT.709,
     /// 3 BT.2020, numbered as in `NuxVideoHardwareBufferFrame`.
     pub color_matrix: u32,
@@ -362,14 +365,15 @@ impl AndroidPlayer {
                 edge(env, "cropBottom")?,
             ];
             let rotation_degrees = edge(env, "rotationDegrees")?;
+            let display = [edge(env, "displayWidth")?, edge(env, "displayHeight")?];
             let color_matrix = edge(env, "colorMatrix")?;
             let color_range = edge(env, "colorRange")?;
+            let [width, height] = display;
             let [left, top, right, bottom] = crop;
-            let (width, height) = match rotation_degrees {
-                0 | 180 => (right.saturating_sub(left), bottom.saturating_sub(top)),
-                90 | 270 => (bottom.saturating_sub(top), right.saturating_sub(left)),
-                _ => return Err(AndroidError::InvalidFrame),
-            };
+            if !matches!(rotation_degrees, 0 | 90 | 180 | 270) || left >= right || top >= bottom {
+                let _ = env.call_method(&frame, "close", "()V", &[]);
+                return Err(AndroidError::InvalidFrame);
+            }
             let bytes = (width as usize)
                 .checked_mul(height as usize)
                 .and_then(|n| n.checked_mul(4));
@@ -403,6 +407,7 @@ impl AndroidPlayer {
                         buffer,
                         crop,
                         rotation_degrees,
+                        display,
                         color_matrix,
                         color_range,
                     }),

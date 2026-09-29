@@ -1540,7 +1540,7 @@
     },
     {
       "name": "NuxVideoHardwareBufferFrame",
-      "size": 64,
+      "size": 72,
       "alignment": 8,
       "fields": [
         {
@@ -1580,12 +1580,20 @@
           "offset": 48
         },
         {
-          "name": "color_matrix",
+          "name": "display_width",
           "offset": 52
         },
         {
-          "name": "color_range",
+          "name": "display_height",
           "offset": 56
+        },
+        {
+          "name": "color_matrix",
+          "offset": 60
+        },
+        {
+          "name": "color_range",
+          "offset": 64
         }
       ]
     },

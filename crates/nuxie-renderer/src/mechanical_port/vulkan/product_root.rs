@@ -16,7 +16,9 @@ use ash::vk;
 use ash::vk::Handle;
 
 #[cfg(target_os = "android")]
-use super::hardware_buffer::{FrameRegion, HardwareBufferConverter, VideoColor};
+use super::hardware_buffer::{HardwareBufferConverter, VideoColor};
+#[cfg(target_os = "android")]
+use crate::video_frame_geometry::FrameRegion;
 use super::render_context_vulkan_decl::{ContextOptions, RenderContextVulkanImpl};
 use super::render_target_vulkan_decl::{RenderTargetVulkanApi, RenderTargetVulkanImpl};
 use super::vkutil_decl::{ImageAccess, ImageAccessAction};

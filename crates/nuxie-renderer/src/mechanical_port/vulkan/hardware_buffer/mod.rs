@@ -21,6 +21,7 @@
 
 mod shaders;
 
+use crate::video_frame_geometry::FrameRegion;
 use crate::RendererError;
 use ash::vk;
 use std::ffi::{c_void, CStr};
@@ -29,58 +30,6 @@ use std::time::Duration;
 
 /// Longest a conversion may take before it is reported as a device failure.
 const CONVERSION_TIMEOUT: Duration = Duration::from_secs(2);
-
-/// The part of a decoded buffer that holds the picture, and how the picture is
-/// turned for display.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct FrameRegion {
-    /// Left, top, right and bottom edges in buffer pixels. The decoder may pad
-    /// the buffer beyond the picture.
-    pub crop: [u32; 4],
-    /// Clockwise quarter turns from buffer to display: 0, 1, 2 or 3.
-    pub quarter_turns: u32,
-}
-
-impl FrameRegion {
-    /// Display width and height of the converted frame.
-    pub(crate) fn display_extent(&self) -> (u32, u32) {
-        let [left, top, right, bottom] = self.crop;
-        let (width, height) = (right - left, bottom - top);
-        if self.quarter_turns % 2 == 1 {
-            (height, width)
-        } else {
-            (width, height)
-        }
-    }
-
-    /// Rows `s` and `t` of the affine map from a target point (u, v), top-left
-    /// origin in [0, 1], to normalized source coordinates.
-    fn source_transform(&self, buffer_width: u32, buffer_height: u32) -> [[f32; 4]; 2] {
-        // Turning the buffer clockwise to display it means a display point
-        // reads from the buffer point turned back counterclockwise.
-        let (s, t): ([f32; 3], [f32; 3]) = match self.quarter_turns {
-            0 => ([1.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
-            1 => ([0.0, 1.0, 0.0], [-1.0, 0.0, 1.0]),
-            2 => ([-1.0, 0.0, 1.0], [0.0, -1.0, 1.0]),
-            _ => ([0.0, -1.0, 1.0], [1.0, 0.0, 0.0]),
-        };
-        let [left, top, right, bottom] = self.crop.map(|edge| edge as f32);
-        let (width, height) = (buffer_width as f32, buffer_height as f32);
-        let crop = |row: [f32; 3], origin: f32, extent: f32, size: f32| {
-            let scale = extent / size;
-            [
-                row[0] * scale,
-                row[1] * scale,
-                row[2] * scale + origin / size,
-                0.0,
-            ]
-        };
-        [
-            crop(s, left, right - left, width),
-            crop(t, top, bottom - top, height),
-        ]
-    }
-}
 
 /// The Y'CbCr matrix a video's pixels were encoded with.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -368,16 +317,11 @@ impl HardwareBufferConverter {
                 "hardware buffer lacks GPU sampled-image usage".into(),
             ));
         }
-        let [left, top, right, bottom] = region.crop;
-        if region.quarter_turns > 3
-            || left >= right
-            || top >= bottom
-            || right > desc.width
-            || bottom > desc.height
-        {
+        let [_, _, right, bottom] = region.crop;
+        if right > desc.width || bottom > desc.height {
             return Err(RendererError::InvalidImageUpload(format!(
-                "crop {:?} turned {} times does not fit a {}x{} buffer",
-                region.crop, region.quarter_turns, desc.width, desc.height
+                "crop {:?} does not fit a {}x{} buffer",
+                region.crop, desc.width, desc.height
             )));
         }
         let mut format_properties = vk::AndroidHardwareBufferFormatPropertiesANDROID::default();
@@ -1007,65 +951,4 @@ fn device_error(operation: &str, error: vk::Result) -> RendererError {
     RendererError::Device(format!(
         "hardware buffer conversion: {operation}: {error:?}"
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::FrameRegion;
-
-    fn map(region: FrameRegion, buffer: (u32, u32), (u, v): (f32, f32)) -> (f32, f32) {
-        let [s, t] = region.source_transform(buffer.0, buffer.1);
-        (s[0] * u + s[1] * v + s[2], t[0] * u + t[1] * v + t[2])
-    }
-
-    fn close(actual: (f32, f32), expected: (f32, f32)) -> bool {
-        (actual.0 - expected.0).abs() < 1e-6 && (actual.1 - expected.1).abs() < 1e-6
-    }
-
-    #[test]
-    fn an_unturned_frame_maps_display_corners_to_its_crop() {
-        let region = FrameRegion {
-            crop: [0, 0, 1920, 1080],
-            quarter_turns: 0,
-        };
-        assert_eq!(region.display_extent(), (1920, 1080));
-        // A 1088-row buffer pads the picture below row 1080.
-        assert!(close(map(region, (1920, 1088), (0.0, 0.0)), (0.0, 0.0)));
-        assert!(close(
-            map(region, (1920, 1088), (1.0, 1.0)),
-            (1.0, 1080.0 / 1088.0)
-        ));
-    }
-
-    #[test]
-    fn turned_frames_read_the_buffer_corner_that_lands_top_left() {
-        let crop = [8, 4, 72, 36];
-        let buffer = (80, 40);
-        let corner = |edge_u: u32, edge_v: u32| {
-            (
-                edge_u as f32 / buffer.0 as f32,
-                edge_v as f32 / buffer.1 as f32,
-            )
-        };
-        // Display top-left shows the buffer's top-left, bottom-left,
-        // bottom-right and top-right corner for 0 to 3 clockwise turns.
-        let expected = [corner(8, 4), corner(8, 36), corner(72, 36), corner(72, 4)];
-        for (quarter_turns, expected) in expected.into_iter().enumerate() {
-            let region = FrameRegion {
-                crop,
-                quarter_turns: quarter_turns as u32,
-            };
-            assert!(
-                close(map(region, buffer, (0.0, 0.0)), expected),
-                "{quarter_turns}"
-            );
-        }
-        let turned = FrameRegion {
-            crop,
-            quarter_turns: 1,
-        };
-        assert_eq!(turned.display_extent(), (32, 64));
-        // After one clockwise turn the buffer's top-left lands top-right.
-        assert!(close(map(turned, buffer, (1.0, 0.0)), corner(8, 4)));
-    }
 }

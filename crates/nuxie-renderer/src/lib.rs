@@ -45,8 +45,12 @@ mod native_webgpu;
 pub use external_image::ExternalImageTextures;
 #[cfg(all(feature = "native-vulkan-experimental", target_os = "android"))]
 pub use mechanical_port::vulkan::hardware_buffer::{hardware_buffer_size, VideoColor, VideoMatrix};
+#[cfg(feature = "native-vulkan-experimental")]
+mod video_frame_geometry;
 #[cfg(feature = "renderer-webgpu")]
 pub use native_webgpu::{NativeWebGpuFactory, NativeWebGpuFrame};
+#[cfg(feature = "native-vulkan-experimental")]
+pub use video_frame_geometry::VideoFrameGeometry;
 
 #[cfg(any(
     test,

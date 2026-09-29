@@ -41,8 +41,11 @@ fn import_frame(
         factory.import_hardware_buffer(
             textures,
             buffer.buffer(),
-            buffer.crop,
-            buffer.quarter_turns(),
+            nuxie_renderer::VideoFrameGeometry {
+                crop: buffer.crop,
+                quarter_turns: buffer.quarter_turns(),
+                display: buffer.display,
+            },
             Some(color),
         )
     }

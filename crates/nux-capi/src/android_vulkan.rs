@@ -13,7 +13,7 @@ use nuxie::render_api::Mat2D;
 #[cfg(test)]
 use nuxie_renderer::RenderMode;
 use nuxie_renderer::deferred::cmd::deferred_replayer::take_frame;
-use nuxie_renderer::{NativeVulkanFactory, RendererError};
+use nuxie_renderer::{NativeVulkanFactory, RendererError, VideoFrameGeometry};
 use std::cell::RefCell;
 use std::ffi::c_void;
 use std::ptr;
@@ -1402,29 +1402,26 @@ pub unsafe extern "C" fn nux_player_video_present_android_hardware_buffer(
                 270 => 3,
                 _ => return Err(NuxStatus::InvalidArgument),
             };
-            let crop = [
-                frame.crop_left,
-                frame.crop_top,
-                frame.crop_right,
-                frame.crop_bottom,
-            ];
+            let geometry = VideoFrameGeometry {
+                crop: [
+                    frame.crop_left,
+                    frame.crop_top,
+                    frame.crop_right,
+                    frame.crop_bottom,
+                ],
+                quarter_turns,
+                display: [frame.display_width, frame.display_height],
+            };
+            if (geometry.display[0] == 0) != (geometry.display[1] == 0) {
+                return Err(NuxStatus::InvalidArgument);
+            }
             let color = video_color(frame.color_matrix, frame.color_range)?;
             super::video::present_image(
                 video,
                 occurrence,
                 frame.generation,
                 frame.presentation_seconds,
-                || {
-                    import_hardware_buffer(
-                        state,
-                        occurrence,
-                        component_id,
-                        buffer,
-                        crop,
-                        quarter_turns,
-                        color,
-                    )
-                },
+                || import_hardware_buffer(state, occurrence, component_id, buffer, geometry, color),
             )
         },
     )
@@ -1446,8 +1443,7 @@ fn import_hardware_buffer(
     occurrence: &super::ArtboardOccurrence,
     component_id: usize,
     buffer: std::ptr::NonNull<c_void>,
-    crop: [u32; 4],
-    quarter_turns: u32,
+    geometry: VideoFrameGeometry,
     color: Option<(u32, u32)>,
 ) -> Result<Rc<dyn nuxie::RenderImage>, NuxStatus> {
     use nuxie_renderer::{VideoColor, VideoMatrix};
@@ -1459,29 +1455,25 @@ fn import_hardware_buffer(
         },
         full_range: range == 2,
     });
-    let crop = if crop == [0; 4] {
-        let (width, height) = unsafe { nuxie_renderer::hardware_buffer_size(buffer) }
-            .ok_or(NuxStatus::RuntimeError)?;
-        [0, 0, width, height]
-    } else {
-        crop
-    };
-    let [left, top, right, bottom] = crop;
-    let bytes = u64::from(right.saturating_sub(left)) * u64::from(bottom.saturating_sub(top)) * 4;
-    if bytes > 64 * 1024 * 1024 {
+    let buffer_size =
+        unsafe { nuxie_renderer::hardware_buffer_size(buffer) }.ok_or(NuxStatus::RuntimeError)?;
+    let (width, height) = geometry
+        .display_size(buffer_size)
+        .ok_or(NuxStatus::InvalidArgument)?;
+    if u64::from(width) * u64::from(height) * 4 > 64 * 1024 * 1024 {
         return Err(NuxStatus::LimitExceeded);
     }
     let mut textures = occurrence.video_frame_textures.borrow_mut();
     let textures = textures.entry(component_id).or_default();
     let mut factory = state.factory.borrow_mut();
-    unsafe { factory.import_hardware_buffer(textures, buffer, crop, quarter_turns, color) }.map_err(
-        |error| match error {
+    unsafe { factory.import_hardware_buffer(textures, buffer, geometry, color) }.map_err(|error| {
+        match error {
             RendererError::InvalidImageUpload(_) | RendererError::InvalidTextureExtent { .. } => {
                 NuxStatus::InvalidArgument
             }
             _ => NuxStatus::RuntimeError,
-        },
-    )
+        }
+    })
 }
 
 /// Host builds of the Android renderer have no hardware buffers.
@@ -1491,8 +1483,7 @@ fn import_hardware_buffer(
     _occurrence: &super::ArtboardOccurrence,
     _component_id: usize,
     _buffer: std::ptr::NonNull<c_void>,
-    _crop: [u32; 4],
-    _quarter_turns: u32,
+    _geometry: VideoFrameGeometry,
     _color: Option<(u32, u32)>,
 ) -> Result<Rc<dyn nuxie::RenderImage>, NuxStatus> {
     Err(NuxStatus::RuntimeError)

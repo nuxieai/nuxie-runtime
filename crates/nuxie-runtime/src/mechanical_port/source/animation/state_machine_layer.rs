@@ -58,7 +58,8 @@ impl StateMachineLayer {
                 _ => {}
             }
         }
-        if self.any.is_none() || self.entry.is_none() || self.exit.is_none() {
+        // Entry is required; exports may omit unused Any and Exit states.
+        if self.entry.is_none() {
             StatusCode::InvalidObject
         } else {
             StatusCode::Ok

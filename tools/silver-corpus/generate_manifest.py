@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "78b07a3fdc72fa7f64bf464d871ae80474a5a39a"
+UPSTREAM_REF = "1fac60f87be3639918f06a1b8e23908b1621b1a1"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )

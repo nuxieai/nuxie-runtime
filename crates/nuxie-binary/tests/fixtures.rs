@@ -8104,18 +8104,27 @@ fn runtime_state_machine_layers_expose_cpp_states_transitions_and_conditions() {
 }
 
 #[test]
-fn runtime_import_resolution_requires_state_machine_layer_scaffold_states() {
-    let missing_exit = read_runtime_file_with_error_kind(&synthetic_runtime_file(4309, |bytes| {
+fn runtime_import_resolution_requires_only_state_machine_layer_entry_state() {
+    let missing_entry = read_runtime_file_with_error_kind(&synthetic_runtime_file(4309, |bytes| {
         push_empty_object(bytes, "Backboard");
         push_empty_object(bytes, "Artboard");
         push_empty_object(bytes, "StateMachine");
         push_empty_object(bytes, "StateMachineLayer");
         push_empty_object(bytes, "AnyState");
+        push_empty_object(bytes, "ExitState");
+    }))
+    .expect_err("C++ rejects state-machine layers missing EntryState");
+
+    assert_eq!(missing_entry.kind(), RuntimeReadErrorKind::Malformed);
+
+    read_runtime_file_with_error_kind(&synthetic_runtime_file(4309, |bytes| {
+        push_empty_object(bytes, "Backboard");
+        push_empty_object(bytes, "Artboard");
+        push_empty_object(bytes, "StateMachine");
+        push_empty_object(bytes, "StateMachineLayer");
         push_empty_object(bytes, "EntryState");
     }))
-    .expect_err("C++ rejects state-machine layers missing AnyState, EntryState, or ExitState");
-
-    assert_eq!(missing_exit.kind(), RuntimeReadErrorKind::Malformed);
+    .expect("C++ permits state-machine layers without AnyState or ExitState");
 }
 
 #[test]

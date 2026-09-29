@@ -1,0 +1,28 @@
+{
+  "name": "NestedArtboardLeaf",
+  "key": { "int": 451, "string": "nested_artboard_leaf" },
+  "extends": "nested_artboard.json",
+  "properties": {
+    "fit": {
+      "type": "uint8",
+      "key": { "int": 538, "string": "fit" },
+      "description": "Fit type for the nested artboard's runtime artboard.",
+      "bindable": true
+    },
+    "fitToLayoutParent": {
+      "type": "bool",
+      "key": { "int": 1098, "string": "fittolayoutparent" },
+      "initialValue": "false"
+    },
+    "alignmentX": {
+      "type": "double",
+      "key": { "int": 644, "string": "alignmentx" },
+      "description": "Alignment value on X."
+    },
+    "alignmentY": {
+      "type": "double",
+      "key": { "int": 645, "string": "alignmenty" },
+      "description": "Alignment value on Y."
+    }
+  }
+}

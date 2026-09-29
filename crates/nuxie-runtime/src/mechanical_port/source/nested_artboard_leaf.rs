@@ -56,7 +56,19 @@ impl NestedArtboardLeaf {
         let parent = owner
             .with_downcast::<Self, _>(|owner| owner.base.base.parent_handle())
             .expect("live NestedArtboardLeaf");
-        let bounds = content_sizing_layout(parent)
+        let fit_to_layout_parent = owner
+            .with_downcast::<Self, _>(|owner| owner.base.fit_to_layout_parent())
+            .expect("live NestedArtboardLeaf");
+        let sizing_layout = if fit_to_layout_parent {
+            content_sizing_layout(parent)
+        } else {
+            parent.filter(|parent| {
+                parent
+                    .with(|parent| parent.as_layout_component().is_some())
+                    .unwrap_or(false)
+            })
+        };
+        let bounds = sizing_layout
             .and_then(|parent| {
                 parent
                     .with(|parent| {
@@ -122,6 +134,10 @@ impl NestedArtboardLeaf {
     pub fn fit_changed(&mut self) {
         self.base.base.mark_world_transform_dirty();
     }
+
+    pub fn fit_to_layout_parent_changed(&mut self) {
+        self.base.base.mark_world_transform_dirty();
+    }
 }
 
 impl NestedArtboardLeafBaseCallbacks for NestedArtboardLeaf {
@@ -130,6 +146,9 @@ impl NestedArtboardLeafBaseCallbacks for NestedArtboardLeaf {
     }
     fn fit_changed(&mut self) {
         NestedArtboardLeaf::fit_changed(self);
+    }
+    fn fit_to_layout_parent_changed(&mut self) {
+        NestedArtboardLeaf::fit_to_layout_parent_changed(self);
     }
 }
 

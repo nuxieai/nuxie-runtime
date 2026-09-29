@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "d90dfa396913a89472ca5f14aab3045dfa5101f5"
+UPSTREAM_REF = "3b2c51e2dd957722fd3061112667d884b1ec60c3"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -261,6 +261,10 @@ EXACT = (
     "collapse_data_binds-test_3",
     "databind_solo_to_enum",
     "layout_solos",
+    "layout_solos_fit_to_layout_parent",
+    "solo_nested_artboard_leaf_no_solo",
+    "solo_nested_artboard_leaf_fits_parent_layout",
+    "solo_nested_artboard_leaf_solo",
     "listener_view_model",
     "viewmodel_image_reset",
     "zero_width_space_line_break",
@@ -953,10 +957,12 @@ def p1q_view_model_actions(
             draw,
         )
 
-    if silver_id == "layout_solos":
+    if silver_id in ("layout_solos", "layout_solos_fit_to_layout_parent"):
         return (
             action("frame-size"),
-            action("bind-authored-view-model"),
+            *((action("opt-in-nested-leaves-to-layout-parent"),) if silver_id.endswith("fit_to_layout_parent") else ()),
+            action("select-state-machine"),
+            action("bind-solo-authored-view-model", if_present=False),
             action("render-view-model-enum-states", property="states", seconds=0.016),
         )
 
@@ -2533,7 +2539,7 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
         # This helper sits between TEST_CASEs. Keep its body out of the preceding
         # Vertical Trim producer while preserving upstream provenance line numbers.
         source = re.sub(
-            r"static void checkTextLayoutSilver\([^)]*\)\s*\{.*?^\}",
+            r"static void (?:checkTextLayoutSilver|renderSoloLeafArtboard)\([^)]*\)\s*\{.*?^\}",
             lambda match: "\n" * match.group(0).count("\n"),
             source,
             flags=re.MULTILINE | re.DOTALL,
@@ -2835,9 +2841,10 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "five clicks with .1-second advances. Enrollment alone is not "
                             "a validation result."
                         )
-                    if silver_id == "layout_solos":
+                    if silver_id in ("layout_solos", "layout_solos_fit_to_layout_parent"):
                         note = (
-                            "Exact comparison contract for 86fc70a7: bind the authored "
+                            "Exact comparison contract for solo_test.cpp through 3b2c51e2: "
+                            "the opt-in sibling asserts false and enables every leaf flag first; bind the authored "
                             "view-model instance (or create the artboard default when unset), "
                             "walk every DataEnum state with a successful setter, then "
                             "advance/apply 0.016, draw and addFrame for each. Enrollment "
@@ -3176,10 +3183,36 @@ def text_layout_producers(runtime_dir: Path) -> list[Producer]:
     return producers
 
 
+def solo_leaf_producers(runtime_dir: Path) -> list[Producer]:
+    relative = "tests/unit_tests/runtime/solo_test.cpp"
+    source = strip_cpp_comments((runtime_dir / relative).read_text(encoding="utf-8"))
+    calls = re.compile(r'renderSoloLeafArtboard\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*(true|false)\s*,\s*(true|false)\s*\)')
+    producers = []
+    for test_name, test_line, chunk in test_chunks(source):
+        for match in calls.finditer(chunk):
+            artboard, silver_id, solo, fit = match.groups()
+            producers.append(Producer(
+                id=silver_id, source="solo_nested_artboard_leaf.riv", dependencies=(),
+                artboard=artboard, animation="none", state_machine="default",
+                lane="runtime", deterministic="cpp-test-defined", random="cpp-test-defined",
+                view_model="bind-authored-if-present", sample_times=(0.016,),
+                actions=(action("frame-size"), action("assert-solo-leaf", expect_solo=solo == "true", expect_fit_to_layout_parent=fit == "true"),
+                         action("select-state-machine"),
+                         action("bind-solo-authored-view-model", if_present=True),
+                         action("advance", target="state-machine", seconds=0.016),
+                         action("draw"), action("frame")),
+                status="exact", producer_class="solo-leaf-dynamic",
+                provenance_file=relative, provenance_test=test_name,
+                producer_line=test_line + chunk.count("\n", 0, match.start()),
+                note="Literal renderSoloLeafArtboard helper at 3b2c51e2, including authored parent/flag/fit assertions. Enrollment alone is not a validation result.",
+            ))
+    return producers
+
+
 def discover(runtime_dir: Path) -> list[Producer]:
     producers = (
         literal_producers(runtime_dir) + dynamic_producers()
-        + text_layout_producers(runtime_dir) + unknown_producers()
+        + text_layout_producers(runtime_dir) + solo_leaf_producers(runtime_dir) + unknown_producers()
     )
     ids = [producer.id for producer in producers]
     duplicates = sorted({silver_id for silver_id in ids if ids.count(silver_id) > 1})
@@ -3252,7 +3285,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (269, 221, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (273, 225, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3265,8 +3298,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 269",
-        "expected_runtime = 221",
+        "expected_entries = 273",
+        "expected_runtime = 225",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

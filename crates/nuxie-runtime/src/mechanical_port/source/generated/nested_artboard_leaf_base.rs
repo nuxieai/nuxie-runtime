@@ -8,13 +8,15 @@ pub trait NestedArtboardLeafBaseCallbacks:
 {
     fn notify_property_changed(&mut self, property_key: u16);
     fn fit_changed(&mut self) {}
+    fn fit_to_layout_parent_changed(&mut self) {}
     fn alignment_x_changed(&mut self) {}
     fn alignment_y_changed(&mut self) {}
 }
 
 pub struct NestedArtboardLeafBase {
     pub base: NestedArtboard,
-    fit: u32,
+    fit: u8,
+    fit_to_layout_parent: bool,
     alignment_x: f32,
     alignment_y: f32,
 }
@@ -24,6 +26,7 @@ impl Default for NestedArtboardLeafBase {
         Self {
             base: NestedArtboard::default(),
             fit: 0,
+            fit_to_layout_parent: false,
             alignment_x: 0.0,
             alignment_y: 0.0,
         }
@@ -33,6 +36,7 @@ impl Default for NestedArtboardLeafBase {
 impl NestedArtboardLeafBase {
     pub const TYPE_KEY: u16 = 451;
     pub const FIT_PROPERTY_KEY: u16 = 538;
+    pub const FIT_TO_LAYOUT_PARENT_PROPERTY_KEY: u16 = 1098;
     pub const ALIGNMENT_X_PROPERTY_KEY: u16 = 644;
     pub const ALIGNMENT_Y_PROPERTY_KEY: u16 = 645;
 
@@ -42,10 +46,10 @@ impl NestedArtboardLeafBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn fit(&self) -> u32 {
+    pub fn fit(&self) -> u8 {
         self.fit
     }
-    pub fn set_fit(&mut self, value: u32, callbacks: &mut impl NestedArtboardLeafBaseCallbacks) {
+    pub fn set_fit(&mut self, value: u8, callbacks: &mut impl NestedArtboardLeafBaseCallbacks) {
         if !self.set_fit_value(value) {
             return;
         }
@@ -53,11 +57,35 @@ impl NestedArtboardLeafBase {
         NestedArtboardLeafBaseCallbacks::notify_property_changed(callbacks, Self::FIT_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_fit_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_fit_value(&mut self, value: u8) -> bool {
         if self.fit == value {
             return false;
         }
         self.fit = value;
+        true
+    }
+    pub fn fit_to_layout_parent(&self) -> bool {
+        self.fit_to_layout_parent
+    }
+    pub fn set_fit_to_layout_parent(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl NestedArtboardLeafBaseCallbacks,
+    ) {
+        if !self.set_fit_to_layout_parent_value(value) {
+            return;
+        }
+        callbacks.fit_to_layout_parent_changed();
+        NestedArtboardLeafBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FIT_TO_LAYOUT_PARENT_PROPERTY_KEY,
+        );
+    }
+    pub(crate) fn set_fit_to_layout_parent_value(&mut self, value: bool) -> bool {
+        if self.fit_to_layout_parent == value {
+            return false;
+        }
+        self.fit_to_layout_parent = value;
         true
     }
     pub fn alignment_x(&self) -> f32 {
@@ -113,6 +141,7 @@ impl NestedArtboardLeafBase {
     pub fn clone_into(source: &NestedArtboardLeaf) -> NestedArtboardLeaf {
         let mut cloned = NestedArtboardLeaf::default();
         cloned.base.fit = source.base.fit;
+        cloned.base.fit_to_layout_parent = source.base.fit_to_layout_parent;
         cloned.base.alignment_x = source.base.alignment_x;
         cloned.base.alignment_y = source.base.alignment_y;
         let mut nested_base = std::mem::take(&mut cloned.base.base.base);
@@ -122,6 +151,7 @@ impl NestedArtboardLeafBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl NestedArtboardLeafBaseCallbacks) {
         self.fit = object.fit;
+        self.fit_to_layout_parent = object.fit_to_layout_parent;
         self.alignment_x = object.alignment_x;
         self.alignment_y = object.alignment_y;
         self.base.copy(&object.base, callbacks);
@@ -134,7 +164,11 @@ impl NestedArtboardLeafBase {
     ) -> bool {
         match property_key {
             Self::FIT_PROPERTY_KEY => {
-                self.fit = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.fit = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
+            Self::FIT_TO_LAYOUT_PARENT_PROPERTY_KEY => {
+                self.fit_to_layout_parent = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true
             }
             Self::ALIGNMENT_X_PROPERTY_KEY => {

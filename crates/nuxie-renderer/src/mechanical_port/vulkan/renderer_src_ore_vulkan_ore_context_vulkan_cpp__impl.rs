@@ -7,9 +7,8 @@ use super::ore_bind_group_layout_vulkan_decl::BindGroupLayoutVulkan;
 use super::ore_bind_group_vulkan_decl::{BindGroupVulkan, ImageWrite, UBOWrite};
 use super::ore_buffer_vulkan_decl::BufferVulkan;
 use super::ore_context_vulkan_decl::{
-    ContextVulkan, DescriptorPoolGeneration, DescriptorSetAllocation,
-    MAX_DESCRIPTOR_SETS_PER_GENERATION, VKRenderPassKey, VkPendingImageTransition,
-    VkPendingTextureUpload,
+    ContextVulkan, DescriptorPoolGeneration, DescriptorSetAllocation, VKRenderPassKey,
+    VkPendingImageTransition, VkPendingTextureUpload, MAX_DESCRIPTOR_SETS_PER_GENERATION,
 };
 use super::ore_render_pass_vulkan_decl::RenderPassVulkan;
 use super::ore_sampler_vulkan_decl::SamplerVulkan;
@@ -23,19 +22,18 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_ca
 use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::buffer::BufferApi;
-use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
+use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
-    CompareFunction, Features, Filter, LoadOp, RenderPassDesc, SamplerDesc, ShaderModuleDesc,
-    StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
-    TextureViewDimension, WrapMode, kMaxBindGroups,
+    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
+    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, RenderPassDesc,
+    SamplerDesc, ShaderModuleDesc, StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType,
+    TextureViewDesc, TextureViewDimension, WrapMode,
 };
 use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
-use std::rc::Weak as RcWeak;
 use std::sync::{Arc, Mutex};
 use vk_mem::{Alloc, AllocationCreateFlags, AllocationCreateInfo, MemoryUsage};
 
@@ -1117,7 +1115,6 @@ pub(crate) fn beginRenderPass(
     desc: &RenderPassDesc<'_>,
     _outError: Option<&mut String>,
 ) -> Option<Box<dyn RenderPassApi>> {
-    context.finishActiveRenderPass();
     assert!(desc.colorCount <= 4);
 
     let pass = RenderPassVulkan::new(context);
@@ -1468,15 +1465,6 @@ impl ContextApi for ContextVulkan {
     }
     fn lastError(&self) -> String {
         self.base.lastError()
-    }
-    fn activeRenderPass(&self) -> Option<RcWeak<dyn ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass();
     }
     fn clearLastError(&self) {
         self.base.clearLastError();

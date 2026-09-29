@@ -1,8 +1,7 @@
 //! The public ORE handle retains its host; the host keeps only its bare context.
 use nuxie_ore_metal::{
     context::{
-        ActiveRenderPass, CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor,
-        ShaderTarget,
+        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor, ShaderTarget,
     },
     gpu_resource::AnyResourceHandle,
     ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
@@ -63,6 +62,9 @@ impl ContextApi for OwnedContext {
     fn contextBase(&self) -> &Context {
         &self.base
     }
+    fn inlineReplayContext(&self) -> Option<Weak<RefCell<dyn ContextApi>>> {
+        Some(Rc::downgrade(&self.context))
+    }
     fn canvasTargetFormat(&self) -> TextureFormat {
         self.context.borrow().canvasTargetFormat()
     }
@@ -120,24 +122,6 @@ impl ContextApi for OwnedContext {
     }
     fn lastError(&self) -> String {
         self.context.borrow().lastError()
-    }
-    fn activeRenderPass(&self) -> Option<Weak<dyn ActiveRenderPass>> {
-        self.context.borrow().activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.context.borrow().setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        let pass = self
-            .context
-            .borrow()
-            .activeRenderPass()
-            .and_then(|pass| pass.upgrade());
-        if let Some(pass) = pass {
-            if !pass.isFinished() {
-                pass.finish();
-            }
-        }
     }
     fn clearLastError(&self) {
         self.context.borrow().clearLastError();

@@ -30,13 +30,15 @@ impl ActiveRenderPass for InlineState {
         if self.isFinished() {
             return;
         }
-        // Latch before replay, which may reenter finishActiveRenderPass.
         self.recording.borrow_mut().finish();
         let context = self
             .context
             .upgrade()
             .expect("inline pass context outlives pass");
         replayCommandBuffer(&mut *context.borrow_mut(), &self.buffer.borrow(), None);
+    }
+    fn detachContext(&self) {
+        self.recording.borrow().detachContext();
     }
 }
 pub struct InlineDeferredRenderPass {
@@ -47,13 +49,27 @@ impl InlineDeferredRenderPass {
         let buffer = Rc::new(RefCell::new(OreCommandBuffer::default()));
         let recording =
             RenderPassRecording::new(Some(context.borrow().contextBase()), buffer.clone(), desc);
-        Self {
+        let replay_context = context
+            .borrow()
+            .inlineReplayContext()
+            .unwrap_or_else(|| Rc::downgrade(&context));
+        let out = Self {
             state: Rc::new(InlineState {
                 recording: RefCell::new(recording),
                 buffer,
-                context: Rc::downgrade(&context),
+                context: replay_context,
             }),
-        }
+        };
+        out.state
+            .recording
+            .borrow()
+            .replaceRegisteredPass(out.activeToken());
+        out
+    }
+}
+impl Drop for InlineDeferredRenderPass {
+    fn drop(&mut self) {
+        self.state.finish();
     }
 }
 impl RenderPassApi for InlineDeferredRenderPass {
@@ -128,21 +144,20 @@ impl RenderPassApi for InlineDeferredRenderPass {
         self.state.recording.borrow().validate();
     }
 }
-pub fn beginRenderPassRecordingOrImmediate(
+pub fn beginRecordedRenderPass(
     ctx: Rc<RefCell<dyn ContextApi>>,
     desc: &RenderPassDesc<'_>,
-    outError: Option<&mut String>,
 ) -> Option<Box<dyn RenderPassApi>> {
-    if ctx.borrow().deferredRecording() {
-        if ctx.borrow().usesDeferredFrameReplay() {
-            let context = ctx.borrow();
-            return Some(Box::new(RenderPassRecording::new(
-                Some(context.contextBase()),
-                context.pendingFrame(),
-                desc,
-            )));
-        }
-        return Some(Box::new(InlineDeferredRenderPass::new(ctx, desc)));
+    if ctx.borrow().isRecording() {
+        return ctx.borrow_mut().beginRenderPass(desc, None);
     }
-    ctx.borrow_mut().beginRenderPass(desc, outError)
+    if ctx.borrow().deferredRecording() && ctx.borrow().usesDeferredFrameReplay() {
+        let context = ctx.borrow();
+        return Some(Box::new(RenderPassRecording::new(
+            Some(context.contextBase()),
+            context.pendingFrame(),
+            desc,
+        )));
+    }
+    Some(Box::new(InlineDeferredRenderPass::new(ctx, desc)))
 }

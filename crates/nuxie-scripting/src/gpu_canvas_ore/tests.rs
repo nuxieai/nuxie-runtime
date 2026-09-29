@@ -3,6 +3,57 @@ use super::*;
 use crate::vm::{RoutedTestFactory, ScriptVm};
 use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
 
+// scripting_context_test.cpp: closing an enclosing pass expires the nested
+// script wrapper before any subsequent draw validation or recording.
+#[test]
+fn pass_closed_by_enclosing_pass_expires_for_script() {
+    use nuxie_ore_metal::{
+        ore_cmd::{
+            ore_command_buffer::OreCommandBuffer, ore_render_pass_recording::RenderPassRecording,
+        },
+        render_pass::RenderPassApi,
+    };
+    let vm = recording_vm();
+    let ore = context(vm.lua()).unwrap();
+    let stream = Rc::new(RefCell::new(OreCommandBuffer::default()));
+    let mut outer = RenderPassRecording::new(
+        Some(ore.borrow().contextBase()),
+        stream.clone(),
+        &RenderPassDesc::default(),
+    );
+    let inner = RenderPassRecording::new(
+        Some(ore.borrow().contextBase()),
+        stream,
+        &RenderPassDesc::default(),
+    );
+    let rp = vm
+        .lua()
+        .create_userdata(pass::Pass {
+            pass: Some(Box::new(inner)),
+            finished: false,
+            sample_count: 1,
+            pipeline_set: false,
+            draw_call_count: 0,
+        })
+        .unwrap();
+    vm.lua().globals().set("rp", rp.clone()).unwrap();
+    outer.finish();
+    assert!(
+        rp.borrow::<pass::Pass>()
+            .unwrap()
+            .pass
+            .as_ref()
+            .unwrap()
+            .activeToken()
+            .upgrade()
+            .unwrap()
+            .isFinished()
+    );
+    assert!(!ore.borrow().hasOpenRenderPasses());
+    let error = vm.lua().load("rp:draw(3)").exec().unwrap_err();
+    assert!(error.to_string().contains("render pass expired"));
+}
+
 fn recording_vm() -> ScriptVm {
     let vm = ScriptVm::new();
     let ore: OreContextHandle = Rc::new(RefCell::new(DeferredOreContext::fromReal(None)));

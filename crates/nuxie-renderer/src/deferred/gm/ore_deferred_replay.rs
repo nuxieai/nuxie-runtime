@@ -1,8 +1,7 @@
-//! tests/gm/ore_deferred_replay.cpp at e949498e.
+//! tests/gm/ore_deferred_replay.cpp at 65638e57.
 use super::ore_gm_helper::*;
 use nuxie_ore_metal::ore_cmd::{
-    ore_command_buffer::OreCommandBuffer,
-    ore_deferred_render_pass::beginRenderPassRecordingOrImmediate,
+    ore_command_buffer::OreCommandBuffer, ore_deferred_render_pass::InlineDeferredRenderPass,
     ore_render_pass_recording::RenderPassRecording, ore_replay::replayCommandBuffer,
 };
 enum ReplayMode {
@@ -42,11 +41,8 @@ fn scene(mode: ReplayMode) -> Vec<u8> {
             replayCommandBuffer(&mut *host.ore.borrow_mut(), &buffer.borrow(), None);
         }
         ReplayMode::InlineDeferred => {
-            host.ore.borrow().setDeferredRecording(true);
-            let mut pass = beginRenderPassRecordingOrImmediate(host.ore.clone(), &desc, None)
-                .expect("GM inline pass");
-            triangle_pass(pass.as_mut(), &pipeline, &vb);
-            host.ore.borrow().setDeferredRecording(false);
+            let mut pass = InlineDeferredRenderPass::new(host.ore.clone(), &desc);
+            triangle_pass(&mut pass, &pipeline, &vb);
         }
         ReplayMode::Immediate => {
             let mut pass = host

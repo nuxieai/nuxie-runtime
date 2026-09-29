@@ -156,16 +156,8 @@ impl<C: ContextApi + 'static> ExactGpuCanvas<C> {
     pub(crate) fn end_frame(&mut self) {
         // Inline deferred pass finish replays through this same context. End
         // the borrow before that callback, as with the source raw back-pointer.
-        let pass = self
-            .context
-            .as_ref()
-            .activeRenderPass()
-            .and_then(|pass| pass.upgrade());
-        if let Some(pass) = pass {
-            if !pass.isFinished() {
-                pass.finish();
-            }
-        }
+        let passes = self.context.as_ref().contextBase().openRenderPassRegistry();
+        passes.finishOpenRenderPassesFrom(0);
         self.context.as_mut().endFrame();
     }
 

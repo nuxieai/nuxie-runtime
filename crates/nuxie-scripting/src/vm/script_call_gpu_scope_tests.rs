@@ -1,15 +1,20 @@
-//! `scripting_context_test.cpp` additions at 54ce53ddddb5daae38514e62a626f2bbccf3c062.
+//! `scripting_context_test.cpp` GPU scopes at 65638e57.
 #![allow(non_snake_case)]
 
 use super::*;
+use nuxie_ore_metal::ore_cmd::{
+    ore_command_buffer::{OreCommandBuffer, OreCommandReader, SharedOreCommandBuffer},
+    ore_commands::{CommandType, ore_payload_size_of},
+    ore_render_pass_recording::RenderPassRecording,
+};
 use nuxie_ore_metal::{
-    context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget},
+    context::{Context, ContextApi, FrameDescriptor, ShaderTarget},
     gpu_resource::AnyResourceHandle,
     render_pass::RenderPassApi,
     types::*,
 };
 use nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext;
-use std::{any::Any, ffi::c_void, rc::Weak};
+use std::ffi::c_void;
 
 fn idle_canvas(vm: &ScriptVm) -> AnyUserData {
     lua_canvas::ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 0, 0).unwrap()
@@ -75,48 +80,6 @@ fn reclaiming_empty_open_frame_list_is_a_noop() {
     assert_eq!(context.open_canvas_frame_count(), 0);
 }
 
-#[derive(Default)]
-struct StubPassState(Cell<bool>);
-impl ActiveRenderPass for StubPassState {
-    fn isFinished(&self) -> bool {
-        self.0.get()
-    }
-    fn finish(&self) {
-        self.0.set(true);
-    }
-}
-
-#[derive(Default)]
-struct StubRenderPass(Rc<StubPassState>);
-impl RenderPassApi for StubRenderPass {
-    fn asAny(&self) -> &dyn Any {
-        self
-    }
-    fn asAnyMut(&mut self) -> &mut dyn Any {
-        self
-    }
-    fn intoAny(self: Box<Self>) -> Box<dyn Any> {
-        self
-    }
-    fn activeToken(&self) -> Weak<dyn ActiveRenderPass> {
-        Rc::downgrade(&(self.0.clone() as Rc<dyn ActiveRenderPass>))
-    }
-    fn setPipeline(&mut self, _: Option<&AnyResourceHandle>) {}
-    fn setVertexBuffer(&mut self, _: u32, _: Option<&AnyResourceHandle>, _: u32) {}
-    fn setIndexBuffer(&mut self, _: Option<&AnyResourceHandle>, _: IndexFormat, _: u32) {}
-    fn setBindGroup(&mut self, _: u32, _: Option<&AnyResourceHandle>, _: Option<&[u32]>, _: u32) {}
-    fn setViewport(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {}
-    fn setScissorRect(&mut self, _: u32, _: u32, _: u32, _: u32) {}
-    fn setStencilReference(&mut self, _: u32) {}
-    fn setBlendColor(&mut self, _: f32, _: f32, _: f32, _: f32) {}
-    fn draw(&mut self, _: u32, _: u32, _: u32, _: u32) {}
-    fn drawIndexed(&mut self, _: u32, _: u32, _: u32, _: i32, _: u32) {}
-    fn finish(&mut self) {
-        self.0.finish();
-    }
-    fn validate(&self) {}
-}
-
 // The portable Context constructor is private. Retain a deferred context only
 // to obtain its real Context base; resource operations remain source stub no-ops.
 struct StubOreContext(DeferredOreContext);
@@ -129,15 +92,6 @@ impl ContextApi for StubOreContext {
     }
     fn lastError(&self) -> String {
         self.contextBase().lastError()
-    }
-    fn activeRenderPass(&self) -> Option<Weak<dyn ActiveRenderPass>> {
-        self.contextBase().activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.contextBase().setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.contextBase().finishActiveRenderPass();
     }
     fn clearLastError(&self) {
         self.contextBase().clearLastError();
@@ -203,6 +157,7 @@ struct Fixture {
     vm: ScriptVm,
     ore: nuxie_render_api::OreContextHandle,
     errors: Rc<RefCell<Vec<String>>>,
+    stream: SharedOreCommandBuffer,
 }
 impl Fixture {
     fn new() -> Self {
@@ -227,16 +182,29 @@ impl Fixture {
             &vm.renderer_bindings.ore_context().unwrap(),
             &ore
         ));
-        Self { vm, ore, errors }
+        Self {
+            vm,
+            ore,
+            errors,
+            stream: Rc::new(RefCell::new(OreCommandBuffer::default())),
+        }
     }
-    fn set_pass(&self, pass: &StubRenderPass) {
-        self.ore.borrow().setActiveRenderPass(Some(pass));
+    fn pass(&self) -> RenderPassRecording {
+        RenderPassRecording::new(
+            Some(self.ore.borrow().contextBase()),
+            self.stream.clone(),
+            &RenderPassDesc::default(),
+        )
     }
-    fn has_pass(&self, pass: &StubRenderPass) -> bool {
-        self.ore
-            .borrow()
-            .activeRenderPass()
-            .is_some_and(|active| Weak::ptr_eq(&active, &pass.activeToken()))
+    fn opcodes(&self) -> Vec<CommandType> {
+        let stream = self.stream.borrow();
+        let mut reader = OreCommandReader::new(stream.command_bytes(), stream.blob_bytes());
+        let mut ops = Vec::new();
+        while let Some(op) = reader.next::<CommandType>() {
+            ops.push(op);
+            reader.skip(ore_payload_size_of(op));
+        }
+        ops
     }
     fn enter(&self) -> crate::gpu_canvas::ScriptCallGpuScope {
         crate::gpu_canvas::enter_script_call_gpu_scope(self.vm.lua())
@@ -249,24 +217,22 @@ impl Fixture {
 #[test]
 fn nested_call_leaves_inherited_render_pass_open() {
     let fixture = Fixture::new();
-    let outer = StubRenderPass::default();
-    fixture.set_pass(&outer);
+    let outer = fixture.pass();
     let scope = fixture.enter();
     fixture.exit(&scope);
-    assert!(!outer.0.isFinished());
-    assert!(fixture.has_pass(&outer));
+    assert!(!outer.isFinished());
+    assert!(fixture.ore.borrow().hasOpenRenderPasses());
     assert!(fixture.errors.borrow().is_empty());
 }
 
 #[test]
-fn own_abandoned_render_pass_is_finished_and_cleared() {
+fn own_abandoned_render_pass_is_finished_and_reported() {
     let fixture = Fixture::new();
     let scope = fixture.enter();
-    let own = StubRenderPass::default();
-    fixture.set_pass(&own);
+    let own = fixture.pass();
     fixture.exit(&scope);
-    assert!(own.0.isFinished());
-    assert!(fixture.ore.borrow().activeRenderPass().is_none());
+    assert!(own.isFinished());
+    assert!(!fixture.ore.borrow().hasOpenRenderPasses());
     assert_eq!(
         &*fixture.errors.borrow(),
         &[
@@ -278,42 +244,55 @@ fn own_abandoned_render_pass_is_finished_and_cleared() {
 #[test]
 fn nested_pass_reclaimed_without_finishing_outer_one() {
     let fixture = Fixture::new();
-    let outer = StubRenderPass::default();
-    fixture.set_pass(&outer);
+    let mut outer = fixture.pass();
+    outer.draw(3, 1, 0, 0);
     let scope = fixture.enter();
-    let inner = StubRenderPass::default();
-    fixture.set_pass(&inner);
+    let mut inner = fixture.pass();
+    inner.draw(6, 1, 0, 0);
     fixture.exit(&scope);
-    assert!(inner.0.isFinished());
-    assert!(!outer.0.isFinished());
-    assert!(fixture.ore.borrow().activeRenderPass().is_none());
+    assert!(inner.isFinished());
+    assert!(!outer.isFinished());
+    assert!(fixture.ore.borrow().hasOpenRenderPasses());
+    assert_eq!(fixture.errors.borrow().len(), 1);
+    outer.draw(9, 1, 0, 0);
+    outer.finish();
+    assert!(!fixture.ore.borrow().hasOpenRenderPasses());
+    assert_eq!(
+        fixture.opcodes(),
+        vec![
+            CommandType::beginRenderPass,
+            CommandType::draw,
+            CommandType::finish,
+            CommandType::beginRenderPass,
+            CommandType::draw,
+            CommandType::draw,
+            CommandType::finish
+        ]
+    );
 }
 
 #[test]
 fn finished_render_pass_is_not_reported_left_open() {
     let fixture = Fixture::new();
     let scope = fixture.enter();
-    let mut own = StubRenderPass::default();
-    fixture.set_pass(&own);
+    let mut own = fixture.pass();
     own.finish();
     fixture.exit(&scope);
-    assert!(fixture.has_pass(&own));
     assert!(fixture.errors.borrow().is_empty());
 }
 
 #[test]
 fn protected_call_leaves_callers_gpu_work_alone() {
     let fixture = Fixture::new();
-    let outer = StubRenderPass::default();
-    fixture.set_pass(&outer);
+    let outer = fixture.pass();
     fixture
         .vm
         .renderer_bindings
         .register_open_canvas_frame(idle_canvas(&fixture.vm));
     let nested = fixture.vm.lua().create_function(|_, ()| Ok(())).unwrap();
     nested.protected_call::<()>(()).unwrap();
-    assert!(!outer.0.isFinished());
-    assert!(fixture.has_pass(&outer));
+    assert!(!outer.isFinished());
+    assert!(fixture.ore.borrow().hasOpenRenderPasses());
     assert_eq!(fixture.vm.renderer_bindings.open_canvas_frame_count(), 1);
     assert!(fixture.errors.borrow().is_empty());
 }
@@ -321,30 +300,45 @@ fn protected_call_leaves_callers_gpu_work_alone() {
 #[test]
 fn protected_call_reclaims_only_nested_calls_work() {
     let fixture = Fixture::new();
-    let outer = StubRenderPass::default();
-    fixture.set_pass(&outer);
+    let mut outer = fixture.pass();
     fixture
         .vm
         .renderer_bindings
         .register_open_canvas_frame(idle_canvas(&fixture.vm));
-    let inner = Rc::new(StubRenderPass::default());
+    let inner = Rc::new(RefCell::new(None::<RenderPassRecording>));
     let nested_pass = inner.clone();
     let ore = fixture.ore.clone();
+    let stream = fixture.stream.clone();
     let bindings = fixture.vm.renderer_bindings.clone();
     let nested = fixture
         .vm
         .lua()
         .create_function(move |lua, ()| {
-            ore.borrow().setActiveRenderPass(Some(nested_pass.as_ref()));
+            *nested_pass.borrow_mut() = Some(RenderPassRecording::new(
+                Some(ore.borrow().contextBase()),
+                stream.clone(),
+                &RenderPassDesc::default(),
+            ));
             let canvas = lua_canvas::ScriptedCanvas::create(lua, bindings.clone(), 0, 0)?;
             bindings.register_open_canvas_frame(canvas);
             Ok(())
         })
         .unwrap();
     nested.protected_call::<()>(()).unwrap();
-    assert!(inner.0.isFinished());
-    assert!(fixture.ore.borrow().activeRenderPass().is_none());
+    assert!(inner.borrow().as_ref().unwrap().isFinished());
+    assert!(fixture.ore.borrow().hasOpenRenderPasses());
     assert_eq!(fixture.errors.borrow().len(), 2);
-    assert!(!outer.0.isFinished());
+    assert!(!outer.isFinished());
     assert_eq!(fixture.vm.renderer_bindings.open_canvas_frame_count(), 1);
+    outer.finish();
+    inner.borrow_mut().take();
+    assert_eq!(
+        fixture.opcodes(),
+        vec![
+            CommandType::beginRenderPass,
+            CommandType::finish,
+            CommandType::beginRenderPass,
+            CommandType::finish
+        ]
+    );
 }

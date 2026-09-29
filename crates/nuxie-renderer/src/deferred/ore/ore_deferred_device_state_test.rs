@@ -1,16 +1,12 @@
 //! Upstream tests/unit_tests/renderer/ore_deferred_device_state_test.cpp at e3c5dec2.
 use super::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::{
-    context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ReplayCaps, ShaderTarget},
+    context::{Context, ContextApi, FrameDescriptor, ReplayCaps, ShaderTarget},
     gpu_resource::AnyResourceHandle,
     render_pass::RenderPassApi,
     types::*,
 };
-use std::{
-    cell::RefCell,
-    ffi::c_void,
-    rc::{Rc, Weak},
-};
+use std::{cell::RefCell, ffi::c_void, rc::Rc};
 struct FakeDeviceContext {
     base: Context,
 }
@@ -30,15 +26,6 @@ impl ContextApi for FakeDeviceContext {
     }
     fn lastError(&self) -> String {
         self.base.lastError()
-    }
-    fn activeRenderPass(&self) -> Option<Weak<dyn ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, p: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(p);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass();
     }
     fn clearLastError(&self) {
         self.base.clearLastError();

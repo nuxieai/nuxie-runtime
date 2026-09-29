@@ -315,14 +315,13 @@ mod tests {
         // through initializeNative; this keeps the test on the translated
         // RenderPassMetal ABI rather than the removed adapter constructors.
         let context = Context::new(Features::default(), None);
-        let pass = RenderPassMetal::new_with_context(&context.state);
+        let mut pass = RenderPassMetal::new_with_context(&context.state);
         assert!(!pass.inner.borrowState().base.isFinished());
-        context.setActiveRenderPass(Some(&pass));
-        let token = context.activeRenderPass().expect("active pass token");
+        let token = pass.activeToken();
         assert!(!token.upgrade().expect("live pass").isFinished());
-        context.finishActiveRenderPass();
+        pass.finish();
         assert!(pass.inner.borrowState().base.isFinished());
-        context.finishActiveRenderPass();
+        pass.finish();
         assert!(pass.inner.borrowState().base.isFinished());
     }
 

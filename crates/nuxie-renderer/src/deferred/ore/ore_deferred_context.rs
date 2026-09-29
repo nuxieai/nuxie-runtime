@@ -19,8 +19,8 @@ use nuxie_ore_metal::ore_cmd::{
 };
 use nuxie_ore_metal::{
     context::{
-        ActiveRenderPass, CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor,
-        ReplayCaps, ShaderTarget,
+        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor, ReplayCaps,
+        ShaderTarget,
     },
     gpu_resource::{AnyResourceHandle, ResourceHandle},
     render_pass::RenderPassApi,
@@ -80,7 +80,7 @@ impl DeferredOreContext {
         assert!(
             self.real.is_none() && self.canvasIdProvider.is_none() && self.canvasRegistry.is_none()
         );
-        assert!(self.base.activeRenderPass().is_none());
+        assert!(!self.base.hasOpenRenderPasses());
         assert_eq!(Rc::strong_count(&self.render), 1);
         assert_eq!(Rc::weak_count(&self.render), 0);
         assert_eq!(Rc::strong_count(&self.realResources), 2);
@@ -210,6 +210,7 @@ impl DeferredOreContext {
         self.realResources.borrow_mut().handleFor(r)
     }
     pub fn resetFrame(&mut self) {
+        self.base.finishOpenRenderPassesFrom(0);
         self.render.borrow_mut().reset();
         self.render.borrow_mut().drainDestroys();
         let mut real = self.realResources.borrow_mut();
@@ -311,15 +312,6 @@ impl ContextApi for DeferredOreContext {
     }
     fn lastError(&self) -> String {
         self.base.lastError()
-    }
-    fn activeRenderPass(&self) -> Option<Weak<dyn ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass();
     }
     fn clearLastError(&self) {
         self.base.clearLastError();

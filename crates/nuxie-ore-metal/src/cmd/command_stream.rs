@@ -91,7 +91,13 @@ impl CommandByteStream {
         &self.blobs
     }
     pub fn write_raw(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
         self.commands.extend_from_slice(bytes);
+    }
+    pub(crate) fn truncate_commands(&mut self, len: usize) {
+        self.commands.truncate(len);
     }
     pub fn write<P: WirePod>(&mut self, value: &P) {
         value.encode(&mut self.commands);

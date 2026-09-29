@@ -23,9 +23,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::texture_h
 use nuxie_ore_metal::bind_group_layout::BindGroupLayout;
 use nuxie_ore_metal::binding_map::BindingMap;
 use nuxie_ore_metal::buffer::BufferApi;
-use nuxie_ore_metal::context::{
-    ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget,
-};
+use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::shader_module::GLFixupKind;
@@ -37,7 +35,6 @@ use nuxie_ore_metal::types::{
     TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, WrapMode,
 };
 use std::ffi::c_void;
-use std::rc::Weak as RcWeak;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_ore_gl_ore_context_gl.cpp");
@@ -342,12 +339,6 @@ pub(crate) fn invalidateScratchFramebuffers(context: &mut ContextGL) {
     withCurrentContext(context, |context| {
         let mut state = context.rust_scratch.as_ref().unwrap().state.borrow_mut();
         debug_assert!(!state.m_scratchFBOLent);
-        debug_assert!(context
-            .base
-            .activeRenderPass()
-            .and_then(|pass| pass.upgrade())
-            .as_ref()
-            .is_none_or(|pass| pass.isFinished()));
         if state.m_scratchFBO != 0 {
             recordGLCommand(GLCommand::DeleteFramebuffer(state.m_scratchFBO));
             state.m_scratchFBO = 0;
@@ -384,11 +375,7 @@ fn beginFrameCurrent(context: &mut ContextGL, _descriptor: &FrameDescriptor) {
 fn waitForGPUCurrent(_context: &mut ContextGL) {}
 
 fn endFrameCurrent(context: &mut ContextGL) {
-    let active = context
-        .base
-        .activeRenderPass()
-        .and_then(|pass| pass.upgrade());
-    if active.as_ref().is_none_or(|pass| pass.isFinished()) {
+    {
         let mut scratch = context.rust_scratch.as_ref().unwrap().state.borrow_mut();
         debug_assert!(!scratch.m_scratchFBOLent);
         debug_assert!(!scratch.m_scratchVAOLent);
@@ -1488,8 +1475,6 @@ fn beginRenderPassCurrent(
     desc: &RenderPassDesc<'_>,
     _outError: Option<&mut String>,
 ) -> Option<Box<dyn RenderPassApi>> {
-    context.base.finishActiveRenderPass();
-
     if desc.colorCount > 4 {
         reject(
             context,
@@ -1778,8 +1763,8 @@ fn beginRenderPassCurrent(
     }
 
     drop(state);
-    // ContextGL does not register m_activeRenderPass upstream. Overlapping
-    // passes therefore retain their loans and use the owned fallback pair.
+    // Immediate backend passes are not auto-finished. Overlapping passes
+    // retain their loans and use the owned fallback pair.
     Some(Box::new(pass))
 }
 
@@ -2070,18 +2055,6 @@ impl ContextApi for ContextGL {
 
     fn lastError(&self) -> String {
         withCurrentContextRef(self, |context| context.base.lastError())
-    }
-
-    fn activeRenderPass(&self) -> Option<RcWeak<dyn ActiveRenderPass>> {
-        withCurrentContextRef(self, |context| context.base.activeRenderPass())
-    }
-
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        withCurrentContextRef(self, |context| context.base.setActiveRenderPass(pass));
-    }
-
-    fn finishActiveRenderPass(&self) {
-        withCurrentContextRef(self, |context| context.base.finishActiveRenderPass());
     }
 
     fn clearLastError(&self) {
@@ -2466,7 +2439,6 @@ mod tests {
         .unwrap();
         product.begin_frame(1);
         let pass = InlineDeferredRenderPass::new(context.clone(), &RenderPassDesc::default());
-        context.borrow().setActiveRenderPass(Some(&pass));
         let token = pass.activeToken().upgrade().unwrap();
         product.end_frame();
         assert!(token.isFinished());
@@ -2564,9 +2536,23 @@ mod tests {
         external
             .borrow_mut()
             .beginFrame(&FrameDescriptor::new(0, 1));
+        // Factory::ore returns an ephemeral forwarding handle. Its collection
+        // must not expire a pass while the actual backend context is alive.
+        let wrapper_weak = Rc::downgrade(&external);
+        let mut transient =
+            InlineDeferredRenderPass::new(external.clone(), &RenderPassDesc::default());
+        drop(external);
+        drop(another);
+        assert!(wrapper_weak.upgrade().is_none());
+        assert!(native_weak.upgrade().is_some());
+        transient.finish();
+        assert!(transient.activeToken().upgrade().unwrap().isFinished());
+        drop(transient);
+
+        let external = factory.ore().unwrap();
+        let another = factory_clone.ore().unwrap();
         let mut pass = InlineDeferredRenderPass::new(external.clone(), &RenderPassDesc::default());
-        external.borrow().setActiveRenderPass(Some(&pass));
-        assert!(external.borrow().contextBase().activeRenderPass().is_some());
+        assert!(external.borrow().hasOpenRenderPasses());
         drop(factory);
         drop(factory_clone);
         assert!(!destroyed.get());

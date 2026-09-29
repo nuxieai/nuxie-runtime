@@ -116,15 +116,6 @@ impl ContextApi for ObservedContext {
     fn lastError(&self) -> String {
         self.inner.lastError()
     }
-    fn activeRenderPass(&self) -> Option<std::rc::Weak<dyn ActiveRenderPass>> {
-        self.inner.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.inner.setActiveRenderPass(pass)
-    }
-    fn finishActiveRenderPass(&self) {
-        self.inner.finishActiveRenderPass()
-    }
     fn clearLastError(&self) {
         self.inner.clearLastError()
     }

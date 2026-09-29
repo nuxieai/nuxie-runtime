@@ -1,7 +1,7 @@
 //! renderer/ore/cmd/ore_command_buffer.hpp at e949498e.
 #![allow(non_snake_case)]
 use super::{
-    ore_commands::{CommandType, DestroyResourcePOD},
+    ore_commands::{CommandType, DestroyResourcePOD, isRenderPassCommand, ore_payload_size_of},
     ore_handle::{INVALID_HANDLE, ResourceHandle},
     ore_resource_commands::{BlobRef, NO_BLOB},
 };
@@ -146,6 +146,38 @@ impl OreCommandBuffer {
                     .release(pending.handle, pending.generation);
             }
         }
+    }
+    pub fn hoistNestedRenderPass(&mut self, outerBegin: usize, innerBegin: usize) -> usize {
+        self.recordingThread.check();
+        assert!(outerBegin < innerBegin && innerBegin <= self.command_bytes().len());
+        let mut kept = Vec::new();
+        let mut outer = Vec::new();
+        let mut depth = -1;
+        let mut pos = outerBegin;
+        while pos < innerBegin {
+            let command = CommandType::decode(&self.command_bytes()[pos..pos + CommandType::SIZE]);
+            let size = CommandType::SIZE + ore_payload_size_of(command);
+            let mut own = false;
+            if isRenderPassCommand(command) {
+                if command == CommandType::beginRenderPass {
+                    depth += 1;
+                }
+                own = depth == 0;
+                if command == CommandType::finish {
+                    depth -= 1;
+                }
+            }
+            (if own { &mut outer } else { &mut kept })
+                .extend_from_slice(&self.command_bytes()[pos..pos + size]);
+            pos += size;
+        }
+        assert_eq!(pos, innerBegin);
+        let nested = self.command_bytes()[innerBegin..].to_vec();
+        self.bytes.truncate_commands(outerBegin);
+        self.bytes.write_raw(&kept);
+        self.bytes.write_raw(&nested);
+        self.bytes.write_raw(&outer);
+        outerBegin + kept.len() + nested.len()
     }
     pub fn reset(&mut self) {
         self.recordingThread.check();

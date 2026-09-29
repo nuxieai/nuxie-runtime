@@ -3,14 +3,14 @@ use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::*;
 use nuxie_ore_metal::{
     context::{
-        ActiveRenderPass, CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor,
+        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor,
         ShaderTarget,
     },
     gpu_resource::AnyResourceHandle,
     render_pass::RenderPassApi,
     types::*,
 };
-use std::{any::Any, ffi::c_void, rc::Weak};
+use std::{any::Any, ffi::c_void};
 
 struct RecordingOreContext {
     base: Context,
@@ -35,15 +35,6 @@ impl ContextApi for RecordingOreContext {
     }
     fn lastError(&self) -> String {
         self.base.lastError()
-    }
-    fn activeRenderPass(&self) -> Option<Weak<dyn ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass();
     }
     fn clearLastError(&self) {
         self.base.clearLastError();

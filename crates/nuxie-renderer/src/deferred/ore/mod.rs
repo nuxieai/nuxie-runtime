@@ -7,6 +7,8 @@ pub mod ore_deferred_context;
 #[cfg(test)]
 mod ore_deferred_device_state_test;
 #[cfg(test)]
+mod ore_nested_render_pass_test;
+#[cfg(test)]
 mod ore_source_equivalence_test;
 pub use nuxie_ore_metal::ore_cmd::ore_command_silver;
 pub use nuxie_ore_metal::ore_cmd::ore_deferred_render_pass;

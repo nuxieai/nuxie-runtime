@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 158417] = [(); PINNED_SOURCE.len()];
+const _: [(); 158489] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -149,8 +149,6 @@ const GLSL_DRAW_IMAGE_MESH_VERT: &str =
     include_str!("source/generated_glsl_embedded/draw_image_mesh.minified.vert");
 const GLSL_DRAW_MESH_FRAG: &str =
     include_str!("source/generated_glsl_embedded/draw_mesh.minified.frag");
-const GLSL_ATOMIC_DRAW: &str =
-    include_str!("source/generated_glsl_embedded/atomic_draw.minified.glsl");
 const GLSL_RESOLVE_ATLAS: &str =
     include_str!("source/generated_glsl_embedded/resolve_atlas.minified.glsl");
 const GLSL_BLIT_TEXTURE_AS_DRAW: &str =
@@ -1906,7 +1904,8 @@ fn newDrawShader(
     interlockMode: gpu::InterlockMode,
     shaderMiscFlags: gpu::ShaderMiscFlags,
 ) -> DrawShader {
-    // DISABLE_PLS_ATOMICS is authored by the admitted RIVE_WEBGL branch.
+    // Upstream disables PLS atomics on WebGL and Android. This owner uses
+    // the RIVE_WEBGL profile on both native harnesses and browser targets.
     if interlockMode == gpu::InterlockMode::atomics {
         return DrawShader { m_id: 0 };
     }
@@ -2046,13 +2045,7 @@ fn newDrawShader(
             }
             _ => panic!("unreachable raster-ordering draw shader"),
         },
-        gpu::InterlockMode::atomics => {
-            sources.extend([
-                GLSL_DRAW_PATH_COMMON,
-                GLSL_GRADIENT_PACKING_COMMON,
-                GLSL_ATOMIC_DRAW,
-            ]);
-        }
+        gpu::InterlockMode::atomics => unreachable!("PLS atomics are compiled out"),
         gpu::InterlockMode::depthStencil => match drawType {
             gpu::DrawType::depthStrokes
             | gpu::DrawType::stencilMidpointFanBorrowedCoverage
@@ -4675,8 +4668,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4082);
-        assert_eq!(PINNED_SOURCE.len(), 158417);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4084);
+        assert_eq!(PINNED_SOURCE.len(), 158489);
     }
 
     #[test]

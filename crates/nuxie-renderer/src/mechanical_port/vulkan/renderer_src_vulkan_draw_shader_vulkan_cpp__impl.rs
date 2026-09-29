@@ -116,6 +116,9 @@ fn select_shader_pair(
             | DrawType::renderPassInitialize => source_unreachable(),
         },
 
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+        InterlockMode::atomics | InterlockMode::clockwiseAtomic => source_unreachable(),
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         InterlockMode::atomics => match drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
@@ -270,6 +273,7 @@ fn select_shader_pair(
             }
         }
 
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         InterlockMode::clockwiseAtomic => {
             let drawUsesAdvancedBlend = feature_is_set(
                 shaderFeatures,
@@ -533,6 +537,7 @@ mod tests {
             &spirv::draw_path_vert,
             &spirv::draw_path_frag,
         );
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         assert_pair(
             select_shader_pair(
                 DrawType::imageRect,
@@ -543,6 +548,7 @@ mod tests {
             &spirv::atomic_draw_image_rect_vert,
             &spirv::atomic_draw_image_rect_fixedcolor_frag,
         );
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         assert_pair(
             select_shader_pair(
                 DrawType::renderPassResolve,
@@ -565,6 +571,7 @@ mod tests {
             &spirv::draw_clockwise_interior_triangles_vert,
             &spirv::draw_clockwise_clip_interior_triangles_fixedcolor_frag,
         );
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         assert_pair(
             select_shader_pair(
                 DrawType::midpointFanPatches,

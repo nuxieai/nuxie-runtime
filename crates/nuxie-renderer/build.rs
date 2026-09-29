@@ -276,6 +276,13 @@ fn generate_vulkan_spirv_module() -> io::Result<()> {
                 format!("{name} does not begin with the SPIR-V magic word"),
             ));
         }
+        if name.contains("atomic") {
+            generated.push_str(
+                "#[cfg(any(not(target_os = \"android\"), feature = \"android-vulkan-atomics\"))]\n",
+            );
+        } else if name.starts_with("draw_clockwise_") {
+            generated.push_str("#[cfg(not(target_os = \"android\"))]\n");
+        }
         generated.push_str("pub(crate) static ");
         generated.push_str(name);
         generated.push_str(": &[u32] = &[\n");

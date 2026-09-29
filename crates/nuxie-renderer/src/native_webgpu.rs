@@ -10,8 +10,23 @@ use nuxie_render_api::{
 use std::sync::Arc;
 
 use crate::exact_source_adapter::{ExactSourceFactoryCore, ExactSourceFrameCore};
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use crate::external_image::TextureRing;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 use crate::mechanical_port::webgpu::WebGpuProductBackend;
 use crate::{RenderMode, RendererError};
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use std::rc::Rc;
+
+/// Textures that receive one stream of browser images, such as one video's
+/// decoded frames, through [`NativeWebGpuFactory::copy_external_image`]. The
+/// stream never rewrites an image someone still holds, so an image handed out
+/// earlier keeps its pixels. In steady state it alternates between two
+/// textures and allocates again only when the image size changes.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[derive(Default)]
+pub struct ExternalImageTextures(TextureRing<RiveRenderImageHandle>);
 
 /// A headless exact-source native Dawn WebGPU renderer factory.
 pub struct NativeWebGpuFactory {
@@ -36,6 +51,41 @@ impl NativeWebGpuFactory {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
         self.core.resize(width, height)
+    }
+
+    /// Copy a browser image source (a canvas, a WebCodecs `VideoFrame`, an
+    /// `ImageBitmap`, a video element) of `width` by `height`
+    /// display pixels into one of `textures` with
+    /// `GPUQueue.copyExternalImageToTexture`, and return it as an image the
+    /// ordinary image paint draws. It is stored as decoded images are: sRGB
+    /// with premultiplied alpha, top row first. No pixels pass through the CPU.
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub fn copy_external_image(
+        &self,
+        textures: &mut ExternalImageTextures,
+        source: &wasm_bindgen::JsValue,
+        width: u32,
+        height: u32,
+    ) -> Result<Rc<dyn RenderImage>, RendererError> {
+        self.core
+            .check_texture_extent("external image", width, height)?;
+        let image = textures.0.next(
+            |image| {
+                self.core.owns_image(image) && (image.width(), image.height()) == (width, height)
+            },
+            RiveRenderImageHandle::is_sole_owner,
+            || {
+                let texture = self.core.with_backend_mut(|backend| {
+                    backend.make_external_image_texture(width, height)
+                })?;
+                // SAFETY: the backend returned a live texture of this device.
+                unsafe { self.core.adopt_texture(texture) }
+            },
+        )?;
+        self.core.with_backend_mut(|backend| {
+            backend.copy_external_image(source, &image, width, height)
+        })?;
+        Ok(image as Rc<dyn RenderImage>)
     }
 
     /// Upload a decoded SDR frame into this factory's resource domain.

@@ -6975,7 +6975,7 @@ impl RuntimeHeader {
 
         let major_version = read_cpp_int_var_uint(reader, "major version")?;
         let minor_version = read_cpp_int_var_uint(reader, "minor version")?;
-        let file_id = read_cpp_int_var_uint(reader, "file id")?;
+        let file_id = reader.read_var_uint()?;
 
         let mut property_keys = Vec::new();
         loop {

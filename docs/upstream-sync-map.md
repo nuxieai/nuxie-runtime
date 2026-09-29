@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7ed4209dad9d62c86e6a35a478ba1e6fee149e5a`
+- LAST_SYNCED_SHA: `1610277371ebe63cc0c76513e7a803f73b7f8bb0`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 127 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 127 require a Rust translation.
+  There are 126 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 126 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1610277371ebe63cc0c76513e7a803f73b7f8bb0` | Read, retain and expose the runtime header file ID at full unsigned 64-bit width in both the runtime and editor/export binary decoder; preserve version/property decoding and overflow handling. | — |
 | `7ed4209dad9d62c86e6a35a478ba1e6fee149e5a` | Move linear-animation binding/interpolator caches into one lazy extras owner, preserve fresh-on-copy caches and explicit bind/holder/interpolator teardown, and initialize didLoop to false. Derive per-layer owner/artboard context from the state-machine call, retain the layer definition, create Any-state instances only when transitions need them, and seed the process-global RNG once per state-machine instance rather than once per layer. Remove the unused blend-state temporary. | — |
 | `899b20b23841de3834ab56c76351b3358eb590cd` | **NO RUST BEHAVIOR DELTA:** upstream's golden executable/deployment scripts decouple deferred recording from scripting, expose `--deferred`, warn on immediate fallback, and fix a Prospero C++ RTTI flag. Our deferred session/replay and runtime-file import GM are not gated on scripting and explicitly select deferred versus immediate execution; these upstream launcher/benchmark/console-build owners have no downstream counterpart. No new launcher, fallback or console support is introduced or claimed. | — |
 | `7e0b60b042abc7e66357c84e6e90919c7d1b1f50` | Translate tools-only shader compilation-mode switching, preserving the prior mode and GL/Vulkan forwarding. Translate the ubershader/specialized comparison scenes and frame-scoped mode restoration. Metal/WebGPU retain upstream's no-switch default; unsupported D3D backends are not introduced or claimed. | — |

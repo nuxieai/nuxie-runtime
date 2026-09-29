@@ -1547,6 +1547,8 @@ pub struct GpuCanvasShaderBinding {
     pub texture_view_dimension: GpuCanvasShaderTextureViewDimension,
     pub texture_sample_type: GpuCanvasShaderTextureSampleType,
     pub texture_multisampled: bool,
+    /// Reflected uniform block size; zero means no minimum was supplied.
+    pub min_binding_size: u32,
 }
 
 /// The authored shader representation requested by a renderer factory.

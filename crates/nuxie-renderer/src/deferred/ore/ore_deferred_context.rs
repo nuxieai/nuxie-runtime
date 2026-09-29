@@ -454,6 +454,12 @@ impl ContextApi for DeferredOreContext {
         )
     }
     fn makeBindGroup(&mut self, desc: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
+        // Replay cannot reach the script, so the range check runs here.
+        let mut error = String::new();
+        if !nuxie_ore_metal::bind_group_layout::validateBindGroupDesc(desc, Some(&mut error)) {
+            self.setLastError(&format!("makeBindGroup: {error}"));
+            return None;
+        }
         let ubos: Vec<_> = desc.ubos[..desc.uboCount as usize]
             .iter()
             .map(|e| self.handleFor(e.buffer))

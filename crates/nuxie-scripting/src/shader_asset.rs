@@ -55,7 +55,8 @@ const MAX_RSTB_BYTES: usize = 4 * 1024 * 1024;
 const MAX_SHADER_MODULE_BYTES: usize = 1024 * 1024;
 const BINDING_MAP_BLOB_VERSION: u8 = 3;
 const BINDING_MAP_ALLOCATOR_VERSION: u8 = 2;
-const BINDING_MAP_ENTRY_WIRE_SIZE: usize = 14;
+const BINDING_MAP_ENTRY_WIRE_SIZE: usize = 18;
+const BINDING_MAP_LEGACY_ENTRY_WIRE_SIZE: usize = 14;
 const BINDING_MAP_ABSENT: u16 = u16::MAX;
 
 /// Backend target selection over the actual translated ShaderAsset owner.
@@ -744,7 +745,7 @@ fn decode_binding_map(name: &str, bytes: &[u8]) -> Result<Vec<GpuCanvasShaderBin
         )));
     }
     let entry_size = usize::from(cursor.read_u16("binding-map entry size")?);
-    if entry_size < BINDING_MAP_ENTRY_WIRE_SIZE {
+    if entry_size < BINDING_MAP_LEGACY_ENTRY_WIRE_SIZE {
         return Err(Error::runtime(format!(
             "ShaderAsset '{name}' WGSL binding-map entries are too small"
         )));
@@ -783,6 +784,11 @@ fn decode_binding_map(name: &str, bytes: &[u8]) -> Result<Vec<GpuCanvasShaderBin
             texture_view_dimension: decode_texture_view_dimension(name, row[11])?,
             texture_sample_type: decode_texture_sample_type(name, row[12])?,
             texture_multisampled: row[13] != 0,
+            min_binding_size: if entry_size >= BINDING_MAP_ENTRY_WIRE_SIZE {
+                u32::from_le_bytes([row[14], row[15], row[16], row[17]])
+            } else {
+                0
+            },
         });
     }
     Ok(bindings)
@@ -1924,6 +1930,26 @@ mod tests {
             .expect("BindingMap v3 is append-only like the pinned C++ decoder");
         assert_eq!(shader.bindings.len(), 1);
         assert_eq!(shader.bindings[0].backend_slots, [None, Some(0), None]);
+        assert_eq!(shader.bindings[0].min_binding_size, 0);
+    }
+
+    #[test]
+    fn binding_map_uniform_minimum_survives_the_host_shader_boundary() {
+        let legacy = IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec();
+        assert_eq!(
+            decode_binding_map("legacy", &legacy).unwrap()[0].min_binding_size,
+            0
+        );
+        for entry_size in [18u16, 20] {
+            let mut map = legacy.clone();
+            map[2..4].copy_from_slice(&entry_size.to_le_bytes());
+            map.extend_from_slice(&192u32.to_le_bytes());
+            map.resize(12 + usize::from(entry_size), 0xa5);
+            assert_eq!(
+                decode_binding_map("sized", &map).unwrap()[0].min_binding_size,
+                192
+            );
+        }
     }
 
     #[test]

@@ -1207,6 +1207,11 @@ fn makeBindGroupCurrent(
         reject(context, "makeBindGroup: BindGroupDesc::layout is null");
         return None;
     };
+    let mut error = String::new();
+    if !nuxie_ore_metal::bind_group_layout::validateBindGroupDesc(desc, Some(&mut error)) {
+        reject(context, format!("makeBindGroup: {error}"));
+        return None;
+    }
     let domain = nuxie_ore_metal::context_backend_domain(&context.base);
     let Some(layout) = layoutOwner.downcast_ref::<BindGroupLayoutGL>() else {
         reject(context, "makeBindGroup: layout has the wrong resource type");
@@ -1279,7 +1284,7 @@ fn makeBindGroupCurrent(
             size: if entry.size != 0 {
                 entry.size
             } else {
-                buffer.size()
+                buffer.size() - entry.offset
             },
             binding: entry.slot,
             slot,
@@ -2158,7 +2163,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 52037] = [(); PINNED_SOURCE.len()];
+const _: [(); 52195] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2658,7 +2663,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1439);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1445);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 22);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);

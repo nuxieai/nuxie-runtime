@@ -34,7 +34,7 @@ mod binding_map_detail {
     //             [group_count * group_size] group layout ids
     // Each group row is group:u8 followed by layout_id:u64 (LE).
     //
-    // Each entry (entry_size = 14 bytes, no trailing alignment):
+    // Each entry (entry_size = 18 bytes, no trailing alignment):
     //
     //          0  [u8]  group
     //          1  [u8]  binding
@@ -47,17 +47,20 @@ mod binding_map_detail {
     //         11  [u8]  textureViewDim (TextureViewDim)
     //         12  [u8]  textureSampleType (TextureSampleType)
     //         13  [u8]  textureMultisampled (0 or 1)
+    //         14  [u32] minBindingSize (LE, UBO only, 0 = no minimum)
     //
     // Forward compat: a newer writer may emit entries larger than the current
     // reader knows about by bumping entry_size. The reader skips the trailing
     // unknown bytes per entry. New fields are always *appended* at the tail.
+    // Legacy 14-byte entries still parse with no UBO minimum.
     // No reserved-for-future slots inside the known prefix, since entry_size
     // already gives us self-describing append-only growth. Any mismatch that
     // matters semantically (blob_version or allocator_version) is a loud
     // error.
 
     pub(super) const kBlobHeaderSize: usize = 12;
-    pub(super) const kEntryWireSize: u16 = 14;
+    pub(super) const kEntryWireSize: u16 = 18;
+    pub(super) const kLegacyEntryWireSize: u16 = 14;
     pub(super) const kGroupWireSize: u16 = 9;
 
     pub(super) fn readU16LE(p: &[u8]) -> u16 {
@@ -140,7 +143,7 @@ impl BindingMap {
 
         // Reject writers that emit fewer fields than the reader needs.
         // Larger entry_size is fine — trailing unknown bytes are skipped.
-        if entrySize < binding_map_detail::kEntryWireSize {
+        if entrySize < binding_map_detail::kLegacyEntryWireSize {
             return false;
         }
         if groupCount != 0 && groupSize < binding_map_detail::kGroupWireSize {
@@ -177,6 +180,9 @@ impl BindingMap {
             e.textureViewDim = TextureViewDim(p[11]);
             e.textureSampleType = TextureSampleType(p[12]);
             e.textureMultisampled = p[13] != 0;
+            if entrySize >= binding_map_detail::kEntryWireSize {
+                e.minBindingSize = binding_map_detail::readU32LE(&p[14..]);
+            }
             // bytes [kEntryWireSize..entrySize] are future-version fields — skip.
             out.m_entries.push(e);
             p = &p[entrySize as usize..];
@@ -230,6 +236,7 @@ impl BindingMap {
             p[11] = e.textureViewDim.0;
             p[12] = e.textureSampleType.0;
             p[13] = if e.textureMultisampled { 1u8 } else { 0u8 };
+            binding_map_detail::writeU32LE(&mut p[14..], e.minBindingSize);
             p = &mut p[binding_map_detail::kEntryWireSize as usize..];
         }
         for group in &self.m_groupLayouts {
@@ -243,7 +250,7 @@ impl BindingMap {
     /// Requires finalize first; dynamic offsets are not known by the toolchain.
     #[cfg(feature = "with-rive-tools")]
     pub fn computeLayoutIds(&mut self) {
-        const _: () = assert!(binding_map_detail::kEntryWireSize == 14);
+        const _: () = assert!(binding_map_detail::kEntryWireSize == 18);
         assert!(
             self.m_finalized,
             "BindingMap::computeLayoutIds before finalize"
@@ -268,6 +275,9 @@ impl BindingMap {
                 h = mix(h, e.textureViewDim.0);
                 h = mix(h, e.textureSampleType.0);
                 h = mix(h, u8::from(e.textureMultisampled));
+                for byte in e.minBindingSize.to_le_bytes() {
+                    h = mix(h, byte);
+                }
                 j += 1;
             }
             self.m_groupLayouts.push(GroupLayout {

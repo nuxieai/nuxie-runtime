@@ -817,6 +817,11 @@ pub(crate) fn makeBindGroup(
             return None;
         }
     };
+    let mut error = String::new();
+    if !nuxie_ore_metal::bind_group_layout::validateBindGroupDesc(desc, Some(&mut error)) {
+        context.setLastError(&format!("makeBindGroup: {error}"));
+        return None;
+    }
     let layout = layoutOwner
         .downcast_ref::<BindGroupLayoutWGPU>()
         .expect("WebGPU bind groups require BindGroupLayoutWGPU");
@@ -882,7 +887,7 @@ pub(crate) fn makeBindGroup(
             size: u64::from(if ubo.size > 0 {
                 ubo.size
             } else {
-                buffer.base.size()
+                buffer.base.size() - ubo.offset
             }),
         });
         retainedBuffers.push(owner);
@@ -1316,7 +1321,7 @@ impl ContextApi for ContextWGPU {
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 16;
 pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 21;
-const _: [(); 47000] = [(); PINNED_SOURCE.len()];
+const _: [(); 47166] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1324,7 +1329,7 @@ mod tests {
 
     #[test]
     fn complete_source_byte_and_feature_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1268);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1273);
         assert_eq!(SOURCE_CONVERSION_HELPER_COUNT, 20);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
         assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 21);

@@ -976,6 +976,11 @@ pub(crate) fn makeBindGroup(
         context.setLastError("makeBindGroup: BindGroupDesc::layout is null");
         return None;
     };
+    let mut error = String::new();
+    if !nuxie_ore_metal::bind_group_layout::validateBindGroupDesc(desc, Some(&mut error)) {
+        context.setLastError(&format!("makeBindGroup: {error}"));
+        return None;
+    }
     let layout = layout_handle
         .downcast_ref::<BindGroupLayoutVulkan>()
         .expect("ContextVulkan requires a BindGroupLayoutVulkan");
@@ -1019,7 +1024,7 @@ pub(crate) fn makeBindGroup(
             range: if ubo.size > 0 {
                 ubo.size
             } else {
-                buffer.size()
+                buffer.size() - ubo.offset
             },
             r#type: if layout.hasDynamicOffset(ubo.slot) {
                 vk::DescriptorType::UNIFORM_BUFFER_DYNAMIC

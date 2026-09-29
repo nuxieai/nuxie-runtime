@@ -2081,11 +2081,11 @@ fn property_keys_match_cpp_uint16_range() {
     let max_property_key_missing_toc = read_runtime_file(&synthetic_runtime_file(4267, |bytes| {
         push_var_uint(bytes, 70_000);
         push_var_uint(bytes, u16::MAX as u64);
-    }))
-    .expect("C++ accepts object property keys at uint16_t max");
-    assert_eq!(max_property_key_missing_toc.object_count(), 1);
-    assert_eq!(max_property_key_missing_toc.known_object_count(), 0);
-    assert!(max_property_key_missing_toc.objects[0].is_none());
+    }));
+    assert!(
+        max_property_key_missing_toc.is_err(),
+        "untyped keys are malformed even within uint16 range"
+    );
 
     let max_property_key_with_toc = read_runtime_file(&synthetic_runtime_file_with_header(
         7,
@@ -8285,15 +8285,11 @@ fn unknown_object_bool_skip_matches_cpp_runtime() {
     let file = read_runtime_file(&synthetic_runtime_file(4245, |bytes| {
         push_var_uint(bytes, 70_000);
         // CustomPropertyBoolean.propertyValue is globally known as a bool.
-        // C++ accepts this stream without an explicit object terminator.
+        // The bool is consumed; an object terminator is still required.
         push_var_uint(bytes, 245);
         bytes.push(1);
-    }))
-    .expect("C++ accepts unknown-object bool fallback at end of stream");
-
-    assert_eq!(file.object_count(), 1);
-    assert_eq!(file.known_object_count(), 0);
-    assert!(file.objects[0].is_none());
+    }));
+    assert!(file.is_err(), "missing object terminator");
 
     assert!(
         read_runtime_file(&synthetic_runtime_file(4283, |bytes| {
@@ -8302,22 +8298,21 @@ fn unknown_object_bool_skip_matches_cpp_runtime() {
             bytes.push(1);
             push_var_uint(bytes, 0);
         }))
-        .is_err(),
-        "C++ does not consume bool fallback payloads, so the byte before the terminator is re-read"
+        .is_ok(),
+        "C++ consumes the bool payload before the object terminator"
     );
 }
 
 #[test]
-fn missing_toc_property_at_eof_collapses_object_to_null_like_cpp_runtime() {
+fn missing_toc_property_at_eof_is_malformed_like_cpp_runtime() {
     let file = read_runtime_file(&synthetic_runtime_file(4246, |bytes| {
         push_var_uint(bytes, 70_000);
         push_var_uint(bytes, 65_000);
-    }))
-    .expect("C++ treats a missing-ToC property at EOF as a null object slot");
-
-    assert_eq!(file.object_count(), 1);
-    assert_eq!(file.known_object_count(), 0);
-    assert!(file.objects[0].is_none());
+    }));
+    assert!(
+        file.is_err(),
+        "C++ rejects a missing-ToC property immediately"
+    );
 
     assert!(
         read_runtime_file(&synthetic_runtime_file(4247, |bytes| {
@@ -8326,7 +8321,7 @@ fn missing_toc_property_at_eof_collapses_object_to_null_like_cpp_runtime() {
             push_var_uint(bytes, 0);
         }))
         .is_err(),
-        "C++ leaves the explicit terminator in the stream and later reports malformed"
+        "C++ rejects an untyped property regardless of a following terminator"
     );
 }
 
@@ -8337,12 +8332,11 @@ fn callback_fallback_matches_cpp_runtime() {
         // NestedTrigger.fire is a callback key. C++ does not use
         // CoreRegistry::isCallback() in the unknown-property skip path.
         push_var_uint(bytes, 401);
-    }))
-    .expect("C++ treats a callback fallback at EOF as a null object slot");
-
-    assert_eq!(file.object_count(), 1);
-    assert_eq!(file.known_object_count(), 0);
-    assert!(file.objects[0].is_none());
+    }));
+    assert!(
+        file.is_err(),
+        "a callback absent from registry and ToC is untyped"
+    );
 
     assert!(
         read_runtime_file(&synthetic_runtime_file(4249, |bytes| {
@@ -8351,7 +8345,7 @@ fn callback_fallback_matches_cpp_runtime() {
             push_var_uint(bytes, 0);
         }))
         .is_err(),
-        "C++ leaves the explicit terminator in the stream and later reports malformed"
+        "C++ rejects an untyped callback regardless of a following terminator"
     );
 }
 
@@ -8433,18 +8427,17 @@ fn known_object_bitmask_passthrough_without_toc_uses_uint_fallback_like_cpp() {
 }
 
 #[test]
-fn known_object_callback_without_toc_collapses_to_null_like_cpp() {
+fn known_object_callback_without_toc_is_malformed_like_cpp() {
     let file = read_runtime_file(&synthetic_runtime_file(4265, |bytes| {
         push_var_uint(bytes, 122);
         // NestedTrigger.fire is a known schema callback, but it is not in
         // NestedTriggerBase::deserialize or CoreRegistry::propertyFieldId.
         push_var_uint(bytes, 401);
-    }))
-    .expect("C++ treats a known-object callback fallback at EOF as a null slot");
-
-    assert_eq!(file.object_count(), 1);
-    assert_eq!(file.known_object_count(), 0);
-    assert!(file.objects[0].is_none());
+    }));
+    assert!(
+        file.is_err(),
+        "C++ rejects an untyped callback on a known object"
+    );
 }
 
 #[test]

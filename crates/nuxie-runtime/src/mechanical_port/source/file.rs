@@ -12,8 +12,9 @@ use crate::mechanical_port::source::{
         Core, CoreArena, CoreHandle,
         binary_reader::BinaryReader,
         field_types::{
-            core_color_type::CoreColorType, core_double_type::CoreDoubleType,
-            core_string_type::CoreStringType, core_uint_type::CoreUintType,
+            core_bool_type::CoreBoolType, core_color_type::CoreColorType,
+            core_double_type::CoreDoubleType, core_string_type::CoreStringType,
+            core_uint_type::CoreUintType,
         },
     },
     data_resolver::DataResolver,
@@ -176,9 +177,12 @@ impl ViewModelInstanceRegistrarHandle {
     }
 }
 
+// Untyped keys make the remaining stream unreadable. Distinguish that failure
+// from an unknown object, whose fully typed properties remain skippable.
 fn read_runtime_object(
     reader: &mut BinaryReader<'_>,
     header: &RuntimeHeader,
+    malformed: &mut bool,
 ) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
     let core_object_key = reader.read_var_uint_as::<i32>();
     // Nuxie-owned types share the Rive record grammar and ordinary arena lifecycle.
@@ -204,12 +208,18 @@ fn read_runtime_object(
                     "Unknown property key {}, missing from property ToC.",
                     property_key
                 );
+                *malformed = true;
                 return None;
             }
             match field_id {
                 CoreUintType::ID => {
                     // Uint64 shares the uint field id, so skip its full range.
                     reader.read_var_uint64();
+                }
+                CoreBoolType::ID => {
+                    // Packed-mask aliases can be typed bool but rejected by
+                    // the object. Consume their byte before reading another key.
+                    CoreBoolType::deserialize(reader);
                 }
                 CoreStringType::ID => {
                     CoreStringType::deserialize(reader);
@@ -426,7 +436,12 @@ impl File {
                 return (ImportResult::Malformed, false);
             };
             source_global_id = next_source_global_id;
-            let Some(object) = read_runtime_object(reader, header) else {
+            let mut malformed = false;
+            let object = read_runtime_object(reader, header, &mut malformed);
+            if malformed {
+                return (ImportResult::Malformed, false);
+            }
+            let Some(object) = object else {
                 import_stack.read_null_object();
                 continue;
             };
@@ -988,11 +1003,16 @@ impl File {
     }
 
     fn attach_watermark(&self, instance: &RuntimeArtboardInstanceHandle, source: &CoreHandle) {
-        use crate::mechanical_port::source::{assets::manifest_asset::ManifestAsset, watermark::Watermark};
+        use crate::mechanical_port::source::{
+            assets::manifest_asset::ManifestAsset, watermark::Watermark,
+        };
 
         let Some((enabled, index)) = self.manifest().and_then(|manifest| {
             manifest.with_downcast::<ManifestAsset, _>(|manifest| {
-                (manifest.has_watermark(), manifest.watermark_artboard_index())
+                (
+                    manifest.has_watermark(),
+                    manifest.watermark_artboard_index(),
+                )
             })
         }) else {
             return;
@@ -1017,7 +1037,10 @@ impl File {
             return;
         };
         instance.with_artboard_mut(|artboard| {
-            artboard.set_watermark(Some(Box::new(Watermark::new(watermark_instance, state_machine))));
+            artboard.set_watermark(Some(Box::new(Watermark::new(
+                watermark_instance,
+                state_machine,
+            ))));
         });
     }
 
@@ -1647,7 +1670,14 @@ impl File {
         let mut to = header_length;
         let mut last_asset_type = 0u16;
         while !reader.reached_end() {
-            let object = read_runtime_object(&mut reader, &header);
+            let mut malformed = false;
+            let object = read_runtime_object(&mut reader, &header, &mut malformed);
+            if malformed {
+                if let Some(result) = result.as_deref_mut() {
+                    *result = ImportResult::Malformed;
+                }
+                return Vec::new();
+            }
             let Some(object) = object else {
                 continue;
             };

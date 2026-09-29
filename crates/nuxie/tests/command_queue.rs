@@ -121,6 +121,11 @@ enum ObservedEvent {
         request_id: u64,
         error: String,
     },
+    ViewModelInstanceReceived {
+        handle: StateMachineHandle,
+        request_id: u64,
+        view_model_instance: ViewModelInstanceHandle,
+    },
     SemanticsDiffReceived {
         handle: StateMachineHandle,
         request_id: u64,
@@ -589,6 +594,18 @@ struct StateMachineEvents {
 impl StateMachineListener for StateMachineEvents {
     fn listener_base(&mut self) -> &mut ListenerBase<StateMachineHandle> {
         &mut self.base
+    }
+    fn on_view_model_instance_received(
+        &mut self,
+        handle: StateMachineHandle,
+        request_id: u64,
+        view_model_instance: ViewModelInstanceHandle,
+    ) {
+        record(&self.log, ObservedEvent::ViewModelInstanceReceived {
+            handle,
+            request_id,
+            view_model_instance,
+        });
     }
     fn on_state_machine_error(
         &mut self,
@@ -4695,7 +4712,7 @@ fn global_view_model_names_listed() {
 }
 
 #[test]
-fn set_bind_get_global_view_model_instance() {
+fn get_bound_view_model_instances() {
     let mut queue = CommandQueue::new();
     let (file_listener, file_log) = event_log();
     let file = queue.load_file(
@@ -4716,35 +4733,120 @@ fn set_bind_get_global_view_model_instance() {
         })
         .expect("global view model name");
     let artboard = queue.instantiate_default_artboard(file, None, 0);
-    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
-    let global = queue.instantiate_view_model_instance_named(
-        file,
-        global_name.clone(),
-        "".to_string(),
-        None,
-        0,
-    );
-    queue.set_global_view_model_instance(machine, global_name.clone(), global, 0);
+    let (machine_listener, machine_log) = event_log();
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&machine_listener.state_machine), 0);
     queue.bind(machine, 0);
+    let (main_listener, main_log) = event_log();
+    let fetched_main = queue.main_view_model_instance(machine, Some(&main_listener.view_model), 2);
     let (ok_listener, ok_log) = event_log();
     let fetched = queue.global_view_model_instance(
         machine,
         global_name.clone(),
         Some(&ok_listener.view_model),
-        0,
-    );
-    queue.request_view_model_instance_view_model_name(fetched, 2);
-    let (error_listener, error_log) = event_log();
-    let missing = queue.global_view_model_instance(
-        machine,
-        "not-a-global".to_string(),
-        Some(&error_listener.view_model),
         3,
     );
+    queue.request_view_model_instance_view_model_name(fetched, 4);
     assert!(server.process_commands());
     queue.process_messages();
-    assert!(events(&ok_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelName { handle, request_id: 2, name } if *handle == fetched && name == &global_name)));
-    assert!(events(&error_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelError { handle, request_id: 3, .. } if *handle == missing)));
+    assert_eq!(received_instances(&machine_log, machine), vec![(fetched_main, 2), (fetched, 3)]);
+    assert!(state_machine_error_requests(&machine_log, machine).is_empty());
+    assert_no_view_model_errors(&main_log);
+    assert_no_view_model_errors(&ok_log);
+    assert!(events(&ok_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelName { handle, request_id: 4, name } if *handle == fetched && name == &global_name)));
+    queue.disconnect();
+}
+
+fn received_instances(log: &EventLog, machine: StateMachineHandle) -> Vec<(ViewModelInstanceHandle, u64)> {
+    events(log).into_iter().filter_map(|event| match event {
+        ObservedEvent::ViewModelInstanceReceived { handle, request_id, view_model_instance } => {
+            assert_eq!(handle, machine);
+            Some((view_model_instance, request_id))
+        }
+        _ => None,
+    }).collect()
+}
+
+fn state_machine_error_requests(log: &EventLog, machine: StateMachineHandle) -> Vec<u64> {
+    events(log).into_iter().filter_map(|event| match event {
+        ObservedEvent::StateMachineError { handle, request_id, error } => {
+            assert_eq!(handle, machine);
+            assert!(!error.is_empty());
+            Some(request_id)
+        }
+        _ => None,
+    }).collect()
+}
+
+fn assert_no_view_model_errors(log: &EventLog) {
+    assert!(!events(log).iter().any(|event| matches!(event, ObservedEvent::ViewModelError { .. })));
+}
+
+#[test]
+fn get_unbound_view_model_instances() {
+    let mut queue = CommandQueue::new();
+    let (file_listener, file_log) = event_log();
+    let file = queue.load_file(GLOBAL_VARIABLES_FIXTURE.to_vec(), Some(&file_listener.file), 0, None);
+    queue.request_global_view_model_names(file, 1);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+    queue.process_messages();
+    let global_name = events(&file_log).into_iter().find_map(|event| match event {
+        ObservedEvent::GlobalViewModelsListed { names, .. } => names.into_iter().next(),
+        _ => None,
+    }).expect("global view model name");
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let (machine_listener, machine_log) = event_log();
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&machine_listener.state_machine), 0);
+    let (main_listener, main_log) = event_log();
+    queue.main_view_model_instance(machine, Some(&main_listener.view_model), 2);
+    let (global_listener, global_log) = event_log();
+    queue.global_view_model_instance(machine, global_name, Some(&global_listener.view_model), 3);
+    assert!(server.process_commands());
+    queue.process_messages();
+    assert!(received_instances(&machine_log, machine).is_empty());
+    assert_eq!(state_machine_error_requests(&machine_log, machine), vec![2, 3]);
+    assert_no_view_model_errors(&main_log);
+    assert_no_view_model_errors(&global_log);
+    queue.disconnect();
+}
+
+#[test]
+fn get_global_view_model_instance_reports_invalid_name() {
+    let mut queue = CommandQueue::new();
+    let file = queue.load_file(GLOBAL_VARIABLES_FIXTURE.to_vec(), None, 0, None);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let (machine_listener, machine_log) = event_log();
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&machine_listener.state_machine), 0);
+    queue.bind(machine, 0);
+    let (listener, log) = event_log();
+    queue.global_view_model_instance(machine, "not-a-global".to_string(), Some(&listener.view_model), 1);
+    assert!(server(&queue).process_commands());
+    queue.process_messages();
+    assert!(received_instances(&machine_log, machine).is_empty());
+    assert_eq!(state_machine_error_requests(&machine_log, machine), vec![1]);
+    assert_no_view_model_errors(&log);
+    queue.disconnect();
+}
+
+#[test]
+fn get_view_model_instances_report_invalid_state_machine() {
+    let mut queue = CommandQueue::new();
+    // Safe handles have no public integer constructor; NULL is likewise absent.
+    let machine = StateMachineHandle::NULL;
+    let (machine_listener, machine_log) = event_log();
+    queue.set_global_state_machine_listener(Some(&machine_listener.state_machine));
+    let (main_listener, main_log) = event_log();
+    queue.main_view_model_instance(machine, Some(&main_listener.view_model), 1);
+    let (global_listener, global_log) = event_log();
+    queue.global_view_model_instance(machine, "Global".to_string(), Some(&global_listener.view_model), 2);
+    assert!(server(&queue).process_commands());
+    queue.process_messages();
+    assert!(received_instances(&machine_log, machine).is_empty());
+    assert_eq!(state_machine_error_requests(&machine_log, machine), vec![1, 2]);
+    assert_no_view_model_errors(&main_log);
+    assert_no_view_model_errors(&global_log);
+    queue.set_global_state_machine_listener(None);
+    queue.disconnect();
 }
 
 #[test]
@@ -4817,11 +4919,39 @@ fn clear_global_view_model_instance_isolated_and_recreated_by_bind() {
     assert!(names.len() >= 2);
     let cleared = names[0].clone();
     let untouched = names[1].clone();
+    queue.request_view_model_property_definitions(file, untouched.clone(), 2);
+    assert!(command_server.process_commands());
+    queue.process_messages();
+    let properties = events(&file_log).into_iter().find_map(|event| match event {
+        ObservedEvent::ViewModelPropertiesListed { view_model, properties, .. } => {
+            assert_eq!(view_model, untouched);
+            Some(properties)
+        }
+        _ => None,
+    }).expect("global property definitions");
+    let property = properties.into_iter().find(|property| matches!(property.data_type, DataType::Number | DataType::String | DataType::Color)).expect("mutable global property");
     let artboard = queue.instantiate_default_artboard(file, None, 0);
-    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    let (machine_listener, machine_log) = event_log();
+    let machine = queue.instantiate_default_state_machine(artboard, Some(&machine_listener.state_machine), 0);
     let identities = Arc::new(Mutex::new(None));
 
     queue.bind(machine, 0);
+    let original_untouched = queue.global_view_model_instance(machine, untouched.clone(), None, 0);
+    let expected_value = match property.data_type {
+        DataType::Number => {
+            queue.set_view_model_instance_number(original_untouched, property.name.clone(), 12345.5, 0);
+            ObservedValue::Number(12345.5)
+        }
+        DataType::String => {
+            queue.set_view_model_instance_string(original_untouched, property.name.clone(), "preserved mutation".to_string(), 0);
+            ObservedValue::String("preserved mutation".to_string())
+        }
+        DataType::Color => {
+            queue.set_view_model_instance_color(original_untouched, property.name.clone(), 0xFF123456, 0);
+            ObservedValue::Color(0xFF123456)
+        }
+        _ => panic!("unsupported mutation type"),
+    };
     let captured = Arc::clone(&identities);
     let cleared_for_capture = cleared.clone();
     let untouched_for_capture = untouched.clone();
@@ -4840,6 +4970,8 @@ fn clear_global_view_model_instance_isolated_and_recreated_by_bind() {
         });
     }));
     queue.clear_global_view_model_instance(machine, cleared.clone(), 3);
+    let (cleared_listener, cleared_log) = event_log();
+    queue.global_view_model_instance(machine, cleared.clone(), Some(&cleared_listener.view_model), 4);
     let captured = Arc::clone(&identities);
     let cleared_after_clear = cleared.clone();
     let untouched_after_clear = untouched.clone();
@@ -4861,13 +4993,25 @@ fn clear_global_view_model_instance_isolated_and_recreated_by_bind() {
         });
     }));
     queue.bind(machine, 0);
+    let (rebound_listener, rebound_log) = event_log();
+    let rebound = queue.global_view_model_instance(machine, cleared.clone(), Some(&rebound_listener.view_model), 0);
+    queue.request_view_model_instance_view_model_name(rebound, 5);
+    let (value_listener, value_log) = event_log();
+    let value_handle = queue.global_view_model_instance(machine, untouched.clone(), Some(&value_listener.view_model), 0);
+    match property.data_type {
+        DataType::Number => queue.request_view_model_instance_number(value_handle, property.name.clone(), 6),
+        DataType::String => queue.request_view_model_instance_string(value_handle, property.name.clone(), 6),
+        DataType::Color => queue.request_view_model_instance_color(value_handle, property.name.clone(), 6),
+        _ => panic!("unsupported readback type"),
+    }
     let captured = Arc::clone(&identities);
+    let cleared_for_identity = cleared.clone();
     queue.run_once(Box::new(move |server| {
         server.with_state_machine_instance_mut(machine, |instance| {
             let (original_cleared, original_untouched) = captured.lock().unwrap().unwrap();
             assert_ne!(
                 instance
-                    .global_view_model_instance(&cleared)
+                    .global_view_model_instance(&cleared_for_identity)
                     .unwrap()
                     .identity_key(),
                 original_cleared
@@ -4883,6 +5027,12 @@ fn clear_global_view_model_instance_isolated_and_recreated_by_bind() {
     }));
 
     assert!(command_server.process_commands());
+    queue.process_messages();
+    assert_eq!(state_machine_error_requests(&machine_log, machine), vec![4]);
+    assert_no_view_model_errors(&cleared_log);
+    assert!(events(&rebound_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelName { handle, request_id: 5, name } if *handle == rebound && name == &cleared)));
+    assert!(events(&value_log).iter().any(|event| matches!(event, ObservedEvent::ViewModelValue { handle, request_id: 6, path, value } if *handle == value_handle && path == &property.name && value == &expected_value)));
+    queue.disconnect();
 }
 
 #[test]

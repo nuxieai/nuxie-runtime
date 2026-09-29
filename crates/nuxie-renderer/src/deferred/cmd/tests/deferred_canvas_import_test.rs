@@ -1,4 +1,4 @@
-//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 34f6df47.
+//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 39afeca4.
 use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::*;
 use nuxie_ore_metal::{
@@ -116,6 +116,9 @@ impl ContextApi for RecordingOreContext {
 }
 
 struct ImportOrderSink {
+    open_screen: bool,
+    ore_frame_ends: u32,
+    ore_frame_afters: u32,
     replay_context: Option<PersistentFactoryContext>,
     factory: PersistentFactory<SerializingFactory>,
     ore: Rc<RefCell<RecordingOreContext>>,
@@ -131,6 +134,9 @@ impl ImportOrderSink {
 
     fn with_steps(steps: Rc<RefCell<Vec<&'static str>>>) -> Self {
         Self {
+            open_screen: true,
+            ore_frame_ends: 0,
+            ore_frame_afters: 0,
             replay_context: None,
             factory: PersistentFactory::new(SerializingFactory::new()),
             ore: Rc::new(RefCell::new(RecordingOreContext::new())),
@@ -152,10 +158,20 @@ impl DeferredFrameSink for ImportOrderSink {
         Some(self.ore.clone())
     }
     fn begin_screen_frame(&mut self, _: u64) -> Option<RendererOwner> {
-        None
+        self.open_screen.then(|| {
+            Rc::new(RefCell::new(
+                Box::new(self.factory.borrow().make_renderer()) as Box<dyn Renderer>,
+            ))
+        })
     }
     fn begin_ore_frame(&mut self) {
         self.steps.borrow_mut().push("ore");
+    }
+    fn end_ore_frame(&mut self) {
+        self.ore_frame_ends += 1;
+    }
+    fn after_ore_frame(&mut self) {
+        self.ore_frame_afters += 1;
     }
     fn begin_canvas_content(
         &mut self,
@@ -174,11 +190,15 @@ impl DeferredFrameSink for ImportOrderSink {
     }
 }
 
-fn record_canvas_write_and_sample(session: &mut DeferredSession, canvas: &RenderCanvasHandle) {
+fn record_canvas_write_and_sample(
+    session: &mut DeferredSession,
+    canvas: &RenderCanvasHandle,
+    clear_color: u32,
+) {
     let mut renderer = nuxie_render_api::DeferredCanvasHost::begin_canvas_content(
         session,
         canvas.clone(),
-        0xff000000,
+        clear_color,
     )
     .unwrap();
     let paint = session.make_render_paint();
@@ -203,7 +223,7 @@ fn record_canvas_write_and_sample(session: &mut DeferredSession, canvas: &Render
 fn canvas_written_and_sampled_in_one_frame_wraps_after_its_content() {
     let mut session = DeferredSession::with_caps(Default::default());
     let canvas = fake_canvas();
-    record_canvas_write_and_sample(&mut session, &canvas);
+    record_canvas_write_and_sample(&mut session, &canvas, 0xff000000);
     session.close_open_range();
 
     let frame = snapshot_frame(&mut session);
@@ -303,7 +323,7 @@ fn first_canvas_content_ensures_backing_before_beginning_the_draw() {
         backed: backed.clone(),
     })));
     let mut session = DeferredSession::with_caps(Default::default());
-    record_canvas_write_and_sample(&mut session, &canvas);
+    record_canvas_write_and_sample(&mut session, &canvas, 0xff000000);
     session.close_open_range();
 
     let frame = snapshot_frame(&mut session);
@@ -324,8 +344,8 @@ fn each_recorded_canvas_view_resolves_to_its_own_canvas() {
     let mut session = DeferredSession::with_caps(Default::default());
     let canvas_a = fake_canvas();
     let canvas_b = fake_canvas();
-    record_canvas_write_and_sample(&mut session, &canvas_a);
-    record_canvas_write_and_sample(&mut session, &canvas_b);
+    record_canvas_write_and_sample(&mut session, &canvas_a, 0);
+    record_canvas_write_and_sample(&mut session, &canvas_b, 0);
     session.close_open_range();
 
     let frame = snapshot_frame(&mut session);
@@ -338,4 +358,24 @@ fn each_recorded_canvas_view_resolves_to_its_own_canvas() {
             Rc::as_ptr(&canvas_b) as *const () as usize,
         ]
     );
+}
+
+#[test]
+fn ore_replay_waits_for_a_successfully_opened_screen_frame() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    let canvas = fake_canvas();
+    record_canvas_write_and_sample(&mut session, &canvas, 0);
+    session.close_open_range();
+
+    let frame = snapshot_frame(&mut session);
+    let mut sink = ImportOrderSink::new();
+    sink.open_screen = false;
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+
+    // Canvas content runs first, but no one-shot ORE import is consumed
+    // unless the host admitted a screen frame. This sink also records begin.
+    assert_eq!(&*sink.steps.borrow(), &["begin", "content"]);
+    assert!(sink.ore.borrow().sample_wraps.is_empty());
+    assert_eq!(sink.ore_frame_ends, 0);
+    assert_eq!(sink.ore_frame_afters, 0);
 }

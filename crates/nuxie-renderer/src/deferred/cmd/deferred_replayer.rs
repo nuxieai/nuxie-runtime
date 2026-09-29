@@ -1,4 +1,4 @@
-//! renderer/cmd/deferred_replayer.hpp at e3c5dec2.
+//! renderer/cmd/deferred_replayer.hpp through 39afeca4.
 use super::{
     canvas_schedule::schedule_canvases,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
@@ -318,7 +318,9 @@ fn open_screen_and_ore(
         .entry(target)
         .or_insert_with(|| sink.borrow_mut().begin_screen_frame(target))
         .clone();
-    if !*ore_replayed {
+    // Ore commands may depend on this frame's screen command buffer.
+    // Never consume them when the host failed to open that screen.
+    if screen.is_some() && !*ore_replayed {
         if !commands.is_empty() {
             let real = sink.borrow_mut().ore_context();
             if let Some(real) = real {

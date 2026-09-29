@@ -1,6 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/vulkan_context.hpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `39afeca44449b12d41c91aaf78f1ed96913ed69a`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -45,12 +45,11 @@ impl Default for VulkanFeatures {
     }
 }
 
-pub(crate) const RIVE_VULKAN_INSTANCE_COMMANDS: [&str; 5] = [
+pub(crate) const RIVE_VULKAN_INSTANCE_COMMANDS: [&str; 4] = [
     "GetDeviceProcAddr",
     "GetPhysicalDeviceFormatProperties",
     "GetPhysicalDeviceProperties",
     "GetPhysicalDeviceFeatures",
-    "SetDebugUtilsObjectNameEXT",
 ];
 
 pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 60] = [
@@ -206,7 +205,6 @@ mod tests {
         assert_eq!(RIVE_VULKAN_INSTANCE_COMMANDS, [
             "GetDeviceProcAddr", "GetPhysicalDeviceFormatProperties",
             "GetPhysicalDeviceProperties", "GetPhysicalDeviceFeatures",
-            "SetDebugUtilsObjectNameEXT",
         ]);
         assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 60);
         assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.first(), Some(&"AllocateCommandBuffers"));

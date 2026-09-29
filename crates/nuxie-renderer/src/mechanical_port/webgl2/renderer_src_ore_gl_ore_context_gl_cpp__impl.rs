@@ -338,6 +338,29 @@ impl ScratchPassObjects {
     }
 }
 
+pub(crate) fn invalidateScratchFramebuffers(context: &mut ContextGL) {
+    withCurrentContext(context, |context| {
+        let mut state = context.rust_scratch.as_ref().unwrap().state.borrow_mut();
+        debug_assert!(!state.m_scratchFBOLent);
+        debug_assert!(context
+            .base
+            .activeRenderPass()
+            .and_then(|pass| pass.upgrade())
+            .as_ref()
+            .is_none_or(|pass| pass.isFinished()));
+        if state.m_scratchFBO != 0 {
+            recordGLCommand(GLCommand::DeleteFramebuffer(state.m_scratchFBO));
+            state.m_scratchFBO = 0;
+        }
+        if state.m_scratchResolveFBO != 0 {
+            recordGLCommand(GLCommand::DeleteFramebuffer(state.m_scratchResolveFBO));
+            state.m_scratchResolveFBO = 0;
+        }
+        state.m_scratchFBOColorCount = 0;
+        state.m_scratchFBODepthAttachment = 0;
+    });
+}
+
 fn beginFrameCurrent(context: &mut ContextGL, _descriptor: &FrameDescriptor) {
     let program = context.executionDomain().getInteger(GL_CURRENT_PROGRAM);
     let arrayBuffer = context
@@ -1617,7 +1640,8 @@ fn beginRenderPassCurrent(
     if desc.colorCount > 0 {
         submit(context, GLCommand::DrawBuffers(drawBuffers));
     } else {
-        submit(context, GLCommand::DrawBuffers(vec![GL_COLOR_ATTACHMENT0]));
+        submit(context, GLCommand::DrawBuffers(vec![GL_NONE]));
+        submit(context, GLCommand::ReadBuffer(GL_NONE));
     }
 
     if let Some((view, texture)) = depth {
@@ -2158,9 +2182,9 @@ impl ContextApi for ContextGL {
 }
 
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
-pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 21;
+pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 51227] = [(); PINNED_SOURCE.len()];
+const _: [(); 51976] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2601,7 +2625,11 @@ mod tests {
                 self.factory.persistent_context().unwrap()
             }
             fn begin_screen_frame(&mut self, _: u64) -> Option<RendererOwner> {
-                None
+                // This test admits a screen to exercise successful ORE replay.
+                // Returning None now intentionally leaves those commands unconsumed.
+                Some(Rc::new(RefCell::new(Box::new(
+                    nuxie_render_api::NullRenderer::new(),
+                ))))
             }
         }
 
@@ -2643,9 +2671,9 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1414);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1438);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
-        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 21);
+        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 22);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
     }
 

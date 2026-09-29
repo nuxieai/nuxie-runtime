@@ -359,6 +359,7 @@ impl FakeContext {
                     vk::Device::from_raw(LIVE),
                     VulkanFeatures::default(),
                     instance_proc_addr,
+                    true,
                 )
             }
             .expect("stand-in driver must support the real VMA allocator"),

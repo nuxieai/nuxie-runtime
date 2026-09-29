@@ -33,6 +33,10 @@ public:
         // mode.
         bool disableClockwiseFixedFunctionMode = false;
 
+        /** Whether optional Vulkan debug names may be assigned to GPU objects.
+         */
+        bool enableDebugNames = true;
+
         ShaderCompilationMode shaderCompilationMode =
             ShaderCompilationMode::standard;
     };
@@ -476,6 +480,11 @@ private:
     rcp<DescriptorSetPoolPool> m_descriptorSetPoolPool;
 
     std::unique_ptr<PipelineManagerVulkan> m_pipelineManager;
+
+#ifdef WITH_RIVE_TOOLS
+    ShaderCompilationMode testingOnly_setShaderCompilationMode(
+        ShaderCompilationMode mode) override;
+#endif
 };
 } // namespace rive::gpu
 

@@ -37,6 +37,8 @@ use std::time::Instant;
 pub(crate) struct ContextOptions {
     pub(crate) forceAtomicMode: bool,
     pub(crate) disableClockwiseFixedFunctionMode: bool,
+    /// Whether optional Vulkan debug names may be assigned to GPU objects.
+    pub(crate) enableDebugNames: bool,
     pub(crate) shaderCompilationMode: ShaderCompilationMode,
 }
 
@@ -45,6 +47,7 @@ impl Default for ContextOptions {
         Self {
             forceAtomicMode: false,
             disableClockwiseFixedFunctionMode: false,
+            enableDebugNames: true,
             shaderCompilationMode: ShaderCompilationMode::standard,
         }
     }

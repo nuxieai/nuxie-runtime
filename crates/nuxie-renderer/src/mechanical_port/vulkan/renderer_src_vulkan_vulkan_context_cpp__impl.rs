@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/vulkan_context.cpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `39afeca44449b12d41c91aaf78f1ed96913ed69a`.
 
 #![allow(non_snake_case)]
 
@@ -46,9 +46,10 @@ impl VulkanContext {
     /// Handles and loader must remain valid for the returned context's lifetime.
     pub(crate) unsafe fn make(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
         device: vk::Device, features: VulkanFeatures,
-        get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr) -> Option<Arc<Self>> {
+        get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+        enableDebugNames: bool) -> Option<Arc<Self>> {
         let allocator = unsafe { make_vma_allocator(instance, physicalDevice, device, features, get_instance_proc_addr) }?;
-        Some(unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, Some(allocator)) })
+        Some(unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, Some(allocator), enableDebugNames) })
     }
     /// # Safety
     /// The raw handles and loader must be a compatible live Vulkan tuple and
@@ -59,14 +60,16 @@ impl VulkanContext {
         device: vk::Device,
         features: VulkanFeatures,
         get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+        enableDebugNames: bool,
     ) -> Arc<Self> {
-        unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, None) }
+        unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, None, enableDebugNames) }
     }
 
     pub(crate) unsafe fn new_with_allocator(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
         device: vk::Device, features: VulkanFeatures,
         get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
-        allocator: Option<vk_mem::Allocator>) -> Arc<Self> {
+        allocator: Option<vk_mem::Allocator>,
+        enableDebugNames: bool) -> Arc<Self> {
         // The source GPUResourceManager base is constructed before every
         // Vulkan member and allocator initializer.
         let manager_owner = nuxie_ore_metal::gpu_resource::GPUResourceManagerOwner::new();
@@ -98,12 +101,16 @@ impl VulkanContext {
                 c"vkGetPhysicalDeviceFeatures",
             )
         };
-        let SetDebugUtilsObjectNameEXT = unsafe {
-            loadInstanceCommand(
-                get_instance_proc_addr,
-                instance,
-                c"vkSetDebugUtilsObjectNameEXT",
-            )
+        let SetDebugUtilsObjectNameEXT = if enableDebugNames {
+            unsafe {
+                loadInstanceCommand(
+                    get_instance_proc_addr,
+                    instance,
+                    c"vkSetDebugUtilsObjectNameEXT",
+                )
+            }
+        } else {
+            None
         };
         let properties = unsafe { ash_instance.get_physical_device_properties(physicalDevice) };
         let mut features = features;

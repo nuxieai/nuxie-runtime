@@ -1611,9 +1611,7 @@ impl CommandServer {
                     lock.unlock();
                     if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
                         if let Some(context) = wrapper.lock().data_context() {
-                            context.with_context_mut(|context| {
-                                context.set_main_view_model_instance(None)
-                            });
+                            context.set_main_view_model_instance(None);
                         }
                     } else {
                         self.error(

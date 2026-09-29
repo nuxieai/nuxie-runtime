@@ -6,11 +6,14 @@ use std::{
 use crate::mechanical_port::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
     core::CoreHandle,
+    data_bind::data_bind::{DataBind, SOURCE_TO_TARGET_FIRST},
+    data_bind::data_bind_container::DataBindContainerOwner,
     generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase,
     importers::{
         artboard_importer::ArtboardImporter, backboard_importer::BackboardImporter,
         import_stack::ImportStack,
     },
+    lazy_vector::LazyVector,
     status_code::StatusCode,
 };
 
@@ -23,6 +26,23 @@ pub enum DataBindContainerDependent {
 }
 
 impl DataBindContainerDependent {
+    pub(crate) fn main_view_model_instance_changed(&self) {
+        match self {
+            Self::Authored(owner) => {
+                DataBindContainerOwner::Authored(owner.clone()).main_view_model_instance_changed()
+            }
+            Self::StateMachine(owner) => DataBindContainerOwner::StateMachine(owner.clone())
+                .main_view_model_instance_changed(),
+        }
+    }
+    pub(crate) fn drop_instance_value_binds_targeting(&self, target: &CoreHandle) {
+        match self {
+            Self::Authored(owner) => DataBindContainerOwner::Authored(owner.clone())
+                .drop_instance_value_binds_targeting(target),
+            Self::StateMachine(owner) => DataBindContainerOwner::StateMachine(owner.clone())
+                .drop_instance_value_binds_targeting(target),
+        }
+    }
     pub(crate) fn same_identity(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Authored(left), Self::Authored(right)) => left == right,
@@ -57,6 +77,7 @@ impl DataBindContainerDependent {
 pub struct ViewModelInstance {
     pub base: ViewModelInstanceBase,
     property_values: Vec<CoreHandle>,
+    value_data_binds: LazyVector<CoreHandle>,
     parents: Vec<CoreHandle>,
     dependents: Vec<DataBindContainerDependent>,
     property_symbols: HashMap<SymbolType, CoreHandle>,
@@ -131,6 +152,21 @@ impl ViewModelInstance {
             return false;
         };
         let value = self.property_values[index].clone();
+        for bind in self.value_data_binds.view().to_vec() {
+            if bind
+                .with(|bind| bind.as_data_bind().and_then(DataBind::target))
+                .flatten()
+                .as_ref()
+                == Some(&value)
+            {
+                self.value_data_binds.erase_all(&bind);
+                DataBind::unbind_handle(&bind);
+                bind.remove_occurrence();
+            }
+        }
+        for dependent in self.dependents.clone() {
+            dependent.drop_instance_value_binds_targeting(&value);
+        }
         if let Some(referenced) = value
             .with(|value| {
                 value
@@ -426,12 +462,13 @@ impl ViewModelInstance {
     }
 
     pub fn complete_clone(source: &CoreHandle, cloned: &CoreHandle) -> bool {
-        let Some((copy_values, properties, view_model)) =
+        let Some((copy_values, properties, view_model, binds)) =
             source.with_downcast::<Self, _>(|source| {
                 (
                     source.base.base.base.base.artboard_handle().is_none(),
                     source.property_values.clone(),
                     source.view_model.clone(),
+                    source.value_data_binds.view().to_vec(),
                 )
             })
         else {
@@ -439,7 +476,7 @@ impl ViewModelInstance {
         };
         // Artboard-owned values are cloned by the artboard's object traversal.
         if copy_values {
-            for property in properties {
+            for property in &properties {
                 let Some(property) = property.clone_occurrence() else {
                     return false;
                 };
@@ -448,6 +485,26 @@ impl ViewModelInstance {
                     .is_none()
                 {
                     return false;
+                }
+            }
+            let cloned_properties = cloned
+                .with_downcast::<Self, _>(|cloned| cloned.property_values.clone())
+                .unwrap();
+            for bind in binds {
+                let target = bind
+                    .with(|bind| bind.as_data_bind().and_then(DataBind::target))
+                    .flatten();
+                if let Some(index) = properties
+                    .iter()
+                    .position(|property| Some(property) == target.as_ref())
+                {
+                    let Some(bind) = DataBind::clone_with_target_handle(
+                        &bind,
+                        Some(cloned_properties[index].clone()),
+                    ) else {
+                        return false;
+                    };
+                    cloned.with_downcast_mut::<Self, _>(|cloned| cloned.add_value_data_bind(bind));
                 }
             }
         }
@@ -463,6 +520,27 @@ impl ViewModelInstance {
     pub fn clone_instance(source: &CoreHandle) -> Option<CoreHandle> {
         source.with_downcast::<Self, _>(|_| ())?;
         source.clone_occurrence()
+    }
+
+    pub fn value_data_binds(&self) -> &[CoreHandle] {
+        self.value_data_binds.view()
+    }
+
+    pub fn add_value_data_bind(&mut self, bind: CoreHandle) {
+        bind.with_mut(|bind| {
+            let bind = bind.as_data_bind_mut().unwrap();
+            if bind.to_source() && bind.to_target() {
+                let flags = bind.base.flags() | SOURCE_TO_TARGET_FIRST;
+                if bind.base.set_flags_value(flags) {
+                    use crate::mechanical_port::source::generated::data_bind::data_bind_base::{
+                        DataBindBase, DataBindBaseCallbacks,
+                    };
+                    bind.flags_changed();
+                    bind.notify_property_changed(DataBindBase::FLAGS_PROPERTY_KEY);
+                }
+            }
+        });
+        self.value_data_binds.push_back(bind);
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
@@ -611,6 +689,10 @@ impl ViewModelInstance {
 
 impl Drop for ViewModelInstance {
     fn drop(&mut self) {
+        for bind in self.value_data_binds.view().to_vec() {
+            DataBind::unbind_handle(&bind);
+            bind.remove_occurrence();
+        }
         let this = self.handle();
         for value in &self.property_values {
             let nested = value

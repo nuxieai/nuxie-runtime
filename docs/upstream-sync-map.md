@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `25a2dc10786955df879ebc295e7c67923b8bde90`
+- LAST_SYNCED_SHA: `85d7f952b9266e3dc184effc5974d40437ef3fe6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 103 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 103 require a Rust translation.
+  There are 102 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 102 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `85d7f952b9266e3dc184effc5974d40437ef3fe6` | Import and clone bindings authored on file-level view-model instance values, reconcile two-way defaults source-first, and install per-artboard clones when binding list instances. Preserve context-change notifications, target removal and deferred binding deletion/resynchronization; translate all six authored instance-value-binding regressions. | — |
 | `25a2dc10786955df879ebc295e7c67923b8bde90` | **DEFERRED:** Wasm/AssemblyScript 2D canvas ABI, native/web guest bindings, canvas/image handle ownership and resize behavior, and nested call-scope cleanup of guest render passes and canvas frames. The complete executable delta is in the parked Wasm script VM/binding lane; native Luau, shared runtime/renderer owners and admitted browser renderer compilation are unchanged. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `edddc609a6595b3a4bc9df637d47b4ae127a2a40` | Skip registry-typed bool properties rejected by an object without desynchronizing the stream; propagate untyped-property failure as malformed through import and asset stripping while preserving unknown-object forward compatibility. Translate all four hand-assembled import regressions and clarify typed semantic-listener matching. CLI authoring, editor and generator changes described by the commit message are absent from the public delta and are not claimed imported. | — |
 | `65638e57ff92bbdd658fa571b1ddbb1ad5c6a71c` | Record nested script render passes and settle each inner pass ahead of its enclosing pass while retaining resource lifecycle command order. Track open passes by registration token, finish nested passes innermost-first, detach on context destruction, and close passes before frame reset. Translate native Luau cleanup/wrapper changes, supported backend changes, renderer/scripting regressions and all three nested-pass GM modes. **DEFERRED:** the Wasm scripting VM/guest GPU wrapper slice remains parked with script execution; unsupported D3D backends are not introduced. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

@@ -23,6 +23,38 @@ pub enum DataBindContainerOwner {
 }
 
 impl DataBindContainerOwner {
+    pub fn main_view_model_instance_changed(&self) {
+        match self {
+            Self::Authored(owner) => {
+                if owner.artboard_dirty_handle().is_some() {
+                    crate::mechanical_port::source::artboard::Artboard::main_view_model_instance_changed_handle(owner);
+                }
+            }
+            Self::StateMachine(owner) => owner.main_view_model_instance_changed(),
+        }
+    }
+
+    pub fn drop_instance_value_binds_targeting(&self, target: &CoreHandle) {
+        match self {
+            Self::Authored(_) => {
+                if let Some(container) = self.container() {
+                    container.drop_instance_value_binds_targeting(target);
+                }
+            }
+            Self::StateMachine(owner) => owner.drop_instance_value_binds_targeting(target),
+        }
+    }
+
+    pub fn data_binds_processed(&self) {
+        if let Self::Authored(owner) = self {
+            if owner.artboard_dirty_handle().is_some() {
+                crate::mechanical_port::source::artboard::Artboard::data_binds_processed_handle(
+                    owner,
+                );
+            }
+        }
+    }
+
     fn container(&self) -> Option<DataBindContainer> {
         match self {
             Self::Authored(owner) => owner.data_bind_container(),
@@ -176,9 +208,43 @@ struct DataBindQueues {
     pending_dirty: Vec<CoreHandle>,
     pending_additions: Vec<CoreHandle>,
     pending_removals: Vec<CoreHandle>,
+    pending_deletes: Vec<CoreHandle>,
 }
 
 impl DataBindContainer {
+    pub fn is_processing_data_binds(&self) -> bool {
+        self.0.borrow().is_processing
+    }
+
+    pub fn remove_and_delete_data_bind(&self, bind: &CoreHandle) {
+        self.remove_data_bind(bind.clone());
+        {
+            let mut state = self.0.borrow_mut();
+            if state.is_processing {
+                let deletes = &mut state.queues.ensure_allocated().pending_deletes;
+                if !deletes.contains(bind) {
+                    deletes.push(bind.clone());
+                }
+                return;
+            }
+        }
+        DataBind::unbind_handle(bind);
+        bind.remove_occurrence();
+    }
+
+    pub fn drop_instance_value_binds_targeting(&self, target: &CoreHandle) {
+        let binds = self.data_binds().to_vec();
+        for bind in binds {
+            if bind.with(|object| {
+                let bind = object.as_data_bind().unwrap();
+                bind.is_instance_value_bind() && bind.target().as_ref() == Some(target)
+            }) == Some(true)
+            {
+                self.remove_and_delete_data_bind(&bind);
+            }
+        }
+    }
+
     pub fn flush_data_bind(&self, bind: &CoreHandle) {
         DataBind::update_data_bind_handle(bind, false);
     }
@@ -415,6 +481,21 @@ impl DataBindContainer {
             .unwrap_or_default();
         for bind in removals {
             self.remove_data_bind(bind);
+        }
+        let deletes = self
+            .0
+            .borrow_mut()
+            .queues
+            .get_mut()
+            .map(|queues| std::mem::take(&mut queues.pending_deletes))
+            .unwrap_or_default();
+        for bind in deletes {
+            DataBind::unbind_handle(&bind);
+            bind.remove_occurrence();
+        }
+        let owner = self.0.borrow().owner.clone();
+        if let Some(owner) = owner {
+            owner.data_binds_processed();
         }
     }
 

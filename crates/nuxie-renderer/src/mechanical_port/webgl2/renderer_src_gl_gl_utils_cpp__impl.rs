@@ -530,7 +530,7 @@ mod tests {
             289
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 501);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10401);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10413);
     }
 
     #[test]

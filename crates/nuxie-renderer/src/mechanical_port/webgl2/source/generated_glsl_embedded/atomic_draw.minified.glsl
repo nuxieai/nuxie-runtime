@@ -1,4 +1,4 @@
-#ifdef KD
+#ifdef LD
 #ifdef DB
 g1(e0)L(0,g,VB);L(1,g,WB);h1
 #endif
@@ -10,7 +10,7 @@ H0 X(0,E,O);
 #endif
 Q2 X(1,N,B0);g2
 #ifdef DB
-y1(HC,e0,F,B,v){M(B,F,VB,g);M(B,F,WB,g);
+z1(HC,e0,F,B,v){M(B,F,VB,g);M(B,F,WB,g);
 #ifdef HB
 V(O,g);
 #else
@@ -22,7 +22,7 @@ O=P;
 #else
 O.xy=R7(P.xy);
 #endif
-B0=X1(l0);W=M3(m0);}else{W=g(m.R2,m.R2,m.R2,m.R2);}c0(O);c0(B0);z1(W);}
+B0=X1(l0);W=M3(m0);}else{W=g(m.R2,m.R2,m.R2,m.R2);}c0(O);c0(B0);A1(W);}
 #endif
 #endif
 #if defined(EB)||defined(FB)
@@ -37,7 +37,7 @@ NB X(0,c,i1);
 #endif
 Q2 X(1,N,B0);g2
 #ifdef DB
-y1(HC,e0,F,B,v){M(B,F,LB,R);
+z1(HC,e0,F,B,v){M(B,F,LB,R);
 #ifdef FB
 V(D2,d);
 #else
@@ -55,12 +55,12 @@ c0(D2);
 #else
 c0(i1);
 #endif
-c0(B0);z1(W);}
+c0(B0);A1(W);}
 #endif
 #endif
-#ifdef LD
+#ifdef MD
 #ifdef DB
-g1(e0)L(0,g,IC);h1 g1(n1)L(r9,g,XB);L(v9,g,SB);L(w9,g,OB);
+g1(e0)L(0,g,IC);h1 g1(n1)L(r9,g,XB);L(v9,g,TB);L(w9,g,OB);
 #ifdef O3
 L(x9,uint,YB);L(y9,uint,ZB);L(z9,uint,AC);L(A9,uint,BC);
 #else
@@ -72,16 +72,16 @@ m2 H0 X(0,d,Y1);H0 X(1,c,V4);
 #ifdef BB
 H0 X(2,g,M0);
 #endif
-NB X(3,c,H1);
+NB X(3,c,I1);
 #ifdef I
 Q2 X(4,N,x3);
 #endif
 #ifdef AB
-Q2 X(5,N,A1);
+Q2 X(5,N,B1);
 #endif
 g2
 #ifdef DB
-S7(HC,e0,F,n1,g0,B,v){M(B,F,IC,g);M(v,g0,XB,g);M(v,g0,SB,g);M(v,g0,OB,g);
+S7(HC,e0,F,n1,g0,B,v){M(B,F,IC,g);M(v,g0,XB,g);M(v,g0,TB,g);M(v,g0,OB,g);
 #ifdef O3
 M(v,g0,YB,uint);M(v,g0,ZB,uint);M(v,g0,AC,uint);M(v,g0,BC,uint);G IB=G(YB,ZB,AC,BC);
 #else
@@ -91,40 +91,40 @@ V(Y1,d);V(V4,c);
 #ifdef BB
 V(M0,g);
 #endif
-V(H1,c);
+V(I1,c);
 #ifdef I
 V(x3,N);
 #endif
 #ifdef AB
-V(A1,N);
+V(B1,N);
 #endif
 bool C9=IC.z==.0||IC.w==.0;V4=C9?.0:1.;d m0=IC.xy;f0 U0=h2(XB);f0 I6=transpose(inverse(U0));if(!C9){float D9=q4*E9(I6[1])/dot(U0[1],I6[1]);if(D9>=.5){m0.x=.5;V4*=W4(.5/D9);}else{m0.x+=D9*IC.z;}float F9=q4*E9(I6[0])/dot(U0[0],I6[0]);if(F9>=.5){m0.y=.5;V4*=W4(.5/F9);}else{m0.y+=F9*IC.w;}}Y1=m0;m0=R0(U0,m0)+OB.xy;if(C9){d P3=R0(I6,IC.zw);P3*=E9(P3)/dot(P3,P3);m0+=q4*P3;}
 #ifdef BB
-if(BB){M0=T7(h2(SB),OB.zw,m0);}
+if(BB){M0=T7(h2(TB),OB.zw,m0);}
 #endif
-H1=uintBitsToFloat(IB.x);
+I1=uintBitsToFloat(IB.x);
 #ifdef I
 x3=X1(IB.y);
 #endif
 #ifdef AB
-A1=X1(IB.z);
+B1=X1(IB.z);
 #endif
 g W=M3(m0);c0(Y1);c0(V4);
 #ifdef BB
 c0(M0);
 #endif
-c0(H1);
+c0(I1);
 #ifdef I
 c0(x3);
 #endif
 #ifdef AB
-c0(A1);
+c0(B1);
 #endif
-z1(W);}
+A1(W);}
 #endif
 #elif defined(PB)
 #ifdef DB
-g1(i3)L(0,d,PC);h1 g1(y3)L(1,d,QC);h1 g1(n1)L(r9,g,XB);L(v9,g,SB);L(w9,g,OB);
+g1(i3)L(0,d,PC);h1 g1(y3)L(1,d,QC);h1 g1(n1)L(r9,g,XB);L(v9,g,TB);L(w9,g,OB);
 #ifdef O3
 L(x9,uint,YB);L(y9,uint,ZB);L(z9,uint,AC);L(A9,uint,BC);
 #else
@@ -136,16 +136,16 @@ m2 H0 X(0,d,Y1);
 #ifdef BB
 H0 X(1,g,M0);
 #endif
-NB X(3,c,H1);
+NB X(3,c,I1);
 #ifdef I
 Q2 X(4,N,x3);
 #endif
 #ifdef AB
-Q2 X(5,N,A1);
+Q2 X(5,N,B1);
 #endif
 g2
 #ifdef DB
-J6(HC,i3,j3,y3,z3,n1,g0,B){M(B,j3,PC,d);M(B,z3,QC,d);M(v,g0,XB,g);M(v,g0,SB,g);M(v,g0,OB,g);
+J6(HC,i3,j3,y3,z3,n1,g0,B){M(B,j3,PC,d);M(B,z3,QC,d);M(v,g0,XB,g);M(v,g0,TB,g);M(v,g0,OB,g);
 #ifdef O3
 M(v,g0,YB,uint);M(v,g0,ZB,uint);M(v,g0,AC,uint);M(v,g0,BC,uint);G IB=G(YB,ZB,AC,BC);
 #else
@@ -155,36 +155,36 @@ V(Y1,d);
 #ifdef BB
 V(M0,g);
 #endif
-V(H1,c);
+V(I1,c);
 #ifdef I
 V(x3,N);
 #endif
 #ifdef AB
-V(A1,N);
+V(B1,N);
 #endif
 f0 U0=h2(XB);d m0=R0(U0,PC)+OB.xy;Y1=QC;
 #ifdef BB
-if(BB){M0=T7(h2(SB),OB.zw,m0);}
+if(BB){M0=T7(h2(TB),OB.zw,m0);}
 #endif
-H1=uintBitsToFloat(IB.x);
+I1=uintBitsToFloat(IB.x);
 #ifdef I
 x3=X1(IB.y);
 #endif
 #ifdef AB
-A1=X1(IB.z);
+B1=X1(IB.z);
 #endif
 g W=M3(m0);c0(Y1);
 #ifdef BB
 c0(M0);
 #endif
-c0(H1);
+c0(I1);
 #ifdef I
 c0(x3);
 #endif
 #ifdef AB
-c0(A1);
+c0(B1);
 #endif
-z1(W);}
+A1(W);}
 #endif
 #endif
 #ifdef DF
@@ -193,7 +193,7 @@ g1(e0)h1
 #endif
 m2 g2
 #ifdef DB
-y1(HC,e0,F,B,v){Y n2;n2.x=(B&1)==0?m.U7.x:m.U7.z;n2.y=(B&2)==0?m.U7.y:m.U7.w;g W=M3(d(n2));z1(W);}
+z1(HC,e0,F,B,v){Y n2;n2.x=(B&1)==0?m.U7.x:m.U7.z;n2.y=(B&2)==0?m.U7.y:m.U7.w;g W=M3(d(n2));A1(W);}
 #endif
 #endif
 #ifdef KE
@@ -201,7 +201,7 @@ y1(HC,e0,F,B,v){Y n2;n2.x=(B&1)==0?m.U7.x:m.U7.z;n2.y=(B&2)==0?m.U7.y:m.U7.w;g W
 #if defined(LE)&&!defined(Q)
 #endif
 #ifdef GB
-I1
+J1
 #ifndef Q
 #ifdef ME
 #define G9 ME
@@ -235,7 +235,7 @@ r4(T2,h0);
 j1(T2,h0);
 #endif
 #endif
-E2(K6,w4);J1 Q3 O5(Kb,Re,BD);P5(Lb,Se,RB);R3 e uint Te(float x){return uint(round(x*I9+J9));}e c W7(uint x){return W4(float(x)*Mb+(-J9*Mb));}N X7(N l0){
+E2(K6,w4);K1 Q3 O5(Kb,Re,BD);P5(Lb,Se,RB);R3 e uint Te(float x){return uint(round(x*I9+J9));}e c W7(uint x){return W4(float(x)*Mb+(-J9*Mb));}N X7(N l0){
 #ifdef EF
 l0=min(l0,m.Ue);
 #endif
@@ -276,9 +276,9 @@ o1=p1.y|packHalf2x16(B2(n,.0));
 #endif
 S=C0(.0);}
 #endif
-}else{f0 U0=h2(J0(RB,l0*A3));g k3=J0(RB,l0*A3+1u);d y4=R0(U0,a0)+k3.xy;float t=l3==M9?y4.x:length(y4);t=clamp(t,.0,1.);float x=t*k3.z+k3.w;float y=uintBitsToFloat(p1.y);S=o2(MD,Qb,d(x,y),.0);}S.w*=n;
+}else{f0 U0=h2(J0(RB,l0*A3));g k3=J0(RB,l0*A3+1u);d y4=R0(U0,a0)+k3.xy;float t=l3==M9?y4.x:length(y4);t=clamp(t,.0,1.);float x=t*k3.z+k3.w;float y=uintBitsToFloat(p1.y);S=o2(ND,Qb,d(x,y),.0);}S.w*=n;
 #if!defined(Q)&&defined(AB)
-N T3;if(AB&&S.w!=.0&&(T3=X1((p1.x>>4)&0xfu))!=R5){i K1=I0(j0);S.xyz=U4(S.xyz,K1,T3);}
+N T3;if(AB&&S.w!=.0&&(T3=X1((p1.x>>4)&0xfu))!=R5){i L1=I0(j0);S.xyz=U4(S.xyz,L1,T3);}
 #endif
 #if defined(CC)&&(defined(Q)||defined(RC))
 S=m3(S);
@@ -304,10 +304,10 @@ if(o1!=0u)c1(h0,o1);
 #define S5 p2
 #define T5 n3
 #else
-#define S5 L1
+#define S5 M1
 #define T5 Z1
 #endif
-#ifdef KD
+#ifdef LD
 S5(JB){
 #ifdef HB
 r(O,g);
@@ -322,18 +322,18 @@ if(HB&&Rb(O)){c8=z4(O d1);}else if(HB&&Sb(O)){c8=d8(O d1);}else
 #ifdef I
 v4 o1=V7;
 #endif
-uint e8=Te(c8);uint Tb=(Ub(B0)<<U5)|e8;uint q2=Z4(w4,Tb);N B1=X1(q2>>U5);B1=X7(B1);if(B1==B0){if(!V5(O)){e8+=q2-max(Tb,q2);e8-=O9;a5(w4,e8);}}else{c p0=W7(q2&f8);Y7(B1,p0,S
+uint e8=Te(c8);uint Tb=(Ub(B0)<<U5)|e8;uint q2=Z4(w4,Tb);N C1=X1(q2>>U5);C1=X7(C1);if(C1==B0){if(!V5(O)){e8+=q2-max(Tb,q2);e8-=O9;a5(w4,e8);}}else{c p0=W7(q2&f8);Y7(C1,p0,S
 #ifdef I
 ,o1
 #endif
-U2 M1);}S.xyz=F2(S.xyz,S.w,a0.xy,m.B3,m.C3);
+U2 N1);}S.xyz=F2(S.xyz,S.w,a0.xy,m.B3,m.C3);
 #ifdef Q
-C1=S;
+D1=S;
 #else
-a8(S M1);
+a8(S N1);
 #endif
 #ifdef I
-N9(o1 M1);
+N9(o1 N1);
 #endif
 T5}
 #endif
@@ -344,9 +344,9 @@ r(D2,d);
 #else
 r(i1,c);
 #endif
-r(B0,N);uint q2=V2(w4);N B1=X1(q2>>U5);B1=X7(B1);uint P9;
+r(B0,N);uint q2=V2(w4);N C1=X1(q2>>U5);C1=X7(C1);uint P9;
 #ifndef FB
-if(B1==B0){P9=q2;}else
+if(C1==B0){P9=q2;}else
 #endif
 {P9=(Ub(B0)<<U5)+O9;}c n;
 #ifdef FB
@@ -359,83 +359,83 @@ int Ye=int(round(n*I9));W2(w4,P9+uint(Ye));i S=C0(.0);
 v4 o1=V7;
 #endif
 #ifndef FB
-if(B1!=B0)
+if(C1!=B0)
 #endif
-{c R9=W7(q2&f8);Y7(B1,R9,S
+{c R9=W7(q2&f8);Y7(C1,R9,S
 #ifdef I
 ,o1
 #endif
-U2 M1);}S.xyz=F2(S.xyz,S.w,a0.xy,m.B3,m.C3);
+U2 N1);}S.xyz=F2(S.xyz,S.w,a0.xy,m.B3,m.C3);
 #ifdef Q
-C1=S;
+D1=S;
 #else
-a8(S M1);
+a8(S N1);
 #endif
 #ifdef I
-N9(o1 M1);
+N9(o1 N1);
 #endif
 T5}
 #endif
 #ifdef KE
 S5(JB){r(Y1,d);
-#ifdef LD
+#ifdef MD
 r(V4,c);
 #endif
 #ifdef BB
 r(M0,g);
 #endif
-r(H1,c);
+r(I1,c);
 #ifdef I
 r(x3,N);
 #endif
 #ifdef AB
-r(A1,N);
+r(B1,N);
 #endif
 i G2=g8(JC,W5,Y1);c X5=1.;
-#ifdef LD
+#ifdef MD
 X5=min(V4,X5);
 #endif
 #ifdef BB
 if(BB){c Y4=h3(c5(M0));X5=clamp(Y4,G0(.0),X5);}
 #endif
-uint q2=V2(w4);N B1=X1(q2>>U5);B1=X7(B1);c R9=W7(q2&f8);i S;
+uint q2=V2(w4);N C1=X1(q2>>U5);C1=X7(C1);c R9=W7(q2&f8);i S;
 #ifdef I
 v4 o1=V7;
 #endif
-Y7(B1,R9,S
+Y7(C1,R9,S
 #ifdef I
 ,o1
 #endif
-U2 M1);
+U2 N1);
 #ifdef I
 if(I&&x3!=0u){v4 N0=Jb(o1)?o1:H9(h0);Nb(x3,N0,X5);}
 #endif
 #if!defined(Q)&&defined(AB)
-if(AB&&A1!=R5){i K1=I0(j0)*(1.-S.w)+S;G2.xyz=U4(G6(G2),K1,A1)*G2.w;}
+if(AB&&B1!=R5){i L1=I0(j0)*(1.-S.w)+S;G2.xyz=U4(G6(G2),L1,B1)*G2.w;}
 #endif
-G2*=X5*H1;
+G2*=X5*I1;
 #if defined(CC)
 G2=m3(G2);
 #endif
 S=S*(1.-G2.w)+G2;S.xyz=F2(S.xyz,S.w,a0.xy,m.B3,m.C3);
 #ifdef Q
-C1=S;
+D1=S;
 #else
-a8(S M1);
+a8(S N1);
 #endif
 #ifdef I
-N9(o1 M1);
+N9(o1 N1);
 #endif
 W2(w4,O9);T5}
 #endif
 #ifdef LE
 S5(JB){
 #ifndef Q
-#ifdef ND
-if(ND){y0(j0,unpackUnorm4x8(m.Ze));}
-#endif
 #ifdef OD
-if(OD){y0(j0,q1(JC,J));}
+if(OD){y0(j0,unpackUnorm4x8(m.Ze));}
+#endif
+#ifdef PD
+if(PD){y0(j0,q1(JC,J));}
 #endif
 #ifdef FF
 i j=I0(j0);y0(j0,j.zyxw);
@@ -456,15 +456,15 @@ p2(JB)
 #else
 S5(JB)
 #endif
-{uint q2=V2(w4);c p0=W7(q2&f8);N B1=X1(q2>>U5);B1=X7(B1);i S;Y7(B1,p0,S U2 M1);
+{uint q2=V2(w4);c p0=W7(q2&f8);N C1=X1(q2>>U5);C1=X7(C1);i S;Y7(C1,p0,S U2 N1);
 #ifdef AD
-float M6=1.-S.w;if(M6!=.0)S+=I0(j0)*M6;C1=S;n3
+float M6=1.-S.w;if(M6!=.0)S+=I0(j0)*M6;D1=S;n3
 #else
 S.xyz=F2(S.xyz,S.w,a0.xy,m.B3,m.C3);
 #ifdef Q
-C1=S;
+D1=S;
 #else
-a8(S M1);
+a8(S N1);
 #endif
 T5
 #endif

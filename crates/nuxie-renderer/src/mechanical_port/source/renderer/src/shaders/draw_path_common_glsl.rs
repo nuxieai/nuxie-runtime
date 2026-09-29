@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: 27a2876815e282c9f235def8b7c529c77d8bb105
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "27a2876815e282c9f235def8b7c529c77d8bb105";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d01a41c75ec416285d91c8f43f5aaed9572745318527bd4f5dd1f7abcada121a";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 914;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 39619;
+    "4504050f09455310243c6660f7e2e6585c8ef28afece8ecf6a8f2068af6f2be3";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 916;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 39767;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -882,6 +882,7 @@ INLINE half incremental_clockwise_coverage(half c0, half c1, half paintAlpha)
     return (c1 - c0) / max(1. - c0 * paintAlpha, EPSILON_FP16_NON_DENORM);
 }
 
+#if defined(@RENDER_MODE_CLOCKWISE_ATOMIC) || defined(@PLS_IMPL_STORAGE_BUFFER)
 // Converts an x,y image coordinate into a buffer index, swizzling into
 // BUFFER_IMAGE_TILE_SIZE x BUFFER_IMAGE_TILE_SIZE tiles for better cache
 // performance.
@@ -899,6 +900,7 @@ INLINE uint swizzle_image_buffer_idx(uint2 imageCoord, uint imageWidth)
     idx += ((imageCoord.y & 0x3u) << 2) + (imageCoord.x & 0x3u);
     return idx;
 }
+#endif // @RENDER_MODE_CLOCKWISE_ATOMIC || @PLS_IMPL_STORAGE_BUFFER
 
 #ifdef @RENDER_MODE_CLOCKWISE_ATOMIC
 

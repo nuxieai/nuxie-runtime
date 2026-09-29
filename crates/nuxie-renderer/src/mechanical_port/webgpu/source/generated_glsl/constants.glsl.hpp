@@ -69,7 +69,7 @@ const char constants[] = R"===(#define Ef float(2048)
 #define Pf 12
 #define g6 13
 #define Qf 13
-#define N1(f) (3+f)
+#define O1(f) (3+f)
 #define H3 2
 #define Rf 3
 #define S2 0

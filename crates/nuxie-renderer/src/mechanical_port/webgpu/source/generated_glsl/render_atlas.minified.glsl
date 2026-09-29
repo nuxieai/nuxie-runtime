@@ -3,11 +3,11 @@ g1(e0)L(0,g,VB);L(1,g,WB);h1
 #endif
 m2 H0 X(0,g,O);g2
 #ifdef VERTEX
-y1(UF,e0,F,B,v){M(B,F,VB,g);M(B,F,WB,g);V(O,g);g W;uint l0;d m0;if(q9(VB,WB,v,l0,m0,O w3)){G N4=J0(QB,l0*4u+2u);R w7=uintBitsToFloat(N4.yzw);m0=m0*w7.x+w7.yz;W=o8(m0,m.td.x,m.td.y);
+z1(UF,e0,F,B,v){M(B,F,VB,g);M(B,F,WB,g);V(O,g);g W;uint l0;d m0;if(q9(VB,WB,v,l0,m0,O w3)){G N4=J0(QB,l0*4u+2u);R w7=uintBitsToFloat(N4.yzw);m0=m0*w7.x+w7.yz;W=o8(m0,m.td.x,m.td.y);
 #ifdef POST_INVERT_Y
 W.y=-W.y;
 #endif
-}else{W=g(m.R2,m.R2,m.R2,m.R2);}c0(O);z1(W);}
+}else{W=g(m.R2,m.R2,m.R2,m.R2);}c0(O);A1(W);}
 #endif
 #ifdef FRAGMENT
 #ifdef ATLAS_FEATHERED_FILL
@@ -22,7 +22,7 @@ void main(){float n=uintBitsToFloat(p0.x);n+=A6(O,gl_FrontFacing d1);p0.x=floatB
 void main(){float n=uintBitsToFloat(p0.x);n=max(n,z4(O));p0.x=floatBitsToUint(n);}
 #endif
 #elif defined(ATLAS_RENDER_TARGET_R8_PLS_EXT)
-__pixel_localEXT R1{layout(r32f)float p0;};
+__pixel_localEXT S1{layout(r32f)float p0;};
 #ifdef ATLAS_FEATHERED_FILL
 void main(){p0+=A6(O,gl_FrontFacing d1);}
 #endif

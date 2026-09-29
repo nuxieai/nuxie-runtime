@@ -1,7 +1,7 @@
 #ifdef VERTEX
 g1(e0)
 #ifdef O3
-L(0,uint,QD);L(1,uint,RD);L(2,uint,SD);L(3,uint,TD);
+L(0,uint,RD);L(1,uint,SD);L(2,uint,TD);L(3,uint,UD);
 #else
 L(0,G,LC);
 #endif
@@ -9,9 +9,9 @@ h1
 #endif
 m2 H0 X(0,i,V6);g2
 #ifdef VERTEX
-U3 V3 C4 D4 i mf(uint j){return hc((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}y1(HF,e0,F,B,v){
+U3 V3 C4 D4 i mf(uint j){return hc((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}z1(HF,e0,F,B,v){
 #ifdef O3
-M(v,F,QD,uint);M(v,F,RD,uint);M(v,F,SD,uint);M(v,F,TD,uint);G LC=G(QD,RD,SD,TD);
+M(v,F,RD,uint);M(v,F,SD,uint);M(v,F,TD,uint);M(v,F,UD,uint);G LC=G(RD,SD,TD,UD);
 #else
 M(v,F,LC,G);
 #endif
@@ -19,7 +19,7 @@ V(V6,i);int n8=B>>1;float x=float(n8<=1?LC.x&0xffffu:LC.x>>16)/65536.;float W9=(
 #ifdef POST_INVERT_Y
 W.y=-W.y;
 #endif
-c0(V6);z1(W);}
+c0(V6);A1(W);}
 #endif
 #ifdef FRAGMENT
 E3 F3 a3(i,IF){r(V6,i);I2(V6);}

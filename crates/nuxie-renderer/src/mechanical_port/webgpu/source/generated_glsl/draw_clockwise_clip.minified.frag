@@ -1,5 +1,5 @@
 #ifdef FRAGMENT
-I1
+J1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 x0(S2,j0);
 #endif
@@ -7,7 +7,7 @@ j1(T2,h0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 Ta(h6,l4);
 #endif
-j1(K6,P0);J1 L1(JB){r(V1,E);c k1=-V1.x;
+j1(K6,P0);K1 M1(JB){r(V1,E);c k1=-V1.x;
 #ifdef DRAW_INTERIOR_TRIANGLES
 r(i1,c);c v0=i1;
 #else

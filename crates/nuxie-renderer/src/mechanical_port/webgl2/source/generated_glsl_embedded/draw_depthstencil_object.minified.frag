@@ -2,15 +2,15 @@
 #ifdef PB
 E3 Z2(d5,W3,JC);
 #ifdef AB
-k7(UD);
+k7(VD);
 #endif
 F3 e5 X3(W5)f5
 #endif
 a3(i,JB){
 #ifdef PB
-r(H5,d);r(H1,c);
+r(H5,d);r(I1,c);
 #ifdef AB
-r(A1,N);
+r(B1,N);
 #endif
 #else
 r(f1,g);
@@ -25,7 +25,7 @@ r(f2,c);
 #endif
 #endif
 #ifdef PB
-i j=B7(JC,W5,H5,m.ud)*H1;
+i j=B7(JC,W5,H5,m.ud)*I1;
 #else
 c n=
 #ifdef FB
@@ -41,11 +41,11 @@ n U2);
 #endif
 #if defined(AB)&&!defined(Q)
 #ifdef PB
-j.xyz=G6(j);N T3=A1;
+j.xyz=G6(j);N T3=B1;
 #else
 N T3=c6(f2);
 #endif
-i K1=T8(UD);j.xyz=U4(j.xyz,K1,T3);j.xyz*=j.w;
+i L1=T8(VD);j.xyz=U4(j.xyz,L1,T3);j.xyz*=j.w;
 #endif
 #ifdef CC
 if(CC){j=m3(j);}

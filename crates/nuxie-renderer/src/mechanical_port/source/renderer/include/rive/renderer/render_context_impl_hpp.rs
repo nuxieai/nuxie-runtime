@@ -339,6 +339,14 @@ impl RenderContextImpl {
 // order. Concrete backend owners implement the trait without changing the
 // source dispatch seam.
 pub trait RenderContextImplContract {
+    #[cfg(feature = "with-rive-tools")]
+    fn testingOnly_setShaderCompilationMode(
+        &mut self,
+        mode: super::render_context_hpp::ShaderCompilationMode,
+    ) -> super::render_context_hpp::ShaderCompilationMode {
+        mode
+    }
+
     fn renderContextImpl(&self) -> &RenderContextImpl;
     fn renderContextImplMut(&mut self) -> &mut RenderContextImpl;
 

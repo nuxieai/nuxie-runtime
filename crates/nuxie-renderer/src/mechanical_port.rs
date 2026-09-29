@@ -397,6 +397,7 @@ pub(crate) mod source {
                     pub(crate) mod render_canvas_hpp;
                     pub(crate) mod render_context_helper_impl_hpp;
                     pub(crate) mod render_context_hpp;
+                    pub(crate) mod shader_compilation_mode_hpp;
                     pub(crate) mod render_context_impl_hpp;
                     pub(crate) mod render_target_hpp;
                     pub(crate) mod rive_render_buffer_hpp;

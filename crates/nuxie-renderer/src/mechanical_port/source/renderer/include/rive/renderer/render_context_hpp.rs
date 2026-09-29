@@ -11,6 +11,8 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
+pub use super::shader_compilation_mode_hpp::ShaderCompilationMode;
+
 // The complete pinned source is retained below in declaration order. The
 // active Rust declarations after it preserve the source-shaped owner graph,
 // defaults, field order, configuration branches, and inline side effects.

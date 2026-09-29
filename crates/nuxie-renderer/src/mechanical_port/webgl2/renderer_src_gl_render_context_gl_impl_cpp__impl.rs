@@ -4246,6 +4246,14 @@ impl RenderContextHelperBufferFactoryContract for RenderContextGLImpl {
 }
 
 impl RenderContextHelperBackendContract for RenderContextGLImpl {
+    #[cfg(feature = "with-rive-tools")]
+    fn testingOnly_setShaderCompilationMode(
+        &mut self,
+        mode: ShaderCompilationMode,
+    ) -> ShaderCompilationMode {
+        self.m_pipelineManager.base.testingOnly_setShaderCompilationMode(mode)
+    }
+
     fn makeRenderBuffer(
         &mut self,
         ty: RenderBufferType,
@@ -4497,6 +4505,64 @@ impl Drop for RenderContextGLImpl {
 mod tests {
     include!("dynamic_msaa_flush_tests.rs");
     use super::*;
+
+    #[cfg(feature = "with-rive-tools")]
+    #[test]
+    fn shader_compilation_mode_dispatch_selects_existing_uber_then_restores_specialized() {
+        use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
+        let commands = Rc::new(RefCell::new(Vec::new()));
+        let domain = GLExecutionDomain::new(Box::new(CanvasTestProvider {
+            commands: commands.clone(),
+            lifecycleIngress: None,
+            finalReleaseIngress: Rc::new(RefCell::new(None)),
+            finalReleaseWake: std::sync::Arc::new(TestFinalReleaseWake::default()),
+        }));
+        let mut context = domain.withCurrent(|| {
+            newComponent097TestContextOwner(GLCapabilities::default(), domain.clone())
+        });
+        let props = StandardPipelineProps {
+            drawType: gpu::DrawType::midpointFanPatches,
+            shaderFeatures: gpu::ShaderFeatures::NONE,
+            interlockMode: gpu::InterlockMode::rasterOrdering,
+            shaderMiscFlags: gpu::ShaderMiscFlags::none,
+            synthesizedFailureType: gpu::SynthesizedFailureType::none,
+        };
+        let mut uber = props;
+        uber.shaderFeatures = gpu::UbershaderFeaturesMaskFor(
+            props.shaderFeatures, props.drawType, props.interlockMode,
+            props.shaderMiscFlags, context.platformFeatures(),
+        );
+        assert_ne!(props.createKey(context.platformFeatures()), uber.createKey(context.platformFeatures()));
+        // Ready cache entries exercise actual selection, not driver compilation.
+        for (properties, id) in [(props, 77), (uber, 78)] {
+            let key = properties.createKey(context.platformFeatures());
+            let program = Box::new(DrawProgram {
+                m_fragmentShader: std::ptr::null(),
+                m_vertexShader: std::ptr::null(),
+                m_pipelineStatus: PipelineStatus::ready,
+                m_id: id,
+                m_baseInstanceUniformLocation: 23,
+                m_state: ManuallyDrop::new((&*context.m_state).clone()),
+                m_synthesizedFailureType: gpu::SynthesizedFailureType::none,
+            });
+            context.m_pipelineManager.base.m_pipelines.insert(key, Some(program));
+        }
+        let specialized = tryGetPipeline(&mut context, &props).unwrap();
+        assert_eq!(unsafe { (*specialized).id() }, 77);
+        let old = RenderContextImplContract::testingOnly_setShaderCompilationMode(
+            &mut *context, ShaderCompilationMode::onlyUbershaders,
+        );
+        assert_eq!(old, ShaderCompilationMode::standard);
+        assert_eq!(unsafe { (*tryGetPipeline(&mut context, &props).unwrap()).id() }, 78);
+        assert_eq!(
+            RenderContextImplContract::testingOnly_setShaderCompilationMode(&mut *context, old),
+            ShaderCompilationMode::onlyUbershaders,
+        );
+        assert_eq!(tryGetPipeline(&mut context, &props), Some(specialized));
+        assert_eq!(context.m_pipelineManager.base.m_pipelines.len(), 2);
+        drop(context);
+        domain.shutdown();
+    }
 
     struct CanvasTestProvider {
         commands: Rc<RefCell<Vec<GLCommand>>>,

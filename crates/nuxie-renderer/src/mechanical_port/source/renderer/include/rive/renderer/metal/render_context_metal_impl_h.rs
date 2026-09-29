@@ -447,19 +447,7 @@ pub use crate::mechanical_port::source::renderer::src::metal::render_context_met
 
 // The transitive shader-compilation header supplies this enum in C++. It is
 // retained here because the pinned context option stores it by value.
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ShaderCompilationMode {
-    allowAsynchronous = 0,
-    alwaysSynchronous = 1,
-    onlyUbershaders = 2,
-}
-
-impl ShaderCompilationMode {
-    // The source `standard = allowAsynchronous` enum alias remains an
-    // associated value because Rust enum variants cannot share a discriminant.
-    pub const standard: Self = Self::allowAsynchronous;
-}
+pub use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode;
 
 #[cfg(feature = "with-rive-tools")]
 pub use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SynthesizedFailureType;

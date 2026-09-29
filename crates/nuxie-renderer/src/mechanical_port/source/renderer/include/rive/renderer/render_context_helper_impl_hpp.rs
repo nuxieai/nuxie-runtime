@@ -330,6 +330,14 @@ pub trait RenderContextHelperImplContract:
 pub trait RenderContextHelperBackendContract:
     RenderContextHelperImplAccess + RenderContextHelperBufferFactoryContract
 {
+    #[cfg(feature = "with-rive-tools")]
+    fn testingOnly_setShaderCompilationMode(
+        &mut self,
+        mode: super::render_context_hpp::ShaderCompilationMode,
+    ) -> super::render_context_hpp::ShaderCompilationMode {
+        mode
+    }
+
     fn makeRenderBuffer(
         &mut self,
         ty: RenderBufferType,
@@ -425,6 +433,14 @@ impl<T> RenderContextImplContract for T
 where
     T: RenderContextHelperBackendContract,
 {
+    #[cfg(feature = "with-rive-tools")]
+    fn testingOnly_setShaderCompilationMode(
+        &mut self,
+        mode: super::render_context_hpp::ShaderCompilationMode,
+    ) -> super::render_context_hpp::ShaderCompilationMode {
+        RenderContextHelperBackendContract::testingOnly_setShaderCompilationMode(self, mode)
+    }
+
     fn renderContextImpl(&self) -> &RenderContextImpl {
         &*self.renderContextHelperImpl().base
     }

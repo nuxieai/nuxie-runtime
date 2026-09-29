@@ -33,7 +33,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
     FlushDescriptor, StorageBufferStructure,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    FlushResources, FrameDescriptor, LoadAction, RenderContext,
+    DitherMode, FlushResources, FrameDescriptor, LoadAction, RenderContext,
 };
 #[cfg(feature = "rive-decoders")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
@@ -1266,6 +1266,24 @@ impl MechanicalRenderContext {
         clear_color: u32,
         load_action: LoadAction,
     ) -> Result<(), RendererError> {
+        self.begin_frame_with_dither(clear_color, load_action, DitherMode::interleavedGradientNoise)
+    }
+
+    #[cfg(all(test, feature = "with-rive-tools"))]
+    pub(super) fn testing_only_set_shader_compilation_mode(
+        &mut self,
+        mode: SourceContextShaderCompilationMode,
+    ) -> SourceContextShaderCompilationMode {
+        let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+        context.m_impl.contract_mut().testingOnly_setShaderCompilationMode(mode)
+    }
+
+    pub(super) fn begin_frame_with_dither(
+        &mut self,
+        clear_color: u32,
+        load_action: LoadAction,
+        dither_mode: DitherMode,
+    ) -> Result<(), RendererError> {
         if self.active_frame {
             return Err(RendererError::NativeMetal(
                 "mechanical RenderContext already has an active frame".into(),
@@ -1276,6 +1294,7 @@ impl MechanicalRenderContext {
             renderTargetHeight: self.height,
             clearColor: clear_color,
             loadAction: load_action,
+            ditherMode: dither_mode,
             ..FrameDescriptor::default()
         };
         #[cfg(test)]

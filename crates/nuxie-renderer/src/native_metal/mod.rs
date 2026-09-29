@@ -476,6 +476,25 @@ impl NativeMetalFactory {
         collect_work_metrics: bool,
         load_action: LoadAction,
     ) -> Result<NativeMetalFrame, RendererError> {
+        self.begin_frame_with_dither(clear_color, collect_work_metrics, load_action,
+            crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DitherMode::interleavedGradientNoise)
+    }
+
+    #[cfg(all(test, feature = "with-rive-tools"))]
+    pub(crate) fn testing_only_set_shader_compilation_mode(
+        &self,
+        mode: crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode,
+    ) -> crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode {
+        self.mechanical.borrow_mut().testing_only_set_shader_compilation_mode(mode)
+    }
+
+    fn begin_frame_with_dither(
+        &self,
+        clear_color: u32,
+        collect_work_metrics: bool,
+        load_action: LoadAction,
+        dither_mode: crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DitherMode,
+    ) -> Result<NativeMetalFrame, RendererError> {
         let mechanical = self.mechanical_context()?;
         let (renderer, frame_number, resource_domain) = {
             let mut mechanical_context = mechanical.borrow_mut();
@@ -491,7 +510,7 @@ impl NativeMetalFactory {
                     self.target_height,
                 )?;
             }
-            mechanical_context.begin_frame_with_load_action(clear_color, load_action)?;
+            mechanical_context.begin_frame_with_dither(clear_color, load_action, dither_mode)?;
             let context =
                 unsafe { Pin::get_unchecked_mut(mechanical_context.render_context_mut()) };
             (
@@ -1880,6 +1899,25 @@ impl NativeMetalFrame {
         self.mechanical
             .borrow_mut()
             .finish(self.frame_number, self.frame_number)?;
+        Ok(())
+    }
+
+    // TestingWindow::flushPLSContext/beginFrame keep the same Renderer and
+    // its save stack alive across the render-context frame boundary.
+    #[cfg(all(test, feature = "with-rive-tools"))]
+    pub(crate) fn flush_gm_frame(&mut self) -> Result<(), RendererError> {
+        self.mechanical.borrow_mut().finish(self.frame_number, self.frame_number)?;
+        Ok(())
+    }
+
+    #[cfg(all(test, feature = "with-rive-tools"))]
+    pub(crate) fn begin_gm_frame_preserving(
+        &mut self,
+        dither_mode: crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DitherMode,
+    ) -> Result<(), RendererError> {
+        let mut context = self.mechanical.borrow_mut();
+        context.begin_frame_with_dither(0, LoadAction::preserveRenderTarget, dither_mode)?;
+        self.frame_number = context.current_frame_number();
         Ok(())
     }
 

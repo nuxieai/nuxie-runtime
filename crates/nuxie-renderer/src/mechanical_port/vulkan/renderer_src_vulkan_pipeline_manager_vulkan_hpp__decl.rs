@@ -21,17 +21,7 @@ use std::thread::JoinHandle;
 
 pub(crate) const MAX_SAMPLER_PERMUTATIONS: usize = 18;
 
-#[repr(i32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ShaderCompilationMode {
-    allowAsynchronous = 0,
-    alwaysSynchronous = 1,
-    onlyUbershaders = 2,
-}
-
-impl ShaderCompilationMode {
-    pub(crate) const standard: Self = Self::allowAsynchronous;
-}
+pub(crate) use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PipelineCreateType {
@@ -96,7 +86,9 @@ impl Default for PipelineManagerState {
 pub(crate) struct PipelineManagerVulkan {
     // AsyncPipelineManager<DrawPipelineVulkan> fields.
     pub(super) m_state: Mutex<PipelineManagerState>,
-    pub(super) m_mode: ShaderCompilationMode,
+    // The worker retains a shared pointer to this pinned owner. Interior
+    // mutation avoids forming an exclusive reference while it is alive.
+    pub(super) m_mode: std::sync::atomic::AtomicI32,
     pub(super) m_jobThread: Mutex<Option<JoinHandle<()>>>,
     pub(super) m_newJobCV: Condvar,
     pub(super) m_jobCompleteCV: Condvar,
@@ -122,6 +114,25 @@ unsafe impl Send for PipelineManagerVulkan {}
 unsafe impl Sync for PipelineManagerVulkan {}
 
 impl PipelineManagerVulkan {
+    pub(crate) fn shaderCompilationMode(&self) -> ShaderCompilationMode {
+        match self.m_mode.load(std::sync::atomic::Ordering::Relaxed) {
+            0 => ShaderCompilationMode::allowAsynchronous,
+            1 => ShaderCompilationMode::alwaysSynchronous,
+            2 => ShaderCompilationMode::onlyUbershaders,
+            _ => unreachable!("only ShaderCompilationMode values are stored"),
+        }
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub(crate) fn testingOnly_setShaderCompilationMode(
+        &self,
+        mode: ShaderCompilationMode,
+    ) -> ShaderCompilationMode {
+        let old = self.shaderCompilationMode();
+        self.m_mode.store(mode as i32, std::sync::atomic::Ordering::Relaxed);
+        old
+    }
+
     pub(crate) fn vendorID(&self) -> u32 {
         self.m_vk.physicalDeviceProperties.vendor_id
     }

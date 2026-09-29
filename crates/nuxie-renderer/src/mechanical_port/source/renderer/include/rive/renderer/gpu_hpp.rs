@@ -15,6 +15,7 @@
 // #include "rive/renderer/trivial_block_allocator.hpp"
 // #include "rive/shapes/paint/image_sampler.hpp"
 //
+// #include <algorithm>
 // #include <functional>
 // #include <optional>
 //
@@ -126,7 +127,8 @@
 // struct PlatformFeatures
 // {
 //     // Supported InterlockModes.
-//     // FIXME: MSAA is implicit even though it isn't implemented on all backends.
+//     // FIXME: depthStencil is implicit even though it isn't implemented on all
+//     // backends.
 //     bool supportsRasterOrderingMode = false;
 //     bool supportsAtomicMode = false;
 //     bool supportsClockwiseMode = false;
@@ -134,10 +136,10 @@
 //     // (Only viable for frames that don't use advanced blend.)
 //     bool supportsClockwiseFixedFunctionMode = false;
 //     bool supportsClockwiseAtomicMode = false;
-//     // Use KHR_blend_equation_advanced in msaa mode?
+//     // Use KHR_blend_equation_advanced in depthStencil mode?
 //     bool supportsBlendAdvancedKHR = false;
 //     bool supportsBlendAdvancedCoherentKHR = false;
-//     // Required for @ENABLE_CLIP_RECT in msaa mode.
+//     // Required for @ENABLE_CLIP_RECT in depthStencil mode.
 //     bool supportsClipPlanes = false;
 //     // The backend supports dynamic state that allows Rive to collapse multiple
 //     // subpasses onto a single pipeline, namely:
@@ -670,11 +672,11 @@
 //     imageRect,
 //     imageMesh,
 //
-//     // MSAA strokes can't be merged with fills because they require their own
-//     // dedicated stencil settings.
+//     // Strokes that use the depth buffer to work out coverage and avoid double
+//     // hits.
 //     depthStrokes,
 //
-//     // MSAA "fast" path: (effectively) single pass rendering.
+//     // depthStencil "fast" path: (almost) single pass rendering.
 //     stencilMidpointFanBorrowedCoverage,
 //     stencilMidpointFans,
 //     stencilMidpointFanReset,
@@ -686,13 +688,28 @@
 //     // together, while collapsing three pipeline binds into one.
 //     stencilDynamicMidpointFans,
 //
-//     // MSAA "slow" path: stencil-then-cover.
+//     // Same as the midpoint-fan "fast" path, but submits outer-cubic patches
+//     // instead of midpoint-fan patches. These use the exact same depth/stencil
+//     // settings as their midpoint-fan counterparts; they just draw a different
+//     // patch of triangles. Used to fill paths via interior triangulation, whose
+//     // interior is smuggled via cubics (RETROFIT_TRI_STRIP_CONTOUR_FLAG).
+//     stencilOuterCubicBorrowedCoverage,
+//     stencilOuterCubics,
+//     stencilOuterCubicReset,
+//
+//     // The stencilDynamicMidpointFans equivalent for outer cubics: collapses
+//     // stencilOuterCubicBorrowedCoverage + stencilOuterCubics +
+//     // stencilOuterCubicReset onto a single pipeline, switching between them
+//     // with dynamic state. Same geometry as the outer-cubic passes above.
+//     stencilDynamicOuterCubics,
+//
+//     // depthStencil "slow" path: stencil-then-cover.
 //     stencilMidpointFanWinding,
 //     stencilMidpointFanCover,
 //
-//     // MSAA interior triangulation is not currently supported, but this one draw
-//     // type is included in order to support the "retrofitcubictristrips" GM.
-//     stencilOuterCubics,
+//     // Same as the midpoint-fan "slow" path, but submits outer-cubic patches.
+//     stencilOuterCubicWinding,
+//     stencilOuterCubicCover,
 //
 //     // Clear or intersect (based on DrawContents) the clip value.
 //     clipReset,
@@ -710,6 +727,41 @@
 //
 // };
 //
+// // True for drawTypes that switch dynamic state on a single pipeline and issue
+// // multiple draws, rather than baking multiple pipelines.
+// constexpr static bool drawTypeHasPipelineDynamicState(DrawType drawType)
+// {
+//     switch (drawType)
+//     {
+//         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
+//             return true;
+//         case DrawType::midpointFanPatches:
+//         case DrawType::midpointFanCenterAAPatches:
+//         case DrawType::outerCurvePatches:
+//         case DrawType::interiorTriangulation:
+//         case DrawType::featherAtlasBlit:
+//         case DrawType::imageRect:
+//         case DrawType::imageMesh:
+//         case DrawType::depthStrokes:
+//         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
+//         case DrawType::clipReset:
+//         case DrawType::renderPassInitialize:
+//         case DrawType::renderPassResolve:
+//             return false;
+//     }
+//     RIVE_UNREACHABLE();
+// }
+//
 // constexpr static bool DrawTypeIsImageDraw(DrawType drawType)
 // {
 //     switch (drawType)
@@ -725,11 +777,16 @@
 //         case DrawType::depthStrokes:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //         case DrawType::clipReset:
 //         case DrawType::renderPassInitialize:
 //         case DrawType::renderPassResolve:
@@ -761,7 +818,7 @@
 //     // (winding or even/odd) with a "clockwise" fill rule, where only regions
 //     // with a positive winding number get filled.
 //     clockwiseAtomic,
-//     msaa,
+//     depthStencil,
 // };
 // constexpr static size_t INTERLOCK_MODE_COUNT = 5;
 // // # of bits required to contain an InterlockMode.
@@ -946,11 +1003,16 @@
 //         case DrawType::depthStrokes:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             mask = kAllShaderFeatures;
 //             break;
 //         case DrawType::clipReset:
@@ -967,8 +1029,8 @@
 //             }
 //             else if (interlockMode == InterlockMode::depthStencil)
 //             {
-//                 // MSAA mode only needs to initialize color, and only when
-//                 // preserving the render target but using a transient MSAA
+//                 // depthStencil mode only needs to initialize color, and only
+//                 // when preserving the render target but using a transient MSAA
 //                 // attachment.
 //                 mask = ShaderFeatures::ENABLE_DITHER;
 //             }
@@ -1020,8 +1082,8 @@
 //     // Ensure that we haven't dropped features we care about somehow
 //     assert((requestedFeatures & outFeatures) == requestedFeatures);
 //
-//     // ENABLE_CLIP_RECT shouldn't be set if we're in MSAA mode without clip
-//     // plane support.
+//     // ENABLE_CLIP_RECT shouldn't be set if we're in depthStencil mode without
+//     // clip plane support.
 //     if (interlockMode == InterlockMode::depthStencil &&
 //         !platformFeatures.supportsClipPlanes)
 //     {
@@ -1063,8 +1125,8 @@
 //     const std::function<bool(DrawType, ShaderFeatures, ShaderMiscFlags)>&);
 //
 // // Flags indicating the contents of a draw. These don't affect shaders, but in
-// // msaa mode they are needed to break up batching. (msaa needs different
-// // stencil/blend state, depending on the DrawContents.)
+// // depthStencil mode they are needed to break up batching. (depthStencil needs
+// // different stencil/blend state, depending on the DrawContents.)
 // //
 // // These also affect the draw sort order, so we attempt associate more expensive
 // // shader branch misses with higher flags.
@@ -1088,7 +1150,7 @@
 // };
 //
 // // These are the only draw contents flags that apply to the pipeline state (and
-// // they only matter for MSAA)
+// // they only matter for depthStencil)
 // constexpr static DrawContents DrawContentsForDepthStencilPipelineState =
 //     DrawContents::activeClip | DrawContents::clipUpdate |
 //     DrawContents::clockwiseFill | DrawContents::evenOddFill |
@@ -1265,7 +1327,7 @@
 //     RenderTarget* renderTarget = nullptr;
 //     ShaderFeatures combinedShaderFeatures = ShaderFeatures::NONE;
 //     InterlockMode interlockMode = InterlockMode::rasterOrdering;
-//     int msaaSampleCount = 0; // (0 unless interlockMode is msaa.)
+//     int msaaSampleCount = 0; // (0 unless interlockMode is depthStencil.)
 //
 //     LoadAction colorLoadAction = LoadAction::clear;
 //     ColorInt colorClearValue = 0; // When loadAction == LoadAction::clear.
@@ -1281,7 +1343,7 @@
 //     // As of now, each tile gets drawn in a separate render pass. The purpose of
 //     // these virtual tiles, for now, is to break the frame up into smaller
 //     // chunks so that Rive can be pre-empted by other rendering processes. This
-//     // is only supported on Vulkan/non-msaa.
+//     // is only supported on Vulkan/non-depthStencil.
 //     //
 //     // TODO: We could also explore a different type of virtual tiling that
 //     // reduces barriers in atomic mode, but that is not how this feature works
@@ -1623,7 +1685,7 @@
 //     WRITEONLY float m_clipRectInverseMatrix[6]; // Maps _fragCoord to normalized
 //                                                 // clipRect coords.
 //     WRITEONLY Vec2D m_inverseFwidth;  // -1 / fwidth(matrix * _fragCoord) -- for
-//                                      // antialiasing.
+//                                       // antialiasing.
 //     WRITEONLY float m_imageMatrix[6]; // Maps _fragCoord to image coordinates.
 //     WRITEONLY float m_imageTextureLOD;
 //     WRITEONLY float
@@ -1682,23 +1744,94 @@
 // };
 // static_assert(sizeof(TriangleVertex) == sizeof(float) * 3);
 //
+// enum class BoundVertexInstanceType
+// {
+//     none,
+//     imageRect,
+//     imageMesh,
+// };
+//
+// // TODO: This was intentionally made identical to the VertexFormat enum in Ore,
+// // and they could/should be merged.
+// enum class VertexElementFormat : uint8_t
+// {
+//     float1,
+//     float2,
+//     float3,
+//     float4,
+//     uint8x4,
+//     sint8x4,
+//     unorm8x4,
+//     snorm8x4,
+//     uint16x2,
+//     sint16x2,
+//     unorm16x2,
+//     snorm16x2,
+//     uint16x4,
+//     sint16x4,
+//     float16x2,
+//     float16x4,
+//     uint32,
+// };
+//
+// // NOTE: This would ideally contain the semantic names that D3D wants as well
+// // (like "GLSL_a_imageDrawViewMatrix"), but we don't want to include that
+// // generated header here, and having the attributes be constexpr is really
+// // convenient (and is taken advantage of in the Vulkan renderer), so for now,
+// // the D3Ds have to handle the semantic themselves.
+// struct VertexAttribute
+// {
+//     VertexElementFormat format;
+//     uint32_t attributeIndex;
+//     uint32_t byteOffset;
+//     const char* semanticName;
+// };
+//
 // // Per-draw instanced attributes used by imageMeshes and imageRects.
-// struct ImageDrawInstance
+// class ImageDrawInstanceBase
 // {
 // public:
-//     // This data is bound to image shaders as 4 tightly-packed instanced
-//     // attributes. The vertex shader unpacks them.
-//     //   attr 2 (float4): viewMatrix (2x2)
-//     //   attr 3 (float4): clipRectInverseMatrix (2x2)
-//     //   attr 4 (float4): translates for view & clipRectInverseMatrix
-//     //   attr 5 (uint4) : opacity (uintBitsToFloat), clipID, blendMode, zIndex
-//     constexpr static size_t FirstAttribIdx = 2;
-//     constexpr static size_t LastAttribIdx = 5;
-//     constexpr static size_t AttribCount = LastAttribIdx + 1 - FirstAttribIdx;
+//     static constexpr size_t FirstAttribIdx = 2;
+//     static constexpr size_t AttributeCount = 7;
+//     static constexpr size_t LastAttribIdx = FirstAttribIdx + AttributeCount - 1;
 //
-//     ImageDrawInstance() = default;
+//     static const std::array<VertexAttribute, AttributeCount>& getAttributes();
 //
-//     ImageDrawInstance(const Mat2D&,
+//     ImageDrawInstanceBase() = default;
+//
+//     ImageDrawInstanceBase(const Mat2D&,
+//                           float opacity,
+//                           const ClipRectInverseMatrix*,
+//                           uint32_t clipID,
+//                           BlendMode,
+//                           uint32_t zIndex);
+//
+// private:
+//     WRITEONLY float m_viewMatrix[4];
+//     WRITEONLY float m_clipRectInverseMatrix[4];
+//
+//     WRITEONLY float m_translate[2];
+//     WRITEONLY float m_clipRectInverseTranslate[2];
+//
+//     WRITEONLY float m_opacity;
+//     WRITEONLY uint32_t m_clipID;
+//     WRITEONLY uint32_t m_blendMode;
+//     WRITEONLY uint32_t m_zIndex;
+// };
+//
+// class ImageRectInstance
+// {
+// public:
+//     constexpr static size_t FirstAttribIdx =
+//         ImageDrawInstanceBase::FirstAttribIdx;
+//     static constexpr size_t AttributeCount = 7;
+//     static constexpr size_t LastAttribIdx = FirstAttribIdx + AttributeCount - 1;
+//
+//     static const std::array<VertexAttribute, AttributeCount>& getAttributes();
+//
+//     ImageRectInstance() = default;
+//
+//     ImageRectInstance(const Mat2D&,
 //                       float opacity,
 //                       const ClipRectInverseMatrix*,
 //                       uint32_t clipID,
@@ -1706,17 +1839,44 @@
 //                       uint32_t zIndex);
 //
 // private:
-//     WRITEONLY float m_viewMatrix[4];
-//     WRITEONLY float m_clipRectInverseMatrix[4];
-//     WRITEONLY float m_translate[2];
-//     WRITEONLY float m_clipRectInverseTranslate[2];
-//     WRITEONLY float m_opacity;
-//     WRITEONLY uint32_t m_clipID;
-//     WRITEONLY uint32_t m_blendMode;
-//     WRITEONLY uint32_t m_zIndex;
+//     ImageDrawInstanceBase m_commons;
+//
+//     // Nothing additional yet
+// };
+//
+// class ImageMeshInstance
+// {
+// public:
+//     constexpr static size_t FirstAttribIdx =
+//         ImageDrawInstanceBase::FirstAttribIdx;
+//     static constexpr size_t AttributeCount = 7;
+//     static constexpr size_t LastAttribIdx = FirstAttribIdx + AttributeCount - 1;
+//
+//     static const std::array<VertexAttribute, AttributeCount>& getAttributes();
+//
+//     ImageMeshInstance() = default;
+//
+//     ImageMeshInstance(const Mat2D&,
+//                       float opacity,
+//                       const ClipRectInverseMatrix*,
+//                       uint32_t clipID,
+//                       BlendMode,
+//                       uint32_t zIndex);
+//
+// private:
+//     ImageDrawInstanceBase m_commons;
+//
+//     // Nothing additional yet
 // };
 //
 // #undef WRITEONLY
+//
+// constexpr size_t MaxVertexAttributeCount =
+//     std::max(ImageMeshInstance::LastAttribIdx,
+//              ImageRectInstance::LastAttribIdx) +
+//     1;
+// constexpr size_t MaxImageDrawInstanceAttributeCount =
+//     MaxVertexAttributeCount - ImageDrawInstanceBase::FirstAttribIdx;
 //
 // // The maximum number of storage buffers we will ever use in a vertex or
 // // fragment shader.
@@ -2043,7 +2203,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/gpu.hpp.
-// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
 // Ownership unit: generic-gpu-contract.
 // Include/dependency authority: the pinned header and source-shaped modules.
 
@@ -3324,7 +3484,7 @@ impl TriangleVertex {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ImageDrawInstance {
+pub struct ImageDrawInstanceBase {
     pub m_viewMatrix: [f32; 4],
     pub m_clipRectInverseMatrix: [f32; 4],
     pub m_translate: [f32; 2],
@@ -3335,13 +3495,82 @@ pub struct ImageDrawInstance {
     pub m_zIndex: u32,
 }
 
-impl ImageDrawInstance {
-    pub const FirstAttribIdx: usize = 2;
-    pub const LastAttribIdx: usize = 5;
-    pub const AttribCount: usize = Self::LastAttribIdx + 1 - Self::FirstAttribIdx;
-    // ImageDrawInstance(const Mat2D&, float, const ClipRectInverseMatrix*,
-    //                   uint32_t, BlendMode, uint32_t);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoundVertexInstanceType {
+    none,
+    imageRect,
+    imageMesh,
 }
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VertexElementFormat {
+    float1,
+    float2,
+    float3,
+    float4,
+    uint8x4,
+    sint8x4,
+    unorm8x4,
+    snorm8x4,
+    uint16x2,
+    sint16x2,
+    unorm16x2,
+    snorm16x2,
+    uint16x4,
+    sint16x4,
+    float16x2,
+    float16x4,
+    uint32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct VertexAttribute {
+    pub format: VertexElementFormat,
+    pub attributeIndex: u32,
+    pub byteOffset: u32,
+    pub semanticName: &'static str,
+}
+
+impl ImageDrawInstanceBase {
+    pub const FirstAttribIdx: usize = 2;
+    pub const AttributeCount: usize = 7;
+    pub const LastAttribIdx: usize = Self::FirstAttribIdx + Self::AttributeCount - 1;
+    pub const fn getAttributes() -> &'static [VertexAttribute; Self::AttributeCount] {
+        &crate::mechanical_port::source::renderer::src::image_draw_attributes_hpp::ImageDrawInstanceBaseAttributes
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ImageRectInstance {
+    pub m_commons: ImageDrawInstanceBase,
+}
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ImageMeshInstance {
+    pub m_commons: ImageDrawInstanceBase,
+}
+
+impl ImageRectInstance {
+    pub const FirstAttribIdx: usize = ImageDrawInstanceBase::FirstAttribIdx;
+    pub const AttributeCount: usize = 7;
+    pub const LastAttribIdx: usize = Self::FirstAttribIdx + Self::AttributeCount - 1;
+    pub const fn getAttributes() -> &'static [VertexAttribute; Self::AttributeCount] {
+        &crate::mechanical_port::source::renderer::src::image_draw_attributes_hpp::ImageRectInstanceAttributes
+    }
+}
+impl ImageMeshInstance {
+    pub const FirstAttribIdx: usize = ImageDrawInstanceBase::FirstAttribIdx;
+    pub const AttributeCount: usize = 7;
+    pub const LastAttribIdx: usize = Self::FirstAttribIdx + Self::AttributeCount - 1;
+    pub const fn getAttributes() -> &'static [VertexAttribute; Self::AttributeCount] {
+        &crate::mechanical_port::source::renderer::src::image_draw_attributes_hpp::ImageMeshInstanceAttributes
+    }
+}
+pub const MaxVertexAttributeCount: usize = 9;
+pub const MaxImageDrawInstanceAttributeCount: usize =
+    MaxVertexAttributeCount - ImageDrawInstanceBase::FirstAttribIdx;
 
 pub const kMaxStorageBuffers: usize = 4;
 

@@ -421,6 +421,7 @@ pub(crate) mod source {
         pub(crate) mod src {
             pub(crate) mod draw_cpp;
             pub(crate) mod gpu_cpp;
+            pub(crate) mod image_draw_attributes_hpp;
             pub(crate) mod gradient_cpp;
             pub(crate) mod gradient_hpp;
             pub(crate) mod render_context_cpp;
@@ -510,3 +511,6 @@ pub(crate) mod source {
         pub(crate) mod renderer_cpp;
     }
 }
+#[cfg(test)]
+#[path = "mechanical_port/pls_render_context_test.rs"]
+mod pls_render_context_test;

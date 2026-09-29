@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/render_context_vulkan_impl.cpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `2210ed8799c0128504dd664a7179f4f8f299e85a`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -1284,7 +1284,12 @@ impl RenderContextVulkanImpl {
                 vk::BufferUsageFlags::VERTEX_BUFFER,
                 0,
             )),
-            m_imageDrawInstanceBufferPool: ManuallyDrop::new(super::vkutil_decl::BufferPool::new(
+            m_imageRectInstanceBufferPool: ManuallyDrop::new(super::vkutil_decl::BufferPool::new(
+                Arc::clone(&vk_context),
+                vk::BufferUsageFlags::VERTEX_BUFFER,
+                0,
+            )),
+            m_imageMeshInstanceBufferPool: ManuallyDrop::new(super::vkutil_decl::BufferPool::new(
                 Arc::clone(&vk_context),
                 vk::BufferUsageFlags::VERTEX_BUFFER,
                 0,
@@ -1297,7 +1302,8 @@ impl RenderContextVulkanImpl {
             m_gradSpanBuffer: ManuallyDrop::new(None),
             m_tessSpanBuffer: ManuallyDrop::new(None),
             m_triangleBuffer: ManuallyDrop::new(None),
-            m_imageDrawInstanceBuffer: ManuallyDrop::new(None),
+            m_imageRectInstanceBuffer: ManuallyDrop::new(None),
+            m_imageMeshInstanceBuffer: ManuallyDrop::new(None),
             m_localEpoch: Instant::now(),
             m_nullImageTexture: ManuallyDrop::new(rcp::new()),
             m_colorRampPipeline: ManuallyDrop::new(None),
@@ -2284,7 +2290,8 @@ pub(crate) fn prepareToFlush(
     debug_assert!(implementation.m_gradSpanBuffer.is_none());
     debug_assert!(implementation.m_tessSpanBuffer.is_none());
     debug_assert!(implementation.m_triangleBuffer.is_none());
-    debug_assert!(implementation.m_imageDrawInstanceBuffer.is_none());
+    debug_assert!(implementation.m_imageRectInstanceBuffer.is_none());
+    debug_assert!(implementation.m_imageMeshInstanceBuffer.is_none());
     if next_frame != 0 {
         implementation
             .m_vk
@@ -2298,8 +2305,10 @@ pub(crate) fn prepareToFlush(
     *implementation.m_gradSpanBuffer = Some(implementation.m_gradSpanBufferPool.acquire());
     *implementation.m_tessSpanBuffer = Some(implementation.m_tessSpanBufferPool.acquire());
     *implementation.m_triangleBuffer = Some(implementation.m_triangleBufferPool.acquire());
-    *implementation.m_imageDrawInstanceBuffer =
-        Some(implementation.m_imageDrawInstanceBufferPool.acquire());
+    *implementation.m_imageRectInstanceBuffer =
+        Some(implementation.m_imageRectInstanceBufferPool.acquire());
+    *implementation.m_imageMeshInstanceBuffer =
+        Some(implementation.m_imageMeshInstanceBufferPool.acquire());
 }
 
 impl DescriptorSetPool {
@@ -4254,7 +4263,7 @@ fn submitDrawList(
                         command,
                         layout::ImageRectImageAttribBufferBinding,
                         &[implementation
-                            .m_imageDrawInstanceBuffer
+                            .m_imageRectInstanceBuffer
                             .as_ref()
                             .unwrap()
                             .vkBuffer()],
@@ -4324,7 +4333,7 @@ fn submitDrawList(
                         command,
                         layout::ImageMeshImageAttribBufferBinding,
                         &[implementation
-                            .m_imageDrawInstanceBuffer
+                            .m_imageMeshInstanceBuffer
                             .as_ref()
                             .unwrap()
                             .vkBuffer()],
@@ -4397,8 +4406,11 @@ pub(crate) fn postFlush(implementation: &mut RenderContextVulkanImpl) {
         .m_triangleBufferPool
         .recycle(implementation.m_triangleBuffer.take().unwrap());
     implementation
-        .m_imageDrawInstanceBufferPool
-        .recycle(implementation.m_imageDrawInstanceBuffer.take().unwrap());
+        .m_imageRectInstanceBufferPool
+        .recycle(implementation.m_imageRectInstanceBuffer.take().unwrap());
+    implementation
+        .m_imageMeshInstanceBufferPool
+        .recycle(implementation.m_imageMeshInstanceBuffer.take().unwrap());
 }
 
 pub(crate) fn hotloadShaders(implementation: &mut RenderContextVulkanImpl, data: &[u32]) {
@@ -4593,9 +4605,14 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
         m_triangleBufferPool
     );
     resize_buffer!(
-        resizeImageDrawInstanceBuffer,
-        m_imageDrawInstanceBuffer,
-        m_imageDrawInstanceBufferPool
+        resizeImageRectInstanceBuffer,
+        m_imageRectInstanceBuffer,
+        m_imageRectInstanceBufferPool
+    );
+    resize_buffer!(
+        resizeImageMeshInstanceBuffer,
+        m_imageMeshInstanceBuffer,
+        m_imageMeshInstanceBufferPool
     );
     unsafe fn wantsManualRenderPassResolve(
         &self,
@@ -4629,7 +4646,8 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
     map_buffer!(mapGradSpanBuffer, m_gradSpanBuffer);
     map_buffer!(mapTessVertexSpanBuffer, m_tessSpanBuffer);
     map_buffer!(mapTriangleVertexBuffer, m_triangleBuffer);
-    map_buffer!(mapImageDrawInstanceBuffer, m_imageDrawInstanceBuffer);
+    map_buffer!(mapImageRectInstanceBuffer, m_imageRectInstanceBuffer);
+    map_buffer!(mapImageMeshInstanceBuffer, m_imageMeshInstanceBuffer);
     unmap_buffer!(unmapFlushUniformBuffer, m_flushUniformBuffer);
     unmap_buffer!(unmapPathBuffer, m_pathBuffer);
     unmap_buffer!(unmapPaintBuffer, m_paintBuffer);
@@ -4638,7 +4656,8 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
     unmap_buffer!(unmapGradSpanBuffer, m_gradSpanBuffer);
     unmap_buffer!(unmapTessVertexSpanBuffer, m_tessSpanBuffer);
     unmap_buffer!(unmapTriangleVertexBuffer, m_triangleBuffer);
-    unmap_buffer!(unmapImageDrawInstanceBuffer, m_imageDrawInstanceBuffer);
+    unmap_buffer!(unmapImageRectInstanceBuffer, m_imageRectInstanceBuffer);
+    unmap_buffer!(unmapImageMeshInstanceBuffer, m_imageMeshInstanceBuffer);
     fn resizeGradientTexture(&mut self, width: u32, height: u32) {
         resizeGradientTexture(self, width, height)
     }
@@ -4761,7 +4780,8 @@ impl Drop for RenderContextVulkanImpl {
                 && self.m_gradSpanBuffer.is_none()
                 && self.m_tessSpanBuffer.is_none()
                 && self.m_triangleBuffer.is_none()
-                && self.m_imageDrawInstanceBuffer.is_none()
+                && self.m_imageRectInstanceBuffer.is_none()
+                && self.m_imageMeshInstanceBuffer.is_none()
         );
         unsafe {
             if self.m_canvasCommandPool != vk::CommandPool::null() {
@@ -4798,7 +4818,8 @@ impl Drop for RenderContextVulkanImpl {
             ManuallyDrop::drop(&mut self.m_gradTexture);
             ManuallyDrop::drop(&mut self.m_colorRampPipeline);
             ManuallyDrop::drop(&mut self.m_nullImageTexture);
-            ManuallyDrop::drop(&mut self.m_imageDrawInstanceBuffer);
+            ManuallyDrop::drop(&mut self.m_imageRectInstanceBuffer);
+            ManuallyDrop::drop(&mut self.m_imageMeshInstanceBuffer);
             ManuallyDrop::drop(&mut self.m_triangleBuffer);
             ManuallyDrop::drop(&mut self.m_tessSpanBuffer);
             ManuallyDrop::drop(&mut self.m_gradSpanBuffer);
@@ -4807,7 +4828,8 @@ impl Drop for RenderContextVulkanImpl {
             ManuallyDrop::drop(&mut self.m_paintBuffer);
             ManuallyDrop::drop(&mut self.m_pathBuffer);
             ManuallyDrop::drop(&mut self.m_flushUniformBuffer);
-            ManuallyDrop::drop(&mut self.m_imageDrawInstanceBufferPool);
+            ManuallyDrop::drop(&mut self.m_imageRectInstanceBufferPool);
+            ManuallyDrop::drop(&mut self.m_imageMeshInstanceBufferPool);
             ManuallyDrop::drop(&mut self.m_triangleBufferPool);
             ManuallyDrop::drop(&mut self.m_tessSpanBufferPool);
             ManuallyDrop::drop(&mut self.m_gradSpanBufferPool);

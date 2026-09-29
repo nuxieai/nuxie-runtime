@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+ * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "b0b59911b49c1105c635569ce476418ea62dc1d42c9ff55ce8bfb5df700ada5a";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 335;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 13960;
+    "964c514f1d5a69a7caaca1b80b0774654711fa001dff9c175b7750d1b1df16d7";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 341;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14214;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -216,21 +216,27 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define COALESCED_ATOMIC_RESOLVE_IDX SCRATCH_COLOR_PLANE_IDX
 
 // Index of each instanced attribute for image draws.
+// First, the common attributes:
 #define IMAGE_FIRST_ATTRIB_IDX 2
 #define IMAGE_VIEW_MATRIX_ATTRIB_IDX 2
 #define IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX 3
 #define IMAGE_TRANSLATES_ATTRIB_IDX 4
-#define IMAGE_PACKED_ATTRIBS_IDX 5
-#define IMAGE_LAST_ATTRIB_IDX 5
-#define IMAGE_ATTRIB_COUNT (IMAGE_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
+#define IMAGE_OPACITY_ATTRIB_IDX 5
+#define IMAGE_CLIP_ID_ATTRIB_IDX 6
+#define IMAGE_BLEND_MODE_ATTRIB_IDX 7
+#define IMAGE_ZINDEX_ATTRIB_IDX 8
 
-// When SPLIT_UINT4_ATTRIBUTES is set (Unreal RHI, whose shader compiler
-// mishandles a uint4 vertex attribute), the packed uint4 is bound as four
-// separate uint attributes at these consecutive locations.
-#define IMAGE_SPLIT_OPACITY_ATTRIB_IDX 5
-#define IMAGE_SPLIT_CLIP_ID_ATTRIB_IDX 6
-#define IMAGE_SPLIT_BLEND_MODE_ATTRIB_IDX 7
-#define IMAGE_SPLIT_ZINDEX_ATTRIB_IDX 8
+#define IMAGE_COMMON_LAST_ATTRIB_IDX 8
+#define IMAGE_COMMON_ATTRIB_COUNT                                              \
+    (IMAGE_COMMON_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
+
+#define IMAGE_RECT_LAST_ATTRIB_IDX IMAGE_COMMON_LAST_ATTRIB_IDX
+#define IMAGE_RECT_ATTRIB_COUNT                                                \
+    (IMAGE_RECT_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
+
+#define IMAGE_MESH_LAST_ATTRIB_IDX IMAGE_COMMON_LAST_ATTRIB_IDX
+#define IMAGE_MESH_ATTRIB_COUNT                                                \
+    (IMAGE_MESH_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
 // MSAA attaches different resources to the framebuffer instead of PLS planes.
 #define MSAA_DEPTH_STENCIL_IDX 1u

@@ -6,7 +6,7 @@
  * as audit provenance. Executable owners and the native renderer connection
  * precede that source text.
  *
- * Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+ * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
  */
 
 #![allow(dead_code)]
@@ -14,12 +14,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/render_context_metal_impl.mm";
 pub const PINNED_SOURCE_SHA256: &str =
-    "a024baed032f3943ee41c7117b8cd5ed9fad6b687c9118150c237fb228599e9d";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 2044;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 85339;
+    "978c3ae78ee10b5ececee675a5408270a0ed814638f4d20e79bedf72605ae01b";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 2059;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 85800;
 pub const TRANSLATION_UNIT: &str = "metal-render-context-implementation";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/render_context_metal_impl_mm.rs";
 
@@ -4646,7 +4646,8 @@ pub mod source_execution {
                 "gradSpan" => &mut base.m_gradSpanBuffer,
                 "tessSpan" => &mut base.m_tessSpanBuffer,
                 "triangle" => &mut base.m_triangleBuffer,
-                "imageDrawInstance" => &mut base.m_imageDrawInstanceBuffer,
+                "imageRectInstance" => &mut base.m_imageRectInstanceBuffer,
+                "imageMeshInstance" => &mut base.m_imageMeshInstanceBuffer,
                 _ => panic!("unknown source buffer ring"),
             }
         }
@@ -4668,7 +4669,8 @@ pub mod source_execution {
                 "gradSpan" => &base.m_gradSpanBuffer,
                 "tessSpan" => &base.m_tessSpanBuffer,
                 "triangle" => &base.m_triangleBuffer,
-                "imageDrawInstance" => &base.m_imageDrawInstanceBuffer,
+                "imageRectInstance" => &base.m_imageRectInstanceBuffer,
+                "imageMeshInstance" => &base.m_imageMeshInstanceBuffer,
                 _ => panic!("unknown source buffer ring"),
             }
         }
@@ -6528,6 +6530,11 @@ pub mod source_execution {
                         );
                     }
                     DrawType::ImageRect | DrawType::ImageMesh => {
+                        let (instance_ring, instance_stride) = if batch.drawType == DrawType::ImageRect {
+                            ("imageRectInstance", core::mem::size_of::<gpu::ImageRectInstance>())
+                        } else {
+                            ("imageMeshInstance", core::mem::size_of::<gpu::ImageMeshInstance>())
+                        };
                         set(
                             metal,
                             "encoder",
@@ -6549,9 +6556,9 @@ pub mod source_execution {
                             "setVertexBuffer:offset:atIndex:",
                             vec![
                                 h(encoder),
-                                h(self.ring_buffer("imageDrawInstance")),
+                                h(self.ring_buffer(instance_ring)),
                                 u(batch.baseElement as u64
-                                    * core::mem::size_of::<gpu::ImageDrawInstance>() as u64),
+                                    * instance_stride as u64),
                                 u(2),
                             ],
                         );
@@ -7067,7 +7074,8 @@ mod source_owner_regressions {
             "gradSpan",
             "tessSpan",
             "triangle",
-            "imageDrawInstance",
+            "imageRectInstance",
+            "imageMeshInstance",
         ] {
             context.make_uniform_buffer_ring(&mut metal, name, 16);
         }
@@ -7689,7 +7697,8 @@ mod source_owner_regressions {
                 "gradSpan",
                 "tessSpan",
                 "triangle",
-                "imageDrawInstance",
+                "imageRectInstance",
+                "imageMeshInstance",
             ] {
                 context.make_uniform_buffer_ring(&mut metal, name, 16);
             }
@@ -12403,7 +12412,7 @@ mod source_owner_regressions {
                 4,
                 gpu::PlatformFeatures::default(),
             );
-            // Flush consumes the nine source BufferRing owners through the
+            // Flush consumes the ten source BufferRing owners through the
             // helper base.  Construct those exact rings before entering the
             // source flush path; an empty descriptor still binds the
             // submitted uniform/coverage rings.
@@ -12416,7 +12425,8 @@ mod source_owner_regressions {
                 "gradSpan",
                 "tessSpan",
                 "triangle",
-                "imageDrawInstance",
+                "imageRectInstance",
+                "imageMeshInstance",
             ] {
                 context.make_uniform_buffer_ring(&mut metal, name, 16);
             }
@@ -13341,10 +13351,15 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //             case DrawType::depthStrokes:
 //             case DrawType::stencilMidpointFanBorrowedCoverage:
 //             case DrawType::stencilDynamicMidpointFans:
+//             case DrawType::stencilDynamicOuterCubics:
 //             case DrawType::stencilMidpointFans:
 //             case DrawType::stencilMidpointFanReset:
 //             case DrawType::stencilMidpointFanWinding:
 //             case DrawType::stencilMidpointFanCover:
+//             case DrawType::stencilOuterCubicBorrowedCoverage:
+//             case DrawType::stencilOuterCubicReset:
+//             case DrawType::stencilOuterCubicWinding:
+//             case DrawType::stencilOuterCubicCover:
 //             case DrawType::stencilOuterCubics:
 //             case DrawType::clipReset:
 //             case DrawType::renderPassInitialize:
@@ -14082,11 +14097,17 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 // }
 //
 // #ifdef RIVE_CANVAS
-// rcp<RenderCanvas> RenderContextMetalImpl::makeRenderCanvas(uint32_t width,
-//                                                            uint32_t height)
+// void RenderContextMetalImpl::ensureCanvasBacking(gpu::RenderCanvas* canvas)
 // {
-//     // Create an MTLTexture usable as both a render target and a shader-read
-//     // image for compositing into Rive draws.
+//     if (canvas->isBacked())
+//     {
+//         return;
+//     }
+//
+//     uint32_t width = canvas->width(), height = canvas->height();
+//
+//     // An MTLTexture usable as both a render target and a shader-read image
+//     // for compositing into Rive draws.
 //     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
 //     desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
 //     desc.width = width;
@@ -14097,18 +14118,14 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //     desc.storageMode = MTLStorageModePrivate;
 //     id<MTLTexture> mtlTexture = [m_gpu newTextureWithDescriptor:desc];
 //
-//     // Wrap as a RenderTarget for rendering into.
 //     auto renderTarget =
 //         makeRenderTarget(MTLPixelFormatRGBA8Unorm, width, height);
 //     renderTarget->setTargetTexture(mtlTexture);
 //
-//     // Wrap as a RiveRenderImage for compositing. The TextureMetalImpl adopt
-//     // constructor takes a pre-created MTLTexture without uploading data.
-//     auto texture = make_rcp<TextureMetalImpl>(mtlTexture, width, height);
-//     auto renderImage = make_rcp<RiveRenderImage>(std::move(texture));
-//
-//     return make_rcp<RenderCanvas>(std::move(renderImage),
-//                                   std::move(renderTarget));
+//     // The TextureMetalImpl adopt constructor takes a pre-created MTLTexture
+//     // without uploading data.
+//     canvas->setBacking(make_rcp<TextureMetalImpl>(mtlTexture, width, height),
+//                        std::move(renderTarget));
 // }
 //
 // std::unique_ptr<rive::ore::Context> RenderContextMetalImpl::makeOreContext()
@@ -14494,7 +14511,8 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 // {
 //     assert(desc.interlockMode != gpu::InterlockMode::clockwise);
 //     assert(desc.interlockMode != gpu::InterlockMode::clockwiseAtomic);
-//     assert(desc.interlockMode != gpu::InterlockMode::depthStencil); // TODO: msaa.
+//     // TODO: depthStencil.
+//     assert(desc.interlockMode != gpu::InterlockMode::depthStencil);
 //
 //     auto* renderTarget = static_cast<RenderTargetMetal*>(desc.renderTarget);
 //     id<MTLCommandBuffer> commandBuffer =
@@ -15048,52 +15066,54 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //                 break;
 //             }
 //             case DrawType::imageRect:
+//             {
+//                 [encoder setRenderPipelineState:drawPipelineState];
+//                 [encoder
+//                     setVertexBuffer:mtl_buffer(imageRectInstanceBufferRing())
+//                              offset:batch.baseElement *
+//                                     sizeof(gpu::ImageRectInstance)
+//                             atIndex:2];
+//                 [encoder setCullMode:MTLCullModeNone];
+//                 assert(desc.interlockMode == gpu::InterlockMode::atomics);
+//                 [encoder setVertexBuffer:m_imageRectVertexBuffer
+//                                   offset:0
+//                                  atIndex:0];
+//                 [encoder
+//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                                indexCount:batch.indexCountPerInstance
+//                                 indexType:MTLIndexTypeUInt16
+//                               indexBuffer:m_imageRectIndexBuffer
+//                         indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
+//                             instanceCount:batch.elementCount];
+//                 break;
+//             }
 //             case DrawType::imageMesh:
 //             {
 //                 [encoder setRenderPipelineState:drawPipelineState];
 //                 [encoder
-//                     setVertexBuffer:mtl_buffer(imageDrawInstanceBufferRing())
+//                     setVertexBuffer:mtl_buffer(imageMeshInstanceBufferRing())
 //                              offset:batch.baseElement *
-//                                     sizeof(gpu::ImageDrawInstance)
+//                                     sizeof(gpu::ImageMeshInstance)
 //                             atIndex:2];
 //                 [encoder setCullMode:MTLCullModeNone];
-//                 if (drawType == DrawType::imageRect)
-//                 {
-//                     assert(desc.interlockMode == gpu::InterlockMode::atomics);
-//                     [encoder setVertexBuffer:m_imageRectVertexBuffer
-//                                       offset:0
-//                                      atIndex:0];
-//                     [encoder
-//                         drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                    indexCount:batch.indexCountPerInstance
-//                                     indexType:MTLIndexTypeUInt16
-//                                   indexBuffer:m_imageRectIndexBuffer
-//                             indexBufferOffset:batch.baseIndex * sizeof(uint16_t)
-//                                 instanceCount:batch.elementCount];
-//                 }
-//                 else
-//                 {
-//                     LITE_RTTI_CAST_OR_BREAK(vertexBuffer,
-//                                             RenderBufferMetalImpl*,
-//                                             batch.vertexBuffer);
-//                     LITE_RTTI_CAST_OR_BREAK(
-//                         uvBuffer, RenderBufferMetalImpl*, batch.uvBuffer);
-//                     LITE_RTTI_CAST_OR_BREAK(
-//                         indexBuffer, RenderBufferMetalImpl*, batch.indexBuffer);
-//                     [encoder setVertexBuffer:vertexBuffer->submittedBuffer()
-//                                       offset:0
-//                                      atIndex:0];
-//                     [encoder setVertexBuffer:uvBuffer->submittedBuffer()
-//                                       offset:0
-//                                      atIndex:1];
-//                     [encoder
-//                         drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-//                                    indexCount:batch.indexCountPerInstance
-//                                     indexType:MTLIndexTypeUInt16
-//                                   indexBuffer:indexBuffer->submittedBuffer()
-//                             indexBufferOffset:batch.baseIndex *
-//                                               sizeof(uint16_t)];
-//                 }
+//                 LITE_RTTI_CAST_OR_BREAK(
+//                     vertexBuffer, RenderBufferMetalImpl*, batch.vertexBuffer);
+//                 LITE_RTTI_CAST_OR_BREAK(
+//                     uvBuffer, RenderBufferMetalImpl*, batch.uvBuffer);
+//                 LITE_RTTI_CAST_OR_BREAK(
+//                     indexBuffer, RenderBufferMetalImpl*, batch.indexBuffer);
+//                 [encoder setVertexBuffer:vertexBuffer->submittedBuffer()
+//                                   offset:0
+//                                  atIndex:0];
+//                 [encoder setVertexBuffer:uvBuffer->submittedBuffer()
+//                                   offset:0
+//                                  atIndex:1];
+//                 [encoder
+//                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
+//                                indexCount:batch.indexCountPerInstance
+//                                 indexType:MTLIndexTypeUInt16
+//                               indexBuffer:indexBuffer->submittedBuffer()
+//                         indexBufferOffset:batch.baseIndex * sizeof(uint16_t)];
 //                 break;
 //             }
 //             case DrawType::renderPassInitialize:
@@ -15109,10 +15129,15 @@ pub(crate) use source_execution::RenderContextMetal as ExecutableRenderContextMe
 //             case DrawType::depthStrokes:
 //             case DrawType::stencilMidpointFanBorrowedCoverage:
 //             case DrawType::stencilDynamicMidpointFans:
+//             case DrawType::stencilDynamicOuterCubics:
 //             case DrawType::stencilMidpointFans:
 //             case DrawType::stencilMidpointFanReset:
 //             case DrawType::stencilMidpointFanWinding:
 //             case DrawType::stencilMidpointFanCover:
+//             case DrawType::stencilOuterCubicBorrowedCoverage:
+//             case DrawType::stencilOuterCubicReset:
+//             case DrawType::stencilOuterCubicWinding:
+//             case DrawType::stencilOuterCubicCover:
 //             case DrawType::stencilOuterCubics:
 //             case DrawType::clipReset:
 //             {

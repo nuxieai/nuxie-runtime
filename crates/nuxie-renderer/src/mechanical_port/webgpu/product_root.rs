@@ -148,7 +148,8 @@ impl WebGpuProductBackend {
                 "query Dawn WebGPU adapter information".into(),
             ));
         }
-        if adapter_info.asRaw().backendType != expected_backend().into() {
+        let expected_backend_type: super::webgpu_decl::WGPUBackendType = expected_backend().into();
+        if adapter_info.asRaw().backendType != expected_backend_type {
             return Err(RendererError::Adapter(
                 "Dawn selected an unexpected WebGPU backend".into(),
             ));

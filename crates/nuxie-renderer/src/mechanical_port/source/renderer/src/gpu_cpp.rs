@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/gpu.cpp.
-// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -27,6 +27,7 @@
 // #include "rive/renderer/render_target.hpp"
 // #include "rive/renderer/texture.hpp"
 // #include "gradient.hpp"
+// #include "image_draw_attributes.hpp"
 // #include "rive_render_paint.hpp"
 //
 // #include "generated/shaders/draw_path.vert.exports.h"
@@ -113,7 +114,13 @@
 //                 DrawType::stencilMidpointFanReset,
 //                 DrawType::stencilMidpointFanWinding,
 //                 DrawType::stencilMidpointFanCover,
+//                 DrawType::stencilDynamicMidpointFans,
+//                 DrawType::stencilOuterCubicBorrowedCoverage,
 //                 DrawType::stencilOuterCubics,
+//                 DrawType::stencilOuterCubicReset,
+//                 DrawType::stencilDynamicOuterCubics,
+//                 DrawType::stencilOuterCubicWinding,
+//                 DrawType::stencilOuterCubicCover,
 //                 DrawType::clipReset,
 //                 DrawType::renderPassInitialize,
 //                 DrawType::renderPassResolve,
@@ -183,11 +190,16 @@
 //         case DrawType::depthStrokes:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             break;
 //     }
 //
@@ -228,6 +240,13 @@
 //     {
 //         if (drawType == DrawType::renderPassInitialize &&
 //             !allowRenderPassInitialize)
+//         {
+//             continue;
+//         }
+//
+//         // Don't build an ubershader for a DrawType we don't support.
+//         if (drawTypeHasPipelineDynamicState(drawType) &&
+//             !platformFeatures.supportsPipelineDynamicState)
 //         {
 //             continue;
 //         }
@@ -355,11 +374,16 @@
 //         case DrawType::depthStrokes:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             drawTypeKey = 0;
 //             break;
 //         case DrawType::interiorTriangulation:
@@ -1057,7 +1081,12 @@
 //     }
 // }
 //
-// ImageDrawInstance::ImageDrawInstance(
+// #define STATIC_ASSERT_ATTRIB(Class, member, attribIdx)                         \
+//     static_assert(                                                             \
+//         offsetof(Class, member) ==                                             \
+//         Class##Attributes[attribIdx - IMAGE_FIRST_ATTRIB_IDX].byteOffset)
+//
+// ImageDrawInstanceBase::ImageDrawInstanceBase(
 //     const Mat2D& matrix,
 //     float opacity,
 //     const ClipRectInverseMatrix* clipRectInverseMatrix,
@@ -1065,45 +1094,36 @@
 //     BlendMode blendMode,
 //     uint32_t zIndex)
 // {
-//     // The backends bind the 4 attributes at byte offset i*16, relying on this
-//     // grouping.
-//     static_assert(ImageDrawInstance::FirstAttribIdx == IMAGE_FIRST_ATTRIB_IDX);
-//     static_assert(ImageDrawInstance::LastAttribIdx == IMAGE_LAST_ATTRIB_IDX);
-//     static_assert(offsetof(ImageDrawInstance, m_viewMatrix) ==
-//                   (IMAGE_VIEW_MATRIX_ATTRIB_IDX - IMAGE_FIRST_ATTRIB_IDX) *
-//                       sizeof(uint32_t) * 4);
-//     static_assert(
-//         offsetof(ImageDrawInstance, m_clipRectInverseMatrix) ==
-//         (IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX - IMAGE_FIRST_ATTRIB_IDX) *
-//             sizeof(uint32_t) * 4);
-//     static_assert(offsetof(ImageDrawInstance, m_translate) ==
-//                   (IMAGE_TRANSLATES_ATTRIB_IDX - IMAGE_FIRST_ATTRIB_IDX) *
-//                       sizeof(uint32_t) * 4);
-//     static_assert(offsetof(ImageDrawInstance, m_opacity) ==
-//                   (IMAGE_PACKED_ATTRIBS_IDX - IMAGE_FIRST_ATTRIB_IDX) *
-//                       sizeof(uint32_t) * 4);
+//     static_assert(FirstAttribIdx == IMAGE_FIRST_ATTRIB_IDX);
+//     static_assert(LastAttribIdx == IMAGE_COMMON_LAST_ATTRIB_IDX);
 //
-//     // When SPLIT_UINT4_ATTRIBUTES is set (Unreal RHI, whose shader compiler
-//     // mishandles a uint4 vertex attribute), the packed uint4 is bound as four
-//     // separate uint attributes at consecutive locations.
-//     static_assert(IMAGE_SPLIT_OPACITY_ATTRIB_IDX == IMAGE_PACKED_ATTRIBS_IDX);
-//     static_assert(
-//         offsetof(ImageDrawInstance, m_clipID) ==
-//         ((IMAGE_PACKED_ATTRIBS_IDX - IMAGE_FIRST_ATTRIB_IDX) * 4 +
-//          (IMAGE_SPLIT_CLIP_ID_ATTRIB_IDX - IMAGE_SPLIT_OPACITY_ATTRIB_IDX)) *
-//             sizeof(uint32_t));
-//     static_assert(
-//         offsetof(ImageDrawInstance, m_blendMode) ==
-//         ((IMAGE_PACKED_ATTRIBS_IDX - IMAGE_FIRST_ATTRIB_IDX) * 4 +
-//          (IMAGE_SPLIT_BLEND_MODE_ATTRIB_IDX - IMAGE_SPLIT_OPACITY_ATTRIB_IDX)) *
-//             sizeof(uint32_t));
-//     static_assert(
-//         offsetof(ImageDrawInstance, m_zIndex) ==
-//         ((IMAGE_PACKED_ATTRIBS_IDX - IMAGE_FIRST_ATTRIB_IDX) * 4 +
-//          (IMAGE_SPLIT_ZINDEX_ATTRIB_IDX - IMAGE_SPLIT_OPACITY_ATTRIB_IDX)) *
-//             sizeof(uint32_t));
-//     static_assert(sizeof(ImageDrawInstance) ==
-//                   IMAGE_ATTRIB_COUNT * sizeof(uint32_t) * 4);
+//     // Check that our attributes start in the right places
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_viewMatrix,
+//                          IMAGE_VIEW_MATRIX_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_clipRectInverseMatrix,
+//                          IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_translate,
+//                          IMAGE_TRANSLATES_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_opacity,
+//                          IMAGE_OPACITY_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_clipID,
+//                          IMAGE_CLIP_ID_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_blendMode,
+//                          IMAGE_BLEND_MODE_ATTRIB_IDX);
+//     STATIC_ASSERT_ATTRIB(ImageDrawInstanceBase,
+//                          m_zIndex,
+//                          IMAGE_ZINDEX_ATTRIB_IDX);
+//
+//     // Now check that the packed values are at the correct offsets
+//     static_assert(offsetof(ImageDrawInstanceBase, m_clipRectInverseTranslate) ==
+//                   offsetof(ImageDrawInstanceBase, m_translate) +
+//                       2 * sizeof(float));
 //
 //     const Mat2D clipRectInverseMatrixToWrite =
 //         clipRectInverseMatrix != nullptr
@@ -1118,6 +1138,48 @@
 //     m_clipID = clipID;
 //     m_blendMode = ConvertBlendModeToPLSBlendMode(blendMode);
 //     m_zIndex = zIndex;
+// }
+//
+// const std::array<VertexAttribute, ImageDrawInstanceBase::AttributeCount>&
+// ImageDrawInstanceBase::getAttributes()
+// {
+//     return ImageDrawInstanceBaseAttributes;
+// }
+//
+// ImageRectInstance::ImageRectInstance(
+//     const Mat2D& matrix,
+//     float opacity,
+//     const ClipRectInverseMatrix* clipRectInverseMatrix,
+//     uint32_t clipID,
+//     BlendMode blendMode,
+//     uint32_t zIndex) :
+//     m_commons{matrix, opacity, clipRectInverseMatrix, clipID, blendMode, zIndex}
+// {
+//     static_assert(offsetof(ImageRectInstance, m_commons) == 0);
+// }
+//
+// const std::array<VertexAttribute, ImageRectInstance::AttributeCount>&
+// ImageRectInstance::getAttributes()
+// {
+//     return ImageRectInstanceAttributes;
+// }
+//
+// ImageMeshInstance::ImageMeshInstance(
+//     const Mat2D& matrix,
+//     float opacity,
+//     const ClipRectInverseMatrix* clipRectInverseMatrix,
+//     uint32_t clipID,
+//     BlendMode blendMode,
+//     uint32_t zIndex) :
+//     m_commons{matrix, opacity, clipRectInverseMatrix, clipID, blendMode, zIndex}
+// {
+//     static_assert(offsetof(ImageMeshInstance, m_commons) == 0);
+// }
+//
+// const std::array<VertexAttribute, ImageMeshInstance::AttributeCount>&
+// ImageMeshInstance::getAttributes()
+// {
+//     return ImageMeshInstanceAttributes;
 // }
 //
 // std::tuple<uint32_t, uint32_t> StorageTextureSize(
@@ -1181,21 +1243,24 @@
 //         case DrawType::imageRect:
 //         case DrawType::imageMesh:
 //         case DrawType::featherAtlasBlit:
-//         case DrawType::outerCurvePatches:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilOuterCubicWinding:
 //         case DrawType::clipReset:
 //             return {.depthTestEnabled = true, .depthWriteEnabled = false};
 //             break;
 //
 //         case DrawType::depthStrokes:
-//         case DrawType::stencilOuterCubics:
 //             return {.depthTestEnabled = true, .depthWriteEnabled = true};
 //             break;
 //
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicCover:
 //             return {
 //                 .depthTestEnabled = true,
 //                 .depthWriteEnabled =
@@ -1204,6 +1269,7 @@
 //             break;
 //
 //         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilOuterCubicReset:
 //             return {
 //                 .depthTestEnabled = true,
 //                 .depthWriteEnabled = enums::no_flags_set(
@@ -1216,6 +1282,7 @@
 //             return {.depthTestEnabled = false, .depthWriteEnabled = false};
 //
 //         case DrawType::interiorTriangulation:
+//         case DrawType::outerCurvePatches:
 //         case DrawType::midpointFanPatches:
 //         case DrawType::midpointFanCenterAAPatches:
 //             break;
@@ -1231,7 +1298,7 @@
 //     bool areDrawContentsValid = true;
 //     if (interlockMode != InterlockMode::depthStencil)
 //     {
-//         // Only MSAA has any valid stencil types
+//         // Only depthStencil has any valid stencil types
 //         return {StencilType::disabled,
 //                 DrawContents::none,
 //                 areDrawContentsValid};
@@ -1243,7 +1310,6 @@
 //         case DrawType::imageMesh:
 //         case DrawType::featherAtlasBlit:
 //         case DrawType::depthStrokes:
-//         case DrawType::stencilOuterCubics:
 //             if (enums::is_flag_set(drawContents, DrawContents::activeClip))
 //             {
 //                 return {
@@ -1262,6 +1328,7 @@
 //             }
 //
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
 //             return {
 //                 StencilType::borrowedCoverage,
 //                 DrawContents::activeClip,
@@ -1269,7 +1336,9 @@
 //             };
 //
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilOuterCubics:
 //             return {
 //                 StencilType::forwardClippedByBackward,
 //                 DrawContents::activeClip | DrawContents::clipUpdate,
@@ -1277,6 +1346,7 @@
 //             };
 //
 //         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilOuterCubicReset:
 //             return {
 //                 StencilType::backwardTriangleCleanup,
 //                 DrawContents::clockwiseFill | DrawContents::activeClip |
@@ -1285,6 +1355,7 @@
 //             };
 //
 //         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilOuterCubicWinding:
 //             areDrawContentsValid =
 //                 enums::is_flag_set(drawContents, DrawContents::evenOddFill) ||
 //                 enums::all_flags_set(drawContents, kNestedClipUpdateMask);
@@ -1295,6 +1366,7 @@
 //             };
 //
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicCover:
 //             areDrawContentsValid =
 //                 enums::is_flag_set(drawContents, DrawContents::evenOddFill);
 //             return {StencilType::evenOddDrawAndReset,
@@ -1545,11 +1617,15 @@
 //         case DrawType::featherAtlasBlit:
 //         case DrawType::depthStrokes:
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilOuterCubics:
 //         case DrawType::clipReset:
 //             return CullFace::counterclockwise;
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilOuterCubicReset:
 //             // clockwise is always the front face in Rive, but for a couple
 //             // draws we encode some stencil work in the counterclockwise face.
 //             // It's done this way because the cull face is often supported as
@@ -1562,7 +1638,8 @@
 //         case DrawType::imageMesh:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
-//         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //         case DrawType::renderPassResolve:
 //         case DrawType::renderPassInitialize:
 //             return CullFace::none;
@@ -1672,8 +1749,8 @@
 //             else
 //             {
 //                 // When m_platformFeatures.supportsBlendAdvancedKHR is true in
-//                 // MSAA mode, the renderContext does not combine draws that have
-//                 // different blend modes.
+//                 // depthStencil mode, the renderContext does not combine draws
+//                 // that have different blend modes.
 //                 assert(drawType != DrawType::renderPassInitialize &&
 //                        drawType != DrawType::renderPassResolve);
 //                 return static_cast<BlendEquation>(blendMode);
@@ -1713,17 +1790,22 @@
 //             return fixedFunctionColorOutput ||
 //                    interlockMode == InterlockMode::depthStencil;
 //         case DrawType::depthStrokes:
-//         case DrawType::stencilOuterCubics:
 //             return true;
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilOuterCubicWinding:
 //         case DrawType::clipReset:
 //             return false;
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicCover:
 //             return !enums::is_flag_set(drawContents, DrawContents::clipUpdate);
 //         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilOuterCubicReset:
 //             // For clockwise fill, disable color writes when cleaning up
 //             // backward triangles. Clockwise only fills in forward triangles.
 //             return enums::no_flags_set(drawContents,
@@ -1749,12 +1831,13 @@
 //                                         shaderMiscFlags);
 //
 //     constexpr auto VALID_PIPELINE_DRAW_CONTENTS_BIT_COUNT =
-//         math::count_set_bits(uint32_t(DrawContentsForDepthStencilPipelineState));
+//         math::count_set_bits(
+//             uint32_t(DrawContentsForDepthStencilPipelineState));
 //
-//     const auto stencilInfo =
-//         get_stencil_info(interlockMode,
-//                          drawType,
-//                          drawContents & DrawContentsForDepthStencilPipelineState);
+//     const auto stencilInfo = get_stencil_info(
+//         interlockMode,
+//         drawType,
+//         drawContents & DrawContentsForDepthStencilPipelineState);
 //
 //     const auto drawContentsMask =
 //         (interlockMode == InterlockMode::depthStencil)
@@ -1777,7 +1860,7 @@
 //             uint32_t(DrawContentsForDepthStencilPipelineState)),
 //         VALID_PIPELINE_DRAW_CONTENTS_BIT_COUNT);
 //
-//     // Only MSAA cares about other blend modes during pipeline creation.
+//     // Only depthStencil cares about other blend modes during pipeline creation.
 //     auto effectiveBlendMode = (interlockMode == InterlockMode::depthStencil &&
 //                                platformFeatures.supportsBlendAdvancedKHR)
 //                                   ? blendMode
@@ -1832,8 +1915,8 @@
 //                                  rive::BlendMode blendMode,
 //                                  const PlatformFeatures& platformFeatures)
 // {
-//     // Only some DrawContents flags are relevant (and only for msaa at the
-//     // moment)
+//     // Only some DrawContents flags are relevant (and only for depthStencil at
+//     // the moment)
 //     drawContents &= (interlockMode == InterlockMode::depthStencil)
 //                         ? DrawContentsForDepthStencilPipelineState
 //                         : DrawContents::none;
@@ -1868,12 +1951,17 @@
 //
 //         case DrawType::depthStrokes:
 //         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilMidpointFans:
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             assert(interlockMode == InterlockMode::depthStencil);
 //             break;
 //
@@ -2768,7 +2856,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3103,16 +3191,16 @@ impl PaintAuxData {
     }
 }
 
-pub fn image_draw_instance(
+pub fn image_draw_instance_base(
     matrix: Mat2D,
     opacity: f32,
     clipRectInverseMatrix: Option<Mat2D>,
     clipID: u32,
     blendMode: BlendMode,
     zIndex: u32,
-) -> ImageDrawInstance {
+) -> ImageDrawInstanceBase {
     let clip = clipRectInverseMatrix.unwrap_or(Mat2D([0.0, 0.0, 0.0, 0.0, 1.0, 1.0]));
-    let mut out = ImageDrawInstance {
+    let mut out = ImageDrawInstanceBase {
         m_viewMatrix: [0.0; 4],
         m_clipRectInverseMatrix: [0.0; 4],
         m_translate: [0.0; 2],
@@ -3222,7 +3310,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{find_transformed_area, Mat2D, AABB};
+    use super::{AABB, Mat2D, find_transformed_area};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -3401,7 +3489,7 @@ impl FlushUniforms {
     }
 }
 
-impl ImageDrawInstance {
+impl ImageDrawInstanceBase {
     pub fn new(
         matrix: Mat2D,
         opacity: f32,
@@ -3410,7 +3498,7 @@ impl ImageDrawInstance {
         blendMode: BlendMode,
         zIndex: u32,
     ) -> Self {
-        image_draw_instance(
+        image_draw_instance_base(
             matrix,
             opacity,
             clipRectInverseMatrix,
@@ -3418,6 +3506,50 @@ impl ImageDrawInstance {
             blendMode,
             zIndex,
         )
+    }
+}
+
+impl ImageRectInstance {
+    pub fn new(
+        matrix: Mat2D,
+        opacity: f32,
+        clipRectInverseMatrix: Option<Mat2D>,
+        clipID: u32,
+        blendMode: BlendMode,
+        zIndex: u32,
+    ) -> Self {
+        Self {
+            m_commons: image_draw_instance_base(
+                matrix,
+                opacity,
+                clipRectInverseMatrix,
+                clipID,
+                blendMode,
+                zIndex,
+            ),
+        }
+    }
+}
+
+impl ImageMeshInstance {
+    pub fn new(
+        matrix: Mat2D,
+        opacity: f32,
+        clipRectInverseMatrix: Option<Mat2D>,
+        clipID: u32,
+        blendMode: BlendMode,
+        zIndex: u32,
+    ) -> Self {
+        Self {
+            m_commons: image_draw_instance_base(
+                matrix,
+                opacity,
+                clipRectInverseMatrix,
+                clipID,
+                blendMode,
+                zIndex,
+            ),
+        }
     }
 }
 

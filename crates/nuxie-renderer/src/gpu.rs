@@ -637,14 +637,17 @@ impl TriangleVertex {
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
-pub(crate) struct ImageDrawInstance {
+pub(crate) struct ImageDrawInstanceBase {
     pub view_matrix: [f32; 4],
     pub clip_rect_inverse_matrix: [f32; 4],
     pub translates: [f32; 4],
-    pub packed: [u32; 4],
+    pub opacity: f32,
+    pub clip_id: u32,
+    pub blend_mode: u32,
+    pub z_index: u32,
 }
 
-impl ImageDrawInstance {
+impl ImageDrawInstanceBase {
     pub(crate) fn new(
         matrix: Mat2D,
         opacity: f32,
@@ -659,12 +662,10 @@ impl ImageDrawInstance {
             view_matrix: [xx, yx, xy, yy],
             clip_rect_inverse_matrix: [clip_xx, clip_yx, clip_xy, clip_yy],
             translates: [tx, ty, clip_tx, clip_ty],
-            packed: [
-                opacity.to_bits(),
-                u32::from(clip_id),
-                blend_mode_id(blend_mode),
-                z_index,
-            ],
+            opacity,
+            clip_id: u32::from(clip_id),
+            blend_mode: blend_mode_id(blend_mode),
+            z_index,
         }
     }
 }
@@ -783,7 +784,7 @@ mod tests {
         assert_eq!(size_of::<PaintAuxData>(), 64);
         assert_eq!(size_of::<ContourData>(), 16);
         assert_eq!(size_of::<TriangleVertex>(), 12);
-        assert_eq!(size_of::<ImageDrawInstance>(), 64);
+        assert_eq!(size_of::<ImageDrawInstanceBase>(), 64);
         assert_eq!(size_of::<ImageRectVertex>(), 16);
         assert_eq!(size_of::<PaintType>(), 4);
         assert_eq!(size_of::<DrawType>(), 1);
@@ -792,10 +793,13 @@ mod tests {
         assert_eq!(offset_of!(PathData, atlas_transform), 36);
         assert_eq!(offset_of!(PathData, coverage_buffer_range), 48);
         assert_eq!(offset_of!(PaintAuxData, clip_rect_inverse_matrix), 32);
-        assert_eq!(offset_of!(ImageDrawInstance, view_matrix), 0);
-        assert_eq!(offset_of!(ImageDrawInstance, clip_rect_inverse_matrix), 16);
-        assert_eq!(offset_of!(ImageDrawInstance, translates), 32);
-        assert_eq!(offset_of!(ImageDrawInstance, packed), 48);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, view_matrix), 0);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, clip_rect_inverse_matrix), 16);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, translates), 32);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, opacity), 48);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, clip_id), 52);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, blend_mode), 56);
+        assert_eq!(offset_of!(ImageDrawInstanceBase, z_index), 60);
     }
 
     #[test]
@@ -930,7 +934,7 @@ mod tests {
         assert_eq!(image_paint.params, 4 | 0x100 | 1 << 4);
         assert_eq!(image_paint.value, 0.5f32.to_bits());
 
-        let image = ImageDrawInstance::new(
+        let image = ImageDrawInstanceBase::new(
             Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
             0.5,
             [7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
@@ -941,7 +945,10 @@ mod tests {
         assert_eq!(image.view_matrix, [1.0, 2.0, 3.0, 4.0]);
         assert_eq!(image.clip_rect_inverse_matrix, [7.0, 8.0, 9.0, 10.0]);
         assert_eq!(image.translates, [5.0, 6.0, 11.0, 12.0]);
-        assert_eq!(image.packed, [0.5f32.to_bits(), 13, 11, 14]);
+        assert_eq!(image.opacity, 0.5);
+        assert_eq!(image.clip_id, 13);
+        assert_eq!(image.blend_mode, 11);
+        assert_eq!(image.z_index, 14);
         assert_eq!(IMAGE_RECT_VERTICES.len(), 12);
         assert_eq!(IMAGE_RECT_INDICES.len(), 42);
         assert_eq!(&IMAGE_RECT_INDICES[..6], &[8, 0, 9, 9, 0, 1]);

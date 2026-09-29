@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context_impl.hpp.
-// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
 
 // /*
 //  * Copyright 2023 Rive
@@ -16,10 +16,9 @@
 // #include "rive/gpu_texture_format.hpp"
 //
 // #ifdef RIVE_CANVAS
+// #include "rive/renderer/render_canvas.hpp"
 // #include <memory>
-// #endif
 //
-// #ifdef RIVE_CANVAS
 // namespace rive::ore
 // {
 // class Context;
@@ -28,9 +27,6 @@
 //
 // namespace rive::gpu
 // {
-// #ifdef RIVE_CANVAS
-// class RenderCanvas;
-// #endif
 // class Texture;
 //
 // // This class manages GPU buffers and isues the actual rendering commands from
@@ -82,12 +78,21 @@
 //         bool generateRemainingMips = false) = 0;
 //
 // #ifdef RIVE_CANVAS
+//     // Allocates a canvas's texture and render target on this device, once,
+//     // before its first use here. A backend with no canvas support leaves the
+//     // canvas unbacked, which is how makeRenderCanvas reports it made none.
 //     virtual void ensureCanvasBacking(RenderCanvas*) {}
-//     // A device-free shell; the replaying context supplies the pixels.
+//
+//     // A canvas nothing has allocated for yet. The recording only needs the
+//     // image identity it refers to, so this touches no device and whichever
+//     // context replays owns the pixels.
 //     rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width, uint32_t height)
 //     {
 //         return make_rcp<RenderCanvas>(width, height);
 //     }
+//
+//     // Creates a RenderCanvas: a GPU texture usable as both a render target
+//     // and a render image. Returns nullptr if not supported by this backend.
 //     rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height)
 //     {
 //         rcp<RenderCanvas> canvas = makeDeferredRenderCanvas(width, height);
@@ -120,7 +125,8 @@
 //     virtual void resizeGradSpanBuffer(size_t sizeInBytes) = 0;
 //     virtual void resizeTessVertexSpanBuffer(size_t sizeInBytes) = 0;
 //     virtual void resizeTriangleVertexBuffer(size_t sizeInBytes) = 0;
-//     virtual void resizeImageDrawInstanceBuffer(size_t sizeInBytes) = 0;
+//     virtual void resizeImageRectInstanceBuffer(size_t sizeInBytes) = 0;
+//     virtual void resizeImageMeshInstanceBuffer(size_t sizeInBytes) = 0;
 //
 //     virtual void preBeginFrame(RenderContext*) {}
 //
@@ -163,7 +169,8 @@
 //     virtual void* mapGradSpanBuffer(size_t mapSizeInBytes) = 0;
 //     virtual void* mapTessVertexSpanBuffer(size_t mapSizeInBytes) = 0;
 //     virtual void* mapTriangleVertexBuffer(size_t mapSizeInBytes) = 0;
-//     virtual void* mapImageDrawInstanceBuffer(size_t mapSizeInBytes) = 0;
+//     virtual void* mapImageRectInstanceBuffer(size_t mapSizeInBytes) = 0;
+//     virtual void* mapImageMeshInstanceBuffer(size_t mapSizeInBytes) = 0;
 //
 //     // Unmap GPU buffers. All buffers will be unmapped before flush().
 //     virtual void unmapFlushUniformBuffer(size_t mapSizeInBytes) = 0;
@@ -174,7 +181,8 @@
 //     virtual void unmapGradSpanBuffer(size_t mapSizeInBytes) = 0;
 //     virtual void unmapTessVertexSpanBuffer(size_t mapSizeInBytes) = 0;
 //     virtual void unmapTriangleVertexBuffer(size_t mapSizeInBytes) = 0;
-//     virtual void unmapImageDrawInstanceBuffer(size_t mapSizeInBytes) = 0;
+//     virtual void unmapImageRectInstanceBuffer(size_t mapSizeInBytes) = 0;
+//     virtual void unmapImageMeshInstanceBuffer(size_t mapSizeInBytes) = 0;
 //
 //     // Allocate resources that are updated and used during flush().
 //     virtual void resizeGradientTexture(uint32_t width, uint32_t height) = 0;
@@ -221,6 +229,11 @@
 //
 //     // Called after all logical flushes in a frame have completed.
 //     virtual void postFlush(const RenderContext::FlushResources&) {}
+//
+//     // Called after replayed Ore passes, before the renderer draws again. Ore
+//     // leaves behind state a backend's own cache does not track, which the
+//     // next flush would then skip updating and render black.
+//     virtual void scrubStateAfterOre() {}
 //
 //     // Creates a platform-specific command buffer for use with flush().
 //     // Returns an opaque pointer that should be passed as
@@ -407,11 +420,17 @@ pub trait RenderContextImplContract {
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
         let canvas = self.makeDeferredRenderCanvas(width, height);
         unsafe { self.ensureCanvasBacking(canvas.get()) };
-        if unsafe { (&*canvas.get()).isBacked() } { canvas } else { rcp::new() }
+        if unsafe { (&*canvas.get()).isBacked() } {
+            canvas
+        } else {
+            rcp::new()
+        }
     }
 
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| RenderCanvas::new(width, height))
+        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| {
+            RenderCanvas::new(width, height)
+        })
     }
 
     unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
@@ -456,7 +475,8 @@ pub trait RenderContextImplContract {
     fn resizeTriangleVertexBuffer(&mut self, sizeInBytes: usize);
 
     // virtual void resizeImageDrawInstanceBuffer(size_t sizeInBytes) = 0;
-    fn resizeImageDrawInstanceBuffer(&mut self, sizeInBytes: usize);
+    fn resizeImageRectInstanceBuffer(&mut self, sizeInBytes: usize);
+    fn resizeImageMeshInstanceBuffer(&mut self, sizeInBytes: usize);
 
     // virtual void preBeginFrame(RenderContext*) {}
     unsafe fn preBeginFrame(&mut self, renderContext: *mut RenderContext) {
@@ -525,7 +545,8 @@ pub trait RenderContextImplContract {
     fn mapTriangleVertexBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
 
     // virtual void* mapImageDrawInstanceBuffer(size_t mapSizeInBytes) = 0;
-    fn mapImageDrawInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
+    fn mapImageRectInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
+    fn mapImageMeshInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
 
     // virtual void unmapFlushUniformBuffer(size_t mapSizeInBytes) = 0;
     fn unmapFlushUniformBuffer(&mut self, mapSizeInBytes: usize);
@@ -552,7 +573,8 @@ pub trait RenderContextImplContract {
     fn unmapTriangleVertexBuffer(&mut self, mapSizeInBytes: usize);
 
     // virtual void unmapImageDrawInstanceBuffer(size_t mapSizeInBytes) = 0;
-    fn unmapImageDrawInstanceBuffer(&mut self, mapSizeInBytes: usize);
+    fn unmapImageRectInstanceBuffer(&mut self, mapSizeInBytes: usize);
+    fn unmapImageMeshInstanceBuffer(&mut self, mapSizeInBytes: usize);
 
     // virtual void resizeGradientTexture(uint32_t width, uint32_t height) = 0;
     fn resizeGradientTexture(&mut self, width: u32, height: u32);

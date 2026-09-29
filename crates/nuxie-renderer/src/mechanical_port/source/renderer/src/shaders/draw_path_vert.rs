@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d5c52b73fc3e1d0077a2fe03f1076d07125a80a97207e34d30be219af8cfd486";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 549;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 19148;
+    "5976f7f40da9487ed8b0da506fe4745ac924dc1ec5a127f078317dc563473df8";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 548;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18970;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -311,45 +311,42 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
                                  pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 1u);
         float2 paintCoord = MUL(paintMatrix, fragCoord) + paintTranslate.xy;
-        if (paintType == LINEAR_GRADIENT_PAINT_TYPE ||
-            paintType == RADIAL_GRADIENT_PAINT_TYPE)
+
+        // v_paint.a contains "-row" of the gradient ramp at texel center,
+        // in normalized space.
+        v_paint.a = -uintBitsToFloat(paintData.y);
+        // abs(v_paint.b) contains either:
+        //   - 2 if the gradient ramp spans an entire row.
+        //   - x0 of the gradient ramp in normalized space, if it's a simple
+        //   2-texel ramp.
+        float gradientSpan = paintTranslate.z;
+        // gradientSpan is either ~1 (complex gradients span the whole width
+        // of the texture minus 1px), or 1/GRAD_TEXTURE_WIDTH (simple
+        // gradients span 1px).
+        if (gradientSpan > .9)
         {
-            // v_paint.a contains "-row" of the gradient ramp at texel center,
-            // in normalized space.
-            v_paint.a = -uintBitsToFloat(paintData.y);
-            // abs(v_paint.b) contains either:
-            //   - 2 if the gradient ramp spans an entire row.
-            //   - x0 of the gradient ramp in normalized space, if it's a simple
-            //   2-texel ramp.
-            float gradientSpan = paintTranslate.z;
-            // gradientSpan is either ~1 (complex gradients span the whole width
-            // of the texture minus 1px), or 1/GRAD_TEXTURE_WIDTH (simple
-            // gradients span 1px).
-            if (gradientSpan > .9)
-            {
-                // Complex ramps span an entire row. Set it to 2 to convey this.
-                v_paint.b = 2.;
-            }
-            else
-            {
-                // This is a simple ramp.
-                v_paint.b = paintTranslate.w;
-            }
-            if (paintType == LINEAR_GRADIENT_PAINT_TYPE)
-            {
-                // The paint is a linear gradient.
-                v_paint.g = .0;
-                v_paint.r = paintCoord.x;
-            }
-            else
-            {
-                // The paint is a radial gradient. Mark v_paint.b negative to
-                // indicate this to the fragment shader. (v_paint.b can't be
-                // zero because the gradient ramp is aligned on pixel centers,
-                // so negating it will always produce a negative number.)
-                v_paint.b = -v_paint.b;
-                v_paint.rg = paintCoord.xy;
-            }
+            // Complex ramps span an entire row. Set it to 2 to convey this.
+            v_paint.b = 2.;
+        }
+        else
+        {
+            // This is a simple ramp.
+            v_paint.b = paintTranslate.w;
+        }
+        if (paintType == LINEAR_GRADIENT_PAINT_TYPE)
+        {
+            // The paint is a linear gradient.
+            v_paint.g = .0;
+            v_paint.r = paintCoord.x;
+        }
+        else
+        {
+            // The paint is a radial gradient. Mark v_paint.b negative to
+            // indicate this to the fragment shader. (v_paint.b can't be
+            // zero because the gradient ramp is aligned on pixel centers,
+            // so negating it will always produce a negative number.)
+            v_paint.b = -v_paint.b;
+            v_paint.rg = paintCoord.xy;
         }
     }
 #ifdef @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
@@ -365,17 +362,19 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #if defined(@ENABLE_MODULATED_IMAGE)
     if (@ENABLE_MODULATED_IMAGE && (paintData.x & PAINT_FLAG_HAS_IMAGE) != 0u)
     {
-        float2x2 paintMatrix = make_float2x2(
+        float2x2 imageMatrix = make_float2x2(
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
                                  pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 4u));
         float4 paintTranslateAndLOD =
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
                                  pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 5u);
-        float2 paintCoord =
-            MUL(paintMatrix, fragCoord) + paintTranslateAndLOD.xy;
+        float2 imageCoord =
+            MUL(imageMatrix, fragCoord) + paintTranslateAndLOD.xy;
 
+        // Add 1 to the LOD because a z value of 0 means "we don't have an
+        // image"
         v_image =
-            float3(paintCoord.x, paintCoord.y, 1. + paintTranslateAndLOD.z);
+            float3(imageCoord.x, imageCoord.y, 1. + paintTranslateAndLOD.z);
     }
     else
     {

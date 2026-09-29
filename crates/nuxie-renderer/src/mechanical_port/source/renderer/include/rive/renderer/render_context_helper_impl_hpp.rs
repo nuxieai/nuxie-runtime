@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context_helper_impl.hpp.
-// Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
 
 // The complete source is retained below in declaration order. The Rust
 // declarations following it keep the inherited owner, every virtual
@@ -39,7 +39,8 @@
 //     void resizeGradSpanBuffer(size_t sizeInBytes) override;
 //     void resizeTessVertexSpanBuffer(size_t sizeInBytes) override;
 //     void resizeTriangleVertexBuffer(size_t sizeInBytes) override;
-//     void resizeImageDrawInstanceBuffer(size_t sizeInBytes) override;
+//     void resizeImageRectInstanceBuffer(size_t sizeInBytes) override;
+//     void resizeImageMeshInstanceBuffer(size_t sizeInBytes) override;
 //
 //     void* mapFlushUniformBuffer(size_t mapSizeInBytes) override;
 //     void* mapPathBuffer(size_t mapSizeInBytes) override;
@@ -49,7 +50,8 @@
 //     void* mapGradSpanBuffer(size_t mapSizeInBytes) override;
 //     void* mapTessVertexSpanBuffer(size_t mapSizeInBytes) override;
 //     void* mapTriangleVertexBuffer(size_t mapSizeInBytes) override;
-//     void* mapImageDrawInstanceBuffer(size_t mapSizeInBytes) override;
+//     void* mapImageRectInstanceBuffer(size_t mapSizeInBytes) override;
+//     void* mapImageMeshInstanceBuffer(size_t mapSizeInBytes) override;
 //
 //     void unmapFlushUniformBuffer(size_t mapSizeInBytes) override;
 //     void unmapPathBuffer(size_t mapSizeInBytes) override;
@@ -59,7 +61,8 @@
 //     void unmapGradSpanBuffer(size_t mapSizeInBytes) override;
 //     void unmapTessVertexSpanBuffer(size_t mapSizeInBytes) override;
 //     void unmapTriangleVertexBuffer(size_t mapSizeInBytes) override;
-//     void unmapImageDrawInstanceBuffer(size_t mapSizeInBytes) override;
+//     void unmapImageRectInstanceBuffer(size_t mapSizeInBytes) override;
+//     void unmapImageMeshInstanceBuffer(size_t mapSizeInBytes) override;
 //
 //     double secondsNow() const override
 //     {
@@ -76,9 +79,13 @@
 //     BufferRing* gradSpanBufferRing() { return m_gradSpanBuffer.get(); }
 //     BufferRing* tessSpanBufferRing() { return m_tessSpanBuffer.get(); }
 //     BufferRing* triangleBufferRing() { return m_triangleBuffer.get(); }
-//     BufferRing* imageDrawInstanceBufferRing()
+//     BufferRing* imageRectInstanceBufferRing()
 //     {
-//         return m_imageDrawInstanceBuffer.get();
+//         return m_imageRectInstanceBuffer.get();
+//     }
+//     BufferRing* imageMeshInstanceBufferRing()
+//     {
+//         return m_imageMeshInstanceBuffer.get();
 //     }
 //
 //     virtual std::unique_ptr<BufferRing> makeUniformBufferRing(
@@ -98,7 +105,8 @@
 //     std::unique_ptr<BufferRing> m_gradSpanBuffer;
 //     std::unique_ptr<BufferRing> m_tessSpanBuffer;
 //     std::unique_ptr<BufferRing> m_triangleBuffer;
-//     std::unique_ptr<BufferRing> m_imageDrawInstanceBuffer;
+//     std::unique_ptr<BufferRing> m_imageRectInstanceBuffer;
+//     std::unique_ptr<BufferRing> m_imageMeshInstanceBuffer;
 //     std::chrono::steady_clock::time_point m_localEpoch =
 //         std::chrono::steady_clock::now();
 // };
@@ -171,7 +179,8 @@ pub struct RenderContextHelperImpl {
     pub(crate) m_gradSpanBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     pub(crate) m_tessSpanBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     pub(crate) m_triangleBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
-    pub(crate) m_imageDrawInstanceBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
+    pub(crate) m_imageRectInstanceBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
+    pub(crate) m_imageMeshInstanceBuffer: ManuallyDrop<Option<Box<dyn BufferRingContract>>>,
     m_localEpoch: ManuallyDrop<Instant>,
 }
 
@@ -187,7 +196,8 @@ impl RenderContextHelperImpl {
             m_gradSpanBuffer: ManuallyDrop::new(None),
             m_tessSpanBuffer: ManuallyDrop::new(None),
             m_triangleBuffer: ManuallyDrop::new(None),
-            m_imageDrawInstanceBuffer: ManuallyDrop::new(None),
+            m_imageRectInstanceBuffer: ManuallyDrop::new(None),
+            m_imageMeshInstanceBuffer: ManuallyDrop::new(None),
             m_localEpoch: ManuallyDrop::new(Instant::now()),
         }
     }
@@ -197,7 +207,8 @@ impl Drop for RenderContextHelperImpl {
     fn drop(&mut self) {
         unsafe {
             ManuallyDrop::drop(&mut self.m_localEpoch);
-            ManuallyDrop::drop(&mut self.m_imageDrawInstanceBuffer);
+            ManuallyDrop::drop(&mut self.m_imageMeshInstanceBuffer);
+            ManuallyDrop::drop(&mut self.m_imageRectInstanceBuffer);
             ManuallyDrop::drop(&mut self.m_triangleBuffer);
             ManuallyDrop::drop(&mut self.m_tessSpanBuffer);
             ManuallyDrop::drop(&mut self.m_gradSpanBuffer);
@@ -263,7 +274,8 @@ pub trait RenderContextHelperImplContract:
     // void resizeTriangleVertexBuffer(size_t sizeInBytes) override;
     fn resizeTriangleVertexBuffer(&mut self, sizeInBytes: usize);
     // void resizeImageDrawInstanceBuffer(size_t sizeInBytes) override;
-    fn resizeImageDrawInstanceBuffer(&mut self, sizeInBytes: usize);
+    fn resizeImageRectInstanceBuffer(&mut self, sizeInBytes: usize);
+    fn resizeImageMeshInstanceBuffer(&mut self, sizeInBytes: usize);
 
     // void* mapFlushUniformBuffer(size_t mapSizeInBytes) override;
     fn mapFlushUniformBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
@@ -282,7 +294,8 @@ pub trait RenderContextHelperImplContract:
     // void* mapTriangleVertexBuffer(size_t mapSizeInBytes) override;
     fn mapTriangleVertexBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
     // void* mapImageDrawInstanceBuffer(size_t mapSizeInBytes) override;
-    fn mapImageDrawInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
+    fn mapImageRectInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
+    fn mapImageMeshInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void;
 
     // void unmapFlushUniformBuffer(size_t mapSizeInBytes) override;
     fn unmapFlushUniformBuffer(&mut self, mapSizeInBytes: usize);
@@ -301,7 +314,8 @@ pub trait RenderContextHelperImplContract:
     // void unmapTriangleVertexBuffer(size_t mapSizeInBytes) override;
     fn unmapTriangleVertexBuffer(&mut self, mapSizeInBytes: usize);
     // void unmapImageDrawInstanceBuffer(size_t mapSizeInBytes) override;
-    fn unmapImageDrawInstanceBuffer(&mut self, mapSizeInBytes: usize);
+    fn unmapImageRectInstanceBuffer(&mut self, mapSizeInBytes: usize);
+    fn unmapImageMeshInstanceBuffer(&mut self, mapSizeInBytes: usize);
 
     // double secondsNow() const override;
     fn secondsNow(&self) -> f64 {
@@ -348,7 +362,9 @@ pub trait RenderContextHelperBackendContract:
         }
     }
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| RenderCanvas::new(width, height))
+        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| {
+            RenderCanvas::new(width, height)
+        })
     }
     unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
         let _ = canvas;
@@ -482,8 +498,12 @@ where
     fn resizeTriangleVertexBuffer(&mut self, b: usize) {
         RenderContextHelperImplContract::resizeTriangleVertexBuffer(self, b)
     }
-    fn resizeImageDrawInstanceBuffer(&mut self, b: usize) {
-        RenderContextHelperImplContract::resizeImageDrawInstanceBuffer(self, b)
+    fn resizeImageRectInstanceBuffer(&mut self, b: usize) {
+        RenderContextHelperImplContract::resizeImageRectInstanceBuffer(self, b)
+    }
+
+    fn resizeImageMeshInstanceBuffer(&mut self, b: usize) {
+        RenderContextHelperImplContract::resizeImageMeshInstanceBuffer(self, b)
     }
     unsafe fn preBeginFrame(&mut self, c: *mut RenderContext) {
         unsafe { RenderContextHelperBackendContract::preBeginFrame(self, c) }
@@ -528,8 +548,12 @@ where
     fn mapTriangleVertexBuffer(&mut self, b: usize) -> *mut c_void {
         RenderContextHelperImplContract::mapTriangleVertexBuffer(self, b)
     }
-    fn mapImageDrawInstanceBuffer(&mut self, b: usize) -> *mut c_void {
-        RenderContextHelperImplContract::mapImageDrawInstanceBuffer(self, b)
+    fn mapImageRectInstanceBuffer(&mut self, b: usize) -> *mut c_void {
+        RenderContextHelperImplContract::mapImageRectInstanceBuffer(self, b)
+    }
+
+    fn mapImageMeshInstanceBuffer(&mut self, b: usize) -> *mut c_void {
+        RenderContextHelperImplContract::mapImageMeshInstanceBuffer(self, b)
     }
     fn unmapFlushUniformBuffer(&mut self, b: usize) {
         RenderContextHelperImplContract::unmapFlushUniformBuffer(self, b)
@@ -555,8 +579,12 @@ where
     fn unmapTriangleVertexBuffer(&mut self, b: usize) {
         RenderContextHelperImplContract::unmapTriangleVertexBuffer(self, b)
     }
-    fn unmapImageDrawInstanceBuffer(&mut self, b: usize) {
-        RenderContextHelperImplContract::unmapImageDrawInstanceBuffer(self, b)
+    fn unmapImageRectInstanceBuffer(&mut self, b: usize) {
+        RenderContextHelperImplContract::unmapImageRectInstanceBuffer(self, b)
+    }
+
+    fn unmapImageMeshInstanceBuffer(&mut self, b: usize) {
+        RenderContextHelperImplContract::unmapImageMeshInstanceBuffer(self, b)
     }
     fn resizeGradientTexture(&mut self, w: u32, h: u32) {
         RenderContextHelperBackendContract::resizeGradientTexture(self, w, h)
@@ -683,8 +711,16 @@ impl RenderContextHelperImpl {
     // {
     //     return m_imageDrawInstanceBuffer.get();
     // }
-    pub(crate) fn imageDrawInstanceBufferRing(&mut self) -> *mut BufferRing {
-        self.m_imageDrawInstanceBuffer
+    pub(crate) fn imageRectInstanceBufferRing(&mut self) -> *mut BufferRing {
+        self.m_imageRectInstanceBuffer
+            .as_deref_mut()
+            .map_or(core::ptr::null_mut(), |ring| {
+                ring.bufferRingMut() as *mut BufferRing
+            })
+    }
+
+    pub(crate) fn imageMeshInstanceBufferRing(&mut self) -> *mut BufferRing {
+        self.m_imageMeshInstanceBuffer
             .as_deref_mut()
             .map_or(core::ptr::null_mut(), |ring| {
                 ring.bufferRingMut() as *mut BufferRing

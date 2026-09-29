@@ -1984,7 +1984,7 @@ pub unsafe fn make_image_rect_draw(
     );
     base.push_to_render_context = push_image_rect;
     base.release_refs = release_image_rect;
-    base.resource_counts.imageDrawCount = 1;
+    base.resource_counts.imageRectCount = 1;
     Box::new(ImageRectDrawAllocation {
         draw: ImageRectDraw { base, opacity },
         image_texture,
@@ -2054,7 +2054,7 @@ pub unsafe fn make_image_mesh_draw(
     );
     base.push_to_render_context = push_image_mesh;
     base.release_refs = release_image_mesh;
-    base.resource_counts.imageDrawCount = 1;
+    base.resource_counts.imageMeshCount = 1;
     Box::new(ImageMeshDrawAllocation {
         draw: ImageMeshDraw {
             base,

@@ -146,11 +146,18 @@ where
     }
 
     // void RenderContextHelperImpl::resizeImageDrawInstanceBuffer(size_t sizeInBytes)
-    fn resizeImageDrawInstanceBuffer(&mut self, sizeInBytes: usize) {
-        // m_imageDrawInstanceBuffer = makeVertexBufferRing(sizeInBytes);
+    fn resizeImageRectInstanceBuffer(&mut self, sizeInBytes: usize) {
+        // m_imageRectInstanceBuffer = makeVertexBufferRing(sizeInBytes);
         let ring =
             RenderContextHelperBufferFactoryContract::makeVertexBufferRing(self, sizeInBytes);
-        *self.renderContextHelperImplMut().m_imageDrawInstanceBuffer = ring;
+        *self.renderContextHelperImplMut().m_imageRectInstanceBuffer = ring;
+    }
+
+    fn resizeImageMeshInstanceBuffer(&mut self, sizeInBytes: usize) {
+        // m_imageMeshInstanceBuffer = makeVertexBufferRing(sizeInBytes);
+        let ring =
+            RenderContextHelperBufferFactoryContract::makeVertexBufferRing(self, sizeInBytes);
+        *self.renderContextHelperImplMut().m_imageMeshInstanceBuffer = ring;
     }
 
     // void* RenderContextHelperImpl::mapFlushUniformBuffer(size_t mapSizeInBytes)
@@ -234,10 +241,19 @@ where
     }
 
     // void* RenderContextHelperImpl::mapImageDrawInstanceBuffer(size_t mapSizeInBytes)
-    fn mapImageDrawInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void {
-        // return m_imageDrawInstanceBuffer->mapBuffer(mapSizeInBytes);
+    fn mapImageRectInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void {
+        // return m_imageRectInstanceBuffer->mapBuffer(mapSizeInBytes);
         self.renderContextHelperImplMut()
-            .m_imageDrawInstanceBuffer
+            .m_imageRectInstanceBuffer
+            .as_mut()
+            .expect("image draw instance buffer ring is required before mapping")
+            .mapBuffer(mapSizeInBytes)
+    }
+
+    fn mapImageMeshInstanceBuffer(&mut self, mapSizeInBytes: usize) -> *mut c_void {
+        // return m_imageMeshInstanceBuffer->mapBuffer(mapSizeInBytes);
+        self.renderContextHelperImplMut()
+            .m_imageMeshInstanceBuffer
             .as_mut()
             .expect("image draw instance buffer ring is required before mapping")
             .mapBuffer(mapSizeInBytes)
@@ -349,12 +365,24 @@ where
 
     // void RenderContextHelperImpl::unmapImageDrawInstanceBuffer(
     //     size_t mapSizeInBytes)
-    fn unmapImageDrawInstanceBuffer(&mut self, mapSizeInBytes: usize) {
-        // assert(m_imageDrawInstanceBuffer->mapSizeInBytes() == mapSizeInBytes);
-        // m_imageDrawInstanceBuffer->unmapAndSubmitBuffer();
+    fn unmapImageRectInstanceBuffer(&mut self, mapSizeInBytes: usize) {
+        // assert(m_imageRectInstanceBuffer->mapSizeInBytes() == mapSizeInBytes);
+        // m_imageRectInstanceBuffer->unmapAndSubmitBuffer();
         let ring = self
             .renderContextHelperImplMut()
-            .m_imageDrawInstanceBuffer
+            .m_imageRectInstanceBuffer
+            .as_mut()
+            .expect("image draw instance buffer ring is required before unmapping");
+        debug_assert!(ring.mapSizeInBytes() == mapSizeInBytes);
+        ring.unmapAndSubmitBuffer();
+    }
+
+    fn unmapImageMeshInstanceBuffer(&mut self, mapSizeInBytes: usize) {
+        // assert(m_imageMeshInstanceBuffer->mapSizeInBytes() == mapSizeInBytes);
+        // m_imageMeshInstanceBuffer->unmapAndSubmitBuffer();
+        let ring = self
+            .renderContextHelperImplMut()
+            .m_imageMeshInstanceBuffer
             .as_mut()
             .expect("image draw instance buffer ring is required before unmapping");
         debug_assert!(ring.mapSizeInBytes() == mapSizeInBytes);

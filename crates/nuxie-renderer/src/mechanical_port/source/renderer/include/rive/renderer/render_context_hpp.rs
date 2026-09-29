@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/render_context.hpp.
-// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -32,7 +32,9 @@
 // #include "rive/renderer/shader_compilation_mode.hpp"
 // #include "rive/renderer/sk_rectanizer_skyline.hpp"
 // #include "rive/renderer/trivial_block_allocator.hpp"
+// #include "rive/renderer/triangulation_controller.hpp"
 // #include "rive/shapes/paint/color.hpp"
+// #include <algorithm>
 // #include <array>
 // #include <unordered_map>
 //
@@ -121,18 +123,20 @@
 //         LoadAction loadAction = LoadAction::clear;
 //         ColorInt clearColor = 0;
 //         // If nonzero, the number of MSAA samples to use.
-//         // Setting this to a nonzero value forces msaa mode.
+//         // Setting this to a nonzero value forces depthStencil mode.
 //         uint32_t msaaSampleCount = 0;
-//         // Use atomic mode (preferred) or msaa instead of rasterOrdering.
+//         // Use atomic mode (preferred) or depthStencil instead of
+//         // rasterOrdering.
 //         bool disableRasterOrdering = false;
 //         DitherMode ditherMode = DitherMode::interleavedGradientNoise;
+//         TriangulationThresholds triangulationThresholds;
 //
 //         // If nonzero, frames are split up into virtual tiles of this size.
 //         //
 //         // As of now, each tile gets drawn in a separate render pass. The
 //         // purpose of these virtual tiles, for now, is to break the frame up
 //         // into smaller chunks so that Rive can be pre-empted by other rendering
-//         // processes. This is only supported on Vulkan/non-msaa.
+//         // processes. This is only supported on Vulkan/non-depthStencil.
 //         //
 //         // TODO: We could also explore a different type of virtual tiling that
 //         // reduces barriers in atomic mode, but that is not how this feature
@@ -163,6 +167,14 @@
 //     // All rendering related calls must be made between beginFrame() and
 //     // flush().
 //     void beginFrame(const FrameDescriptor&);
+//
+//     // Decides which filled paths get an interior triangulation, under the
+//     // budget in FrameDescriptor::triangulationThresholds. It is live-tuned
+//     // across frames.
+//     TriangulationController& triangulationController()
+//     {
+//         return m_triangulationController;
+//     }
 //
 //     const FrameDescriptor& frameDescriptor() const
 //     {
@@ -323,8 +335,8 @@
 //     // (for rendering into) and a render image (for compositing into draws).
 //     rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height);
 //
-//     // Like makeRenderCanvas, but allocates nothing: whichever context ends
-//     // up replaying owns the pixels and backs it there.
+//     // Like makeRenderCanvas, but allocates nothing: whichever context ends up
+//     // replaying the recording owns the pixels and backs it there.
 //     rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width, uint32_t height);
 //
 //     rive::ore::Context* ore() override;
@@ -359,7 +371,7 @@
 //     // LogicalFlush::LayoutCounters.
 //     struct ResourceAllocationCounts
 //     {
-//         constexpr static int NUM_ELEMENTS = 19;
+//         constexpr static int NUM_ELEMENTS = 20;
 //         using VecType = simd::gvec<size_t, NUM_ELEMENTS>;
 //
 //         RIVE_ALWAYS_INLINE VecType toVec() const
@@ -389,7 +401,8 @@
 //         size_t gradSpanBufferCount = 0;
 //         size_t tessSpanBufferCount = 0;
 //         size_t triangleVertexBufferCount = 0;
-//         size_t imageDrawInstanceBufferCount = 0;
+//         size_t imageRectInstanceBufferCount = 0;
+//         size_t imageMeshInstanceBufferCount = 0;
 //         size_t gradTextureHeight = 0;
 //         size_t tessTextureHeight = 0;
 //         size_t featherAtlasTextureWidth = 0;
@@ -425,6 +438,8 @@
 //     ResourceAllocationCounts m_currentResourceAllocations;
 //     ResourceAllocationCounts m_maxRecentResourceRequirements;
 //     double m_lastResourceTrimTimeInSeconds;
+//
+//     TriangulationController m_triangulationController;
 //
 //     // Per-frame state.
 //     FrameDescriptor m_frameDescriptor;
@@ -476,7 +491,8 @@
 //     WriteOnlyMappedMemory<gpu::GradientSpan> m_gradSpanData;
 //     WriteOnlyMappedMemory<gpu::TessVertexSpan> m_tessSpanData;
 //     WriteOnlyMappedMemory<gpu::TriangleVertex> m_triangleVertexData;
-//     WriteOnlyMappedMemory<gpu::ImageDrawInstance> m_imageDrawInstanceData;
+//     WriteOnlyMappedMemory<gpu::ImageRectInstance> m_imageRectInstanceData;
+//     WriteOnlyMappedMemory<gpu::ImageMeshInstance> m_imageMeshInstanceData;
 //
 //     // Simple allocator for trivially-destructible data that needs to persist
 //     // until the current frame has completed. All memory in this allocator is
@@ -602,7 +618,7 @@
 //         // allocated in the render context's various GPU buffers.
 //         struct ResourceCounters
 //         {
-//             constexpr static int NUM_ELEMENTS = 7;
+//             constexpr static int NUM_ELEMENTS = 8;
 //             using VecType = simd::gvec<size_t, NUM_ELEMENTS>;
 //
 //             VecType toVec() const
@@ -630,7 +646,8 @@
 //             // lines, curves, lone joins, emulated caps, etc.
 //             size_t maxTessellatedSegmentCount = 0;
 //             size_t maxTriangleVertexCount = 0;
-//             size_t imageDrawCount = 0; // imageRect or imageMesh.
+//             size_t imageRectCount = 0;
+//             size_t imageMeshCount = 0;
 //         };
 //
 //         // Additional counters for layout state that don't need to be tracked by
@@ -921,8 +938,9 @@
 //         // prevents DrawBatches from being combined with the existing drawList.
 //         BarrierFlags m_pendingBarriers;
 //
-//         // Stateful Z index of the current draw being pushed. Used by msaa mode
-//         // to avoid double hits and to reverse-sort opaque paths front to back.
+//         // Stateful Z index of the current draw being pushed. Used by
+//         // depthStencil mode to avoid double hits and to reverse-sort opaque
+//         // paths front to back.
 //         uint32_t m_currentZIndex;
 //
 //         RIVE_DEBUG_CODE(bool m_hasDoneLayout = false;)
@@ -1615,7 +1633,8 @@ impl RectanizerSkyline {
 }
 pub use gpu::{
     BarrierFlags, ColorRampLocation, ContourData, ContourDirections, DrawBatch, DrawContents,
-    DrawType, FlushDescriptor, FlushUniforms, GradTextureLayout, GradientSpan, ImageDrawInstance,
+    DrawType, FlushDescriptor, FlushUniforms, GradTextureLayout, GradientSpan, ImageRectInstance,
+    ImageMeshInstance,
     PaintAuxData, PaintData, PaintType, PathData, ShaderFeatures, ShaderMiscFlags, TessVertexSpan,
     TriangleVertex, TwoTexelRamp, WindingFaces,
 };
@@ -2040,7 +2059,8 @@ pub struct ResourceAllocationCounts {
     pub gradSpanBufferCount: usize,
     pub tessSpanBufferCount: usize,
     pub triangleVertexBufferCount: usize,
-    pub imageDrawInstanceBufferCount: usize,
+    pub imageRectInstanceBufferCount: usize,
+    pub imageMeshInstanceBufferCount: usize,
     pub gradTextureHeight: usize,
     pub tessTextureHeight: usize,
     pub featherAtlasTextureWidth: usize,
@@ -2054,7 +2074,7 @@ pub struct ResourceAllocationCounts {
 }
 
 impl ResourceAllocationCounts {
-    pub const NUM_ELEMENTS: usize = 19;
+    pub const NUM_ELEMENTS: usize = 20;
 
     // VecType toVec() const;
     pub fn toVec(&self) -> [usize; Self::NUM_ELEMENTS] {
@@ -2067,7 +2087,8 @@ impl ResourceAllocationCounts {
             self.gradSpanBufferCount,
             self.tessSpanBufferCount,
             self.triangleVertexBufferCount,
-            self.imageDrawInstanceBufferCount,
+            self.imageRectInstanceBufferCount,
+            self.imageMeshInstanceBufferCount,
             self.gradTextureHeight,
             self.tessTextureHeight,
             self.featherAtlasTextureWidth,
@@ -2092,17 +2113,18 @@ impl ResourceAllocationCounts {
             gradSpanBufferCount: vec[5],
             tessSpanBufferCount: vec[6],
             triangleVertexBufferCount: vec[7],
-            imageDrawInstanceBufferCount: vec[8],
-            gradTextureHeight: vec[9],
-            tessTextureHeight: vec[10],
-            featherAtlasTextureWidth: vec[11],
-            featherAtlasTextureHeight: vec[12],
-            plsTransientBackingWidth: vec[13],
-            plsTransientBackingHeight: vec[14],
-            plsTransientBackingPlaneCount: vec[15],
-            plsAtomicCoverageBackingWidth: vec[16],
-            plsAtomicCoverageBackingHeight: vec[17],
-            coverageBufferLength: vec[18],
+            imageRectInstanceBufferCount: vec[8],
+            imageMeshInstanceBufferCount: vec[9],
+            gradTextureHeight: vec[10],
+            tessTextureHeight: vec[11],
+            featherAtlasTextureWidth: vec[12],
+            featherAtlasTextureHeight: vec[13],
+            plsTransientBackingWidth: vec[14],
+            plsTransientBackingHeight: vec[15],
+            plsTransientBackingPlaneCount: vec[16],
+            plsAtomicCoverageBackingWidth: vec[17],
+            plsAtomicCoverageBackingHeight: vec[18],
+            coverageBufferLength: vec[19],
         }
     }
 }
@@ -2192,7 +2214,8 @@ pub struct RenderContextMembers {
     pub(crate) m_grad_span_data: WriteOnlyMappedMemory<gpu::GradientSpan>,
     pub(crate) m_tess_span_data: WriteOnlyMappedMemory<gpu::TessVertexSpan>,
     pub(crate) m_triangle_vertex_data: WriteOnlyMappedMemory<gpu::TriangleVertex>,
-    pub(crate) m_image_draw_instance_data: WriteOnlyMappedMemory<gpu::ImageDrawInstance>,
+    pub(crate) m_image_rect_instance_data: WriteOnlyMappedMemory<gpu::ImageRectInstance>,
+    pub(crate) m_image_mesh_instance_data: WriteOnlyMappedMemory<gpu::ImageMeshInstance>,
     pub(crate) m_per_frame_allocator: TrivialBlockAllocator,
     pub(crate) m_num_chops_allocator: TrivialArrayAllocator<u8>,
     pub(crate) m_chop_vertices_allocator: TrivialArrayAllocator<Vec2D>,
@@ -2284,7 +2307,8 @@ mod render_context_layout_tests {
             offset_of!(RenderContextMembers, m_grad_span_data),
             offset_of!(RenderContextMembers, m_tess_span_data),
             offset_of!(RenderContextMembers, m_triangle_vertex_data),
-            offset_of!(RenderContextMembers, m_image_draw_instance_data),
+            offset_of!(RenderContextMembers, m_image_rect_instance_data),
+            offset_of!(RenderContextMembers, m_image_mesh_instance_data),
             offset_of!(RenderContextMembers, m_per_frame_allocator),
             offset_of!(RenderContextMembers, m_num_chops_allocator),
             offset_of!(RenderContextMembers, m_chop_vertices_allocator),
@@ -2342,7 +2366,8 @@ impl RenderContext {
                 m_grad_span_data: gpu::WriteOnlyMappedMemory::default(),
                 m_tess_span_data: gpu::WriteOnlyMappedMemory::default(),
                 m_triangle_vertex_data: gpu::WriteOnlyMappedMemory::default(),
-                m_image_draw_instance_data: gpu::WriteOnlyMappedMemory::default(),
+                m_image_rect_instance_data: gpu::WriteOnlyMappedMemory::default(),
+                m_image_mesh_instance_data: gpu::WriteOnlyMappedMemory::default(),
                 m_per_frame_allocator: TrivialBlockAllocator::default(),
                 m_num_chops_allocator: TrivialArrayAllocator::default(),
                 m_chop_vertices_allocator: TrivialArrayAllocator::default(),
@@ -2593,7 +2618,8 @@ pub struct ResourceCounters {
     pub contourCount: usize,
     pub maxTessellatedSegmentCount: usize,
     pub maxTriangleVertexCount: usize,
-    pub imageDrawCount: usize,
+    pub imageRectCount: usize,
+    pub imageMeshCount: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

@@ -1,7 +1,8 @@
 //! AVFoundation playback without a native view overlay. AVPlayer owns A/V
-//! timing; frames are copied into an owned RGBA buffer for the renderer upload.
-//! This initial path does a CPU copy and does not claim zero-copy or a known
-//! hardware decode path. All methods, including Drop, run on the main thread.
+//! timing; each frame is handed over in AVFoundation's IOSurface-backed pixel
+//! buffer, which the Metal renderer samples in place. This path does not claim
+//! a known hardware decode path. All methods, including Drop, run on the main
+//! thread.
 use nuxie_runtime::video::playback::{
     AudioPolicy, Command, DecoderAction, Playback, SuspensionReason,
 };
@@ -33,7 +34,14 @@ unsafe extern "C" {
         width: *mut u32,
         height: *mut u32,
     ) -> i32;
-    fn nux_video_apple_copy_rgba(handle: *mut c_void, out: *mut u8, capacity: usize) -> bool;
+    fn nux_video_apple_take_pixel_buffer(handle: *mut c_void) -> *mut c_void;
+    fn nux_video_apple_pixel_buffer_release(pixel_buffer: *mut c_void);
+    fn nux_video_apple_pixel_buffer_read_rgba(
+        pixel_buffer: *mut c_void,
+        out: *mut u8,
+        capacity: usize,
+    ) -> bool;
+    fn nux_video_apple_pixel_buffer_first_pixel(pixel_buffer: *mut c_void, out: *mut u8) -> bool;
     fn nux_video_apple_pump(seconds: f64);
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,9 +56,53 @@ pub enum AppleError {
     Disposed,
 }
 
-/// Storage remains alive while the renderer uploads it; native decode surfaces
-/// are released immediately after the bounded copy. Pixels are opaque SDR RGBA.
 pub use crate::scene::{Frame, FramePixels};
+
+/// A decoded frame in AVFoundation's IOSurface-backed 32BGRA `CVPixelBuffer`.
+/// Pass it to `NativeMetalFactory::import_pixel_buffer` or
+/// `nux_player_video_present_metal_pixel_buffer`, which sample it in place and
+/// hold their own reference; `read_rgba` copies it to the CPU for checks.
+/// Dropping it releases this reference.
+pub struct PixelBuffer {
+    buffer: NonNull<c_void>,
+    width: u32,
+    height: u32,
+}
+
+impl PixelBuffer {
+    /// The `CVPixelBufferRef`, valid while this value lives.
+    pub fn as_ptr(&self) -> NonNull<c_void> {
+        self.buffer
+    }
+
+    /// The top-left pixel as RGBA, a color oracle that copies four bytes.
+    pub fn first_pixel(&self) -> Option<[u8; 4]> {
+        let mut pixel = [0; 4];
+        unsafe {
+            nux_video_apple_pixel_buffer_first_pixel(self.buffer.as_ptr(), pixel.as_mut_ptr())
+        }
+        .then_some(pixel)
+    }
+
+    /// Top-row-first RGBA bytes, the frame's pixels as the byte path reads them.
+    pub fn read_rgba(&self) -> Option<Vec<u8>> {
+        let mut rgba = vec![0; self.width as usize * self.height as usize * 4];
+        unsafe {
+            nux_video_apple_pixel_buffer_read_rgba(
+                self.buffer.as_ptr(),
+                rgba.as_mut_ptr(),
+                rgba.len(),
+            )
+        }
+        .then_some(rgba)
+    }
+}
+
+impl Drop for PixelBuffer {
+    fn drop(&mut self) {
+        unsafe { nux_video_apple_pixel_buffer_release(self.buffer.as_ptr()) }
+    }
+}
 pub enum Observation {
     Ready {
         generation: u64,
@@ -180,22 +232,25 @@ impl ApplePlayer {
             2 => Some(Observation::Playing(generation)),
             3 => Some(Observation::Ended(generation)),
             4 | 5 => {
-                let length = (width as usize)
+                // The budget bounds the texture each frame's RGBA would need.
+                (width as usize)
                     .checked_mul(height as usize)
                     .and_then(|n| n.checked_mul(4))
                     .filter(|&n| n > 0 && n <= self.max_frame_bytes)
                     .ok_or(AppleError::FrameTooLarge)?;
-                let mut rgba = vec![0; length];
-                if !unsafe { nux_video_apple_copy_rgba(handle.as_ptr(), rgba.as_mut_ptr(), length) }
-                {
-                    return Err(AppleError::DecodeFailed);
-                }
+                let buffer =
+                    NonNull::new(unsafe { nux_video_apple_take_pixel_buffer(handle.as_ptr()) })
+                        .ok_or(AppleError::DecodeFailed)?;
                 let frame = Frame {
                     generation,
                     pts: time,
                     width,
                     height,
-                    pixels: FramePixels::Rgba(rgba),
+                    pixels: FramePixels::PixelBuffer(PixelBuffer {
+                        buffer,
+                        width,
+                        height,
+                    }),
                 };
                 Some(if kind == 5 {
                     Observation::SelectedSeekFrame(frame)

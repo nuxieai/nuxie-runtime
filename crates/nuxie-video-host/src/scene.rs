@@ -41,13 +41,22 @@ pub struct Frame {
 /// Where a decoded frame's pixels are.
 pub enum FramePixels {
     /// `width * height * 4` sRGB bytes, top row first, copied to the CPU by
-    /// the platform adapter.
+    /// the platform adapter (Android).
     Rgba(Vec<u8>),
     /// A browser frame drawn into its player's GPU-backed canvas. Copy it on
     /// the GPU, or read it back with `CanvasFrame::read_rgba` where the
     /// renderer cannot. Valid until the player captures its next frame.
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     Canvas(crate::browser::CanvasFrame),
+    /// An Apple frame in AVFoundation's IOSurface-backed pixel buffer, which
+    /// the Metal renderer samples in place.
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "tvos",
+        target_os = "visionos"
+    ))]
+    PixelBuffer(crate::apple::PixelBuffer),
 }
 
 impl Frame {
@@ -57,6 +66,13 @@ impl Frame {
             FramePixels::Rgba(rgba) => Some(rgba),
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             FramePixels::Canvas(_) => None,
+            #[cfg(any(
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "tvos",
+                target_os = "visionos"
+            ))]
+            FramePixels::PixelBuffer(_) => None,
         }
     }
 }

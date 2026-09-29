@@ -5,8 +5,8 @@ controller. They do not fetch or authenticate published assets. A caller must
 retain its verified source/cache lease, marshal observations to the scene's
 owning thread, and upload through the same persistent renderer factory used to
 import the scene. Hardware decoding is **unknown** unless independently observed.
-The browser adapter hands the renderer each decoded frame on the GPU; the Apple
-and Android adapters still copy bounded RGBA frames and do not claim zero-copy.
+The browser and Apple adapters hand the renderer each decoded frame on the GPU;
+the Android adapter still copies bounded RGBA frames and does not claim zero-copy.
 
 - Apple: AVPlayer audio clock and AVPlayerItemVideoOutput. Methods and destruction
   run on the main thread. `AppleScenePlayer` owns one live video occurrence.
@@ -15,6 +15,14 @@ and Android adapters still copy bounded RGBA frames and do not claim zero-copy.
   players run. Muted players never activate the session. Shared audible players
   combine mix/duck/exclusive requirements. Interruptions and headphone removal
   feed playback intent; the host still supplies application/visibility suspension.
+  Frames arrive as `FramePixels::PixelBuffer`: AVFoundation's IOSurface-backed
+  32BGRA buffer, which `NativeMetalFactory::import_pixel_buffer` (or the C ABI's
+  `nux_player_video_present_metal_pixel_buffer`) wraps as a BGRA8Unorm texture
+  with no CPU copy. It samples the same bytes the RGBA path uploaded, so colors
+  are unchanged. The texture holds the buffer until it is released, so
+  AVFoundation cannot reuse the surface while a frame is shown. The byte budget
+  bounds each frame's RGBA size. `PixelBuffer::read_rgba` copies a frame to the
+  CPU for checks.
 - Browser: HTMLVideoElement. Inside requestVideoFrameCallback the adapter draws
   the frame the element shows into the player's own 2D canvas, so pixels and the
   callback's mediaTime describe the same decoded frame, and hands the canvas over

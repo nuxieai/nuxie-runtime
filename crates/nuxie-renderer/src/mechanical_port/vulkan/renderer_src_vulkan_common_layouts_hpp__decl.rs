@@ -1,26 +1,18 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/common_layouts.hpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `2210ed8799c0128504dd664a7179f4f8f299e85a`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
 use super::vkutil_decl::kColorWriteMaskRGBA;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    ImageDrawInstance, ImageRectVertex, PatchVertex, TriangleVertex,
+    ImageRectInstance, ImageMeshInstance, ImageRectVertex, PatchVertex, TriangleVertex, VertexElementFormat, VertexAttribute,
 };
 use ash::vk;
 use std::sync::LazyLock;
 
 // Typed expansion of the pinned `shaders/constants.glsl` dependency.
 const PLS_PLANE_COUNT: u32 = 4;
-const IMAGE_FIRST_ATTRIB_IDX: u32 = 2;
-const IMAGE_VIEW_MATRIX_ATTRIB_IDX: u32 = 2;
-const IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX: u32 = 3;
-const IMAGE_TRANSLATES_ATTRIB_IDX: u32 = 4;
-const IMAGE_PACKED_ATTRIBS_IDX: u32 = 5;
-const IMAGE_LAST_ATTRIB_IDX: u32 = 5;
-const IMAGE_ATTRIB_COUNT: usize =
-    (IMAGE_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX) as usize;
 
 pub(crate) const MAX_RENDER_PASS_ATTACHMENTS: u32 = PLS_PLANE_COUNT + 1;
 
@@ -77,69 +69,47 @@ pub(crate) static INTERIOR_TRI_VERTEX_INPUT_STATE: LazyLock<
         .vertex_attribute_descriptions(&INTERIOR_TRI_VERTEX_ATTRIBS)
 });
 
-const fn imageDrawInstanceAttribs(
-    binding: u32,
-) -> [vk::VertexInputAttributeDescription; IMAGE_ATTRIB_COUNT] {
-    [
-        vk::VertexInputAttributeDescription {
-            location: IMAGE_VIEW_MATRIX_ATTRIB_IDX,
-            binding,
-            format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: (IMAGE_VIEW_MATRIX_ATTRIB_IDX - IMAGE_FIRST_ATTRIB_IDX)
-                * core::mem::size_of::<u32>() as u32
-                * 4,
-        },
-        vk::VertexInputAttributeDescription {
-            location: IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX,
-            binding,
-            format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: (IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX - IMAGE_FIRST_ATTRIB_IDX)
-                * core::mem::size_of::<u32>() as u32
-                * 4,
-        },
-        vk::VertexInputAttributeDescription {
-            location: IMAGE_TRANSLATES_ATTRIB_IDX,
-            binding,
-            format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: (IMAGE_TRANSLATES_ATTRIB_IDX - IMAGE_FIRST_ATTRIB_IDX)
-                * core::mem::size_of::<u32>() as u32
-                * 4,
-        },
-        vk::VertexInputAttributeDescription {
-            location: IMAGE_PACKED_ATTRIBS_IDX,
-            binding,
-            format: vk::Format::R32G32B32A32_UINT,
-            offset: (IMAGE_PACKED_ATTRIBS_IDX - IMAGE_FIRST_ATTRIB_IDX)
-                * core::mem::size_of::<u32>() as u32
-                * 4,
-        },
-    ]
+pub(crate) const fn getVkFormat(format: VertexElementFormat) -> vk::Format {
+    match format {
+        VertexElementFormat::float1 => vk::Format::R32_SFLOAT,
+        VertexElementFormat::float2 => vk::Format::R32G32_SFLOAT,
+        VertexElementFormat::float3 => vk::Format::R32G32B32_SFLOAT,
+        VertexElementFormat::float4 => vk::Format::R32G32B32A32_SFLOAT,
+        VertexElementFormat::uint8x4 => vk::Format::R8G8B8A8_UINT,
+        VertexElementFormat::sint8x4 => vk::Format::R8G8B8A8_SINT,
+        VertexElementFormat::unorm8x4 => vk::Format::R8G8B8A8_UNORM,
+        VertexElementFormat::snorm8x4 => vk::Format::R8G8B8A8_SNORM,
+        VertexElementFormat::uint16x2 => vk::Format::R16G16_UINT,
+        VertexElementFormat::sint16x2 => vk::Format::R16G16_SINT,
+        VertexElementFormat::unorm16x2 => vk::Format::R16G16_UNORM,
+        VertexElementFormat::snorm16x2 => vk::Format::R16G16_SNORM,
+        VertexElementFormat::uint16x4 => vk::Format::R16G16B16A16_UINT,
+        VertexElementFormat::sint16x4 => vk::Format::R16G16B16A16_SINT,
+        VertexElementFormat::float16x2 => vk::Format::R16G16_SFLOAT,
+        VertexElementFormat::float16x4 => vk::Format::R16G16B16A16_SFLOAT,
+        VertexElementFormat::uint32 => vk::Format::R32_UINT,
+    }
 }
 
-// Rust's stable const generics cannot spell `[T; N + IMAGE_ATTRIB_COUNT]` in
-// the return type. `OUT` is checked during constant evaluation and preserves
-// the source template's exact concatenation operation.
+// The explicit attribute slice selects the source ImageRect/Mesh template.
 pub(crate) const fn appendImageDrawInstanceAttribs<const N: usize, const OUT: usize>(
     binding: u32,
     geometryAttribs: [vk::VertexInputAttributeDescription; N],
+    attributes: &[VertexAttribute],
 ) -> [vk::VertexInputAttributeDescription; OUT] {
-    assert!(OUT == N + IMAGE_ATTRIB_COUNT);
+    assert!(OUT == N + attributes.len());
     let mut result = [vk::VertexInputAttributeDescription {
-        location: 0,
-        binding: 0,
-        format: vk::Format::UNDEFINED,
-        offset: 0,
+        location: 0, binding: 0, format: vk::Format::UNDEFINED, offset: 0,
     }; OUT];
-    let mut index = 0;
-    while index < N {
-        result[index] = geometryAttribs[index];
-        index += 1;
-    }
-    let image = imageDrawInstanceAttribs(binding);
-    let mut image_index = 0;
-    while image_index < IMAGE_ATTRIB_COUNT {
-        result[N + image_index] = image[image_index];
-        image_index += 1;
+    let mut i = 0;
+    while i < N { result[i] = geometryAttribs[i]; i += 1; }
+    let mut i = 0;
+    while i < attributes.len() {
+        let src = &attributes[i];
+        result[N+i] = vk::VertexInputAttributeDescription {
+            location: src.attributeIndex, binding, format: getVkFormat(src.format), offset: src.byteOffset,
+        };
+        i += 1;
     }
     result
 }
@@ -154,12 +124,12 @@ pub(crate) static ImageRectInputBindings: [vk::VertexInputBindingDescription; 2]
     },
     vk::VertexInputBindingDescription {
         binding: ImageRectImageAttribBufferBinding,
-        stride: core::mem::size_of::<ImageDrawInstance>() as u32,
+        stride: core::mem::size_of::<ImageRectInstance>() as u32,
         input_rate: vk::VertexInputRate::INSTANCE,
     },
 ];
-pub(crate) static ImageRectVertexAttribs: [vk::VertexInputAttributeDescription; 5] =
-    appendImageDrawInstanceAttribs::<1, 5>(
+pub(crate) static ImageRectVertexAttribs: [vk::VertexInputAttributeDescription; 8] =
+    appendImageDrawInstanceAttribs::<1, 8>(
         ImageRectImageAttribBufferBinding,
         [vk::VertexInputAttributeDescription {
             location: 0,
@@ -167,6 +137,7 @@ pub(crate) static ImageRectVertexAttribs: [vk::VertexInputAttributeDescription; 
             format: vk::Format::R32G32B32A32_SFLOAT,
             offset: 0,
         }],
+        ImageRectInstance::getAttributes(),
     );
 pub(crate) static IMAGE_RECT_VERTEX_INPUT_STATE: LazyLock<
     vk::PipelineVertexInputStateCreateInfo<'static>,
@@ -192,12 +163,12 @@ pub(crate) static ImageMeshInputBindings: [vk::VertexInputBindingDescription; 3]
     },
     vk::VertexInputBindingDescription {
         binding: ImageMeshImageAttribBufferBinding,
-        stride: core::mem::size_of::<ImageDrawInstance>() as u32,
+        stride: core::mem::size_of::<ImageMeshInstance>() as u32,
         input_rate: vk::VertexInputRate::INSTANCE,
     },
 ];
-pub(crate) static ImageMeshVertexAttribs: [vk::VertexInputAttributeDescription; 6] =
-    appendImageDrawInstanceAttribs::<2, 6>(
+pub(crate) static ImageMeshVertexAttribs: [vk::VertexInputAttributeDescription; 9] =
+    appendImageDrawInstanceAttribs::<2, 9>(
         ImageMeshImageAttribBufferBinding,
         [
             vk::VertexInputAttributeDescription {
@@ -213,6 +184,7 @@ pub(crate) static ImageMeshVertexAttribs: [vk::VertexInputAttributeDescription; 
                 offset: 0,
             },
         ],
+        ImageMeshInstance::getAttributes(),
     );
 pub(crate) static IMAGE_MESH_VERTEX_INPUT_STATE: LazyLock<
     vk::PipelineVertexInputStateCreateInfo<'static>,
@@ -332,16 +304,16 @@ mod tests {
         assert_eq!(INTERIOR_TRI_INPUT_BINDINGS[0].stride, 12);
         assert_eq!(ImageRectInputBindings[0].stride, 16);
         assert_eq!(ImageRectInputBindings[1].stride, 64);
-        assert_eq!(ImageRectVertexAttribs.len(), 5);
+        assert_eq!(ImageRectVertexAttribs.len(), 8);
         assert_eq!(ImageMeshInputBindings.len(), 3);
-        assert_eq!(ImageMeshVertexAttribs.len(), 6);
+        assert_eq!(ImageMeshVertexAttribs.len(), 9);
         assert_eq!(
             ImageMeshVertexAttribs.map(|attribute| attribute.location),
-            [0, 1, 2, 3, 4, 5]
+            [0, 1, 2, 3, 4, 5, 6, 7, 8]
         );
         assert_eq!(
             ImageMeshVertexAttribs.map(|attribute| attribute.offset),
-            [0, 0, 0, 16, 32, 48]
+            [0, 0, 0, 16, 32, 48, 52, 56, 60]
         );
         assert_eq!(PATH_VERTEX_INPUT_STATE.vertex_binding_description_count, 1);
         assert_eq!(PATH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 2);
@@ -354,9 +326,9 @@ mod tests {
             PATH_VERTEX_ATTRIBS.as_ptr()
         );
         assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_binding_description_count, 2);
-        assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count, 5);
+        assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count, 8);
         assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_binding_description_count, 3);
-        assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 6);
+        assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 9);
         assert_eq!(
             IMAGE_MESH_VERTEX_INPUT_STATE.p_vertex_binding_descriptions,
             ImageMeshInputBindings.as_ptr()

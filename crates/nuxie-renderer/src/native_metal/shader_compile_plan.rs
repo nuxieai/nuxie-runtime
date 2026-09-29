@@ -165,11 +165,8 @@ pub(crate) enum ShaderMacro {
     CoalescedPlsResolveAndTransfer,
 }
 
-// This is the minimal exported-token artifact produced by the pinned
-// upstream renderer's authoritative batch-minification rule. Keep the token
-// spellings with the generated artifact instead of duplicating them in Rust:
-// minify.py assigns names across the complete input batch, so a token map from
-// a different or stale build directory is not interchangeable.
+// Historical capture only. Live fragments and tokens use the same current batch.
+#[cfg(test)]
 const METAL_MACRO_TOKEN_FIXTURE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/native_metal/background_shader_macros.txt"
@@ -178,16 +175,37 @@ const METAL_MACRO_TOKEN_FIXTURE: &str = include_str!(concat!(
 impl ShaderMacro {
     /// The generated token used as the dictionary key by the Metal compiler.
     pub(crate) fn metal_token(self) -> &'static str {
-        let identifier = self.identifier();
-        for line in METAL_MACRO_TOKEN_FIXTURE.lines() {
-            let Some((fixture_identifier, token)) = line.split_once('=') else {
-                continue;
-            };
-            if fixture_identifier == identifier {
-                return token;
-            }
+        use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
+        match self {
+            Self::Vertex => exports::GLSL_VERTEX,
+            Self::Fragment => exports::GLSL_FRAGMENT,
+            Self::EnableClipping => exports::GLSL_ENABLE_CLIPPING,
+            Self::EnableClipRect => exports::GLSL_ENABLE_CLIP_RECT,
+            Self::EnableAdvancedBlend => exports::GLSL_ENABLE_ADVANCED_BLEND,
+            Self::EnableFeather => exports::GLSL_ENABLE_FEATHER,
+            Self::EnableEvenOdd => exports::GLSL_ENABLE_EVEN_ODD,
+            Self::EnableNestedClipping => exports::GLSL_ENABLE_NESTED_CLIPPING,
+            Self::EnableHslBlendModes => exports::GLSL_ENABLE_HSL_BLEND_MODES,
+            Self::EnableDither => exports::GLSL_ENABLE_DITHER,
+            Self::EnableModulatedImage => exports::GLSL_ENABLE_MODULATED_IMAGE,
+            Self::PlsImplDeviceBuffer => exports::GLSL_PLS_IMPL_DEVICE_BUFFER,
+            Self::PlsImplDeviceBufferRasterOrdered => exports::GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED,
+            Self::FixedFunctionColorOutput => exports::GLSL_FIXED_FUNCTION_COLOR_OUTPUT,
+            Self::ClockwiseFill => exports::GLSL_CLOCKWISE_FILL,
+            Self::EnableInstanceIndex => exports::GLSL_ENABLE_INSTANCE_INDEX,
+            Self::DrawPath => exports::GLSL_DRAW_PATH,
+            Self::DrawInteriorTriangles => exports::GLSL_DRAW_INTERIOR_TRIANGLES,
+            Self::FeatherAtlasBlit => exports::GLSL_FEATHER_ATLAS_BLIT,
+            Self::DrawImage => exports::GLSL_DRAW_IMAGE,
+            Self::DrawImageRect => exports::GLSL_DRAW_IMAGE_RECT,
+            Self::DrawImageMesh => exports::GLSL_DRAW_IMAGE_MESH,
+            Self::DrawRenderTargetUpdateBounds => exports::GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS,
+            Self::InitializePls => exports::GLSL_INITIALIZE_PLS,
+            Self::StoreColorClear => exports::GLSL_STORE_COLOR_CLEAR,
+            Self::SwizzleColorBgraToRgba => exports::GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA,
+            Self::ResolvePls => exports::GLSL_RESOLVE_PLS,
+            Self::CoalescedPlsResolveAndTransfer => exports::GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER,
         }
-        panic!("missing generated Metal token for {identifier}");
     }
 
     /// The unexpanded macro identifier used in the pinned C++ source.
@@ -265,48 +283,48 @@ impl SourceFragment {
     pub(crate) const fn source(self) -> &'static str {
         match self {
             Self::Metal => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/metal.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/metal.minified.glsl.runtime"
             )),
             Self::Constants => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/constants.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/constants.minified.glsl.runtime"
             )),
             Self::FlushUniforms => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/flush_uniforms.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/flush_uniforms.minified.glsl.runtime"
             )),
             Self::Common => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/common.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/common.minified.glsl.runtime"
             )),
             Self::AdvancedBlend => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/advanced_blend.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/advanced_blend.minified.glsl.runtime"
             )),
             Self::DrawPathCommon => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/draw_path_common.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_path_common.minified.glsl.runtime"
             )),
             Self::DrawPathVertex => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/draw_path.vert"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_path.minified.vert.runtime"
             )),
             Self::DrawRasterOrderPathFragment => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/draw_raster_order_path.frag"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_raster_order_path.minified.frag.runtime"
             )),
             Self::AtomicDraw => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/atomic_draw.glsl"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/atomic_draw.minified.glsl.runtime"
             )),
             Self::DrawImageMeshVertex => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/draw_image_mesh.vert"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_image_mesh.minified.vert.runtime"
             )),
             Self::DrawMeshFragment => include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/native_metal/background_shader_sources/draw_mesh.frag"
+                env!("OUT_DIR"),
+                "/mechanical_shader_generated/draw_mesh.minified.frag.runtime"
             )),
         }
     }
@@ -831,12 +849,15 @@ mod tests {
             .map(|shader_macro| shader_macro.identifier())
             .collect();
         assert_eq!(enum_identifiers, fixture_identifiers);
+        let current_exports = include_str!(concat!(
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/constants.glsl.exports.h"
+        ));
         for shader_macro in ALL_SHADER_MACROS {
-            let expected = fixture_pairs
-                .iter()
-                .find_map(|(identifier, token)| {
-                    (*identifier == shader_macro.identifier()).then_some(*token)
-                })
+            let prefix = format!("#define {} \"", shader_macro.identifier());
+            let expected = current_exports
+                .lines()
+                .find_map(|line| line.strip_prefix(&prefix)?.strip_suffix('"'))
                 .unwrap();
             assert_eq!(shader_macro.metal_token(), expected);
         }

@@ -6,6 +6,8 @@
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
+use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
+
 use super::render_context_webgpu_decl::{
     BlitTextureAsDrawPipeline, Capabilities, ContextOptions, DrawPipelineLayout,
     PixelLocalStorageType, RenderContextWebGPUImpl, RenderTargetWebGPU, TextureWebGPUImpl,
@@ -148,40 +150,40 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "GB";
-const GLSL_POST_INVERT_Y: &str = "SC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "MF";
-const GLSL_DRAW_PATH: &str = "LD";
+const GLSL_POST_INVERT_Y: &str = "RC";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "LF";
+const GLSL_DRAW_PATH: &str = "KD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "PE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "BE";
-const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
-const GLSL_CLEAR_COLOR: &str = "SE";
-const GLSL_LOAD_COLOR: &str = "UE";
-const GLSL_STORE_COLOR: &str = "CE";
-const GLSL_CLEAR_COVERAGE: &str = "DE";
-const GLSL_CLEAR_CLIP: &str = "TF";
-const GLSL_ENABLE_CLIPPING: &str = "J";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "OE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "AE";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
+const GLSL_CLEAR_COLOR: &str = "RE";
+const GLSL_LOAD_COLOR: &str = "TE";
+const GLSL_STORE_COLOR: &str = "BE";
+const GLSL_CLEAR_COVERAGE: &str = "CE";
+const GLSL_CLEAR_CLIP: &str = "SF";
+const GLSL_ENABLE_CLIPPING: &str = "I";
 const GLSL_ENABLE_CLIP_RECT: &str = "BB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "AB";
-const GLSL_ENABLE_EVEN_ODD: &str = "XC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "ZC";
-const GLSL_ENABLE_HSL_BLEND_MODES: &str = "GC";
-const GLSL_ENABLE_DITHER: &str = "MB";
-const GLSL_ENABLE_MODULATED_IMAGE: &str = "KB";
-const GLSL_TARGET_SPIRV: &str = "EC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "OF";
-const GLSL_PLS_IMPL_NONE: &str = "QF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "PF";
+const GLSL_ENABLE_EVEN_ODD: &str = "WC";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "YC";
+const GLSL_ENABLE_HSL_BLEND_MODES: &str = "EC";
+const GLSL_ENABLE_DITHER: &str = "LB";
+const GLSL_ENABLE_MODULATED_IMAGE: &str = "JB";
+const GLSL_TARGET_SPIRV: &str = "CC";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "NF";
+const GLSL_PLS_IMPL_NONE: &str = "PF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "OF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "KE";
-const GLSL_DRAW_IMAGE_RECT: &str = "MD";
-const GLSL_DRAW_IMAGE_MESH: &str = "PB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_CLOCKWISE_FILL: &str = "EE";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
-const GLSL_OPTIONALLY_FLAT: &str = "NB";
+const GLSL_DRAW_IMAGE: &str = "JE";
+const GLSL_DRAW_IMAGE_RECT: &str = "LD";
+const GLSL_DRAW_IMAGE_MESH: &str = "OB";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "N";
+const GLSL_CLOCKWISE_FILL: &str = "DE";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "DC";
+const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl/glsl.minified.glsl");
@@ -226,41 +228,40 @@ fn loadStoreEXTPipelineKey(actions: LoadStoreActionsEXT, format: TextureFormat) 
 
 const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const PLS_PLANE_COUNT: usize = 4;
-const IMAGE_FIRST_ATTRIB_IDX: u32 = 2;
-const IMAGE_VIEW_MATRIX_ATTRIB_IDX: u32 = 2;
-const IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX: u32 = 3;
-const IMAGE_TRANSLATES_ATTRIB_IDX: u32 = 4;
-const IMAGE_PACKED_ATTRIBS_IDX: u32 = 5;
-const IMAGE_ATTRIB_COUNT: usize = 4;
+const IMAGE_RECT_ATTRIB_COUNT: usize = 7;
+const IMAGE_MESH_ATTRIB_COUNT: usize = 7;
 const SPECIALIZATION_COUNT: usize = 16;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
 ];
 
-fn appendImageDrawInstanceAttribs(attributes: &mut Vec<WGPUVertexAttribute>) {
-    for (format, location) in [
-        (
-            super::webgpu_cpp_decl::VertexFormat::Float32x4,
-            IMAGE_VIEW_MATRIX_ATTRIB_IDX,
-        ),
-        (
-            super::webgpu_cpp_decl::VertexFormat::Float32x4,
-            IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX,
-        ),
-        (
-            super::webgpu_cpp_decl::VertexFormat::Float32x4,
-            IMAGE_TRANSLATES_ATTRIB_IDX,
-        ),
-        (
-            super::webgpu_cpp_decl::VertexFormat::Uint32x4,
-            IMAGE_PACKED_ATTRIBS_IDX,
-        ),
-    ] {
+fn getWGPUVertexFormat(format: gpu::VertexElementFormat) -> super::webgpu_cpp_decl::VertexFormat {
+    match format {
+        gpu::VertexElementFormat::float1 => super::webgpu_cpp_decl::VertexFormat::Float32,
+        gpu::VertexElementFormat::float2 => super::webgpu_cpp_decl::VertexFormat::Float32x2,
+        gpu::VertexElementFormat::float3 => super::webgpu_cpp_decl::VertexFormat::Float32x3,
+        gpu::VertexElementFormat::float4 => super::webgpu_cpp_decl::VertexFormat::Float32x4,
+        gpu::VertexElementFormat::uint8x4 => super::webgpu_cpp_decl::VertexFormat::Uint8x4,
+        gpu::VertexElementFormat::sint8x4 => super::webgpu_cpp_decl::VertexFormat::Sint8x4,
+        gpu::VertexElementFormat::unorm8x4 => super::webgpu_cpp_decl::VertexFormat::Unorm8x4,
+        gpu::VertexElementFormat::snorm8x4 => super::webgpu_cpp_decl::VertexFormat::Snorm8x4,
+        gpu::VertexElementFormat::uint16x2 => super::webgpu_cpp_decl::VertexFormat::Uint16x2,
+        gpu::VertexElementFormat::sint16x2 => super::webgpu_cpp_decl::VertexFormat::Sint16x2,
+        gpu::VertexElementFormat::unorm16x2 => super::webgpu_cpp_decl::VertexFormat::Unorm16x2,
+        gpu::VertexElementFormat::snorm16x2 => super::webgpu_cpp_decl::VertexFormat::Snorm16x2,
+        gpu::VertexElementFormat::uint16x4 => super::webgpu_cpp_decl::VertexFormat::Uint16x4,
+        gpu::VertexElementFormat::sint16x4 => super::webgpu_cpp_decl::VertexFormat::Sint16x4,
+        gpu::VertexElementFormat::float16x2 => super::webgpu_cpp_decl::VertexFormat::Float16x2,
+        gpu::VertexElementFormat::float16x4 => super::webgpu_cpp_decl::VertexFormat::Float16x4,
+        gpu::VertexElementFormat::uint32 => super::webgpu_cpp_decl::VertexFormat::Uint32,
+    }
+}
+fn appendImageDrawInstanceAttribs(attributes: &mut Vec<WGPUVertexAttribute>, source: &[gpu::VertexAttribute]) {
+    for attr in source {
         let mut attribute = WGPUVertexAttribute::default();
-        attribute.format = format.into();
-        attribute.offset =
-            u64::from(location - IMAGE_FIRST_ATTRIB_IDX) * std::mem::size_of::<u32>() as u64 * 4;
-        attribute.shaderLocation = location;
+        attribute.format = getWGPUVertexFormat(attr.format).into();
+        attribute.offset = u64::from(attr.byteOffset);
+        attribute.shaderLocation = attr.attributeIndex;
         attributes.push(attribute);
     }
 }
@@ -1492,7 +1493,7 @@ pub(crate) fn makeDrawPipeline(
     pipelineState: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState,
 ) -> super::webgpu_cpp_decl::RenderPipeline {
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-        BlendEquation, DrawType, ImageDrawInstance, ImageRectVertex, InterlockMode, PatchVertex,
+        BlendEquation, DrawType, ImageRectInstance, ImageMeshInstance, ImageRectVertex, InterlockMode, PatchVertex,
         ShaderFeatures, ShaderMiscFlags, TriangleVertex,
     };
 
@@ -1547,17 +1548,17 @@ pub(crate) fn makeDrawPipeline(
             let mut position = WGPUVertexAttribute::default();
             position.format = super::webgpu_cpp_decl::VertexFormat::Float32x4.into();
             attributes.push(position);
-            appendImageDrawInstanceAttribs(&mut attributes);
-            assert_eq!(attributes.len(), 1 + IMAGE_ATTRIB_COUNT);
+            appendImageDrawInstanceAttribs(&mut attributes, ImageRectInstance::getAttributes());
+            assert_eq!(attributes.len(), 1 + IMAGE_RECT_ATTRIB_COUNT);
             let mut vertices = WGPUVertexBufferLayout::default();
             vertices.attributeCount = 1;
             vertices.attributes = attributes.as_ptr();
             vertices.arrayStride = std::mem::size_of::<ImageRectVertex>() as u64;
             vertices.stepMode = super::webgpu_cpp_decl::VertexStepMode::Vertex.into();
             let mut instances = WGPUVertexBufferLayout::default();
-            instances.attributeCount = IMAGE_ATTRIB_COUNT;
+            instances.attributeCount = IMAGE_RECT_ATTRIB_COUNT;
             instances.attributes = unsafe { attributes.as_ptr().add(1) };
-            instances.arrayStride = std::mem::size_of::<ImageDrawInstance>() as u64;
+            instances.arrayStride = std::mem::size_of::<ImageRectInstance>() as u64;
             instances.stepMode = super::webgpu_cpp_decl::VertexStepMode::Instance.into();
             vertexBufferLayouts.extend([vertices, instances]);
             topology = super::webgpu_cpp_decl::PrimitiveTopology::TriangleList;
@@ -1569,8 +1570,8 @@ pub(crate) fn makeDrawPipeline(
                 attribute.shaderLocation = location;
                 attributes.push(attribute);
             }
-            appendImageDrawInstanceAttribs(&mut attributes);
-            assert_eq!(attributes.len(), 2 + IMAGE_ATTRIB_COUNT);
+            appendImageDrawInstanceAttribs(&mut attributes, ImageMeshInstance::getAttributes());
+            assert_eq!(attributes.len(), 2 + IMAGE_MESH_ATTRIB_COUNT);
             for index in 0..2 {
                 let mut layout = WGPUVertexBufferLayout::default();
                 layout.attributeCount = 1;
@@ -1580,9 +1581,9 @@ pub(crate) fn makeDrawPipeline(
                 vertexBufferLayouts.push(layout);
             }
             let mut instances = WGPUVertexBufferLayout::default();
-            instances.attributeCount = IMAGE_ATTRIB_COUNT;
+            instances.attributeCount = IMAGE_MESH_ATTRIB_COUNT;
             instances.attributes = unsafe { attributes.as_ptr().add(2) };
-            instances.arrayStride = std::mem::size_of::<ImageDrawInstance>() as u64;
+            instances.arrayStride = std::mem::size_of::<ImageMeshInstance>() as u64;
             instances.stepMode = super::webgpu_cpp_decl::VertexStepMode::Instance.into();
             vertexBufferLayouts.push(instances);
             topology = super::webgpu_cpp_decl::PrimitiveTopology::TriangleList;
@@ -3566,7 +3567,8 @@ struct FlushBufferRings {
     gradSpan: *mut BufferRing,
     tessSpan: *mut BufferRing,
     triangle: *mut BufferRing,
-    imageDrawInstance: *mut BufferRing,
+    imageRectInstance: *mut BufferRing,
+    imageMeshInstance: *mut BufferRing,
 }
 
 fn flushBufferRings(context: &mut RenderContextWebGPUImpl) -> FlushBufferRings {
@@ -3579,7 +3581,8 @@ fn flushBufferRings(context: &mut RenderContextWebGPUImpl) -> FlushBufferRings {
         gradSpan: context.base.gradSpanBufferRing(),
         tessSpan: context.base.tessSpanBufferRing(),
         triangle: context.base.triangleBufferRing(),
-        imageDrawInstance: context.base.imageDrawInstanceBufferRing(),
+        imageRectInstance: context.base.imageRectInstanceBufferRing(),
+        imageMeshInstance: context.base.imageMeshInstanceBufferRing(),
     }
 }
 
@@ -4040,9 +4043,9 @@ unsafe fn executeDrawList(
                 );
                 drawEncoder.SetVertexBuffer(
                     1,
-                    webgpuBuffer(rings.imageDrawInstance).Get(),
+                    webgpuBuffer(rings.imageRectInstance).Get(),
                     u64::from(batch.baseElement)
-                        * std::mem::size_of::<gpu::ImageDrawInstance>() as u64,
+                        * std::mem::size_of::<gpu::ImageRectInstance>() as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
                 drawEncoder.SetIndexBuffer(
@@ -4089,9 +4092,9 @@ unsafe fn executeDrawList(
                 );
                 drawEncoder.SetVertexBuffer(
                     2,
-                    webgpuBuffer(rings.imageDrawInstance).Get(),
+                    webgpuBuffer(rings.imageMeshInstance).Get(),
                     u64::from(batch.baseElement)
-                        * std::mem::size_of::<gpu::ImageDrawInstance>() as u64,
+                        * std::mem::size_of::<gpu::ImageMeshInstance>() as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
                 drawEncoder.SetIndexBuffer(
@@ -4625,7 +4628,7 @@ pub(crate) fn MakeContext(
 
 pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4906;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 196884] = [(); PINNED_SOURCE.len()];
+const _: [(); 197821] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

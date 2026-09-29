@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/render_context.cpp.
-// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -39,6 +39,8 @@
 //
 // #include "shaders/constants.glsl"
 //
+// #include <algorithm>
+// #include <limits>
 // #include <string_view>
 //
 // #ifdef RIVE_DECODERS
@@ -450,6 +452,8 @@
 //     }
 //     m_frameShaderFeaturesMask =
 //         gpu::ShaderFeaturesMaskFor(m_frameInterlockMode);
+//     m_triangulationController.beginFrame(
+//         m_frameDescriptor.triangulationThresholds);
 //     if (m_logicalFlushes.empty())
 //     {
 //         m_logicalFlushes.emplace_back(new LogicalFlush(this));
@@ -561,9 +565,9 @@
 //         passCountInBatch += draws[i]->prepassCount() + draws[i]->subpassCount();
 //     }
 //
-//     // We can only reorder 32k draws at a time in atomic and msaa modes since
-//     // the sort key addresses them with a signed 16-bit index. Make sure we
-//     // don't exceed that limit.
+//     // We can only reorder 32k draws at a time in atomic and depthStencil modes
+//     // since the sort key addresses them with a signed 16-bit index. Make sure
+//     // we don't exceed that limit.
 //     if (m_ctx->frameInterlockMode() != gpu::InterlockMode::rasterOrdering &&
 //         m_drawPassCount + passCountInBatch > kMaxReorderedDrawPassCount)
 //     {
@@ -791,6 +795,8 @@
 //     assert(flushResources.renderTarget->height() ==
 //            m_frameDescriptor.renderTargetHeight);
 //
+//     m_triangulationController.endFrame();
+//
 //     m_clipContentID = 0;
 //
 //     // Layout this frame's resource buffers and textures.
@@ -822,7 +828,8 @@
 //             totalFrameResourceCounts.maxTessellatedSegmentCount,
 //         .triangleVertexBufferCount =
 //             totalFrameResourceCounts.maxTriangleVertexCount,
-//         .imageDrawInstanceBufferCount = totalFrameResourceCounts.imageDrawCount,
+//         .imageRectInstanceBufferCount = totalFrameResourceCounts.imageRectCount,
+//         .imageMeshInstanceBufferCount = totalFrameResourceCounts.imageMeshCount,
 //         .gradTextureHeight = layoutCounts.maxGradTextureHeight,
 //         .tessTextureHeight = layoutCounts.maxTessTextureHeight,
 //         .featherAtlasTextureWidth = layoutCounts.maxFeatherAtlasWidth,
@@ -888,7 +895,8 @@
 //         .gradSpanBufferCount = 5,            // 125%
 //         .tessSpanBufferCount = 5,            // 125%
 //         .triangleVertexBufferCount = 5,      // 125%
-//         .imageDrawInstanceBufferCount = 5,   // 125%
+//         .imageRectInstanceBufferCount = 5,   // 125%
+//         .imageMeshInstanceBufferCount = 5,   // 125%
 //         .gradTextureHeight = 5,              // 125%
 //         .tessTextureHeight = 5,              // 125%
 //         .featherAtlasTextureWidth = 5,       // 125%
@@ -940,7 +948,8 @@
 //             .gradSpanBufferCount = 2,            // 66.7%
 //             .tessSpanBufferCount = 2,            // 66.7%
 //             .triangleVertexBufferCount = 2,      // 66.7%
-//             .imageDrawInstanceBufferCount = 2,   // 66.7%
+//             .imageRectInstanceBufferCount = 2,   // 66.7%
+//             .imageMeshInstanceBufferCount = 2,   // 66.7%
 //             .gradTextureHeight = 2,              // 66.7%
 //             .tessTextureHeight = 2,              // 66.7%
 //             .featherAtlasTextureWidth = 2,       // 66.7%
@@ -993,8 +1002,10 @@
 //         }
 //
 //         assert(m_flushUniformData.elementsWritten() == m_logicalFlushes.size());
-//         assert(m_imageDrawInstanceData.elementsWritten() ==
-//                totalFrameResourceCounts.imageDrawCount);
+//         assert(m_imageRectInstanceData.elementsWritten() ==
+//                totalFrameResourceCounts.imageRectCount);
+//         assert(m_imageMeshInstanceData.elementsWritten() ==
+//                totalFrameResourceCounts.imageMeshCount);
 //         assert(m_pathData.elementsWritten() ==
 //                totalFrameResourceCounts.pathCount +
 //                    layoutCounts.pathPaddingCount);
@@ -1688,13 +1699,13 @@
 //             // us better branching on the GPU.
 //             {.entry = SortEntry::blendMode, .bitCount = 4},
 //
-//             // msaa mode draws strokes, fills, and even/odd with different
-//             // stencil settings.
+//             // depthStencil mode draws strokes, fills, and even/odd with
+//             // different stencil settings.
 //             {.entry = SortEntry::drawContents, .bitCount = 9},
 //
-//             // Finally, we need sorting by subpass. Without this, the MSAA
-//             // subpasses (and maybe others) won't run in the correct order when
-//             // allSubpassesInSameDrawGroup was true.
+//             // Finally, we need sorting by subpass. Without this, the
+//             // depthStencil subpasses (and maybe others) won't run in the
+//             // correct order when allSubpassesInSameDrawGroup was true.
 //             {.entry = SortEntry::subpassIndex, .bitCount = 3},
 //         };
 //
@@ -1800,7 +1811,8 @@
 //             // Otherwise, we put subpasses into different draw groups because it
 //             // yields better reordering.
 //             const bool allSubpassesInSameDrawGroup =
-//                 m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
+//                 m_ctx->frameInterlockMode() ==
+//                     gpu::InterlockMode::depthStencil &&
 //                 !platformFeatures.supportsBlendAdvancedKHR &&
 //                 enums::is_flag_set(m_combinedDrawContents,
 //                                    gpu::DrawContents::advancedBlend);
@@ -1929,7 +1941,8 @@
 //                                     ImageSampler::LinearClamp(),
 //                                     BarrierFlags::none);
 //         }
-//         else if (m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
+//         else if (m_ctx->frameInterlockMode() ==
+//                      gpu::InterlockMode::depthStencil &&
 //                  m_flushDesc.colorLoadAction ==
 //                      gpu::LoadAction::preserveRenderTarget &&
 //                  platformFeatures.msaaColorPreserveNeedsDraw)
@@ -2027,12 +2040,12 @@
 //
 //             case gpu::InterlockMode::depthStencil:
 //             {
-//                 // MSAA mode can't batch draws that overlap because they both
-//                 // rely on the stencil buffer across subpasses. Stop batching
-//                 // every time the drawGroupIdx changes.
+//                 // depthStencil mode can't batch draws that overlap because they
+//                 // both rely on the stencil buffer across subpasses. Stop
+//                 // batching every time the drawGroupIdx changes.
 //                 int64_t needsBreakMask = keyBuilder.mask(SortEntry::drawGroup);
-//                 // MSAA mode draws clips, strokes, fills, and even/odd with
-//                 // different stencil settings, so these can't be batched.
+//                 // depthStencil mode draws clips, strokes, fills, and even/odd
+//                 // with different stencil settings, so these can't be batched.
 //                 needsBreakMask |= keyBuilder.mask(SortEntry::drawContents);
 //                 if (platformFeatures.supportsBlendAdvancedKHR)
 //                 {
@@ -2041,9 +2054,9 @@
 //                     // blend equation.
 //                     needsBreakMask |= keyBuilder.mask(SortEntry::blendMode);
 //                 }
-//                 // MSAA barriers only need to prevent batching of draws for now.
-//                 // If we also need a dstBlend barrier, that will be decided
-//                 // later.
+//                 // depthStencil barriers only need to prevent batching of draws
+//                 // for now. If we also need a dstBlend barrier, that will be
+//                 // decided later.
 //                 barriersForKeyDiffs.push_back(
 //                     {needsBreakMask, BarrierFlags::drawBatchBreak});
 //                 break;
@@ -2117,7 +2130,8 @@
 //             // differ".
 //             if ((m_ctx->frameInterlockMode() ==
 //                      gpu::InterlockMode::clockwiseAtomic ||
-//                  m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil) &&
+//                  m_ctx->frameInterlockMode() ==
+//                      gpu::InterlockMode::depthStencil) &&
 //                 subpassIndex == 0 && batch != nullptr)
 //             {
 //                 // Barriers at this level have to go on the first batch in the
@@ -2161,7 +2175,8 @@
 //                 assert(firstBatchInCurrentDrawGroup != nullptr);
 //
 //                 if (draw->hasAdvancedBlend() &&
-//                     (m_ctx->frameInterlockMode() != gpu::InterlockMode::depthStencil ||
+//                     (m_ctx->frameInterlockMode() !=
+//                          gpu::InterlockMode::depthStencil ||
 //                      !m_ctx->platformFeatures()
 //                           .supportsBlendAdvancedCoherentKHR))
 //                 {
@@ -2227,7 +2242,8 @@
 //                     assert(m_ctx->frameInterlockMode() ==
 //                            gpu::InterlockMode::depthStencil);
 //
-//                     // msaa doesn't mix srcOver draws with advanced blend draws.
+//                     // depthStencil doesn't mix srcOver draws with advanced
+//                     // blend draws.
 //                     assert(enums::is_flag_set(
 //                                batch->shaderFeatures,
 //                                gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND) ==
@@ -2724,15 +2740,26 @@
 //                                            sizeof(gpu::TriangleVertex));
 //     }
 //
-//     LOG_BUFFER_RING_SIZE(imageDrawInstanceBufferCount,
-//                          sizeof(gpu::ImageDrawInstance));
-//     if (allocs.imageDrawInstanceBufferCount !=
-//             m_currentResourceAllocations.imageDrawInstanceBufferCount ||
+//     LOG_BUFFER_RING_SIZE(imageRectInstanceBufferCount,
+//                          sizeof(gpu::ImageRectInstance));
+//     if (allocs.imageRectInstanceBufferCount !=
+//             m_currentResourceAllocations.imageRectInstanceBufferCount ||
 //         forceRealloc)
 //     {
-//         m_impl->resizeImageDrawInstanceBuffer(
-//             allocs.imageDrawInstanceBufferCount *
-//             sizeof(gpu::ImageDrawInstance));
+//         m_impl->resizeImageRectInstanceBuffer(
+//             allocs.imageRectInstanceBufferCount *
+//             sizeof(gpu::ImageRectInstance));
+//     }
+//
+//     LOG_BUFFER_RING_SIZE(imageMeshInstanceBufferCount,
+//                          sizeof(gpu::ImageMeshInstance));
+//     if (allocs.imageMeshInstanceBufferCount !=
+//             m_currentResourceAllocations.imageMeshInstanceBufferCount ||
+//         forceRealloc)
+//     {
+//         m_impl->resizeImageMeshInstanceBuffer(
+//             allocs.imageMeshInstanceBufferCount *
+//             sizeof(gpu::ImageMeshInstance));
 //     }
 //
 //     assert(allocs.gradTextureHeight <= kMaxTextureHeight);
@@ -2930,15 +2957,25 @@
 //     assert(
 //         m_triangleVertexData.hasRoomFor(mapCounts.triangleVertexBufferCount));
 //
-//     if (mapCounts.imageDrawInstanceBufferCount > 0)
+//     if (mapCounts.imageRectInstanceBufferCount > 0)
 //     {
-//         HANDLE_MAP_FAILURE(m_imageDrawInstanceData.mapElements(
+//         HANDLE_MAP_FAILURE(m_imageRectInstanceData.mapElements(
 //             m_impl.get(),
-//             &RenderContextImpl::mapImageDrawInstanceBuffer,
-//             mapCounts.imageDrawInstanceBufferCount));
+//             &RenderContextImpl::mapImageRectInstanceBuffer,
+//             mapCounts.imageRectInstanceBufferCount));
 //     }
-//     assert(m_imageDrawInstanceData.hasRoomFor(
-//         mapCounts.imageDrawInstanceBufferCount > 0));
+//     assert(m_imageRectInstanceData.hasRoomFor(
+//         mapCounts.imageRectInstanceBufferCount));
+//
+//     if (mapCounts.imageMeshInstanceBufferCount > 0)
+//     {
+//         HANDLE_MAP_FAILURE(m_imageMeshInstanceData.mapElements(
+//             m_impl.get(),
+//             &RenderContextImpl::mapImageMeshInstanceBuffer,
+//             mapCounts.imageMeshInstanceBufferCount));
+//     }
+//     assert(m_imageMeshInstanceData.hasRoomFor(
+//         mapCounts.imageMeshInstanceBufferCount));
 //
 // #undef HANDLE_MAP_FAILURE
 //     return true;
@@ -2999,12 +3036,19 @@
 //             &RenderContextImpl::unmapTriangleVertexBuffer,
 //             mapCounts.triangleVertexBufferCount);
 //     }
-//     if (m_imageDrawInstanceData)
+//     if (m_imageRectInstanceData)
 //     {
-//         m_imageDrawInstanceData.unmapElements(
+//         m_imageRectInstanceData.unmapElements(
 //             m_impl.get(),
-//             &RenderContextImpl::unmapImageDrawInstanceBuffer,
-//             mapCounts.imageDrawInstanceBufferCount);
+//             &RenderContextImpl::unmapImageRectInstanceBuffer,
+//             mapCounts.imageRectInstanceBufferCount);
+//     }
+//     if (m_imageMeshInstanceData)
+//     {
+//         m_imageMeshInstanceData.unmapElements(
+//             m_impl.get(),
+//             &RenderContextImpl::unmapImageMeshInstanceBuffer,
+//             mapCounts.imageMeshInstanceBufferCount);
 //     }
 // }
 //
@@ -3505,7 +3549,7 @@
 //         m_ctx->m_triangleVertexData.elementsWritten());
 //     size_t actualVertexCount = draw->triangulator()->polysToTriangles(
 //         pathID,
-//         draw->triangulatorFillRule(),
+//         draw->pathFillRule(),
 //         draw->triangulatorReverseTriangles(),
 //         draw->triangulatorNegateWinding(),
 //         windingFaces,
@@ -3556,10 +3600,10 @@
 //     // with an image paint instead of calling this method.
 //     assert(!m_ctx->frameSupportsImagePaintForPaths());
 //
-//     const uint32_t imageDrawBaseInstance =
+//     const uint32_t imageRectBaseInstance =
 //         math::lossless_numeric_cast<uint32_t>(
-//             m_ctx->m_imageDrawInstanceData.elementsWritten());
-//     m_ctx->m_imageDrawInstanceData.emplace_back(draw->imageMatrix(),
+//             m_ctx->m_imageRectInstanceData.elementsWritten());
+//     m_ctx->m_imageRectInstanceData.emplace_back(draw->imageMatrix(),
 //                                                 draw->opacity(),
 //                                                 draw->clipRectInverseMatrix(),
 //                                                 draw->clipID(),
@@ -3571,7 +3615,7 @@
 //                                 m_baselineShaderMiscFlags,
 //                                 PaintType::solidColor,
 //                                 1,
-//                                 imageDrawBaseInstance);
+//                                 imageRectBaseInstance);
 //     return batch;
 // }
 //
@@ -3581,10 +3625,10 @@
 //     RIVE_PROF_SCOPE_L(2)
 //     assert(m_hasDoneLayout);
 //
-//     const uint32_t imageDrawBaseInstance =
+//     const uint32_t imageMeshBaseInstance =
 //         math::lossless_numeric_cast<uint32_t>(
-//             m_ctx->m_imageDrawInstanceData.elementsWritten());
-//     m_ctx->m_imageDrawInstanceData.emplace_back(draw->imageMatrix(),
+//             m_ctx->m_imageMeshInstanceData.elementsWritten());
+//     m_ctx->m_imageMeshInstanceData.emplace_back(draw->imageMatrix(),
 //                                                 draw->opacity(),
 //                                                 draw->clipRectInverseMatrix(),
 //                                                 draw->clipID(),
@@ -3596,7 +3640,7 @@
 //                                 m_baselineShaderMiscFlags,
 //                                 PaintType::solidColor,
 //                                 1, // one instance (the mesh)
-//                                 imageDrawBaseInstance);
+//                                 imageMeshBaseInstance);
 //     batch.indexCountPerInstance = draw->indexCount();
 //     batch.vertexBuffer = draw->vertexBuffer();
 //     batch.uvBuffer = draw->uvBuffer();
@@ -3750,7 +3794,12 @@
 //         case DrawType::stencilMidpointFanCover:
 //             return kMidpointFanPatchIndexCount -
 //                    kMidpointFanPatchBorderIndexCount;
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             return kOuterCurvePatchIndexCount -
 //                    kOuterCurvePatchBorderIndexCount;
 //         case DrawType::interiorTriangulation:
@@ -3784,7 +3833,12 @@
 //         case DrawType::stencilMidpointFanCover:
 //             return kMidpointFanPatchBaseIndex +
 //                    kMidpointFanPatchBorderIndexCount;
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             return kOuterCurvePatchBaseIndex + kOuterCurvePatchBorderIndexCount;
 //         case DrawType::interiorTriangulation:
 //         case DrawType::featherAtlasBlit:
@@ -3812,7 +3866,12 @@
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //             batch->indexCountPerInstance = patchIndexCount(drawType);
 //             batch->baseIndex = patchBaseIndex(drawType);
 //             break;
@@ -3868,7 +3927,7 @@
 //         }
 //     }
 //
-//     // In clockwiseAtomic and msaa modes, individual draws can use
+//     // In clockwiseAtomic and depthStencil modes, individual draws can use
 //     // fixedFunctionColorOutput even if the render pass as a whole does not.
 //     if (m_ctx->frameInterlockMode() == gpu::InterlockMode::clockwiseAtomic)
 //     {
@@ -3900,7 +3959,12 @@
 //         case DrawType::stencilMidpointFanReset:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilDynamicOuterCubics:
 //         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
 //         case DrawType::clipReset:
 //             if (!m_drawList.empty() &&
 //                 !enums::is_flag_set(m_pendingBarriers,
@@ -3920,8 +3984,8 @@
 //                     currentBatch->baseElement + currentBatch->elementCount !=
 //                         baseElement)
 //                 {
-//                     // In MSAA mode, multiple subpasses reference the same
-//                     // tessellation data. Although rare, this breaks the
+//                     // In depthStencil mode, multiple subpasses reference the
+//                     // same tessellation data. Although rare, this breaks the
 //                     // guarantee we have in other modes that mergeable batches
 //                     // will always have contiguous patches.
 //                     assert(m_ctx->frameInterlockMode() ==
@@ -3983,8 +4047,9 @@
 //         assert((batch->drawContents & gpu::DrawContents::featheredFill) ==
 //                (draw->drawContents() & gpu::DrawContents::featheredFill));
 //
-//         // msaa can't mix drawContents in a batch.
-//         assert(m_ctx->frameInterlockMode() != gpu::InterlockMode::depthStencil ||
+//         // depthStencil can't mix drawContents in a batch.
+//         assert(m_ctx->frameInterlockMode() !=
+//                    gpu::InterlockMode::depthStencil ||
 //                batch->drawContents == draw->drawContents());
 //
 //         batch->shaderMiscFlags |= shaderMiscFlags;
@@ -4018,13 +4083,6 @@
 //         shaderFeatures |= ShaderFeatures::ENABLE_DITHER;
 //     }
 //
-//     if (draw->imageTexture() != nullptr &&
-//         m_ctx->frameInterlockMode() != gpu::InterlockMode::atomics &&
-//         drawType != DrawType::imageRect && drawType != DrawType::imageMesh)
-//     {
-//         shaderFeatures |= ShaderFeatures::ENABLE_MODULATED_IMAGE;
-//     }
-//
 //     if (paintType != PaintType::clipUpdate &&
 //         !enums::is_flag_set(shaderMiscFlags,
 //                             gpu::ShaderMiscFlags::borrowedCoveragePass))
@@ -4056,14 +4114,14 @@
 //                 break;
 //         }
 //     }
-//     batch->shaderFeatures |= shaderFeatures & m_ctx->m_frameShaderFeaturesMask;
-//     assert(
-//         (batch->shaderFeatures &
-//          gpu::ShaderFeaturesMaskFor(drawType, m_ctx->frameInterlockMode())) ==
-//         batch->shaderFeatures);
-//
 //     if (draw->imageTexture() != nullptr)
 //     {
+//         if (m_ctx->frameInterlockMode() != gpu::InterlockMode::atomics &&
+//             drawType != DrawType::imageRect && drawType != DrawType::imageMesh)
+//         {
+//             shaderFeatures |= ShaderFeatures::ENABLE_MODULATED_IMAGE;
+//         }
+//
 //         if (batch->imageTexture == nullptr)
 //         {
 //             // We merged in with a batch that did not already have an image so
@@ -4077,6 +4135,12 @@
 //         }
 //         assert(batch->imageTexture == draw->imageTexture());
 //     }
+//
+//     batch->shaderFeatures |= shaderFeatures & m_ctx->m_frameShaderFeaturesMask;
+//     assert(
+//         (batch->shaderFeatures &
+//          gpu::ShaderFeaturesMaskFor(drawType, m_ctx->frameInterlockMode())) ==
+//         batch->shaderFeatures);
 //
 //     assert(draw->imageTexture() == nullptr ||
 //            batch->imageSampler == draw->imageSampler());
@@ -5307,7 +5371,8 @@ impl RenderContext {
                 + layout.gradSpanPaddingCount as usize,
             tessSpanBufferCount: total.maxTessellatedSegmentCount,
             triangleVertexBufferCount: total.maxTriangleVertexCount,
-            imageDrawInstanceBufferCount: total.imageDrawCount,
+            imageRectInstanceBufferCount: total.imageRectCount,
+            imageMeshInstanceBufferCount: total.imageMeshCount,
             gradTextureHeight: layout.maxGradTextureHeight as usize,
             tessTextureHeight: layout.maxTessTextureHeight as usize,
             featherAtlasTextureWidth: layout.maxFeatherAtlasWidth as usize,
@@ -5350,7 +5415,7 @@ impl RenderContext {
         self.m_max_recent_resource_requirements = ResourceAllocationCounts::FromVec(&recent_max);
 
         let current = self.m_current_resource_allocations.toVec();
-        let overalloc = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 5];
+        let overalloc = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 4, 5];
         let mut allocated = [0usize; ResourceAllocationCounts::NUM_ELEMENTS];
         for i in 0..allocated.len() {
             allocated[i] = if req[i] <= current[i] {
@@ -5379,7 +5444,7 @@ impl RenderContext {
         if needs_trim {
             let recent = self.m_max_recent_resource_requirements.toVec();
             let values = allocs.toVec();
-            let shrink = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 2];
+            let shrink = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 2];
             let mut trimmed = [0usize; ResourceAllocationCounts::NUM_ELEMENTS];
             for i in 0..trimmed.len() {
                 trimmed[i] = if recent[i] <= values[i].saturating_mul(shrink[i]) / 3 {
@@ -5406,8 +5471,12 @@ impl RenderContext {
                 self.m_logical_flushes.len()
             );
             debug_assert_eq!(
-                self.m_image_draw_instance_data.elementsWritten(),
-                total.imageDrawCount
+                self.m_image_rect_instance_data.elementsWritten(),
+                total.imageRectCount
+            );
+            debug_assert_eq!(
+                self.m_image_mesh_instance_data.elementsWritten(),
+                total.imageMeshCount
             );
             debug_assert_eq!(
                 self.m_path_data.elementsWritten(),
@@ -5512,11 +5581,18 @@ impl RenderContext {
                 allocs.triangleVertexBufferCount * core::mem::size_of::<gpu::TriangleVertex>(),
             );
         }
-        if force_realloc || allocs.imageDrawInstanceBufferCount != old.imageDrawInstanceBufferCount
+        if force_realloc || allocs.imageRectInstanceBufferCount != old.imageRectInstanceBufferCount
         {
-            implementation.resizeImageDrawInstanceBuffer(
-                allocs.imageDrawInstanceBufferCount
-                    * core::mem::size_of::<gpu::ImageDrawInstance>(),
+            implementation.resizeImageRectInstanceBuffer(
+                allocs.imageRectInstanceBufferCount
+                    * core::mem::size_of::<gpu::ImageRectInstance>(),
+            );
+        }
+        if force_realloc || allocs.imageMeshInstanceBufferCount != old.imageMeshInstanceBufferCount
+        {
+            implementation.resizeImageMeshInstanceBuffer(
+                allocs.imageMeshInstanceBufferCount
+                    * core::mem::size_of::<gpu::ImageMeshInstance>(),
             );
         }
         debug_assert!(allocs.gradTextureHeight <= K_MAX_TEXTURE_HEIGHT);
@@ -5640,9 +5716,14 @@ impl RenderContext {
             mapTriangleVertexBuffer
         );
         map!(
-            m_image_draw_instance_data,
-            imageDrawInstanceBufferCount,
-            mapImageDrawInstanceBuffer
+            m_image_rect_instance_data,
+            imageRectInstanceBufferCount,
+            mapImageRectInstanceBuffer
+        );
+        map!(
+            m_image_mesh_instance_data,
+            imageMeshInstanceBufferCount,
+            mapImageMeshInstanceBuffer
         );
         true
     }
@@ -5682,9 +5763,14 @@ impl RenderContext {
             unmapTriangleVertexBuffer
         );
         unmap!(
-            m_image_draw_instance_data,
-            imageDrawInstanceBufferCount,
-            unmapImageDrawInstanceBuffer
+            m_image_rect_instance_data,
+            imageRectInstanceBufferCount,
+            unmapImageRectInstanceBuffer
+        );
+        unmap!(
+            m_image_mesh_instance_data,
+            imageMeshInstanceBufferCount,
+            unmapImageMeshInstanceBuffer
         );
     }
 }
@@ -5734,8 +5820,10 @@ impl Drop for RenderContext {
             core::ptr::drop_in_place(&mut self.m_num_chops_allocator);
             trace_drop!("perFrameAllocator");
             core::ptr::drop_in_place(&mut self.m_per_frame_allocator);
-            trace_drop!("imageDrawData");
-            core::ptr::drop_in_place(&mut self.m_image_draw_instance_data);
+            trace_drop!("imageMeshData");
+            core::ptr::drop_in_place(&mut self.m_image_mesh_instance_data);
+            trace_drop!("imageRectData");
+            core::ptr::drop_in_place(&mut self.m_image_rect_instance_data);
             trace_drop!("triangleData");
             core::ptr::drop_in_place(&mut self.m_triangle_vertex_data);
             trace_drop!("tessData");
@@ -6102,7 +6190,8 @@ impl LogicalFlush {
             counts.contourCount += add.contourCount;
             counts.maxTessellatedSegmentCount += add.maxTessellatedSegmentCount;
             counts.maxTriangleVertexCount += add.maxTriangleVertexCount;
-            counts.imageDrawCount += add.imageDrawCount;
+            counts.imageRectCount += add.imageRectCount;
+            counts.imageMeshCount += add.imageMeshCount;
         }
         let context = unsafe { self.m_ctx.as_ref() };
         if counts.pathCount > context.m_max_path_id
@@ -6381,13 +6470,13 @@ impl LogicalFlush {
     ) -> *mut gpu::DrawBatch {
         debug_assert!(!unsafe { self.m_ctx.as_ref() }.frameSupportsImagePaintForPathsExecutable());
         let context = unsafe { self.m_ctx.as_mut() };
-        let base = context.m_image_draw_instance_data.elementsWritten() as u32;
+        let base = context.m_image_rect_instance_data.elementsWritten() as u32;
         let clip = if unsafe { (*draw).clipRectInverseMatrix().is_null() } {
             None
         } else {
             Some(*unsafe { (*(*draw).clipRectInverseMatrix()).inverseMatrix() })
         };
-        let instance = gpu::ImageDrawInstance::new(
+        let instance = gpu::ImageRectInstance::new(
             *unsafe { (*draw).imageMatrix() },
             unsafe { (*draw).opacity() },
             clip,
@@ -6395,7 +6484,7 @@ impl LogicalFlush {
             unsafe { (*draw).blendMode() },
             self.m_current_z_index,
         );
-        unsafe { context.m_image_draw_instance_data.emplace_back(instance) };
+        unsafe { context.m_image_rect_instance_data.emplace_back(instance) };
         unsafe {
             self.pushDrawExecutable(
                 &(*draw).base,
@@ -6413,13 +6502,13 @@ impl LogicalFlush {
         draw: *mut ImageMeshDraw,
     ) -> *mut gpu::DrawBatch {
         let context = unsafe { self.m_ctx.as_mut() };
-        let base = context.m_image_draw_instance_data.elementsWritten() as u32;
+        let base = context.m_image_mesh_instance_data.elementsWritten() as u32;
         let clip = if unsafe { (*draw).clipRectInverseMatrix().is_null() } {
             None
         } else {
             Some(*unsafe { (*(*draw).clipRectInverseMatrix()).inverseMatrix() })
         };
-        let instance = gpu::ImageDrawInstance::new(
+        let instance = gpu::ImageMeshInstance::new(
             *unsafe { (*draw).imageMatrix() },
             unsafe { (*draw).opacity() },
             clip,
@@ -6427,7 +6516,7 @@ impl LogicalFlush {
             unsafe { (*draw).blendMode() },
             self.m_current_z_index,
         );
-        unsafe { context.m_image_draw_instance_data.emplace_back(instance) };
+        unsafe { context.m_image_mesh_instance_data.emplace_back(instance) };
         let batch = unsafe {
             self.pushDrawExecutable(
                 &(*draw).base,
@@ -6662,13 +6751,6 @@ impl LogicalFlush {
         if self.frameDescriptor().ditherMode == DitherMode::interleavedGradientNoise {
             shader_features |= gpu::ShaderFeatures::ENABLE_DITHER;
         }
-        if !draw.imageTexture().is_null()
-            && context.frameInterlockMode() != gpu::InterlockMode::atomics
-            && draw_type != gpu::DrawType::imageRect
-            && draw_type != gpu::DrawType::imageMesh
-        {
-            shader_features |= gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE;
-        }
         if paint_type != gpu::PaintType::clipUpdate
             && (misc.0 & gpu::ShaderMiscFlags::borrowedCoveragePass.0) == 0
         {
@@ -6697,10 +6779,13 @@ impl LogicalFlush {
                 nuxie_render_api::BlendMode::SrcOver => {}
             }
         }
-        unsafe {
-            (*batch).shaderFeatures |= shader_features & context.m_frame_shader_features_mask;
-        }
         if !draw.imageTexture().is_null() {
+            if context.frameInterlockMode() != gpu::InterlockMode::atomics
+                && draw_type != gpu::DrawType::imageRect
+                && draw_type != gpu::DrawType::imageMesh
+            {
+                shader_features |= gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE;
+            }
             debug_assert!(!draw.imageTexture().is_null());
             unsafe {
                 if (*batch).imageTexture.is_none() {
@@ -6711,6 +6796,14 @@ impl LogicalFlush {
                 }
                 debug_assert_eq!((*batch).imageTexture.unwrap().as_ptr(), draw.imageTexture());
             }
+        }
+        unsafe {
+            (*batch).shaderFeatures |= shader_features & context.m_frame_shader_features_mask;
+            debug_assert_eq!(
+                (*batch).shaderFeatures
+                    & gpu::ShaderFeaturesMaskForDraw(draw_type, context.frameInterlockMode()),
+                (*batch).shaderFeatures,
+            );
         }
         debug_assert!(
             draw.imageTexture().is_null()
@@ -7555,7 +7648,8 @@ impl LogicalFlush {
         running_resources.maxTessellatedSegmentCount +=
             self.m_resource_counts.maxTessellatedSegmentCount;
         running_resources.maxTriangleVertexCount += self.m_resource_counts.maxTriangleVertexCount;
-        running_resources.imageDrawCount += self.m_resource_counts.imageDrawCount;
+        running_resources.imageRectCount += self.m_resource_counts.imageRectCount;
+        running_resources.imageMeshCount += self.m_resource_counts.imageMeshCount;
         running_layout.pathPaddingCount += self.m_path_padding_count;
         running_layout.paintPaddingCount += self.m_paint_padding_count;
         running_layout.paintAuxPaddingCount += self.m_paint_aux_padding_count;

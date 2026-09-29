@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_image_mesh.vert.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_image_mesh.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "3a9c838f13be3c5682f5ed6751ee2234a647b892eaa7b6fc90431c56b3f84f19";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 144;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 4597;
+    "8f514846f08a19b9089136bb8c51cb615ca79c26e85d0e195fc27e2e29afc4f7";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 132;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 4103;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_IMAGE_MESH_VERT_SOURCE: &str = r###"/*
@@ -37,14 +37,10 @@ ATTR(IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX,
      float4,
      @a_imageDrawClipRectInverseMatrix);
 ATTR(IMAGE_TRANSLATES_ATTRIB_IDX, float4, @a_imageDrawTranslates);
-#ifdef SPLIT_UINT4_ATTRIBUTES
-ATTR(IMAGE_SPLIT_OPACITY_ATTRIB_IDX, uint, @a_imageDrawOpacity);
-ATTR(IMAGE_SPLIT_CLIP_ID_ATTRIB_IDX, uint, @a_imageDrawClipID);
-ATTR(IMAGE_SPLIT_BLEND_MODE_ATTRIB_IDX, uint, @a_imageDrawBlendMode);
-ATTR(IMAGE_SPLIT_ZINDEX_ATTRIB_IDX, uint, @a_imageDrawZIndex);
-#else
-ATTR(IMAGE_PACKED_ATTRIBS_IDX, uint4, @a_imageDrawPacked);
-#endif
+ATTR(IMAGE_OPACITY_ATTRIB_IDX, float, @a_imageDrawOpacity);
+ATTR(IMAGE_CLIP_ID_ATTRIB_IDX, uint, @a_imageDrawClipID);
+ATTR(IMAGE_BLEND_MODE_ATTRIB_IDX, uint, @a_imageDrawBlendMode);
+ATTR(IMAGE_ZINDEX_ATTRIB_IDX, uint, @a_imageDrawZIndex);
 ATTR_BLOCK_END
 #endif
 
@@ -83,18 +79,10 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
                 @a_imageDrawClipRectInverseMatrix,
                 float4);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawTranslates, float4);
-#ifdef SPLIT_UINT4_ATTRIBUTES
-    ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawOpacity, uint);
+    ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawOpacity, float);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawClipID, uint);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawBlendMode, uint);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawZIndex, uint);
-    uint4 @a_imageDrawPacked = uint4(@a_imageDrawOpacity,
-                                     @a_imageDrawClipID,
-                                     @a_imageDrawBlendMode,
-                                     @a_imageDrawZIndex);
-#else
-    ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawPacked, uint4);
-#endif
 
     VARYING_INIT(v_imageTexCoord, float2);
 #ifdef @ENABLE_CLIPPING
@@ -116,7 +104,7 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
     if (@ENABLE_CLIPPING)
     {
         v_clipID =
-            id_bits_to_f16(@a_imageDrawPacked.y, uniforms.pathIDGranularity);
+            id_bits_to_f16(@a_imageDrawClipID, uniforms.pathIDGranularity);
     }
 #endif
 #ifdef @ENABLE_CLIP_RECT
@@ -140,12 +128,12 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
     pos.y = -pos.y;
 #endif
 #ifdef @RENDER_MODE_DEPTH_STENCIL
-    pos.z = normalize_z_index(@a_imageDrawPacked.w);
+    pos.z = normalize_z_index(@a_imageDrawZIndex);
 #endif
 
-    v_imageOpacity = uintBitsToFloat(@a_imageDrawPacked.x);
+    v_imageOpacity = @a_imageDrawOpacity;
 #ifdef @ENABLE_ADVANCED_BLEND
-    v_imageBlendMode = cast_uint_to_ushort(@a_imageDrawPacked.z);
+    v_imageBlendMode = cast_uint_to_ushort(@a_imageDrawBlendMode);
 #endif
 
     VARYING_PACK(v_imageTexCoord);

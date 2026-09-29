@@ -447,36 +447,36 @@ mod tests {
     // historical fixtures; they must not substitute for the current batch.
     fn current_source_oracle(atomic_path: bool) -> String {
         const METAL: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/metal.glsl"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/metal.minified.glsl.runtime"
         ));
         const CONSTANTS: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/constants.glsl"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/constants.minified.glsl.runtime"
         ));
         const FLUSH_UNIFORMS: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/flush_uniforms.glsl"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/flush_uniforms.minified.glsl.runtime"
         ));
         const COMMON: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/common.glsl"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/common.minified.glsl.runtime"
         ));
         const DRAW_PATH_COMMON: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/draw_path_common.glsl"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/draw_path_common.minified.glsl.runtime"
         ));
         const ATOMIC_DRAW: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/atomic_draw.glsl"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/atomic_draw.minified.glsl.runtime"
         ));
         const DRAW_IMAGE_MESH_VERTEX: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/draw_image_mesh.vert"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/draw_image_mesh.minified.vert.runtime"
         ));
         const DRAW_MESH_FRAGMENT: &str = include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/native_metal/background_shader_sources/draw_mesh.frag"
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/draw_mesh.minified.frag.runtime"
         ));
 
         let mut source = METAL.to_owned();

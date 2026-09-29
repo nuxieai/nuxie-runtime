@@ -1,35 +1,35 @@
-struct DC {
-    hc: f32,
-    rd: f32,
-    kf: f32,
-    lf: f32,
+struct BC {
+    jc: f32,
+    sd: f32,
+    of_: f32,
+    pf: f32,
     p6_: u32,
-    Mg: u32,
-    Ve: u32,
-    We: u32,
+    Pg: u32,
+    Ze: u32,
+    af: u32,
     U7_: vec4<i32>,
-    Ig: vec2<f32>,
-    sd: vec2<f32>,
+    Lg: vec2<f32>,
+    td: vec2<f32>,
     c2_: u32,
-    Ng: f32,
+    Qg: f32,
     d6_: u32,
     R2_: f32,
-    td: f32,
-    Qe: u32,
-    B3_: f32,
-    C3_: f32,
     ud: f32,
-    Fg: u32,
+    Ue: u32,
+    A3_: f32,
+    B3_: f32,
+    vd: f32,
+    Ig: u32,
 }
 
 var<private> A6_1: vec4<f32>;
 var<private> B6_1: vec4<f32>;
-var<private> N4_1: vec4<f32>;
+var<private> O4_1: vec4<f32>;
 var<private> I7_1: u32;
-var<private> O4_1: vec3<f32>;
-var<private> Qg: vec4<u32>;
+var<private> P4_1: vec3<f32>;
+var<private> Tg: vec4<u32>;
 @group(0) @binding(0)
-var<uniform> m: DC;
+var<uniform> m: BC;
 
 fn main_1() {
     var phi_837_: vec2<f32>;
@@ -91,13 +91,13 @@ fn main_1() {
     }
     let _e65 = phi_840_;
     let _e66 = (_e48 - _e65);
-    let _e69 = N4_1[0u];
+    let _e69 = O4_1[0u];
     let _e71 = max(floor(_e69), 0f);
-    let _e73 = N4_1[1u];
-    let _e75 = N4_1[2u];
+    let _e73 = O4_1[1u];
+    let _e75 = O4_1[2u];
     let _e76 = u32(_e75);
     let _e81 = f32((_e76 >> bitcast<u32>(10i)));
-    let _e83 = N4_1[3u];
+    let _e83 = O4_1[3u];
     let _e84 = I7_1;
     let _e85 = (_e73 - _e81);
     let _e86 = (_e71 <= _e85);
@@ -108,9 +108,9 @@ fn main_1() {
         phi_859_ = _e85;
         phi_855_ = _e71;
     } else {
-        let _e88 = O4_1;
+        let _e88 = P4_1;
         let _e93 = (_e71 - _e85);
-        let _e95 = O4_1[2u];
+        let _e95 = P4_1[2u];
         let _e96 = (_e84 & 469762048u);
         if (_e96 > 134217728u) {
             phi_845_ = _e84;
@@ -192,7 +192,7 @@ fn main_1() {
         if ((_e134 & 2147483648u) != 0u) {
             phi_963_ = select(select(_e141, _e142, vec2((_e138 >= 8f))), _e140, vec2((_e138 >= 12f)));
             if (_e138 >= 14f) {
-                let _e178 = O4_1;
+                let _e178 = P4_1;
                 phi_963_ = _e178.xy;
             }
             let _e181 = phi_963_;
@@ -315,18 +315,18 @@ fn main_1() {
         phi_1058_ = vec4<u32>(_e337.x, _e337.y, bitcast<u32>((_e322 - (floor((_e322 / 6.2831855f)) * 6.2831855f))), _e337.w);
     }
     let _e361 = phi_1058_;
-    Qg = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
+    Tg = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
     return;
 }
 
 @fragment
-fn main(@location(0) A6_: vec4<f32>, @location(1) B6_: vec4<f32>, @location(2) N4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) O4_: vec3<f32>) -> @location(0) vec4<u32> {
+fn main(@location(0) A6_: vec4<f32>, @location(1) B6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
     A6_1 = A6_;
     B6_1 = B6_;
-    N4_1 = N4_;
-    I7_1 = I7_;
     O4_1 = O4_;
+    I7_1 = I7_;
+    P4_1 = P4_;
     main_1();
-    let _e11 = Qg;
+    let _e11 = Tg;
     return _e11;
 }

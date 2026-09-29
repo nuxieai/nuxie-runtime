@@ -43,15 +43,15 @@ use crate::mechanical_metal_implementation::source_execution::{
 
 fn source_static_function_name(name: &str) -> Option<&'static NSString> {
     Some(match name {
+        "GF" => objc2_foundation::ns_string!("GF"),
         "HF" => objc2_foundation::ns_string!("HF"),
-        "IF" => objc2_foundation::ns_string!("IF"),
+        "AG" => objc2_foundation::ns_string!("AG"),
         "BG" => objc2_foundation::ns_string!("BG"),
-        "CG" => objc2_foundation::ns_string!("CG"),
-        "UF" => objc2_foundation::ns_string!("UF"),
+        "TF" => objc2_foundation::ns_string!("TF"),
+        "VE" => objc2_foundation::ns_string!("VE"),
         "WE" => objc2_foundation::ns_string!("WE"),
-        "XE" => objc2_foundation::ns_string!("XE"),
-        "HC" => objc2_foundation::ns_string!("HC"),
-        "JB" => objc2_foundation::ns_string!("JB"),
+        "FC" => objc2_foundation::ns_string!("FC"),
+        "IB" => objc2_foundation::ns_string!("IB"),
         _ => return None,
     })
 }
@@ -2537,7 +2537,8 @@ fn source_sizeof_product(source: &str) -> Option<u64> {
         "ContourData" => core::mem::size_of::<gpu::ContourData>(),
         "GradientSpan" => core::mem::size_of::<gpu::GradientSpan>(),
         "TessVertexSpan" => core::mem::size_of::<gpu::TessVertexSpan>(),
-        "ImageDrawInstance" => core::mem::size_of::<gpu::ImageDrawInstance>(),
+        "ImageRectInstance" => core::mem::size_of::<gpu::ImageRectInstance>(),
+        "ImageMeshInstance" => core::mem::size_of::<gpu::ImageMeshInstance>(),
         _ => return None,
     };
     Some(count * size as u64)

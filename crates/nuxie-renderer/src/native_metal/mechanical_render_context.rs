@@ -78,7 +78,8 @@ const CONTOUR_RING: &str = "contour";
 const GRAD_SPAN_RING: &str = "gradSpan";
 const TESS_VERTEX_SPAN_RING: &str = "tessSpan";
 const TRIANGLE_RING: &str = "triangle";
-const IMAGE_DRAW_INSTANCE_RING: &str = "imageDrawInstance";
+const IMAGE_RECT_INSTANCE_RING: &str = "imageRectInstance";
+const IMAGE_MESH_INSTANCE_RING: &str = "imageMeshInstance";
 
 #[cfg(test)]
 std::thread_local! {
@@ -390,7 +391,9 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
 
     unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
         let canvas = unsafe { &mut *canvas };
-        if canvas.isBacked() { return; }
+        if canvas.isBacked() {
+            return;
+        }
         let (width, height) = (canvas.width(), canvas.height());
         let Some((texture_metal, target_metal, texture_descriptor)) = self
             .metal
@@ -479,8 +482,12 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         self.resize_vertex_ring(TRIANGLE_RING, sizeInBytes);
     }
 
-    fn resizeImageDrawInstanceBuffer(&mut self, sizeInBytes: usize) {
-        self.resize_vertex_ring(IMAGE_DRAW_INSTANCE_RING, sizeInBytes);
+    fn resizeImageRectInstanceBuffer(&mut self, sizeInBytes: usize) {
+        self.resize_vertex_ring(IMAGE_RECT_INSTANCE_RING, sizeInBytes);
+    }
+
+    fn resizeImageMeshInstanceBuffer(&mut self, sizeInBytes: usize) {
+        self.resize_vertex_ring(IMAGE_MESH_INSTANCE_RING, sizeInBytes);
     }
 
     fn prepareToFlush(&mut self, _: u64, _: u64) {
@@ -519,8 +526,12 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         self.map_ring(TRIANGLE_RING, size)
     }
 
-    fn mapImageDrawInstanceBuffer(&mut self, size: usize) -> *mut c_void {
-        self.map_ring(IMAGE_DRAW_INSTANCE_RING, size)
+    fn mapImageRectInstanceBuffer(&mut self, size: usize) -> *mut c_void {
+        self.map_ring(IMAGE_RECT_INSTANCE_RING, size)
+    }
+
+    fn mapImageMeshInstanceBuffer(&mut self, size: usize) -> *mut c_void {
+        self.map_ring(IMAGE_MESH_INSTANCE_RING, size)
     }
 
     fn unmapFlushUniformBuffer(&mut self, size: usize) {
@@ -555,8 +566,12 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         self.unmap_ring(TRIANGLE_RING, size);
     }
 
-    fn unmapImageDrawInstanceBuffer(&mut self, size: usize) {
-        self.unmap_ring(IMAGE_DRAW_INSTANCE_RING, size);
+    fn unmapImageRectInstanceBuffer(&mut self, size: usize) {
+        self.unmap_ring(IMAGE_RECT_INSTANCE_RING, size);
+    }
+
+    fn unmapImageMeshInstanceBuffer(&mut self, size: usize) {
+        self.unmap_ring(IMAGE_MESH_INSTANCE_RING, size);
     }
 
     fn resizeGradientTexture(&mut self, width: u32, height: u32) {

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/metal.glsl.
  *
- * Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+ * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
  */
 
 #![allow(dead_code)]
@@ -10,10 +10,10 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c95bc053c61db72e1709209dda94b609a5837bf9e7b61b7a171434c97d04bc3d";
+    "d9f1e0790e5df593bf91794f68f30120c39fcbbed39df1e43f086f0ac5c8aee4";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 534;
 pub const PINNED_SOURCE_BYTE_COUNT: usize = 27098;
 
@@ -233,7 +233,7 @@ pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
 #endif
 
 // imageDrawAttrs is $device, not $constant: the host binds it at a per-draw
-// offset of baseElement * sizeof(ImageDrawInstance), and macOS requires
+// offset of baseElement * sizeof(ImageRectInstance), and macOS requires
 // constant-address-space offsets to be 256-byte aligned.
 #define IMAGE_RECT_VERTEX_MAIN(NAME,                                           \
                                Attrs,                                          \

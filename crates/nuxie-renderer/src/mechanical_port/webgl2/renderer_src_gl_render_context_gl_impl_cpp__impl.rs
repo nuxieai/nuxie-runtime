@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 156001] = [(); PINNED_SOURCE.len()];
+const _: [(); 157988] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -71,55 +71,52 @@ const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const COVERAGE_PLANE_IDX: usize = 3;
 const IMAGE_FIRST_ATTRIB_IDX: GLuint = 2;
-const IMAGE_VIEW_MATRIX_ATTRIB_IDX: GLuint = 2;
-const IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX: GLuint = 3;
-const IMAGE_TRANSLATES_ATTRIB_IDX: GLuint = 4;
-const IMAGE_PACKED_ATTRIBS_IDX: GLuint = 5;
-const IMAGE_LAST_ATTRIB_IDX: GLuint = 5;
+const IMAGE_RECT_LAST_ATTRIB_IDX: GLuint = 8;
+const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = 8;
 
 // Exact export substitutions emitted by the frozen shader minifier.
-const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "YD";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "WD";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "XD";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "VD";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "XD";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "VE";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
-const GLSL_CLEAR_COVERAGE: &str = "DE";
-const GLSL_CLOCKWISE_FILL: &str = "EE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "AD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "MF";
-const GLSL_DRAW_IMAGE: &str = "KE";
-const GLSL_DRAW_IMAGE_MESH: &str = "PB";
-const GLSL_DRAW_IMAGE_RECT: &str = "MD";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "WD";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "UE";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "DC";
+const GLSL_CLEAR_COVERAGE: &str = "CE";
+const GLSL_CLOCKWISE_FILL: &str = "DE";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ZC";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "LF";
+const GLSL_DRAW_IMAGE: &str = "JE";
+const GLSL_DRAW_IMAGE_MESH: &str = "OB";
+const GLSL_DRAW_IMAGE_RECT: &str = "LD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
-const GLSL_DRAW_PATH: &str = "LD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "DF";
+const GLSL_DRAW_PATH: &str = "KD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "CF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "PE";
-const GLSL_ENABLE_KHR_BLEND: &str = "JE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "OE";
+const GLSL_ENABLE_KHR_BLEND: &str = "IE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "EG";
-const GLSL_OPTIONALLY_FLAT: &str = "NB";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "N";
+const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "DG";
+const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
-const GLSL_RESOLVE_PLS: &str = "RC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "NF";
-const GLSL_FlushUniforms: &str = "DC";
-const GLSL_atlasRenderTexture: &str = "YE";
-const GLSL_contourBuffer: &str = "FD";
-const GLSL_dstColorTexture: &str = "VD";
-const GLSL_featherAtlasTexture: &str = "CD";
-const GLSL_gaussianIntegralTexture: &str = "YC";
-const GLSL_gradTexture: &str = "ND";
-const GLSL_imageTexture: &str = "JC";
-const GLSL_paintAuxBuffer: &str = "RB";
-const GLSL_paintBuffer: &str = "BD";
-const GLSL_pathBuffer: &str = "QB";
-const GLSL_sourceTexture: &str = "KC";
-const GLSL_tessVertexTexture: &str = "MC";
+const GLSL_RESOLVE_PLS: &str = "QC";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "MF";
+const GLSL_FlushUniforms: &str = "BC";
+const GLSL_atlasRenderTexture: &str = "XE";
+const GLSL_contourBuffer: &str = "ED";
+const GLSL_dstColorTexture: &str = "UD";
+const GLSL_featherAtlasTexture: &str = "BD";
+const GLSL_gaussianIntegralTexture: &str = "XC";
+const GLSL_gradTexture: &str = "MD";
+const GLSL_imageTexture: &str = "HC";
+const GLSL_paintAuxBuffer: &str = "QB";
+const GLSL_paintBuffer: &str = "AD";
+const GLSL_pathBuffer: &str = "PB";
+const GLSL_sourceTexture: &str = "IC";
+const GLSL_tessVertexTexture: &str = "KC";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");
@@ -954,7 +951,7 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
             .borrow_mut()
             .bindVAO(context.m_imageRectVAO.id());
         recordGLCommand(GLCommand::EnableVertexAttribArray(0));
-        for index in IMAGE_FIRST_ATTRIB_IDX..=IMAGE_LAST_ATTRIB_IDX {
+        for index in IMAGE_FIRST_ATTRIB_IDX..=IMAGE_RECT_LAST_ATTRIB_IDX {
             recordGLCommand(GLCommand::EnableVertexAttribArray(index));
             recordGLCommand(GLCommand::VertexAttribDivisor(index, 1));
         }
@@ -993,7 +990,7 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
             .bindVAO(context.m_imageMeshVAO.id());
         recordGLCommand(GLCommand::EnableVertexAttribArray(0));
         recordGLCommand(GLCommand::EnableVertexAttribArray(1));
-        for index in IMAGE_FIRST_ATTRIB_IDX..=IMAGE_LAST_ATTRIB_IDX {
+        for index in IMAGE_FIRST_ATTRIB_IDX..=IMAGE_MESH_LAST_ATTRIB_IDX {
             recordGLCommand(GLCommand::EnableVertexAttribArray(index));
             recordGLCommand(GLCommand::VertexAttribDivisor(index, 1));
         }
@@ -1878,15 +1875,15 @@ pub(crate) fn resizeAtomicCoverageBacking(
 
 fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
     match feature {
-        gpu::ShaderFeatures::ENABLE_CLIPPING => "J",
+        gpu::ShaderFeatures::ENABLE_CLIPPING => "I",
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "BB",
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "AB",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
-        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "ZC",
-        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "GC",
-        gpu::ShaderFeatures::ENABLE_DITHER => "MB",
-        gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "KB",
+        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "WC",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "YC",
+        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "EC",
+        gpu::ShaderFeatures::ENABLE_DITHER => "LB",
+        gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "JB",
         _ => panic!("combined or empty shader feature"),
     }
 }
@@ -2573,35 +2570,47 @@ unsafe fn glBufferId(bufferRing: *mut BufferRing) -> GLuint {
     unsafe { (*bufferRing.cast::<BufferRingGLImpl>()).bufferID() }
 }
 
-fn setImageDrawInstanceAttribs(byteOffset: usize) {
-    let stride = std::mem::size_of::<gpu::ImageDrawInstance>() as GLsizei;
-    let word = std::mem::size_of::<u32>();
-    assert_eq!(std::mem::size_of::<gpu::ImageDrawInstance>(), word * 16);
-    for (index, offset) in [
-        (IMAGE_VIEW_MATRIX_ATTRIB_IDX, byteOffset),
-        (
-            IMAGE_CLIP_RECT_INVERSE_MATRIX_ATTRIB_IDX,
-            byteOffset + word * 4,
-        ),
-        (IMAGE_TRANSLATES_ATTRIB_IDX, byteOffset + word * 8),
-    ] {
-        recordGLCommand(GLCommand::VertexAttribPointer {
-            index,
-            size: 4,
-            type_: GL_FLOAT,
-            normalized: GL_FALSE,
-            stride,
-            offset: u32::try_from(offset).expect("WebGL vertex attribute offset fits u32"),
-        });
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CallType { UnnormalizedFloat, NormalizedFloat, Int }
+struct GLVertexElementFormat { componentType: GLenum, componentCount: GLint, callType: CallType }
+fn getGLVertexElementFormat(format: gpu::VertexElementFormat) -> GLVertexElementFormat {
+    let (componentType, componentCount, callType) = match format {
+        gpu::VertexElementFormat::float1 => (GL_FLOAT, 1, CallType::UnnormalizedFloat),
+        gpu::VertexElementFormat::float2 => (GL_FLOAT, 2, CallType::UnnormalizedFloat),
+        gpu::VertexElementFormat::float3 => (GL_FLOAT, 3, CallType::UnnormalizedFloat),
+        gpu::VertexElementFormat::float4 => (GL_FLOAT, 4, CallType::UnnormalizedFloat),
+        gpu::VertexElementFormat::uint8x4 => (GL_UNSIGNED_BYTE, 4, CallType::Int),
+        gpu::VertexElementFormat::sint8x4 => (GL_BYTE, 4, CallType::Int),
+        gpu::VertexElementFormat::unorm8x4 => (GL_UNSIGNED_BYTE, 4, CallType::NormalizedFloat),
+        gpu::VertexElementFormat::snorm8x4 => (GL_BYTE, 4, CallType::NormalizedFloat),
+        gpu::VertexElementFormat::uint16x2 => (GL_UNSIGNED_SHORT, 2, CallType::Int),
+        gpu::VertexElementFormat::sint16x2 => (GL_SHORT, 2, CallType::Int),
+        gpu::VertexElementFormat::unorm16x2 => (GL_UNSIGNED_SHORT, 2, CallType::NormalizedFloat),
+        gpu::VertexElementFormat::snorm16x2 => (GL_SHORT, 2, CallType::NormalizedFloat),
+        gpu::VertexElementFormat::uint16x4 => (GL_UNSIGNED_SHORT, 4, CallType::Int),
+        gpu::VertexElementFormat::sint16x4 => (GL_SHORT, 4, CallType::Int),
+        gpu::VertexElementFormat::float16x2 => (GL_HALF_FLOAT, 2, CallType::UnnormalizedFloat),
+        gpu::VertexElementFormat::float16x4 => (GL_HALF_FLOAT, 4, CallType::UnnormalizedFloat),
+        gpu::VertexElementFormat::uint32 => (GL_UNSIGNED_INT, 1, CallType::Int),
+    };
+    GLVertexElementFormat { componentType, componentCount, callType }
+}
+fn setInstanceAttribs(baseByteOffset: usize, stride: GLsizei, attributes: &[gpu::VertexAttribute]) {
+    for attr in attributes {
+        let fmt = getGLVertexElementFormat(attr.format);
+        let offset = u32::try_from(baseByteOffset + attr.byteOffset as usize).expect("WebGL vertex attribute offset fits u32");
+        if fmt.callType == CallType::Int {
+            recordGLCommand(GLCommand::VertexAttribIPointer {
+                index: attr.attributeIndex, size: fmt.componentCount, type_: fmt.componentType, stride, offset,
+            });
+        } else {
+            recordGLCommand(GLCommand::VertexAttribPointer {
+                index: attr.attributeIndex, size: fmt.componentCount, type_: fmt.componentType,
+                normalized: if fmt.callType == CallType::NormalizedFloat { GL_TRUE } else { GL_FALSE },
+                stride, offset,
+            });
+        }
     }
-    recordGLCommand(GLCommand::VertexAttribIPointer {
-        index: IMAGE_PACKED_ATTRIBS_IDX,
-        size: 4,
-        type_: GL_UNSIGNED_INT,
-        stride,
-        offset: u32::try_from(byteOffset + word * 12)
-            .expect("WebGL integer attribute offset fits u32"),
-    });
 }
 
 unsafe fn bindStorageBuffer(
@@ -3775,12 +3784,14 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     state.bindVAO(context.m_imageRectVAO.id());
                     state.bindBuffer(
                         GL_ARRAY_BUFFER,
-                        glBufferId(context.base.imageDrawInstanceBufferRing()),
+                        glBufferId(context.base.imageRectInstanceBufferRing()),
                     );
                     drop(state);
-                    setImageDrawInstanceAttribs(
+                    setInstanceAttribs(
                         batch.baseElement as usize
-                            * std::mem::size_of::<gpu::ImageDrawInstance>(),
+                            * std::mem::size_of::<gpu::ImageRectInstance>(),
+                        std::mem::size_of::<gpu::ImageRectInstance>() as GLsizei,
+                        gpu::ImageRectInstance::getAttributes(),
                     );
                     recordGLCommand(GLCommand::DrawElementsInstanced {
                         mode: GL_TRIANGLES,
@@ -3842,12 +3853,14 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                     let mut state = context.m_state.borrow_mut();
                     state.bindBuffer(
                         GL_ARRAY_BUFFER,
-                        glBufferId(context.base.imageDrawInstanceBufferRing()),
+                        glBufferId(context.base.imageMeshInstanceBufferRing()),
                     );
                     drop(state);
-                    setImageDrawInstanceAttribs(
+                    setInstanceAttribs(
                         batch.baseElement as usize
-                            * std::mem::size_of::<gpu::ImageDrawInstance>(),
+                            * std::mem::size_of::<gpu::ImageMeshInstance>(),
+                        std::mem::size_of::<gpu::ImageMeshInstance>() as GLsizei,
+                        gpu::ImageMeshInstance::getAttributes(),
                     );
                     context
                         .m_state
@@ -4584,8 +4597,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4025);
-        assert_eq!(PINNED_SOURCE.len(), 156001);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4076);
+        assert_eq!(PINNED_SOURCE.len(), 157988);
     }
 
     #[test]
@@ -4672,7 +4685,7 @@ mod tests {
     fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
         let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
         let features = [
-            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "J"),
+            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "I"),
             (
                 "ENABLE_CLIP_RECT",
                 gpu::ShaderFeatures::ENABLE_CLIP_RECT,
@@ -4687,23 +4700,23 @@ mod tests {
             (
                 "ENABLE_EVEN_ODD",
                 gpu::ShaderFeatures::ENABLE_EVEN_ODD,
-                "XC",
+                "WC",
             ),
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "ZC",
+                "YC",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",
                 gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES,
-                "GC",
+                "EC",
             ),
-            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "MB"),
+            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "LB"),
             (
                 "ENABLE_MODULATED_IMAGE",
                 gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE,
-                "KB",
+                "JB",
             ),
         ];
         assert_eq!(features.len(), gpu::kShaderFeatureCount);

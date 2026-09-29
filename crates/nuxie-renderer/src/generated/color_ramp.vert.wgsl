@@ -1,25 +1,25 @@
-struct DC {
-    hc: f32,
-    rd: f32,
-    kf: f32,
-    lf: f32,
+struct BC {
+    jc: f32,
+    sd: f32,
+    of_: f32,
+    pf: f32,
     p6_: u32,
-    Mg: u32,
-    Ve: u32,
-    We: u32,
+    Pg: u32,
+    Ze: u32,
+    af: u32,
     U7_: vec4<i32>,
-    Ig: vec2<f32>,
-    sd: vec2<f32>,
+    Lg: vec2<f32>,
+    td: vec2<f32>,
     c2_: u32,
-    Ng: f32,
+    Qg: f32,
     d6_: u32,
     R2_: f32,
-    td: f32,
-    Qe: u32,
-    B3_: f32,
-    C3_: f32,
     ud: f32,
-    Fg: u32,
+    Ue: u32,
+    A3_: f32,
+    B3_: f32,
+    vd: f32,
+    Ig: u32,
 }
 
 struct gl_PerVertex {
@@ -35,10 +35,10 @@ struct VertexOutput {
 }
 
 var<private> gl_VertexIndex_1: i32;
-var<private> LC_1: vec4<u32>;
+var<private> JC_1: vec4<u32>;
 @group(0) @binding(0)
-var<uniform> m: DC;
-var<private> U6_: vec4<f32>;
+var<uniform> m: BC;
+var<private> V6_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -54,22 +54,22 @@ fn main_1() {
     let _e33 = (_e31 >> bitcast<u32>(1i));
     let _e34 = (_e33 <= 1i);
     if _e34 {
-        let _e36 = LC_1[0u];
+        let _e36 = JC_1[0u];
         phi_239_ = (_e36 & 65535u);
     } else {
-        let _e39 = LC_1[0u];
+        let _e39 = JC_1[0u];
         phi_239_ = (_e39 >> bitcast<u32>(16i));
     }
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = m.hc;
+    let _e50 = m.jc;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);
     }
     let _e54 = phi_240_;
-    let _e56 = LC_1[1u];
+    let _e56 = JC_1[1u];
     phi_242_ = _e45;
     if (((_e56 & 2147483648u) != 0u) && (_e33 == 0i)) {
         if ((_e56 & 536870912u) != 0u) {
@@ -93,24 +93,24 @@ fn main_1() {
     }
     let _e81 = phi_246_;
     if _e34 {
-        let _e83 = LC_1[2u];
+        let _e83 = JC_1[2u];
         phi_244_ = _e83;
     } else {
-        let _e85 = LC_1[3u];
+        let _e85 = JC_1[3u];
         phi_244_ = _e85;
     }
     let _e87 = phi_244_;
-    U6_ = (vec4<f32>(((vec4(_e87) >> bitcast<vec4<u32>>(vec4<u32>(16u, 8u, 0u, 24u))) & vec4<u32>(255u, 255u, 255u, 255u))) * vec4<f32>(0.003921569f, 0.003921569f, 0.003921569f, 0.003921569f));
+    V6_ = (vec4<f32>(((vec4(_e87) >> bitcast<vec4<u32>>(vec4<u32>(16u, 8u, 0u, 24u))) & vec4<u32>(255u, 255u, 255u, 255u))) * vec4<f32>(0.003921569f, 0.003921569f, 0.003921569f, 0.003921569f));
     unnamed.gl_Position = vec4<f32>(((_e81 * 2f) - 1f), (((f32((_e56 & 536870911u)) + _e54) * _e50) - sign(_e50)), 0f, 1f);
     return;
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LC: vec4<u32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) JC: vec4<u32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
-    LC_1 = LC;
+    JC_1 = JC;
     main_1();
-    let _e8 = U6_;
+    let _e8 = V6_;
     let _e9 = unnamed.gl_Position;
     return VertexOutput(_e8, _e9);
 }

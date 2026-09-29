@@ -2,7 +2,8 @@ use crate::mechanical_port::source::{
     animation::{
         interpolating_keyframe::KeyFrameValueContext,
         keyed_callback_reporter::KeyedCallbackReporter, linear_animation::LinearAnimation,
-        r#loop::Loop, nested_animation::NestedEventNotifier,
+        linear_animation_instance_extras::LAIBindingExtras, r#loop::Loop,
+        nested_animation::NestedEventNotifier,
     },
     artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
     core::{CoreHandle, field_types::core_callback_type::CallbackContext},
@@ -11,7 +12,6 @@ use crate::mechanical_port::source::{
         bindable_property_color::BindablePropertyColor,
         bindable_property_number::BindablePropertyNumber,
         bindable_property_string::BindablePropertyString,
-        data_bind_container::DataBindContainerWeak,
     },
     generated::{
         animation::{
@@ -27,7 +27,10 @@ use crate::mechanical_port::source::{
     },
     scripted::scripted_interpolator::ScriptedInterpolator,
 };
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::{RefCell, RefMut},
+    rc::Rc,
+};
 
 #[derive(Clone)]
 enum LinearAnimationOwner {
@@ -55,12 +58,9 @@ pub struct LinearAnimationInstance {
     direction: f32,
     did_loop: bool,
     loop_value: i32,
-    scripted_interpolators: RefCell<Option<HashMap<CoreHandle, CoreHandle>>>,
-    cloned_artboard_data_binds: RefCell<Vec<CoreHandle>>,
-    keyframe_value_holders: RefCell<Option<HashMap<CoreHandle, CoreHandle>>>,
-    keyframe_value_binds: RefCell<HashMap<CoreHandle, CoreHandle>>,
-    // Retained field projection for teardown while Artboard itself is borrowed.
-    keyframe_bind_container: RefCell<DataBindContainerWeak>,
+    // Common instances pay only for a nullable cold-cluster pointer and the
+    // borrow flag; copies deliberately start with no allocated cluster.
+    binding_extras: RefCell<Option<Box<LAIBindingExtras>>>,
 }
 impl LinearAnimationInstance {
     pub fn new(
@@ -123,11 +123,7 @@ impl LinearAnimationInstance {
             direction: 1.0,
             did_loop: false,
             loop_value: -1,
-            scripted_interpolators: RefCell::new(None),
-            cloned_artboard_data_binds: RefCell::new(Vec::new()),
-            keyframe_value_holders: RefCell::new(None),
-            keyframe_value_binds: RefCell::new(HashMap::new()),
-            keyframe_bind_container: RefCell::new(DataBindContainerWeak::default()),
+            binding_extras: RefCell::new(None),
         }
     }
 
@@ -277,14 +273,22 @@ impl LinearAnimationInstance {
     }
     pub fn keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
         let holder = self
-            .keyframe_value_holders
+            .binding_extras
             .borrow()
             .as_ref()
-            .and_then(|holders| holders.get(key).cloned());
+            .and_then(|extras| extras.keyframe_value_holders.get(key).cloned());
         if let Some(holder) = holder {
-            let bind = self.keyframe_value_binds.borrow().get(key).cloned();
+            // Release the cluster borrow before flushing: the bind may call
+            // back into animation application.
+            let (bind, container) = {
+                let extras = self.binding_extras.borrow();
+                let extras = extras.as_ref().unwrap();
+                (
+                    extras.keyframe_value_binds.get(key).cloned(),
+                    extras.bind_container.upgrade(),
+                )
+            };
             if let Some(bind) = bind {
-                let container = self.keyframe_bind_container.borrow().upgrade();
                 if let Some(container) = container {
                     container.flush_data_bind(&bind);
                 }
@@ -331,9 +335,8 @@ impl LinearAnimationInstance {
             ),
             _ => return None,
         };
-        self.keyframe_value_holders
-            .borrow_mut()
-            .get_or_insert_with(HashMap::new)
+        self.ensure_binding_extras()
+            .keyframe_value_holders
             .insert(key.clone(), holder.clone());
         let clone = source_bind
             .clone_occurrence()
@@ -358,10 +361,10 @@ impl LinearAnimationInstance {
             .artboard
             .with_artboard(|artboard| artboard.base.data_bind_container.clone())
             .expect("live animation artboard");
-        *self.keyframe_bind_container.borrow_mut() = container.downgrade();
+        self.ensure_binding_extras().bind_container = container.downgrade();
         container.add_data_bind(clone.clone());
-        self.keyframe_value_binds
-            .borrow_mut()
+        self.ensure_binding_extras()
+            .keyframe_value_binds
             .insert(key.clone(), clone);
         Some(holder)
     }
@@ -371,24 +374,35 @@ impl LinearAnimationInstance {
         value: CoreHandle,
         binds: Vec<CoreHandle>,
     ) {
-        self.scripted_interpolators
-            .borrow_mut()
-            .get_or_insert_with(HashMap::new)
-            .insert(key, value);
-        self.cloned_artboard_data_binds.borrow_mut().extend(binds)
+        let container = self
+            .artboard
+            .with_artboard(|artboard| artboard.base.data_bind_container.downgrade());
+        let mut extras = self.ensure_binding_extras();
+        extras.scripted_interpolators.insert(key, value);
+        extras.cloned_artboard_data_binds.extend(binds);
+        if let Some(container) = container {
+            extras.bind_container = container;
+        }
+    }
+    fn ensure_binding_extras(&self) -> RefMut<'_, LAIBindingExtras> {
+        RefMut::map(self.binding_extras.borrow_mut(), |extras| {
+            extras
+                .get_or_insert_with(|| Box::new(LAIBindingExtras::default()))
+                .as_mut()
+        })
     }
     pub fn stateful_interpolator(
         &self,
         keyframe: CoreHandle,
         shared: CoreHandle,
     ) -> Option<CoreHandle> {
-        if let Some(cached) = self
+        let cached = self
+            .ensure_binding_extras()
             .scripted_interpolators
-            .borrow()
-            .as_ref()
-            .and_then(|instances| instances.get(&keyframe))
-        {
-            return Some(cached.clone());
+            .get(&keyframe)
+            .cloned();
+        if let Some(cached) = cached {
+            return Some(cached);
         }
         use crate::mechanical_port::source::scripted::scripted_object::{
             ScriptUpdateRequestHost, ScriptedObject,
@@ -401,6 +415,9 @@ impl LinearAnimationInstance {
         let context = self
             .artboard
             .with_artboard(|artboard| artboard.data_context())?;
+        self.ensure_binding_extras().bind_container = self
+            .artboard
+            .with_artboard(|artboard| artboard.base.data_bind_container.downgrade())?;
         let (properties, needs_init) =
             owner.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
                 clone.scripted.set_data_context(context);
@@ -416,16 +433,17 @@ impl LinearAnimationInstance {
                 .with(|property| property.script_input_data_bind())
                 .flatten()
             {
-                self.cloned_artboard_data_binds.borrow_mut().push(bind);
+                self.ensure_binding_extras()
+                    .cloned_artboard_data_binds
+                    .push(bind);
             }
         }
         if needs_init {
             let mut host = ScriptUpdateRequestHost::default();
             ScriptedObject::reinit_occurrence(&owner, &properties, &mut host);
         }
-        self.scripted_interpolators
-            .borrow_mut()
-            .get_or_insert_with(HashMap::new)
+        self.ensure_binding_extras()
+            .scripted_interpolators
             .insert(keyframe, owner.clone());
         Some(owner)
     }
@@ -666,43 +684,81 @@ impl Clone for LinearAnimationInstance {
             direction: self.direction,
             did_loop: self.did_loop,
             loop_value: self.loop_value,
-            scripted_interpolators: RefCell::new(None),
-            cloned_artboard_data_binds: RefCell::new(Vec::new()),
-            keyframe_value_holders: RefCell::new(None),
-            keyframe_value_binds: RefCell::new(HashMap::new()),
-            keyframe_bind_container: RefCell::new(DataBindContainerWeak::default()),
+            binding_extras: RefCell::new(None),
         }
     }
 }
 impl Drop for LinearAnimationInstance {
     fn drop(&mut self) {
-        for bind in self.cloned_artboard_data_binds.get_mut().drain(..) {
-            let _ = self
-                .artboard
-                .with_artboard_mut(|artboard| artboard.remove_data_bind(bind));
-        }
-        for bind in self
-            .keyframe_value_binds
-            .get_mut()
-            .drain()
-            .map(|(_, bind)| bind)
+        let Some(mut extras) = self.binding_extras.get_mut().take() else {
+            return;
+        };
+        for bind in extras
+            .cloned_artboard_data_binds
+            .drain(..)
+            .chain(extras.keyframe_value_binds.drain().map(|(_, bind)| bind))
         {
-            if let Some(container) = self.keyframe_bind_container.get_mut().upgrade() {
+            if let Some(container) = extras.bind_container.upgrade() {
                 container.remove_data_bind(bind.clone());
             }
             bind.remove_occurrence();
         }
-        if let Some(scripted_interpolators) = self.scripted_interpolators.get_mut().take() {
-            let _ = self.artboard.with_artboard_mut(|artboard| {
-                for interpolator in scripted_interpolators.into_values() {
-                    artboard.remove_runtime_object(interpolator);
-                }
-            });
+        for (_, holder) in extras.keyframe_value_holders.drain() {
+            holder.remove_occurrence();
         }
-        if let Some(holders) = self.keyframe_value_holders.get_mut().take() {
-            for holder in holders.into_values() {
-                holder.remove_occurrence();
-            }
+        for (_, interpolator) in extras.scripted_interpolators.drain() {
+            interpolator.remove_occurrence();
         }
+    }
+}
+
+#[cfg(test)]
+mod binding_extras_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        animation::keyframe_double::KeyFrameDouble, core::CoreArena,
+    };
+
+    #[test]
+    fn ordinary_playback_and_unbound_lookup_leave_cluster_unallocated() {
+        let arena = CoreArena::default();
+        let keyframe = arena.insert(KeyFrameDouble::default());
+        let mut instance = LinearAnimationInstance::new_runtime(
+            Rc::new(RefCell::new(LinearAnimation::default())),
+            RuntimeArtboardInstanceWeakHandle::default(),
+            1.0,
+        );
+        assert!(!instance.did_loop());
+        assert!(instance.binding_extras.borrow().is_none());
+        instance.advance(0.0, None);
+        instance.apply(1.0);
+        assert!(instance.keyframe_value_holder(&keyframe).is_none());
+        assert!(instance.binding_extras.borrow().is_none());
+    }
+
+    #[test]
+    fn copied_instance_starts_fresh_while_original_keeps_its_cluster() {
+        let mut instance = LinearAnimationInstance::new_runtime(
+            Rc::new(RefCell::new(LinearAnimation::default())),
+            RuntimeArtboardInstanceWeakHandle::default(),
+            1.0,
+        );
+        // The same cluster is retained on repeated use and time seeking.
+        let cluster = {
+            let extras = instance.ensure_binding_extras();
+            &*extras as *const LAIBindingExtras
+        };
+        instance.set_time(0.5);
+        instance.reset(1.0);
+        assert_eq!(
+            cluster,
+            &*instance.ensure_binding_extras() as *const LAIBindingExtras
+        );
+        instance.did_loop = true;
+        let copy = instance.clone();
+        assert!(copy.did_loop());
+        assert_eq!(copy.time(), instance.time());
+        assert!(copy.binding_extras.borrow().is_none());
+        assert!(instance.binding_extras.borrow().is_some());
     }
 }

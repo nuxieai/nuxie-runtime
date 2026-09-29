@@ -73,8 +73,8 @@ where
     T: BlendAnimationDefinition + Any,
 {
     pub fn new(blend_state: CoreHandle, instance: RuntimeArtboardInstanceWeakHandle) -> Self {
-        let (animations, flags) = blend_state
-            .with_downcast::<K, _>(|state| (state.animations(), state.flags()))
+        let animations = blend_state
+            .with_downcast::<K, _>(|state| state.animations())
             .expect("BlendStateInstance retains its typed BlendState");
         let mut animation_instances = Vec::with_capacity(animations.len());
         for blend_animation in animations {
@@ -82,18 +82,6 @@ where
                 blend_animation,
                 instance.clone(),
             ));
-        }
-
-        // Upstream gathers the reset animations when the Reset bit is set; the
-        // resulting local vector is intentionally discarded there as well.
-        if flags & (1 << 1) != 0 {
-            let animations: Vec<_> = animation_instances
-                .iter()
-                .map(|animation| {
-                    animation.with_blend_animation(BlendAnimationDefinition::animation)
-                })
-                .collect();
-            drop(animations);
         }
 
         Self {

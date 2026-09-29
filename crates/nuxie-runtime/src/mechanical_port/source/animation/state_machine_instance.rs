@@ -178,21 +178,20 @@ impl InputInstance {
 pub struct StateMachineLayerInstance {
     occurrence: RuntimeStateMachineLayerInstanceWeakHandle,
     layer: Option<CoreHandle>,
-    artboard_instance: RuntimeArtboardInstanceWeakHandle,
     any_state_instance: Option<RuntimeStateInstanceHandle>,
     current_state: Option<RuntimeStateInstanceHandle>,
     state_from: Option<RuntimeStateInstanceHandle>,
     transition: Option<CoreHandle>,
     transition_duration_property: Option<CoreHandle>,
     animation_reset: Option<AnimationReset>,
-    transition_completed: bool,
-    hold_animation_from: bool,
+    hold_animation: Option<CoreHandle>,
     mix: f32,
     mix_from: f32,
+    hold_time: f32,
+    transition_completed: bool,
+    hold_animation_from: bool,
     state_machine_changed_on_advance: bool,
     waiting_for_exit: bool,
-    hold_animation: Option<CoreHandle>,
-    hold_time: f32,
 }
 
 #[derive(Clone)]
@@ -242,7 +241,6 @@ impl Default for StateMachineLayerInstance {
         Self {
             occurrence: RuntimeStateMachineLayerInstanceWeakHandle::default(),
             layer: None,
-            artboard_instance: RuntimeArtboardInstanceWeakHandle::default(),
             any_state_instance: None,
             current_state: None,
             state_from: None,
@@ -264,23 +262,8 @@ impl Default for StateMachineLayerInstance {
 impl StateMachineLayerInstance {
     const MAX_ITERATIONS: usize = 100;
 
-    fn init(
-        &mut self,
-        state_machine_instance: &mut StateMachineInstance,
-        layer: CoreHandle,
-        artboard: RuntimeArtboardInstanceWeakHandle,
-    ) {
-        self.artboard_instance = artboard.clone();
-        let deterministic = DETERMINISTIC_MODE.load(Ordering::Relaxed);
-        let seed = RandomProvider::layer_seed(deterministic);
-        RandomProvider::seed(seed);
+    fn init(&mut self, state_machine_instance: &mut StateMachineInstance, layer: CoreHandle) {
         debug_assert!(self.layer.is_none());
-        let any_state = layer
-            .with_downcast::<StateMachineLayer, _>(StateMachineLayer::any_state)
-            .flatten();
-        // Missing Any is tolerated; transition dispatch already handles None.
-        self.any_state_instance =
-            any_state.map(|state| Self::make_state_instance(state, &artboard));
         let entry = layer
             .with_downcast::<StateMachineLayer, _>(StateMachineLayer::entry_state)
             .flatten()
@@ -422,18 +405,18 @@ impl StateMachineLayerInstance {
         {
             from.with_state_mut(|state| state.advance(seconds, machine));
         }
-        self.apply();
+        self.apply(machine);
         let mut changed = false;
         for iteration in 0.. {
             if !self.update_state(machine) {
                 break;
             }
             changed = true;
-            self.apply();
+            self.apply(machine);
             if iteration == Self::MAX_ITERATIONS {
                 let machine_name = machine.name();
                 let layer = self.layer.as_ref();
-                let artboard = &self.artboard_instance;
+                let artboard = &machine.artboard_instance;
                 eprintln!(
                     "{} StateMachine exceeded max iterations in layer {} on artboard {}",
                     machine_name,
@@ -467,6 +450,33 @@ impl StateMachineLayerInstance {
             && self.mix < 1.0
     }
 
+    fn ensure_any_state_instance(&mut self, machine: &StateMachineInstance) {
+        if self.any_state_instance.is_some() {
+            return;
+        }
+        let Some(any_state) = self.layer.as_ref().and_then(|layer| {
+            layer
+                .with_downcast::<StateMachineLayer, _>(StateMachineLayer::any_state)
+                .flatten()
+        }) else {
+            return;
+        };
+        if any_state
+            .with(|state| state.layer_state_transition_count())
+            .flatten()
+            .expect("an authored LayerState must expose transition count")
+            == 0
+        {
+            return;
+        }
+        // Recheck on every update until needed, including transitions added
+        // after construction. The layer definition itself remains pinned.
+        self.any_state_instance = Some(Self::make_state_instance(
+            any_state,
+            &machine.artboard_instance,
+        ));
+    }
+
     fn update_state(&mut self, machine: &mut StateMachineInstance) -> bool {
         if self.is_transitioning()
             && !self
@@ -480,6 +490,7 @@ impl StateMachineLayerInstance {
             return false;
         }
         self.waiting_for_exit = false;
+        self.ensure_any_state_instance(machine);
         if self.try_change_state_from(machine, self.any_state_instance.clone()) {
             return true;
         }
@@ -557,7 +568,7 @@ impl StateMachineLayerInstance {
             self.current_state = None;
             return;
         };
-        let current = Self::make_state_instance(state_to, &self.artboard_instance);
+        let current = Self::make_state_instance(state_to, &machine.artboard_instance);
         self.current_state = Some(current.clone());
         let state = current.definition();
         let events = Self::layer_component_events(&state);
@@ -718,7 +729,7 @@ impl StateMachineLayerInstance {
         }
     }
 
-    fn build_animation_reset_for_transition(&mut self) {
+    fn build_animation_reset_for_transition(&mut self, machine: &StateMachineInstance) {
         let animations = [self.state_from.as_ref(), self.current_state.as_ref()]
             .into_iter()
             .flatten()
@@ -729,7 +740,7 @@ impl StateMachineLayerInstance {
                     .flatten()
             })
             .collect::<Vec<_>>();
-        let artboard = self
+        let artboard = machine
             .artboard_instance
             .upgrade()
             .expect("a state-machine layer retains its artboard instance");
@@ -793,7 +804,7 @@ impl StateMachineLayerInstance {
         {
             use crate::mechanical_port::source::profiler::rive_profile;
             if rive_profile::global_transition_enabled() {
-                let artboard = self
+                let artboard = machine
                     .artboard_instance
                     .upgrade()
                     .expect("live layer Artboard");
@@ -831,7 +842,7 @@ impl StateMachineLayerInstance {
         }
         self.state_from = out_state;
         if !self.transition_completed {
-            self.build_animation_reset_for_transition();
+            self.build_animation_reset_for_transition(machine);
         }
         if let Some(out_state) = self.state_from.clone() {
             let hold_animation = out_state
@@ -920,16 +931,16 @@ impl StateMachineLayerInstance {
         true
     }
 
-    fn apply(&mut self) {
+    fn apply(&mut self, machine: &StateMachineInstance) {
         if let Some(animation_reset) = self.animation_reset.as_ref() {
-            let mut artboard = self
+            let mut artboard = machine
                 .artboard_instance
                 .upgrade()
                 .expect("a state-machine layer retains its artboard instance");
             animation_reset.apply(&mut artboard);
         }
         if let Some(hold_animation) = self.hold_animation.clone() {
-            let artboard = self
+            let artboard = machine
                 .artboard_instance
                 .upgrade()
                 .expect("a state-machine layer retains its artboard instance");
@@ -954,7 +965,7 @@ impl StateMachineLayerInstance {
                         .flatten()
                 })
                 .unwrap_or(self.mix_from);
-            state_from.with_state_mut(|state| state.apply(&self.artboard_instance, mix));
+            state_from.with_state_mut(|state| state.apply(&machine.artboard_instance, mix));
         }
         if let Some(current_state) = self.current_state.clone() {
             let mix = interpolator
@@ -967,7 +978,7 @@ impl StateMachineLayerInstance {
                         .flatten()
                 })
                 .unwrap_or(self.mix);
-            current_state.with_state_mut(|state| state.apply(&self.artboard_instance, mix));
+            current_state.with_state_mut(|state| state.apply(&machine.artboard_instance, mix));
         }
     }
 
@@ -984,6 +995,79 @@ impl StateMachineLayerInstance {
                 .flatten()
                 .is_some()
         })
+    }
+}
+
+#[cfg(test)]
+mod layer_allocation_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        animation::{
+            any_state::AnyState, entry_state::EntryState, state_transition::StateTransition,
+        },
+        artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
+        core::CoreArena,
+        core_context::CoreContext,
+        status_code::StatusCode,
+    };
+
+    struct Context(CoreArena);
+    impl CoreContext for Context {
+        fn core_arena(&self) -> &CoreArena {
+            &self.0
+        }
+        fn resolve_handle(&self, _id: u32) -> Option<CoreHandle> {
+            None
+        }
+    }
+
+    #[test]
+    fn any_state_is_lazy_and_rechecks_transitions_added_after_init() {
+        let mut context = Context(CoreArena::default());
+        let entry = context.0.insert(EntryState::default());
+        let any = context.0.insert(AnyState::default());
+        let mut definition = StateMachineLayer::default();
+        definition.add_state(entry);
+        definition.add_state(any.clone());
+        assert_eq!(definition.on_added_dirty(&mut context), StatusCode::Ok);
+        let definition = context.0.insert(definition);
+        let machine_definition = context.0.insert(StateMachine::default());
+        let artboard = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let machine = StateMachineInstance::new(machine_definition, artboard.downgrade());
+        machine.with_instance_mut(|machine| {
+            let mut layer = StateMachineLayerInstance::default();
+            layer.init(machine, definition.clone());
+            assert!(layer.any_state_instance.is_none());
+            layer.ensure_any_state_instance(machine);
+            assert!(layer.any_state_instance.is_none());
+            let transition = context.0.insert(StateTransition::default());
+            any.with_downcast_mut::<AnyState, _>(|any| any.base.base.add_transition(transition));
+            layer.ensure_any_state_instance(machine);
+            let retained = layer.any_state_instance.as_ref().unwrap().definition();
+            assert_eq!(retained, any);
+            layer.reset_state(machine);
+            assert_eq!(layer.any_state_instance.as_ref().unwrap().definition(), any);
+            assert_eq!(layer.layer.as_ref(), Some(&definition));
+        });
+    }
+
+    #[test]
+    fn layer_without_any_state_does_not_allocate_one() {
+        let mut context = Context(CoreArena::default());
+        let entry = context.0.insert(EntryState::default());
+        let mut definition = StateMachineLayer::default();
+        definition.add_state(entry);
+        assert_eq!(definition.on_added_dirty(&mut context), StatusCode::Ok);
+        let definition = context.0.insert(definition);
+        let machine_definition = context.0.insert(StateMachine::default());
+        let artboard = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let machine = StateMachineInstance::new(machine_definition, artboard.downgrade());
+        machine.with_instance_mut(|machine| {
+            let mut layer = StateMachineLayerInstance::default();
+            layer.init(machine, definition);
+            assert!(!layer.update_state(machine));
+            assert!(layer.any_state_instance.is_none());
+        });
     }
 }
 
@@ -2428,6 +2512,9 @@ impl StateMachineInstance {
                 }
             }
 
+            // Upstream seeds once per machine, even when there are no layers.
+            let deterministic = DETERMINISTIC_MODE.load(Ordering::Relaxed);
+            RandomProvider::seed(RandomProvider::layer_seed(deterministic));
             let layer_count = instance
                 .machine
                 .with_downcast::<StateMachine, _>(StateMachine::layer_count)
@@ -2444,7 +2531,7 @@ impl StateMachineInstance {
                     StateMachineLayerInstance::default(),
                 );
                 layer_instance.with_layer_mut(|layer_instance| {
-                    layer_instance.init(instance, layer, artboard_instance.clone());
+                    layer_instance.init(instance, layer);
                 });
                 instance.layers.push(layer_instance);
             }

@@ -56,6 +56,7 @@ pub mod layer_state;
 pub mod layer_state_flags;
 pub mod linear_animation;
 pub mod linear_animation_instance;
+mod linear_animation_instance_extras;
 pub mod listener_action;
 pub mod listener_align_target;
 pub mod listener_bool_change;

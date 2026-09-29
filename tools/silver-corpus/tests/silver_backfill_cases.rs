@@ -221,3 +221,13 @@ fn upstream_layout_occluded_by_rectangle_pointer_test() {
     };
     compare_case("layout_order_pointer_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
 }
+
+#[test]
+fn upstream_layout_animation_interrupted_mid_animation() {
+    // layout_test.cpp at 621f2a2e: zero, .016, and 124 further .016 frames.
+    let Some(runtime) = runtime_root("upstream interrupted layout animation Silver assertion") else {
+        return;
+    };
+    compare_case("layout_animation_transition_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}

@@ -192,6 +192,16 @@ enum LayoutMeasureContext {
     Participant(CoreHandle),
 }
 
+/// Allocated on the first retarget or non-default inherited style and retained
+/// until destruction. Presence does not mean an animation is in flight.
+struct LayoutAnimation {
+    a: LayoutAnimationData,
+    b: LayoutAnimationData,
+    inherited_interpolator: Option<CoreHandle>,
+    inherited_interpolation: LayoutStyleInterpolation,
+    inherited_interpolation_time: f32,
+}
+
 struct CachedLayoutNode {
     owner: CoreHandle,
     node: taffy::prelude::NodeId,
@@ -243,11 +253,7 @@ pub struct LayoutComponent {
     layout: Layout,
     layout_padding: LayoutPadding,
     solved_padding: LayoutPadding,
-    animation_data_a: LayoutAnimationData,
-    animation_data_b: LayoutAnimationData,
-    inherited_interpolator: Option<CoreHandle>,
-    inherited_interpolation: LayoutStyleInterpolation,
-    inherited_interpolation_time: f32,
+    animation: Option<Box<LayoutAnimation>>,
     inherited_direction: LayoutDirection,
     layout_flags: u16,
     render_paths: Option<Box<LayoutRenderPaths>>,
@@ -278,11 +284,7 @@ impl Default for LayoutComponent {
             layout: Layout::default(),
             layout_padding: LayoutPadding::default(),
             solved_padding: LayoutPadding::default(),
-            animation_data_a: LayoutAnimationData::default(),
-            animation_data_b: LayoutAnimationData::default(),
-            inherited_interpolator: None,
-            inherited_interpolation: LayoutStyleInterpolation::Hold,
-            inherited_interpolation_time: 0.0,
+            animation: None,
             inherited_direction: LayoutDirection::Inherit,
             layout_flags: LayoutComponentFlags::ParentIsRow as u16
                 | LayoutComponentFlags::PositionLeftChanged as u16
@@ -2473,10 +2475,11 @@ impl LayoutComponent {
         if self.has_layout_flag(LayoutComponentFlags::JustAddedToHost) {
             self.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
             self.layout = next;
-            let data = self.current_animation_data();
-            data.from = next;
-            data.to = next;
-            data.elapsed_seconds = 0.0;
+            if let Some(data) = self.current_animation_data() {
+                data.from = next;
+                data.to = next;
+                data.elapsed_seconds = 0.0;
+            }
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
             self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
@@ -2484,18 +2487,23 @@ impl LayoutComponent {
         }
         if animate && self.animates() {
             let force = self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds);
-            let data = self.current_animation_data();
-            if next != data.to || force {
+            let target = self
+                .current_animation_data()
+                .map(|data| data.to)
+                .unwrap_or(self.layout);
+            if next != target || force {
+                self.ensure_animation();
+                let data = self.current_animation_data().unwrap();
                 if data.elapsed_seconds != 0.0 {
                     if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-                        self.animation_data_a = self.animation_data_b;
+                        self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
                     }
                     self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
                 } else {
                     self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                 }
                 let from = self.layout;
-                let data = self.current_animation_data();
+                let data = self.current_animation_data().unwrap();
                 data.from = from;
                 data.to = next;
                 data.elapsed_seconds = 0.0;
@@ -2509,7 +2517,9 @@ impl LayoutComponent {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
             self.layout = next;
-            self.animation_data_a.to = next;
+            if let Some(animation) = self.animation.as_mut() {
+                animation.a.to = next;
+            }
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
         }
@@ -2573,7 +2583,7 @@ impl LayoutComponent {
                     layout.has_layout_flag(LayoutComponentFlags::JustAddedToHost),
                     layout.animates(),
                     layout.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds),
-                    *layout.current_animation_data(),
+                    layout.current_animation_data().copied(),
                 )
             })
             .unwrap();
@@ -2583,26 +2593,30 @@ impl LayoutComponent {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
                 layout.layout = next;
-                *layout.current_animation_data() = LayoutAnimationData {
-                    from: next,
-                    to: next,
-                    elapsed_seconds: 0.0,
-                };
+                if let Some(data) = layout.current_animation_data() {
+                    *data = LayoutAnimationData {
+                        from: next,
+                        to: next,
+                        elapsed_seconds: 0.0,
+                    };
+                }
             });
             changed = true;
         } else if animate && animates {
-            if next != current.to || force {
+            if next != current.map(|data| data.to).unwrap_or(old) || force {
                 owner.with_mut(|object| {
                     let layout = object.as_layout_component_mut().unwrap();
-                    if current.elapsed_seconds != 0.0 {
+                    layout.ensure_animation();
+                    if layout.current_animation_data().unwrap().elapsed_seconds != 0.0 {
                         if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-                            layout.animation_data_a = layout.animation_data_b;
+                            layout.animation.as_mut().unwrap().a =
+                                layout.animation.as_mut().unwrap().b;
                         }
                         layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
                     } else {
                         layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                     }
-                    *layout.current_animation_data() = LayoutAnimationData {
+                    *layout.current_animation_data().unwrap() = LayoutAnimationData {
                         from: old,
                         to: next,
                         elapsed_seconds: 0.0,
@@ -2617,7 +2631,9 @@ impl LayoutComponent {
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout = next;
-                layout.animation_data_a.to = next;
+                if let Some(animation) = layout.animation.as_mut() {
+                    animation.a.to = next;
+                }
             });
             changed = true;
         }
@@ -2743,7 +2759,8 @@ impl LayoutComponent {
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 let target = layout.layout;
-                if !animate || !layout.animates() || layout.current_animation_data().to == target {
+                let data = *layout.current_animation_data()?;
+                if !animate || !layout.animates() || layout.style.is_none() || data.to == target {
                     return None;
                 }
                 Some((
@@ -2751,7 +2768,7 @@ impl LayoutComponent {
                     layout.interpolation(),
                     layout.interpolator(),
                     layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation),
-                    layout.animation_data_a,
+                    layout.animation.as_mut().unwrap().a,
                 ))
             })
             .flatten()
@@ -2776,19 +2793,20 @@ impl LayoutComponent {
             let f = factor(data_a.elapsed_seconds);
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                layout.animation_data_b.from = layout.animation_data_a.interpolate(f);
+                layout.animation.as_mut().unwrap().b.from =
+                    layout.animation.as_mut().unwrap().a.interpolate(f);
                 if f == 1.0 {
-                    layout.animation_data_a = layout.animation_data_b;
+                    layout.animation.as_mut().unwrap().a = layout.animation.as_mut().unwrap().b;
                     layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                 } else {
-                    layout.animation_data_a.elapsed_seconds += elapsed;
+                    layout.animation.as_mut().unwrap().a.elapsed_seconds += elapsed;
                 }
             });
         }
         let (data, old) = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                (*layout.current_animation_data(), layout.layout)
+                (*layout.current_animation_data().unwrap(), layout.layout)
             })
             .unwrap();
         if data.elapsed_seconds >= time {
@@ -2800,10 +2818,10 @@ impl LayoutComponent {
                 layout.layout = data.to;
                 if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
                     layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                    layout.animation_data_a = layout.animation_data_b;
-                    layout.animation_data_b.elapsed_seconds = 0.0;
+                    layout.animation.as_mut().unwrap().a = layout.animation.as_mut().unwrap().b;
+                    layout.animation.as_mut().unwrap().b.elapsed_seconds = 0.0;
                 }
-                layout.animation_data_a.elapsed_seconds = 0.0;
+                layout.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
             });
             Self::propagate_size_occurrence(owner);
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
@@ -2830,6 +2848,7 @@ impl LayoutComponent {
                 .as_layout_component_mut()
                 .unwrap()
                 .current_animation_data()
+                .unwrap()
                 .elapsed_seconds += elapsed
         });
         if f != 1.0 {
@@ -2847,7 +2866,9 @@ impl LayoutComponent {
                 if !layout.animates() {
                     return false;
                 }
-                layout.layout = layout.current_animation_data().to;
+                if let Some(data) = layout.current_animation_data() {
+                    layout.layout = data.to;
+                }
                 true
             })
             .unwrap_or(false);
@@ -2868,8 +2889,9 @@ impl LayoutComponent {
     pub fn interpolator(&self) -> Option<CoreHandle> {
         self.with_style(|style| match style.animation_style() {
             LayoutAnimationStyle::Inherit => self
-                .inherited_interpolator
-                .clone()
+                .animation
+                .as_ref()
+                .and_then(|animation| animation.inherited_interpolator.clone())
                 .or_else(|| style.interpolator()),
             LayoutAnimationStyle::Custom => style.interpolator(),
             _ => None,
@@ -2878,7 +2900,12 @@ impl LayoutComponent {
     }
     pub fn interpolation(&self) -> LayoutStyleInterpolation {
         self.with_style(|style| match style.animation_style() {
-            LayoutAnimationStyle::Inherit => self.inherited_interpolation,
+            LayoutAnimationStyle::Inherit => self
+                .animation
+                .as_ref()
+                .map_or(LayoutStyleInterpolation::Hold, |animation| {
+                    animation.inherited_interpolation
+                }),
             LayoutAnimationStyle::Custom => style.interpolation(),
             _ => LayoutStyleInterpolation::Hold,
         })
@@ -2886,22 +2913,46 @@ impl LayoutComponent {
     }
     pub fn interpolation_time(&self) -> f32 {
         self.with_style(|style| match style.animation_style() {
-            LayoutAnimationStyle::Inherit => self.inherited_interpolation_time,
+            LayoutAnimationStyle::Inherit => self
+                .animation
+                .as_ref()
+                .map_or(0.0, |animation| animation.inherited_interpolation_time),
             LayoutAnimationStyle::Custom => style.base.interpolation_time(),
             _ => 0.0,
         })
         .unwrap_or(0.0)
     }
-    fn current_animation_data(&mut self) -> &mut LayoutAnimationData {
-        if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
-            &mut self.animation_data_b
+    fn current_animation_data(&mut self) -> Option<&mut LayoutAnimationData> {
+        let smoothing = self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation);
+        let animation = self.animation.as_mut()?;
+        Some(if smoothing {
+            &mut animation.b
         } else {
-            &mut self.animation_data_a
-        }
+            &mut animation.a
+        })
+    }
+    fn ensure_animation(&mut self) -> &mut LayoutAnimation {
+        self.animation.get_or_insert_with(|| {
+            let data = LayoutAnimationData {
+                from: self.layout,
+                to: self.layout,
+                elapsed_seconds: 0.0,
+            };
+            Box::new(LayoutAnimation {
+                a: data,
+                b: data,
+                inherited_interpolator: None,
+                inherited_interpolation: LayoutStyleInterpolation::Hold,
+                inherited_interpolation_time: 0.0,
+            })
+        })
     }
     pub fn apply_interpolation(&mut self, elapsed: f32, animate: bool) -> bool {
         let target = self.layout;
-        if !animate || !self.animates() || self.current_animation_data().to == target {
+        let Some(data) = self.current_animation_data().copied() else {
+            return false;
+        };
+        if !animate || !self.animates() || self.style.is_none() || data.to == target {
             return false;
         }
         let time = self.interpolation_time();
@@ -2922,19 +2973,20 @@ impl LayoutComponent {
         };
         if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
             let factor = transform_factor(
-                self.animation_data_a.elapsed_seconds,
+                self.animation.as_mut().unwrap().a.elapsed_seconds,
                 self.interpolation(),
                 self.interpolator(),
             );
-            self.animation_data_b.from = self.animation_data_a.interpolate(factor);
+            self.animation.as_mut().unwrap().b.from =
+                self.animation.as_mut().unwrap().a.interpolate(factor);
             if factor == 1.0 {
-                self.animation_data_a = self.animation_data_b;
+                self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
                 self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
             } else {
-                self.animation_data_a.elapsed_seconds += elapsed;
+                self.animation.as_mut().unwrap().a.elapsed_seconds += elapsed;
             }
         }
-        let data = *self.current_animation_data();
+        let data = *self.current_animation_data().unwrap();
         if data.elapsed_seconds >= time {
             if self.layout.width() != data.to.width() || self.layout.height() != data.to.height() {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
@@ -2942,10 +2994,10 @@ impl LayoutComponent {
             self.layout = data.to;
             if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
                 self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
-                self.animation_data_a = self.animation_data_b;
-                self.animation_data_b.elapsed_seconds = 0.0;
+                self.animation.as_mut().unwrap().a = self.animation.as_mut().unwrap().b;
+                self.animation.as_mut().unwrap().b.elapsed_seconds = 0.0;
             }
-            self.animation_data_a.elapsed_seconds = 0.0;
+            self.animation.as_mut().unwrap().a.elapsed_seconds = 0.0;
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
             return false;
@@ -2955,7 +3007,7 @@ impl LayoutComponent {
             self.interpolation(),
             self.interpolator(),
         );
-        let current = self.current_animation_data().interpolate(factor);
+        let current = self.current_animation_data().unwrap().interpolate(factor);
         if self.layout != current {
             let resized =
                 self.layout.width() != current.width() || self.layout.height() != current.height();
@@ -2965,7 +3017,7 @@ impl LayoutComponent {
             }
             CoreCapabilities::world_transform_mark_dirty(self);
         }
-        self.current_animation_data().elapsed_seconds += elapsed;
+        self.current_animation_data().unwrap().elapsed_seconds += elapsed;
         if factor != 1.0 {
             self.mark_layout_node_dirty(false);
             true
@@ -2984,7 +3036,9 @@ impl LayoutComponent {
     }
     pub fn interrupt_animation(&mut self) {
         if self.animates() {
-            self.layout = self.current_animation_data().to;
+            if let Some(data) = self.current_animation_data() {
+                self.layout = data.to;
+            }
             self.propagate_size();
         }
     }
@@ -3020,21 +3074,34 @@ impl LayoutComponent {
         interpolator: Option<CoreHandle>,
         time: f32,
     ) -> bool {
-        if interpolation == self.inherited_interpolation
-            && interpolator == self.inherited_interpolator
-            && time == self.inherited_interpolation_time
+        if self.animation.is_none() {
+            if interpolation == LayoutStyleInterpolation::Hold
+                && interpolator.is_none()
+                && time == 0.0
+            {
+                return false;
+            }
+            self.ensure_animation();
+        }
+        let animation = self.animation.as_mut().unwrap();
+        if interpolation == animation.inherited_interpolation
+            && interpolator == animation.inherited_interpolator
+            && time == animation.inherited_interpolation_time
         {
             return false;
         }
-        self.inherited_interpolation = interpolation;
-        self.inherited_interpolator = interpolator;
-        self.inherited_interpolation_time = time;
+        animation.inherited_interpolation = interpolation;
+        animation.inherited_interpolator = interpolator;
+        animation.inherited_interpolation_time = time;
         true
     }
     pub fn clear_inherited_interpolation(&mut self) {
-        self.inherited_interpolation = LayoutStyleInterpolation::Hold;
-        self.inherited_interpolator = None;
-        self.inherited_interpolation_time = 0.0;
+        let Some(animation) = self.animation.as_mut() else {
+            return;
+        };
+        animation.inherited_interpolation = LayoutStyleInterpolation::Hold;
+        animation.inherited_interpolator = None;
+        animation.inherited_interpolation_time = 0.0;
     }
     pub fn cascade_layout_style(
         &mut self,

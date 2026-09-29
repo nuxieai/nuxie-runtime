@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `25db4792fadc1d26b9deed73e6e865122ff1ef95`
+- LAST_SYNCED_SHA: `d8727299e08ba8517887a8a9f0fae80819208294`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 125 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 125 require a Rust translation.
+  There are 124 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 124 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d8727299e08ba8517887a8a9f0fae80819208294` | Decode/write watermark manifest sections without narrowing section IDs; attach pre-rolls only to top-level instances, preserve timed state-machine handover and opaque fitted drawing, and port manifest/playback tests. Native/browser clocks are monotonic; import-free Wasm hosts explicitly provide a monotonic clock before instancing watermarked files. | — |
 | `25db4792fadc1d26b9deed73e6e865122ff1ef95` | Track eligible out-of-band image, font and audio assets per loaded file; apply global registration/replacement/removal to existing and future files, clear every alias when resources are deleted, and preserve embedded/internal-loader ownership and invalid-handle errors. Translate the corresponding command-queue scenarios. | — |
 | `1610277371ebe63cc0c76513e7a803f73b7f8bb0` | Read, retain and expose the runtime header file ID at full unsigned 64-bit width in both the runtime and editor/export binary decoder; preserve version/property decoding and overflow handling. | — |
 | `7ed4209dad9d62c86e6a35a478ba1e6fee149e5a` | Move linear-animation binding/interpolator caches into one lazy extras owner, preserve fresh-on-copy caches and explicit bind/holder/interpolator teardown, and initialize didLoop to false. Derive per-layer owner/artboard context from the state-machine call, retain the layer definition, create Any-state instances only when transitions need them, and seed the process-global RNG once per state-machine instance rather than once per layer. Remove the unused blend-state temporary. | — |

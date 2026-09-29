@@ -6,6 +6,8 @@ pub(crate) const FILE_EXTENSION: &str = "man";
 pub struct RuntimeManifest {
     pub names: BTreeMap<i32, StringValue>,
     pub paths: BTreeMap<i32, Vec<u32>>,
+    pub has_watermark: bool,
+    pub watermark_artboard_index: u32,
 }
 
 impl RuntimeFile {
@@ -209,6 +211,7 @@ fn parse_cpp_manifest_asset(bytes: &[u8]) -> RuntimeManifest {
         let decoded = match section {
             0 => decode_cpp_manifest_names(&mut reader, &mut manifest),
             1 => decode_cpp_manifest_paths(&mut reader, &mut manifest),
+            2 => decode_cpp_manifest_watermark(&mut reader, &mut manifest, section_size),
             _ => {
                 let Some(section_size) = usize::try_from(section_size).ok() else {
                     return manifest;
@@ -231,6 +234,31 @@ fn parse_cpp_manifest_asset(bytes: &[u8]) -> RuntimeManifest {
     }
 
     manifest
+}
+
+fn decode_cpp_manifest_watermark(
+    reader: &mut BinaryReader<'_>,
+    manifest: &mut RuntimeManifest,
+    section_size: u64,
+) -> Result<()> {
+    let section_start = reader.offset;
+    let version = reader.read_var_uint()?;
+    if version == 1 {
+        let flags = reader.read_var_uint()?;
+        let artboard_index = u32::try_from(reader.read_var_uint()?)
+            .map_err(|_| anyhow::anyhow!("watermark artboard index does not fit in uint32_t"))?;
+        manifest.has_watermark = (flags & 1) != 0;
+        manifest.watermark_artboard_index = artboard_index;
+    }
+    // Preserve upstream's mutation order: successfully read fields remain
+    // visible even if the section's declared size or trailing bytes are bad.
+    let bytes_read = (reader.offset - section_start) as u64;
+    let remaining = section_size
+        .checked_sub(bytes_read)
+        .and_then(|value| usize::try_from(value).ok())
+        .ok_or_else(|| anyhow::anyhow!("invalid watermark section size"))?;
+    reader.read_bytes_exact(remaining)?;
+    Ok(())
 }
 
 fn decode_cpp_manifest_names(
@@ -291,6 +319,126 @@ fn read_cpp_manifest_path_id(reader: &mut BinaryReader<'_>) -> u32 {
         Err(_) => {
             reader.offset = reader.bytes.len();
             0
+        }
+    }
+}
+
+#[cfg(test)]
+mod watermark_tests {
+    use super::*;
+
+    fn append_var_uint(out: &mut Vec<u8>, mut value: u64) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            out.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn section(id: u64, payload: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        append_var_uint(&mut bytes, id);
+        append_var_uint(&mut bytes, payload.len() as u64);
+        bytes.extend_from_slice(payload);
+        bytes
+    }
+
+    #[test]
+    fn no_sections_has_no_watermark() {
+        assert!(!parse_cpp_manifest_asset(&[]).has_watermark);
+    }
+
+    #[test]
+    fn watermark_section_decodes() {
+        let manifest = parse_cpp_manifest_asset(&section(2, &[1, 1, 7]));
+        assert!(manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, 7);
+    }
+
+    #[test]
+    fn cleared_flag_leaves_watermark_off() {
+        let manifest = parse_cpp_manifest_asset(&section(2, &[1, 0, 7]));
+        assert!(!manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, 7);
+    }
+
+    #[test]
+    fn trailing_fields_are_skipped() {
+        let manifest = parse_cpp_manifest_asset(&section(2, &[1, 1, 3, 0x2a, 0x2b]));
+        assert!(manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, 3);
+    }
+
+    #[test]
+    fn unknown_version_still_consumes_section() {
+        let mut bytes = section(2, &[99, 1, 3]);
+        bytes.extend(section(0, &[1, 4, 2, b'h', b'i']));
+        let manifest = parse_cpp_manifest_asset(&bytes);
+        assert!(!manifest.has_watermark);
+        assert_eq!(manifest.resolve_name(4), Some("hi"));
+    }
+
+    #[test]
+    fn unknown_section_keeps_parsing() {
+        let mut bytes = section(99, &[1, 2, 3]);
+        bytes.extend(section(2, &[1, 1, 5]));
+        let manifest = parse_cpp_manifest_asset(&bytes);
+        assert!(manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, 5);
+    }
+
+    #[test]
+    fn out_of_range_index_stops_without_setting_watermark() {
+        let mut payload = vec![1, 1];
+        append_var_uint(&mut payload, 1u64 << 32);
+        let mut bytes = section(2, &payload);
+        bytes.extend(section(0, &[1, 4, 2, b'h', b'i']));
+        let manifest = parse_cpp_manifest_asset(&bytes);
+        assert!(!manifest.has_watermark);
+        assert!(manifest.names.is_empty());
+
+        let mut payload = vec![1, 1];
+        append_var_uint(&mut payload, u32::MAX as u64);
+        let manifest = parse_cpp_manifest_asset(&section(2, &payload));
+        assert!(manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, u32::MAX);
+    }
+
+    #[test]
+    fn section_ids_are_not_narrowed() {
+        for id in [256, 257, 258] {
+            let manifest = parse_cpp_manifest_asset(&section(id, &[1, 1, 7]));
+            assert!(!manifest.has_watermark, "section id {id}");
+            assert!(manifest.names.is_empty());
+            assert!(manifest.paths.is_empty());
+        }
+        let manifest = parse_cpp_manifest_asset(&section(2, &[1, 1, 7]));
+        assert!(manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, 7);
+    }
+
+    #[test]
+    fn soft_failures_and_unknown_versions_preserve_decoded_state() {
+        let mut bytes = section(0, &[1, 4, 2, b'h', b'i']);
+        bytes.extend(section(2, &[1, 1, 7]));
+        bytes.extend(section(2, &[99, 0, 0]));
+        bytes.extend(section(2, &[1, 0])); // Missing index: no mutation.
+        let manifest = parse_cpp_manifest_asset(&bytes);
+        assert_eq!(manifest.resolve_name(4), Some("hi"));
+        assert!(manifest.has_watermark);
+        assert_eq!(manifest.watermark_artboard_index, 7);
+
+        // A size mismatch is checked after storing recognized fields.
+        for bytes in [vec![2, 2, 1, 1, 7], vec![2, 4, 1, 1, 7]] {
+            let manifest = parse_cpp_manifest_asset(&bytes);
+            assert!(manifest.has_watermark);
+            assert_eq!(manifest.watermark_artboard_index, 7);
         }
     }
 }

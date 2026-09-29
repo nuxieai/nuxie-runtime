@@ -14,6 +14,8 @@ test-script-signature = []
 # The pinned C++ browser build seeds nondeterministic randomness from
 # performance.now() through a JS host. Host-free wasm embedders (the cold
 # publisher) must stay import-free, so the JS seed is a default-on feature.
+# Also supplies the monotonic browser clock for watermark playback. Import-free
+# hosts install watermark::set_watermark_clock before instancing watermarked files.
 js-host-seed = ["dep:js-sys", "dep:wasm-bindgen"]
 default = ["js-host-seed"]
 

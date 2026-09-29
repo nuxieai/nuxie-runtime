@@ -4,8 +4,9 @@ These adapters bind platform audiovisual players to Nuxie's `video::Playback`
 controller. They do not fetch or authenticate published assets. A caller must
 retain its verified source/cache lease, marshal observations to the scene's
 owning thread, and upload through the same persistent renderer factory used to
-import the scene. Hardware decoding is **unknown** unless independently observed;
-these initial implementations copy bounded RGBA frames and do not claim zero-copy.
+import the scene. Hardware decoding is **unknown** unless independently observed.
+The browser adapter hands the renderer each decoded frame on the GPU; the Apple
+and Android adapters still copy bounded RGBA frames and do not claim zero-copy.
 
 - Apple: AVPlayer audio clock and AVPlayerItemVideoOutput. Methods and destruction
   run on the main thread. `AppleScenePlayer` owns one live video occurrence.
@@ -14,10 +15,23 @@ these initial implementations copy bounded RGBA frames and do not claim zero-cop
   players run. Muted players never activate the session. Shared audible players
   combine mix/duck/exclusive requirements. Interruptions and headphone removal
   feed playback intent; the host still supplies application/visibility suspension.
-- Browser: HTMLVideoElement plus bounded Canvas2D copies. CORS must permit pixel
-  access. Rejected autoplay is observable and can be retried by a user action.
-  Embedded bytes own a Blob URL that is revoked on disposal. Frame timestamps
-  use requestVideoFrameCallback mediaTime captured with the decoded frame.
+- Browser: HTMLVideoElement. Inside requestVideoFrameCallback the adapter draws
+  the frame the element shows into the player's own 2D canvas, so pixels and the
+  callback's mediaTime describe the same decoded frame, and hands the canvas over
+  as `FramePixels::Canvas` without reading it back. The canvas stays GPU-backed
+  because nothing reads it: WebGPU renderers copy it into a reused texture with
+  `NativeWebGpuFactory::copy_external_image` (`GPUQueue.copyExternalImageToTexture`),
+  and others read it back through a scratch canvas with `CanvasFrame::read_rgba`.
+  Going through Canvas2D keeps the colors the earlier byte path had. Chrome's
+  WebGPU import of a video element or WebCodecs VideoFrame instead converts the
+  BT.709 transfer curve, as Chrome's own `<video>` display does, which renders
+  mid-tones about 11 levels brighter (gray 125 becomes 136). Each draw replaces the
+  canvas, so translucent frames never blend over the previous one. The canvas
+  holds only the latest capture, so a frame is uploaded in the tick that
+  returns it. The byte budget bounds each frame's RGBA size, which is also the
+  size of the texture a GPU copy writes. CORS must permit pixel access.
+  Rejected autoplay is observable and can be retried by a user action.
+  Embedded bytes own a Blob URL that is revoked on disposal.
 - Android: package `android/ai/nuxie/runtime/VideoPlayer.java` with the Rust JNI
   adapter. MediaPlayer renders to a private SurfaceTexture on its HandlerThread;
   bounded RGBA readback feeds Vulkan scene composition. Pass the application

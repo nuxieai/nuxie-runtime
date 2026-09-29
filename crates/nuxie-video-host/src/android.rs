@@ -22,7 +22,7 @@ impl From<jni::errors::Error> for AndroidError {
         Self::Jni(error)
     }
 }
-pub use crate::scene::Frame;
+pub use crate::scene::{Frame, FramePixels};
 /// The platform's observed decoder identity. Classification is unavailable
 /// before API 29 or when MediaPlayer's identity cannot be matched exactly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -304,7 +304,7 @@ impl AndroidPlayer {
                     pts,
                     width: width as u32,
                     height: height as u32,
-                    rgba,
+                    pixels: FramePixels::Rgba(rgba),
                 }),
             ))
         })

@@ -50,7 +50,7 @@ pub enum AppleError {
 
 /// Storage remains alive while the renderer uploads it; native decode surfaces
 /// are released immediately after the bounded copy. Pixels are opaque SDR RGBA.
-pub use crate::scene::Frame;
+pub use crate::scene::{Frame, FramePixels};
 pub enum Observation {
     Ready {
         generation: u64,
@@ -195,7 +195,7 @@ impl ApplePlayer {
                     pts: time,
                     width,
                     height,
-                    rgba,
+                    pixels: FramePixels::Rgba(rgba),
                 };
                 Some(if kind == 5 {
                     Observation::SelectedSeekFrame(frame)

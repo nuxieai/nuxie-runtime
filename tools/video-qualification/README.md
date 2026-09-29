@@ -33,6 +33,12 @@ python3 -u tools/video-qualification/browser/serve.py --directory target/video-b
 ```
 
 Open the printed localhost URL for WebGL2, or its `/webgpu/` child for WebGPU.
+`/webgpu/parity.html` renders five decoded frames twice each, once through the
+WebGPU external copy (the frame's canvas copied into a reused texture) and
+once through the CPU path it replaced (Canvas2D bytes, premultiplied, then
+uploaded), and requires every channel of every pixel to agree within 3. The
+default source is the translucent `parity-alpha.webm`; `?video=parity-opaque.mp4`
+checks H.264. Both fixtures are asymmetric, so a flip cannot pass.
 `/endpoint.html` checks a 10fps final sample 100ms before the source endpoint:
 first scrub, coalesced repeated scrub, departure and return, and superseding
 an in-flight seek. It requires settled playback and actual blue decoded pixels.
@@ -362,6 +368,19 @@ disabled and foreground visibility retained throughout. Evidence:
 Both results include720p rendering/readback and the independent composition
 oracles. They qualify this browser/host, not every browser implementation,
 hardware acceleration, audio synchronization or long-run memory stability.
+
+GPU-to-GPU browser upload (2026-09-28, Chrome 153 on the local Mac): browser
+frames now stay in the player's GPU-backed canvas and WebGPU copies them with
+`copyExternalImageToTexture`. `/webgpu/parity.html` passed on `parity-alpha.webm`
+and `parity-opaque.mp4` with a maximum channel difference of 0 over five frames
+each, so colors, alpha and orientation match the earlier byte path exactly.
+Copying a WebCodecs VideoFrame or the video element directly instead failed
+this proof: Chrome's WebGPU import converts the BT.709 transfer curve, which
+brightens mid-tones by about 11 levels (gray 125 to 136). Every other browser
+proof passed on both renderers; `endpoint.html` timed out once and passed on
+three reruns. The 720p benchmarks passed at 29.29 fps (WebGPU, frame-work p50
+3.4 ms, p95 5.5 ms) and 29.03 fps (WebGL2, p50 7.4 ms, p95 8.3 ms); both
+timings still include the proof's own readback of the rendered target.
 
 Managed decoder admission regression (2026-09-16): supplied AVFoundation,
 MediaPlayer and HTMLVideoElement adapters reject forced hardware/software

@@ -1,4 +1,6 @@
-//! Browser-managed A/V playback with bounded RGBA copies for the renderer.
+//! Browser-managed A/V playback. Each decoded frame is drawn into its player's
+//! GPU-backed 2D canvas and handed to the renderer there, for a GPU-to-GPU
+//! copy; readback to RGBA happens only where a renderer asks for bytes.
 //! The host supplies CORS-authorized, retained asset URLs or embedded bytes.
 use nuxie_runtime::video::playback::{DecoderAction, Playback};
 use std::{
@@ -8,7 +10,85 @@ use std::{
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlVideoElement};
 
-pub use crate::scene::Frame;
+pub use crate::scene::{Frame, FramePixels};
+
+/// A decoded frame in its player's 2D canvas, still in GPU memory. Canvas2D
+/// converts the video to sRGB exactly as the earlier byte path did, so a GPU
+/// copy of this canvas keeps those colors. The canvas is the player's own: the
+/// frame is valid until the player captures again, which is why hosts upload
+/// it in the tick that returns it.
+pub struct CanvasFrame {
+    canvas: HtmlCanvasElement,
+}
+
+impl CanvasFrame {
+    /// The canvas holding the frame, for a renderer that copies it on the GPU.
+    pub fn source(&self) -> &JsValue {
+        &self.canvas
+    }
+
+    /// Read the frame back to the CPU as straight-alpha sRGB RGBA. The copy
+    /// goes through a scratch canvas so the player's canvas stays on the GPU.
+    /// This waits for the GPU; use it only where the renderer cannot copy the
+    /// frame itself.
+    pub fn read_rgba(&self) -> Result<Vec<u8>, JsValue> {
+        let (width, height) = (self.canvas.width(), self.canvas.height());
+        let context = SCRATCH.with(|scratch| {
+            if let Some(context) = scratch.borrow().as_ref() {
+                return Ok(context.clone());
+            }
+            let context = frame_canvas()?.1;
+            *scratch.borrow_mut() = Some(context.clone());
+            Ok::<_, JsValue>(context)
+        })?;
+        let canvas = context
+            .canvas()
+            .ok_or_else(|| JsValue::from_str("video readback canvas unavailable"))?;
+        fit_canvas(&canvas, &context, width, height)?;
+        context.draw_image_with_html_canvas_element(&self.canvas, 0.0, 0.0)?;
+        Ok(context
+            .get_image_data(0.0, 0.0, width.into(), height.into())?
+            .data()
+            .0)
+    }
+}
+
+thread_local! {
+    // One readback surface serves every player on this thread; each use draws
+    // and reads synchronously.
+    static SCRATCH: RefCell<Option<CanvasRenderingContext2d>> = const { RefCell::new(None) };
+}
+
+/// Frame canvases draw with the `copy` operation: each draw replaces the
+/// canvas instead of blending over the previous frame, which matters for
+/// translucent video. Resizing resets the context, so sizing restores it.
+fn fit_canvas(
+    canvas: &HtmlCanvasElement,
+    context: &CanvasRenderingContext2d,
+    width: u32,
+    height: u32,
+) -> Result<(), JsValue> {
+    if (canvas.width(), canvas.height()) != (width, height) {
+        canvas.set_width(width);
+        canvas.set_height(height);
+        context.set_global_composite_operation("copy")?;
+    }
+    Ok(())
+}
+
+fn frame_canvas() -> Result<(HtmlCanvasElement, CanvasRenderingContext2d), JsValue> {
+    let document = web_sys::window()
+        .and_then(|w| w.document())
+        .ok_or_else(|| JsValue::from_str("video requires a document host"))?;
+    let canvas: HtmlCanvasElement = document.create_element("canvas")?.dyn_into()?;
+    let context: CanvasRenderingContext2d = canvas
+        .get_context("2d")?
+        .ok_or_else(|| JsValue::from_str("video canvas unavailable"))?
+        .dyn_into()?;
+    context.set_global_composite_operation("copy")?;
+    Ok((canvas, context))
+}
+
 pub struct BrowserPlayer {
     video: HtmlVideoElement,
     canvas: HtmlCanvasElement,
@@ -32,6 +112,9 @@ pub struct BrowserPlayer {
     play_blocked: Rc<Cell<bool>>,
     play_attempt: Rc<Cell<u64>>,
 }
+/// Draw the frame the video element shows now into the player's canvas. The
+/// budget bounds its RGBA size, which is also the size of the texture a GPU
+/// copy writes.
 fn capture_frame(
     video: &HtmlVideoElement,
     canvas: &HtmlCanvasElement,
@@ -47,23 +130,17 @@ fn capture_frame(
     if bytes.is_none_or(|n| n == 0 || n > max_bytes) {
         return Err(JsValue::from_str("video frame exceeds budget"));
     }
-    if canvas.width() != width {
-        canvas.set_width(width);
-    }
-    if canvas.height() != height {
-        canvas.set_height(height);
-    }
+    fit_canvas(canvas, context, width, height)?;
+    // Reading this canvas back would move it off the GPU; nothing here does.
     context.draw_image_with_html_video_element(video, 0.0, 0.0)?;
-    let rgba = context
-        .get_image_data(0.0, 0.0, width.into(), height.into())?
-        .data()
-        .0;
     Ok(Frame {
         generation,
         pts,
         width,
         height,
-        rgba,
+        pixels: FramePixels::Canvas(CanvasFrame {
+            canvas: canvas.clone(),
+        }),
     })
 }
 
@@ -78,11 +155,7 @@ impl BrowserPlayer {
         video.set_preload("auto");
         video.set_muted(true);
         video.set_src(source);
-        let canvas: HtmlCanvasElement = document.create_element("canvas")?.dyn_into()?;
-        let context: CanvasRenderingContext2d = canvas
-            .get_context("2d")?
-            .ok_or_else(|| JsValue::from_str("video canvas unavailable"))?
-            .dyn_into()?;
+        let (canvas, context) = frame_canvas()?;
         let play_blocked = Rc::new(Cell::new(false));
         let pending_seek_generation = Rc::new(Cell::new(None));
         let completed_seek_generation = Rc::new(Cell::new(None));

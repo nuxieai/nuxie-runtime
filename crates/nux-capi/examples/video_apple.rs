@@ -193,6 +193,7 @@ mod proof {
                             step(player, 1, 3, generation, 0.0, decoder)
                         }
                         Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
+                            let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
                             let view = NuxVideoFrame {
                                 struct_size: size_of::<NuxVideoFrame>() as u32,
                                 generation: frame.generation,
@@ -201,13 +202,13 @@ mod proof {
                                 height: frame.height,
                                 row_bytes: frame.width * 4,
                                 pixels: NuxByteView {
-                                    data: frame.rgba.as_ptr(),
-                                    len: frame.rgba.len(),
+                                    data: rgba.as_ptr(),
+                                    len: rgba.len(),
                                 },
                             };
                             ok(nux_player_video_present_metal(renderer, player, 1, &view));
                             if frame.pts > 1.1 {
-                                assert!(frame.rgba[2] > 200 && frame.rgba[0] < 30);
+                                assert!(rgba[2] > 200 && rgba[0] < 30);
                                 blue[index] = true;
                             }
                             frames[index] += 1;
@@ -384,6 +385,7 @@ mod proof {
                         step(player, catalog.id, 3, generation, 0.0, &mut decoder)
                     }
                     Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
+                        let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
                         let pixels = NuxVideoFrame {
                             struct_size: size_of::<NuxVideoFrame>() as u32,
                             generation: frame.generation,
@@ -392,8 +394,8 @@ mod proof {
                             height: frame.height,
                             row_bytes: frame.width * 4,
                             pixels: NuxByteView {
-                                data: frame.rgba.as_ptr(),
-                                len: frame.rgba.len(),
+                                data: rgba.as_ptr(),
+                                len: rgba.len(),
                             },
                         };
                         ok(nux_player_video_present_metal(

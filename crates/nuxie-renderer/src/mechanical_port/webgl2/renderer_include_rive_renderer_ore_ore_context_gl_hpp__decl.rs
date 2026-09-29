@@ -94,6 +94,12 @@ impl ContextGL {
         &self.m_executionStamp
     }
 
+    /// Discard completed-pass framebuffers with this context current and no
+    /// ORE pass active. Cached VAOs do not reference drawable state and remain.
+    pub(crate) fn invalidateScratchFramebuffers(&mut self) {
+        super::ore_context_gl_impl::invalidateScratchFramebuffers(self);
+    }
+
     pub(crate) fn executionDomain(&self) -> &GLExecutionDomain {
         self.executionStamp().domain()
     }
@@ -138,12 +144,12 @@ impl DerefMut for ContextGL {
     }
 }
 
-pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 19;
+pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 20;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
 pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 14;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
 pub(crate) const RUST_EXECUTION_SIDECAR_COUNT: usize = 1;
-const _: [(); 4764] = [(); PINNED_SOURCE.len()];
+const _: [(); 5105] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -152,8 +158,8 @@ mod tests {
 
     #[test]
     fn complete_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 120);
-        assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 19);
+        assert_eq!(PINNED_SOURCE.lines().count(), 129);
+        assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 20);
         assert_eq!(SOURCE_FRIEND_COUNT, 3);
         assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 14);
         assert_eq!(SOURCE_DELETED_COPY_OPERATION_COUNT, 2);

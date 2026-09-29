@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/render_context_vulkan_impl.cpp`.
-//! Updated through upstream `2210ed8799c0128504dd664a7179f4f8f299e85a`.
+//! Updated through upstream `39afeca44449b12d41c91aaf78f1ed96913ed69a`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -4743,6 +4743,7 @@ pub(crate) unsafe fn MakeContext(
             device,
             features,
             get_instance_proc_addr,
+            options.enableDebugNames,
         )
     };
     let Some(vk_context) = vk_context else {

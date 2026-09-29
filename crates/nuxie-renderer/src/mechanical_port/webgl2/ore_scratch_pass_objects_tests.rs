@@ -2,6 +2,72 @@
 // Command/lifetime coverage, NOT a replacement for the browser pixel scenarios.
 
 #[test]
+fn invalidating_scratch_framebuffers_preserves_vao_and_resets_attachment_state() {
+    let (domain, trace) = execution([401, 402, 403, 404]);
+    let mut ctx = context(&domain);
+    beginRenderPass(&mut ctx, &RenderPassDesc::default(), None)
+        .unwrap()
+        .finish();
+    domain.withCurrent(|| {
+        assert_eq!(ctx.rust_scratch.as_ref().unwrap().scratchResolveFBO(), 403);
+    });
+    {
+        let mut state = ctx.rust_scratch.as_ref().unwrap().state.borrow_mut();
+        state.m_scratchFBOColorCount = 2;
+        state.m_scratchFBODepthAttachment = GL_DEPTH_ATTACHMENT;
+    }
+    clearTrace(&trace);
+    ctx.invalidateScratchFramebuffers();
+    assert_eq!(
+        trace.borrow().commands,
+        vec![
+            GLCommand::DeleteFramebuffer(401),
+            GLCommand::DeleteFramebuffer(403),
+        ]
+    );
+    {
+        let state = ctx.rust_scratch.as_ref().unwrap().state.borrow();
+        assert_eq!(state.m_scratchFBO, 0);
+        assert_eq!(state.m_scratchResolveFBO, 0);
+        assert_eq!(state.m_scratchFBOColorCount, 0);
+        assert_eq!(state.m_scratchFBODepthAttachment, 0);
+        assert_eq!(state.m_scratchVAO, 402);
+    }
+    clearTrace(&trace);
+    ctx.invalidateScratchFramebuffers();
+    assert!(trace.borrow().commands.is_empty());
+    beginRenderPass(&mut ctx, &RenderPassDesc::default(), None)
+        .unwrap()
+        .finish();
+    assert_eq!(
+        trace.borrow().generated,
+        vec![(GLObjectKind::Framebuffer, 404)]
+    );
+    drop(ctx);
+    domain.withCurrent(|| {});
+    domain.shutdown();
+}
+
+#[test]
+#[cfg(debug_assertions)]
+fn invalidating_scratch_framebuffers_rejects_a_live_borrower_before_deletion() {
+    let (domain, trace) = execution([501, 502]);
+    let mut ctx = context(&domain);
+    let mut pass = beginRenderPass(&mut ctx, &RenderPassDesc::default(), None).unwrap();
+    clearTrace(&trace);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ctx.invalidateScratchFramebuffers();
+    }));
+    assert!(result.is_err());
+    assert!(trace.borrow().commands.is_empty());
+    pass.finish();
+    drop(pass);
+    drop(ctx);
+    domain.withCurrent(|| {});
+    domain.shutdown();
+}
+
+#[test]
 fn scratch_resolve_is_reused_detached_and_vao_arrays_are_scrubbed() {
     let (domain, trace) = execution([401, 402, 403]);
     let mut ctx = context(&domain);
@@ -54,11 +120,11 @@ fn scratch_resolve_is_reused_detached_and_vao_arrays_are_scrubbed() {
     assert!(trace
         .borrow()
         .commands
-        .contains(&GLCommand::DrawBuffers(vec![GL_COLOR_ATTACHMENT0])));
+        .contains(&GLCommand::DrawBuffers(vec![GL_NONE])));
     assert!(trace
         .borrow()
         .commands
-        .contains(&GLCommand::ReadBuffer(GL_COLOR_ATTACHMENT0)));
+        .contains(&GLCommand::ReadBuffer(GL_NONE)));
     drop(ctx);
     domain.withCurrent(|| {});
     assert_eq!(

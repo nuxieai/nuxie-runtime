@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9463ff7b5b9a1452d0c32e41390a99cd39b6c946`
+- LAST_SYNCED_SHA: `39afeca44449b12d41c91aaf78f1ed96913ed69a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 123 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 123 require a Rust translation.
+  There are 122 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 122 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `39afeca44449b12d41c91aaf78f1ed96913ed69a` | Do not consume deferred ORE commands until a screen frame opens successfully; translate the exact failed-screen regression. Add GL scratch-framebuffer invalidation and depth-only draw/read-buffer disabling. Thread the default-enabled Vulkan debug-name option through context construction and avoid loading the optional function when disabled. Bootstrap edits only add trailing newlines; private Android host changes mentioned by the title are not present in the public delta or claimed imported. | — |
 | `9463ff7b5b9a1452d0c32e41390a99cd39b6c946` | Translate atomic-mode image paint modulation and gradient packing across shared renderer and supported backends, preserving the upstream stroke/feather limitation at this checkpoint. Regenerate shader artifacts. Treat singular artboard self-transforms as pointer misses, cancel all tracked gestures before dispatching drag ends, and retain per-pointer drag ownership and the upstream regression cases. D3D is not shipped or claimed. | — |
 | `d8727299e08ba8517887a8a9f0fae80819208294` | Decode/write watermark manifest sections without narrowing section IDs; attach pre-rolls only to top-level instances, preserve timed state-machine handover and opaque fitted drawing, and port manifest/playback tests. Native/browser clocks are monotonic; import-free Wasm hosts explicitly provide a monotonic clock before instancing watermarked files. | — |
 | `25db4792fadc1d26b9deed73e6e865122ff1ef95` | Track eligible out-of-band image, font and audio assets per loaded file; apply global registration/replacement/removal to existing and future files, clear every alias when resources are deleted, and preserve embedded/internal-loader ownership and invalid-handle errors. Translate the corresponding command-queue scenarios. | — |

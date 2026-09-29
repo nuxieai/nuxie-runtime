@@ -12353,16 +12353,16 @@ mod file_global_state_machine_import_tests {
             record("StateMachine"),
             record("StateMachineLayer"),
             record("AnyState"),
-            record("EntryState"),
-            // Artboard A initializes here and rejects the missing ExitState.
-            record("Artboard"),
             record("ExitState"),
+            // Artboard A initializes here and rejects the missing EntryState.
+            record("Artboard"),
+            record("EntryState"),
         ])
         .expect_err("a state authored after initialization cannot repair the failed layer");
         assert!(
             error
                 .to_string()
-                .contains("missing required AnyState/EntryState/ExitState"),
+                .contains("missing required EntryState"),
             "{error:#}",
         );
     }

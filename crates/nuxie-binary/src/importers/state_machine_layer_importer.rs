@@ -43,9 +43,7 @@ struct CppStateMachineLayerResolution {
     owner_artboard_resolve_boundary: usize,
     importer_resolve_boundary: usize,
     state_count: usize,
-    has_any_state: bool,
     has_entry_state: bool,
-    has_exit_state: bool,
     transitions: Vec<CppStateTransitionResolution>,
 }
 
@@ -117,9 +115,7 @@ pub(super) fn validate_cpp_state_machine_layers(
                     .unwrap_or(0),
                 importer_resolve_boundary: objects.len(),
                 state_count: 0,
-                has_any_state: false,
                 has_entry_state: false,
-                has_exit_state: false,
                 transitions: Vec::new(),
             });
             current_layer = Some(layers.len() - 1);
@@ -132,9 +128,7 @@ pub(super) fn validate_cpp_state_machine_layers(
                 layer.state_count += 1;
                 if file_index < layer.owner_artboard_resolve_boundary {
                     match definition.name {
-                        "AnyState" => layer.has_any_state = true,
                         "EntryState" => layer.has_entry_state = true,
-                        "ExitState" => layer.has_exit_state = true,
                         _ => {}
                     }
                 }
@@ -171,13 +165,12 @@ fn validate_cpp_state_machine_layer_transitions(
     // every lifecycle status except InvalidObject, so the transition remains
     // imported with a null interpolator pointer.
 
-    // StateMachineLayer checks its required system-state pointers only after
+    // StateMachineLayer checks its required EntryState pointer only after
     // every retained state's dirty lifecycle has completed.
-    if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary
-        && (!layer.has_any_state || !layer.has_entry_state || !layer.has_exit_state)
+    if (layer.object_id as usize) < layer.owner_artboard_resolve_boundary && !layer.has_entry_state
     {
         bail!(
-            "state machine layer {} is missing required AnyState/EntryState/ExitState objects",
+            "state machine layer {} is missing required EntryState object",
             layer.object_id
         );
     }

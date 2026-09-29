@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `78b07a3fdc72fa7f64bf464d871ae80474a5a39a`
+- LAST_SYNCED_SHA: `1fac60f87be3639918f06a1b8e23908b1621b1a1`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 137 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 137 require a Rust translation.
+  There are 136 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 136 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1fac60f87be3639918f06a1b8e23908b1621b1a1` | Permit state-machine layers without Any or Exit states while retaining required Entry validation in both live runtime and binary import; preserve null-safe Any-state instance creation, transition handling and initialization boundaries. The editor features referenced by the commit message are not part of the public runtime delta. | — |
 | `78b07a3fdc72fa7f64bf464d871ae80474a5a39a` | Translate the generated layout conformance runner and its real collection/item-position inspection helpers. Preserve all four exact fixture/expectation pairs, referenced image/font assets, positive/negative checks and explicit upstream known-defect checks. Correct existing LayoutComponent/Artboard/Text computed-size virtual dispatch, Text local-bounds accessors, and the omitted layout-participant undefined-to-zero read conversion exposed by the matrix; retain the approved Taffy and Rust text boundaries. | — |
 | `bb7200ef181d72f0e83e737636a41b1e43601d7a` | **DEFER/SKIP:** Windows WAMR build/platform fixes, tier-ladder process layout, and Wasm execution clock portability remain deferred with UNIV-3728. The only renderer edit adds an ORE header to the unsupported D3D12 path-fiddle host. No shared/native-Luau runtime or supported renderer behavior changes; no Windows Wasm execution or D3D12 support is claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148` | Re-home hidden focus within its ancestor chain and descend renewed scopes to eligible leaves after the owning root's update. Preserve root-scoped visibility checks, unattributed host-node behavior, and all-roots entry points; reuse filtered children in leaf selection. Translate the focus regressions and same-frame collapsing assertion, using upstream's changed focus_collapsing Silver recording. | — |

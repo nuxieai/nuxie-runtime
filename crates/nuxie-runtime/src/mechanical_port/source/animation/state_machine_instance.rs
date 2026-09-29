@@ -277,10 +277,10 @@ impl StateMachineLayerInstance {
         debug_assert!(self.layer.is_none());
         let any_state = layer
             .with_downcast::<StateMachineLayer, _>(StateMachineLayer::any_state)
-            .flatten()
-            .expect("an imported state-machine layer has AnyState");
-        let any_state_instance = Self::make_state_instance(any_state, &artboard);
-        self.any_state_instance = Some(any_state_instance);
+            .flatten();
+        // Missing Any is tolerated; transition dispatch already handles None.
+        self.any_state_instance =
+            any_state.map(|state| Self::make_state_instance(state, &artboard));
         let entry = layer
             .with_downcast::<StateMachineLayer, _>(StateMachineLayer::entry_state)
             .flatten()

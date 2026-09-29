@@ -14610,14 +14610,14 @@ fn cpp_probe_agrees_on_unknown_property_null_object_fallback_when_available() {
             }),
         ),
         (
-            "state_machine_layer_missing_required_state_malformed",
+            "state_machine_layer_missing_entry_state_malformed",
             synthetic_runtime_file(6055, |bytes| {
                 push_empty_object(bytes, "Backboard");
                 push_empty_object(bytes, "Artboard");
                 push_empty_object(bytes, "StateMachine");
                 push_empty_object(bytes, "StateMachineLayer");
                 push_empty_object(bytes, "AnyState");
-                push_empty_object(bytes, "EntryState");
+                push_empty_object(bytes, "ExitState");
             }),
         ),
         (

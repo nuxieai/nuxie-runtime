@@ -163,14 +163,41 @@ fn advanced_pin_s4_divergences_are_replayed_and_recorded() {
         compare_case(id, &runtime)
             .unwrap_or_else(|error| panic!("promoted fixture {id} regressed: {error:#}"));
     }
-    for (id, expected) in [(
-        "layout_text_match",
-        "layout_text_match: frame 0, op 61 (save): expected save, got frame",
-    )] {
-        let error =
-            compare_case(id, &runtime).expect_err("advanced-pin fixture unexpectedly became exact");
-        assert_eq!(format!("{error:#}"), expected);
-    }
+}
+
+// Upstream 4ca3b88a text_test.cpp: all four producers use the same five-frame
+// helper, binding the default VMI when present and advancing the authored
+// default state machine (or the artboard when there is no default machine).
+#[test]
+fn text_box_keeps_its_content_size_before_7_3() {
+    let Some(runtime) = runtime_root("upstream pre-7.3 layout text matrix") else {
+        return;
+    };
+    compare_case("layout_text_match", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn text_box_matches_layout_controlled_size() {
+    let Some(runtime) = runtime_root("upstream 7.3 layout text matrix") else {
+        return;
+    };
+    compare_case("layout_text_match_7_3", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn middle_aligned_hug_layout_text_before_7_3() {
+    let Some(runtime) = runtime_root("upstream pre-7.3 authored hug-layout text") else {
+        return;
+    };
+    compare_case("text_layout_pre_7_3", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn middle_aligned_hug_layout_text_at_7_3() {
+    let Some(runtime) = runtime_root("upstream 7.3 authored hug-layout text") else {
+        return;
+    };
+    compare_case("text_layout_7_3", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
 }
 
 #[test]

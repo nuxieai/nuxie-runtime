@@ -13,6 +13,7 @@ use crate::mechanical_port::source::{
     dirtyable::Dirtyable,
     generated::{core_registry::CoreCapabilities, text::text_base::TextBase},
     hit_info::HitInfo,
+    importers::import_stack::ImportStack,
     layout::{
         layout_enums::{LayoutDirection, LayoutScaleType},
         layout_measure_mode::LayoutMeasureMode,
@@ -28,6 +29,7 @@ use crate::mechanical_port::source::{
         paint::color::{ColorInt, color_modulate_opacity},
         paint::shape_paint_path::ShapePaintPath,
     },
+    status_code::StatusCode,
     text_engine::{
         FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
         TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWrap, VerticalTextAlign,
@@ -449,6 +451,7 @@ pub struct Text {
     layout_width_scale_type: u8,
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
+    layout_sizes_box: bool,
     emoji_image_cache: Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>,
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
@@ -483,6 +486,7 @@ impl Default for Text {
             layout_width_scale_type: u8::MAX,
             layout_height_scale_type: u8::MAX,
             layout_direction: LayoutDirection::Inherit,
+            layout_sizes_box: true,
             emoji_image_cache: Vec::new(),
             draw_commands: Vec::new(),
             value_run_listeners: Vec::new(),
@@ -491,6 +495,20 @@ impl Default for Text {
 }
 
 impl Text {
+    pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
+        let major = import_stack.major_version();
+        let minor = import_stack.minor_version();
+        self.layout_sizes_box = major > 7 || (major == 7 && minor >= 3);
+        self.base.import(import_stack)
+    }
+
+    pub fn clone(&self) -> Self {
+        let mut callbacks = Self::default();
+        let mut twin = self.base.clone_into(&mut callbacks);
+        twin.layout_sizes_box = self.layout_sizes_box;
+        twin
+    }
+
     pub fn internal_transform(&self) -> Mat2D {
         self.internal_transform
     }
@@ -657,7 +675,21 @@ impl Text {
         }
     }
     pub fn overflow_as_fixed(&self) -> bool {
-        self.effective_sizing() == TextSizing::Fixed || !self.layout_width.is_nan()
+        self.effective_sizing() == TextSizing::Fixed || !self.layout_box_width().is_nan()
+    }
+    pub fn layout_box_width(&self) -> f32 {
+        if self.layout_sizes_box {
+            self.layout_width
+        } else {
+            f32::NAN
+        }
+    }
+    pub fn layout_box_height(&self) -> f32 {
+        if self.layout_sizes_box {
+            self.layout_height
+        } else {
+            f32::NAN
+        }
     }
     pub fn add_style_paint(&mut self, paint: CoreHandle) {
         self.text_style_paints.push(paint);
@@ -1244,20 +1276,22 @@ impl Text {
         }
 
         let paragraph_space = self.fit_paragraph_spacing();
-        let auto_size_max_y = if self.layout_height.is_nan() {
+        let box_width = self.layout_box_width();
+        let box_height = self.layout_box_height();
+        let auto_size_max_y = if box_height.is_nan() {
             info.min_y
                 .max(info.total_height - paragraph_space - info.top_trim - info.bottom_trim)
         } else {
-            info.min_y + self.layout_height
+            info.min_y + box_height
         };
         self.bounds = match self.effective_sizing() {
             TextSizing::AutoWidth => Aabb::new(
                 0.0,
                 info.min_y,
-                if self.layout_width.is_nan() {
+                if box_width.is_nan() {
                     info.max_width
                 } else {
-                    self.layout_width
+                    box_width
                 },
                 auto_size_max_y,
             ),

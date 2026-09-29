@@ -415,6 +415,15 @@ impl AppleMetalFactory {
             .borrow_mut()
             .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
     }
+
+    /// # Safety
+    /// `pixel_buffer` must be a valid `CVPixelBufferRef` for this call.
+    unsafe fn import_pixel_buffer(
+        &mut self,
+        pixel_buffer: std::ptr::NonNull<c_void>,
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        unsafe { self.native.borrow_mut().import_pixel_buffer(pixel_buffer) }
+    }
 }
 
 impl crate::asset_hooks::AssetUploadFactory for AppleMetalFactory {
@@ -831,6 +840,15 @@ impl RendererState {
         self.factory
             .borrow_mut()
             .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
+    }
+
+    /// # Safety
+    /// `pixel_buffer` must be a valid `CVPixelBufferRef` for this call.
+    pub(crate) unsafe fn import_pixel_buffer(
+        &mut self,
+        pixel_buffer: std::ptr::NonNull<c_void>,
+    ) -> Result<Box<dyn nuxie::RenderImage>, RendererError> {
+        unsafe { self.factory.borrow_mut().import_pixel_buffer(pixel_buffer) }
     }
 }
 
@@ -2043,14 +2061,17 @@ mod tests {
     }
 }
 
-/// Upload a video frame through the exact renderer domain used to import the
-/// player. Old decoder generations are ignored; wrong renderer domains fail.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_player_video_present_metal(
+/// Run `present` for one video of a player imported through this renderer's
+/// exact Metal domain; any other renderer domain fails.
+fn with_metal_video(
     renderer: *const NuxRenderer,
     player: *const NuxPlayer,
     component_id: usize,
-    frame: *const super::NuxVideoFrame,
+    present: impl FnOnce(
+        &mut RendererState,
+        &nuxie::CoreHandle,
+        &super::ArtboardOccurrence,
+    ) -> Result<(), NuxStatus>,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         super::video::status((|| {
@@ -2068,14 +2089,96 @@ pub unsafe extern "C" fn nux_player_video_present_metal(
                     .state
                     .try_borrow_mut()
                     .map_err(|_| NuxStatus::ReentrantCall)?;
-                unsafe {
-                    super::video::present_frame(video, occurrence, frame, |w, h, row, pixels| {
-                        state
-                            .upload_rgba8_premul_srgb(w, h, row, pixels)
-                            .map_err(|_| NuxStatus::RuntimeError)
-                    })
-                }
+                present(&mut state, video, occurrence)
             })
         })())
     })
+}
+
+/// Upload a video frame through the exact renderer domain used to import the
+/// player. Old decoder generations are ignored; wrong renderer domains fail.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_present_metal(
+    renderer: *const NuxRenderer,
+    player: *const NuxPlayer,
+    component_id: usize,
+    frame: *const super::NuxVideoFrame,
+) -> NuxStatus {
+    with_metal_video(
+        renderer,
+        player,
+        component_id,
+        |state, video, occurrence| unsafe {
+            super::video::present_frame(video, occurrence, frame, |w, h, row, pixels| {
+                state
+                    .upload_rgba8_premul_srgb(w, h, row, pixels)
+                    .map_err(|_| NuxStatus::RuntimeError)
+            })
+        },
+    )
+}
+
+/// A decoded video frame held in a Core Video pixel buffer.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxVideoPixelBufferFrame {
+    /// Must be initialized to `sizeof(NuxVideoPixelBufferFrame)`.
+    pub struct_size: u32,
+    pub generation: u64,
+    pub presentation_seconds: f64,
+    /// Borrowed `CVPixelBufferRef`: 32BGRA and IOSurface-backed, as
+    /// AVFoundation provides when `kCVPixelBufferMetalCompatibilityKey` is
+    /// requested. Its bytes are read like `NuxVideoFrame` pixels, top row
+    /// first. The renderer samples the buffer in place and retains it while
+    /// the frame is in use, so the caller may release it after the call.
+    pub pixel_buffer: *mut c_void,
+}
+
+/// Present a video frame without copying its pixels: the renderer draws the
+/// pixel buffer's IOSurface directly. Generation and renderer-domain rules
+/// match `nux_player_video_present_metal`; the same 64 MiB frame limit applies
+/// to width * height * 4.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_present_metal_pixel_buffer(
+    renderer: *const NuxRenderer,
+    player: *const NuxPlayer,
+    component_id: usize,
+    frame: *const NuxVideoPixelBufferFrame,
+) -> NuxStatus {
+    with_metal_video(
+        renderer,
+        player,
+        component_id,
+        |state, video, occurrence| {
+            let frame = unsafe { frame.as_ref() }.ok_or(NuxStatus::NullArgument)?;
+            if frame.struct_size as usize != std::mem::size_of::<NuxVideoPixelBufferFrame>() {
+                return Err(NuxStatus::InvalidStructSize);
+            }
+            let pixel_buffer =
+                std::ptr::NonNull::new(frame.pixel_buffer).ok_or(NuxStatus::NullArgument)?;
+            super::video::present_image(
+                video,
+                occurrence,
+                frame.generation,
+                frame.presentation_seconds,
+                || {
+                    let image =
+                        unsafe { state.import_pixel_buffer(pixel_buffer) }.map_err(|error| {
+                            match error {
+                                RendererError::InvalidImageUpload(_)
+                                | RendererError::InvalidTextureExtent { .. } => {
+                                    NuxStatus::InvalidArgument
+                                }
+                                _ => NuxStatus::RuntimeError,
+                            }
+                        })?;
+                    let bytes = u64::from(image.width()) * u64::from(image.height()) * 4;
+                    if bytes > 64 * 1024 * 1024 {
+                        return Err(NuxStatus::LimitExceeded);
+                    }
+                    Ok(image)
+                },
+            )
+        },
+    )
 }

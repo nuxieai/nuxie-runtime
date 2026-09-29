@@ -654,17 +654,43 @@ pub(crate) unsafe fn present_frame(
             .checked_mul(4)
             .is_none_or(|row| row > frame.row_bytes)
         || required != frame.pixels.len
-        || !frame.presentation_seconds.is_finite()
-        || frame.presentation_seconds < 0.0
     {
         return Err(NuxStatus::InvalidArgument);
     }
     if frame.pixels.data.is_null() {
         return Err(NuxStatus::NullArgument);
     }
+    present_image(
+        video,
+        occurrence,
+        frame.generation,
+        frame.presentation_seconds,
+        || {
+            let pixels = unsafe { std::slice::from_raw_parts(frame.pixels.data, frame.pixels.len) };
+            upload(frame.width, frame.height, frame.row_bytes, pixels)
+        },
+    )
+}
+
+/// Present the image `make_image` returns as the video's current frame.
+/// Frames of an old decoder generation are ignored before any image is made.
+#[cfg(any(
+    all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+    feature = "android-vulkan"
+))]
+pub(crate) fn present_image(
+    video: &nuxie::CoreHandle,
+    occurrence: &ArtboardOccurrence,
+    generation: u64,
+    presentation_seconds: f64,
+    make_image: impl FnOnce() -> Result<Box<dyn nuxie::RenderImage>, NuxStatus>,
+) -> Result<(), NuxStatus> {
+    if !presentation_seconds.is_finite() || presentation_seconds < 0.0 {
+        return Err(NuxStatus::InvalidArgument);
+    }
     let accepts = video
         .with_downcast::<Video, _>(|v| {
-            v.playback.generation() == frame.generation
+            v.playback.generation() == generation
                 && !matches!(
                     v.playback.state(),
                     PlaybackState::Disposed | PlaybackState::Failed
@@ -674,15 +700,10 @@ pub(crate) unsafe fn present_frame(
     if !accepts {
         return Ok(());
     }
-    let pixels = unsafe { std::slice::from_raw_parts(frame.pixels.data, frame.pixels.len) };
-    let image = upload(frame.width, frame.height, frame.row_bytes, pixels)?;
+    let image = make_image()?;
     let changed = video
         .with_downcast_mut::<Video, _>(|v| {
-            v.present(
-                frame.generation,
-                Rc::from(image),
-                frame.presentation_seconds,
-            )
+            v.present(generation, Rc::from(image), presentation_seconds)
         })
         .ok_or(NuxStatus::NotFound)?;
     occurrence.commit_runtime_change(changed)

@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-c55840a8f4a400b3572875a186e0dda0708e7718}
+ref=${RIVE_RUNTIME_REF:-ad34081b740a3071ca92f2e73223404a600199e3}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "semantic/tabtest.riv|529e4deb84fbf89da79730bbd1e3b487c915fe59088f2b2fd6c8b55371bc59fd|ad34081b740a3071ca92f2e73223404a600199e3|semantic/tabtest.riv"
   "sync/svg_clip_test.riv|aa92b7949420fa8cbf37936675fc53ccf6cd73d9e67e21d0aed79a396434f91d|f1ec753f1ad9e64f0844f845ffc8d68d16d15bdb|svg_clip_test.riv"
   "sync/layout_solos.riv|9ef8d3b289e54433f5498a9a95a3171a6994677be9c1b82b8cea192b00c965c7|86fc70a74e0db7b747e04471bd4372cd38f6a0e7|layout/layout_solos.riv"
   "sync/solo_nested_artboard_layout.riv|334f9b679dfbb611ad1332d14e22200d9743cb77aaf56592021a9a4b5673e8e4|86fc70a74e0db7b747e04471bd4372cd38f6a0e7|layout/solo_nested_artboard_layout.riv"

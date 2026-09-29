@@ -919,6 +919,7 @@ const HOSTED_FONT_FIXTURE: &[u8] =
 const GLOBAL_VARIABLES_FIXTURE: &[u8] =
     include_bytes!("../../../fixtures/command_queue/global_variables_test.riv");
 const SEMANTIC_SIMPSONS_FIXTURE: &[u8] = include_bytes!("../../../fixtures/semantic/simpsons.riv");
+const SEMANTIC_TABTEST_FIXTURE: &[u8] = include_bytes!("../../../fixtures/semantic/tabtest.riv");
 const SEMANTIC_FOCUS_FIXTURE: &[u8] =
     include_bytes!("../../../fixtures/semantic/semantic_list_scroll_focus_fixed.riv");
 const DATA_BIND_BLOB_FIXTURE: &[u8] =
@@ -1417,6 +1418,86 @@ fn semantics_drain_diff_maps_bounds_into_view_space() {
     assert!(large_height > small_height);
     assert!(((large_width / small_width) / expected_scale - 1.0).abs() <= 0.01);
     assert!(((large_height / small_height) / expected_scale - 1.0).abs() <= 0.01);
+}
+
+#[test]
+fn semantics_drain_diff_republishes_bounds_when_viewport_changes() {
+    use nuxie_runtime::source::artboard::Artboard;
+
+    let (listener, log) = event_log();
+    let (mut queue, mut server, _, state_machine) =
+        semantic_fixture_with(SEMANTIC_TABTEST_FIXTURE, Some(&listener.state_machine));
+    queue.enable_semantics(state_machine, 0);
+    warm_semantics(&mut queue, state_machine);
+    queue.drain_semantics_diff(
+        state_machine,
+        Fit::Contain,
+        Alignment::CENTER,
+        1.0,
+        nuxie::Vec2D::new(200.0, 200.0),
+        0,
+    );
+    server.process_commands();
+    queue.process_messages();
+    let diffs = || {
+        events(&log)
+            .into_iter()
+            .filter_map(|event| {
+                if let ObservedEvent::SemanticsDiffReceived { handle, diff, .. } = event {
+                    assert_eq!(handle, state_machine);
+                    Some(diff)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let initial_diffs = diffs();
+    assert_eq!(initial_diffs.len(), 1);
+    let expected_root_id = initial_diffs[0].root_id;
+    assert_ne!(expected_root_id, 0);
+    let mut model = SemanticTestModel::default();
+    model.apply(&initial_diffs[0]);
+    let (node_id, initial_node) = model
+        .nodes
+        .iter()
+        .find(|(_, node)| node.role == SemanticRole::Tab as u32 && node.max_x - node.min_x > 0.0)
+        .expect("tab with positive width");
+    let node_id = *node_id;
+    let initial_bounds = initial_node.bounds();
+
+    // Deliberately no state-machine advance: only the viewport changes.
+    Artboard::inc_frame_id();
+    let expected_frame_number = Artboard::frame_id();
+    queue.drain_semantics_diff(
+        state_machine,
+        Fit::Contain,
+        Alignment::CENTER,
+        1.0,
+        nuxie::Vec2D::new(800.0, 800.0),
+        0,
+    );
+    server.process_commands();
+    queue.process_messages();
+    let resized_diffs = diffs();
+    assert_eq!(resized_diffs.len(), 2);
+    let last_diff = &resized_diffs[1];
+    assert_eq!(last_diff.frame_number, expected_frame_number);
+    assert_eq!(last_diff.root_id, expected_root_id);
+    assert!(!last_diff.updated_geometry.is_empty());
+    model.apply(last_diff);
+    let resized_bounds = model
+        .nodes
+        .get(&node_id)
+        .expect("same semantic node")
+        .bounds();
+    // Pinned Catch Approx(4).epsilon(.01) uses .01 * |4| as its margin.
+    let width_ratio = (resized_bounds.max_x - resized_bounds.min_x)
+        / (initial_bounds.max_x - initial_bounds.min_x);
+    let height_ratio = (resized_bounds.max_y - resized_bounds.min_y)
+        / (initial_bounds.max_y - initial_bounds.min_y);
+    assert!((f64::from(width_ratio) - 4.0).abs() <= 0.01 * 4.0);
+    assert!((f64::from(height_ratio) - 4.0).abs() <= 0.01 * 4.0);
 }
 
 #[test]

@@ -249,6 +249,10 @@ pub(crate) mod webgpu {
 
 #[cfg(feature = "native-vulkan-experimental")]
 pub(crate) mod vulkan {
+    #[path = "renderer_rive_vk_bootstrap_src_vulkan_frame_synchronizer_cpp__impl.rs"]
+    mod frame_synchronizer_impl;
+    #[path = "renderer_rive_vk_bootstrap_include_rive_vk_bootstrap_vulkan_frame_sync_coordinator_hpp__decl.rs"]
+    mod frame_sync_coordinator_decl;
     // Vulkan native handles and reverse-teardown owner graphs are a sealed
     // translation zone. The crate sees only the opaque ContextVulkan root.
     #[path = "renderer_src_vulkan_common_layouts_hpp__decl.rs"]

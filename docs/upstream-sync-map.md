@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `947107bc5971acb208b68135437aa5e33023d619`
+- LAST_SYNCED_SHA: `d619bc2a83f3c592a57eb58b9c83315142bcfbfc`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 131 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 131 require a Rust translation.
+  There are 130 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 130 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d619bc2a83f3c592a57eb58b9c83315142bcfbfc` | Translate the Vulkan frame-sync coordinator and its synchronizer dependency, including frame/fence state, completion caching, readback and resource cleanup. Preserve the four upstream coordinator scenarios and the approved Ash/Vulkan context boundary. The upstream commit adds utility APIs without switching production callsites; the product host's existing scheduling is not replaced by this delta. | — |
 | `947107bc5971acb208b68135437aa5e33023d619` | Add queued main view-model lookup and report successful main/global lookups through state-machine listeners. Route lookup failures to the state-machine error channel, preserving request IDs, listener association, existing-instance identity, locking and callback order; translate the bound/unbound/invalid lookup and cleared-global regressions. | — |
 | `4217c6378d0934c784a467abcaac9e9684c98411` | **DEFERRED:** tools-only Wasm tier-ladder/state-transplant guards, disabled-engine inline singleton surface, and WAMR internal-header build gating belong to the parked Wasm execution lane. No native Luau, shared runtime, browser renderer or fixture behavior changes occur in this public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4ca3b88a34e02d534bb800a803e81217ee11cc60` | Gate layout-controlled text box sizing and overflow at file version 7.3; preserve content-sized legacy boxes, in-memory defaults and clone state while leaving effective text dimensions unchanged. Translate the four exact five-frame text-layout Silver scenarios and consume the updated upstream assets/recordings through the pinned harness. Preserve approved Rust text and Taffy boundaries. | — |

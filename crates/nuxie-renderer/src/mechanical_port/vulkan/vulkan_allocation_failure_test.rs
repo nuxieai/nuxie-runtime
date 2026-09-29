@@ -17,7 +17,7 @@ static MAP_MEMORY: AtomicI32 = AtomicI32::new(0);
 const LIVE: u64 = 0x1000;
 const POISON: u64 = 0xDEADBEEF;
 
-fn reset_driver() -> MutexGuard<'static, ()> {
+pub(super) fn reset_driver() -> MutexGuard<'static, ()> {
     let lock = DRIVER_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
@@ -348,9 +348,9 @@ unsafe extern "system" fn instance_proc_addr(
     unsafe { resolve(name) }
 }
 
-struct FakeContext(Arc<VulkanContext>);
+pub(super) struct FakeContext(Arc<VulkanContext>);
 impl FakeContext {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self(
             unsafe {
                 VulkanContext::make(

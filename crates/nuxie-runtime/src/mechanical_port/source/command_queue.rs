@@ -566,6 +566,15 @@ pub trait StateMachineListener: Send {
     }
     fn on_state_machine_deleted(&mut self, _handle: StateMachineHandle, _request_id: u64) {}
     fn on_state_machine_settled(&mut self, _handle: StateMachineHandle, _request_id: u64) {}
+    /// Reports a successful main or global instance lookup. Lookup failures
+    /// are reported through `on_state_machine_error`.
+    fn on_view_model_instance_received(
+        &mut self,
+        _state_machine_handle: StateMachineHandle,
+        _request_id: u64,
+        _view_model_instance_handle: ViewModelInstanceHandle,
+    ) {
+    }
     fn on_semantics_diff_received(
         &mut self,
         _handle: StateMachineHandle,
@@ -662,6 +671,7 @@ pub(crate) enum Command {
     ClearSemanticFocus,
     BindViewModelInstance,
     SetViewModelInstance,
+    GetMainViewModelInstance,
     ClearViewModelInstance,
     SetGlobalViewModelInstance,
     ClearGlobalViewModelInstance,
@@ -734,6 +744,7 @@ pub(crate) enum Message {
     ViewModelDeleted,
     StateMachineDeleted,
     StateMachineSettled,
+    StateMachineViewModelInstanceReceived,
     SemanticsDiffReceived,
     FileAssetsListed,
     ArtboardSizeReceived,
@@ -1795,6 +1806,31 @@ impl CommandQueue {
             request_id,
         );
     }
+    /// Returns a handle to the main instance currently bound to the state
+    /// machine. This lookup never creates an instance.
+    ///
+    /// Success is reported through `StateMachineListener::on_view_model_instance_received`.
+    /// An invalid state machine or missing main instance is reported through
+    /// `StateMachineListener::on_state_machine_error`, and the returned handle
+    /// maps to nothing. The optional view model listener is associated with the
+    /// returned handle for subsequent operations, not lookup success or failure.
+    pub fn main_view_model_instance(
+        &mut self,
+        state_machine: StateMachineHandle,
+        listener: Option<&ViewModelInstanceListenerHandle>,
+        request_id: u64,
+    ) -> ViewModelInstanceHandle {
+        let handle = self.next_view_model_handle();
+        self.attach_view_model_listener(handle, listener);
+        let _lock = self.command_gate.acquire();
+        self.command_stream
+            .write(Command::GetMainViewModelInstance)
+            .write(state_machine)
+            .write(handle)
+            .write(request_id);
+        self.notify_command();
+        handle
+    }
     /// Removes the main (non-global) view model instance without rebinding.
     /// Call [`Self::bind`] to create and apply its default main instance.
     pub fn clear_view_model_instance(&mut self, handle: StateMachineHandle, request_id: u64) {
@@ -1832,6 +1868,14 @@ impl CommandQueue {
         self.names.write(name);
         self.notify_command();
     }
+    /// Returns a handle to the global instance currently bound under `name`.
+    /// This lookup never creates an instance.
+    ///
+    /// Success is reported through `StateMachineListener::on_view_model_instance_received`.
+    /// An invalid state machine or missing named instance is reported through
+    /// `StateMachineListener::on_state_machine_error`, and the returned handle
+    /// maps to nothing. The optional view model listener is associated with the
+    /// returned handle for subsequent operations, not lookup success or failure.
     pub fn global_view_model_instance(
         &mut self,
         state_machine: StateMachineHandle,
@@ -3042,6 +3086,31 @@ impl CommandQueue {
                         listener
                             .borrow_mut()
                             .on_view_model_deleted(handle, request_id);
+                    }
+                }
+                Message::StateMachineViewModelInstanceReceived => {
+                    let state_machine_handle = self.read_message_pod::<StateMachineHandle>();
+                    let view_model_instance_handle =
+                        self.read_message_pod::<ViewModelInstanceHandle>();
+                    let request_id = self.read_message_pod::<u64>();
+                    drop(lock);
+                    if let Some(listener) =
+                        Self::global_listener(&self.global_state_machine_listener)
+                    {
+                        listener.borrow_mut().on_view_model_instance_received(
+                            state_machine_handle,
+                            request_id,
+                            view_model_instance_handle,
+                        );
+                    }
+                    if let Some(listener) =
+                        Self::listener(&self.state_machine_listeners, &state_machine_handle)
+                    {
+                        listener.borrow_mut().on_view_model_instance_received(
+                            state_machine_handle,
+                            request_id,
+                            view_model_instance_handle,
+                        );
                     }
                 }
                 Message::StateMachineSettled => {

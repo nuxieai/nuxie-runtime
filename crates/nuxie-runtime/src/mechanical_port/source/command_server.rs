@@ -1551,14 +1551,50 @@ impl CommandServer {
                     let name = self.command_queue.pop_name();
                     lock.unlock();
                     if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
-                        if let Some(view) = wrapper.lock().global_view_model_instance(&name) {
+                        let view = {
+                            let instance = wrapper.lock();
+                            instance.global_view_model_instance(&name)
+                        };
+                        if let Some(view) = view {
                             self.view_models
                                 .insert(view_handle, Rc::new(ViewModelInstanceRuntime::new(view)));
+                            let mut messages = self.command_queue.message_lock();
+                            messages.write(Message::StateMachineViewModelInstanceReceived);
+                            messages.write(handle);
+                            messages.write(view_handle);
+                            messages.write(request_id);
                         } else {
-                            self.error(view_handle, request_id, Message::ViewModelError, format!("No global view model instance bound under name {name} on a state machine"));
+                            self.error(handle, request_id, Message::StateMachineError, format!("No global view model instance named {name} bound to state machine {handle}"));
                         }
                     } else {
-                        self.error(view_handle, request_id, Message::ViewModelError, format!("State machine {handle} not found for getting global view model instance."));
+                        self.error(handle, request_id, Message::StateMachineError, format!("State machine {handle} not found for getting global view model instance."));
+                    }
+                }
+                Command::GetMainViewModelInstance => {
+                    let handle = self.command_queue.read();
+                    let view_handle = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        let view = {
+                            let instance = wrapper.lock();
+                            instance.data_context().and_then(|context| {
+                                context.with_context(|context| context.main_view_model_instance())
+                            })
+                        };
+                        if let Some(view) = view {
+                            self.view_models
+                                .insert(view_handle, Rc::new(ViewModelInstanceRuntime::new(view)));
+                            let mut messages = self.command_queue.message_lock();
+                            messages.write(Message::StateMachineViewModelInstanceReceived);
+                            messages.write(handle);
+                            messages.write(view_handle);
+                            messages.write(request_id);
+                        } else {
+                            self.error(handle, request_id, Message::StateMachineError, format!("No main view model instance bound to state machine {handle}"));
+                        }
+                    } else {
+                        self.error(handle, request_id, Message::StateMachineError, format!("State machine {handle} not found for getting main view model instance."));
                     }
                 }
                 Command::Bind => {

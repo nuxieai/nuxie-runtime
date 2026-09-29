@@ -1,12 +1,13 @@
-//! JNI owner for the bundled platform MediaPlayer/OES adapter. Decoded pixels
-//! are copied into owned Rust memory; the host uploads them to its retained
-//! Vulkan factory. Java never calls into a borrowed runtime occurrence.
+//! JNI owner for the bundled platform MediaPlayer/ImageReader adapter. Each
+//! decoded frame arrives in the decoder's hardware buffer, which the host's
+//! retained Vulkan factory imports and converts on the GPU. Java never calls
+//! into a borrowed runtime occurrence.
 use jni::{
     JNIEnv, JavaVM,
-    objects::{GlobalRef, JByteArray, JObject, JString, JValue},
+    objects::{GlobalRef, JObject, JString, JValue},
 };
 use nuxie_runtime::video::playback::{Command, DecoderAction, Playback};
-use std::{cell::RefCell, marker::PhantomData, rc::Rc};
+use std::{cell::RefCell, ffi::c_void, marker::PhantomData, ptr::NonNull, rc::Rc};
 
 #[derive(Debug)]
 pub enum AndroidError {
@@ -23,6 +24,76 @@ impl From<jni::errors::Error> for AndroidError {
     }
 }
 pub use crate::scene::{Frame, FramePixels};
+
+/// An Android frame in the decoder's hardware buffer. Pass its buffer, crop,
+/// turns and color to `NativeVulkanFactory::import_hardware_buffer`, which
+/// converts it on the GPU before returning. Dropping the frame returns the
+/// buffer to the decoder.
+pub struct HardwareBufferFrame {
+    vm: JavaVM,
+    frame: GlobalRef,
+    buffer: NonNull<c_void>,
+    /// The picture's left, top, right and bottom edges in buffer pixels.
+    pub crop: [u32; 4],
+    /// Clockwise rotation from buffer to display: 0, 90, 180 or 270.
+    pub rotation_degrees: u32,
+    /// The Y'CbCr matrix the decoder tags its output with: 1 BT.601, 2 BT.709,
+    /// 3 BT.2020, numbered as in `NuxVideoHardwareBufferFrame`.
+    pub color_matrix: u32,
+    /// 1 limited range, 2 full range.
+    pub color_range: u32,
+}
+
+impl HardwareBufferFrame {
+    /// The `AHardwareBuffer*`, valid while this frame lives.
+    pub fn buffer(&self) -> NonNull<c_void> {
+        self.buffer
+    }
+
+    /// Clockwise quarter turns from buffer to display.
+    pub fn quarter_turns(&self) -> u32 {
+        self.rotation_degrees / 90
+    }
+}
+
+impl Drop for HardwareBufferFrame {
+    fn drop(&mut self) {
+        if let Ok(mut env) = self.vm.attach_current_thread() {
+            if env
+                .call_method(self.frame.as_obj(), "close", "()V", &[])
+                .is_err()
+            {
+                // Closing an image of a closed reader is harmless; do not
+                // leave the exception pending for unrelated calls.
+                let _ = env.exception_clear();
+            }
+        }
+    }
+}
+
+/// `AHardwareBuffer_fromHardwareBuffer` is API 26 while the runtime targets
+/// API 23, so it is looked up in the NDK's public `libandroid.so` when needed
+/// rather than linked. A default-scope `dlsym` does not see it from inside an
+/// app's linker namespace.
+fn hardware_buffer_from_java(env: &JNIEnv<'_>, buffer: &JObject<'_>) -> Option<NonNull<c_void>> {
+    type FromHardwareBuffer =
+        unsafe extern "C" fn(*mut jni::sys::JNIEnv, jni::sys::jobject) -> *mut c_void;
+    unsafe extern "C" {
+        fn dlopen(file: *const std::ffi::c_char, mode: std::ffi::c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const std::ffi::c_char) -> *mut c_void;
+    }
+    const RTLD_NOW: std::ffi::c_int = 2;
+    let library = unsafe { dlopen(c"libandroid.so".as_ptr(), RTLD_NOW) };
+    if library.is_null() {
+        return None;
+    }
+    let address = unsafe { dlsym(library, c"AHardwareBuffer_fromHardwareBuffer".as_ptr()) };
+    if address.is_null() {
+        return None;
+    }
+    let from_hardware_buffer: FromHardwareBuffer = unsafe { std::mem::transmute(address) };
+    NonNull::new(unsafe { from_hardware_buffer(env.get_raw(), buffer.as_raw()) })
+}
 /// The platform's observed decoder identity. Classification is unavailable
 /// before API 29 or when MediaPlayer's identity cannot be matched exactly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -280,31 +351,61 @@ impl AndroidPlayer {
             }
             let generation = env.get_field(&frame, "generation", "J")?.j()? as u64;
             let pts = env.get_field(&frame, "seconds", "D")?.d()?;
-            let width = env.get_field(&frame, "width", "I")?.i()?;
-            let height = env.get_field(&frame, "height", "I")?.i()?;
-            let count = usize::try_from(width)
-                .ok()
-                .and_then(|w| usize::try_from(height).ok().and_then(|h| w.checked_mul(h)))
+            let edge = |env: &mut JNIEnv<'_>, name: &str| -> Result<u32, AndroidError> {
+                let value = env.get_field(&frame, name, "I")?.i()?;
+                u32::try_from(value).map_err(|_| AndroidError::InvalidFrame)
+            };
+            let crop = [
+                edge(env, "cropLeft")?,
+                edge(env, "cropTop")?,
+                edge(env, "cropRight")?,
+                edge(env, "cropBottom")?,
+            ];
+            let rotation_degrees = edge(env, "rotationDegrees")?;
+            let color_matrix = edge(env, "colorMatrix")?;
+            let color_range = edge(env, "colorRange")?;
+            let [left, top, right, bottom] = crop;
+            let (width, height) = match rotation_degrees {
+                0 | 180 => (right.saturating_sub(left), bottom.saturating_sub(top)),
+                90 | 270 => (bottom.saturating_sub(top), right.saturating_sub(left)),
+                _ => return Err(AndroidError::InvalidFrame),
+            };
+            let bytes = (width as usize)
+                .checked_mul(height as usize)
                 .and_then(|n| n.checked_mul(4));
-            if count.is_none_or(|n| n == 0 || n > self.max_frame_bytes)
+            if bytes.is_none_or(|n| n == 0 || n > self.max_frame_bytes)
                 || !pts.is_finite()
                 || pts < 0.0
             {
+                let _ = env.call_method(&frame, "close", "()V", &[]);
                 return Err(AndroidError::InvalidFrame);
             }
-            let bytes = JByteArray::from(env.get_field(&frame, "rgba", "[B")?.l()?);
-            if usize::try_from(env.get_array_length(&bytes)?).ok() != count {
-                return Err(AndroidError::InvalidFrame);
-            }
-            let rgba = env.convert_byte_array(bytes)?;
+            let buffer_object = env
+                .get_field(&frame, "buffer", "Landroid/hardware/HardwareBuffer;")?
+                .l()?;
+            let global = env.new_global_ref(&frame)?;
+            let Some(buffer) = hardware_buffer_from_java(env, &buffer_object) else {
+                let _ = env.call_method(&frame, "close", "()V", &[]);
+                return Err(AndroidError::Media(
+                    "AHardwareBuffer_fromHardwareBuffer (Android 8) is unavailable".into(),
+                ));
+            };
             Ok((
                 actions,
                 Some(Frame {
                     generation,
                     pts,
-                    width: width as u32,
-                    height: height as u32,
-                    pixels: FramePixels::Rgba(rgba),
+                    width,
+                    height,
+                    pixels: FramePixels::HardwareBuffer(HardwareBufferFrame {
+                        vm: env.get_java_vm()?,
+                        frame: global,
+                        buffer,
+                        crop,
+                        rotation_degrees,
+                        color_matrix,
+                        color_range,
+                    }),
                 }),
             ))
         })

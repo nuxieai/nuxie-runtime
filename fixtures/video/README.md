@@ -65,3 +65,13 @@ ffmpeg -f lavfi -i 'testsrc2=s=64x32:r=10:d=1' \
   -map '[v]' -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -b:v 0 -crf 20 \
   parity-alpha.webm
 ```
+
+`parity-opaque.rgba` is FFmpeg's decode of `parity-opaque.mp4`: all ten frames
+as top-row-first RGBA, 64×32×4 bytes each. The stream carries no color
+metadata, so FFmpeg converts it as BT.601 limited range, the same default
+Android's decoders apply. The Android hardware buffer parity proof judges the
+Vulkan conversion against it.
+
+```sh
+ffmpeg -i parity-opaque.mp4 -f rawvideo -pix_fmt rgba parity-opaque.rgba
+```

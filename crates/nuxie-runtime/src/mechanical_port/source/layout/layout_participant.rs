@@ -322,8 +322,19 @@ impl LayoutParticipant {
     fn solved_layout(&self) -> Layout {
         self.layout_data
             .as_deref()
-            .map(|data| data.solved_layout)
+            .map(|data| {
+                let layout = data.solved_layout;
+                Layout::new(
+                    Self::defined_or_zero(layout.left()),
+                    Self::defined_or_zero(layout.top()),
+                    Self::defined_or_zero(layout.width()),
+                    Self::defined_or_zero(layout.height()),
+                )
+            })
             .unwrap_or_default()
+    }
+    fn defined_or_zero(value: f32) -> f32 {
+        if value.is_nan() { 0.0 } else { value }
     }
     pub fn resolved_left(&self) -> f32 {
         self.animation

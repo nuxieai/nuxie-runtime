@@ -2,11 +2,23 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-bb7200ef181d72f0e83e737636a41b1e43601d7a}
+ref=${RIVE_RUNTIME_REF:-78b07a3fdc72fa7f64bf464d871ae80474a5a39a}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/layout/matrix/matrix.expect|b0d133cbbfa853557175c0c514ab4de6f33b2d2d42455c795f44a0e68a494b1f|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix.expect"
+  "sync/layout/matrix/matrix.riv|7de4772d417087edd56b936ac4c26953df065e0a16b64dcfd1947d39f54ea643|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix.riv"
+  "sync/layout/matrix/matrix_font.expect|c424ee40a6584ea57a739a37dd00347baaabdb401276c93aafe89f526887b470|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_font.expect"
+  "sync/layout/matrix/matrix_font.riv|af67d69b052c9db367c5ec2e75e9460543fda56ee73faa92852969526bbf9e14|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_font.riv"
+  "sync/layout/matrix/matrix_image.expect|175bf6c4e9539bd698f13007bb82969323da8b6b1efc9d5339acd8d071178d1c|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_image.expect"
+  "sync/layout/matrix/matrix_image.riv|ef60985de9441593094bc6478a8fdb4b6bac573bf143938c627487447a328d01|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_image.riv"
+  "sync/layout/matrix/matrix_legacy.expect|62068a77f1e4b4883a145ae0118310aee7620b4c6125a178d32e9764f57788a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.expect"
+  "sync/layout/matrix/matrix_legacy.riv|0f788e1abe9d074b348a7cca55f077325f4a8242ce8758324518daa1ba154716|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.riv"
+  "sync/layout/matrix/README.md|36e3afa7769913e9a3d0a0420d6b3115e81e67b8a9ee1230883e9039829bd0a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/README.md"
+  "sync/layout/matrix/CORPUS.md|d43e44d4335540cfd39e3bde33b829f888630695a66281b42c538dcc44acc8bc|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/CORPUS.md"
+  "sync/layout/assets/Montserrat.ttf|a4fe82b4bfd40c71320ab0f1daca8ba2f230b55a56ffa94d5d1b349675b70d73|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|Montserrat.ttf"
+  "sync/layout/assets/batdude.png|32c86d18c059d4338cca1771faf9b43a80827ae8ea30d6cc10d64f681bfeec01|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|batdude.png"
   "sync/nested_artboard_constrained.riv|a6c0d028124595f97545c5d3ea34a1b72ce42f5154b791fb7f8619de73f75e68|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_constrained.riv"
   "sync/nested_artboard_followpath.riv|8f2866a5712c780ebd7da7bb4e9fcfeb66d8a9511828e882892ec4cce6683fac|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_followpath.riv"
   "sync/nested_artboard_origin_override.riv|6ad14f15e3b4f5802af9ade3d59df489838d22b85024117a3a1457a25af33842|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_origin_override.riv"
@@ -149,7 +161,8 @@ for entry in "${assets[@]}"; do
   if [[ "$relative" != "sync/data_bind_blob_test.riv" \
     && "$relative" != "sync/data_enum_roundtrip.rml" \
     && "$relative" != "sync/focus_bounds_moving_host.rml" \
-    && "$relative" != command_queue/* ]]; then
+    && "$relative" != command_queue/* \
+    && "$relative" != sync/layout/* ]]; then
     for target in fuzz_import fuzz_runtime fuzz_pointer; do
       seed_dir="$repo_root/fuzz/seeds/$target"
       mkdir -p "$seed_dir"

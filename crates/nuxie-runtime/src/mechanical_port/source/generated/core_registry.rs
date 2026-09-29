@@ -3037,6 +3037,7 @@ pub enum CoreField {
     NestedArtboardLeafAlignmentX,
     NestedArtboardLeafAlignmentY,
     NestedArtboardLeafFit,
+    NestedArtboardLeafFitToLayoutParent,
     NestedArtboardQuantize,
     NestedArtboardSpeed,
     NestedBoolNestedValue,
@@ -7341,6 +7342,7 @@ impl CoreRegistry {
             1009 => CoreField::SemanticDataIsMultiline,
             921 => CoreField::DataBindPathIsRelative,
             634 => CoreField::BindablePropertyBooleanPropertyValue,
+            1098 => CoreField::NestedArtboardLeafFitToLayoutParent,
             333 => CoreField::TextModifierRangeClamp,
             779 => CoreField::TextFollowPathModifierRadial,
             782 => CoreField::TextFollowPathModifierOrient,
@@ -8095,6 +8097,7 @@ impl CoreRegistry {
             196 => CoreField::LayoutComponentClip,
             921 => CoreField::DataBindPathIsRelative,
             634 => CoreField::BindablePropertyBooleanPropertyValue,
+            1098 => CoreField::NestedArtboardLeafFitToLayoutParent,
             333 => CoreField::TextModifierRangeClamp,
             779 => CoreField::TextFollowPathModifierRadial,
             782 => CoreField::TextFollowPathModifierOrient,
@@ -8859,6 +8862,7 @@ impl CoreRegistry {
             1009 => 4,
             921 => 4,
             634 => 4,
+            1098 => 4,
             333 => 4,
             779 => 4,
             782 => 4,
@@ -9487,6 +9491,7 @@ impl CoreRegistry {
             1009 => 668,
             921 => 643,
             634 => 472,
+            1098 => 451,
             333 => 158,
             779 => 547,
             782 => 547,
@@ -45452,7 +45457,7 @@ impl CoreRegistryObject
                 }
             }
             CoreField::NestedArtboardLeafFit => {
-                if self.base.set_fit_value(value) {
+                if self.base.set_fit_value(value as u8) {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBaseCallbacks>::fit_changed(self);
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::FIT_PROPERTY_KEY);
                 }
@@ -45497,6 +45502,12 @@ impl CoreRegistryObject
                 if self.base.base.base.set_is_paused_value(value) {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBaseCallbacks>::is_paused_changed(self);
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::IS_PAUSED_PROPERTY_KEY);
+                }
+            }
+            CoreField::NestedArtboardLeafFitToLayoutParent => {
+                if self.base.set_fit_to_layout_parent_value(value) {
+                    <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBaseCallbacks>::fit_to_layout_parent_changed(self);
+                    <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::FIT_TO_LAYOUT_PARENT_PROPERTY_KEY);
                 }
             }
             CoreField::NestedArtboardIsStateful => {
@@ -45707,7 +45718,7 @@ impl CoreRegistryObject
                 self.base.base.base.base.base.drawable_flags() as u32
             }
             CoreField::NestedArtboardArtboardId => self.base.base.base.artboard_id(),
-            CoreField::NestedArtboardLeafFit => self.base.fit(),
+            CoreField::NestedArtboardLeafFit => self.base.fit() as u32,
             _ => 0,
         }
     }
@@ -45740,6 +45751,7 @@ impl CoreRegistryObject
     }
     fn get_bool(&mut self, field: CoreField) -> bool {
         match field {
+            CoreField::NestedArtboardLeafFitToLayoutParent => self.base.fit_to_layout_parent(),
             CoreField::NestedArtboardIsPaused => self.base.base.base.is_paused(),
             CoreField::NestedArtboardIsStateful => self.base.base.base.is_stateful(),
             _ => false,

@@ -149,6 +149,16 @@ pub enum Action {
     BindDefaultViewModelIfPresent,
     BindFreshViewModel,
     BindAuthoredViewModel,
+    BindAuthoredViewModelIfPresent,
+    SelectStateMachine,
+    BindSoloAuthoredViewModel {
+        if_present: bool,
+    },
+    OptInNestedLeavesToLayoutParent,
+    AssertSoloLeaf {
+        expect_solo: bool,
+        expect_fit_to_layout_parent: bool,
+    },
     BindAuthoredViewModelInstance {
         instance_index: usize,
     },
@@ -492,7 +502,14 @@ impl Execution {
                 .frame_size(frame_dimension(width), frame_dimension(height));
         }
         let mut renderer = factory.borrow().make_renderer();
-        let state_machine = select_state_machine(&instance, &case.state_machine)?;
+        let mut state_machine = if actions
+            .iter()
+            .any(|action| matches!(action, Action::SelectStateMachine))
+        {
+            None
+        } else {
+            select_state_machine(&instance, &case.state_machine)?
+        };
         let mut animation = select_animation(&instance, &case.animation)?;
         let mut owned_context: Option<RuntimeDataContextHandle> = None;
         let mut staged_main: Option<CoreHandle> = None;
@@ -500,6 +517,32 @@ impl Execution {
         let mut staged_named = BTreeMap::<String, CoreHandle>::new();
         for action in &actions[first_runtime_action..] {
             match action {
+                Action::SelectStateMachine => {
+                    state_machine = select_state_machine(&instance, &case.state_machine)?;
+                    anyhow::ensure!(
+                        state_machine.is_some(),
+                        "solo producer requires a state machine"
+                    );
+                }
+                Action::BindSoloAuthoredViewModel { if_present } => {
+                    let id = instance.with_artboard(|artboard| artboard.base.view_model_id());
+                    let main = file.with_file_mut(|file| {
+                        if id == u32::MAX {
+                            file.create_view_model_instance_for_artboard(instance.core_handle())
+                        } else {
+                            file.create_view_model_instance_at(id as usize, 0)
+                        }
+                    });
+                    if main.is_none() && *if_present {
+                        continue;
+                    }
+                    let main =
+                        main.context("selected artboard has no authored view-model instance")?;
+                    owned_context = machine(&state_machine)?.with_instance_mut(|machine| {
+                        machine.bind_view_model_instance(Some(main));
+                        machine.data_context()
+                    });
+                }
                 Action::ReplayPointerLog { .. } => {
                     unreachable!("pointer logs are expanded before execution")
                 }
@@ -524,17 +567,72 @@ impl Execution {
                     bind_context(&instance, state_machine.as_ref(), &context);
                     owned_context = Some(context);
                 }
-                Action::BindAuthoredViewModel => {
-                    let id = instance.with_artboard(|artboard| artboard.base.view_model_id());
-                    let main = file
-                        .with_file_mut(|file| {
-                            if id == u32::MAX {
-                                file.create_view_model_instance_for_artboard(instance.core_handle())
-                            } else {
-                                file.create_view_model_instance_at(id as usize, 0)
-                            }
+                Action::OptInNestedLeavesToLayoutParent => {
+                    use nuxie_runtime::source::nested_artboard_leaf::NestedArtboardLeaf;
+                    let leaves =
+                        instance.with_artboard(|a| a.find_all_handles::<NestedArtboardLeaf>());
+                    anyhow::ensure!(!leaves.is_empty(), "expected nested leaves");
+                    for leaf in leaves {
+                        anyhow::ensure!(
+                            leaf.with_downcast::<NestedArtboardLeaf, _>(|l| !l
+                                .base
+                                .fit_to_layout_parent())
+                                == Some(true),
+                            "expected legacy leaf flag"
+                        );
+                        anyhow::ensure!(
+                            CoreRegistry::set_bool_handle(&leaf, 1098, true),
+                            "leaf flag setter missing"
+                        );
+                    }
+                }
+                Action::AssertSoloLeaf {
+                    expect_solo,
+                    expect_fit_to_layout_parent,
+                } => {
+                    use nuxie_runtime::source::{
+                        generated::solo_base::SoloBase, layout::Fit,
+                        nested_artboard_leaf::NestedArtboardLeaf,
+                    };
+                    let leaves =
+                        instance.with_artboard(|a| a.find_all_handles::<NestedArtboardLeaf>());
+                    anyhow::ensure!(leaves.len() == 1, "expected exactly one nested leaf");
+                    let (parent, flag, fit) = leaves[0]
+                        .with_downcast::<NestedArtboardLeaf, _>(|l| {
+                            (
+                                l.base.base.parent_handle(),
+                                l.base.fit_to_layout_parent(),
+                                l.base.fit(),
+                            )
                         })
-                        .context("selected artboard has no authored view-model instance")?;
+                        .context("missing leaf")?;
+                    let parent = parent.context("leaf has no parent")?;
+                    anyhow::ensure!(
+                        parent.is_type_of(SoloBase::TYPE_KEY) == *expect_solo,
+                        "unexpected leaf parent"
+                    );
+                    if *expect_solo {
+                        anyhow::ensure!(
+                            flag == *expect_fit_to_layout_parent,
+                            "unexpected authored leaf flag"
+                        );
+                    }
+                    anyhow::ensure!(fit == Fit::Contain as u8, "expected contain fit");
+                }
+                Action::BindAuthoredViewModel | Action::BindAuthoredViewModelIfPresent => {
+                    let id = instance.with_artboard(|artboard| artboard.base.view_model_id());
+                    let main = file.with_file_mut(|file| {
+                        if id == u32::MAX {
+                            file.create_view_model_instance_for_artboard(instance.core_handle())
+                        } else {
+                            file.create_view_model_instance_at(id as usize, 0)
+                        }
+                    });
+                    if main.is_none() && matches!(action, Action::BindAuthoredViewModelIfPresent) {
+                        continue;
+                    }
+                    let main =
+                        main.context("selected artboard has no authored view-model instance")?;
                     let context = complete_context(&file, Some(main));
                     bind_context(&instance, state_machine.as_ref(), &context);
                     owned_context = Some(context);

@@ -62,6 +62,30 @@ impl AndroidVulkanFactory {
     }
 }
 
+impl AndroidVulkanFactory {
+    /// # Safety
+    /// See `NativeVulkanFactory::import_hardware_buffer`.
+    #[cfg(target_os = "android")]
+    pub(super) unsafe fn import_hardware_buffer(
+        &mut self,
+        textures: &mut nuxie_renderer::ExternalImageTextures,
+        buffer: std::ptr::NonNull<std::ffi::c_void>,
+        crop: [u32; 4],
+        quarter_turns: u32,
+        color: Option<nuxie_renderer::VideoColor>,
+    ) -> Result<std::rc::Rc<dyn RenderImage>, RendererError> {
+        unsafe {
+            self.native.borrow_mut().import_hardware_buffer(
+                textures,
+                buffer,
+                crop,
+                quarter_turns,
+                color,
+            )
+        }
+    }
+}
+
 impl crate::asset_hooks::AssetUploadFactory for AndroidVulkanFactory {
     fn upload_rgba8_premul_srgb(
         &mut self,

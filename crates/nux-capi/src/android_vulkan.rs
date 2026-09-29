@@ -15,6 +15,7 @@ use nuxie_renderer::RenderMode;
 use nuxie_renderer::deferred::cmd::deferred_replayer::take_frame;
 use nuxie_renderer::{NativeVulkanFactory, RendererError};
 use std::cell::RefCell;
+use std::ffi::c_void;
 use std::ptr;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -1308,14 +1309,17 @@ mod tests {
     }
 }
 
-/// Upload a video frame through the exact renderer domain used to import the
-/// player. Old decoder generations are ignored; wrong renderer domains fail.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn nux_player_video_present_android_vulkan(
+/// Run `present` for one video of a player imported through this renderer's
+/// exact Vulkan domain; any other renderer domain fails.
+fn with_android_vulkan_video(
     renderer: *const NuxAndroidVulkanRenderer,
     player: *const NuxPlayer,
     component_id: usize,
-    frame: *const super::NuxVideoFrame,
+    present: impl FnOnce(
+        &mut AndroidVulkanRendererState,
+        &nuxie::CoreHandle,
+        &super::ArtboardOccurrence,
+    ) -> Result<(), NuxStatus>,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
         super::video::status((|| {
@@ -1333,16 +1337,163 @@ pub unsafe extern "C" fn nux_player_video_present_android_vulkan(
                     .state
                     .try_borrow_mut()
                     .map_err(|_| NuxStatus::ReentrantCall)?;
-                unsafe {
-                    super::video::present_frame(video, occurrence, frame, |w, h, row, pixels| {
-                        state
-                            .factory
-                            .borrow_mut()
-                            .upload_rgba8_premul_srgb(w, h, row, pixels)
-                            .map_err(|_| NuxStatus::RuntimeError)
-                    })
-                }
+                present(&mut state, video, occurrence)
             })
         })())
     })
+}
+
+/// Upload a video frame through the exact renderer domain used to import the
+/// player. Old decoder generations are ignored; wrong renderer domains fail.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_present_android_vulkan(
+    renderer: *const NuxAndroidVulkanRenderer,
+    player: *const NuxPlayer,
+    component_id: usize,
+    frame: *const super::NuxVideoFrame,
+) -> NuxStatus {
+    with_android_vulkan_video(
+        renderer,
+        player,
+        component_id,
+        |state, video, occurrence| unsafe {
+            super::video::present_frame(video, occurrence, frame, |w, h, row, pixels| {
+                state
+                    .factory
+                    .borrow_mut()
+                    .upload_rgba8_premul_srgb(w, h, row, pixels)
+                    .map_err(|_| NuxStatus::RuntimeError)
+            })
+        },
+    )
+}
+
+/// Present a video frame without copying its pixels through the CPU: the
+/// renderer imports the hardware buffer and converts it from YUV to RGBA on
+/// the GPU with the buffer's own matrix and range, into textures it reuses
+/// for this video. Generation and renderer-domain rules match
+/// `nux_player_video_present_android_vulkan`; the same 64 MiB frame limit
+/// applies to the displayed width * height * 4. Returns `RuntimeError` when
+/// the Vulkan device cannot import hardware buffers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_present_android_hardware_buffer(
+    renderer: *const NuxAndroidVulkanRenderer,
+    player: *const NuxPlayer,
+    component_id: usize,
+    frame: *const super::NuxVideoHardwareBufferFrame,
+) -> NuxStatus {
+    with_android_vulkan_video(
+        renderer,
+        player,
+        component_id,
+        |state, video, occurrence| {
+            let frame = unsafe { frame.as_ref() }.ok_or(NuxStatus::NullArgument)?;
+            if frame.struct_size as usize
+                != std::mem::size_of::<super::NuxVideoHardwareBufferFrame>()
+            {
+                return Err(NuxStatus::InvalidStructSize);
+            }
+            let buffer =
+                std::ptr::NonNull::new(frame.hardware_buffer).ok_or(NuxStatus::NullArgument)?;
+            let quarter_turns = match frame.rotation_degrees {
+                0 => 0,
+                90 => 1,
+                180 => 2,
+                270 => 3,
+                _ => return Err(NuxStatus::InvalidArgument),
+            };
+            let crop = [
+                frame.crop_left,
+                frame.crop_top,
+                frame.crop_right,
+                frame.crop_bottom,
+            ];
+            let color = video_color(frame.color_matrix, frame.color_range)?;
+            super::video::present_image(
+                video,
+                occurrence,
+                frame.generation,
+                frame.presentation_seconds,
+                || {
+                    import_hardware_buffer(
+                        state,
+                        occurrence,
+                        component_id,
+                        buffer,
+                        crop,
+                        quarter_turns,
+                        color,
+                    )
+                },
+            )
+        },
+    )
+}
+
+/// The frame's matrix and range codes, or `None` when both are zero and the
+/// driver's suggestion applies. Any other combination is rejected.
+fn video_color(matrix: u32, range: u32) -> Result<Option<(u32, u32)>, NuxStatus> {
+    match (matrix, range) {
+        (0, 0) => Ok(None),
+        (1..=3, 1..=2) => Ok(Some((matrix, range))),
+        _ => Err(NuxStatus::InvalidArgument),
+    }
+}
+
+#[cfg(target_os = "android")]
+fn import_hardware_buffer(
+    state: &mut AndroidVulkanRendererState,
+    occurrence: &super::ArtboardOccurrence,
+    component_id: usize,
+    buffer: std::ptr::NonNull<c_void>,
+    crop: [u32; 4],
+    quarter_turns: u32,
+    color: Option<(u32, u32)>,
+) -> Result<Rc<dyn nuxie::RenderImage>, NuxStatus> {
+    use nuxie_renderer::{VideoColor, VideoMatrix};
+    let color = color.map(|(matrix, range)| VideoColor {
+        matrix: match matrix {
+            1 => VideoMatrix::Bt601,
+            2 => VideoMatrix::Bt709,
+            _ => VideoMatrix::Bt2020,
+        },
+        full_range: range == 2,
+    });
+    let crop = if crop == [0; 4] {
+        let (width, height) = unsafe { nuxie_renderer::hardware_buffer_size(buffer) }
+            .ok_or(NuxStatus::RuntimeError)?;
+        [0, 0, width, height]
+    } else {
+        crop
+    };
+    let [left, top, right, bottom] = crop;
+    let bytes = u64::from(right.saturating_sub(left)) * u64::from(bottom.saturating_sub(top)) * 4;
+    if bytes > 64 * 1024 * 1024 {
+        return Err(NuxStatus::LimitExceeded);
+    }
+    let mut textures = occurrence.video_frame_textures.borrow_mut();
+    let textures = textures.entry(component_id).or_default();
+    let mut factory = state.factory.borrow_mut();
+    unsafe { factory.import_hardware_buffer(textures, buffer, crop, quarter_turns, color) }.map_err(
+        |error| match error {
+            RendererError::InvalidImageUpload(_) | RendererError::InvalidTextureExtent { .. } => {
+                NuxStatus::InvalidArgument
+            }
+            _ => NuxStatus::RuntimeError,
+        },
+    )
+}
+
+/// Host builds of the Android renderer have no hardware buffers.
+#[cfg(not(target_os = "android"))]
+fn import_hardware_buffer(
+    _state: &mut AndroidVulkanRendererState,
+    _occurrence: &super::ArtboardOccurrence,
+    _component_id: usize,
+    _buffer: std::ptr::NonNull<c_void>,
+    _crop: [u32; 4],
+    _quarter_turns: u32,
+    _color: Option<(u32, u32)>,
+) -> Result<Rc<dyn nuxie::RenderImage>, NuxStatus> {
+    Err(NuxStatus::RuntimeError)
 }

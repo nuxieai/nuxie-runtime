@@ -630,6 +630,39 @@ pub struct NuxVideoFrame {
     pub pixels: NuxByteView,
 }
 
+/// A decoded video frame held in an Android hardware buffer.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxVideoHardwareBufferFrame {
+    /// Must be initialized to `sizeof(NuxVideoHardwareBufferFrame)`.
+    pub struct_size: u32,
+    pub generation: u64,
+    pub presentation_seconds: f64,
+    /// Borrowed `AHardwareBuffer*` with `AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE`,
+    /// as an `AImageReader` created with that usage hands out. Its producer
+    /// must have finished writing it: images from `AImageReader_acquire*Image`
+    /// (not the `Async` variants) qualify. The call has finished reading it
+    /// when it returns.
+    pub hardware_buffer: *mut c_void,
+    /// The picture's left, top, right and bottom edges in buffer pixels, as
+    /// `AImage_getCropRect` reports; all zero means the whole buffer.
+    pub crop_left: u32,
+    pub crop_top: u32,
+    pub crop_right: u32,
+    pub crop_bottom: u32,
+    /// Clockwise rotation from buffer to display in degrees: 0, 90, 180 or 270,
+    /// such as the video track's rotation metadata.
+    pub rotation_degrees: u32,
+    /// The Y'CbCr matrix the decoder tags its output with: 1 BT.601, 2 BT.709,
+    /// 3 BT.2020, or 0 to use the driver's suggestion, which some drivers get
+    /// wrong. Streams without color metadata decode with Android's defaults:
+    /// BT.2020 from 4K, BT.601 up to 720x576 and BT.709 between.
+    pub color_matrix: u32,
+    /// 1 limited range or 2 full range; zero exactly when `color_matrix` is.
+    /// Streams without color metadata are limited range.
+    pub color_range: u32,
+}
+
 #[cfg(any(
     all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
     feature = "android-vulkan"
@@ -667,7 +700,7 @@ pub(crate) unsafe fn present_frame(
         frame.presentation_seconds,
         || {
             let pixels = unsafe { std::slice::from_raw_parts(frame.pixels.data, frame.pixels.len) };
-            upload(frame.width, frame.height, frame.row_bytes, pixels)
+            upload(frame.width, frame.height, frame.row_bytes, pixels).map(Rc::from)
         },
     )
 }
@@ -683,7 +716,7 @@ pub(crate) fn present_image(
     occurrence: &ArtboardOccurrence,
     generation: u64,
     presentation_seconds: f64,
-    make_image: impl FnOnce() -> Result<Box<dyn nuxie::RenderImage>, NuxStatus>,
+    make_image: impl FnOnce() -> Result<Rc<dyn nuxie::RenderImage>, NuxStatus>,
 ) -> Result<(), NuxStatus> {
     if !presentation_seconds.is_finite() || presentation_seconds < 0.0 {
         return Err(NuxStatus::InvalidArgument);
@@ -702,9 +735,7 @@ pub(crate) fn present_image(
     }
     let image = make_image()?;
     let changed = video
-        .with_downcast_mut::<Video, _>(|v| {
-            v.present(generation, Rc::from(image), presentation_seconds)
-        })
+        .with_downcast_mut::<Video, _>(|v| v.present(generation, image, presentation_seconds))
         .ok_or(NuxStatus::NotFound)?;
     occurrence.commit_runtime_change(changed)
 }

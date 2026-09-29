@@ -1539,6 +1539,57 @@
       ]
     },
     {
+      "name": "NuxVideoHardwareBufferFrame",
+      "size": 64,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "generation",
+          "offset": 8
+        },
+        {
+          "name": "presentation_seconds",
+          "offset": 16
+        },
+        {
+          "name": "hardware_buffer",
+          "offset": 24
+        },
+        {
+          "name": "crop_left",
+          "offset": 32
+        },
+        {
+          "name": "crop_top",
+          "offset": 36
+        },
+        {
+          "name": "crop_right",
+          "offset": 40
+        },
+        {
+          "name": "crop_bottom",
+          "offset": 44
+        },
+        {
+          "name": "rotation_degrees",
+          "offset": 48
+        },
+        {
+          "name": "color_matrix",
+          "offset": 52
+        },
+        {
+          "name": "color_range",
+          "offset": 56
+        }
+      ]
+    },
+    {
       "name": "NuxVideoInfo",
       "size": 160,
       "alignment": 8,

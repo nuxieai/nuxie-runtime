@@ -1,5 +1,5 @@
 use std::{
-    cell::RefMut,
+    cell::{Cell, RefMut},
     collections::HashMap,
     fmt,
     rc::Rc,
@@ -180,6 +180,8 @@ impl fmt::Display for DataType {
 
 struct SynchronizedStateMachine {
     instance: RuntimeStateMachineInstanceHandle,
+    last_semantics_transform: Cell<Mat2D>,
+    has_last_semantics_transform: Cell<bool>,
     gate: Mutex<()>,
 }
 
@@ -187,6 +189,8 @@ impl SynchronizedStateMachine {
     fn new(instance: RuntimeStateMachineInstanceHandle) -> Self {
         Self {
             instance,
+            last_semantics_transform: Cell::new(Mat2D::identity()),
+            has_last_semantics_transform: Cell::new(false),
             gate: Mutex::new(()),
         }
     }
@@ -1632,21 +1636,35 @@ impl CommandServer {
                         if let Some(manager) = instance.semantic_manager() {
                             let mut diff =
                                 manager.with_semantic_manager_mut(|manager| manager.drain_diff());
-                            if !diff.is_empty() {
-                                let mut transform = Mat2D::identity();
-                                if let Some(artboard) = instance.artboard().upgrade() {
-                                    let surface =
-                                        Aabb::from_min_max(Vec2D::new(0.0, 0.0), view_bounds);
-                                    if surface.width() != 0.0 && surface.height() != 0.0 {
-                                        transform = compute_alignment(
-                                            fit,
-                                            Alignment::new(ax, ay),
-                                            &surface,
-                                            &artboard.with_artboard(|artboard| artboard.bounds()),
-                                            scale,
-                                        );
-                                    }
+                            // Artboard bounds and viewport history are read/updated
+                            // while the synchronized state-machine gate is held.
+                            let mut transform = Mat2D::identity();
+                            if let Some(artboard) = instance.artboard().upgrade() {
+                                let surface = Aabb::from_min_max(Vec2D::new(0.0, 0.0), view_bounds);
+                                if surface.width() != 0.0 && surface.height() != 0.0 {
+                                    transform = compute_alignment(
+                                        fit,
+                                        Alignment::new(ax, ay),
+                                        &surface,
+                                        &artboard.with_artboard(|artboard| artboard.bounds()),
+                                        scale,
+                                    );
                                 }
+                            }
+                            let transform_changed = wrapper.has_last_semantics_transform.get()
+                                && wrapper.last_semantics_transform.get() != transform;
+                            wrapper.last_semantics_transform.set(transform);
+                            wrapper.has_last_semantics_transform.set(true);
+                            if transform_changed {
+                                diff.frame_number =
+                                    crate::mechanical_port::source::artboard::Artboard::frame_id();
+                                manager.with_semantic_manager(|manager| {
+                                    diff.updated_geometry = manager.bounds_snapshot();
+                                    diff.tree_version = manager.version();
+                                    diff.root_id = manager.root_id();
+                                });
+                            }
+                            if !diff.is_empty() {
                                 drop(instance);
                                 if transform != Mat2D::identity() {
                                     Self::map_semantics_diff_to_view_space(&mut diff, &transform);

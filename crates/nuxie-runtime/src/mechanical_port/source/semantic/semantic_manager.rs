@@ -675,6 +675,29 @@ impl SemanticManager {
         self.refresh();
         std::mem::take(&mut self.last_diff)
     }
+
+    /// The unique semantic root ID, or zero for an empty/multiple-root tree.
+    pub fn root_id(&self) -> u32 {
+        if self.roots.len() == 1 {
+            self.roots[0].borrow().id
+        } else {
+            0
+        }
+    }
+
+    /// Artboard-space geometry from the current flat snapshot, without refresh.
+    pub fn bounds_snapshot(&self) -> Vec<SemanticsBoundsUpdate> {
+        self.last_flat_snapshot
+            .iter()
+            .map(|node| SemanticsBoundsUpdate {
+                id: node.id,
+                min_x: node.min_x,
+                min_y: node.min_y,
+                max_x: node.max_x,
+                max_y: node.max_y,
+            })
+            .collect()
+    }
 }
 
 fn request_data_focus(data: Option<crate::mechanical_port::source::core::CoreHandle>) -> bool {

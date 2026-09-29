@@ -42,6 +42,12 @@ impl DataBindContainerOwner {
             .bind_data_binds_from_context(context);
     }
 
+    pub fn bind_data_binds_from_current_context(&self) {
+        self.container()
+            .expect("live binding container")
+            .bind_data_binds_from_current_context();
+    }
+
     pub fn unbind_data_binds(&self) {
         self.container()
             .expect("live binding container")
@@ -217,11 +223,24 @@ impl DataBindContainer {
     }
 
     pub fn bind_data_binds_from_context(&self, context: RuntimeDataContextHandle) {
+        self.set_data_bind_context(Some(context));
+        self.bind_data_binds_from_current_context();
+    }
+
+    pub fn data_bind_context(&self) -> Option<RuntimeDataContextHandle> {
+        self.0.borrow().data_context.clone()
+    }
+
+    /// Set the one retained context without walking existing bindings.
+    pub fn set_data_bind_context(&self, context: Option<RuntimeDataContextHandle>) {
+        self.0.borrow_mut().data_context = context;
+    }
+
+    pub fn bind_data_binds_from_current_context(&self) {
         let binds = self.data_binds().to_vec();
         for bind in binds {
-            DataBindContext::bind_from_context_handle(&bind, Some(context.clone()));
+            DataBindContext::bind_from_context_handle(&bind, self.data_bind_context());
         }
-        self.0.borrow_mut().data_context = Some(context);
     }
 
     pub fn advance_data_binds(&self, elapsed: f32) -> bool {

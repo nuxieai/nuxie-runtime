@@ -9,7 +9,11 @@ use crate::mechanical_port::source::{
 
 pub trait BoundSource {}
 pub trait ContextConverter {
-    fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle);
+    fn bind_from_context(
+        &mut self,
+        context: RuntimeDataContextHandle,
+        data_bind: Option<CoreHandle>,
+    );
 }
 pub const RECONCILE_DIRT: u32 = super::data_bind::BINDINGS | super::data_bind::BINDINGS_TARGET;
 pub struct DataBindContext {
@@ -94,7 +98,7 @@ impl DataBindContext {
             super::converters::data_converter::bind_converter_context(
                 &converter,
                 data_context,
-                owner.clone(),
+                Some(owner.clone()),
             );
         }
     }

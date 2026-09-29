@@ -98,7 +98,11 @@ impl DataConverterOperationViewModel {
     pub fn source_path_ids(&self) -> &[u32] {
         &self.source_path_ids
     }
-    pub fn bind_from_context(&mut self, context: RuntimeDataContextHandle, data_bind: CoreHandle) {
+    pub fn bind_from_context(
+        &mut self,
+        context: RuntimeDataContextHandle,
+        data_bind: Option<CoreHandle>,
+    ) {
         self.base
             .base
             .base
@@ -112,11 +116,15 @@ impl DataConverterOperationViewModel {
             });
         if let Some(source) = resolved {
             self.source = Some(source.clone());
-            source.with_mut(|source| {
-                if let Some(source) = source.as_view_model_instance_value_mut() {
-                    source.add_dependent(ValueDependentHandle::core(data_bind));
-                }
-            });
+            // Upstream stores a null parent too, then dereferences it when
+            // notifying dependents. Safe Rust only registers live dependents.
+            if let Some(data_bind) = data_bind {
+                source.with_mut(|source| {
+                    if let Some(source) = source.as_view_model_instance_value_mut() {
+                        source.add_dependent(ValueDependentHandle::core(data_bind));
+                    }
+                });
+            }
         }
     }
 }
@@ -178,12 +186,16 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
                     .is_some()
             }) {
                 owner.with_downcast_mut::<Self, _>(|owner| owner.source = Some(source.clone()));
-                source.with_mut(|source| {
-                    source
-                        .as_view_model_instance_value_mut()
-                        .unwrap()
-                        .add_dependent(ValueDependentHandle::core(data_bind))
-                });
+                // Same safe-owner boundary as the direct binding method:
+                // never register upstream's subsequently dereferenced null.
+                if let Some(data_bind) = data_bind {
+                    source.with_mut(|source| {
+                        source
+                            .as_view_model_instance_value_mut()
+                            .unwrap()
+                            .add_dependent(ValueDependentHandle::core(data_bind))
+                    });
+                }
             }
         }
     }

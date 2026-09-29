@@ -3354,7 +3354,7 @@ pub trait DataConverterCapability {
     ) -> fn(
         &CoreHandle,
         crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
-        CoreHandle,
+        Option<CoreHandle>,
     );
     fn unbind(&mut self);
     fn update(&mut self);

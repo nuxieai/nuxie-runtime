@@ -167,7 +167,6 @@ pub struct Artboard {
     // source artboard bindings do not change during playback.
     key_frame_source_binds: RefCell<HashMap<CoreHandle, CoreHandle>>,
     key_frame_source_binds_built: Cell<bool>,
-    data_context: Option<RuntimeDataContextHandle>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     file: RuntimeFileWeakHandle,
     joysticks_apply_before_update: bool,
@@ -245,7 +244,6 @@ impl Default for Artboard {
             data_bind_container: DataBindContainer::default(),
             key_frame_source_binds: RefCell::new(HashMap::new()),
             key_frame_source_binds_built: Cell::new(false),
-            data_context: None,
             scripting_vm: None,
             file: RuntimeFileWeakHandle::default(),
             joysticks_apply_before_update: true,
@@ -591,7 +589,7 @@ impl Artboard {
     }
 
     pub fn data_context(&self) -> Option<RuntimeDataContextHandle> {
-        self.data_context.clone()
+        self.data_bind_container.data_bind_context()
     }
 
     pub fn data_bind_handles(&self) -> Vec<CoreHandle> {
@@ -3944,9 +3942,13 @@ impl Artboard {
     }
 
     pub fn internal_data_context_handle(root: &CoreHandle, value: RuntimeDataContextHandle) {
+        // Hosts read their parent's context while binding; install it before
+        // recursing, then walk the existing binds afterwards.
         let hosts = root
             .with_downcast_mut::<Artboard, _>(|artboard| {
-                artboard.data_context = Some(value.clone());
+                artboard
+                    .data_bind_container
+                    .set_data_bind_context(Some(value.clone()));
                 artboard.artboard_hosts.clone()
             })
             .expect("live Artboard");
@@ -3974,7 +3976,7 @@ impl Artboard {
             });
         }
         let container = crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(root.clone());
-        container.bind_data_binds_from_context(value.clone());
+        container.bind_data_binds_from_current_context();
         container.sort_data_binds();
         let objects = root
             .with_downcast::<Artboard, _>(|artboard| artboard.scripted_objects.clone())
@@ -4004,7 +4006,9 @@ impl Artboard {
             .flatten();
         if let Some(context) = context {
             context.with_context_mut(|context| context.remove_dependent_container(root));
-            root.with_downcast_mut::<Artboard, _>(|artboard| artboard.data_context = None);
+            root.with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.data_bind_container.set_data_bind_context(None);
+            });
         }
         let (hosts, objects) = root
             .with_downcast::<Artboard, _>(|artboard| {
@@ -4074,8 +4078,12 @@ impl Artboard {
                 .with_context_mut(|context| context.set_main_view_model_instance(Some(instance)));
         } else {
             let context = RuntimeDataContextHandle::new(DataContext::new(Some(instance)));
+            root.with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard
+                    .data_bind_container
+                    .set_data_bind_context(Some(context.clone()));
+            });
             context.with_context_mut(|context| context.add_dependent_container(root.clone()));
-            root.with_downcast_mut::<Artboard, _>(|artboard| artboard.data_context = Some(context));
         }
     }
 
@@ -4146,13 +4154,15 @@ impl Artboard {
     }
 
     fn clear_data_context_for_drop(&mut self) {
-        if let Some(context) = self.data_context.take()
-            && let Some(owner) =
+        if let Some(context) = self.data_context() {
+            if let Some(owner) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
-        {
-            context.with_context_mut(|context| {
-                context.remove_dependent_container(&owner);
-            });
+            {
+                context.with_context_mut(|context| {
+                    context.remove_dependent_container(&owner);
+                });
+            }
+            self.data_bind_container.set_data_bind_context(None);
         }
         for host in self.artboard_hosts.clone() {
             host.with_mut(|host| {
@@ -4171,7 +4181,7 @@ impl Artboard {
     }
 
     pub fn global_view_model_instance(&self, name: &str) -> Option<CoreHandle> {
-        let context = self.data_context.as_ref()?;
+        let context = self.data_context()?;
         let file = self.artboard_file()?;
         let slot = file.with_file(|file| file.view_model_id(name))?;
         context.with_context(|context| context.instance_for_slot(slot))
@@ -4209,24 +4219,22 @@ impl Artboard {
         {
             return false;
         }
-        if self.data_context.is_none() {
+        if self.data_context().is_none() {
             if instance.is_none() {
                 return true;
             }
             let context = RuntimeDataContextHandle::new(DataContext::new(None));
+            self.data_bind_container
+                .set_data_bind_context(Some(context.clone()));
             if let Some(owner) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
             {
                 context.with_context_mut(|context| context.add_dependent_container(owner));
             }
-            self.data_context = Some(context);
         }
-        self.data_context
-            .as_ref()
-            .unwrap()
-            .with_context_mut(|context| {
-                context.set_view_model_instance_for_slot(slot_key, instance)
-            });
+        self.data_context().unwrap().with_context_mut(|context| {
+            context.set_view_model_instance_for_slot(slot_key, instance)
+        });
         true
     }
 
@@ -4299,7 +4307,6 @@ impl Artboard {
         clone.base.file = self.file.clone();
         clone.base.scripting_vm = self.scripting_vm.clone();
         clone.base.frame_origin = self.frame_origin;
-        clone.base.data_context = self.data_context.clone();
         clone.base.is_instance = true;
         clone.base.original_width = self.original_width;
         clone.base.original_height = self.original_height;
@@ -4401,6 +4408,13 @@ impl Artboard {
             instance.with_artboard_mut(|instance| instance.base.objects.push(clone.clone()));
             Self::clone_object_data_binds(&data_binds, object.as_ref(), clone, &arena, &container)?;
         }
+        // All cloned binds must exist before installing the context, otherwise
+        // add_data_bind would bind and apply them during construction.
+        container.set_data_bind_context(
+            source
+                .with_downcast::<Artboard, _>(Artboard::data_context)
+                .flatten(),
+        );
         instance.with_artboard_mut(|instance| {
             instance.base.animations = animations;
             instance.base.state_machines = state_machines;

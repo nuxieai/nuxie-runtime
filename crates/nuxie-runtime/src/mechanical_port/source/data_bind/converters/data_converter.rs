@@ -16,14 +16,15 @@ pub use crate::mechanical_port::source::data_bind::data_bind::{
     BINDINGS, BINDINGS_TARGET, DEPENDENTS,
 };
 
-pub type ConverterBindContextHandler = fn(&CoreHandle, RuntimeDataContextHandle, CoreHandle);
+pub type ConverterBindContextHandler =
+    fn(&CoreHandle, RuntimeDataContextHandle, Option<CoreHandle>);
 
 /// Select the virtual operation, then release the occurrence before invoking
 /// it. A scripted converter's hydration may resolve this very same owner.
 pub fn bind_converter_context(
     owner: &CoreHandle,
     context: RuntimeDataContextHandle,
-    data_bind: CoreHandle,
+    data_bind: Option<CoreHandle>,
 ) {
     let handler = owner
         .with(|owner| {
@@ -278,12 +279,12 @@ impl DataConverter {
     pub fn bind_from_context_handle(
         owner: &CoreHandle,
         context: RuntimeDataContextHandle,
-        data_bind: CoreHandle,
+        data_bind: Option<CoreHandle>,
     ) {
         owner
             .data_bind_container()
             .expect("registered converter container")
-            .set_parent_data_bind(Some(data_bind));
+            .set_parent_data_bind(data_bind);
         crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).bind_data_binds_from_context(context);
     }
     pub(crate) fn parent_data_bind(&self) -> Option<CoreHandle> {
@@ -311,6 +312,11 @@ impl DataConverter {
         use super::{
             data_converter_formula::DataConverterFormula, data_converter_group::DataConverterGroup,
         };
+        // Arena teardown may have already retired this converter. Preserve
+        // the former scoped-dispatch no-op for that stale occurrence.
+        if !owner.is_alive() {
+            return;
+        }
         if let Some(items) =
             owner.with_downcast::<DataConverterGroup, _>(|group| group.items().to_vec())
         {
@@ -322,15 +328,18 @@ impl DataConverter {
                     Self::unbind_handle(&converter);
                 }
             }
-        } else if owner
-            .with_downcast_mut::<DataConverterFormula, _>(DataConverterFormula::unbind)
-            .is_none()
-        {
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
+        } else {
             use crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter;
+            // Release the formula borrow before owned bindings detach their
+            // property observers, which can target this same converter.
+            owner.with_downcast_mut::<DataConverterFormula, _>(
+                DataConverterFormula::detach_source_dependency,
+            );
+            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
             owner.with_downcast_mut::<ScriptedDataConverter, _>(
                 ScriptedDataConverter::clear_binding_context,
             );
-            crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
         }
     }
 
@@ -390,9 +399,9 @@ impl DataConverter {
     pub fn bind_from_context(
         &mut self,
         data_context: RuntimeDataContextHandle,
-        data_bind: CoreHandle,
+        data_bind: Option<CoreHandle>,
     ) {
-        self.data_binds.set_parent_data_bind(Some(data_bind));
+        self.data_binds.set_parent_data_bind(data_bind);
         self.data_binds.bind_data_binds_from_context(data_context);
     }
 

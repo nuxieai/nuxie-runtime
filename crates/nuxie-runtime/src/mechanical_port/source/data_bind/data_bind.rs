@@ -651,11 +651,7 @@ impl DataBind {
             }
         }
         if let Some(converter) = self.converter.as_ref() {
-            converter.with_mut(|converter| {
-                if let Some(converter) = converter.as_data_converter_capability_mut() {
-                    converter.unbind();
-                }
-            });
+            super::converters::data_converter::DataConverter::unbind_handle(converter);
         }
         self.context_value = None;
     }

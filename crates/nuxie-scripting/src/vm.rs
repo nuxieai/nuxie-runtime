@@ -764,6 +764,7 @@ pub(crate) fn script_pixel_ratio(lua: &Lua) -> f32 {
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
 /// [`ScriptVm::lua`] exposes the full mlua-style API for binding work.
 pub struct ScriptVm {
+    script_backend: nuxie_runtime::source::scripted::script_backend::ScriptBackend,
     runtime_identity: Rc<()>,
     initializes_data_global_externally: Cell<bool>,
     lua: Lua,
@@ -1427,6 +1428,26 @@ fn caller_chunk_source(lua: &Lua) -> Option<String> {
 }
 
 impl ScriptVm {
+    pub fn display_scale(&self) -> f32 {
+        self.script_backend.display_scale()
+    }
+    pub fn set_display_scale(&self, scale: f32) {
+        self.script_backend.set_display_scale(scale);
+    }
+    pub fn register_scripted_object(&self, object: nuxie_runtime::source::core::CoreHandle) {
+        self.script_backend.register_scripted_object(object);
+    }
+    pub fn unregister_scripted_object(&self, object: &nuxie_runtime::source::core::CoreHandle) {
+        self.script_backend.unregister_scripted_object(object);
+    }
+    pub fn call_layout_resize(
+        &self,
+        instance: &mut dyn ScriptInstance,
+        size: nuxie_runtime::source::math::vec2d::Vec2D,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<ScriptOptionalMethodResult, ScriptError> {
+        RuntimeScriptingVm::call_layout_resize(self, instance, size, host)
+    }
     fn script_error(&self, error: Error) -> ScriptError {
         tracked_script_error(error, &self.resource_limits)
     }
@@ -1779,6 +1800,7 @@ impl ScriptVm {
         });
         Self {
             lua,
+            script_backend: Default::default(),
             runtime_identity: Rc::new(()),
             initializes_data_global_externally: Cell::new(false),
             initialization_error,
@@ -2555,6 +2577,9 @@ pub fn validate_executable_luau_bytecode(
 }
 
 impl RuntimeScriptingVm for ScriptVm {
+    fn script_backend(&self) -> &nuxie_runtime::source::scripted::script_backend::ScriptBackend {
+        &self.script_backend
+    }
     fn install_native_file_assets(
         &self,
         file: nuxie_runtime::mechanical_port::source::file::RuntimeFileWeakHandle,

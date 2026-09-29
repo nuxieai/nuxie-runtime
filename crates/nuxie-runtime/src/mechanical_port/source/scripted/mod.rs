@@ -1,3 +1,4 @@
+pub mod script_backend;
 pub mod scripted_data_converter;
 pub mod scripted_drawable;
 pub mod scripted_interpolator;

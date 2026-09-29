@@ -16,6 +16,7 @@ use crate::scripting::{ScriptMethod, ScriptOptionalMethodResult, ScriptValue};
 pub struct ScriptedLayout {
     pub base: ScriptedLayoutBase,
     size: Vec2,
+    size_known: bool,
 }
 
 impl Drop for ScriptedLayout {
@@ -44,15 +45,10 @@ impl ScriptedLayout {
             return;
         };
         let mut host = ScriptUpdateRequestHost::default();
-        // Upstream passes one native Vec2D, not two scalar arguments.
-        if let Err(error) = instance.borrow_mut().call_optional_method(
-            ScriptMethod::Resize,
-            &[ScriptValue::Vec2 {
-                x: size.x,
-                y: size.y,
-            }],
-            &mut host,
-        ) {
+        let Some(vm) = self.base.base.scripted.scripting_vm() else {
+            return;
+        };
+        if let Err(error) = vm.call_layout_resize(&mut **instance.borrow_mut(), size, &mut host) {
             eprintln!("resize failed: {error}");
         }
         if host.take_requested() {
@@ -120,7 +116,14 @@ impl ScriptedLayout {
         _direction: LayoutDirection,
     ) {
         self.size = size;
+        self.size_known = true;
         self.call_scripted_resize(size);
+    }
+
+    pub fn display_scale_changed(&mut self) {
+        if self.size_known {
+            self.call_scripted_resize(self.size);
+        }
     }
 
     pub fn add_property(&mut self, property: CoreHandle) {

@@ -210,6 +210,17 @@ impl FileAssetLoader for AdmittedCodeAssetLoader {
 }
 
 impl ScriptingVm for InstalledScripts {
+    fn call_layout_resize(
+        &self,
+        instance: &mut dyn ScriptInstance,
+        size: nuxie_runtime::source::math::vec2d::Vec2D,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<nuxie_runtime::ScriptOptionalMethodResult, ScriptError> {
+        ScriptingVm::call_layout_resize(&*self.vm, instance, size, host)
+    }
+    fn script_backend(&self) -> &nuxie_runtime::source::scripted::script_backend::ScriptBackend {
+        ScriptingVm::script_backend(&*self.vm)
+    }
     fn install_native_file_assets(
         &self,
         file: RuntimeFileWeakHandle,

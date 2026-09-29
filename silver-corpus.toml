@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "2f3cf360a4637718d1f2fcab301666b2664b7cc8"
+upstream_ref = "bc97fa18fdd658f7c0c80f935121276d3b28ffaf"
 expected_entries = 266
 expected_runtime = 218
 expected_scripted = 45
@@ -4348,7 +4348,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_layout_test.cpp"
 provenance_test = "layout grid script"
-producer_line = 343
+producer_line = 530
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]

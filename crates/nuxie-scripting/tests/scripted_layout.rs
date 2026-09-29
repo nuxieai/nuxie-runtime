@@ -2,10 +2,162 @@
 
 use luaur_rt::{Function, Table, Value, Vector};
 use nuxie_render_api::{NullFactory, PersistentFactory};
+use nuxie_runtime::source::{
+    core::CoreArena,
+    lua::scripting_vm::RuntimeScriptingVmHandle,
+    scripted::scripted_layout::{LayoutDirection, LayoutScaleType, ScriptedLayout, Vec2},
+};
 use nuxie_runtime::{
     NoopScriptHost, ScriptInstance, ScriptMethod, ScriptOptionalMethodResult, ScriptValue,
 };
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
+use std::rc::Rc;
+
+// Upstream scripting_layout_test.cpp's selfTable seam. The safe Lua API owns
+// stack restoration for chunk/getter calls; typed results also assert the
+// upstream LUA_TVECTOR checks without reaching into the VM's private stack.
+fn resize_dispatch_instance(source: &str) -> (Rc<ScriptVm>, LuaScriptInstance) {
+    let vm = Rc::new(ScriptVm::new());
+    vm.install_rive_globals().expect("install Rive globals");
+    vm.load("layout-resize-dispatch", source)
+        .expect("load resize script")
+        .call::<Value>(())
+        .expect("execute resize script");
+    let table: Table = vm.lua().globals().get("selfTable").unwrap();
+    let instance = vm.script_instance_from_table(table);
+    (vm, instance)
+}
+
+fn resize_getter<T: luaur_rt::FromLuaMulti>(vm: &ScriptVm, name: &str) -> T {
+    vm.lua()
+        .globals()
+        .get::<Function>(name)
+        .unwrap()
+        .call(())
+        .unwrap()
+}
+
+#[test]
+fn layout_resize_dispatch_carries_the_display_scale() {
+    let (vm, mut instance) = resize_dispatch_instance(
+        r#"
+type MyLayout = {}
+local lastSize: Vector?
+local lastScale: number?
+function resize(self: MyLayout, size: Vector, scale: number)
+  lastSize = size
+  lastScale = scale
+end
+selfTable = { resize = resize }
+function getLastSize(): Vector?
+  return lastSize
+end
+function getLastScale(): number?
+  return lastScale
+end
+return function(): Layout<MyLayout>
+  return { resize = resize }
+end
+"#,
+    );
+    vm.set_display_scale(2.5);
+    vm.call_layout_resize(&mut instance, Vec2::new(300.0, 200.0), &mut NoopScriptHost)
+        .expect("layout resize");
+    let size: Vector = resize_getter(&vm, "getLastSize");
+    assert_eq!(size.x(), 300.0);
+    assert_eq!(size.y(), 200.0);
+    assert_eq!(resize_getter::<f64>(&vm, "getLastScale"), 2.5);
+}
+
+#[test]
+fn display_scale_changes_reannounce_the_layout_size() {
+    let (vm, instance) = resize_dispatch_instance(
+        r#"
+type MyLayout = {}
+local resizeCallCount = 0
+local lastSize: Vector?
+local lastScale: number?
+function resize(self: MyLayout, size: Vector, scale: number)
+  resizeCallCount = resizeCallCount + 1
+  lastSize = size
+  lastScale = scale
+end
+selfTable = { resize = resize }
+function getResizeCallCount(): number
+  return resizeCallCount
+end
+function getLastScale(): number?
+  return lastScale
+end
+function getLastSize(): Vector?
+  return lastSize
+end
+"#,
+    );
+    let backend = RuntimeScriptingVmHandle::new(Box::new(vm.clone()));
+    let arena = CoreArena::default();
+    let layout = arena.insert(ScriptedLayout::default());
+    layout
+        .with_mut(|object| {
+            let layout = object.as_scripted_layout_mut().unwrap();
+            layout
+                .base
+                .base
+                .scripted
+                .install_script_instance(Box::new(instance), backend.clone());
+            layout.base.base.scripted.set_implemented_methods(1 << 12);
+        })
+        .unwrap();
+    backend.register_scripted_object(layout.clone());
+
+    vm.set_display_scale(3.0);
+    assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 0.0);
+    layout
+        .with_mut(|object| {
+            object.as_scripted_layout_mut().unwrap().control_size(
+                Vec2::new(240.0, 120.0),
+                LayoutScaleType::Fixed,
+                LayoutScaleType::Fixed,
+                LayoutDirection::Inherit,
+            );
+        })
+        .unwrap();
+    assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 1.0);
+
+    vm.set_display_scale(4.0);
+    assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 2.0);
+    assert_eq!(resize_getter::<f64>(&vm, "getLastScale"), 4.0);
+    let size: Vector = resize_getter(&vm, "getLastSize");
+    assert_eq!(size.x(), 240.0);
+    assert_eq!(size.y(), 120.0);
+
+    vm.set_display_scale(4.0);
+    assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 2.0);
+    backend.unregister_scripted_object(&layout);
+}
+
+#[test]
+fn two_parameter_resize_scripts_ignore_the_scale_argument() {
+    let (vm, mut instance) = resize_dispatch_instance(
+        r#"
+type MyLayout = {}
+local resizeCallCount = 0
+function resize(self: MyLayout, size: Vector)
+  resizeCallCount = resizeCallCount + 1
+end
+selfTable = { resize = resize }
+function getResizeCallCount(): number
+  return resizeCallCount
+end
+return function(): Layout<MyLayout>
+  return { resize = resize }
+end
+"#,
+    );
+    vm.call_layout_resize(&mut instance, Vec2::new(120.0, 80.0), &mut NoopScriptHost)
+        .expect("layout resize");
+    assert_eq!(resize_getter::<f64>(&vm, "getResizeCallCount"), 1.0);
+}
 
 fn layout_instance(source: &str) -> (ScriptVm, LuaScriptInstance, Table) {
     let vm = ScriptVm::new();

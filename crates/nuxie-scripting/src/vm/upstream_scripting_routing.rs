@@ -1,4 +1,5 @@
-//! `tests/unit_tests/runtime/scripting/scripting_routing_test.cpp` at dee5342a.
+//! `tests/unit_tests/runtime/scripting/scripting_routing_test.cpp`.
+//! Import routing at dee5342a; command-server regression at 1f1a7c59.
 use super::*;
 use nuxie_render_api::*;
 
@@ -244,7 +245,7 @@ fn sized_canvas_refuses_deviceless_factory_without_host() {
 }
 
 #[test]
-fn command_server_load_routes_device_off_import_factory() {
+fn command_server_routes_a_deferred_scripting_render_context() {
     use nuxie_runtime::source::{
         command_queue::CommandQueue, command_server::CommandServer,
         lua::scripting_vm::RuntimeScriptingVmHandle,
@@ -298,45 +299,39 @@ fn command_server_load_routes_device_off_import_factory() {
             Some(retained)
         })),
     );
-    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let callback_observed = observed.clone();
-    queue.run_once(Box::new(move |server| {
-        let file = server
-            .get_file(handle)
-            .expect("command server imported file");
-        let file_vm = file
-            .with_file(|file| file.scripting_vm())
-            .expect("file scripting VM");
-        CREATED_VM.with(|slot| {
-            let slot = slot.borrow();
-            let (context, retained) = slot.as_ref().expect("server created scripting context");
-            assert!(file_vm.ptr_eq(retained));
-            assert_eq!(
-                context
-                    .renderer_bindings
-                    .with_factory(|factory| {
-                        Ok(factory.persistent_context().unwrap().identity() as usize)
-                    })
-                    .unwrap(),
-                factory_identity
-            );
-            assert_eq!(
-                Rc::as_ptr(&context.deferred_canvas_host().unwrap()) as *const () as usize,
-                host_identity
-            );
-            assert_eq!(
-                Rc::as_ptr(&context.ore_context().unwrap()) as *const () as usize,
-                ore_identity
-            );
-            assert_eq!(
-                context.render_context().unwrap().identity() as usize,
-                device_identity
-            );
-        });
-        callback_observed.store(true, std::sync::atomic::Ordering::Relaxed);
-    }));
-    server.process_commands();
-    assert!(observed.load(std::sync::atomic::Ordering::Relaxed));
+    assert!(server.process_commands());
+    let file = server
+        .get_file(handle)
+        .expect("command server imported file");
+    let file_vm = file
+        .with_file(|file| file.scripting_vm())
+        .expect("file scripting VM");
+    CREATED_VM.with(|slot| {
+        let slot = slot.borrow();
+        let (context, retained) = slot.as_ref().expect("server created scripting context");
+        assert!(file_vm.ptr_eq(retained));
+        assert_eq!(
+            context
+                .renderer_bindings
+                .with_factory(|factory| {
+                    Ok(factory.persistent_context().unwrap().identity() as usize)
+                })
+                .unwrap(),
+            factory_identity
+        );
+        assert_eq!(
+            context.render_context().unwrap().identity() as usize,
+            device_identity
+        );
+        assert_eq!(
+            Rc::as_ptr(&context.deferred_canvas_host().unwrap()) as *const () as usize,
+            host_identity
+        );
+        assert_eq!(
+            Rc::as_ptr(&context.ore_context().unwrap()) as *const () as usize,
+            ore_identity
+        );
+    });
     queue.disconnect();
     CREATED_VM.with(|slot| slot.borrow_mut().take());
 }

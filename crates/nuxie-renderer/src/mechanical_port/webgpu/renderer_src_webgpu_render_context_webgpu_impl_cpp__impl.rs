@@ -149,39 +149,39 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 // `*.exports.h` snapshots are frozen beside the minified GLSL and tests below
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "DB";
-const GLSL_FRAGMENT: &str = "GB";
-const GLSL_POST_INVERT_Y: &str = "RC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "LF";
-const GLSL_DRAW_PATH: &str = "KD";
+const GLSL_FRAGMENT: &str = "FB";
+const GLSL_POST_INVERT_Y: &str = "SC";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
+const GLSL_DRAW_PATH: &str = "OD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "OE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "AE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "TE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_CLEAR_COLOR: &str = "RE";
-const GLSL_LOAD_COLOR: &str = "TE";
-const GLSL_STORE_COLOR: &str = "BE";
-const GLSL_CLEAR_COVERAGE: &str = "CE";
-const GLSL_CLEAR_CLIP: &str = "SF";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
+const GLSL_CLEAR_COLOR: &str = "WE";
+const GLSL_LOAD_COLOR: &str = "YE";
+const GLSL_STORE_COLOR: &str = "FE";
+const GLSL_CLEAR_COVERAGE: &str = "GE";
+const GLSL_CLEAR_CLIP: &str = "XF";
 const GLSL_ENABLE_CLIPPING: &str = "I";
 const GLSL_ENABLE_CLIP_RECT: &str = "BB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "AB";
-const GLSL_ENABLE_EVEN_ODD: &str = "WC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "YC";
+const GLSL_ENABLE_EVEN_ODD: &str = "XC";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "ZC";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "EC";
 const GLSL_ENABLE_DITHER: &str = "LB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "JB";
 const GLSL_TARGET_SPIRV: &str = "CC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "NF";
-const GLSL_PLS_IMPL_NONE: &str = "PF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "OF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "SF";
+const GLSL_PLS_IMPL_NONE: &str = "UF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "TF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
-const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "JE";
-const GLSL_DRAW_IMAGE_RECT: &str = "LD";
+const GLSL_FEATHER_ATLAS_BLIT: &str = "GB";
+const GLSL_DRAW_IMAGE: &str = "OE";
+const GLSL_DRAW_IMAGE_RECT: &str = "AD";
 const GLSL_DRAW_IMAGE_MESH: &str = "OB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "N";
-const GLSL_CLOCKWISE_FILL: &str = "DE";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "O";
+const GLSL_CLOCKWISE_FILL: &str = "HE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "DC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
@@ -201,6 +201,8 @@ const GLSL_ADVANCED_BLEND: &str =
     include_str!("source/generated_glsl/advanced_blend.minified.glsl");
 const GLSL_DRAW_PATH_COMMON: &str =
     include_str!("source/generated_glsl/draw_path_common.minified.glsl");
+const GLSL_GRADIENT_PACKING_COMMON: &str =
+    include_str!("source/generated_glsl/gradient_packing_common.minified.glsl");
 const GLSL_DRAW_PATH_VERT: &str = include_str!("source/generated_glsl/draw_path.minified.vert");
 const GLSL_DRAW_RASTER_ORDER_PATH_FRAG: &str =
     include_str!("source/generated_glsl/draw_raster_order_path.minified.frag");
@@ -228,7 +230,7 @@ fn loadStoreEXTPipelineKey(actions: LoadStoreActionsEXT, format: TextureFormat) 
 
 const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const PLS_PLANE_COUNT: usize = 4;
-const IMAGE_RECT_ATTRIB_COUNT: usize = 7;
+const IMAGE_RECT_ATTRIB_COUNT: usize = 11;
 const IMAGE_MESH_ATTRIB_COUNT: usize = 7;
 const SPECIALIZATION_COUNT: usize = 16;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
@@ -1898,7 +1900,14 @@ fn compilePLSDrawShaders(
         | DrawType::midpointFanCenterAAPatches
         | DrawType::outerCurvePatches
         | DrawType::interiorTriangulation => {
-            appendGlslParts(&mut common, &[GLSL_DRAW_PATH_COMMON, GLSL_DRAW_PATH_VERT]);
+            appendGlslParts(
+                &mut common,
+                &[
+                    GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
+                    GLSL_DRAW_PATH_VERT,
+                ],
+            );
             common.push_str(if interlockMode == InterlockMode::rasterOrdering {
                 GLSL_DRAW_RASTER_ORDER_PATH_FRAG
             } else if shaderMiscFlags.has(ShaderMiscFlags::clipUpdateOnly) {
@@ -1912,6 +1921,7 @@ fn compilePLSDrawShaders(
                 &mut common,
                 &[
                     GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
                     GLSL_DRAW_PATH_VERT,
                     GLSL_DRAW_MESH_FRAG,
                 ],
@@ -4628,7 +4638,7 @@ pub(crate) fn MakeContext(
 
 pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4906;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 197821] = [(); PINNED_SOURCE.len()];
+const _: [(); 198035] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4760,7 +4770,7 @@ mod tests {
         assert!(buildConstantEntries(None, &values).is_empty());
     }
 
-    const GENERATED_GLSL_PRODUCTS: [&str; 17] = [
+    const GENERATED_GLSL_PRODUCTS: [&str; 18] = [
         include_str!("source/generated_glsl/advanced_blend.minified.glsl"),
         include_str!("source/generated_glsl/bezier_utils.minified.glsl"),
         include_str!("source/generated_glsl/color_ramp.minified.glsl"),
@@ -4775,6 +4785,7 @@ mod tests {
         include_str!("source/generated_glsl/draw_raster_order_path.minified.frag"),
         include_str!("source/generated_glsl/flush_uniforms.minified.glsl"),
         include_str!("source/generated_glsl/glsl.minified.glsl"),
+        include_str!("source/generated_glsl/gradient_packing_common.minified.glsl"),
         include_str!("source/generated_glsl/pls_load_store_ext.minified.glsl"),
         include_str!("source/generated_glsl/render_atlas.minified.glsl"),
         include_str!("source/generated_glsl/tessellate.minified.glsl"),
@@ -4782,13 +4793,13 @@ mod tests {
 
     #[test]
     fn generated_glsl_output_denominator_is_frozen() {
-        assert_eq!(GENERATED_GLSL_PRODUCTS.len(), 17);
+        assert_eq!(GENERATED_GLSL_PRODUCTS.len(), 18);
         assert_eq!(
             GENERATED_GLSL_PRODUCTS
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            51_895
+            52_135
         );
     }
 

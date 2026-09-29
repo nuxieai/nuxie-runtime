@@ -6,227 +6,227 @@
 #else
 #define H5 false
 #endif
-#undef z2
+#undef B2
 #ifdef ENABLE_FEATHER
-#define z2 g
+#define B2 f
 #else
-#define z2 E
+#define B2 E
 #endif
 #ifdef VERTEX
-g1(e0)
+f1(f0)
 #if defined(DRAW_INTERIOR_TRIANGLES)||defined(FEATHER_ATLAS_BLIT)
-O(0,M3,KB);
+J(0,N3,KB);
 #else
-O(0,g,UB);O(1,g,VB);
+J(0,f,UB);J(1,f,VB);
 #endif
-h1
+g1
 #endif
-m2 H0 W(0,g,f1);
+p2 H0 V(0,f,V1);
 #ifdef FEATHER_ATLAS_BLIT
-H0 W(1,d,D2);
+H0 V(1,c,F2);
 #elif!defined(RENDER_MODE_DEPTH_STENCIL)
 #ifdef DRAW_INTERIOR_TRIANGLES
-OPTIONALLY_FLAT W(1,c,i1);
+OPTIONALLY_FLAT V(1,d,h1);
 #else
-H0 W(2,z2,L);
+H0 V(2,B2,M);
 #endif
-OPTIONALLY_FLAT W(3,c,B0);
+OPTIONALLY_FLAT V(3,d,C0);
 #endif
 #ifdef ENABLE_CLIPPING
 #ifdef FEATHER_ATLAS_BLIT
-OPTIONALLY_FLAT W(4,c,J3);
+OPTIONALLY_FLAT V(4,d,K3);
 #else
-OPTIONALLY_FLAT W(4,E,V1);
+OPTIONALLY_FLAT V(4,E,W1);
 #endif
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-H0 W(5,g,M0);
+H0 V(5,f,M0);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-OPTIONALLY_FLAT W(6,c,f2);
+OPTIONALLY_FLAT V(6,d,g2);
 #endif
 #ifdef RENDER_MODE_CLOCKWISE_ATOMIC
-Q2 W(7,a1,f3);W(8,d,o4);
+S2 V(7,a1,g3);V(8,c,p4);
 #endif
 #ifdef ENABLE_MODULATED_IMAGE
-H0 W(9,Q,A2);
+H0 V(9,Q,C2);
 #endif
-g2
+h2
 #ifdef VERTEX
 #ifdef EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
-Bd(fh)Cd(float,Qh)Dd(Rh)
+Jd(xh)Kd(float,ii)Ld(ji)
 #endif
-z1(FC,e0,F,B,A){
+y1(FC,f0,F,B,v){
 #if defined(DRAW_INTERIOR_TRIANGLES)||defined(FEATHER_ATLAS_BLIT)
-P(B,F,KB,Q);
+K(B,F,KB,Q);
 #else
-P(B,F,UB,g);P(B,F,VB,g);
+K(B,F,UB,f);K(B,F,VB,f);
 #endif
-U(f1,g);
+T(V1,f);
 #if defined(ENABLE_MODULATED_IMAGE)
-U(A2,Q);
+T(C2,Q);
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-U(D2,d);
+T(F2,c);
 #elif!defined(RENDER_MODE_DEPTH_STENCIL)
 #ifdef DRAW_INTERIOR_TRIANGLES
-U(i1,c);
+T(h1,d);
 #else
-U(L,z2);
+T(M,B2);
 #endif
-U(B0,c);
+T(C0,d);
 #endif
 #ifdef ENABLE_CLIPPING
 #ifdef FEATHER_ATLAS_BLIT
-U(J3,c);
+T(K3,d);
 #else
-U(V1,E);
+T(W1,E);
 #endif
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-U(M0,g);
+T(M0,f);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-U(f2,c);
+T(g2,d);
 #endif
 #ifdef RENDER_MODE_CLOCKWISE_ATOMIC
-U(f3,a1);U(o4,d);
+T(g3,a1);T(p4,c);
 #endif
-bool je=false;uint l0;d m0;
+bool te=false;uint m0;c j0;
 #ifdef RENDER_MODE_DEPTH_STENCIL
-K g9;
+L i9;
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-m0=Hb(KB,l0,
+j0=Kb(KB,m0,
 #ifdef RENDER_MODE_DEPTH_STENCIL
-g9,
+i9,
 #endif
-D2 v3);
+F2 w3);
 #elif defined(DRAW_INTERIOR_TRIANGLES)
-m0=Ib(KB,l0
+j0=Lb(KB,m0
 #ifdef RENDER_MODE_DEPTH_STENCIL
-,g9
+,i9
 #else
-,i1
+,h1
 #endif
-v3);
+w3);
 #else
-g M;je=!q9(UB,VB,A,l0,m0
+f N;te=!v9(UB,VB,v,m0,j0
 #ifndef RENDER_MODE_DEPTH_STENCIL
-,M
+,N
 #else
-,g9
+,i9
 #endif
-v3);
+w3);
 #ifndef RENDER_MODE_DEPTH_STENCIL
 #ifdef ENABLE_FEATHER
-L=M;
+M=N;
 #else
-L.xy=R7(M.xy);
+M.xy=S7(N.xy);
 #endif
 #endif
 #endif
-a1 p1=P5(AD,l0);
+a1 o1=Q5(DD,m0);
 #if!defined(FEATHER_ATLAS_BLIT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-B0=r8(l0,m.d6);if((p1.x&J9)!=0u)B0=-B0;
+C0=v8(m0,n.e6);if((o1.x&L9)!=0u)C0=-C0;
 #endif
-uint R3=p1.x&0xfu;
+uint S3=o1.x&0xfu;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){uint Sh=(R3==Z7?p1.y:p1.x)>>16;c k1=r8(Sh,m.d6);if(R3==Z7)k1=-k1;
+if(ENABLE_CLIPPING){uint ki=(S3==a8?o1.y:o1.x)>>16;d j1=v8(ki,n.e6);if(S3==a8)j1=-j1;
 #ifdef FEATHER_ATLAS_BLIT
-J3=k1;
+K3=j1;
 #else
-V1.x=k1;
+W1.x=j1;
 #endif
 }
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND){f2=float((p1.x>>4)&0xfu);}
+if(ENABLE_ADVANCED_BLEND){g2=float((o1.x>>4)&0xfu);}
 #endif
-d L0=m0;
+c q0=j0;
 #ifdef FRAMEBUFFER_BOTTOM_UP
-L0.y=float(m.Pg)-L0.y;
+q0.y=float(n.Nb)-q0.y;
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){f0 Y3=h2(J0(QB,l0*z3+2u));g H4=J0(QB,l0*z3+3u);
+if(ENABLE_CLIP_RECT){d0 Z3=I1(K0(QB,m0*A3+2u));f H4=K0(QB,m0*A3+3u);
 #ifndef RENDER_MODE_DEPTH_STENCIL
-M0=T7(Y3,H4.xy,L0);
+M0=U7(Z3,H4.xy,q0);
 #else
-Dc(Y3,H4.xy,L0 x5);
+Kc(Z3,H4.xy,q0 x5);
 #endif
 }
 #endif
-if(R3==Pb){i j=unpackUnorm4x8(p1.y);if(H5){}else{j.xyz*=j.w;}f1=g(j);}
+if(S3==Vb){i j=unpackUnorm4x8(o1.y);if(H5){}else{j.xyz*=j.w;}V1=f(j);}
 #if defined(ENABLE_CLIPPING)&&!defined(FEATHER_ATLAS_BLIT)
-else if(ENABLE_CLIPPING&&R3==Z7){c I5=r8(p1.x>>16,m.d6);V1.y=I5;}
+else if(ENABLE_CLIPPING&&S3==a8){d I5=v8(o1.x>>16,n.e6);W1.y=I5;}
 #endif
-else{f0 Th=h2(J0(QB,l0*z3));g pb=J0(QB,l0*z3+1u);d L6=R0(Th,L0)+pb.xy;f1.w=-uintBitsToFloat(p1.y);float Uh=pb.z;if(Uh>.9){f1.z=2.;}else{f1.z=pb.w;}if(R3==Qb){f1.y=.0;f1.x=L6.x;}else{f1.z=-f1.z;f1.xy=L6.xy;}}
+else{d0 li=I1(K0(QB,m0*A3));f ue=K0(QB,m0*A3+1u);V1=Ob(q0,li,ue.xy,float(S3),ue.zw,uintBitsToFloat(o1.y));V1.w=-V1.w;}
 #ifdef EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
-if(EMULATE_DYNAMIC_COLOR_WRITE_DISABLE){f1*=Rh.Qh;}
+if(EMULATE_DYNAMIC_COLOR_WRITE_DISABLE){V1*=ji.ii;}
 #endif
 #if defined(ENABLE_MODULATED_IMAGE)
-if(ENABLE_MODULATED_IMAGE&&(p1.x&Mf)!=0u){f0 Vh=h2(J0(QB,l0*z3+4u));g ke=J0(QB,l0*z3+5u);d f4=R0(Vh,L0)+ke.xy;A2=Q(f4.x,f4.y,1.+ke.z);}else{A2=Q(0.0,0.0,0.0);}
+if(ENABLE_MODULATED_IMAGE&&(o1.x&cg)!=0u){d0 mi=I1(K0(QB,m0*A3+4u));f ve=K0(QB,m0*A3+5u);c g4=N0(mi,q0)+ve.xy;C2=Q(g4.x,g4.y,1.+ve.z);}else{C2=Q(0.0,0.0,0.0);}
 #endif
-g V;if(!je){V=L3(m0);
+f W;if(!te){W=M3(j0);
 #ifdef POST_INVERT_Y
-V.y=-V.y;
+W.y=-W.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-V.z=ia(g9);
+W.z=na(i9);
 #elif defined(RENDER_MODE_CLOCKWISE_ATOMIC)
-X R4=J0(PB,l0*4u+3u);f3=R4.xy;o4=m0+uintBitsToFloat(R4.zw);
+X R4=K0(PB,m0*4u+3u);g3=R4.xy;p4=j0+uintBitsToFloat(R4.zw);
 #endif
-}else{V=g(m.R2,m.R2,m.R2,m.R2);}c0(f1);
+}else{W=f(n.T2,n.T2,n.T2,n.T2);}a0(V1);
 #if defined(ENABLE_MODULATED_IMAGE)
-c0(A2);
+a0(C2);
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-c0(D2);
+a0(F2);
 #elif!defined(RENDER_MODE_DEPTH_STENCIL)
 #ifdef DRAW_INTERIOR_TRIANGLES
-c0(i1);
+a0(h1);
 #else
-c0(L);
+a0(M);
 #endif
-c0(B0);
+a0(C0);
 #endif
 #ifdef ENABLE_CLIPPING
 #ifdef FEATHER_ATLAS_BLIT
-c0(J3);
+a0(K3);
 #else
-c0(V1);
+a0(W1);
 #endif
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-c0(M0);
+a0(M0);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-c0(f2);
+a0(g2);
 #endif
 #ifdef RENDER_MODE_CLOCKWISE_ATOMIC
-c0(f3);c0(o4);
+a0(g3);a0(p4);
 #endif
-A1(V);}
+z1(W);}
 #endif
 #ifdef FRAGMENT
-O3 P3 e i M7(g J5,
+P3 Q3 e i M7(f N7,
 #ifdef ENABLE_MODULATED_IMAGE
-Q qb,
+Q tb,
 #endif
-float n K6){i j;if(J5.w>=.0){j=c5(J5);if(H5)j.w*=n;else j*=n;}else{float t=J5.z>.0?J5.x:length(J5.xy);t=clamp(t,.0,1.);float le=abs(J5.z);float x=le>1.?(1.-1./ma)*t+(.5/ma):(1./ma)*t+le;float Wh=-J5.w;j=o2(MD,Rb,d(x,Wh),.0);j.w*=n;if(H5){}else{j.xyz*=j.w;}}
+float o L6){i j;if(N7.w>=.0){j=c5(N7);if(H5)j.w*=o;else j*=o;}else{N7.w=-N7.w;c T9=cc(N7);j=i2(ED,N9,T9,.0);j.w*=o;if(H5){}else{j.xyz*=j.w;}}
 #if defined(ENABLE_MODULATED_IMAGE)
-if(ENABLE_MODULATED_IMAGE&&qb.z>0.0){c Xh=qb.z-1.;i G2=U6(HC,V5,qb.xy,Xh);if(H5)G2=C0(F6(G2),G2.w);j*=G2;}
+if(ENABLE_MODULATED_IMAGE&&tb.z>0.0){d ni=tb.z-1.;i j2=U6(HC,W5,tb.xy,ni);if(H5)j2=D0(G6(j2),j2.w);j*=j2;}
 #endif
 return j;}
 #if!defined(DRAW_INTERIOR_TRIANGLES)&&!defined(FEATHER_ATLAS_BLIT)
-e c me(z2 M H3){
+e d we(B2 N I3){
 #ifdef ENABLE_FEATHER
-if(ENABLE_FEATHER&&Sb(M))return y4(M d1);else
+if(ENABLE_FEATHER&&Yb(N))return y4(N d1);else
 #endif
-return min(M.x,M.y);}e c ne(z2 M H3){
+return min(N.x,N.y);}e d xe(B2 N I3){
 #if defined(ENABLE_FEATHER)
-if(ENABLE_FEATHER&&Tb(M))return d8(M d1);else
+if(ENABLE_FEATHER&&Zb(N))return e8(N d1);else
 #endif
-return M.x;}e c rb(z2 M H3){if(U5(M))return me(M d1);else return ne(M d1);}e c Yh(c S4,z2 M H3){if(U5(M)){c v0=me(M d1);return max(v0,S4);}else{c v0=ne(M d1);return S4+v0;}}
+return N.x;}e d ub(B2 N I3){if(V5(N))return we(N d1);else return xe(N d1);}e d oi(d S4,B2 N I3){if(V5(N)){d w0=we(N d1);return max(w0,S4);}else{d w0=xe(N d1);return S4+w0;}}
 #endif
 #endif

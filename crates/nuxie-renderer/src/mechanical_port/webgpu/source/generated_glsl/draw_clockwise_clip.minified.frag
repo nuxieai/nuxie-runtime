@@ -1,33 +1,33 @@
 #ifdef FRAGMENT
 J1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-x0(S2,j0);
+y0(U2,k0);
 #endif
-j1(T2,g0);
+i1(V2,h0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Va(g6,l4);
+Za(h6,m4);
 #endif
-j1(J6,P0);K1 M1(IB){r(V1,E);c k1=-V1.x;
+i1(K6,Q0);K1 M1(IB){r(W1,E);d j1=-W1.x;
 #ifdef DRAW_INTERIOR_TRIANGLES
-r(i1,c);c v0=i1;
+r(h1,d);d w0=h1;
 #else
-r(L,z2);c v0=L.x;
+r(M,B2);d w0=M.x;
 #endif
-x2;E N0;c L5,r3;
+z2;E O0;d K5,v3;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
-if(BORROWED_COVERAGE_PASS){r3=v0;}else
+if(BORROWED_COVERAGE_PASS){v3=w0;}else
 #endif
-{N0=unpackHalf2x16(Y0(g0));L5=N0.y;c S4=L5==k1?N0.x:G0(.0);r3=S4+v0;}
+{O0=unpackHalf2x16(Y0(h0));K5=O0.y;d S4=K5==j1?O0.x:I0(.0);v3=S4+w0;}
 #ifdef ENABLE_NESTED_CLIPPING
-c I5=V1.y;if(ENABLE_NESTED_CLIPPING&&I5!=.0){c p4=.0;
+d I5=W1.y;if(ENABLE_NESTED_CLIPPING&&I5!=.0){d q4=.0;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
-if(BORROWED_COVERAGE_PASS){N0=unpackHalf2x16(Y0(g0));L5=N0.y;}
+if(BORROWED_COVERAGE_PASS){O0=unpackHalf2x16(Y0(h0));K5=O0.y;}
 #endif
-if(L5!=k1){p4=L5==I5?N0.x:.0;c1(P0,packHalf2x16(B2(p4,Lf)));}else{p4=unpackHalf2x16(Y0(P0)).x;e2(P0);}r3=min(r3,p4);}else
+if(K5!=j1){q4=K5==I5?O0.x:.0;c1(Q0,packHalf2x16(D2(q4,bg)));}else{q4=unpackHalf2x16(Y0(Q0)).x;f2(Q0);}v3=min(v3,q4);}else
 #endif
-{e2(P0);}c1(g0,packHalf2x16(B2(r3,k1)));
+{f2(Q0);}c1(h0,packHalf2x16(D2(v3,j1)));
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-w2(j0);
+y2(k0);
 #endif
-y2;Z1;}
+A2;a2;}
 #endif

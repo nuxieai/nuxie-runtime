@@ -731,6 +731,7 @@ fn make_fill_single_sided_reverse(fill: &mut FillTessellation, negate_coverage: 
 pub struct ImageRectDrawAllocation {
     pub draw: ImageRectDraw,
     image_texture: rcp<gpu::Texture>,
+    gradient: rcp<super::gradient_hpp::Gradient>,
 }
 
 #[repr(C)]
@@ -875,6 +876,19 @@ unsafe fn release_path_draw(draw: *mut Draw) {
 unsafe fn release_image_rect(draw: *mut Draw) {
     let owner = unsafe { &mut *draw.cast::<ImageRectDrawAllocation>() };
     owner.image_texture.operator_assign_null();
+    owner.gradient.operator_assign_null();
+}
+
+unsafe fn allocate_image_rect_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> bool {
+    if !unsafe { allocate_plain_draw(draw, flush) } {
+        return false;
+    }
+    let owner = unsafe { &mut *draw.cast::<ImageRectDrawAllocation>() };
+    owner.gradient.get().is_null()
+        || unsafe {
+            (&mut *flush)
+                .allocateGradientExecutable(owner.gradient.get(), &mut owner.draw.ramp_location)
+        }
 }
 
 unsafe fn release_image_mesh(draw: *mut Draw) {
@@ -1497,10 +1511,13 @@ fn base_draw(
     draw
 }
 
-fn color_modulate_opacity(value: u32, opacity: f32) -> u32 {
+pub(crate) fn color_modulate_opacity(value: u32, opacity: f32) -> u32 {
     let source_alpha = (value >> 24) as f32 / 255.0;
-    let alpha = (source_alpha * opacity).clamp(0.0, 1.0);
-    (value & 0x00ff_ffff) | ((alpha.mul_add(255.0, 0.5).floor() as u32) << 24)
+    let opacity = source_alpha * opacity;
+    // Preserve std::max(0, std::min(1, opacity)), including NaN selecting 1.
+    let upper = if opacity < 1.0 { opacity } else { 1.0 };
+    let alpha = if 0.0 < upper { upper } else { 0.0 };
+    (value & 0x00ff_ffff) | (((255.0 * alpha).round() as u32) << 24)
 }
 
 fn contour_directions_for_path(
@@ -1962,19 +1979,22 @@ pub unsafe fn make_image_rect_draw(
     pixel_bounds: IAABB,
     matrix: Mat2D,
     blend_mode: BlendMode,
-    opacity: f32,
+    modulated_color: u32,
     image_texture: rcp<gpu::Texture>,
+    gradient: rcp<super::gradient_hpp::Gradient>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
     draw_contents: gpu::DrawContents,
     clip_id: u32,
     scissor: Option<AABBu16>,
+    image_matrix: Mat2D,
+    gradient_matrix: Mat2D,
 ) -> Box<ImageRectDrawAllocation> {
     let image_texture_ptr = image_texture.get();
     let mut base = base_draw(
         DrawObjectType::imageRect,
         pixel_bounds,
         matrix,
-        None,
+        Some(image_matrix),
         blend_mode,
         image_texture_ptr,
         image_sampler,
@@ -1984,10 +2004,18 @@ pub unsafe fn make_image_rect_draw(
     );
     base.push_to_render_context = push_image_rect;
     base.release_refs = release_image_rect;
+    base.allocate_resources = allocate_image_rect_resources;
     base.resource_counts.imageRectCount = 1;
     Box::new(ImageRectDrawAllocation {
-        draw: ImageRectDraw { base, opacity },
+        draw: ImageRectDraw {
+            base,
+            modulated_color,
+            gradient_matrix,
+            gradient_ref: gradient.get(),
+            ramp_location: gpu::ColorRampLocation::default(),
+        },
         image_texture,
+        gradient,
     })
 }
 
@@ -2001,8 +2029,11 @@ pub unsafe fn make_image_rect_draw_from_source(
     matrix: Mat2D,
     blend_mode: BlendMode,
     image_texture: rcp<gpu::Texture>,
+    gradient: rcp<super::gradient_hpp::Gradient>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
-    opacity: f32,
+    modulated_color: u32,
+    image_matrix: Mat2D,
+    gradient_matrix: Mat2D,
 ) -> Box<ImageRectDrawAllocation> {
     debug_assert!(!context.frameSupportsImagePaintForPathsExecutable());
     unsafe {
@@ -2010,12 +2041,15 @@ pub unsafe fn make_image_rect_draw_from_source(
             pixel_bounds,
             matrix,
             blend_mode,
-            opacity,
+            modulated_color,
             image_texture,
+            gradient,
             image_sampler,
             gpu::DrawContents::none,
             0,
             None,
+            image_matrix,
+            gradient_matrix,
         )
     }
 }

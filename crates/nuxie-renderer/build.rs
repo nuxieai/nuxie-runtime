@@ -573,6 +573,7 @@ fn embedded_source_literal(rust_source: &str) -> io::Result<&str> {
 const TRANSLATED_SHADER_RUST_PATHS: &[&str] = &[
     "src/mechanical_port/source/renderer/src/shaders/advanced_blend_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/atomic_draw_glsl.rs",
+    "src/mechanical_port/source/renderer/src/shaders/gradient_packing_common_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs",
@@ -619,6 +620,7 @@ const TRANSLATED_BUILD_RULE_PATHS: &[&str] = &[
 const TRANSLATED_SHADER_SOURCES: &[&str] = &[
     include_str!("src/mechanical_port/source/renderer/src/shaders/advanced_blend_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/atomic_draw_glsl.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/gradient_packing_common_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/bezier_utils_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/blit_texture_as_draw_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/clear_clockwise_atomic_clip_glsl.rs"),

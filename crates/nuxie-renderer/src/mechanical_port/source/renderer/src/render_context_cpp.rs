@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/render_context.cpp.
-// Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
+// Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -3603,12 +3603,39 @@
 //     const uint32_t imageRectBaseInstance =
 //         math::lossless_numeric_cast<uint32_t>(
 //             m_ctx->m_imageRectInstanceData.elementsWritten());
-//     m_ctx->m_imageRectInstanceData.emplace_back(draw->imageMatrix(),
-//                                                 draw->opacity(),
+//
+//     uint32_t gradientType = 0;
+//     Mat2D gradientMatrix;
+//     float gradientHorizontalSpan[2]{};
+//     float gradientY = 0;
+//     if (draw->gradient() != nullptr)
+//     {
+//         // a gradientType of 0 is used to signify "no gradient" so these had
+//         // better not be 0
+//         static_assert(int(PaintType::linearGradient) != 0);
+//         static_assert(int(PaintType::radialGradient) != 0);
+//         gradientType = uint32_t(draw->gradient()->paintType());
+//         getGradientMatrixAndSpan(draw->gradient(),
+//                                  draw->rampLocation(),
+//                                  draw->gradientMatrix(),
+//                                  m_ctx->platformFeatures(),
+//                                  m_ctx->frameDescriptor().renderTargetHeight,
+//                                  gradientMatrix,
+//                                  gradientHorizontalSpan);
+//         gradientY = getGradientY(draw->rampLocation(), m_gradTextureLayout);
+//     }
+//
+//     m_ctx->m_imageRectInstanceData.emplace_back(draw->paintMatrix(),
+//                                                 draw->modulatedColor(),
 //                                                 draw->clipRectInverseMatrix(),
 //                                                 draw->clipID(),
 //                                                 draw->blendMode(),
-//                                                 m_currentZIndex);
+//                                                 m_currentZIndex,
+//                                                 draw->imageMatrix(),
+//                                                 gradientMatrix,
+//                                                 gradientType,
+//                                                 gradientHorizontalSpan,
+//                                                 gradientY);
 //
 //     DrawBatch& batch = pushDraw(draw,
 //                                 DrawType::imageRect,
@@ -4175,6 +4202,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::{
     RiveRenderImage, RiveRenderImageHandle,
 };
+use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use nuxie_render_api::{FillRule, RawPath};
 
 const K_DEFAULT_DRAW_CAPACITY: usize = 2048;
@@ -6476,13 +6504,39 @@ impl LogicalFlush {
         } else {
             Some(*unsafe { (*(*draw).clipRectInverseMatrix()).inverseMatrix() })
         };
+        let mut gradient_type = 0;
+        let mut gradient_matrix = nuxie_render_api::Mat2D::IDENTITY;
+        let mut gradient_span = [0.0; 2];
+        let mut gradient_y = 0.0;
+        if let Some(gradient) = unsafe { (*draw).gradient().as_ref() } {
+            gradient_type = gradient.paintType() as u32;
+            debug_assert_ne!(gradient_type, 0);
+            let coeffs = unsafe { core::slice::from_raw_parts(gradient.coeffs(), 3) };
+            (gradient_matrix, gradient_span) = gpu_cpp::getGradientMatrixAndSpan(
+                gradient.paintType(),
+                [coeffs[0], coeffs[1], coeffs[2]],
+                unsafe { (*draw).rampLocation() },
+                unsafe { *(*draw).gradientMatrix() },
+                context.platformFeatures().framebufferBottomUp,
+                context.frameDescriptor().renderTargetHeight,
+            );
+            gradient_y = gpu_cpp::getGradientY(
+                unsafe { (*draw).rampLocation() },
+                self.m_grad_texture_layout,
+            );
+        }
         let instance = gpu::ImageRectInstance::new(
-            *unsafe { (*draw).imageMatrix() },
-            unsafe { (*draw).opacity() },
+            *unsafe { (*draw).paintMatrix() },
+            unsafe { (*draw).modulatedColor() },
             clip,
             unsafe { (*draw).clipID() },
             unsafe { (*draw).blendMode() },
             self.m_current_z_index,
+            *unsafe { (*draw).imageMatrix() },
+            gradient_matrix,
+            gradient_type,
+            gradient_span,
+            gradient_y,
         );
         unsafe { context.m_image_rect_instance_data.emplace_back(instance) };
         unsafe {

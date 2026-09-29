@@ -6,7 +6,7 @@
  * emission order, output generation, command-line surface, and failure
  * behavior. It is not wired into build.rs in this phase.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  */
 
 #![allow(dead_code)]
@@ -18,12 +18,12 @@ use std::env;
 use std::fs::File;
 use std::io::{self, Write};
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal/generate_draw_combinations.py";
 pub const PINNED_SOURCE_SHA256: &str =
-    "9e9360ccedf7270656216bed1061f1f40c6d92cf6bcf1f67cf9469b114c37c75";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 164;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 7187;
+    "c52b76eda342308c8d8aa72c009d3c234070ed3f41f8210ce18ef57f6ff67be5";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 165;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 7259;
 pub const TRANSLATION_UNIT: &str = "metal-shader-generator";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/shaders/metal/generate_draw_combinations_py.rs";
 pub const TRANSLATION_DISPOSITION: &str = "required";
@@ -153,6 +153,7 @@ def emit_shader(out, shader_type, draw_type, fill_type, feature_set):
                   ('c' if fill_type == FillType.CLOCKWISE else 'p',
                    ''.join(namespace_id)))
         out.write('{\n')
+        out.write('#include "gradient_packing_common.minified.glsl"\n')
         out.write('#include "draw_path.minified.vert"\n')
         if FEATHER_ATLAS_BLIT in feature_set:
             out.write('#include "draw_mesh.minified.frag"\n')
@@ -463,6 +464,7 @@ pub fn emit_shader<W: Write>(
         let namespace_id: String = namespace_id.iter().collect();
         writeln!(out, "namespace {namespace_prefix}{namespace_id}")?;
         out.write_all(b"{\n")?;
+        out.write_all(b"#include \"gradient_packing_common.minified.glsl\"\n")?;
         out.write_all(b"#include \"draw_path.minified.vert\"\n")?;
         if feature_set.contains(FEATHER_ATLAS_BLIT) {
             out.write_all(b"#include \"draw_mesh.minified.frag\"\n")?;

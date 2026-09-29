@@ -6,7 +6,7 @@
  * audit. The Rust owner follows its queue, worker, source assembly, Metal
  * compile, diagnostic, failure, and destruction order.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  */
 
 #![allow(dead_code)]
@@ -41,12 +41,12 @@ macro_rules! debug_assert_abort {
     }};
 }
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/metal/background_shader_compiler.mm";
 pub const PINNED_SOURCE_SHA256: &str =
-    "7618c621c233aa090935acc98cd484a497dcb82a96d28036f18713499b01af4a";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 346;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 12612;
+    "d31704bf93be34b63a6f42e001def924dba7d30074d7b22428025211a254245e";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 362;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 13581;
 pub const TRANSLATION_UNIT: &str = "metal-background-shader-compiler";
 pub const TRANSLATION_TARGET: &str = "crates/nuxie-renderer/src/mechanical_port/source/renderer/src/metal/background_shader_compiler_mm.rs";
 pub const TRANSLATION_DISPOSITION: &str = "required";
@@ -209,16 +209,17 @@ pub const PINNED_BACKGROUND_SHADER_COMPILER_MM_SOURCE: &str = r####"/*
 
 #include "background_shader_compiler.h"
 
-#include "generated/shaders/metal.glsl.hpp"
-#include "generated/shaders/constants.glsl.hpp"
-#include "generated/shaders/flush_uniforms.glsl.hpp"
-#include "generated/shaders/common.glsl.hpp"
 #include "generated/shaders/advanced_blend.glsl.hpp"
+#include "generated/shaders/constants.glsl.hpp"
+#include "generated/shaders/common.glsl.hpp"
+#include "generated/shaders/draw_image_mesh.vert.hpp"
+#include "generated/shaders/draw_mesh.frag.hpp"
 #include "generated/shaders/draw_path_common.glsl.hpp"
 #include "generated/shaders/draw_path.vert.hpp"
 #include "generated/shaders/draw_raster_order_path.frag.hpp"
-#include "generated/shaders/draw_image_mesh.vert.hpp"
-#include "generated/shaders/draw_mesh.frag.hpp"
+#include "generated/shaders/flush_uniforms.glsl.hpp"
+#include "generated/shaders/gradient_packing_common.glsl.hpp"
+#include "generated/shaders/metal.glsl.hpp"
 
 #ifndef RIVE_IOS
 // iOS doesn't need the atomic shaders; every non-simulated iOS device supports
@@ -422,10 +423,15 @@ void BackgroundShaderCompiler::threadMain()
             case DrawType::depthStrokes:
             case DrawType::stencilMidpointFanBorrowedCoverage:
             case DrawType::stencilDynamicMidpointFans:
+            case DrawType::stencilDynamicOuterCubics:
             case DrawType::stencilMidpointFans:
             case DrawType::stencilMidpointFanReset:
             case DrawType::stencilMidpointFanWinding:
             case DrawType::stencilMidpointFanCover:
+            case DrawType::stencilOuterCubicBorrowedCoverage:
+            case DrawType::stencilOuterCubicReset:
+            case DrawType::stencilOuterCubicWinding:
+            case DrawType::stencilOuterCubicCover:
             case DrawType::stencilOuterCubics:
             case DrawType::clipReset:
                 RIVE_UNREACHABLE();
@@ -435,6 +441,7 @@ void BackgroundShaderCompiler::threadMain()
         if (interlockMode == gpu::InterlockMode::atomics)
         {
             [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+            [source appendFormat:@"%s\n", gpu::glsl::gradient_packing_common];
             [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
         }
         else
@@ -448,6 +455,8 @@ void BackgroundShaderCompiler::threadMain()
                 case DrawType::outerCurvePatches:
                 case DrawType::interiorTriangulation:
                     [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+                    [source appendFormat:@"%s\n",
+                                         gpu::glsl::gradient_packing_common];
                     [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
                     [source
                         appendFormat:@"%s\n",
@@ -455,6 +464,8 @@ void BackgroundShaderCompiler::threadMain()
                     break;
                 case DrawType::featherAtlasBlit:
                     [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+                    [source appendFormat:@"%s\n",
+                                         gpu::glsl::gradient_packing_common];
                     [source appendFormat:@"%s\n", gpu::glsl::draw_path_vert];
                     [source appendFormat:@"%s\n", gpu::glsl::draw_mesh_frag];
                     break;
@@ -467,10 +478,15 @@ void BackgroundShaderCompiler::threadMain()
                 case DrawType::depthStrokes:
                 case DrawType::stencilMidpointFanBorrowedCoverage:
                 case DrawType::stencilDynamicMidpointFans:
+                case DrawType::stencilDynamicOuterCubics:
                 case DrawType::stencilMidpointFans:
                 case DrawType::stencilMidpointFanReset:
                 case DrawType::stencilMidpointFanWinding:
                 case DrawType::stencilMidpointFanCover:
+                case DrawType::stencilOuterCubicBorrowedCoverage:
+                case DrawType::stencilOuterCubicReset:
+                case DrawType::stencilOuterCubicWinding:
+                case DrawType::stencilOuterCubicCover:
                 case DrawType::stencilOuterCubics:
                 case DrawType::clipReset:
                 case DrawType::renderPassInitialize:
@@ -666,6 +682,7 @@ pub struct GeneratedShaderSources {
     pub common: &'static str,
     pub advanced_blend: &'static str,
     pub draw_path_common: &'static str,
+    pub gradient_packing_common: &'static str,
     pub draw_path_vert: &'static str,
     pub draw_raster_order_path_frag: &'static str,
     pub draw_image_mesh_vert: &'static str,
@@ -704,6 +721,10 @@ mod runtime_generated_shader_sources {
     pub const DRAW_PATH_VERT: &str = include_str!(concat!(
         env!("OUT_DIR"),
         "/mechanical_shader_generated/draw_path.minified.vert.runtime"
+    ));
+    pub const GRADIENT_PACKING_COMMON: &str = include_str!(concat!(
+        env!("OUT_DIR"),
+        "/mechanical_shader_generated/gradient_packing_common.minified.glsl.runtime"
     ));
     pub const DRAW_RASTER_ORDER_PATH_FRAG: &str = include_str!(concat!(
         env!("OUT_DIR"),
@@ -744,6 +765,7 @@ pub fn generated_shader_sources() -> GeneratedShaderSources {
         common: runtime_generated_shader_sources::COMMON,
         advanced_blend: runtime_generated_shader_sources::ADVANCED_BLEND,
         draw_path_common: runtime_generated_shader_sources::DRAW_PATH_COMMON,
+        gradient_packing_common: runtime_generated_shader_sources::GRADIENT_PACKING_COMMON,
         draw_path_vert: runtime_generated_shader_sources::DRAW_PATH_VERT,
         draw_raster_order_path_frag: runtime_generated_shader_sources::DRAW_RASTER_ORDER_PATH_FRAG,
         draw_image_mesh_vert: runtime_generated_shader_sources::DRAW_IMAGE_MESH_VERT,
@@ -1987,6 +2009,11 @@ impl BackgroundShaderCompiler {
                 && interlockMode == InterlockMode::atomics
             {
                 append_source_fragment!(&mut source, &native_iteration, sources.draw_path_common);
+                append_source_fragment!(
+                    &mut source,
+                    &native_iteration,
+                    sources.gradient_packing_common,
+                );
                 append_source_fragment!(&mut source, &native_iteration, sources.atomic_draw);
             } else {
                 debug_assert_eq!(interlockMode, InterlockMode::rasterOrdering);
@@ -1999,6 +2026,11 @@ impl BackgroundShaderCompiler {
                             &mut source,
                             &native_iteration,
                             sources.draw_path_common,
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.gradient_packing_common,
                         );
                         append_source_fragment!(
                             &mut source,
@@ -2016,6 +2048,11 @@ impl BackgroundShaderCompiler {
                             &mut source,
                             &native_iteration,
                             sources.draw_path_common,
+                        );
+                        append_source_fragment!(
+                            &mut source,
+                            &native_iteration,
+                            sources.gradient_packing_common,
                         );
                         append_source_fragment!(
                             &mut source,
@@ -2294,7 +2331,7 @@ mod tests {
         use crate::mechanical_port::source::renderer::src::shaders::{
             advanced_blend_glsl, atomic_draw_glsl, common_glsl, constants_glsl,
             draw_image_mesh_vert, draw_mesh_frag, draw_path_common_glsl, draw_path_vert,
-            draw_raster_order_path_frag, flush_uniforms_glsl, metal_glsl,
+            draw_raster_order_path_frag, flush_uniforms_glsl, gradient_packing_common_glsl, metal_glsl,
         };
 
         let actual = super::generated_shader_sources();
@@ -2305,6 +2342,7 @@ mod tests {
             common: super::runtime_generated_shader_sources::COMMON,
             advanced_blend: super::runtime_generated_shader_sources::ADVANCED_BLEND,
             draw_path_common: super::runtime_generated_shader_sources::DRAW_PATH_COMMON,
+            gradient_packing_common: super::runtime_generated_shader_sources::GRADIENT_PACKING_COMMON,
             draw_path_vert: super::runtime_generated_shader_sources::DRAW_PATH_VERT,
             draw_raster_order_path_frag:
                 super::runtime_generated_shader_sources::DRAW_RASTER_ORDER_PATH_FRAG,
@@ -2321,6 +2359,7 @@ mod tests {
             actual.common,
             actual.advanced_blend,
             actual.draw_path_common,
+            actual.gradient_packing_common,
             actual.draw_path_vert,
             actual.draw_raster_order_path_frag,
             actual.draw_image_mesh_vert,
@@ -2344,6 +2383,7 @@ mod tests {
             minifier_output!("common.glsl.hpp"),
             minifier_output!("advanced_blend.glsl.hpp"),
             minifier_output!("draw_path_common.glsl.hpp"),
+            minifier_output!("gradient_packing_common.glsl.hpp"),
             minifier_output!("draw_path.vert.hpp"),
             minifier_output!("draw_raster_order_path.frag.hpp"),
             minifier_output!("draw_image_mesh.vert.hpp"),
@@ -2378,6 +2418,7 @@ mod tests {
             common_glsl::PINNED_COMMON_GLSL_SOURCE,
             advanced_blend_glsl::PINNED_ADVANCED_BLEND_GLSL_SOURCE,
             draw_path_common_glsl::PINNED_DRAW_PATH_COMMON_GLSL_SOURCE,
+            gradient_packing_common_glsl::PINNED_GRADIENT_PACKING_COMMON_SOURCE,
             draw_path_vert::PINNED_DRAW_PATH_VERT_SOURCE,
             draw_raster_order_path_frag::PINNED_DRAW_RASTER_ORDER_PATH_FRAG_SOURCE,
             draw_image_mesh_vert::PINNED_DRAW_IMAGE_MESH_VERT_SOURCE,
@@ -2851,6 +2892,7 @@ mod tests {
                     common: "",
                     advanced_blend: "",
                     draw_path_common: "",
+                    gradient_packing_common: "",
                     draw_path_vert: "",
                     draw_raster_order_path_frag: "",
                     draw_image_mesh_vert: "",
@@ -3098,6 +3140,7 @@ mod tests {
                     common: "",
                     advanced_blend: "",
                     draw_path_common: "",
+                    gradient_packing_common: "",
                     draw_path_vert: "",
                     draw_raster_order_path_frag: "",
                     draw_image_mesh_vert: "",
@@ -3186,6 +3229,7 @@ mod tests {
                     common: "",
                     advanced_blend: "",
                     draw_path_common: "",
+                    gradient_packing_common: "",
                     draw_path_vert: "",
                     draw_raster_order_path_frag: "",
                     draw_image_mesh_vert: "",

@@ -470,6 +470,10 @@ mod tests {
             env!("OUT_DIR"),
             "/mechanical_shader_generated/atomic_draw.minified.glsl.runtime"
         ));
+        const GRADIENT_PACKING_COMMON: &str = include_str!(concat!(
+            env!("OUT_DIR"),
+            "/mechanical_shader_generated/gradient_packing_common.minified.glsl.runtime"
+        ));
         const DRAW_IMAGE_MESH_VERTEX: &str = include_str!(concat!(
             env!("OUT_DIR"),
             "/mechanical_shader_generated/draw_image_mesh.minified.vert.runtime"
@@ -484,10 +488,10 @@ mod tests {
             source.push_str(fragment);
             source.push('\n');
         }
-        let tail = if atomic_path {
-            [DRAW_PATH_COMMON, ATOMIC_DRAW]
+        let tail: &[&str] = if atomic_path {
+            &[DRAW_PATH_COMMON, GRADIENT_PACKING_COMMON, ATOMIC_DRAW]
         } else {
-            [DRAW_IMAGE_MESH_VERTEX, DRAW_MESH_FRAGMENT]
+            &[DRAW_IMAGE_MESH_VERTEX, DRAW_MESH_FRAGMENT]
         };
         for fragment in tail {
             source.push_str(fragment);

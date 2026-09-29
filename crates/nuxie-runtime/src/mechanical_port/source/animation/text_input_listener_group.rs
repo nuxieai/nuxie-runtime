@@ -20,7 +20,7 @@ use std::{
 pub struct TextInputListenerGroup {
     base: ListenerGroup,
     text_input: CoreHandle,
-    is_dragging: Cell<bool>,
+    dragging_pointer_id: Cell<i32>,
     click_count: Cell<i32>,
     last_click_time: Cell<i64>,
     last_click_position: Cell<Vec2D>,
@@ -31,7 +31,7 @@ impl TextInputListenerGroup {
         Self {
             base: ListenerGroup::new_optional(None),
             text_input,
-            is_dragging: Cell::new(false),
+            dragging_pointer_id: Cell::new(-1),
             click_count: Cell::new(0),
             last_click_time: Cell::new(0),
             last_click_position: Cell::new(Vec2D::new(0.0, 0.0)),
@@ -51,6 +51,22 @@ impl TextInputListenerGroup {
 }
 
 impl ListenerGroupBehavior for TextInputListenerGroup {
+    fn tracked_pointer_ids(&self) -> Vec<i32> {
+        self.base.tracked_pointer_ids()
+    }
+    fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
+        let was_dragging = self.base.cancel_pointer(id, position, timestamp);
+        if self.dragging_pointer_id.get() == id {
+            self.text_input.with_mut(|input| {
+                input
+                    .as_text_input_mut()
+                    .expect("text hit owner remains TextInput")
+                    .end_drag(position)
+            });
+            self.dragging_pointer_id.set(-1);
+        }
+        was_dragging
+    }
     fn reset(&self, id: i32) {
         self.base.reset(id);
     }
@@ -127,7 +143,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
                     .expect("text hit owner remains TextInput")
                     .start_drag(position)
             });
-            self.is_dragging.set(true);
+            self.dragging_pointer_id.set(pointer_id);
             if let Some(manager) = machine.focus_manager() {
                 let children = self
                     .text_input
@@ -160,7 +176,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
             ProcessEventResult::Scroll
         } else if event == ListenerType::Move
             && phase == GestureClickPhase::Down
-            && self.is_dragging.get()
+            && self.dragging_pointer_id.get() == pointer_id
         {
             self.text_input.with_mut(|input| {
                 input
@@ -172,7 +188,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         } else {
             if previous == GestureClickPhase::Down
                 && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
-                && self.is_dragging.get()
+                && self.dragging_pointer_id.get() == pointer_id
             {
                 self.text_input.with_mut(|input| {
                     input
@@ -180,7 +196,7 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
                         .expect("text hit owner remains TextInput")
                         .end_drag(position)
                 });
-                self.is_dragging.set(false);
+                self.dragging_pointer_id.set(-1);
             }
             ProcessEventResult::None
         }

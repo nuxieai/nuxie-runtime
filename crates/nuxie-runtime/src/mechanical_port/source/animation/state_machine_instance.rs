@@ -2156,7 +2156,10 @@ impl RuntimeStateMachineInstanceHandle {
 
     pub fn advance_and_apply(&self, seconds: f32) -> bool {
         let artboard = self.with_instance(|machine| {
-            machine.artboard_instance.upgrade().expect("live state machine artboard")
+            machine
+                .artboard_instance
+                .upgrade()
+                .expect("live state machine artboard")
         });
         if artboard.with_artboard_mut(|artboard| artboard.advance_watermark(seconds)) {
             // Settle the host at time zero while keeping its ticker running.
@@ -3206,7 +3209,7 @@ impl StateMachineInstance {
         }
     }
 
-    fn normalize_pointer_position(&self, mut position: Vec2D) -> Vec2D {
+    fn normalize_pointer_position(&self, mut position: Vec2D) -> (Vec2D, bool) {
         self.artboard_instance
             .with_artboard(|artboard| {
                 if artboard.frame_origin() {
@@ -3215,10 +3218,17 @@ impl StateMachineInstance {
                         position.y - artboard.origin_y() * artboard.layout_height(),
                     );
                 }
+                let mut collapsed = false;
                 if artboard.has_self_transform() {
-                    position = artboard.self_transform().invert_or_identity() * position;
+                    let mut inverse =
+                        crate::mechanical_port::source::math::mat2d::Mat2D::identity();
+                    if artboard.self_transform().invert(&mut inverse) {
+                        position = inverse * position;
+                    } else {
+                        collapsed = true;
+                    }
                 }
-                position
+                (position, collapsed)
             })
             .expect("a state machine retains its ArtboardInstance")
     }
@@ -3230,13 +3240,22 @@ impl StateMachineInstance {
         pointer_id: i32,
         timestamp: f32,
     ) -> HitResult {
-        let position = self.normalize_pointer_position(position);
+        let (position, contents_collapsed) = self.normalize_pointer_position(position);
         for group in &self.listener_groups {
             group.with_group(|group| group.reset(pointer_id));
         }
         let hit_components = self.hit_components.clone();
-        for component in &hit_components {
-            component.prepare_event(position, hit_type, pointer_id);
+        let mut drag_ended = Vec::new();
+        if contents_collapsed {
+            for group in &self.listener_groups {
+                group.with_group(|group| {
+                    group.cancel_pointers(position, timestamp, &mut drag_ended)
+                });
+            }
+        } else {
+            for component in &hit_components {
+                component.prepare_event(position, hit_type, pointer_id);
+            }
         }
         let mut hit_something = false;
         let mut hit_opaque = false;
@@ -3245,7 +3264,7 @@ impl StateMachineInstance {
                 self,
                 position,
                 hit_type,
-                !hit_opaque,
+                !hit_opaque && !contents_collapsed,
                 timestamp,
                 pointer_id,
             );
@@ -3253,6 +3272,9 @@ impl StateMachineInstance {
                 hit_something = true;
                 hit_opaque |= result == HitResult::HitOpaque;
             }
+        }
+        for ended_pointer_id in drag_ended {
+            self.drag_end(position, timestamp, ended_pointer_id);
         }
         if hit_type == ListenerType::Exit {
             for group in &self.listener_groups {
@@ -3269,7 +3291,10 @@ impl StateMachineInstance {
     }
 
     pub fn hit_test(&self, position: Vec2D) -> bool {
-        let position = self.normalize_pointer_position(position);
+        let (position, contents_collapsed) = self.normalize_pointer_position(position);
+        if contents_collapsed {
+            return false;
+        }
         self.hit_components
             .iter()
             .any(|component| component.hit_test(position))

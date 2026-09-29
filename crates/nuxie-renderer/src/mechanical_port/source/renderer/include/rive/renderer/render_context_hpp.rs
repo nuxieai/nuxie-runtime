@@ -1346,11 +1346,23 @@ pub type IntersectionBoard = crate::intersection_board::IntersectionBoard;
 #[repr(C)]
 pub struct ImageRectDraw {
     pub base: Draw,
-    pub(crate) opacity: f32,
+    pub(crate) modulated_color: u32,
+    pub(crate) gradient_matrix: nuxie_render_api::Mat2D,
+    pub(crate) gradient_ref: *const Gradient,
+    pub(crate) ramp_location: ColorRampLocation,
 }
 impl ImageRectDraw {
-    pub fn opacity(&self) -> f32 {
-        self.opacity
+    pub fn modulatedColor(&self) -> u32 {
+        self.modulated_color
+    }
+    pub fn gradientMatrix(&self) -> &nuxie_render_api::Mat2D {
+        &self.gradient_matrix
+    }
+    pub fn gradient(&self) -> *const Gradient {
+        self.gradient_ref
+    }
+    pub fn rampLocation(&self) -> ColorRampLocation {
+        self.ramp_location
     }
 }
 #[repr(C)]
@@ -1635,10 +1647,9 @@ impl RectanizerSkyline {
 }
 pub use gpu::{
     BarrierFlags, ColorRampLocation, ContourData, ContourDirections, DrawBatch, DrawContents,
-    DrawType, FlushDescriptor, FlushUniforms, GradTextureLayout, GradientSpan, ImageRectInstance,
-    ImageMeshInstance,
-    PaintAuxData, PaintData, PaintType, PathData, ShaderFeatures, ShaderMiscFlags, TessVertexSpan,
-    TriangleVertex, TwoTexelRamp, WindingFaces,
+    DrawType, FlushDescriptor, FlushUniforms, GradTextureLayout, GradientSpan, ImageMeshInstance,
+    ImageRectInstance, PaintAuxData, PaintData, PaintType, PathData, ShaderFeatures,
+    ShaderMiscFlags, TessVertexSpan, TriangleVertex, TwoTexelRamp, WindingFaces,
 };
 
 #[derive(Default)]

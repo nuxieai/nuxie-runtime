@@ -1,6 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/common_layouts.hpp`.
-//! Updated through upstream `2210ed8799c0128504dd664a7179f4f8f299e85a`.
+//! Updated through upstream `9463ff7b5b9a1452d0c32e41390a99cd39b6c946`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -128,8 +128,8 @@ pub(crate) static ImageRectInputBindings: [vk::VertexInputBindingDescription; 2]
         input_rate: vk::VertexInputRate::INSTANCE,
     },
 ];
-pub(crate) static ImageRectVertexAttribs: [vk::VertexInputAttributeDescription; 8] =
-    appendImageDrawInstanceAttribs::<1, 8>(
+pub(crate) static ImageRectVertexAttribs: [vk::VertexInputAttributeDescription; 12] =
+    appendImageDrawInstanceAttribs::<1, 12>(
         ImageRectImageAttribBufferBinding,
         [vk::VertexInputAttributeDescription {
             location: 0,
@@ -303,8 +303,20 @@ mod tests {
         assert_eq!(PATH_VERTEX_ATTRIBS[1].offset, 16);
         assert_eq!(INTERIOR_TRI_INPUT_BINDINGS[0].stride, 12);
         assert_eq!(ImageRectInputBindings[0].stride, 16);
-        assert_eq!(ImageRectInputBindings[1].stride, 64);
-        assert_eq!(ImageRectVertexAttribs.len(), 8);
+        assert_eq!(ImageRectInputBindings[1].stride, 128);
+        assert_eq!(ImageRectVertexAttribs.len(), 12);
+        assert_eq!(
+            ImageRectVertexAttribs.map(|attribute| attribute.location),
+            [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        );
+        assert_eq!(
+            ImageRectVertexAttribs.map(|attribute| attribute.offset),
+            [0, 0, 16, 32, 48, 52, 56, 60, 64, 80, 96, 112]
+        );
+        assert_eq!(ImageRectVertexAttribs[4].format, vk::Format::R32_UINT);
+        assert!(ImageRectVertexAttribs[8..].iter().all(|attribute| {
+            attribute.format == vk::Format::R32G32B32A32_SFLOAT
+        }));
         assert_eq!(ImageMeshInputBindings.len(), 3);
         assert_eq!(ImageMeshVertexAttribs.len(), 9);
         assert_eq!(
@@ -326,7 +338,7 @@ mod tests {
             PATH_VERTEX_ATTRIBS.as_ptr()
         );
         assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_binding_description_count, 2);
-        assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count, 8);
+        assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count, 12);
         assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_binding_description_count, 3);
         assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 9);
         assert_eq!(

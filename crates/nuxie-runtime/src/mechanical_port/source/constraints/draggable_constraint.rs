@@ -168,7 +168,7 @@ pub struct DraggableConstraintListenerGroup {
     base: ListenerGroup,
     constraint: CoreHandle,
     draggable: RefCell<Box<dyn DraggableProxy>>,
-    has_scrolled: Cell<bool>,
+    scrolling_pointer_id: Cell<i32>,
 }
 
 impl DraggableConstraintListenerGroup {
@@ -181,11 +181,29 @@ impl DraggableConstraintListenerGroup {
             base: ListenerGroup::new(listener),
             constraint,
             draggable: RefCell::new(draggable),
-            has_scrolled: Cell::new(false),
+            scrolling_pointer_id: Cell::new(-1),
         }
     }
 
     pub fn enable(&self, _pointer_id: i32) {}
+    pub fn tracked_pointer_ids(&self) -> Vec<i32> {
+        self.base.tracked_pointer_ids()
+    }
+    pub fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
+        let was_down = self
+            .base
+            .find_pointer_data(id)
+            .is_some_and(|pointer| pointer.phase.get() == GestureClickPhase::Down);
+        let mut was_dragging = self.base.cancel_pointer(id, position, timestamp);
+        if was_down {
+            self.draggable.borrow_mut().end_drag(position, timestamp);
+            if self.scrolling_pointer_id.get() == id {
+                self.scrolling_pointer_id.set(-1);
+                was_dragging = true;
+            }
+        }
+        was_dragging
+    }
     pub fn disable(&self, _pointer_id: i32) {}
     pub fn reset(&self, pointer_id: i32) {
         self.base.reset(pointer_id);
@@ -239,21 +257,21 @@ impl DraggableConstraintListenerGroup {
             && matches!(phase, GestureClickPhase::Clicked | GestureClickPhase::Out)
         {
             self.draggable.borrow_mut().end_drag(position, time_stamp);
-            if self.has_scrolled.get() {
+            if self.scrolling_pointer_id.get() == pointer_id {
                 state_machine_instance.drag_end(position, time_stamp, pointer_id);
-                self.has_scrolled.set(false);
+                self.scrolling_pointer_id.set(-1);
                 return ProcessEventResult::Scroll;
             }
         } else if previous_phase != GestureClickPhase::Down && phase == GestureClickPhase::Down {
             self.draggable.borrow_mut().start_drag(position, time_stamp);
-            self.has_scrolled.set(false);
+            self.scrolling_pointer_id.set(-1);
         } else if hit_event == ListenerType::Move && phase == GestureClickPhase::Down {
             let has_dragged = self.draggable.borrow_mut().drag(position, time_stamp);
             if has_dragged {
-                if !self.has_scrolled.get() {
+                if self.scrolling_pointer_id.get() != pointer_id {
                     state_machine_instance.drag_start(position, time_stamp, false, pointer_id);
                 }
-                self.has_scrolled.set(true);
+                self.scrolling_pointer_id.set(pointer_id);
                 return ProcessEventResult::Scroll;
             }
         }

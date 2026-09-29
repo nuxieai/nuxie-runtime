@@ -44,6 +44,35 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
 }
 
 #[test]
+fn collapsing_an_artboard_ends_a_text_input_drag() {
+    use nuxie_runtime::source::{
+        generated::transform_component_base::TransformComponentBase, math::vec2d::Vec2D,
+    };
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard.state_machine_instance_handle(0).unwrap();
+    machine.advance_and_apply(0.0);
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into())
+    });
+    machine.advance_and_apply(0.0);
+    machine.with_instance_mut(|m| m.pointer_down(Vec2D::new(8.0, 8.0), 0));
+    assert!(with_input(&input, |input| input.is_dragging()));
+    for key in [
+        TransformComponentBase::SCALE_X_PROPERTY_KEY,
+        TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+    ] {
+        assert!(CoreRegistry::set_double_handle(
+            &artboard.core_handle(),
+            i32::from(key),
+            0.0
+        ));
+    }
+    artboard.advance_default(0.0);
+    machine.with_instance_mut(|m| m.pointer_move(Vec2D::new(20.0, 8.0), 0.0, 0));
+    assert!(!with_input(&input, |input| input.is_dragging()));
+}
+
+#[test]
 fn empty_shaped_text_has_no_selection_rectangles() {
     use nuxie_runtime::source::{math::aabb::Aabb, text::fully_shaped_text::FullyShapedText};
     let shape = FullyShapedText::default();

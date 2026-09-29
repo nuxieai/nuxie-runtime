@@ -458,6 +458,7 @@ pub(crate) mod source {
             pub(crate) mod shaders {
                 pub(crate) mod advanced_blend_glsl;
                 pub(crate) mod atomic_draw_glsl;
+                pub(crate) mod gradient_packing_common_glsl;
                 pub(crate) mod bezier_utils_glsl;
                 pub(crate) mod blit_texture_as_draw_glsl;
                 pub(crate) mod clear_clockwise_atomic_clip_glsl;

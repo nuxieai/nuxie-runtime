@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_depthstencil_path.main";
-pub const PINNED_SOURCE_SHA256: &str = "a5ef3d8519a759f6c3b57ada19420c1a67c1006073e0b6e3d7cfaaa2c69d46e7";
+pub const PINNED_SOURCE_SHA256: &str = "c18b07079500eb9bf4cae3206bca87de2ad147e9a879253a551ade53a8471029";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_depthstencil_path";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 16;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 575;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 17;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 624;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_spirv_draw_depthstencil_path_main__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

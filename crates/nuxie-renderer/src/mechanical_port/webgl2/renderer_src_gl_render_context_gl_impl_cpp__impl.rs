@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 157988] = [(); PINNED_SOURCE.len()];
+const _: [(); 158417] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -71,49 +71,49 @@ const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const COVERAGE_PLANE_IDX: usize = 3;
 const IMAGE_FIRST_ATTRIB_IDX: GLuint = 2;
-const IMAGE_RECT_LAST_ATTRIB_IDX: GLuint = 8;
+const IMAGE_RECT_LAST_ATTRIB_IDX: GLuint = gpu::ImageRectInstance::LastAttribIdx as GLuint;
 const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = 8;
 
 // Exact export substitutions emitted by the frozen shader minifier.
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "XD";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "VD";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "BE";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "ZD";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "WD";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "UE";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "AE";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "ZE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "DC";
-const GLSL_CLEAR_COVERAGE: &str = "CE";
-const GLSL_CLOCKWISE_FILL: &str = "DE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ZC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "LF";
-const GLSL_DRAW_IMAGE: &str = "JE";
+const GLSL_CLEAR_COVERAGE: &str = "GE";
+const GLSL_CLOCKWISE_FILL: &str = "HE";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "CD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
+const GLSL_DRAW_IMAGE: &str = "OE";
 const GLSL_DRAW_IMAGE_MESH: &str = "OB";
-const GLSL_DRAW_IMAGE_RECT: &str = "LD";
+const GLSL_DRAW_IMAGE_RECT: &str = "AD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
-const GLSL_DRAW_PATH: &str = "KD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "CF";
+const GLSL_DRAW_PATH: &str = "OD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "HF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "OE";
-const GLSL_ENABLE_KHR_BLEND: &str = "IE";
-const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "N";
-const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "DG";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "TE";
+const GLSL_ENABLE_KHR_BLEND: &str = "ME";
+const GLSL_FEATHER_ATLAS_BLIT: &str = "GB";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "O";
+const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "NE";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
-const GLSL_RESOLVE_PLS: &str = "QC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "MF";
+const GLSL_RESOLVE_PLS: &str = "RC";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "RF";
 const GLSL_FlushUniforms: &str = "BC";
-const GLSL_atlasRenderTexture: &str = "XE";
-const GLSL_contourBuffer: &str = "ED";
-const GLSL_dstColorTexture: &str = "UD";
-const GLSL_featherAtlasTexture: &str = "BD";
-const GLSL_gaussianIntegralTexture: &str = "XC";
-const GLSL_gradTexture: &str = "MD";
+const GLSL_atlasRenderTexture: &str = "CF";
+const GLSL_contourBuffer: &str = "ID";
+const GLSL_dstColorTexture: &str = "YD";
+const GLSL_featherAtlasTexture: &str = "FD";
+const GLSL_gaussianIntegralTexture: &str = "YC";
+const GLSL_gradTexture: &str = "ED";
 const GLSL_imageTexture: &str = "HC";
 const GLSL_paintAuxBuffer: &str = "QB";
-const GLSL_paintBuffer: &str = "AD";
+const GLSL_paintBuffer: &str = "DD";
 const GLSL_pathBuffer: &str = "PB";
 const GLSL_sourceTexture: &str = "IC";
 const GLSL_tessVertexTexture: &str = "KC";
@@ -135,6 +135,8 @@ const GLSL_ADVANCED_BLEND: &str =
     include_str!("source/generated_glsl_embedded/advanced_blend.minified.glsl");
 const GLSL_DRAW_PATH_COMMON: &str =
     include_str!("source/generated_glsl_embedded/draw_path_common.minified.glsl");
+const GLSL_GRADIENT_PACKING_COMMON: &str =
+    include_str!("source/generated_glsl_embedded/gradient_packing_common.minified.glsl");
 const GLSL_DRAW_PATH_VERT: &str =
     include_str!("source/generated_glsl_embedded/draw_path.minified.vert");
 const GLSL_DRAW_RASTER_ORDER_PATH_FRAG: &str =
@@ -1879,8 +1881,8 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "BB",
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "AB",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
-        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "WC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "YC",
+        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "ZC",
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "EC",
         gpu::ShaderFeatures::ENABLE_DITHER => "LB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "JB",
@@ -1997,9 +1999,9 @@ fn newDrawShader(
 
     let mut sources = vec![
         if context.platformFeatures().avoidFlatVaryings {
-            "#define NB\n"
+            "#define MB\n"
         } else {
-            "#define NB flat\n"
+            "#define MB flat\n"
         },
         GLSL_CONSTANTS,
         GLSL_FLUSH_UNIFORMS,
@@ -2016,7 +2018,11 @@ fn newDrawShader(
             | gpu::DrawType::midpointFanCenterAAPatches
             | gpu::DrawType::outerCurvePatches
             | gpu::DrawType::interiorTriangulation => {
-                sources.extend([GLSL_DRAW_PATH_COMMON, GLSL_DRAW_PATH_VERT]);
+                sources.extend([
+                    GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
+                    GLSL_DRAW_PATH_VERT,
+                ]);
                 sources.push(if interlockMode == gpu::InterlockMode::clockwise {
                     if hasMiscFlag(shaderMiscFlags, gpu::ShaderMiscFlags::clipUpdateOnly) {
                         GLSL_DRAW_CLOCKWISE_CLIP_FRAG
@@ -2030,6 +2036,7 @@ fn newDrawShader(
             gpu::DrawType::featherAtlasBlit => {
                 sources.extend([
                     GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
                     GLSL_DRAW_PATH_VERT,
                     GLSL_DRAW_MESH_FRAG,
                 ]);
@@ -2040,7 +2047,11 @@ fn newDrawShader(
             _ => panic!("unreachable raster-ordering draw shader"),
         },
         gpu::InterlockMode::atomics => {
-            sources.extend([GLSL_DRAW_PATH_COMMON, GLSL_ATOMIC_DRAW]);
+            sources.extend([
+                GLSL_DRAW_PATH_COMMON,
+                GLSL_GRADIENT_PACKING_COMMON,
+                GLSL_ATOMIC_DRAW,
+            ]);
         }
         gpu::InterlockMode::depthStencil => match drawType {
             gpu::DrawType::depthStrokes
@@ -2060,6 +2071,7 @@ fn newDrawShader(
             | gpu::DrawType::featherAtlasBlit => {
                 sources.extend([
                     GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
                     GLSL_DRAW_PATH_VERT,
                     GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG,
                 ]);
@@ -4663,8 +4675,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4076);
-        assert_eq!(PINNED_SOURCE.len(), 157988);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4082);
+        assert_eq!(PINNED_SOURCE.len(), 158417);
     }
 
     #[test]
@@ -4766,12 +4778,12 @@ mod tests {
             (
                 "ENABLE_EVEN_ODD",
                 gpu::ShaderFeatures::ENABLE_EVEN_ODD,
-                "WC",
+                "XC",
             ),
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "YC",
+                "ZC",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",

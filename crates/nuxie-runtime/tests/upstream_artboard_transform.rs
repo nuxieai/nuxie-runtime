@@ -1,4 +1,4 @@
-//! Direct ports of all six cases in pinned
+//! Direct ports of all thirteen cases in pinned
 //! `tests/unit_tests/runtime/artboard_transform_test.cpp`.
 
 use std::path::PathBuf;
@@ -329,4 +329,261 @@ fn artboard_clip_is_transformed_by_its_own_rotation() {
     fixture.artboard.advance_default(0.0);
     let transform = clip_transform(&draw_recording(&fixture)).expect("clipPath was called");
     assert!(transform[1].abs() > 0.0001 || transform[2].abs() > 0.0001);
+}
+
+type Machine =
+    nuxie_runtime::source::animation::state_machine_instance::RuntimeStateMachineInstanceHandle;
+
+fn machine_named(fixture: &Fixture, name: &str) -> Machine {
+    let definition = fixture
+        .artboard
+        .with_artboard(|a| a.state_machine_named(name))
+        .unwrap();
+    StateMachineInstance::new(definition, fixture.artboard.downgrade())
+}
+
+fn scale(artboard: &RuntimeArtboardInstanceHandle, x: f32, y: f32) {
+    set_double(
+        &artboard.core_handle(),
+        TransformComponentBase::SCALE_X_PROPERTY_KEY,
+        x,
+    );
+    set_double(
+        &artboard.core_handle(),
+        TransformComponentBase::SCALE_Y_PROPERTY_KEY,
+        y,
+    );
+}
+
+fn bool_value(machine: &Machine, name: &str) -> bool {
+    machine.with_instance(|m| m.get_bool(name).expect("bool input").value())
+}
+
+#[test]
+fn zero_scale_artboard_takes_no_listener_hits() {
+    let f = fixture("opaque_hit_test.riv", Some("main"));
+    let m = machine_named(&f, "main-state-machine");
+    m.advance_and_apply(0.0);
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 250.0), 0));
+    assert!(bool_value(&m, "toGreen"));
+    let gray = bool_value(&m, "grayToggle");
+    for (x, y) in [(0.0, 0.0), (1.0, 0.0)] {
+        scale(&f.artboard, x, y);
+        f.artboard.advance_default(0.0);
+        m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+        assert!(bool_value(&m, "toGreen"));
+        assert_eq!(bool_value(&m, "grayToggle"), gray);
+    }
+    scale(&f.artboard, 1.0, 1.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+    assert!(!bool_value(&m, "toGreen"));
+    assert_ne!(bool_value(&m, "grayToggle"), gray);
+}
+
+#[test]
+fn zero_scale_artboard_reports_no_hit_from_hit_test() {
+    let f = fixture("opaque_hit_test.riv", Some("main"));
+    let m = machine_named(&f, "main-state-machine");
+    m.advance_and_apply(0.0);
+    let frame = f.artboard.with_artboard(|a| {
+        if a.frame_origin() {
+            Vec2D::new(
+                a.origin_x() * a.layout_width(),
+                a.origin_y() * a.layout_height(),
+            )
+        } else {
+            Vec2D::new(0.0, 0.0)
+        }
+    });
+    let point = Vec2D::new(100.0, 250.0);
+    assert!(m.with_instance(|m| m.hit_test(point)));
+    scale(&f.artboard, 0.0, 0.0);
+    f.artboard.advance_default(0.0);
+    assert!(!m.with_instance(|m| m.hit_test(point)));
+    assert!(!m.with_instance(|m| m.hit_test(Vec2D::new(0.0, 0.0))));
+    scale(&f.artboard, 0.5, 0.5);
+    f.artboard.advance_default(0.0);
+    let world = f
+        .artboard
+        .with_artboard(|a| frame + a.self_transform() * (point - frame));
+    assert!(m.with_instance(|m| m.hit_test(world)));
+}
+
+#[test]
+fn zero_scale_mounted_artboard_takes_no_pointer_events() {
+    use nuxie_runtime::source::animation::nested_state_machine::NestedStateMachine;
+    let f = fixture("opaque_hit_test.riv", Some("second"));
+    let m = machine_named(&f, "second-state-machine");
+    let nested = f
+        .artboard
+        .with_artboard(|a| a.find_handle::<NestedArtboard>("second-nested"))
+        .unwrap();
+    let animation = nested
+        .with_downcast::<NestedArtboard, _>(|n| n.nested_animations()[0].clone())
+        .unwrap();
+    let nested_machine = animation
+        .with_downcast::<NestedStateMachine, _>(NestedStateMachine::state_machine_instance)
+        .flatten()
+        .unwrap();
+    let _ = bool_value(&nested_machine, "bool-target");
+    let _ = bool_value(&m, "second-gray-toggle");
+    f.artboard.advance_default(0.0);
+    m.advance_and_apply(0.0);
+    let mounted = nested
+        .with_downcast::<NestedArtboard, _>(|n| n.artboard_instance_handle(0))
+        .flatten()
+        .unwrap();
+    scale(&mounted, 0.0, 0.0);
+    mounted.advance_default(0.0);
+    let mut inverse = Mat2D::identity();
+    assert!(
+        nested
+            .with_downcast::<NestedArtboard, _>(|n| n.base.world_transform().invert(&mut inverse))
+            .unwrap()
+    );
+    let gray = bool_value(&m, "second-gray-toggle");
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+    assert!(!bool_value(&nested_machine, "bool-target"));
+    assert_ne!(bool_value(&m, "second-gray-toggle"), gray);
+    scale(&mounted, 1.0, 1.0);
+    mounted.advance_default(0.0);
+    let gray = bool_value(&m, "second-gray-toggle");
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+    assert!(bool_value(&nested_machine, "bool-target"));
+    assert_eq!(bool_value(&m, "second-gray-toggle"), gray);
+}
+
+fn click_fixture(name: &str) -> (Fixture, Machine) {
+    let f = fixture("click_event.riv", Some(name));
+    let m = machine_named(&f, "sm-1");
+    m.with_instance_mut(|m| m.advance_seconds(0.0));
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.advance_seconds(0.0));
+    (f, m)
+}
+
+#[test]
+fn collapsing_an_artboard_mid_click_drops_the_held_press() {
+    let (f, m) = click_fixture("art-1");
+    let point = Vec2D::new(75.0, 75.0);
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
+    m.with_instance_mut(|m| m.pointer_down(point, 0));
+    scale(&f.artboard, 0.0, 0.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
+    scale(&f.artboard, 1.0, 1.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
+    m.with_instance_mut(|m| m.pointer_down(point, 0));
+    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 1);
+    m.with_instance_mut(|m| m.pointer_down(point, 0));
+    scale(&f.artboard, 0.0, 0.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_move(point, 0.0, 0));
+    scale(&f.artboard, 1.0, 1.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 1);
+}
+
+#[test]
+fn collapsing_an_artboard_exits_what_the_pointer_was_over() {
+    use nuxie_runtime::source::animation::{
+        animation_state::AnimationState, linear_animation::LinearAnimation,
+    };
+    let (f, m) = click_fixture("art-2");
+    let current_animation = || {
+        let state = m.with_instance_mut(|m| m.layer_state(0)).unwrap();
+        let animation = state
+            .with_downcast::<AnimationState, _>(AnimationState::animation)
+            .flatten()
+            .unwrap();
+        animation
+            .with_downcast::<LinearAnimation, _>(|a| a.base.name().to_owned())
+            .unwrap()
+    };
+    let point = Vec2D::new(75.0, 75.0);
+    m.with_instance_mut(|m| m.pointer_move(point, 0.0, 0));
+    f.artboard.advance_default(0.0);
+    m.advance_and_apply(0.0);
+    assert_eq!(current_animation(), "green");
+    scale(&f.artboard, 0.0, 0.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_move(point, 0.0, 0));
+    f.artboard.advance_default(0.0);
+    m.advance_and_apply(0.0);
+    assert_eq!(current_animation(), "red");
+}
+
+#[test]
+fn collapsing_an_artboard_mid_drag_ends_the_drag() {
+    use nuxie_runtime::source::node::Node;
+    let f = fixture("drag_event.riv", None);
+    let m = f.artboard.state_machine_instance_handle(0).unwrap();
+    let vm = f
+        .file
+        .with_file_mut(|file| {
+            file.create_default_view_model_instance_for_artboard(f.artboard.core_handle())
+        })
+        .unwrap();
+    m.with_instance_mut(|m| m.bind_view_model_instance(vm));
+    m.advance_and_apply(0.1);
+    let nested = f
+        .artboard
+        .with_artboard(|a| a.find_all_handles::<NestedArtboard>());
+    assert_eq!(nested.len(), 1);
+    let target = nested[0]
+        .with_downcast::<NestedArtboard, _>(|n| n.base.parent_handle())
+        .flatten()
+        .unwrap();
+    let position = || {
+        target
+            .with_downcast::<Node, _>(|n| (n.base.x(), n.base.y()))
+            .unwrap()
+    };
+    let resting_x = position().0;
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(250.0, 250.0), 0));
+    m.advance_and_apply(0.1);
+    m.with_instance_mut(|m| m.pointer_move(Vec2D::new(250.0, 250.0), 0.0, 0));
+    m.advance_and_apply(0.1);
+    m.with_instance_mut(|m| m.pointer_move(Vec2D::new(200.0, 200.0), 0.0, 0));
+    m.advance_and_apply(0.1);
+    assert_ne!(position().0, resting_x);
+    scale(&f.artboard, 0.0, 0.0);
+    let collapsed = position();
+    m.with_instance_mut(|m| m.pointer_move(Vec2D::new(150.0, 150.0), 0.0, 0));
+    m.advance_and_apply(0.1);
+    assert_eq!(position(), collapsed);
+    m.with_instance_mut(|m| m.pointer_up(Vec2D::new(200.0, 200.0), 0));
+    m.advance_and_apply(0.1);
+    scale(&f.artboard, 1.0, 1.0);
+    let released = position();
+    m.with_instance_mut(|m| m.pointer_move(Vec2D::new(100.0, 100.0), 0.0, 0));
+    m.advance_and_apply(0.1);
+    assert_eq!(position(), released);
+}
+
+#[test]
+fn collapsing_an_artboard_cancels_every_pointer() {
+    let (f, m) = click_fixture("art-1");
+    let point = Vec2D::new(75.0, 75.0);
+    for id in [0, 1] {
+        m.with_instance_mut(|m| m.pointer_down(point, id));
+    }
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
+    scale(&f.artboard, 0.0, 0.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
+    scale(&f.artboard, 1.0, 1.0);
+    f.artboard.advance_default(0.0);
+    m.with_instance_mut(|m| m.pointer_up(point, 1));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
+    m.with_instance_mut(|m| m.pointer_down(point, 1));
+    m.with_instance_mut(|m| m.pointer_up(point, 1));
+    assert_eq!(m.with_instance(|m| m.reported_event_count()), 1);
 }

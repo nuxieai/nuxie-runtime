@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/spirv/draw_clockwise_clip.main";
-pub const PINNED_SOURCE_SHA256: &str = "521593f1a521e39642a05890e2403ec221c1d314d6528f5dc93453b2e473372c";
+pub const PINNED_SOURCE_SHA256: &str = "40d9a8188736ccc7efd359084b9e1aa07bee537bffb5b3f9ca2737eb8fefc933";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_clockwise_clip";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 15;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 536;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 16;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 585;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_spirv_draw_clockwise_clip_main__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

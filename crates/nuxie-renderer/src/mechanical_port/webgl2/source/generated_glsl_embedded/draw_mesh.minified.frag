@@ -1,31 +1,31 @@
-#ifdef GB
-#if(defined(N)&&!defined(I))||defined(RB)
-#undef zb
+#ifdef FB
+#if(defined(O)&&!defined(I))||defined(RB)
+#undef Cb
 #else
-#define zb
+#define Cb
 #endif
 J1
-#ifndef N
-x0(S2,j0);
+#ifndef O
+y0(U2,k0);
 #endif
 #ifndef RB
-j1(T2,g0);
-#ifndef N
-x0(g6,l4);
+i1(V2,h0);
+#ifndef O
+y0(h6,m4);
 #endif
-j1(J6,P0);
+i1(K6,Q0);
 #else
-x0(T2,g0);
+y0(V2,h0);
 #endif
 K1
 #ifdef OB
-D3 Z2(d5,V3,HC);E3 e5 W3(V5)f5 O3 P3
+E3 c3(d5,W3,HC);F3 e5 X3(W5)f5 P3 Q3
 #endif
-#ifdef N
+#ifdef O
 #ifdef OB
-p2(IB)
+r2(IB)
 #else
-p2(IB)
+r2(IB)
 #endif
 #else
 #ifdef OB
@@ -35,90 +35,90 @@ M1(IB)
 #endif
 #endif
 {
-#ifdef FB
-r(f1,g);
+#ifdef GB
+r(V1,f);
 #if defined(JB)
-r(A2,Q);
+r(C2,Q);
 #endif
-r(D2,d);
+r(F2,c);
 #endif
 #ifdef I
-r(J3,c);
+r(K3,d);
 #endif
 #ifdef BB
-r(M0,g);
+r(M0,f);
 #endif
-#if defined(FB)&&defined(AB)
-r(f2,c);
+#if defined(GB)&&defined(AB)
+r(g2,d);
 #endif
 #ifdef OB
-r(G5,d);r(I1,c);
+r(G5,c);r(H1,i);
 #ifdef AB
-r(B1,K);
+r(A1,L);
 #endif
 #endif
-#ifdef FB
-i j=M7(f1,
+#ifdef GB
+i j=M7(V1,
 #ifdef JB
-A2,
+C2,
 #endif
-1. U2);c n=clamp(o2(BD,O9,D2,.0).x,G0(.0),G0(1.));
+1. W2);d o=clamp(i2(FD,R9,F2,.0).x,I0(.0),I0(1.));
 #endif
 #ifdef OB
-i j=A7(HC,V5,G5,m.ud);c n=1.;
+i j=A7(HC,W5,G5,n.Cd);d o=1.;
 #endif
 #ifdef BB
-if(BB){c Y4=max(h3(c5(M0)),G0(.0));n=min(Y4,n);}
+if(BB){d Y4=max(i3(c5(M0)),I0(.0));o=min(Y4,o);}
 #endif
-#ifdef zb
-x2;
+#ifdef Cb
+z2;
 #endif
 #if defined(I)
-if(I&&J3!=.0){c r3;
+if(I&&K3!=.0){d v3;
 #ifndef RB
-E N0=unpackHalf2x16(Y0(g0));c E6=N0.y;r3=max(E6==J3?N0.x:G0(.0),G0(.0));
+E O0=unpackHalf2x16(Y0(h0));d F6=O0.y;v3=max(F6==K3?O0.x:I0(.0),I0(.0));
 #else
-r3=I0(g0).x;
+v3=J0(h0).x;
 #endif
-r3=max(r3,G0(.0));n=min(n,r3);}
+v3=max(v3,I0(.0));o=min(o,v3);}
 #endif
 #ifdef OB
-n*=I1;
+j*=H1;
 #endif
-#if!defined(N)
-i L1=I0(j0);
+#if!defined(O)
+i L1=J0(k0);
 #ifdef AB
 if(AB){
-#ifdef FB
-K S3=a6(f2);
+#ifdef GB
+L T3=c6(g2);
 #endif
 #ifdef OB
-j.xyz=F6(j);K S3=B1;
+j.xyz=G6(j);L T3=A1;
 #endif
-if(S3!=Q5){j.xyz=U4(j.xyz,L1,S3);}j.w*=n;j.xyz*=j.w;}else
+if(T3!=R5){j.xyz=U4(j.xyz,L1,T3);}j.w*=o;j.xyz*=j.w;}else
 #endif
-{j*=n;}
+{j*=o;}
 #ifdef AC
 if(AC){j=l3(j);}
 #endif
-j.xyz=F2(j.xyz,j.w,a0.xy,m.A3,m.B3);
+j.xyz=I2(j.xyz,j.w,c0.xy,n.B3,n.C3);
 #ifndef RB
 j=L1*(1.-j.w)+j;
 #endif
-y0(j0,j);
+z0(k0,j);
 #endif
 #ifndef RB
-e2(g0);e2(P0);
+f2(h0);f2(Q0);
 #else
-y0(g0,C0(.0));
+z0(h0,D0(.0));
 #endif
-#ifdef zb
-y2;
+#ifdef Cb
+A2;
 #endif
-#ifdef N
-j=(j*n);j.xyz=F2(j.xyz,j.w,a0.xy,m.A3,m.B3);D1=j;m3
+#ifdef O
+j=(j*o);j.xyz=I2(j.xyz,j.w,c0.xy,n.B3,n.C3);C1=j;m3
 #else
-Z1;
+a2;
 #endif
 }
 #endif

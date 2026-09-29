@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_mesh.frag.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_mesh.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d6e7ec4585532526c9c225f5d49fe44c1e68a0acff94caa750a761212b5a3546";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 234;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 7187;
+    "c5e85eb53d7d5885d9074e3c595ca9690f8b68290c637f3545ae1042f03b14ec";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 233;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 7162;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_MESH_FRAG_SOURCE: &str = r###"/*
@@ -99,7 +99,7 @@ PLS_MAIN(@drawFragmentMain)
 #endif
 #ifdef @DRAW_IMAGE_MESH
     VARYING_UNPACK(v_imageTexCoord, float2);
-    VARYING_UNPACK(v_imageOpacity, half);
+    VARYING_UNPACK(v_imageModulatedColor, half4);
 #ifdef @ENABLE_ADVANCED_BLEND
     VARYING_UNPACK(v_imageBlendMode, ushort);
 #endif
@@ -161,8 +161,7 @@ PLS_MAIN(@drawFragmentMain)
 #endif
 
 #ifdef @DRAW_IMAGE_MESH
-    // Apply opacity after clipping.
-    coverage *= v_imageOpacity;
+    color *= v_imageModulatedColor;
 #endif
 
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT)

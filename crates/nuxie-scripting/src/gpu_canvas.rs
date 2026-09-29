@@ -2376,10 +2376,7 @@ pub(crate) fn install_gpu_canvas_globals(vm: &ScriptVm) -> Result<()> {
 #[derive(Default)]
 pub(crate) struct ScriptCallGpuScope {
     pub(crate) open_canvas_frame_token: u64,
-    // The weak identity retains the allocation's identity without extending the
-    // encoder lifetime owned by the enclosing script's render-pass userdata.
-    pub(crate) inherited_render_pass:
-        Option<std::rc::Weak<dyn nuxie_ore_metal::context::ActiveRenderPass>>,
+    pub(crate) open_render_pass_token: u64,
 }
 
 pub(crate) fn enter_script_call_gpu_scope(lua: &luaur_rt::Lua) -> ScriptCallGpuScope {
@@ -2388,17 +2385,17 @@ pub(crate) fn enter_script_call_gpu_scope(lua: &luaur_rt::Lua) -> ScriptCallGpuS
     };
     ScriptCallGpuScope {
         open_canvas_frame_token: bindings.next_open_canvas_frame_token(),
-        inherited_render_pass: bindings
+        open_render_pass_token: bindings
             .ore_context()
-            .and_then(|context| context.borrow().activeRenderPass()),
+            .map_or(0, |context| context.borrow().nextRenderPassToken()),
     }
 }
 
 pub(crate) fn close_orphan_render_pass(
     bindings: &RendererBindings,
-    inherited_render_pass: Option<&std::rc::Weak<dyn nuxie_ore_metal::context::ActiveRenderPass>>,
+    token: u64,
 ) -> Result<bool> {
-    ore::close_orphan_render_pass(bindings, inherited_render_pass)
+    ore::close_orphan_render_pass(bindings, token)
 }
 
 fn resolve_shader_entry(

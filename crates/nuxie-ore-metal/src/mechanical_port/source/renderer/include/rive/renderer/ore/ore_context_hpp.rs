@@ -78,10 +78,124 @@ pub enum ShaderTarget {
 pub trait ActiveRenderPass {
     fn isFinished(&self) -> bool;
     fn finish(&self);
+    fn detachContext(&self) {}
 }
 
-/// Cross-cutting Context state. The source active-pass pointer becomes a weak
-/// token, and resources receive only a weak error sink plus cloned manager.
+struct OpenRenderPass {
+    token: u64,
+    pass: RcWeak<dyn ActiveRenderPass>,
+    stream: crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
+    beginOffset: usize,
+}
+
+pub struct OpenRenderPassRegistry {
+    passes: RefCell<Vec<OpenRenderPass>>,
+    nextToken: Cell<u64>,
+}
+impl Default for OpenRenderPassRegistry {
+    fn default() -> Self {
+        Self {
+            passes: RefCell::new(Vec::new()),
+            nextToken: Cell::new(1),
+        }
+    }
+}
+impl Drop for OpenRenderPassRegistry {
+    fn drop(&mut self) {
+        self.detach();
+    }
+}
+impl OpenRenderPassRegistry {
+    fn detach(&self) {
+        for open in self.passes.borrow().iter() {
+            if let Some(pass) = open.pass.upgrade() {
+                pass.detachContext();
+            }
+        }
+        self.passes.borrow_mut().clear();
+    }
+    pub(crate) fn begin(
+        &self,
+        pass: RcWeak<dyn ActiveRenderPass>,
+        stream: crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
+    ) -> u64 {
+        let token = self.nextToken.get();
+        self.nextToken.set(token.wrapping_add(1));
+        let beginOffset = stream.borrow().command_bytes().len();
+        self.passes.borrow_mut().push(OpenRenderPass {
+            token,
+            pass,
+            stream,
+            beginOffset,
+        });
+        token
+    }
+    pub(crate) fn replacePass(&self, token: u64, pass: RcWeak<dyn ActiveRenderPass>) {
+        if let Some(open) = self
+            .passes
+            .borrow_mut()
+            .iter_mut()
+            .find(|open| open.token == token)
+        {
+            open.pass = pass;
+        }
+    }
+    fn finishInnermost(&self) {
+        let entry = self
+            .passes
+            .borrow()
+            .last()
+            .map(|open| (open.token, open.pass.clone()));
+        if let Some((token, pass)) = entry {
+            if let Some(pass) = pass.upgrade() {
+                pass.finish();
+            }
+            let mut passes = self.passes.borrow_mut();
+            if passes.last().is_some_and(|open| open.token == token) {
+                passes.pop();
+            }
+        }
+    }
+    pub(crate) fn finishNested(&self, token: u64) {
+        while self
+            .passes
+            .borrow()
+            .last()
+            .is_some_and(|open| open.token != token)
+        {
+            self.finishInnermost();
+        }
+    }
+    pub(crate) fn finishOpen(&self, token: u64) {
+        let mut passes = self.passes.borrow_mut();
+        if let Some(i) = passes.iter().rposition(|open| open.token == token) {
+            let entry = passes.remove(i);
+            if i > 0 && Rc::ptr_eq(&passes[i - 1].stream, &entry.stream) {
+                let outer = &mut passes[i - 1];
+                outer.beginOffset = entry
+                    .stream
+                    .borrow_mut()
+                    .hoistNestedRenderPass(outer.beginOffset, entry.beginOffset);
+            }
+        }
+    }
+    pub fn finishOpenRenderPassesFrom(&self, token: u64) -> usize {
+        let mut count = 0;
+        while self
+            .passes
+            .borrow()
+            .last()
+            .is_some_and(|open| open.token >= token)
+        {
+            self.finishInnermost();
+            count += 1;
+        }
+        count
+    }
+}
+
+/// Cross-cutting Context state. Resources receive only a weak error sink
+/// plus cloned manager; recorded passes use the separate weak registry.
 pub struct ContextState {
     // Rust safety sidecars. Identity remains tied to this source Context;
     // a concrete backend may clone only the drain into its execution root so
@@ -170,6 +284,11 @@ impl BufferErrorSink for ContextState {
 
 pub trait ContextApi {
     fn contextBase(&self) -> &Context;
+    /// Forwarding facades project the native replay context without retaining
+    /// either that context or its host. Ordinary contexts use their own handle.
+    fn inlineReplayContext(&self) -> Option<RcWeak<RefCell<dyn ContextApi>>> {
+        None
+    }
     fn findInternedBindGroupLayout(&self, layoutId: u64) -> Option<AnyResourceHandle> {
         self.contextBase().findInternedBindGroupLayout(layoutId)
     }
@@ -232,9 +351,15 @@ pub trait ContextApi {
     }
     fn features(&self) -> Features;
     fn lastError(&self) -> String;
-    fn activeRenderPass(&self) -> Option<RcWeak<dyn ActiveRenderPass>>;
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>);
-    fn finishActiveRenderPass(&self);
+    fn nextRenderPassToken(&self) -> u64 {
+        self.contextBase().nextRenderPassToken()
+    }
+    fn hasOpenRenderPasses(&self) -> bool {
+        self.contextBase().hasOpenRenderPasses()
+    }
+    fn finishOpenRenderPassesFrom(&self, token: u64) -> usize {
+        self.contextBase().finishOpenRenderPassesFrom(token)
+    }
     fn clearLastError(&self);
     fn setLastError(&self, message: &str);
     fn makeBuffer(&mut self, desc: &BufferDesc<'_>) -> Option<AnyResourceHandle>;
@@ -299,7 +424,8 @@ pub struct Context {
     // Drop these before the resource manager/state and recording buffers.
     internedLayouts: Rc<RefCell<HashMap<u64, AnyResourceHandle>>>,
     pub(crate) state: Arc<ContextState>,
-    activeRenderPass: Rc<RefCell<Option<RcWeak<dyn ActiveRenderPass>>>>,
+    pub(crate) openRenderPasses: Rc<OpenRenderPassRegistry>,
+    ownsOpenRenderPasses: bool,
     deferredRecording: Rc<Cell<bool>>,
     pendingFrame: crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
 }
@@ -307,12 +433,13 @@ pub struct Context {
 impl Context {
     // A host forwarding owner needs a stable base reference without escaping
     // its native context's RefCell borrow. This projects the same state, not
-    // a second backend or independent recording/active-pass state machine.
+    // a second backend or independent open-pass registry.
     pub(crate) fn shared_base(&self) -> Self {
         Self {
             internedLayouts: self.internedLayouts.clone(),
             state: self.state.clone(),
-            activeRenderPass: self.activeRenderPass.clone(),
+            openRenderPasses: self.openRenderPasses.clone(),
+            ownsOpenRenderPasses: false,
             deferredRecording: self.deferredRecording.clone(),
             pendingFrame: self.pendingFrame.clone(),
         }
@@ -328,9 +455,7 @@ impl Context {
         self.internedLayouts.borrow_mut().insert(layoutId, layout);
     }
 
-    // virtual ~Context() = default;
-    // Rust's default drop glue supplies the virtual-destructor boundary for
-    // each concrete context owner.
+    // Context::drop detaches every still-open pass before releasing state.
 
     // Resource factories. Rust has no pure-virtual member declaration; the
     // complete source signatures remain visible here and are implemented by
@@ -413,32 +538,17 @@ impl Context {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    // Active render pass tracking — used by Lua bindings to auto-finish
-    // stale passes and by backends that enforce one-encoder-at-a-time.
-    // RenderPass* activeRenderPass() const { return m_activeRenderPass; }
-    pub fn activeRenderPass(&self) -> Option<RcWeak<dyn ActiveRenderPass>> {
-        self.activeRenderPass.borrow().clone()
+    pub fn nextRenderPassToken(&self) -> u64 {
+        self.openRenderPasses.nextToken.get()
     }
-
-    // void setActiveRenderPass(RenderPass* pass) { m_activeRenderPass = pass; }
-    pub fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        *self.activeRenderPass.borrow_mut() = pass.map(RenderPassApi::activeToken);
+    pub fn hasOpenRenderPasses(&self) -> bool {
+        !self.openRenderPasses.passes.borrow().is_empty()
     }
-
-    // Called at the top of every backend's beginRenderPass(). If a prior pass
-    // is still open, finish it — matches the Lua binding's auto-finish
-    // contract and means backends that enforce one-encoder-at-a-time (Metal,
-    // D3D12) won't assert when a second beginRenderPass happens within the
-    // same command buffer. Does not clear m_activeRenderPass, because the
-    // pointer identity is owned by the Lua wrapper that called setActive…().
-    // inline void finishActiveRenderPass()
-    pub fn finishActiveRenderPass(&self) {
-        let active = self.activeRenderPass().and_then(|pass| pass.upgrade());
-        if let Some(pass) = active
-            && !pass.isFinished()
-        {
-            pass.finish();
-        }
+    pub fn finishOpenRenderPassesFrom(&self, token: u64) -> usize {
+        self.openRenderPasses.finishOpenRenderPassesFrom(token)
+    }
+    pub fn openRenderPassRegistry(&self) -> Rc<OpenRenderPassRegistry> {
+        self.openRenderPasses.clone()
     }
 
     // Last validation error — set by setPipeline() / setBindGroup() when
@@ -507,11 +617,21 @@ impl Context {
         Self {
             internedLayouts: Rc::new(RefCell::new(HashMap::new())),
             state: ContextState::newWithFinalReleaseDrain(features, manager, domainFinalReleases),
-            activeRenderPass: Rc::new(RefCell::new(None)),
+            openRenderPasses: Rc::new(OpenRenderPassRegistry::default()),
+            ownsOpenRenderPasses: true,
             deferredRecording: Rc::new(Cell::new(std::env::var_os("RIVE_ORE_DEFER").is_some())),
             pendingFrame: Rc::new(RefCell::new(
                 crate::ore_cmd::ore_command_buffer::OreCommandBuffer::default(),
             )),
+        }
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        // A forwarding base shares identity but is not the native Context owner.
+        if self.ownsOpenRenderPasses {
+            self.openRenderPasses.detach();
         }
     }
 }
@@ -803,7 +923,9 @@ impl RenderPass {
 mod tests {
     use super::*;
     use crate::gpu_resource::GPUResourceManagerOwner;
-    use crate::metal::render_pass::RenderPassMetal;
+    use crate::ore_cmd::{
+        ore_command_buffer::OreCommandBuffer, ore_render_pass_recording::RenderPassRecording,
+    };
 
     #[test]
     fn error_state_is_replaced_and_cleared_explicitly() {
@@ -822,20 +944,22 @@ mod tests {
     }
 
     #[test]
-    fn active_pass_is_weakly_held_and_finished_at_most_once() {
+    fn open_pass_is_weakly_held_and_finished_at_most_once() {
         let context = Context::new(Features::default(), None);
-        let pass = RenderPassMetal::new();
-        context.setActiveRenderPass(Some(&pass));
-
-        context.finishActiveRenderPass();
-        let weak = context.activeRenderPass().expect("active pass token");
+        let pass = RenderPassRecording::new(
+            Some(&context),
+            Rc::new(RefCell::new(OreCommandBuffer::default())),
+            &RenderPassDesc::default(),
+        );
+        let weak = pass.activeToken();
+        assert_eq!(context.finishOpenRenderPassesFrom(0), 1);
         assert!(weak.upgrade().expect("live pass").isFinished());
-        context.finishActiveRenderPass();
+        assert_eq!(context.finishOpenRenderPassesFrom(0), 0);
         assert!(weak.upgrade().expect("live pass").isFinished());
 
         drop(pass);
         assert!(weak.upgrade().is_none(), "context must not own the pass");
-        context.finishActiveRenderPass();
+        assert_eq!(context.finishOpenRenderPassesFrom(0), 0);
     }
 
     #[test]

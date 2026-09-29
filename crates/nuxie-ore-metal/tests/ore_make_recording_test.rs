@@ -220,17 +220,6 @@ impl ContextApi for CapturingContext {
     fn lastError(&self) -> String {
         self.base.lastError()
     }
-    fn activeRenderPass(
-        &self,
-    ) -> Option<std::rc::Weak<dyn nuxie_ore_metal::context::ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass();
-    }
     fn clearLastError(&self) {
         self.base.clearLastError();
     }

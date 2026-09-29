@@ -923,7 +923,7 @@ fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGp
         report(
             crate::gpu_canvas::close_orphan_render_pass(
                 &bindings,
-                scope.inherited_render_pass.as_ref(),
+                scope.open_render_pass_token,
             ),
             "GPU render pass left open at script return. Call :finish() on render passes before returning.",
         );

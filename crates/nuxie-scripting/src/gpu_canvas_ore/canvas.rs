@@ -276,25 +276,10 @@ fn begin_pass(lua: &Lua, canvas: &Canvas, table: &Table) -> Result<AnyUserData> 
             clearColor: *clear,
         };
     }
-    let active = {
-        context
-            .borrow()
-            .activeRenderPass()
-            .and_then(|active| active.upgrade())
-    };
-    if let Some(active) = active {
-        if !active.isFinished() {
-            active.finish();
-            context.borrow().setActiveRenderPass(None);
-        }
-    }
-    let pass =
-        nuxie_ore_metal::ore_cmd::ore_deferred_render_pass::beginRenderPassRecordingOrImmediate(
-            context.clone(),
-            &desc,
-            None,
-        );
-    context.borrow().setActiveRenderPass(pass.as_deref());
+    let pass = nuxie_ore_metal::ore_cmd::ore_deferred_render_pass::beginRecordedRenderPass(
+        context.clone(),
+        &desc,
+    );
     lua.create_userdata(Pass {
         pass,
         finished: false,

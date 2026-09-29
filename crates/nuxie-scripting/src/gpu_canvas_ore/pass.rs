@@ -20,7 +20,7 @@ impl Pass {
             })
         {
             return Err(Error::runtime(
-                "render pass expired — already finished, or auto-finished by a subsequent beginRenderPass",
+                "render pass expired: it was already finished",
             ));
         }
         Ok(())
@@ -134,18 +134,10 @@ impl UserData for Pass {
             }
             drop(ctx);this.pass().drawIndexed(count,number_value(lua,instances,1.0)? as u32,number_value(lua,first,0.0)? as u32,base,first_instance);this.draw_call_count=this.draw_call_count.wrapping_add(1);Ok(())
         });
-        methods.add_method_mut("finish", |lua, this, ()| {
+        methods.add_method_mut("finish", |_, this, ()| {
             this.validate()?;
             this.pass().finish();
             this.finished = true;
-            let context = context(lua)?;
-            let ctx = context.borrow();
-            if let Some(active) = ctx.activeRenderPass() {
-                if std::rc::Weak::ptr_eq(&active, &this.pass.as_ref().expect("pass").activeToken())
-                {
-                    ctx.setActiveRenderPass(None);
-                }
-            }
             Ok(())
         });
     }

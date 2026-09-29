@@ -1,9 +1,7 @@
 //! `tests/unit_tests/runtime/scripting/scripting_gpu_features_test.cpp` at e949498e.
 #![allow(non_snake_case)]
 use super::*;
-use nuxie_ore_metal::context::{
-    ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget,
-};
+use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::types::*;
@@ -32,15 +30,6 @@ impl ContextApi for FakeDeviceContext {
     }
     fn lastError(&self) -> String {
         self.base.lastError()
-    }
-    fn activeRenderPass(&self) -> Option<std::rc::Weak<dyn ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(pass);
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass();
     }
     fn clearLastError(&self) {
         self.base.clearLastError();

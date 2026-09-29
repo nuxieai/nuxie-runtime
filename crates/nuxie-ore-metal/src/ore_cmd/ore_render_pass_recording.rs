@@ -9,35 +9,50 @@ use super::{
     ore_make_recording::encodePods,
 };
 use crate::{
-    context::{ActiveRenderPass, Context},
+    context::{ActiveRenderPass, Context, OpenRenderPassRegistry},
     gpu_resource::AnyResourceHandle,
     render_pass::{RenderPass, RenderPassApi},
     types::*,
 };
 use std::{
     any::Any,
-    cell::RefCell,
+    cell::{Cell, RefCell},
     rc::{Rc, Weak},
 };
 
 struct RecordingState {
     base: RefCell<RenderPass>,
     cmd: SharedOreCommandBuffer,
+    registry: Weak<OpenRenderPassRegistry>,
+    token: Cell<u64>,
 }
 impl ActiveRenderPass for RecordingState {
     fn isFinished(&self) -> bool {
         self.base.borrow().isFinished()
     }
     fn finish(&self) {
-        let mut base = self.base.borrow_mut();
-        if base.m_finished {
+        if self.base.borrow().m_finished {
             return;
         }
+        let registry = self.registry.upgrade();
+        if let Some(registry) = &registry {
+            registry.finishNested(self.token.get());
+        }
+        let mut base = self.base.borrow_mut();
         self.cmd.borrow_mut().appendOpcode(CommandType::finish);
         base.m_finished = true;
         for group in &mut base.m_boundGroups {
             *group = None;
         }
+        drop(base);
+        if let Some(registry) = registry {
+            registry.finishOpen(self.token.get());
+        }
+    }
+    fn detachContext(&self) {
+        let mut base = self.base.borrow_mut();
+        base.m_finished = true;
+        base.m_context = std::sync::Weak::new();
     }
 }
 pub struct RenderPassRecording {
@@ -58,6 +73,10 @@ impl RenderPassRecording {
             state: Rc::new(RecordingState {
                 base: RefCell::new(base),
                 cmd,
+                registry: context
+                    .map(|c| Rc::downgrade(&c.openRenderPasses))
+                    .unwrap_or_default(),
+                token: Cell::new(0),
             }),
         };
         let mut begin = BeginRenderPassCmd {
@@ -88,6 +107,13 @@ impl RenderPassRecording {
             stencilLoadOp: ds.stencilLoadOp,
             stencilStoreOp: ds.stencilStoreOp,
         };
+        if let Some(context) = context {
+            out.state.token.set(
+                context
+                    .openRenderPasses
+                    .begin(out.activeToken(), out.state.cmd.clone()),
+            );
+        }
         out.state
             .cmd
             .borrow_mut()
@@ -96,6 +122,14 @@ impl RenderPassRecording {
     }
     pub fn isFinished(&self) -> bool {
         self.state.isFinished()
+    }
+    pub(crate) fn replaceRegisteredPass(&self, pass: Weak<dyn ActiveRenderPass>) {
+        if let Some(registry) = self.state.registry.upgrade() {
+            registry.replacePass(self.state.token.get(), pass);
+        }
+    }
+    pub(crate) fn detachContext(&self) {
+        self.state.detachContext();
     }
     fn idOf(&self, r: Option<&AnyResourceHandle>) -> u32 {
         if let Some(r) = r {
@@ -108,6 +142,11 @@ impl RenderPassRecording {
             );
         }
         self.state.cmd.borrow_mut().capture(r)
+    }
+}
+impl Drop for RenderPassRecording {
+    fn drop(&mut self) {
+        self.state.finish();
     }
 }
 impl RenderPassApi for RenderPassRecording {

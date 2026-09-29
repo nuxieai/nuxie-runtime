@@ -30,34 +30,32 @@ use super::webgpu_cpp_decl::{
     VertexStepMode as WgpuVertexStepMode,
 };
 use super::webgpu_decl::{
-    WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE, WGPUBindGroupLayout, WGPUBlendState, WGPUBufferDescriptor,
-    WGPUChainedStruct, WGPUColorTargetState, WGPUDepthStencilState, WGPUFragmentState,
-    WGPUIndexFormat_Undefined, WGPULoadOp_Clear, WGPULoadOp_Load, WGPUMultisampleState,
-    WGPUOptionalBool_False, WGPUOptionalBool_True, WGPUPipelineLayoutDescriptor,
-    WGPUPrimitiveState, WGPURenderPassColorAttachment, WGPURenderPassDepthStencilAttachment,
-    WGPURenderPassDescriptor, WGPURenderPipelineDescriptor, WGPUSamplerDescriptor,
-    WGPUShaderModuleDescriptor, WGPUShaderSourceWGSL, WGPUStoreOp_Discard, WGPUStoreOp_Store,
-    WGPUStringView, WGPUTextureDescriptor, WGPUTextureViewDescriptor, WGPUVertexAttribute,
-    WGPUVertexBufferLayout, WGPUVertexState,
+    WGPUBindGroupLayout, WGPUBlendState, WGPUBufferDescriptor, WGPUChainedStruct,
+    WGPUColorTargetState, WGPUDepthStencilState, WGPUFragmentState, WGPUIndexFormat_Undefined,
+    WGPULoadOp_Clear, WGPULoadOp_Load, WGPUMultisampleState, WGPUOptionalBool_False,
+    WGPUOptionalBool_True, WGPUPipelineLayoutDescriptor, WGPUPrimitiveState,
+    WGPURenderPassColorAttachment, WGPURenderPassDepthStencilAttachment, WGPURenderPassDescriptor,
+    WGPURenderPipelineDescriptor, WGPUSamplerDescriptor, WGPUShaderModuleDescriptor,
+    WGPUShaderSourceWGSL, WGPUStoreOp_Discard, WGPUStoreOp_Store, WGPUStringView,
+    WGPUTextureDescriptor, WGPUTextureViewDescriptor, WGPUVertexAttribute, WGPUVertexBufferLayout,
+    WGPUVertexState, WGPU_FALSE, WGPU_STRLEN, WGPU_TRUE,
 };
 use super::webgpu_wagyu_decl::{
     WGPUSType_WagyuShaderModuleDescriptor, WGPUWagyuShaderLanguage, WGPUWagyuShaderLanguage_GLSL,
     WGPUWagyuShaderLanguage_GLSLRAW, WGPUWagyuShaderLanguage_WGSL, WGPUWagyuShaderModuleDescriptor,
 };
-use nuxie_ore_metal::bind_group_layout::{
-    validatePipelineDesc, NativeSlotScope,
-};
-use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
+use nuxie_ore_metal::bind_group_layout::{validatePipelineDesc, NativeSlotScope};
+use nuxie_ore_metal::context::{Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::types::{
-    BindGroupDesc, BindGroupLayoutDesc, BindingKind, BlendFactor, BlendOp, BufferDesc, BufferUsage,
-    ColorWriteMask, CompareFunction, CullMode, FaceWinding, Features, Filter, IndexFormat, LoadOp,
-    PipelineDesc, PrimitiveTopology, RenderPassDesc, SamplerDesc, ShaderLanguage, ShaderModuleDesc,
-    StencilOp, StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
-    TextureViewDimension, VertexFormat, VertexStepMode, WrapMode, kMaxBindGroups,
+    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindingKind, BlendFactor, BlendOp,
+    BufferDesc, BufferUsage, ColorWriteMask, CompareFunction, CullMode, FaceWinding, Features,
+    Filter, IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology, RenderPassDesc, SamplerDesc,
+    ShaderLanguage, ShaderModuleDesc, StencilOp, StoreOp, TextureAspect, TextureDesc,
+    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, VertexFormat,
+    VertexStepMode, WrapMode,
 };
-use std::rc::Weak as RcWeak;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_ore_wgpu_ore_context_wgpu.cpp");
@@ -951,7 +949,6 @@ pub(crate) fn beginRenderPass(
     desc: &RenderPassDesc<'_>,
     _outError: Option<&mut String>,
 ) -> Option<Box<dyn nuxie_ore_metal::render_pass::RenderPassApi>> {
-    context.base.finishActiveRenderPass();
     assert!(
         !context.m_wgpuCommandEncoder.Get().is_null(),
         "beginFrame must be called before beginRenderPass"
@@ -1246,15 +1243,6 @@ impl ContextApi for ContextWGPU {
     }
     fn lastError(&self) -> String {
         self.base.lastError()
-    }
-    fn activeRenderPass(&self) -> Option<RcWeak<dyn ActiveRenderPass>> {
-        self.base.activeRenderPass()
-    }
-    fn setActiveRenderPass(&self, pass: Option<&dyn RenderPassApi>) {
-        self.base.setActiveRenderPass(pass)
-    }
-    fn finishActiveRenderPass(&self) {
-        self.base.finishActiveRenderPass()
     }
     fn clearLastError(&self) {
         self.base.clearLastError()

@@ -10,7 +10,7 @@ use crate::mechanical_port::source::{
     },
 };
 
-use std::{cmp::max, collections::BTreeSet, ptr};
+use std::{cmp::max, collections::BTreeSet};
 
 fn buffer_usage_from_string(state: &mut LuaState, value: &str) -> BufferUsage {
     match value {
@@ -1490,7 +1490,7 @@ fn validate_render_pass(state: &mut LuaState, pass: &ScriptedGPURenderPass) {
         || pass.pass.is_none()
         || pass.pass.as_ref().is_some_and(|pass| pass.is_finished())
     {
-        state.error::<()>("render pass expired — already finished, or auto-finished by a subsequent beginRenderPass");
+        state.error::<()>("render pass expired: it was already finished");
     }
 }
 
@@ -1693,16 +1693,6 @@ fn gpu_render_pass_finish(state: &mut LuaState) -> i32 {
     validate_render_pass(state, pass);
     pass.pass.as_mut().unwrap().finish();
     pass.finished = true;
-    if let (Some(pass), Some(context)) = (pass.pass.as_deref(), ore_context(state)) {
-        // Same-call identity check between two live shared borrows. Neither
-        // reference nor an address derived from it is retained.
-        if context
-            .active_render_pass()
-            .is_some_and(|active| std::ptr::eq(active, pass))
-        {
-            context.set_active_render_pass(None);
-        }
-    }
     0
 }
 
@@ -1732,19 +1722,6 @@ impl Drop for ScriptedGPUCanvas {
     fn drop(&mut self) {
         if let (Some(state), Some(reference)) = (self.lua_state.as_mut(), self.image_ref.take()) {
             state.unref(reference);
-        }
-    }
-}
-
-impl Drop for ScriptedGPURenderPass {
-    fn drop(&mut self) {
-        if let (Some(context), Some(pass)) = (self.context.as_deref_mut(), self.pass.as_deref()) {
-            if context
-                .active_render_pass()
-                .is_some_and(|active| ptr::eq(active, pass))
-            {
-                context.set_active_render_pass(None);
-            }
         }
     }
 }
@@ -1937,18 +1914,9 @@ pub fn gpu_canvas_begin_render_pass(state: &mut LuaState) -> i32 {
         state.error::<()>("beginRenderPass: descriptor must include at least one color attachment or a depthStencil attachment");
     }
     let context = ore_context(state).unwrap();
-    if context
-        .active_render_pass()
-        .is_some_and(|pass| !pass.is_finished())
-    {
-        context.active_render_pass_mut().unwrap().finish();
-        context.set_active_render_pass(None);
-    }
-    let pass = context.begin_render_pass(desc);
-    context.set_active_render_pass(Some(pass.as_ref()));
+    let pass = begin_recorded_render_pass(context, desc);
     state.new_rive(ScriptedGPURenderPass {
         pass: Some(pass),
-        context: Some(context),
         finished: false,
         pipeline_set: false,
         sample_count: pass_sample_count.unwrap_or(1).max(1),
@@ -2370,14 +2338,14 @@ pub fn rive_lua_enter_script_call_gpu_scope(state: &mut LuaState) -> ScriptCallG
     };
     scope.open_canvas_frame_token = context.next_open_canvas_frame_token();
     if let Some(ore) = context.ore_context() {
-        scope.inherited_render_pass = ore.active_render_pass().map(std::ptr::NonNull::from);
+        scope.open_render_pass_token = ore.next_render_pass_token();
     }
     scope
 }
 
 fn close_orphan_render_pass(
     state: &mut LuaState,
-    inherited_render_pass: Option<std::ptr::NonNull<OreRenderPass>>,
+    token: u64,
 ) {
     let Some(context) = state.thread_data_optional::<dyn ScriptingContext>() else {
         return;
@@ -2385,19 +2353,9 @@ fn close_orphan_render_pass(
     let Some(ore) = context.ore_context() else {
         return;
     };
-    let Some(pass) = ore.active_render_pass_mut() else {
-        return;
-    };
-    if pass.is_finished() {
+    if ore.finish_open_render_passes_from(token) == 0 {
         return;
     }
-    // The enclosing call retains its pass object, so its address cannot be
-    // reused while that call is suspended.
-    if inherited_render_pass == Some(std::ptr::NonNull::from(&mut *pass)) {
-        return;
-    }
-    pass.finish();
-    ore.set_active_render_pass(None);
     state.push_string("GPU render pass left open at script return. Call :finish() on render passes before returning.");
     context.print_error(state);
     state.pop(1);
@@ -2431,6 +2389,6 @@ fn close_orphan_canvas_frames(state: &mut LuaState, token: u64) {
 }
 
 pub fn rive_lua_exit_script_call_gpu_scope(state: &mut LuaState, scope: &ScriptCallGpuScope) {
-    close_orphan_render_pass(state, scope.inherited_render_pass);
+    close_orphan_render_pass(state, scope.open_render_pass_token);
     close_orphan_canvas_frames(state, scope.open_canvas_frame_token);
 }

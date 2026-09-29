@@ -68,6 +68,23 @@ impl WirePod for CommandType {
         }
     }
 }
+pub const fn isRenderPassCommand(command: CommandType) -> bool {
+    matches!(
+        command,
+        CommandType::beginRenderPass
+            | CommandType::setPipeline
+            | CommandType::setVertexBuffer
+            | CommandType::setIndexBuffer
+            | CommandType::setBindGroup
+            | CommandType::setViewport
+            | CommandType::setScissorRect
+            | CommandType::setStencilReference
+            | CommandType::setBlendColor
+            | CommandType::draw
+            | CommandType::drawIndexed
+            | CommandType::finish
+    )
+}
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum WrapCanvasViewMode {

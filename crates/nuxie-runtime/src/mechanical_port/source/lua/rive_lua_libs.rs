@@ -1242,7 +1242,6 @@ impl_lua_rive!(
 );
 pub struct ScriptedGPURenderPass {
     pub pass: Option<Box<OreRenderPass>>,
-    pub context: Option<*mut OreContext>,
     pub finished: bool,
     pub pipeline_set: bool,
     pub sample_count: u32,
@@ -2218,7 +2217,7 @@ pub struct TrackedViewModelInstance {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ScriptCallGpuScope {
     pub open_canvas_frame_token: u64,
-    pub inherited_render_pass: Option<std::ptr::NonNull<OreRenderPass>>,
+    pub open_render_pass_token: u64,
 }
 
 #[derive(Clone, Copy, Debug)]

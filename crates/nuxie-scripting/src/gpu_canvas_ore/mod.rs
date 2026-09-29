@@ -187,25 +187,13 @@ pub(crate) fn image_view(
 
 pub(super) fn close_orphan_render_pass(
     bindings: &RendererBindings,
-    inherited_render_pass: Option<&std::rc::Weak<dyn nuxie_ore_metal::context::ActiveRenderPass>>,
+    token: u64,
 ) -> Result<bool> {
     let Some(context) = bindings.ore_context() else {
         return Ok(false);
     };
-    let active = context.borrow().activeRenderPass();
-    let Some(active) = active else {
-        return Ok(false);
-    };
-    let Some(pass) = active.upgrade() else {
-        return Ok(false);
-    };
-    if pass.isFinished() {
-        return Ok(false);
-    }
-    if inherited_render_pass.is_some_and(|inherited| std::rc::Weak::ptr_eq(&active, inherited)) {
-        return Ok(false);
-    }
-    pass.finish();
-    context.borrow().setActiveRenderPass(None);
-    Ok(true)
+    // Finishing an inline recording replays through this same context. Release
+    // its host borrow before invoking pass callbacks, as the native owner does.
+    let registry = context.borrow().contextBase().openRenderPassRegistry();
+    Ok(registry.finishOpenRenderPassesFrom(token) != 0)
 }

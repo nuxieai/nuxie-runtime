@@ -2,11 +2,14 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-bc97fa18fdd658f7c0c80f935121276d3b28ffaf}
+ref=${RIVE_RUNTIME_REF:-a6b6723ba291f6f00888c09a1f975c6c23936095}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/nested_artboard_constrained.riv|a6c0d028124595f97545c5d3ea34a1b72ce42f5154b791fb7f8619de73f75e68|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_constrained.riv"
+  "sync/nested_artboard_followpath.riv|8f2866a5712c780ebd7da7bb4e9fcfeb66d8a9511828e882892ec4cce6683fac|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_followpath.riv"
+  "sync/nested_artboard_origin_override.riv|6ad14f15e3b4f5802af9ade3d59df489838d22b85024117a3a1457a25af33842|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_origin_override.riv"
   "semantic/tabtest.riv|529e4deb84fbf89da79730bbd1e3b487c915fe59088f2b2fd6c8b55371bc59fd|ad34081b740a3071ca92f2e73223404a600199e3|semantic/tabtest.riv"
   "sync/svg_clip_test.riv|aa92b7949420fa8cbf37936675fc53ccf6cd73d9e67e21d0aed79a396434f91d|f1ec753f1ad9e64f0844f845ffc8d68d16d15bdb|svg_clip_test.riv"
   "sync/layout_solos.riv|9ef8d3b289e54433f5498a9a95a3171a6994677be9c1b82b8cea192b00c965c7|86fc70a74e0db7b747e04471bd4372cd38f6a0e7|layout/layout_solos.riv"

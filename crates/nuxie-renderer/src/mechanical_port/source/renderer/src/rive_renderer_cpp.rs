@@ -1,6 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
  * The literal source is retained below in declaration/order form.
  */
 
@@ -64,9 +64,11 @@
 // RiveRenderer::ClipElement::ClipElement(const Mat2D& matrix_,
 //                                        const RiveRenderPath* path_,
 //                                        FillRule fillRule_,
-//                                        IAABB pixelBounds_)
+//                                        IAABB pixelBounds_,
+//                                        std::optional<StrokeParams> stroke_,
+//                                        float feather_)
 // {
-//     reset(matrix_, path_, fillRule_, pixelBounds_);
+//     reset(matrix_, path_, fillRule_, pixelBounds_, stroke_, feather_);
 // }
 //
 // RiveRenderer::ClipElement::~ClipElement() {}
@@ -74,7 +76,9 @@
 // void RiveRenderer::ClipElement::reset(const Mat2D& matrix_,
 //                                       const RiveRenderPath* path_,
 //                                       FillRule fillRule_,
-//                                       IAABB pixelBounds_)
+//                                       IAABB pixelBounds_,
+//                                       std::optional<StrokeParams> stroke_,
+//                                       float feather_)
 // {
 //     matrix = matrix_;
 //     rawPathMutationID = path_->getRawPathMutationID();
@@ -83,6 +87,8 @@
 //     fillRule = fillRule_;
 //     clipID = 0; // This gets initialized lazily.
 //     pixelBounds = pixelBounds_;
+//     stroke = stroke_;
+//     feather = feather_;
 // }
 //
 // bool RiveRenderer::ClipElement::isEquivalent(const Mat2D& matrix_,
@@ -172,14 +178,28 @@
 //             save();
 //
 //             AABB bounds;
-//             bool isAABB = IsAABB(path->getRawPath(), &bounds);
-//             if (!isAABB)
+//             if (!IsAABB(path->getRawPath(), &bounds) || paint->getIsStroked() ||
+//                 paint->getFeather() != 0.0f)
 //             {
 //                 // If this is not an AABB directly we need to get the actual
 //                 // bounds and then clip against the path.
-//                 // TODO: stroked/feathered paths
 //                 bounds = path->getBounds();
-//                 clipPath(renderPath);
+//
+//                 std::optional<StrokeParams> stroke;
+//                 if (paint->getIsStroked())
+//                 {
+//                     stroke = {
+//                         .thickness = paint->getThickness(),
+//                         .join = paint->getJoin(),
+//                         .cap = paint->getCap(),
+//                     };
+//                 }
+//
+//                 float outset =
+//                     RiveRenderPath::calculateBoundsOutset(stroke,
+//                                                           paint->getFeather());
+//                 bounds = bounds.outset(outset, outset);
+//                 clipPathImpl(path, stroke, paint->getFeather());
 //             }
 //
 //             // TODO: Multiply the paint's gradient matrix with this once it
@@ -393,7 +413,9 @@
 //                                                     renderState.clipRect);
 // }
 //
-// void RiveRenderer::clipPathImpl(const RiveRenderPath* path)
+// void RiveRenderer::clipPathImpl(const RiveRenderPath* path,
+//                                 std::optional<StrokeParams> stroke,
+//                                 float feather)
 // {
 //     RIVE_PROF_SCOPE_L(3)
 //     auto& renderState = m_renderStateStack.back();
@@ -419,8 +441,7 @@
 //         // Calculate the pixel bounds for this clip path before we push it into
 //         // the stack to ensure that we even need to do so
 //         const auto pixelBounds =
-//             renderState.matrix.mapBoundingBox(path->getRawPath().points())
-//                 .roundOut();
+//             path->calculatePixelBounds(renderState.matrix, stroke, feather);
 //         renderState.overallClipPixelBounds =
 //             renderState.overallClipPixelBounds.intersect(pixelBounds);
 //         if (renderState.overallClipPixelBounds.empty())
@@ -433,7 +454,9 @@
 //         m_clipStack.emplace_back(renderState.matrix,
 //                                  path,
 //                                  path->getFillRule(),
-//                                  pixelBounds);
+//                                  pixelBounds,
+//                                  stroke,
+//                                  feather);
 //     }
 //     else
 //     {
@@ -780,6 +803,14 @@
 //         RiveRenderPaint clipUpdatePaint;
 //         clipUpdatePaint.clipUpdate(
 //             /*clip THIS clipDraw against:*/ parentClipID);
+//         clipUpdatePaint.feather(clip.feather);
+//         if (clip.stroke.has_value())
+//         {
+//             clipUpdatePaint.style(RenderPaintStyle::stroke);
+//             clipUpdatePaint.thickness(clip.stroke->thickness);
+//             clipUpdatePaint.join(clip.stroke->join);
+//             clipUpdatePaint.cap(clip.stroke->cap);
+//         }
 //
 //         rcp clipPath = clip.path;
 //         FillRule clipFillRule = clip.fillRule;
@@ -918,13 +949,13 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::{
-    ClipElement, RenderState, RiveRenderer,
+    ClipElement, RenderState, RiveRenderer, StrokeParams,
 };
 use crate::mechanical_port::source::renderer::src::draw_cpp::{
     make_clip_reset, make_image_mesh_draw, make_image_rect_draw, make_path_draw_from_source,
 };
 use nuxie_render_api::{
-    Aabb, BlendMode, FillRule, Mat2D, RawPath, RenderPath as ApiRenderPath, Vec2D,
+    Aabb, BlendMode, FillRule, Mat2D, RawPath, RenderPaintStyle, RenderPath as ApiRenderPath, Vec2D,
 };
 
 mod gpu {
@@ -1330,7 +1361,7 @@ mod transform_rect_to_new_space_tests {
 
 impl RiveRenderer {
     pub fn implementation_source_identity() -> &'static str {
-        "renderer/src/rive_renderer.cpp@4ac7b32798da0482e441ef09304dc3b480ed3ee5"
+        "renderer/src/rive_renderer.cpp@0d8bb5a342f84a53119a6817c46ad1739cb7b696"
     }
     pub unsafe fn clipRectImplSource(&mut self, mut rect: Aabb, original_path: &RiveRenderPath) {
         let state = self.current_state().clone();
@@ -1340,7 +1371,7 @@ impl RiveRenderer {
         }
         if !state.clipRectInverseMatrix.is_null() {
             if !transform_rect_to_new_space(&mut rect, state.matrix, state.clipRectMatrix) {
-                unsafe { self.clipPathImplSource(original_path) };
+                unsafe { self.clipPathImplSource(original_path, None, 0.0) };
                 return;
             }
         }
@@ -1374,28 +1405,48 @@ impl RiveRenderer {
         current.overallClipPixelBounds = current.overallClipPixelBounds.intersect(pixel);
         current.clipRectInverseMatrix = inverse_ptr;
     }
-    pub unsafe fn clipPathImplSource(&mut self, path: &RiveRenderPath) {
+    pub unsafe fn clipPathImplSource(
+        &mut self,
+        path: &RiveRenderPath,
+        stroke: Option<StrokeParams>,
+        feather: f32,
+    ) {
         if path.getBounds().is_empty_or_nan() {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         }
         let state = self.current_state().clone();
-        let mapped = state.matrix.map_bounding_box(path.getRawPath().points());
-        let pixel = mapped.round_out();
-        let combined = state.overallClipPixelBounds.intersect(pixel);
-        if combined.empty() {
-            self.current_state_mut().overallClipPixelBounds = combined;
-            return;
-        }
         let height = state.clipStackHeight;
+        debug_assert!(self.m_clipStack.len() >= height);
         if self.m_clipStack.len() == height
             || !self.m_clipStack[height].isEquivalent(state.matrix, path)
         {
+            let pixel = path.calculatePixelBounds(state.matrix, stroke.as_ref(), feather);
+            let combined = state.overallClipPixelBounds.intersect(pixel);
+            self.current_state_mut().overallClipPixelBounds = combined;
+            if combined.empty() {
+                return;
+            }
             self.m_clipStack.truncate(height);
-            self.m_clipStack
-                .push(unsafe { ClipElement::new(state.matrix, path, path.getFillRule(), pixel) });
+            self.m_clipStack.push(unsafe {
+                ClipElement::new(
+                    state.matrix,
+                    path,
+                    path.getFillRule(),
+                    pixel,
+                    stroke,
+                    feather,
+                )
+            });
+        } else {
+            let combined = state
+                .overallClipPixelBounds
+                .intersect(self.m_clipStack[height].pixelBounds);
+            self.current_state_mut().overallClipPixelBounds = combined;
+            if combined.empty() {
+                return;
+            }
         }
-        self.current_state_mut().overallClipPixelBounds = combined;
         self.current_state_mut().clipStackHeight = height + 1;
     }
     pub fn clipAndPushDrawSource(&mut self, mut draw: DrawUniquePtr) {
@@ -1486,6 +1537,13 @@ impl RiveRenderer {
             let clip = &mut self.m_clipStack[i];
             let mut paint = RiveRenderPaint::new();
             paint.clipUpdate(current);
+            paint.feather(clip.feather);
+            if let Some(stroke) = clip.stroke {
+                paint.style(RenderPaintStyle::Stroke);
+                paint.thickness(stroke.thickness);
+                paint.join(stroke.join);
+                paint.cap(stroke.cap);
+            }
             let Some(mut clip_path) = clip.path.clone() else {
                 return ApplyClipResult::failure;
             };
@@ -1608,10 +1666,24 @@ impl RendererContract for RiveRenderer {
         {
             self.save();
             let mut bounds = Aabb::new(0.0, 0.0, 0.0, 0.0);
-            if !Self::IsAABB(p.getRawPath(), &mut bounds) {
+            if !Self::IsAABB(p.getRawPath(), &mut bounds)
+                || q.getIsStroked()
+                || q.getFeather() != 0.0
+            {
                 bounds = p.getBounds();
-                // Upstream adds stroked/feathered image paths in a later commit.
-                unsafe { self.clipPath(path) };
+                let stroke = q.getIsStroked().then(|| StrokeParams {
+                    thickness: q.getThickness(),
+                    join: q.getJoin(),
+                    cap: q.getCap(),
+                });
+                let outset = RiveRenderPath::calculateBoundsOutset(stroke.as_ref(), q.getFeather());
+                bounds = Aabb::new(
+                    bounds.min_x - outset,
+                    bounds.min_y - outset,
+                    bounds.max_x + outset,
+                    bounds.max_y + outset,
+                );
+                unsafe { self.clipPathImplSource(p, stroke, q.getFeather()) };
             }
             let gradient_matrix = self.current_state().matrix;
             let adjust = Mat2D([
@@ -1717,7 +1789,7 @@ impl RendererContract for RiveRenderer {
         {
             unsafe { self.clipRectImplSource(candidate, p) }
         } else {
-            unsafe { self.clipPathImplSource(p) }
+            unsafe { self.clipPathImplSource(p, None, 0.0) }
         }
     }
     unsafe fn drawImage(

@@ -4,7 +4,7 @@
 
 // Mechanical translation of the complete pinned source implementation
 // renderer/src/gpu.cpp.
-// Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+// Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -2119,6 +2119,13 @@
 //         simd::cast<uint32_t>((e > 143u) & 1) * 0x7FFFu);
 // }
 //
+// float featherRadiusFromFeather(float feather)
+// {
+//     // Blur magnitudes in design tools are customarily the width of two standard
+//     // deviations, or, the length of the range -1stddev .. +1stddev.
+//     return feather * (GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS / 2);
+// }
+//
 // // Code to generate g_gaussianIntegralTableF16.
 // #ifdef RIVE_GENERATE_FEATHER_LUT
 // static float eval_normal_distribution(float x, float mu, float inverseSigma)
@@ -2397,6 +2404,7 @@
 //     0x3a77, 0x3a80, 0x3a8a, 0x3a95, 0x3aa0, 0x3aac, 0x3ab9, 0x3ac7, 0x3ad6,
 //     0x3ae7, 0x3afa, 0x3b10, 0x3b29, 0x3b48, 0x3b70, 0x3baa, 0x3c00,
 // };
+//
 // } // namespace rive::gpu
 use core::f32;
 use core::ffi::c_char;
@@ -2415,7 +2423,11 @@ const _: [(); OuterCubicPatchSegmentSpan as usize] =
 // Exact source-owned value from renderer/src/shaders/constants.glsl, which
 // gpu.cpp includes directly and the generated shaders pair with shift 7/mask 0x7f.
 const STORAGE_TEXTURE_WIDTH: u32 = 256;
-const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 4.0;
+const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = crate::gpu::GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS;
+
+pub fn featherRadiusFromFeather(feather: f32) -> f32 {
+    crate::gpu::feather_radius_from_feather(feather)
+}
 const GLSL_ENABLE_CLIPPING: &[u8] = b"ENABLE_CLIPPING\0";
 const GLSL_ENABLE_CLIP_RECT: &[u8] = b"ENABLE_CLIP_RECT\0";
 const GLSL_ENABLE_ADVANCED_BLEND: &[u8] = b"ENABLE_ADVANCED_BLEND\0";

@@ -388,7 +388,7 @@ fn build_feather_tessellation_with_direction_impl(
 ) -> Option<StrokeTessellation> {
     #[cfg(test)]
     FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
-    let feather_radius = paint_feather * 1.5;
+    let feather_radius = crate::gpu::feather_radius_from_feather(paint_feather);
     if feather_radius <= 0.0 || !feather_radius.is_finite() {
         return None;
     }
@@ -427,7 +427,8 @@ pub(crate) fn feather_requires_atlas(
 }
 
 pub(crate) fn feather_atlas_scale(paint_feather: f32, transform: Mat2D) -> f32 {
-    let device_radius = paint_feather * 1.5 * max_matrix_scale(transform);
+    let device_radius =
+        crate::gpu::feather_radius_from_feather(paint_feather) * max_matrix_scale(transform);
     16.0 / device_radius.max(16.0)
 }
 
@@ -477,7 +478,13 @@ fn feather_pixel_bounds_impl(
     let softened_path = (soften_feather_fill
         && stroke.is_none()
         && feather_fill_requires_softening(paint_feather, matrix_scale))
-    .then(|| softened_path_for_feathering(path, paint_feather * 1.5, matrix_scale));
+    .then(|| {
+        softened_path_for_feathering(
+            path,
+            crate::gpu::feather_radius_from_feather(paint_feather),
+            matrix_scale,
+        )
+    });
     let path = softened_path.as_ref().unwrap_or(path);
     let mut mapped_bounds = transform.map_bounding_box(path.points());
     debug_assert!(mapped_bounds.width() >= 0.0);
@@ -492,7 +499,7 @@ fn feather_pixel_bounds_impl(
             stroke_radius
         }
     });
-    radius += paint_feather * 1.5;
+    radius += crate::gpu::feather_radius_from_feather(paint_feather);
     let stroke_pixel_outset = transform.map_bounds(Aabb::new(0.0, 0.0, radius, radius));
     mapped_bounds = mapped_bounds.outset(
         stroke_pixel_outset.width() + 1.0,
@@ -582,7 +589,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     scratch: &mut StrokePreparationScratch,
 ) -> Option<StrokeTessellation> {
     let matrix_scale = max_matrix_scale(transform);
-    let feather_radius = paint_feather * 1.5;
+    let feather_radius = crate::gpu::feather_radius_from_feather(paint_feather);
     let softened_path = (soften_feather_fill
         && stroke.is_none()
         && feather_fill_requires_softening(paint_feather, matrix_scale))

@@ -27,7 +27,7 @@ use nuxie_render_api::{
 };
 
 pub fn resolve_path_pixel_bounds(
-    path: &nuxie_render_api::RawPath,
+    path: &RiveRenderPath,
     matrix: Mat2D,
     precomputed_pixel_bounds: Option<IAABB>,
     paint_feather: f32,
@@ -38,17 +38,10 @@ pub fn resolve_path_pixel_bounds(
         return Some(pixel_bounds);
     }
 
-    let [left, top, right, bottom] = if stroke.is_some() || paint_feather != 0.0 {
-        crate::draw::prepared_feather_pixel_bounds(path, matrix, paint_feather, stroke)?
-    } else {
-        crate::draw::path_pixel_bounds(path, matrix)?
-    };
-    let pixel_bounds = IAABB {
-        left,
-        top,
-        right,
-        bottom,
-    };
+    let stroke = stroke.map(|(thickness, join, cap)| {
+        crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::StrokeParams { thickness, join, cap }
+    });
+    let pixel_bounds = path.calculatePixelBounds(matrix, stroke.as_ref(), paint_feather);
     #[cfg(debug_assertions)]
     if let Some(precomputed) = precomputed_pixel_bounds {
         debug_assert_eq!(pixel_bounds, precomputed);
@@ -1605,7 +1598,7 @@ pub unsafe fn make_path_draw_from_source(
         context.frameInterlockMode(),
     );
     let pixel_bounds = resolve_path_pixel_bounds(
-        path,
+        render_path,
         paint_matrix,
         precomputed_pixel_bounds,
         paint.getFeather(),
@@ -1704,7 +1697,7 @@ pub unsafe fn make_path_draw_from_source(
     }
 
     let feather_radius = if paint.getFeather() != 0.0 {
-        let radius = paint.getFeather() * 1.5;
+        let radius = gpu::featherRadiusFromFeather(paint.getFeather());
         debug_assert!(!radius.is_nan() && radius > 0.0);
         radius
     } else {

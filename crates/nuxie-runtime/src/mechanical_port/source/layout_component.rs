@@ -1917,6 +1917,19 @@ impl LayoutComponent {
             });
         }
     }
+    /// Whether the real collection walk reaches this child and takes its node.
+    /// Walking upward from the child is not equivalent through opaque containers.
+    #[cfg(feature = "tools")]
+    pub fn collects_for_layout(&self, child: &CoreHandle) -> bool {
+        let mut found = false;
+        for (component, _) in Self::layout_providers_children(self.base.children(), false) {
+            if &component == child {
+                found = true;
+            }
+        }
+        found
+    }
+
     pub fn sync_layout_children(&mut self) {
         self.clear_layout_children();
         for (_, provider) in Self::layout_providers_children(self.base.children(), false) {

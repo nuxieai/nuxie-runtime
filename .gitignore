@@ -4,6 +4,7 @@
 /fixtures/command_queue/
 /fixtures/gm/
 /fixtures/fonts/
+/fixtures/sync/layout/
 !/fixtures/sync/data_bind_blob_test.riv
 !/fixtures/sync/color_passthrough_test.riv
 !/fixtures/sync/global_view_models_scripting_test.riv

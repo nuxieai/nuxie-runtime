@@ -1678,10 +1678,10 @@ impl Text {
         self.local_bounds()
     }
     pub fn computed_width(&self) -> f32 {
-        self.bounds.width()
+        self.local_bounds().width()
     }
     pub fn computed_height(&self) -> f32 {
-        self.bounds.height()
+        self.local_bounds().height()
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
         if value.intersects(ComponentDirt::WORLD_TRANSFORM) {

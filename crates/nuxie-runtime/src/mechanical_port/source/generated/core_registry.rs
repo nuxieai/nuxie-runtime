@@ -6447,14 +6447,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 )
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::computed_width(
-                    &mut self.base.base.base.base,
-                )
+                crate::mechanical_port::source::text::text::Text::computed_width(self)
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::computed_height(
-                    &mut self.base.base.base.base,
-                )
+                crate::mechanical_port::source::text::text::Text::computed_height(self)
             }
             CoreField::TextWidth => self.base.width(),
             CoreField::TextHeight => self.base.height(),
@@ -40205,14 +40201,10 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                 )
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::computed_width(
-                    &mut self.base.base.base.base,
-                )
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_width(self)
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::computed_height(
-                    &mut self.base.base.base.base,
-                )
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_height(self)
             }
             CoreField::LayoutComponentWidth => self.base.width(),
             CoreField::LayoutComponentHeight => self.base.height(),
@@ -40706,13 +40698,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                 crate::mechanical_port::source::artboard::Artboard::computed_root_y(self)
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::node::Node::computed_width(
-                    &mut self.base.base.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_width(
+                    &self.base.base,
                 )
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::node::Node::computed_height(
-                    &mut self.base.base.base.base.base.base,
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_height(
+                    &self.base.base,
                 )
             }
             CoreField::LayoutComponentWidth => self.base.base.base.width(),

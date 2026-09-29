@@ -1639,6 +1639,13 @@ impl ArtboardComponentList {
             .unwrap_or_else(Mat2D::identity)
     }
 
+    /// A mounted item's layout offset, less the item's artboard origin.
+    #[cfg(feature = "tools")]
+    pub fn item_position(&self, index: i32) -> Vec2D {
+        self.artboard_instance(index)
+            .map_or_else(Vec2D::default, |artboard| self.artboard_position(&artboard))
+    }
+
     fn artboard_position(&self, artboard: &RuntimeArtboardInstanceHandle) -> Vec2D {
         let matrix = self.artboard_transform(artboard);
         Vec2D::new(matrix[4], matrix[5])

@@ -1,4 +1,4 @@
-//! Upstream tests/unit_tests/renderer/ore_deferred_bookkeeping_test.cpp at 707c4f60.
+//! Upstream tests/unit_tests/renderer/ore_deferred_bookkeeping_test.cpp at edcf7d9d.
 use super::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::{context::ContextApi, types::*};
 
@@ -105,4 +105,58 @@ fn an_empty_deferred_layout_keeps_no_entries() {
         })
         .unwrap();
     assert_eq!(group.bindGroupBase().unwrap().dynamicOffsetCount(), 0);
+}
+
+#[test]
+fn a_deferred_bind_group_rejects_a_ubo_shorter_than_its_block() {
+    let mut ctx = DeferredOreContext::fromReal(None);
+    let entries = [BindGroupLayoutEntry {
+        binding: 1,
+        kind: BindingKind::uniformBuffer,
+        minBindingSize: 192,
+        ..Default::default()
+    }];
+    let layout = ctx
+        .makeBindGroupLayout(&BindGroupLayoutDesc {
+            entries: Some(&entries),
+            entryCount: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    let mut buffer_desc = BufferDesc {
+        usage: BufferUsage::uniform,
+        size: 160,
+        data: None,
+        immutable: false,
+        label: None,
+    };
+    let model = ctx.makeBuffer(&buffer_desc).unwrap();
+    let mut ubos = [UBOEntry {
+        slot: 1,
+        buffer: Some(&model),
+        ..Default::default()
+    }];
+    // Replay never talks to the script, so the refusal happens on record.
+    ctx.clearLastError();
+    assert!(ctx
+        .makeBindGroup(&BindGroupDesc {
+            layout: Some(&layout),
+            ubos: &ubos,
+            uboCount: 1,
+            ..Default::default()
+        })
+        .is_none());
+    assert!(ctx.lastError().contains("needs 192"));
+
+    buffer_desc.size = 192;
+    let sized = ctx.makeBuffer(&buffer_desc).unwrap();
+    ubos[0].buffer = Some(&sized);
+    assert!(ctx
+        .makeBindGroup(&BindGroupDesc {
+            layout: Some(&layout),
+            ubos: &ubos,
+            uboCount: 1,
+            ..Default::default()
+        })
+        .is_some());
 }

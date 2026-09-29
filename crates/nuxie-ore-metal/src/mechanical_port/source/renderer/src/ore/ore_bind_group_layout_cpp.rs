@@ -23,6 +23,102 @@ use crate::{context::ContextApi, shader_module::ShaderModule};
 #[cfg(all(test, feature = "with-rive-tools"))]
 mod shader_layout_tests {
     use super::*;
+    use crate::buffer::{Buffer, BufferApi, BufferUpdateError};
+    use crate::gpu_resource::{GPUResource, GpuResourcePayload, ResourceHandle};
+
+    struct TestBuffer(Buffer);
+    unsafe impl GpuResourcePayload for TestBuffer {
+        fn gpu_resource(&self) -> &GPUResource {
+            self.0.gpu_resource()
+        }
+        fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+            self.0.gpu_resource_mut()
+        }
+    }
+    impl BufferApi for TestBuffer {
+        fn size(&self) -> u32 {
+            self.0.size()
+        }
+        fn usage(&self) -> BufferUsage {
+            self.0.usage()
+        }
+        fn update(&self, _: &[u8], _: u32, _: u32) -> Result<(), BufferUpdateError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn validate_bind_group_desc_rejects_ubo_shorter_than_block() {
+        let ubo_entry = |binding, minimum| BindGroupLayoutEntry {
+            binding,
+            kind: BindingKind::uniformBuffer,
+            minBindingSize: minimum,
+            ..Default::default()
+        };
+        let layout = |entries| {
+            let mut layout = BindGroupLayout::new();
+            layout.m_groupIndex = 0;
+            layout.m_entries = entries;
+            ResourceHandle::new(None, layout).erase()
+        };
+        let sized = layout(vec![ubo_entry(0, 208), ubo_entry(1, 192)]);
+        let buffer = |size| {
+            ResourceHandle::new_buffer(None, TestBuffer(Buffer::new(size, BufferUsage::uniform)))
+                .erase()
+        };
+        let camera = buffer(208);
+        let model = buffer(160);
+        let models = buffer(1024);
+        let mut ubos = [
+            UBOEntry {
+                slot: 0,
+                buffer: Some(&camera),
+                ..Default::default()
+            },
+            UBOEntry {
+                slot: 1,
+                buffer: Some(&model),
+                ..Default::default()
+            },
+        ];
+        let check = |layout, ubos: &[UBOEntry<'_>], error: &mut String| {
+            validateBindGroupDesc(
+                &BindGroupDesc {
+                    layout: Some(layout),
+                    ubos,
+                    uboCount: ubos.len() as u32,
+                    textures: &[],
+                    textureCount: 0,
+                    samplers: &[],
+                    samplerCount: 0,
+                    label: None,
+                },
+                Some(error),
+            )
+        };
+        let mut error = String::new();
+        assert!(!check(&sized, &ubos, &mut error));
+        assert!(error.contains("@binding(1)"));
+        assert!(error.contains("160"));
+        assert!(error.contains("192"));
+        ubos[1].buffer = Some(&models);
+        assert!(check(&sized, &ubos, &mut error));
+        ubos[1].offset = 256;
+        ubos[1].size = 192;
+        assert!(check(&sized, &ubos, &mut error));
+        ubos[1].size = 160;
+        assert!(!check(&sized, &ubos, &mut error));
+        assert!(error.contains("160"));
+        ubos[1].offset = 1000;
+        ubos[1].size = 192;
+        assert!(!check(&sized, &ubos, &mut error));
+        assert!(error.contains("exceeds"));
+        let unsized_layout = layout(vec![ubo_entry(1, 0)]);
+        ubos[1].offset = 0;
+        ubos[1].size = 0;
+        ubos[1].buffer = Some(&model);
+        assert!(check(&unsized_layout, &ubos[1..], &mut error));
+    }
 
     #[test]
     fn shared_population_preserves_fields_and_reflects_binding_metadata() {
@@ -33,6 +129,7 @@ mod shader_layout_tests {
             kind: ResourceKind::UniformBuffer,
             stageMask: 7,
             backendSlot: [4, BindingMap::kAbsent, 9],
+            minBindingSize: 192,
             ..Default::default()
         });
         shader.m_bindingMap.push(&BindingMapEntry {
@@ -66,7 +163,7 @@ mod shader_layout_tests {
             entries[0].nativeSlotFS,
             BindGroupLayoutEntry::kNativeSlotAbsent
         );
-        assert_eq!(entries[0].minBindingSize, 123);
+        assert_eq!(entries[0].minBindingSize, 192);
         assert_eq!(entries[0].nativeSlotCS, 456);
         assert_eq!(entries[1].binding, 8);
         assert!(!entries[1].hasDynamicOffset);
@@ -254,6 +351,7 @@ pub fn populateBindGroupLayoutEntries(
         out.textureViewDim = viewDimFromBindingMap(e.textureViewDim);
         out.textureSampleType = sampleTypeFromBindingMap(e.textureSampleType);
         out.textureMultisampled = e.textureMultisampled;
+        out.minBindingSize = e.minBindingSize;
         let native_slot = |slot| {
             if slot == BindingMap::kAbsent {
                 BindGroupLayoutEntry::kNativeSlotAbsent
@@ -690,6 +788,11 @@ pub fn validateStagesAgree(
                 && vs.textureSampleType != fs.textureSampleType
             {
                 Some("texture sample type")
+            } else if vs.minBindingSize != 0
+                && fs.minBindingSize != 0
+                && vs.minBindingSize != fs.minBindingSize
+            {
+                Some("uniform block size")
             } else {
                 None
             };
@@ -763,4 +866,56 @@ pub fn validatePipelineDesc(
         layouts.as_deref(),
         outError,
     )
+}
+
+/// Validate UBO ranges before a backend touches native objects. Null layouts
+/// and missing bindings/buffers remain the backend's own errors to name.
+pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut String>) -> bool {
+    let Some(layout) = desc.layout.and_then(AnyResourceHandle::bindGroupLayoutBase) else {
+        return true;
+    };
+    for ubo in desc.ubos.iter().take(desc.uboCount as usize) {
+        let Some(entry) = layout.findEntry(ubo.slot) else {
+            continue;
+        };
+        if entry.kind != BindingKind::uniformBuffer {
+            continue;
+        }
+        let Some(bufferSize) = ubo.buffer.and_then(AnyResourceHandle::size).map(u64::from) else {
+            continue;
+        };
+        if u64::from(ubo.offset) > bufferSize
+            || u64::from(ubo.offset) + u64::from(ubo.size) > bufferSize
+        {
+            if let Some(error) = outError.as_mut() {
+                **error = format!(
+                    "@group({}) @binding({}): offset {} + size {} exceeds the {} byte buffer",
+                    layout.groupIndex(),
+                    ubo.slot,
+                    ubo.offset,
+                    ubo.size,
+                    bufferSize
+                );
+            }
+            return false;
+        }
+        let bound = if ubo.size != 0 {
+            u64::from(ubo.size)
+        } else {
+            bufferSize - u64::from(ubo.offset)
+        };
+        if bound < u64::from(entry.minBindingSize) {
+            if let Some(error) = outError.as_mut() {
+                **error = format!(
+                    "@group({}) @binding({}): binds {} bytes but the shader's uniform block needs {}",
+                    layout.groupIndex(),
+                    ubo.slot,
+                    bound,
+                    entry.minBindingSize
+                );
+            }
+            return false;
+        }
+    }
+    true
 }

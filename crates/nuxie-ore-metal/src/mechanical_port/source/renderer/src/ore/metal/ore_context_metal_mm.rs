@@ -37,14 +37,14 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resou
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_binding_map_hpp::BindingMap;
 use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_types_hpp::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BlendFactor, BlendOp, BufferDesc, ColorWriteMask, CompareFunction, Features, Filter, LoadOp,
-    PipelineDesc, RenderPassDesc, SamplerDesc, ShaderModuleDesc, StencilOp, StoreOp, TextureDesc,
-    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, VertexFormat,
-    VertexStepMode, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BlendFactor, BlendOp,
+    BufferDesc, ColorWriteMask, CompareFunction, Features, Filter, LoadOp, PipelineDesc,
+    RenderPassDesc, SamplerDesc, ShaderModuleDesc, StencilOp, StoreOp, TextureDesc, TextureFormat,
+    TextureType, TextureViewDesc, TextureViewDimension, VertexFormat, VertexStepMode, WrapMode,
+    kMaxBindGroups,
 };
 use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-    validatePipelineDesc, NativeSlotScope,
+    NativeSlotScope, validateBindGroupDesc, validatePipelineDesc,
 };
 
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
@@ -1181,6 +1181,11 @@ impl ContextMetal {
                 .setLastError("makeBindGroup: BindGroupDesc::layout is null");
             return None;
         }
+        let mut error = String::new();
+        if !validateBindGroupDesc(desc, Some(&mut error)) {
+            self.base.setLastError(format!("makeBindGroup: {error}"));
+            return None;
+        }
         let layoutHandle = desc.layout?;
         if !self.ownsResource(layoutHandle) {
             self.base
@@ -2151,11 +2156,13 @@ mod tests {
         drop(context);
         assert_eq!(completion.completedSerial(), 1);
         assert_eq!(submission.result(), Some(Ok(())));
-        assert!(command_buffer_completion_result(
-            MTLCommandBufferStatus::Error,
-            Some("injected Metal failure".to_owned())
-        )
-        .is_err());
+        assert!(
+            command_buffer_completion_result(
+                MTLCommandBufferStatus::Error,
+                Some("injected Metal failure".to_owned())
+            )
+            .is_err()
+        );
     }
 
     #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
@@ -2185,11 +2192,13 @@ mod tests {
 
         let stage = Arc::new(AtomicU64::new(0));
         let completed = AtomicU64::new(0);
-        let mut deferred = vec![ResourceHandle::new(
-            None,
-            crate::gpu_resource::TestGPUResource::new(CompletionDropProbe(stage.clone())),
-        )
-        .erase()];
+        let mut deferred = vec![
+            ResourceHandle::new(
+                None,
+                crate::gpu_resource::TestGPUResource::new(CompletionDropProbe(stage.clone())),
+            )
+            .erase(),
+        ];
 
         finish_source_completion(&mut deferred, &completed, 7, || {
             assert_eq!(stage.load(Ordering::Relaxed), 1);
@@ -2413,31 +2422,37 @@ mod tests {
         };
         context.base.setLastError("earlier context error");
         let empty_binding_map = [3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
-        assert!(context
-            .makeShaderModule(&ShaderModuleDesc {
-                code: Some(b"this is not valid Metal shading language"),
-                codeSize: b"this is not valid Metal shading language".len() as u32,
-                bindingMapBytes: Some(&empty_binding_map),
-                bindingMapSize: empty_binding_map.len() as u32,
-                ..ShaderModuleDesc::default()
-            })
-            .is_none());
+        assert!(
+            context
+                .makeShaderModule(&ShaderModuleDesc {
+                    code: Some(b"this is not valid Metal shading language"),
+                    codeSize: b"this is not valid Metal shading language".len() as u32,
+                    bindingMapBytes: Some(&empty_binding_map),
+                    bindingMapSize: empty_binding_map.len() as u32,
+                    ..ShaderModuleDesc::default()
+                })
+                .is_none()
+        );
         assert_eq!(context.lastError(), "earlier context error");
 
-        assert!(context
-            .makeShaderModule(&ShaderModuleDesc::default())
-            .is_none());
+        assert!(
+            context
+                .makeShaderModule(&ShaderModuleDesc::default())
+                .is_none()
+        );
         assert_eq!(context.lastError(), "earlier context error");
 
-        assert!(context
-            .makeShaderModule(&ShaderModuleDesc {
-                code: Some(&[0xff]),
-                codeSize: 1,
-                bindingMapBytes: Some(&empty_binding_map),
-                bindingMapSize: empty_binding_map.len() as u32,
-                ..ShaderModuleDesc::default()
-            })
-            .is_none());
+        assert!(
+            context
+                .makeShaderModule(&ShaderModuleDesc {
+                    code: Some(&[0xff]),
+                    codeSize: 1,
+                    bindingMapBytes: Some(&empty_binding_map),
+                    bindingMapSize: empty_binding_map.len() as u32,
+                    ..ShaderModuleDesc::default()
+                })
+                .is_none()
+        );
         assert_eq!(context.lastError(), "earlier context error");
     }
 
@@ -2449,9 +2464,11 @@ mod tests {
         };
         context.base.setLastError("earlier context error");
         let mut out_error = String::new();
-        assert!(context
-            .makePipeline(&PipelineDesc::default(), Some(&mut out_error))
-            .is_none());
+        assert!(
+            context
+                .makePipeline(&PipelineDesc::default(), Some(&mut out_error))
+                .is_none()
+        );
         assert_eq!(
             out_error,
             "pipeline declares color outputs but has no fragment shader; supply `fragment`, or omit `colorTargets` for a depth-only pipeline"
@@ -2459,15 +2476,17 @@ mod tests {
         assert_eq!(context.lastError(), "earlier context error");
 
         out_error.clear();
-        assert!(context
-            .makePipeline(
-                &PipelineDesc {
-                    colorCount: 0,
-                    ..PipelineDesc::default()
-                },
-                Some(&mut out_error),
-            )
-            .is_none());
+        assert!(
+            context
+                .makePipeline(
+                    &PipelineDesc {
+                        colorCount: 0,
+                        ..PipelineDesc::default()
+                    },
+                    Some(&mut out_error),
+                )
+                .is_none()
+        );
         assert_eq!(out_error, "vertex shader module is null");
         assert_eq!(context.lastError(), "earlier context error");
     }
@@ -2573,16 +2592,18 @@ fragment float4 fs_main() { return float4(1.0); }
         );
 
         let mut error = String::new();
-        assert!(context
-            .makePipeline(
-                &PipelineDesc {
-                    vertexModule: None,
-                    fragmentModule: Some(&fragment),
-                    ..PipelineDesc::default()
-                },
-                Some(&mut error),
-            )
-            .is_none());
+        assert!(
+            context
+                .makePipeline(
+                    &PipelineDesc {
+                        vertexModule: None,
+                        fragmentModule: Some(&fragment),
+                        ..PipelineDesc::default()
+                    },
+                    Some(&mut error),
+                )
+                .is_none()
+        );
         assert_eq!(
             error,
             "@group(0) @binding(0): shader declares sampler but PipelineDesc::bindGroupLayouts has no entry for group 0"
@@ -2716,9 +2737,11 @@ fragment float4 fs_main() { return float4(1.0); }
         let Some(mut context) = live_context() else {
             return;
         };
-        assert!(context
-            .beginRenderPass(&RenderPassDesc::default(), None)
-            .is_none());
+        assert!(
+            context
+                .beginRenderPass(&RenderPassDesc::default(), None)
+                .is_none()
+        );
         assert_eq!(
             context.lastError(),
             "beginRenderPass: beginFrame has not created a command buffer"

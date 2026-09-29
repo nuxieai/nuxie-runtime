@@ -753,6 +753,7 @@ fn layout_entry(binding: &GpuCanvasShaderBinding) -> Result<BindGroupLayoutEntry
             mask: binding.stage_mask,
         },
         textureMultisampled: binding.texture_multisampled,
+        minBindingSize: binding.min_binding_size,
         nativeSlotVS: native_slot(vs),
         nativeSlotFS: native_slot(fs),
         nativeSlotCS: native_slot(cs),
@@ -1839,11 +1840,13 @@ mod tests {
             texture_view_dimension: GpuCanvasShaderTextureViewDimension::Undefined,
             texture_sample_type: GpuCanvasShaderTextureSampleType::Undefined,
             texture_multisampled: false,
+            min_binding_size: 192,
         };
 
         let entry = layout_entry(&binding).expect("uniform layout entry");
 
         assert_eq!(entry.kind, BindingKind::uniformBuffer);
+        assert_eq!(entry.minBindingSize, 192);
         assert_eq!(entry.textureViewDim, TextureViewDimension::texture2D);
         assert_eq!(entry.textureSampleType, SampleType::floatFilterable);
     }

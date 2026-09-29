@@ -31,6 +31,7 @@ pub mod bind_group_layout {
         bindingMapForStages, makeBindGroupLayoutFromBindingMap, makeBindGroupLayoutFromShader,
         populateBindGroupLayoutEntries, populateBindGroupLayoutEntriesFromShader,
         NativeSlotScope, validatePipelineDesc, validateStagesAgree, validateSplitStageSlots,
+        validateBindGroupDesc,
     };
     #[doc(hidden)]
     pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{

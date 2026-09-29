@@ -888,8 +888,8 @@ pub struct BindGroupLayoutEntry {
 
     // UBO-only: smallest valid bind size for this entry. 0 = no minimum
     // (use the full buffer range). Matches WebGPU's
-    // `BindGroupLayoutEntry::buffer.minBindingSize`. Currently advisory —
-    // backends don't yet enforce.
+    // `BindGroupLayoutEntry::buffer.minBindingSize`. Filled from the shader's
+    // reflected block size and enforced by `validateBindGroupDesc`.
     pub minBindingSize: u32,
 
     // Pre-resolved native slots, per-stage. Populated by the caller from

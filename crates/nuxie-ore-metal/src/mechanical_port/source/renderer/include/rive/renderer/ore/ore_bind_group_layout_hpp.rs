@@ -44,6 +44,8 @@ use super::ore_types_hpp::BindGroupLayoutEntry;
 // Option<&ShaderModule> preserves the nullable upstream shader argument.
 // Population returns the total required group count, even when the caller's
 // slice is shorter. Only the slice's prefix is written; retry with more room.
+// validateBindGroupDesc: paired implementation validates UBO ranges before
+// every backend's makeBindGroup touches native objects.
 
 // Public Ore type — created via `Context::makeBindGroupLayout`. Carries the
 // user-supplied entries plus per-backend baked layout handles.

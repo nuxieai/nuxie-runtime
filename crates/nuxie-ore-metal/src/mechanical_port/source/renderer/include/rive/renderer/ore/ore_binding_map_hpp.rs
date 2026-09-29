@@ -254,6 +254,83 @@ mod tests {
         map.push(&entry);
     }
 
+    #[test]
+    fn binding_map_legacy_14_byte_entries_parse_with_no_minimum() {
+        let mut sized = split_entry(0, 1, ResourceKind::UniformBuffer, 1, 1, 3);
+        sized.minBindingSize = 208;
+        let source = split_map(&[sized]);
+        let blob = source.toBlob();
+        let mut legacy = blob[..12 + 14].to_vec();
+        legacy[2] = 14;
+        legacy[3] = 0;
+        let mut out = BindingMap::default();
+        assert!(BindingMap::fromBlob(
+            Some(&legacy),
+            legacy.len(),
+            Some(&mut out)
+        ));
+        assert_eq!(out.size(), 1);
+        assert_eq!(out.at(0).binding, 1);
+        assert_eq!(out.at(0).minBindingSize, 0);
+    }
+
+    #[test]
+    fn binding_map_layout_ids_cover_uniform_block_size() {
+        let build = |minimum| {
+            let mut entry = split_entry(0, 0, ResourceKind::UniformBuffer, 0, 0, 3);
+            entry.minBindingSize = minimum;
+            let mut map = split_map(&[entry]);
+            map.computeLayoutIds();
+            map
+        };
+        assert_eq!(
+            build(160).layoutIdForGroup(0),
+            build(160).layoutIdForGroup(0)
+        );
+        assert_ne!(
+            build(160).layoutIdForGroup(0),
+            build(192).layoutIdForGroup(0)
+        );
+    }
+
+    #[test]
+    fn replace_stage_keeps_larger_uniform_block_size() {
+        let mut vs = split_entry(0, 0, ResourceKind::UniformBuffer, 0, BindingMap::kAbsent, 1);
+        vs.minBindingSize = 160;
+        let mut vertex = split_map(&[vs]);
+        let mut fs = split_entry(0, 0, ResourceKind::UniformBuffer, BindingMap::kAbsent, 0, 2);
+        fs.minBindingSize = 192;
+        vertex.replaceStage(&split_map(&[fs]), Stage::FS);
+        assert_eq!(vertex.size(), 1);
+        assert_eq!(vertex.at(0).minBindingSize, 192);
+    }
+
+    #[test]
+    fn validate_stages_agree_rejects_differing_uniform_block_sizes() {
+        let build = |minimum, stage| {
+            let mut entry = split_entry(0, 0, ResourceKind::UniformBuffer, 0, 0, stage);
+            entry.minBindingSize = minimum;
+            split_map(&[entry])
+        };
+        let mut error = String::new();
+        assert!(validateStagesAgree(
+            &build(192, 1),
+            &build(192, 2),
+            Some(&mut error)
+        ));
+        assert!(validateStagesAgree(
+            &build(0, 1),
+            &build(192, 2),
+            Some(&mut error)
+        ));
+        assert!(!validateStagesAgree(
+            &build(160, 1),
+            &build(192, 2),
+            Some(&mut error)
+        ));
+        assert!(error.contains("uniform block size"));
+    }
+
     fn make_entry(
         group: u8,
         binding: u8,
@@ -529,13 +606,14 @@ mod tests {
                 2,
             ),
         );
+        original.m_entries[0].minBindingSize = 192;
         original.finalize();
 
         let blob = original.toBlob();
-        assert_eq!(blob.len(), 54);
+        assert_eq!(blob.len(), 66);
         assert_eq!(blob[0], BindingMap::kBlobVersion);
         assert_eq!(blob[1], BindingMap::kAllocatorVersion);
-        assert_eq!(&blob[2..4], &[14, 0]);
+        assert_eq!(&blob[2..4], &[18, 0]);
         assert_eq!(&blob[4..8], &[3, 0, 0, 0]);
         assert_eq!(&blob[8..12], &[9, 0, 0, 0]);
 
@@ -987,6 +1065,8 @@ pub struct BindingMapEntry {
     pub textureViewDim: TextureViewDim,
     pub textureSampleType: TextureSampleType,
     pub textureMultisampled: bool,
+    // UBO only: reflected WGSL block size; 0 = no minimum.
+    pub minBindingSize: u32,
 }
 
 // C++ `BindingMap::Entry` is a nested type; this top-level alias preserves
@@ -1016,6 +1096,7 @@ impl Default for BindingMapEntry {
             textureViewDim: TextureViewDim::Undefined,
             textureSampleType: TextureSampleType::Undefined,
             textureMultisampled: false,
+            minBindingSize: 0,
         }
     }
 }
@@ -1083,6 +1164,7 @@ impl BindingMap {
                         entry.textureSampleType = source.textureSampleType;
                     }
                     entry.textureMultisampled |= source.textureMultisampled;
+                    entry.minBindingSize = entry.minBindingSize.max(source.minBindingSize);
                 }
                 Err(index) => {
                     let mut entry = *source;

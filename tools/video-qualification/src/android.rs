@@ -3,19 +3,55 @@ use jni::{
     objects::{JObject, JString},
 };
 use nuxie_render_api::PersistentFactory;
+use nuxie_renderer::ExternalImageTextures;
 use nuxie_renderer::{NativeVulkanFactory, RenderMode};
 use nuxie_runtime::{
     File, RuntimeFactoryHandle,
     source::{artboard::RuntimeArtboardInstanceHandle, core::CoreHandle},
     video::{Video, playback::*},
 };
-use nuxie_video_host::{android::AndroidScenePlayer, pool::ManagedPlayer};
+use nuxie_video_host::{
+    android::{AndroidPlayer, AndroidScenePlayer, Frame, FramePixels},
+    pool::ManagedPlayer,
+};
 use std::{
     cell::RefCell,
     time::{Duration, Instant},
 };
+/// Import a MediaPlayer frame's hardware buffer as the product does: no CPU
+/// copy, converted from YUV on the GPU into one of the video's textures.
+fn import_frame(
+    factory: &NativeVulkanFactory,
+    textures: &mut ExternalImageTextures,
+    frame: &Frame,
+) -> std::rc::Rc<dyn nuxie_render_api::RenderImage> {
+    use nuxie_renderer::{VideoColor, VideoMatrix};
+    let FramePixels::HardwareBuffer(buffer) = &frame.pixels else {
+        panic!("MediaPlayer frames arrive in hardware buffers");
+    };
+    let color = VideoColor {
+        matrix: match buffer.color_matrix {
+            1 => VideoMatrix::Bt601,
+            2 => VideoMatrix::Bt709,
+            _ => VideoMatrix::Bt2020,
+        },
+        full_range: buffer.color_range == 2,
+    };
+    unsafe {
+        factory.import_hardware_buffer(
+            textures,
+            buffer.buffer(),
+            buffer.crop,
+            buffer.quarter_turns(),
+            Some(color),
+        )
+    }
+    .expect("hardware buffer import")
+}
+
 struct Proof {
     factory: PersistentFactory<NativeVulkanFactory>,
+    frame_textures: ExternalImageTextures,
     artboard: RuntimeArtboardInstanceHandle,
     video: CoreHandle,
     player: AndroidScenePlayer,
@@ -104,6 +140,7 @@ impl Proof {
         assert!(!player.owns_decoder());
         Self {
             factory,
+            frame_textures: ExternalImageTextures::default(),
             artboard,
             video,
             player,
@@ -140,20 +177,8 @@ impl Proof {
         let status = self
             .player
             .tick(env, Allocation::PlatformManaged, now, |frame| {
-                let rgba = frame.rgba().expect("MediaPlayer frames are copied to RGBA");
                 pts = frame.pts;
-                let image = self
-                    .factory
-                    .borrow()
-                    .upload_canonical_rgba8_premul_srgb(
-                        frame.width,
-                        frame.height,
-                        frame.width * 4,
-                        rgba,
-                    )
-                    .unwrap();
-                let image: std::rc::Rc<dyn nuxie_render_api::RenderImage> =
-                    std::rc::Rc::from(image);
+                let image = import_frame(&self.factory.borrow(), &mut self.frame_textures, frame);
                 let view = nuxie_render_api::Factory::make_gpu_canvas_image_view(
                     &mut *self.factory.borrow_mut(),
                     image.clone(),
@@ -455,6 +480,7 @@ impl SyncProof {
 }
 pub struct VulkanBenchmark {
     factory: PersistentFactory<NativeVulkanFactory>,
+    frame_textures: ExternalImageTextures,
     artboard: RuntimeArtboardInstanceHandle,
     player: AndroidScenePlayer,
     start: Instant,
@@ -519,6 +545,7 @@ impl VulkanBenchmark {
         .unwrap();
         Self {
             factory,
+            frame_textures: ExternalImageTextures::default(),
             artboard,
             player,
             start: Instant::now(),
@@ -580,7 +607,6 @@ impl VulkanBenchmark {
             return true;
         }
         let tick_start = Instant::now();
-        let mut pixel = None;
         let mut pts = 0.0;
         let mut upload_ms = 0.0;
         let status = self
@@ -590,25 +616,15 @@ impl VulkanBenchmark {
                 nuxie_runtime::video::resources::Allocation::PlatformManaged,
                 self.start.elapsed().as_secs_f64(),
                 |frame| {
-                    let rgba = frame.rgba().expect("MediaPlayer frames are copied to RGBA");
                     assert_eq!((frame.width, frame.height), (1280, 720));
-                    pixel = Some(rgba[..4].to_vec());
                     pts = frame.pts;
                     self.first_decoded_ms
                         .get_or_insert(self.start.elapsed().as_secs_f64() * 1000.0);
                     let upload_start = Instant::now();
-                    let image = self
-                        .factory
-                        .borrow()
-                        .upload_canonical_rgba8_premul_srgb(
-                            frame.width,
-                            frame.height,
-                            frame.width * 4,
-                            rgba,
-                        )
-                        .unwrap();
+                    let image =
+                        import_frame(&self.factory.borrow(), &mut self.frame_textures, frame);
                     upload_ms = upload_start.elapsed().as_secs_f64() * 1000.0;
-                    Ok(std::rc::Rc::from(image))
+                    Ok(image)
                 },
             )
             .unwrap();
@@ -642,9 +658,9 @@ impl VulkanBenchmark {
                 }
             }
             super::verify_composition(&pixels).unwrap();
-            let pixel = pixel.unwrap();
-            let center = &pixels[(16 * 64 + 32) * 4..(16 * 64 + 32) * 4 + 4];
-            assert!(center[0].abs_diff(pixel[0]) < 8 && center[2].abs_diff(pixel[2]) < 8);
+            // The frame reaches the GPU without a CPU copy, so the fixture's
+            // color is judged where it lands: the composed frame's center.
+            let pixel = &pixels[(16 * 64 + 32) * 4..(16 * 64 + 32) * 4 + 4];
             if pixel[0] > 200 && pixel[2] < 30 {
                 self.red += 1;
             } else if pixel[2] > 200 && pixel[0] < 30 {
@@ -799,6 +815,204 @@ fn guard(env: &mut JNIEnv<'_>, action: impl FnOnce(&mut JNIEnv<'_>) -> i32) -> i
             -1
         }
     }
+}
+fn call_reference<'local>(
+    env: &mut JNIEnv<'local>,
+    player: &JObject<'_>,
+    name: &str,
+    signature: &str,
+) -> jni::objects::JValueOwned<'local> {
+    env.call_method(player, name, signature, &[]).unwrap()
+}
+/// Plays `source` through the hardware buffer path and through the GL readback
+/// path the runtime used before, then compares every converted frame with the
+/// closest reference frame. The fixture changes every frame and is asymmetric,
+/// so a flipped, mirrored or swizzled conversion matches no reference frame.
+fn run_parity(env: &mut JNIEnv<'_>, activity: &JObject<'_>, source: &str) -> String {
+    use nuxie_render_api::{BlendMode, ImageSampler, Renderer};
+    let (width, height) = (64u32, 32u32);
+    let factory = NativeVulkanFactory::new(width, height).unwrap();
+    let mut textures = ExternalImageTextures::default();
+    let mut converted = Vec::new();
+    let mut playback = Playback::new(PlaybackSettings {
+        autoplay: true,
+        muted: true,
+        ..Default::default()
+    });
+    let mut player =
+        AndroidPlayer::open(env, activity, source, playback.generation(), 1 << 20, 0).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline && playback.state() != PlaybackState::Ended {
+        if let Some(frame) = player.tick(&mut playback).unwrap() {
+            assert_eq!((frame.width, frame.height), (width, height));
+            let image = import_frame(&factory, &mut textures, &frame);
+            drop(frame);
+            let mut render = factory.begin_frame(0xff000000, RenderMode::Msaa).unwrap();
+            render.draw_image(
+                Some(image.as_ref()),
+                ImageSampler::LINEAR_CLAMP,
+                BlendMode::SrcOver,
+                1.0,
+            );
+            converted.push(render.finish().unwrap());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    player.close().unwrap();
+    let source = env.new_string(source).unwrap();
+    let reference_player = env
+        .new_object(
+            "ai/nuxie/videoqualification/GlReadbackPlayer",
+            "(Landroid/content/Context;Ljava/lang/String;JII)V",
+            &[
+                (&activity).into(),
+                (&source).into(),
+                jni::objects::JValue::Long(1),
+                jni::objects::JValue::Int(1 << 20),
+                jni::objects::JValue::Int(0),
+            ],
+        )
+        .unwrap();
+    let mut references: Vec<Vec<u8>> = Vec::new();
+    let mut started = false;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while Instant::now() < deadline
+        && !call_reference(env, &reference_player, "ended", "()Z")
+            .z()
+            .unwrap()
+    {
+        if !started
+            && call_reference(env, &reference_player, "ready", "()Z")
+                .z()
+                .unwrap()
+        {
+            env.call_method(
+                &reference_player,
+                "action",
+                "(IDJ)V",
+                &[
+                    jni::objects::JValue::Int(0),
+                    jni::objects::JValue::Double(0.0),
+                    jni::objects::JValue::Long(1),
+                ],
+            )
+            .unwrap();
+            started = true;
+        }
+        let frame = call_reference(
+            env,
+            &reference_player,
+            "takeFrame",
+            "()Lai/nuxie/videoqualification/GlReadbackPlayer$Frame;",
+        )
+        .l()
+        .unwrap();
+        if !frame.is_null() {
+            let bytes = jni::objects::JByteArray::from(
+                env.get_field(&frame, "rgba", "[B").unwrap().l().unwrap(),
+            );
+            references.push(env.convert_byte_array(bytes).unwrap());
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    call_reference(env, &reference_player, "close", "()V");
+    if converted.len() < 5 || references.len() < 5 {
+        return format!(
+            "FAIL: parity collected {} converted and {} reference frames",
+            converted.len(),
+            references.len()
+        );
+    }
+    // FFmpeg's decode of the same file is the exact oracle. Each frame is
+    // judged against the decoded frame it is closest to.
+    let decoded: Vec<&[u8]> = include_bytes!("../../../fixtures/video/parity-opaque.rgba")
+        .chunks_exact((width * height * 4) as usize)
+        .collect();
+    let mean = |a: &[u8], b: &[u8]| {
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| x.abs_diff(*y) as u64)
+            .sum::<u64>()
+    };
+    let closest = |frame: &[u8]| {
+        (0..decoded.len())
+            .min_by_key(|&index| mean(frame, decoded[index]))
+            .unwrap()
+    };
+    // Pixels whose 3x3 neighborhood is one color in the decoded frame: the
+    // old GL path resamples sharp edges slightly, so colors compare there.
+    let flat = |frame: &[u8], x: usize, y: usize| {
+        let (w, h) = (width as usize, height as usize);
+        let at = |x: usize, y: usize, c: usize| frame[(y * w + x) * 4 + c];
+        (0..3).all(|c| {
+            (y.saturating_sub(1)..=(y + 1).min(h - 1)).all(|ny| {
+                (x.saturating_sub(1)..=(x + 1).min(w - 1))
+                    .all(|nx| at(nx, ny, c).abs_diff(at(x, y, c)) <= 2)
+            })
+        })
+    };
+    let mut against_decode = Vec::new();
+    let mut against_gl = Vec::new();
+    let references: std::collections::HashMap<usize, &Vec<u8>> = references
+        .iter()
+        .rev()
+        .map(|frame| (closest(frame), frame))
+        .collect();
+    for frame in &converted {
+        let index = closest(frame);
+        let truth = decoded[index];
+        for (pixel, (a, b)) in frame.chunks_exact(4).zip(truth.chunks_exact(4)).enumerate() {
+            against_decode.extend((0..3).map(|c| a[c].abs_diff(b[c])));
+            let (x, y) = (pixel % width as usize, pixel / width as usize);
+            if let (Some(gl), true) = (references.get(&index), flat(truth, x, y)) {
+                let gl = &gl[pixel * 4..pixel * 4 + 4];
+                against_gl.extend((0..3).map(|c| a[c].abs_diff(gl[c])));
+            }
+        }
+    }
+    let summary = |values: &mut Vec<u8>| {
+        values.sort_unstable();
+        let max = values.last().copied().unwrap_or(0);
+        let mean = values.iter().map(|&v| v as f64).sum::<f64>() / values.len().max(1) as f64;
+        (max, mean)
+    };
+    let (decode_max, decode_mean) = summary(&mut against_decode);
+    let (gl_max, gl_mean) = summary(&mut against_gl);
+    let result = format!(
+        "frames={} gl_frames={} vs_ffmpeg_decode max={decode_max} mean={decode_mean:.3}; vs_gl_path_flat_areas pixels={} max={gl_max} mean={gl_mean:.3}",
+        converted.len(),
+        references.len(),
+        against_gl.len() / 3,
+    );
+    // The conversion must reproduce the decode, and today's colors where the
+    // old path did not resample; any matrix, range, orientation or channel
+    // error moves every pixel.
+    if decode_max <= 2 && gl_max <= 4 && !against_gl.is_empty() {
+        format!("PASS: hardware buffer parity; {result}")
+    } else {
+        format!("FAIL: hardware buffer parity; {result}")
+    }
+}
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_ai_nuxie_videoqualification_MainActivity_parity<'local>(
+    mut env: JNIEnv<'local>,
+    activity: JObject<'local>,
+    source: JString<'local>,
+) -> jni::sys::jstring {
+    let path: String = env.get_string(&source).unwrap().into();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_parity(&mut env, &activity, &path)
+    }))
+    .unwrap_or_else(|error| {
+        let message = error
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| error.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_else(|| "parity proof panicked".into());
+        format!("FAIL: {message}")
+    });
+    let _ = env.exception_clear();
+    env.new_string(result).unwrap().into_raw()
 }
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_ai_nuxie_videoqualification_MainActivity_open(

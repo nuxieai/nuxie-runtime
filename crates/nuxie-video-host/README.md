@@ -5,8 +5,8 @@ controller. They do not fetch or authenticate published assets. A caller must
 retain its verified source/cache lease, marshal observations to the scene's
 owning thread, and upload through the same persistent renderer factory used to
 import the scene. Hardware decoding is **unknown** unless independently observed.
-The browser and Apple adapters hand the renderer each decoded frame on the GPU;
-the Android adapter still copies bounded RGBA frames and does not claim zero-copy.
+All three adapters hand the renderer each decoded frame on the GPU; no pixels
+pass through the CPU.
 
 - Apple: AVPlayer audio clock and AVPlayerItemVideoOutput. Methods and destruction
   run on the main thread. `AppleScenePlayer` owns one live video occurrence.
@@ -41,10 +41,18 @@ the Android adapter still copies bounded RGBA frames and does not claim zero-cop
   Rejected autoplay is observable and can be retried by a user action.
   Embedded bytes own a Blob URL that is revoked on disposal.
 - Android: package `android/ai/nuxie/runtime/VideoPlayer.java` with the Rust JNI
-  adapter. MediaPlayer renders to a private SurfaceTexture on its HandlerThread;
-  bounded RGBA readback feeds Vulkan scene composition. Pass the application
-  Context. Audio focus follows authored policy; muted motion does not request it.
-  This path requires packaging the Java class with the native library.
+  adapter; Android 10 (API 29) or later. MediaPlayer decodes into an
+  ImageReader with GPU sampled-image usage on its HandlerThread, and each frame
+  arrives as `FramePixels::HardwareBuffer` with its crop, rotation and color.
+  `NativeVulkanFactory::import_hardware_buffer` imports the buffer with no copy
+  and converts it from YUV to RGBA in one draw into textures reused per video.
+  The color is the stream's own description, or Android's decoder defaults
+  when it has none (limited range; BT.2020 from 4K, BT.601 up to 720x576,
+  BT.709 between), because drivers' suggestions are not reliable: the
+  emulator reports full range for limited-range video. Dropping the frame
+  returns the buffer to the decoder. Pass the application Context. Audio focus
+  follows authored policy; muted motion does not request it. This path
+  requires packaging the Java class with the native library.
 
 `source::EmbeddedFile` materializes embedded data once into an app-owned private
 cache directory. Keep the lease until the decoder closes; dropping it removes

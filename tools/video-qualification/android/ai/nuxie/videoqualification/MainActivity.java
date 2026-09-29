@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 public final class MainActivity extends Activity {
   static { System.loadLibrary("video_qualification"); }
   private native int open(String source, boolean embedded, boolean sync, boolean benchmark);
+  private native String parity(String source);
   private native int tick();
   private native String caption();
   private native String metrics();
@@ -50,7 +51,8 @@ public final class MainActivity extends Activity {
     setContentView(layout);
     try {
       new File(getFilesDir(), "video-proof-result.txt").delete();
-      String fixture = getIntent().getBooleanExtra("benchmark", false) ? "red-blue-720p.mp4" : getIntent().getBooleanExtra("sync", false)
+      String fixture = getIntent().getBooleanExtra("parity", false) ? "parity-opaque.mp4"
+                       : getIntent().getBooleanExtra("benchmark", false) ? "red-blue-720p.mp4" : getIntent().getBooleanExtra("sync", false)
                            ? "red-blue-sync.mp4"
                            : "red-blue-audio.mp4";
       File file = new File(getCacheDir(), fixture);
@@ -60,6 +62,18 @@ public final class MainActivity extends Activity {
         int count;
         while ((count = input.read(bytes)) != -1)
           output.write(bytes, 0, count);
+      }
+      if (getIntent().getBooleanExtra("parity", false)) {
+        // The proof waits on decoders, so it runs off the UI thread.
+        String path = file.getAbsolutePath();
+        new Thread(() -> {
+          String result;
+          try { result = parity(path); }
+          catch (Throwable error) { result = "FAIL: " + error; }
+          String finished = result;
+          handler.post(() -> finishProof(finished));
+        }).start();
+        return;
       }
       if (getIntent().getBooleanExtra("teardown", false)) {
         runTeardownProof(file);

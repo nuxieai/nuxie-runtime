@@ -40,8 +40,8 @@ pub struct Frame {
 
 /// Where a decoded frame's pixels are.
 pub enum FramePixels {
-    /// `width * height * 4` sRGB bytes, top row first, copied to the CPU by
-    /// the platform adapter (Android).
+    /// `width * height * 4` sRGB bytes, top row first, copied to the CPU by a
+    /// platform adapter.
     Rgba(Vec<u8>),
     /// A browser frame drawn into its player's GPU-backed canvas. Copy it on
     /// the GPU, or read it back with `CanvasFrame::read_rgba` where the
@@ -57,6 +57,10 @@ pub enum FramePixels {
         target_os = "visionos"
     ))]
     PixelBuffer(crate::apple::PixelBuffer),
+    /// An Android frame in the decoder's hardware buffer, which the Vulkan
+    /// renderer imports and converts on the GPU.
+    #[cfg(target_os = "android")]
+    HardwareBuffer(crate::android::HardwareBufferFrame),
 }
 
 impl Frame {
@@ -73,6 +77,8 @@ impl Frame {
                 target_os = "visionos"
             ))]
             FramePixels::PixelBuffer(_) => None,
+            #[cfg(target_os = "android")]
+            FramePixels::HardwareBuffer(_) => None,
         }
     }
 }

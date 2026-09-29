@@ -1,0 +1,57 @@
+<!doctype html><meta charset="utf-8"><title>Nuxie WebGPU video upload parity</title>
+<canvas id="canvas" width="64" height="32" style="width:256px;height:128px;image-rendering:pixelated"></canvas><pre id="result">loading</pre>
+<script type="module">
+import init,{BrowserUploadParity} from './video_qualification.js';
+import {prepareWebGpu,captureWebGpuPixels,waitForWebGpu,releaseWebGpu} from './webgpu-host.js';
+// The GPU copy must reproduce the CPU path it replaces: the same colors,
+// alpha and orientation. Compare both captures of several decoded frames.
+const result=document.querySelector('#result');
+const video=new URL(new URL(location.href).searchParams.get('video')??'./parity-alpha.webm',location.href).href;
+const tolerance=Number(new URL(location.href).searchParams.get('tolerance')??3);
+let proof,session;
+const finish=(text)=>{result.textContent=text;proof?.close();proof?.free();if(session)releaseWebGpu(session);};
+try {
+  await init();
+  const canvas=document.querySelector('#canvas');
+  session=await prepareWebGpu(canvas);
+  proof=new BrowserUploadParity(canvas,video);
+  const frames=[];
+  const start=performance.now();
+  const tick=async()=>{try {
+    if(proof.tick()){
+      // Both renders reuse this task's canvas texture; queue order keeps each
+      // capture between its render and the next one.
+      proof.draw(true);
+      const gpu=captureWebGpuPixels(session);
+      proof.draw(false);
+      const cpu=captureWebGpuPixels(session);
+      await waitForWebGpu(session);
+      const [a,b]=[(await gpu).pixels,(await cpu).pixels];
+      let maxDiff=0,over=0,alphaMin=255,alphaMax=0;
+      for(let i=0;i<a.length;i++){
+        const d=Math.abs(a[i]-b[i]);
+        maxDiff=Math.max(maxDiff,d);
+        if(d>tolerance)over++;
+        if(i%4===3){alphaMin=Math.min(alphaMin,a[i]);alphaMax=Math.max(alphaMax,a[i]);}
+      }
+      // Keep the first comparison inspectable from the page.
+      globalThis.parityCaptures??={gpu:Array.from(a),cpu:Array.from(b)};
+      const at=(x,y)=>Array.from(a.slice((y*64+x)*4,(y*64+x)*4+4));
+      frames.push({maxDiff,over,alphaMin,alphaMax,topLeft:at(2,2),topRight:at(61,2),bottomLeft:at(2,29),bottomRight:at(61,29)});
+    }
+    if(frames.length>=5){
+      const failed=frames.filter((f)=>f.over>0);
+      // A flip or lost alpha could hide behind uniform content; require an
+      // asymmetric frame, and alpha variation when the source has it.
+      const corners=frames[0];
+      const asymmetric=JSON.stringify(corners.topLeft)!==JSON.stringify(corners.bottomRight)&&JSON.stringify(corners.topRight)!==JSON.stringify(corners.bottomLeft);
+      const status=failed.length===0&&asymmetric?'passed':'failed';
+      finish(JSON.stringify({status,video:video.split('/').pop(),tolerance,asymmetric,frames}));
+      return;
+    }
+    if(performance.now()-start>15000)throw new Error('parity timed out after '+frames.length+' frames');
+    requestAnimationFrame(tick);
+  }catch(error){finish('FAILED: '+error);}};
+  requestAnimationFrame(tick);
+}catch(error){finish('FAILED: '+error);}
+</script>

@@ -140,6 +140,7 @@ impl Proof {
         let status = self
             .player
             .tick(env, Allocation::PlatformManaged, now, |frame| {
+                let rgba = frame.rgba().expect("MediaPlayer frames are copied to RGBA");
                 pts = frame.pts;
                 let image = self
                     .factory
@@ -148,7 +149,7 @@ impl Proof {
                         frame.width,
                         frame.height,
                         frame.width * 4,
-                        &frame.rgba,
+                        rgba,
                     )
                     .unwrap();
                 let image: std::rc::Rc<dyn nuxie_render_api::RenderImage> =
@@ -589,8 +590,9 @@ impl VulkanBenchmark {
                 nuxie_runtime::video::resources::Allocation::PlatformManaged,
                 self.start.elapsed().as_secs_f64(),
                 |frame| {
+                    let rgba = frame.rgba().expect("MediaPlayer frames are copied to RGBA");
                     assert_eq!((frame.width, frame.height), (1280, 720));
-                    pixel = Some(frame.rgba[..4].to_vec());
+                    pixel = Some(rgba[..4].to_vec());
                     pts = frame.pts;
                     self.first_decoded_ms
                         .get_or_insert(self.start.elapsed().as_secs_f64() * 1000.0);
@@ -602,7 +604,7 @@ impl VulkanBenchmark {
                             frame.width,
                             frame.height,
                             frame.width * 4,
-                            &frame.rgba,
+                            rgba,
                         )
                         .unwrap();
                     upload_ms = upload_start.elapsed().as_secs_f64() * 1000.0;

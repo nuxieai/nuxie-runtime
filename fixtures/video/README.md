@@ -48,3 +48,20 @@ must settle using the decoder-selected frame's actual timestamp and blue pixels.
 ffmpeg -i red-blue-audio.mp4 -vf fps=10 -c:v libx264 \
   -pix_fmt yuv420p -c:a copy red-blue-endpoint.mp4
 ```
+
+`parity-opaque.mp4` and `parity-alpha.webm` feed the browser upload parity
+proof (`tools/video-qualification/browser/parity.html`). Both are FFmpeg's
+`testsrc2` pattern at 64×32 and 10 fps for one second: asymmetric in both axes,
+so a flipped or mirrored upload cannot match. The WebM is VP9 with an alpha
+plane that ramps from 16 on the left to 254 on the right, so premultiplication
+errors show in every column.
+
+```sh
+ffmpeg -f lavfi -i 'testsrc2=s=64x32:r=10:d=1' -c:v libx264 -profile:v baseline \
+  -pix_fmt yuv420p -movflags +faststart parity-opaque.mp4
+ffmpeg -f lavfi -i 'testsrc2=s=64x32:r=10:d=1' \
+  -f lavfi -i "color=c=black:s=64x32:r=10:d=1,format=gray,geq=lum='16+X*239/63'" \
+  -filter_complex '[0:v]format=yuv420p[c];[c][1:v]alphamerge,format=yuva420p[v]' \
+  -map '[v]' -c:v libvpx-vp9 -pix_fmt yuva420p -auto-alt-ref 0 -b:v 0 -crf 20 \
+  parity-alpha.webm
+```

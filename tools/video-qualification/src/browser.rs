@@ -10,16 +10,80 @@ use nuxie_runtime::{
     video::{Video, playback::*},
 };
 use nuxie_video_host::{
-    browser::BrowserScenePlayer, pool::ManagedPlayer, sync::RegisteredSynchronizationGroup,
+    browser::{BrowserScenePlayer, Frame, FramePixels},
+    pool::ManagedPlayer,
+    sync::RegisteredSynchronizationGroup,
 };
 use wasm_bindgen::prelude::*;
 
 fn error(e: impl std::fmt::Debug) -> JsValue {
     JsValue::from_str(&format!("{e:?}"))
 }
+
+/// Per-video upload state: WebGPU copies each decoded frame's canvas into reused
+/// textures on the GPU; WebGL2 uploads bytes.
+#[cfg(feature = "webgpu")]
+type FrameTextures = nuxie_renderer::ExternalImageTextures;
+#[cfg(not(feature = "webgpu"))]
+type FrameTextures = ();
+
+/// Upload a decoded frame the way the product does on this backend. Returns
+/// the image and the decoded top-left pixel, an oracle independent of the
+/// renderer.
+fn upload_frame(
+    factory: &PersistentFactory<ProofFactory>,
+    textures: &mut FrameTextures,
+    frame: &Frame,
+) -> Result<(std::rc::Rc<dyn nuxie_render_api::RenderImage>, Vec<u8>), JsValue> {
+    #[cfg(feature = "webgpu")]
+    if let FramePixels::Canvas(decoded) = &frame.pixels {
+        let pixel = first_pixel(decoded.source())?;
+        let image = factory
+            .borrow()
+            .copy_external_image(textures, decoded.source(), frame.width, frame.height)
+            .map_err(error)?;
+        return Ok((image, pixel));
+    }
+    let _ = textures;
+    let rgba = match &frame.pixels {
+        FramePixels::Rgba(rgba) => std::borrow::Cow::Borrowed(rgba.as_slice()),
+        FramePixels::Canvas(decoded) => std::borrow::Cow::Owned(decoded.read_rgba()?),
+    };
+    let image = factory
+        .borrow()
+        .upload_canonical_rgba8_premul_srgb(frame.width, frame.height, frame.width * 4, &rgba)
+        .map_err(error)?;
+    Ok((std::rc::Rc::from(image), rgba[..4].to_vec()))
+}
+
+/// Read one pixel of a decoded frame's canvas. A one-pixel draw keeps the oracle's
+/// readback small beside the GPU copy it checks.
+#[cfg(feature = "webgpu")]
+fn first_pixel(frame: &JsValue) -> Result<Vec<u8>, JsValue> {
+    use wasm_bindgen::JsCast;
+    let document = web_sys::window()
+        .and_then(|window| window.document())
+        .ok_or_else(|| error("oracle needs a document"))?;
+    let canvas: web_sys::HtmlCanvasElement = document.create_element("canvas")?.dyn_into()?;
+    canvas.set_width(1);
+    canvas.set_height(1);
+    let context: web_sys::CanvasRenderingContext2d = canvas
+        .get_context("2d")?
+        .ok_or_else(|| error("oracle canvas unavailable"))?
+        .dyn_into()?;
+    let arguments = [frame.clone()]
+        .into_iter()
+        .chain([0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0].map(JsValue::from_f64))
+        .collect::<js_sys::Array>();
+    js_sys::Reflect::get(&context, &JsValue::from_str("drawImage"))?
+        .dyn_into::<js_sys::Function>()?
+        .apply(&context, &arguments)?;
+    Ok(context.get_image_data(0.0, 0.0, 1.0, 1.0)?.data().0)
+}
 #[wasm_bindgen]
 pub struct BrowserVideoProof {
     factory: PersistentFactory<ProofFactory>,
+    textures: FrameTextures,
     artboard: RuntimeArtboardInstanceHandle,
     video: CoreHandle,
     player: BrowserScenePlayer,
@@ -99,6 +163,7 @@ impl BrowserVideoProof {
         assert!(!player.owns_decoder());
         Ok(Self {
             factory,
+            textures: FrameTextures::default(),
             artboard,
             video,
             player,
@@ -119,19 +184,8 @@ impl BrowserVideoProof {
         let status = self
             .player
             .tick(Allocation::PlatformManaged, now, |frame| {
-                let image = self
-                    .factory
-                    .borrow()
-                    .upload_canonical_rgba8_premul_srgb(
-                        frame.width,
-                        frame.height,
-                        frame.width * 4,
-                        &frame.rgba,
-                    )
-                    .map_err(error)?;
-                decoded = Some((frame.pts, frame.rgba[..4].to_vec()));
-                let image: std::rc::Rc<dyn nuxie_render_api::RenderImage> =
-                    std::rc::Rc::from(image);
+                let (image, pixel) = upload_frame(&self.factory, &mut self.textures, frame)?;
+                decoded = Some((frame.pts, pixel));
                 let view = nuxie_render_api::Factory::make_gpu_canvas_image_view(
                     &mut *self.factory.borrow_mut(),
                     image.clone(),
@@ -473,6 +527,7 @@ impl BrowserSyncProof {
 #[wasm_bindgen]
 pub struct BrowserVideoBenchmark {
     factory: PersistentFactory<ProofFactory>,
+    textures: FrameTextures,
     artboard: RuntimeArtboardInstanceHandle,
     player: BrowserScenePlayer,
     decoded: Vec<u8>,
@@ -521,6 +576,7 @@ impl BrowserVideoBenchmark {
         let player = BrowserScenePlayer::open(video, source, 8 * 1024 * 1024, 5.0, true)?;
         Ok(Self {
             factory,
+            textures: FrameTextures::default(),
             artboard,
             player,
             decoded: vec![],
@@ -535,18 +591,9 @@ impl BrowserVideoBenchmark {
                 if (frame.width, frame.height) != (1280, 720) {
                     return Err(error("wrong benchmark resolution"));
                 }
-                self.decoded = frame.rgba[..4].to_vec();
-                let image = self
-                    .factory
-                    .borrow()
-                    .upload_canonical_rgba8_premul_srgb(
-                        frame.width,
-                        frame.height,
-                        frame.width * 4,
-                        &frame.rgba,
-                    )
-                    .map_err(error)?;
-                Ok(std::rc::Rc::from(image))
+                let (image, pixel) = upload_frame(&self.factory, &mut self.textures, frame)?;
+                self.decoded = pixel;
+                Ok(image)
             },
         )?;
         if status.presented {
@@ -599,5 +646,146 @@ impl BrowserVideoBenchmark {
             return Err(error("benchmark decoder retained"));
         }
         Ok(())
+    }
+}
+
+/// Renders each decoded frame twice, through the WebGPU external copy and
+/// through the CPU readback it replaces (Canvas2D bytes, premultiplied, then
+/// uploaded), so a page can capture both and compare them pixel by pixel.
+/// Each image is drawn alone at 1:1 over a transparent target, so the capture
+/// holds its premultiplied colors, its alpha and its orientation.
+#[cfg(feature = "webgpu")]
+#[wasm_bindgen]
+pub struct BrowserUploadParity {
+    factory: PersistentFactory<ProofFactory>,
+    textures: FrameTextures,
+    _artboard: RuntimeArtboardInstanceHandle,
+    player: BrowserScenePlayer,
+    gpu: Option<std::rc::Rc<dyn nuxie_render_api::RenderImage>>,
+    cpu: Option<std::rc::Rc<dyn nuxie_render_api::RenderImage>>,
+}
+
+#[cfg(feature = "webgpu")]
+#[wasm_bindgen]
+impl BrowserUploadParity {
+    #[wasm_bindgen(constructor)]
+    pub fn new(canvas: web_sys::HtmlCanvasElement, source: &str) -> Result<Self, JsValue> {
+        let _ = canvas;
+        let mut factory = PersistentFactory::new(ProofFactory::new(64, 32).map_err(error)?);
+        let file = File::import(
+            &super::video_scene_with_dimensions(None, 64, 32),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .ok_or_else(|| error("parity scene import failed"))?;
+        let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+        artboard.update_pass(true);
+        let video = artboard
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                    .cloned()
+            })
+            .unwrap();
+        video
+            .with_downcast_mut::<Video, _>(|v| {
+                v.playback = Playback::new(PlaybackSettings {
+                    autoplay: true,
+                    muted: true,
+                    ..Default::default()
+                })
+            })
+            .unwrap();
+        let player = BrowserScenePlayer::open(video, source, 64 * 32 * 4, 5.0, true)?;
+        Ok(Self {
+            factory,
+            textures: FrameTextures::default(),
+            _artboard: artboard,
+            player,
+            gpu: None,
+            cpu: None,
+        })
+    }
+
+    /// Advance playback; true when a new frame was uploaded both ways.
+    pub fn tick(&mut self) -> Result<bool, JsValue> {
+        let now = web_sys::window().unwrap().performance().unwrap().now() / 1000.0;
+        let mut uploaded = None;
+        let status = self.player.tick(
+            nuxie_runtime::video::resources::Allocation::PlatformManaged,
+            now,
+            |frame| {
+                let FramePixels::Canvas(decoded) = &frame.pixels else {
+                    return Err(error("parity needs a browser canvas frame"));
+                };
+                let gpu = self
+                    .factory
+                    .borrow()
+                    .copy_external_image(
+                        &mut self.textures,
+                        decoded.source(),
+                        frame.width,
+                        frame.height,
+                    )
+                    .map_err(error)?;
+                // The byte path the GPU copy replaces: straight-alpha Canvas2D
+                // bytes, premultiplied on the CPU, then uploaded.
+                let mut rgba = decoded.read_rgba()?;
+                for pixel in rgba.chunks_exact_mut(4) {
+                    let alpha = u16::from(pixel[3]);
+                    for color in &mut pixel[..3] {
+                        *color = ((u16::from(*color) * alpha + 127) / 255) as u8;
+                    }
+                }
+                let cpu = self
+                    .factory
+                    .borrow()
+                    .upload_canonical_rgba8_premul_srgb(
+                        frame.width,
+                        frame.height,
+                        frame.width * 4,
+                        &rgba,
+                    )
+                    .map_err(error)?;
+                uploaded = Some((gpu.clone(), std::rc::Rc::from(cpu)));
+                Ok(gpu)
+            },
+        )?;
+        if let Some((gpu, cpu)) = uploaded.filter(|_| status.presented) {
+            self.gpu = Some(gpu);
+            self.cpu = Some(cpu);
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Present the latest frame's GPU-copied (`true`) or CPU-uploaded image.
+    pub fn draw(&mut self, gpu: bool) -> Result<(), JsValue> {
+        let image = (if gpu { &self.gpu } else { &self.cpu })
+            .clone()
+            .ok_or_else(|| error("no uploaded frame"))?;
+        let mut render = self
+            .factory
+            .borrow()
+            .begin_frame(0x00000000, RenderMode::Msaa)
+            .map_err(error)?;
+        nuxie_render_api::Renderer::draw_image(
+            &mut render,
+            Some(&*image),
+            nuxie_render_api::ImageSampler::default(),
+            nuxie_render_api::BlendMode::SrcOver,
+            1.0,
+        );
+        render.finish_present().map_err(error)
+    }
+
+    pub fn close(&mut self) -> Result<(), JsValue> {
+        self.gpu = None;
+        self.cpu = None;
+        self.player.reclaim()
     }
 }

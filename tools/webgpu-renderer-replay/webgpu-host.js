@@ -152,11 +152,35 @@ export function releaseWebGpu(sessionId) {
   session.device.destroy();
 }
 
+// Browser image sources (a canvas, a WebCodecs VideoFrame, an ImageBitmap, a
+// video element) have no webgpu.h representation. A wasm-bindgen caller lends
+// one to the Dawn ABI for a single copy: importExternalImage returns the handle
+// nuxieWgpuQueueCopyExternalImageToTexture reads, and releaseExternalImage
+// takes it back, returning why the copy failed if it did. The caller keeps
+// ownership of the source.
+const externalImages = new Map();
+let nextExternalImage = 1;
+
+export function importExternalImage(source) {
+  const handle = nextExternalImage;
+  nextExternalImage = handle >= 0xffffffff ? 1 : handle + 1;
+  externalImages.set(handle, { source, failure: undefined });
+  return handle;
+}
+
+export function releaseExternalImage(handle) {
+  const image = externalImages.get(handle);
+  externalImages.delete(handle);
+  return image?.failure;
+}
+
 export const webGpuPlatform = Object.freeze({
   prepare: prepareWebGpu,
   wait: waitForWebGpu,
   capture: captureWebGpuPixels,
   release: releaseWebGpu,
+  importExternalImage,
+  releaseExternalImage,
 });
 
 globalThis.__nuxieWebGpuPlatform = webGpuPlatform;
@@ -910,6 +934,26 @@ export function createWebGpuImports(getWasm) {
     },
     wgpuQueueWriteBuffer: (queue, buffer, offset, data, size) =>
       object(queue).writeBuffer(object(buffer), Number(offset), u8(), data, size),
+    // Returns 1 when the copy was issued. A browser rejection (a closed
+    // frame, a cross-origin source) is recorded for releaseExternalImage
+    // instead of unwinding through wasm.
+    nuxieWgpuQueueCopyExternalImageToTexture: (queue, image, destination, width, height) => {
+      const lent = externalImages.get(image);
+      try {
+        if (!lent) throw new Error(`external image ${image} is not lent`);
+        object(queue).copyExternalImageToTexture(
+          { source: lent.source },
+          { texture: object(destination), colorSpace: "srgb", premultipliedAlpha: true },
+          { width, height },
+        );
+        return 1;
+      } catch (error) {
+        const failure = error?.message ?? String(error);
+        if (lent) lent.failure = failure;
+        traceWebGpu("external-image-copy-failed", failure);
+        return 0;
+      }
+    },
     wgpuQueueWriteTexture: (queue, destination, data, dataSize, layout, size) =>
       object(queue).writeTexture(
         texelCopyTexture(destination),

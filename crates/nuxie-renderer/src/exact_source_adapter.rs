@@ -35,6 +35,12 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
     RiveRenderImage, RiveRenderImageHandle,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
+#[cfg(all(
+    feature = "native-webgpu-experimental",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as GpuTexture;
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 use crate::{RenderMode, RendererError};
@@ -379,7 +385,14 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
         })
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(
+        target_os = "android",
+        all(
+            feature = "native-webgpu-experimental",
+            target_arch = "wasm32",
+            target_os = "unknown"
+        )
+    ))]
     pub(crate) fn with_backend_mut<T>(&self, callback: impl FnOnce(&mut B) -> T) -> T {
         callback(&mut self.backend.borrow_mut())
     }
@@ -420,21 +433,8 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
             )));
         }
 
+        self.check_texture_extent("RGBA8 image", width, height)?;
         let image = self.with_context(|context| {
-            let max_dimension = context
-                .m_impl
-                .contract()
-                .renderContextImpl()
-                .platformFeatures()
-                .maxTextureSize;
-            if width == 0 || height == 0 || width > max_dimension || height > max_dimension {
-                return Err(RendererError::InvalidTextureExtent {
-                    label: "RGBA8 image",
-                    width,
-                    height,
-                    max_dimension,
-                });
-            }
             let texture = context.m_impl.contract_mut().makeImageTexture(
                 width,
                 height,
@@ -462,6 +462,66 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
             self.resource_domain.clone(),
             self.execution_anchor(),
         )))
+    }
+
+    pub(crate) fn check_texture_extent(
+        &self,
+        label: &'static str,
+        width: u32,
+        height: u32,
+    ) -> Result<(), RendererError> {
+        let max_dimension = self.with_context(|context| {
+            context
+                .m_impl
+                .contract()
+                .renderContextImpl()
+                .platformFeatures()
+                .maxTextureSize
+        });
+        if width == 0 || height == 0 || width > max_dimension || height > max_dimension {
+            return Err(RendererError::InvalidTextureExtent {
+                label,
+                width,
+                height,
+                max_dimension,
+            });
+        }
+        Ok(())
+    }
+
+    /// Publish a texture this factory's backend created as an image of this
+    /// factory's resource domain, the same shape decoded images take.
+    ///
+    /// # Safety
+    /// `texture` must be non-null and belong to this factory's device.
+    #[cfg(all(
+        feature = "native-webgpu-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    pub(crate) unsafe fn adopt_texture(
+        &self,
+        texture: rcp<GpuTexture>,
+    ) -> Result<RiveRenderImageHandle, RendererError> {
+        RiveRenderImageHandle::from_exact(make_rcp(|| unsafe { RiveRenderImage::new(texture) }))
+            .map(|image| {
+                image.with_execution_domain(self.resource_domain.clone(), self.execution_anchor())
+            })
+            .ok_or_else(|| {
+                RendererError::InvalidImageUpload(
+                    "renderer did not publish the adopted texture".into(),
+                )
+            })
+    }
+
+    /// Whether `image` was created by this factory's device.
+    #[cfg(all(
+        feature = "native-webgpu-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    pub(crate) fn owns_image(&self, image: &RiveRenderImageHandle) -> bool {
+        image.belongs_to(&self.resource_domain)
     }
 
     #[cfg(test)]

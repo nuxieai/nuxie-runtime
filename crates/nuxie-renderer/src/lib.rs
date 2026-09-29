@@ -34,8 +34,24 @@ pub use native_vulkan::{NativeVulkanPresentation, NativeVulkanSurfaceAdmission};
 
 #[cfg(feature = "renderer-webgpu")]
 mod native_webgpu;
+#[cfg(all(
+    feature = "renderer-webgpu",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+pub use native_webgpu::ExternalImageTextures;
 #[cfg(feature = "renderer-webgpu")]
 pub use native_webgpu::{NativeWebGpuFactory, NativeWebGpuFrame};
+
+#[cfg(any(
+    test,
+    all(
+        feature = "renderer-webgpu",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    )
+))]
+mod external_image;
 
 #[cfg(all(
     feature = "renderer-webgl2",

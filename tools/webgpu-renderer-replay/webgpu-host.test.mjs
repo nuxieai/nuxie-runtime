@@ -234,6 +234,99 @@ test("decodes Wagyu shader descriptors with their exact wasm32 layout", async ()
   host.releaseWebGpu(sessionId);
 });
 
+test("copies a lent external image into a texture and reports rejections", async () => {
+  const session = fakeSession("external");
+  const copies = [];
+  session.device.queue.copyExternalImageToTexture = (source, destination, size) => {
+    if (source.source.closed) throw new Error("VideoFrame is closed");
+    copies.push({ source, destination, size });
+  };
+  session.device.createTexture = (descriptor) => ({ descriptor });
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: {
+      gpu: {
+        async requestAdapter() {
+          return session.adapter;
+        },
+      },
+    },
+  });
+  const host = await loadFreshHost();
+  assert.equal(globalThis.__nuxieWebGpuPlatform.importExternalImage, host.importExternalImage);
+  assert.equal(globalThis.__nuxieWebGpuPlatform.releaseExternalImage, host.releaseExternalImage);
+  const sessionId = await host.prepareWebGpu(session.canvas);
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const callbacks = new Map();
+  const wasm = {
+    memory,
+    __indirect_function_table: { get: (index) => callbacks.get(index) },
+    __wbindgen_free() {},
+    __wbindgen_malloc() {
+      return 2048;
+    },
+  };
+  const imports = host.createWebGpuImports(() => wasm);
+  const words = new Uint32Array(memory.buffer);
+  const registerCallback = (callbackInfo, callbackIndex, callback) => {
+    callbacks.set(callbackIndex, callback);
+    words[(callbackInfo + 8) >>> 2] = callbackIndex;
+  };
+  let adapterHandle;
+  registerCallback(64, 1, (_status, handle) => {
+    adapterHandle = handle;
+  });
+  imports.wgpuInstanceRequestAdapter(imports.wgpuCreateInstance(), 0, 64);
+  let deviceHandle;
+  registerCallback(96, 2, (_status, handle) => {
+    deviceHandle = handle;
+  });
+  imports.wgpuAdapterRequestDevice(adapterHandle, 0, 96);
+  const queue = imports.wgpuDeviceGetQueue(deviceHandle);
+
+  const descriptor = 256;
+  words[(descriptor + 24) >>> 2] = 2; // 2d
+  words[(descriptor + 28) >>> 2] = 64;
+  words[(descriptor + 32) >>> 2] = 32;
+  words[(descriptor + 36) >>> 2] = 1;
+  words[(descriptor + 40) >>> 2] = 22; // rgba8unorm
+  words[(descriptor + 44) >>> 2] = 1;
+  words[(descriptor + 48) >>> 2] = 1;
+  const texture = imports.wgpuDeviceCreateTexture(deviceHandle, descriptor);
+
+  const frame = { closed: false };
+  const lent = host.importExternalImage(frame);
+  assert.equal(
+    imports.nuxieWgpuQueueCopyExternalImageToTexture(queue, lent, texture, 64, 32),
+    1,
+  );
+  assert.equal(host.releaseExternalImage(lent), undefined);
+  assert.equal(copies.length, 1);
+  assert.equal(copies[0].source.source, frame);
+  assert.equal(copies[0].destination.colorSpace, "srgb");
+  assert.equal(copies[0].destination.premultipliedAlpha, true);
+  assert.deepEqual(copies[0].destination.texture.descriptor.size, {
+    width: 64,
+    height: 32,
+    depthOrArrayLayers: 1,
+  });
+  assert.deepEqual(copies[0].size, { width: 64, height: 32 });
+
+  const closed = host.importExternalImage({ closed: true });
+  assert.equal(
+    imports.nuxieWgpuQueueCopyExternalImageToTexture(queue, closed, texture, 64, 32),
+    0,
+  );
+  assert.match(host.releaseExternalImage(closed), /VideoFrame is closed/);
+  // A returned handle no longer names its source.
+  assert.equal(
+    imports.nuxieWgpuQueueCopyExternalImageToTexture(queue, lent, texture, 64, 32),
+    0,
+  );
+  assert.equal(copies.length, 1);
+  host.releaseWebGpu(sessionId);
+});
+
 test("replay schedules explicit capture before yielding the surface texture", () => {
   const captureIndex = replayHtml.indexOf(
     "const capture = captureWebGpuPixels(sessionId)",

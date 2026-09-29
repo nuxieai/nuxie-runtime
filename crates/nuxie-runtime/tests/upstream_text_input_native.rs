@@ -434,6 +434,37 @@ fn losing_focus_clears_the_text_input_selection() {
 }
 
 #[test]
+fn a_focused_text_input_reports_that_it_accepts_text() {
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let manager = machine
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
+    assert!(!manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+
+    // The focus target is the FocusData child; the query sees its TextInput parent.
+    let focus = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+        })
+        .expect("authored FocusData");
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert!(manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(!manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+}
+
+#[test]
 fn text_input_cursor_blinks_while_focused() {
     use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
     let (_file, artboard, _input) = input_fixture();

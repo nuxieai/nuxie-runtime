@@ -315,6 +315,10 @@ pub trait Focusable {
     fn selected_text(&self) -> Option<String> {
         None
     }
+    /// Whether this focusable consumes typed text.
+    fn accepts_text_input(&self) -> bool {
+        false
+    }
     /// Native occurrence used to release this wrapper before synchronous actions.
     fn gamepad_dispatch_owner(&self) -> Option<CoreHandle> {
         None

@@ -843,6 +843,9 @@ impl TextInput {
     pub fn accepts_keyboard_input(&self) -> bool {
         true
     }
+    pub fn accepts_text_input(&self) -> bool {
+        true
+    }
     pub fn focusable_artboard(&self) -> Option<CoreHandle> {
         self.base.artboard_handle()
     }

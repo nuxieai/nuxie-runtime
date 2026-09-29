@@ -20,8 +20,9 @@ renderer-metal = ["native-ore-metal-experimental", "rive-decoders"]
 native-metal-experimental = []
 # Builds the exact pinned Vulkan campaign without selecting it for shipping.
 native-vulkan-experimental = ["dep:ash", "dep:vk-mem"]
-# Builds the exact pinned Dawn/Wagyu WebGPU campaign.
-native-webgpu-experimental = ["dep:libc", "dep:web-time"]
+# Builds the exact pinned Dawn/Wagyu WebGPU campaign. In the browser,
+# wasm-bindgen lends JavaScript image sources to the host's external copy.
+native-webgpu-experimental = ["dep:libc", "dep:wasm-bindgen", "dep:web-time"]
 # Builds the exact pinned WebGL2 campaign for the browser.
 native-webgl2-experimental = [
     "ore-gl",

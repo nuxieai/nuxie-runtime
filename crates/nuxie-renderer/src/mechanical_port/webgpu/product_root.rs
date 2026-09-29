@@ -10,6 +10,8 @@ use std::sync::Arc;
 use super::render_context_webgpu_decl::{
     ContextOptions, RenderContextWebGPUImpl, RenderTargetWebGPU,
 };
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use super::render_context_webgpu_decl::TextureWebGPUImpl;
 use super::webgpu_cpp_decl::{
     Adapter, AdapterInfo, BackendType, Buffer, BufferUsage, CallbackMode, CommandEncoder, Device,
     ErrorType, FeatureName, Instance, InstanceFeatureName, MapAsyncStatus, MapMode,
@@ -33,6 +35,10 @@ use crate::exact_gpu_canvas::ExactGpuCanvas;
 use crate::exact_source_adapter::ExactSourceBackend;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, static_rcp_cast};
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as RiveTexture;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
 };
@@ -787,6 +793,116 @@ impl Drop for WebGpuProductBackend {
         self.command_encoder.take();
         unsafe { self.device.Destroy() };
         let _ = (&self.adapter, &self.queue);
+    }
+}
+
+// Browser image sources (a canvas or a video frame, for example) have no webgpu.h
+// representation. The WebGPU host (tools/webgpu-renderer-replay/webgpu-host.js)
+// lends one to the ABI for a single copy: importExternalImage returns the
+// handle its copy import reads, and releaseExternalImage takes it back and
+// says why the copy failed, if it did.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod external_image_host {
+    use super::super::webgpu_decl::{WGPUBool, WGPUQueue, WGPUTexture};
+    use wasm_bindgen::prelude::*;
+
+    #[wasm_bindgen]
+    extern "C" {
+        #[wasm_bindgen(catch, js_namespace = __nuxieWebGpuPlatform, js_name = importExternalImage)]
+        pub(super) fn import_external_image(source: &JsValue) -> Result<u32, JsValue>;
+        #[wasm_bindgen(catch, js_namespace = __nuxieWebGpuPlatform, js_name = releaseExternalImage)]
+        pub(super) fn release_external_image(image: u32) -> Result<Option<String>, JsValue>;
+    }
+
+    unsafe extern "C" {
+        /// `GPUQueue.copyExternalImageToTexture` into mip 0 of `destination`,
+        /// converting to sRGB and premultiplying alpha. Returns 1 on success.
+        pub(super) fn nuxieWgpuQueueCopyExternalImageToTexture(
+            queue: WGPUQueue,
+            image: u32,
+            destination: WGPUTexture,
+            width: u32,
+            height: u32,
+        ) -> WGPUBool;
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+impl WebGpuProductBackend {
+    /// A texture `copyExternalImageToTexture` can write and the image paint
+    /// samples: the single-level RGBA8 texture `makeImageTexture` gives decoded
+    /// images, plus the render-attachment usage the external copy requires.
+    pub(crate) fn make_external_image_texture(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<rcp<RiveTexture>, RendererError> {
+        let descriptor = WGPUTextureDescriptor {
+            usage: (TextureUsage::TextureBinding
+                | TextureUsage::CopyDst
+                | TextureUsage::RenderAttachment)
+                .intoBitmask()
+                .into(),
+            dimension: TextureDimension::e2D.into(),
+            size: WGPUExtent3D {
+                width,
+                height,
+                depthOrArrayLayers: 1,
+            },
+            format: TextureFormat::RGBA8Unorm.into(),
+            ..Default::default()
+        };
+        let texture = unsafe { self.device.CreateTexture(&descriptor) };
+        if texture.Get().is_null() {
+            return Err(RendererError::Device(
+                "create WebGPU external image texture".into(),
+            ));
+        }
+        let texture = make_rcp(|| *TextureWebGPUImpl::new(width, height, texture));
+        Ok(unsafe { static_rcp_cast(texture) })
+    }
+
+    /// Copy `source` into the texture behind `image` on the queue, stored as
+    /// decoded images are: sRGB with premultiplied alpha. Queue order keeps
+    /// the copy after every submitted draw that sampled the old contents.
+    pub(crate) fn copy_external_image(
+        &mut self,
+        source: &wasm_bindgen::JsValue,
+        image: &RiveRenderImageHandle,
+        width: u32,
+        height: u32,
+    ) -> Result<(), RendererError> {
+        let texture = image.source().refTexture();
+        if texture.get().is_null() {
+            return Err(RendererError::InvalidImageUpload(
+                "external image target has no texture".into(),
+            ));
+        }
+        let destination = unsafe { (*texture.get()).nativeHandle() }.cast();
+        let lent = external_image_host::import_external_image(source).map_err(|error| {
+            RendererError::InvalidImageUpload(format!(
+                "lend external image to WebGPU: {error:?}"
+            ))
+        })?;
+        let copied = unsafe {
+            external_image_host::nuxieWgpuQueueCopyExternalImageToTexture(
+                self.queue.Get(),
+                lent,
+                destination,
+                width,
+                height,
+            )
+        };
+        let failure = external_image_host::release_external_image(lent)
+            .ok()
+            .flatten();
+        if copied == 0 {
+            return Err(RendererError::InvalidImageUpload(format!(
+                "WebGPU rejected the external image copy: {}",
+                failure.as_deref().unwrap_or("no reason given")
+            )));
+        }
+        Ok(())
     }
 }
 

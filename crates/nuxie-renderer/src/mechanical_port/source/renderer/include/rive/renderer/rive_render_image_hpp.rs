@@ -348,6 +348,24 @@ impl RiveRenderImageHandle {
         !self.source().refTexture().get().is_null()
     }
 
+    /// Whether this handle is the only owner of its image and the image the
+    /// only owner of its texture: no other handle, draw, paint, registry or
+    /// canvas import retains either, so rewriting the texture changes nothing
+    /// another owner can see. The counts are exact on the renderer's owner
+    /// thread, the only thread these resources are used on.
+    #[cfg(all(
+        feature = "native-webgpu-experimental",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    pub(crate) fn is_sole_owner(&self) -> bool {
+        let image = self.source();
+        let texture = image.m_texture.get();
+        image.base.base.debugging_refcnt() == 1
+            && !texture.is_null()
+            && unsafe { (*texture).base.debugging_refcnt() } == 1
+    }
+
     /// Borrow the exact `gpu::Texture*` held by the retained source image,
     /// but only inside the execution domain that created it. The pointer
     /// remains valid while this handle is retained. This is the Rust

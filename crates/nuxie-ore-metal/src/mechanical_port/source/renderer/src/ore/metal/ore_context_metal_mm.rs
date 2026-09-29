@@ -226,20 +226,19 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
         TextureFormat::r11g11b10float => MTLPixelFormat::RG11B10Float,
         TextureFormat::depth16unorm => MTLPixelFormat::Depth16Unorm,
         TextureFormat::depth24plusStencil8 => {
-            // #if defined(RIVE_IOS) || defined(RIVE_IOS_SIMULATOR) || TARGET_CPU_ARM64
-            // iOS and Apple Silicon (ARM64) don't support Depth24Unorm.
-            if cfg!(any(target_os = "ios", target_arch = "aarch64")) {
-                MTLPixelFormat::Depth32Float_Stencil8
-            } else {
-                // #else
+            // #if TARGET_OS_OSX && !TARGET_CPU_ARM64
+            if cfg!(all(target_os = "macos", not(target_arch = "aarch64"))) {
                 MTLPixelFormat::Depth24Unorm_Stencil8
+            } else {
+                // Only Intel macs support Depth24Unorm.
+                MTLPixelFormat::Depth32Float_Stencil8
             }
         }
         TextureFormat::depth32float => MTLPixelFormat::Depth32Float,
         TextureFormat::depth32floatStencil8 => MTLPixelFormat::Depth32Float_Stencil8,
         TextureFormat::bc1unorm => {
             // #if TARGET_OS_OSX || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 160400)
-            // if (@available(iOS 16.4, *)) return MTLPixelFormatBC1_RGBA;
+            // if (@available(iOS 16.4, tvOS 16.4, *)) return MTLPixelFormatBC1_RGBA;
             // #endif
             #[cfg(target_os = "macos")]
             {
@@ -247,8 +246,8 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
             }
             #[cfg(not(target_os = "macos"))]
             {
-                #[cfg(target_os = "ios")]
-                if objc2::available!(ios = 16.4) {
+                #[cfg(any(target_os = "ios", target_os = "tvos"))]
+                if objc2::available!(ios = 16.4, tvos = 16.4) {
                     return MTLPixelFormat::BC1_RGBA;
                 }
                 // RIVE_UNREACHABLE();
@@ -257,7 +256,7 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
         }
         TextureFormat::bc3unorm => {
             // #if TARGET_OS_OSX || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 160400)
-            // if (@available(iOS 16.4, *)) return MTLPixelFormatBC3_RGBA;
+            // if (@available(iOS 16.4, tvOS 16.4, *)) return MTLPixelFormatBC3_RGBA;
             // #endif
             #[cfg(target_os = "macos")]
             {
@@ -265,8 +264,8 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
             }
             #[cfg(not(target_os = "macos"))]
             {
-                #[cfg(target_os = "ios")]
-                if objc2::available!(ios = 16.4) {
+                #[cfg(any(target_os = "ios", target_os = "tvos"))]
+                if objc2::available!(ios = 16.4, tvos = 16.4) {
                     return MTLPixelFormat::BC3_RGBA;
                 }
                 // RIVE_UNREACHABLE();
@@ -275,7 +274,7 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
         }
         TextureFormat::bc7unorm => {
             // #if TARGET_OS_OSX || (__IPHONE_OS_VERSION_MAX_ALLOWED >= 160400)
-            // if (@available(iOS 16.4, *)) return MTLPixelFormatBC7_RGBAUnorm;
+            // if (@available(iOS 16.4, tvOS 16.4, *)) return MTLPixelFormatBC7_RGBAUnorm;
             // #endif
             #[cfg(target_os = "macos")]
             {
@@ -283,8 +282,8 @@ fn oreFormatToMTL(format: TextureFormat) -> MTLPixelFormat {
             }
             #[cfg(not(target_os = "macos"))]
             {
-                #[cfg(target_os = "ios")]
-                if objc2::available!(ios = 16.4) {
+                #[cfg(any(target_os = "ios", target_os = "tvos"))]
+                if objc2::available!(ios = 16.4, tvos = 16.4) {
                     return MTLPixelFormat::BC7_RGBAUnorm;
                 }
                 // RIVE_UNREACHABLE();

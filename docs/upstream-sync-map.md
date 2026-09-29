@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `df5d96b7deb6af1822383171d566bc1e4949ab51`
+- LAST_SYNCED_SHA: `c5faa1fad8e95a6f8639696e08d646f3b2968e48`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 101 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 101 require a Rust translation.
+  There are 100 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 100 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c5faa1fad8e95a6f8639696e08d646f3b2968e48` | Expose module-loaded and module-error host hooks at the upstream boundaries: the loaded closure is available before execution, and failed/yielded module frames remain available before result transfer. Default hooks are no-ops. The public delta contains these runtime hooks, not the VS Code debugger or CLI integration described by its title. | — |
 | `df5d96b7deb6af1822383171d566bc1e4949ab51` | **NO RUST BEHAVIOR DELTA:** the sole executable change replaces Emscripten `Module.HEAPU8` with a fresh view of `wasmMemory.buffer` after allocating decoded image pixels. The live Rust scripting decoder uses the approved Rust image codec and owned pixel buffers on native and `wasm32-unknown-unknown`, with no Emscripten heap-view bridge. This is not deferred Wasm script execution, and no Emscripten dependency is introduced. | — |
 | `85d7f952b9266e3dc184effc5974d40437ef3fe6` | Import and clone bindings authored on file-level view-model instance values, reconcile two-way defaults source-first, and install per-artboard clones when binding list instances. Preserve context-change notifications, target removal and deferred binding deletion/resynchronization; translate all six authored instance-value-binding regressions. | — |
 | `25a2dc10786955df879ebc295e7c67923b8bde90` | **DEFERRED:** Wasm/AssemblyScript 2D canvas ABI, native/web guest bindings, canvas/image handle ownership and resize behavior, and nested call-scope cleanup of guest render passes and canvas frames. The complete executable delta is in the parked Wasm script VM/binding lane; native Luau, shared runtime/renderer owners and admitted browser renderer compilation are unchanged. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

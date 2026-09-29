@@ -21,7 +21,7 @@ use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::multi::MultiValue;
 use crate::state::{Lua, LuaRef};
-use crate::sync::{NotSync, XRc, NOT_SYNC};
+use crate::sync::{NOT_SYNC, NotSync, XRc};
 use crate::sys::*;
 use crate::traits::{FromLuaMulti, IntoLua, IntoLuaMulti};
 
@@ -100,6 +100,96 @@ impl Thread {
     /// The raw coroutine state pointer. Mirrors `mlua::Thread::state`.
     pub fn state(&self) -> *mut lua_State {
         self.thread_state
+    }
+
+    /// Inspect a stack value without consuming it. Handles obtained this way
+    /// retain their value independently of subsequent coroutine execution.
+    pub fn stack_value(&self, index: i32) -> Result<crate::Value> {
+        let lua = self.lua();
+        unsafe {
+            let parent = lua.state();
+            let _stack = crate::stack_guard::StackGuard::new(parent);
+            if lua_checkstack(parent, 2) == 0 || lua_checkstack(self.thread_state, 1) == 0 {
+                return Err(Error::runtime("stack overflow"));
+            }
+            let top = lua_gettop(self.thread_state);
+            if index == 0 || index > top || index < -top {
+                return Ok(crate::Value::Nil);
+            }
+            lua_pushvalue(self.thread_state, index).map_err(|error| Error::from_vm(error))?;
+            lua_xmove(self.thread_state, parent, 1).map_err(|error| Error::from_vm(error))?;
+            lua.value_from_stack(-1)
+        }
+    }
+
+    /// Execute a module once. Nonzero statuses (including yield) are module
+    /// errors. The observer runs with the normalized error on top and the
+    /// original frames intact, before that error is moved to the parent.
+    pub fn resume_module<R: FromLuaMulti>(
+        &self,
+        display: &str,
+        on_error: impl FnOnce(&Thread),
+    ) -> Result<R> {
+        if self.status() != ThreadStatus::Resumable {
+            return Err(Error::CoroutineUnresumable);
+        }
+        let lua = self.lua();
+        unsafe {
+            let parent = lua.state();
+            let co = self.thread_state;
+            let _stack = crate::stack_guard::StackGuard::new(parent);
+            let result = lua_resume(co, parent, 0).map_err(|error| Error::from_vm(error))?;
+            // Internal host failures carry typed Rust causes. Preserve those
+            // before installing the upstream display error for inspection;
+            // arbitrary Lua userdata errors still normalize to "unknown".
+            let host_cause = if result != status::OK
+                && result != status::YIELD
+                && result != status::BREAK
+                && lua_gettop(co) > 0
+            {
+                crate::callback::recover_wrapped_error(co, lua_gettop(co))
+            } else {
+                None
+            };
+            let message = if result == status::OK {
+                if lua_gettop(co) == 0 {
+                    Some(format!("{display}:1: module must return a value"))
+                } else if lua_type(co, -1) != ttype::TABLE && lua_type(co, -1) != ttype::FUNCTION {
+                    Some(format!(
+                        "{display}:1: module must return a table or function"
+                    ))
+                } else {
+                    None
+                }
+            } else if result == status::YIELD {
+                Some(format!("{display}:1: module can not yield"))
+            } else if luaur_vm::functions::lua_isstring::lua_isstring(co, -1) == 0 {
+                Some(format!("{display}:1: unknown error while running module"))
+            } else {
+                None
+            };
+            if let Some(message) = message {
+                lua_pushlstring(co, message.as_ptr().cast(), message.len())
+                    .map_err(|error| Error::from_vm(error))?;
+            }
+            if result != status::OK {
+                on_error(self);
+            }
+            lua_xmove(co, parent, 1).map_err(|error| Error::from_vm(error))?;
+            if let Some(cause) = host_cause {
+                return Err(Error::CallbackError {
+                    traceback: String::new(),
+                    cause: std::sync::Arc::new(cause),
+                });
+            }
+            if luaur_vm::functions::lua_isstring::lua_isstring(parent, -1) != 0 {
+                return Err(
+                    lua.pop_error(luaur_vm::enums::lua_status::lua_Status::LUA_ERRRUN as i32)
+                );
+            }
+            let value = lua.value_from_stack(-1)?;
+            R::from_lua_multi(MultiValue::from_vec(vec![value]), &lua)
+        }
     }
 
     /// Resume the coroutine, passing `args` and converting its yielded/returned
@@ -512,6 +602,27 @@ impl FromLua for Thread {
 use crate::traits::FromLua;
 
 impl Lua {
+    /// Create a module coroutine whose globals are the closure's sandbox.
+    /// Unlike a generic coroutine, it does not inherit the caller's globals.
+    pub fn create_module_thread(&self, func: Function) -> Result<Thread> {
+        let environment = func.try_environment()?;
+        let thread = self.create_thread(func)?;
+        unsafe {
+            lua_setthreaddata(thread.state(), lua_getthreaddata(self.state()));
+        }
+        if let Some(environment) = environment {
+            unsafe {
+                let state = self.state();
+                let _stack = crate::stack_guard::StackGuard::new(state);
+                environment.push_to_stack();
+                lua_xmove(state, thread.state(), 1).map_err(|error| Error::from_vm(error))?;
+                lua_replace(thread.state(), LUA_GLOBALSINDEX);
+                lua_setsafeenv(thread.state(), LUA_GLOBALSINDEX, 1);
+            }
+        }
+        Ok(thread)
+    }
+
     /// Create a new coroutine from a [`Function`]. Mirrors
     /// `mlua::Lua::create_thread`.
     pub fn create_thread(&self, func: Function) -> Result<Thread> {

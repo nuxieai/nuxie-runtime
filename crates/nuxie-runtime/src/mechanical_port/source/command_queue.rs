@@ -1229,21 +1229,37 @@ impl CommandQueue {
         self.notify_command();
     }
 
+    /// Register or replace an out-of-band image by unique name in both open
+    /// and future files. Embedded assets and assets claimed by the server's
+    /// internal loader are excluded. Invalid handles report an image error
+    /// with the supplied request identifier.
     pub fn add_global_image_asset(&mut self, name: String, handle: RenderImageHandle, id: u64) {
         self.global_asset(Command::AddImageFileAsset, name, handle, id);
     }
+    /// Register or replace an out-of-band font by unique name in both open
+    /// and future files. Embedded assets and assets claimed by the server's
+    /// internal loader are excluded. Invalid handles report a font error.
     pub fn add_global_font_asset(&mut self, name: String, handle: FontHandle, id: u64) {
         self.global_asset(Command::AddFontFileAsset, name, handle, id);
     }
+    /// Register or replace out-of-band audio by unique name in both open and
+    /// future files. Embedded assets and assets claimed by the server's
+    /// internal loader are excluded. Invalid handles report an audio error.
     pub fn add_global_audio_asset(&mut self, name: String, handle: AudioSourceHandle, id: u64) {
         self.global_asset(Command::AddAudioFileAsset, name, handle, id);
     }
+    /// Unregister this name and clear it from every open file it was applied
+    /// to. Deleting an image clears every name registered to that resource.
     pub fn remove_global_image_asset(&mut self, name: String, id: u64) {
         self.remove_global_asset(Command::RemoveImageFileAsset, name, id);
     }
+    /// Unregister this name and clear it from every open file it was applied
+    /// to. Deleting a font clears every name registered to that resource.
     pub fn remove_global_font_asset(&mut self, name: String, id: u64) {
         self.remove_global_asset(Command::RemoveFontFileAsset, name, id);
     }
+    /// Unregister this name and clear it from every open file it was applied
+    /// to. Deleting audio clears every name registered to that resource.
     pub fn remove_global_audio_asset(&mut self, name: String, id: u64) {
         self.remove_global_asset(Command::RemoveAudioFileAsset, name, id);
     }

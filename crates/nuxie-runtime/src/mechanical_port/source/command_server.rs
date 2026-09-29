@@ -1,5 +1,5 @@
 use std::{
-    cell::{Cell, RefMut},
+    cell::{Cell, RefCell, RefMut},
     collections::HashMap,
     fmt,
     rc::Rc,
@@ -20,7 +20,7 @@ use crate::mechanical_port::source::{
         FontHandle, Message, PointerEvent, PropertyData, RenderImageHandle, StateMachineHandle,
         ViewModelInstanceData, ViewModelInstanceHandle, ViewModelInstanceValue,
     },
-    core::CoreHandle,
+    core::{CoreArena, CoreHandle},
     factory::RuntimeFactoryHandle,
     file::{File, RuntimeFileHandle},
     file_asset_loader::{FileAssetLoader, FileAssetLoaderRef},
@@ -50,16 +50,170 @@ pub struct Subscription {
 
 #[derive(Default)]
 struct CommandAssetRegistry {
-    image_assets: HashMap<String, RenderImageHandle>,
-    audio_assets: HashMap<String, AudioSourceHandle>,
-    font_assets: HashMap<String, FontHandle>,
+    image_assets: TypedGlobalAssetRegistry<RenderImageHandle>,
+    audio_assets: TypedGlobalAssetRegistry<AudioSourceHandle>,
+    font_assets: TypedGlobalAssetRegistry<FontHandle>,
     images: HashMap<RenderImageHandle, RenderImageRef>,
     audio_sources: HashMap<AudioSourceHandle, AudioSourceRef>,
     fonts: HashMap<FontHandle, FontRef>,
 }
 
+// CoreHandle is weak: retain its arena for the lifetime of the upstream rcp.
+#[derive(Clone)]
+struct RetainedFileAsset {
+    asset: CoreHandle,
+    _arena: CoreArena,
+}
+
+#[derive(Default)]
+struct GlobalAssetEntry<H> {
+    resource_handle: H,
+    assets_by_file_handle: HashMap<FileHandle, RetainedFileAsset>,
+}
+
+#[derive(Default)]
+struct TypedGlobalAssetRegistry<H> {
+    entries: HashMap<String, GlobalAssetEntry<H>>,
+}
+
+impl<H: Copy + Default + PartialEq> TypedGlobalAssetRegistry<H> {
+    fn add_file_asset(&mut self, file: FileHandle, asset: &RetainedFileAsset) {
+        self.entries
+            .entry(file_asset_name(&asset.asset))
+            .or_default()
+            .assets_by_file_handle
+            .insert(file, asset.clone());
+    }
+
+    fn remove_file_asset(&mut self, file: FileHandle, name: &str) {
+        if let Some(entry) = self.entries.get_mut(name) {
+            entry.assets_by_file_handle.remove(&file);
+            if entry.resource_handle == H::default() && entry.assets_by_file_handle.is_empty() {
+                self.entries.remove(name);
+            }
+        }
+    }
+
+    fn get_resource_handle(&self, name: &str) -> H {
+        self.entries
+            .get(name)
+            .map(|entry| entry.resource_handle)
+            .unwrap_or_default()
+    }
+
+    fn set_resource(&mut self, name: String, handle: H) {
+        self.entries.entry(name).or_default().resource_handle = handle;
+    }
+
+    fn unregister_resource_by_name(&mut self, name: &str) {
+        if let Some(entry) = self.entries.get_mut(name) {
+            entry.resource_handle = H::default();
+            if entry.assets_by_file_handle.is_empty() {
+                self.entries.remove(name);
+            }
+        }
+    }
+
+    fn unregister_resource_by_handle(&mut self, handle: H) -> Vec<String> {
+        let mut names = Vec::new();
+        self.entries.retain(|name, entry| {
+            if entry.resource_handle != handle {
+                return true;
+            }
+            entry.resource_handle = H::default();
+            if entry.assets_by_file_handle.is_empty() {
+                return false;
+            }
+            names.push(name.clone());
+            true
+        });
+        names
+    }
+
+    fn apply_to_file_assets(&self, name: &str, mut apply: impl FnMut(&CoreHandle)) {
+        if let Some(entry) = self.entries.get(name) {
+            for asset in entry.assets_by_file_handle.values() {
+                apply(&asset.asset);
+            }
+        }
+    }
+}
+
+fn file_asset_name(asset: &CoreHandle) -> String {
+    asset
+        .with(|asset| {
+            CoreCapabilities::as_file_asset(asset)
+                .expect("registered file asset")
+                .file_asset_base()
+                .unique_name()
+        })
+        .expect("retained file asset")
+}
+
+impl CommandAssetRegistry {
+    fn add_file_assets(&mut self, file: FileHandle, assets: &[RetainedFileAsset]) {
+        for asset in assets {
+            if asset.asset.with_downcast::<ImageAsset, _>(|_| ()).is_some() {
+                self.image_assets.add_file_asset(file, asset);
+            } else if asset.asset.with_downcast::<AudioAsset, _>(|_| ()).is_some() {
+                self.audio_assets.add_file_asset(file, asset);
+            } else if asset.asset.with_downcast::<FontAsset, _>(|_| ()).is_some() {
+                self.font_assets.add_file_asset(file, asset);
+            }
+        }
+    }
+
+    fn apply_resources_to_file_assets(&self, assets: &[RetainedFileAsset]) {
+        for retained in assets {
+            let asset = &retained.asset;
+            let name = file_asset_name(asset);
+            if asset.with_downcast::<ImageAsset, _>(|_| ()).is_some() {
+                let handle = self.image_assets.get_resource_handle(&name);
+                ImageAsset::set_render_image_occurrence(asset, self.images.get(&handle).cloned());
+            } else if asset.with_downcast::<AudioAsset, _>(|_| ()).is_some() {
+                let handle = self.audio_assets.get_resource_handle(&name);
+                asset.with_downcast_mut::<AudioAsset, _>(|asset| {
+                    asset.set_audio_source(self.audio_sources.get(&handle).cloned())
+                });
+            } else if asset.with_downcast::<FontAsset, _>(|_| ()).is_some() {
+                let handle = self.font_assets.get_resource_handle(&name);
+                FontAsset::set_font_occurrence(asset, self.fonts.get(&handle).cloned());
+            }
+        }
+    }
+
+    fn remove_file_assets(&mut self, file: FileHandle, assets: &[CoreHandle]) {
+        for asset in assets {
+            let name = file_asset_name(asset);
+            if asset.with_downcast::<ImageAsset, _>(|_| ()).is_some() {
+                self.image_assets.remove_file_asset(file, &name);
+            } else if asset.with_downcast::<AudioAsset, _>(|_| ()).is_some() {
+                self.audio_assets.remove_file_asset(file, &name);
+            } else if asset.with_downcast::<FontAsset, _>(|_| ()).is_some() {
+                self.font_assets.remove_file_asset(file, &name);
+            }
+        }
+    }
+
+    fn apply_render_image(&self, name: &str, image: Option<RenderImageRef>) {
+        self.image_assets.apply_to_file_assets(name, |asset| {
+            ImageAsset::set_render_image_occurrence(asset, image.clone())
+        });
+    }
+    fn apply_audio_source(&self, name: &str, audio: Option<AudioSourceRef>) {
+        self.audio_assets.apply_to_file_assets(name, |asset| {
+            asset.with_downcast_mut::<AudioAsset, _>(|asset| asset.set_audio_source(audio.clone()));
+        });
+    }
+    fn apply_font(&self, name: &str, font: Option<FontRef>) {
+        self.font_assets.apply_to_file_assets(name, |asset| {
+            FontAsset::set_font_occurrence(asset, font.clone())
+        });
+    }
+}
+
 struct CommandFileAssetLoader {
-    assets: Rc<std::cell::RefCell<CommandAssetRegistry>>,
+    file_assets: Rc<RefCell<Vec<RetainedFileAsset>>>,
     internal_loader: Option<FileAssetLoaderRef>,
 }
 
@@ -78,15 +232,26 @@ impl FileAssetLoader for CommandFileAssetLoader {
             return true;
         }
 
-        let Some((unique_name, unique_filename)) = asset
+        if !in_band_bytes.is_empty() {
+            return false;
+        }
+        if asset.with_downcast::<ImageAsset, _>(|_| ()).is_some()
+            || asset.with_downcast::<AudioAsset, _>(|_| ()).is_some()
+            || asset.with_downcast::<FontAsset, _>(|_| ()).is_some()
+        {
+            self.file_assets.borrow_mut().push(RetainedFileAsset {
+                _arena: asset.retain_arena().expect("live importing file asset"),
+                asset,
+            });
+            return false;
+        }
+
+        let Some(unique_filename) = asset
             .with(|asset| {
                 CoreCapabilities::as_file_asset(asset).map(|asset| {
-                    (
-                        asset.file_asset_base().unique_name(),
-                        asset
-                            .file_asset_base()
-                            .unique_filename(asset.file_extension()),
-                    )
+                    asset
+                        .file_asset_base()
+                        .unique_filename(asset.file_extension())
                 })
             })
             .flatten()
@@ -94,55 +259,12 @@ impl FileAssetLoader for CommandFileAssetLoader {
             return false;
         };
 
-        let assets = self.assets.borrow();
-        if let Some(image) = assets
-            .image_assets
-            .get(&unique_name)
-            .and_then(|handle| assets.images.get(handle))
-            .cloned()
-        {
-            return asset
-                .with_downcast_mut::<ImageAsset, _>(|asset| {
-                    asset.set_render_image(Some(image));
-                    true
-                })
-                .unwrap_or(false);
-        }
-        if let Some(audio) = assets
-            .audio_assets
-            .get(&unique_name)
-            .and_then(|handle| assets.audio_sources.get(handle))
-            .cloned()
-        {
-            return asset
-                .with_downcast_mut::<AudioAsset, _>(|asset| {
-                    asset.set_audio_source(Some(audio));
-                    true
-                })
-                .unwrap_or(false);
-        }
-        if let Some(font) = assets
-            .font_assets
-            .get(&unique_name)
-            .and_then(|handle| assets.fonts.get(handle))
-            .cloned()
-        {
-            return asset
-                .with_downcast_mut::<FontAsset, _>(|asset| {
-                    asset.set_font(Some(font));
-                    true
-                })
-                .unwrap_or(false);
-        }
         // These assets cannot be registered externally. Leave in-band decoding
         // to the importer. TextAsset includes both ScriptAsset and ShaderAsset.
         if asset.is_type_of(TextAssetBase::TYPE_KEY)
             || asset.is_type_of(crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY)
             || asset.is_type_of(BlobAssetBase::TYPE_KEY)
             || asset.is_type_of(ManifestAssetBase::TYPE_KEY)
-            || asset.with_downcast::<ImageAsset, _>(|_| ()).is_some()
-            || asset.with_downcast::<AudioAsset, _>(|_| ()).is_some()
-            || asset.with_downcast::<FontAsset, _>(|_| ()).is_some()
         {
             return false;
         }
@@ -276,7 +398,7 @@ pub struct CommandServer {
     file_dependencies: HashMap<FileHandle, Vec<ArtboardHandle>>,
     artboard_dependencies: HashMap<ArtboardHandle, Vec<StateMachineHandle>>,
     files: HashMap<FileHandle, RuntimeFileHandle>,
-    assets: Rc<std::cell::RefCell<CommandAssetRegistry>>,
+    assets: CommandAssetRegistry,
     blobs: HashMap<BlobAssetHandle, Arc<RuntimeBlobAsset>>,
     artboards: HashMap<ArtboardHandle, RuntimeBindableArtboardHandle>,
     view_models: HashMap<ViewModelInstanceHandle, RuntimeViewModelInstanceHandle>,
@@ -285,6 +407,11 @@ pub struct CommandServer {
 }
 
 impl CommandServer {
+    /// Execute commands with the supplied resource factory. The optional
+    /// internal loader runs first and should return true for assets it owns;
+    /// those assets are excluded from command-queue global registrations.
+    /// Leave it absent to handle out-of-band images, audio and fonts through
+    /// the command queue.
     pub fn new(
         command_queue: CommandQueue,
         factory: RuntimeFactoryHandle,
@@ -301,7 +428,7 @@ impl CommandServer {
             file_dependencies: HashMap::new(),
             artboard_dependencies: HashMap::new(),
             files: HashMap::new(),
-            assets: Rc::new(std::cell::RefCell::new(CommandAssetRegistry::default())),
+            assets: CommandAssetRegistry::default(),
             blobs: HashMap::new(),
             artboards: HashMap::new(),
             view_models: HashMap::new(),
@@ -326,17 +453,17 @@ impl CommandServer {
 
     pub fn get_image(&self, handle: RenderImageHandle) -> Option<RenderImageRef> {
         self.assert_thread();
-        self.assets.borrow().images.get(&handle).cloned()
+        self.assets.images.get(&handle).cloned()
     }
 
     pub fn get_audio_source(&self, handle: AudioSourceHandle) -> Option<AudioSourceRef> {
         self.assert_thread();
-        self.assets.borrow().audio_sources.get(&handle).cloned()
+        self.assets.audio_sources.get(&handle).cloned()
     }
 
     pub fn get_font(&self, handle: FontHandle) -> Option<FontRef> {
         self.assert_thread();
-        self.assets.borrow().fonts.get(&handle).cloned()
+        self.assets.fonts.get(&handle).cloned()
     }
 
     pub fn get_blob(&self, handle: BlobAssetHandle) -> Option<Arc<RuntimeBlobAsset>> {
@@ -713,13 +840,17 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     let scripting_factory = self.command_queue.pop_scripting_context_factory();
                     lock.unlock();
+                    let file_assets = Rc::new(RefCell::new(Vec::new()));
                     let loader = FileAssetLoaderRef::new(Box::new(CommandFileAssetLoader {
-                        assets: self.assets.clone(),
+                        file_assets: file_assets.clone(),
                         internal_loader: self.internal_loader.clone(),
                     }));
                     let vm = scripting_factory.and_then(|make_vm| make_vm(self.factory()));
                     let file = File::import_with_loader(&bytes, self.factory(), None, loader, vm);
                     if let Some(file) = file {
+                        let file_assets = file_assets.borrow().clone();
+                        self.assets.add_file_assets(handle, &file_assets);
+                        self.assets.apply_resources_to_file_assets(&file_assets);
                         self.file_dependencies.insert(handle, Vec::new());
                         self.files.insert(handle, file);
                         let mut messages = self.command_queue.message_lock();
@@ -739,7 +870,12 @@ impl CommandServer {
                     let handle: FileHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    self.files.remove(&handle);
+                    if let Some(file) = self.files.get(&handle) {
+                        file.with_file(|file| {
+                            self.assets.remove_file_assets(handle, file.assets())
+                        });
+                        self.files.remove(&handle);
+                    }
                     if let Some(artboards) = self.file_dependencies.remove(&handle) {
                         for artboard in artboards {
                             self.cleanup_artboard(artboard, request_id);
@@ -760,7 +896,7 @@ impl CommandServer {
                         .with_factory_mut(|factory| factory.decode_image(&bytes));
                     if let Ok(image) = image {
                         let image: RenderImageRef = Rc::from(image);
-                        self.assets.borrow_mut().images.insert(handle, image);
+                        self.assets.images.insert(handle, image);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ImageDecoded);
                         messages.write(handle);
@@ -782,7 +918,7 @@ impl CommandServer {
                     if let Some(image) = image {
                         let image: Rc<dyn nuxie_render_api::RenderImage + Send> = Rc::from(image);
                         let image: RenderImageRef = image;
-                        self.assets.borrow_mut().images.insert(handle, image);
+                        self.assets.images.insert(handle, image);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::ImageDecoded);
                         messages.write(handle);
@@ -800,16 +936,14 @@ impl CommandServer {
                     let handle: RenderImageHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    let mut assets = self.assets.borrow_mut();
-                    assets.images.remove(&handle);
-                    if let Some(name) = assets
+                    self.assets.images.remove(&handle);
+                    for name in self
+                        .assets
                         .image_assets
-                        .iter()
-                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                        .unregister_resource_by_handle(handle)
                     {
-                        assets.image_assets.remove(&name);
+                        self.assets.apply_render_image(&name, None);
                     }
-                    drop(assets);
                     let mut messages = self.command_queue.message_lock();
                     messages.write(Message::ImageDeleted);
                     messages.write(handle);
@@ -865,7 +999,7 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
                     if let Some(audio) = AudioSource::from_encoded(&bytes) {
-                        self.assets.borrow_mut().audio_sources.insert(handle, audio);
+                        self.assets.audio_sources.insert(handle, audio);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::AudioDecoded);
                         messages.write(handle);
@@ -885,7 +1019,7 @@ impl CommandServer {
                     let audio = self.command_queue.pop_external_audio();
                     lock.unlock();
                     if let Some(audio) = audio {
-                        self.assets.borrow_mut().audio_sources.insert(handle, audio);
+                        self.assets.audio_sources.insert(handle, audio);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::AudioDecoded);
                         messages.write(handle);
@@ -903,16 +1037,14 @@ impl CommandServer {
                     let handle: AudioSourceHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    let mut assets = self.assets.borrow_mut();
-                    assets.audio_sources.remove(&handle);
-                    if let Some(name) = assets
+                    self.assets.audio_sources.remove(&handle);
+                    for name in self
+                        .assets
                         .audio_assets
-                        .iter()
-                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                        .unregister_resource_by_handle(handle)
                     {
-                        assets.audio_assets.remove(&name);
+                        self.assets.apply_audio_source(&name, None);
                     }
-                    drop(assets);
                     let mut messages = self.command_queue.message_lock();
                     messages.write(Message::AudioDeleted);
                     messages.write(handle);
@@ -924,7 +1056,7 @@ impl CommandServer {
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
                     if let Some(font) = HbFont::decode(&bytes) {
-                        self.assets.borrow_mut().fonts.insert(handle, font);
+                        self.assets.fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);
                         messages.write(handle);
@@ -944,7 +1076,7 @@ impl CommandServer {
                     let font = self.command_queue.pop_external_font();
                     lock.unlock();
                     if let Some(font) = font.as_ref().and_then(HbFont::from_raw_text) {
-                        self.assets.borrow_mut().fonts.insert(handle, font);
+                        self.assets.fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);
                         messages.write(handle);
@@ -962,16 +1094,14 @@ impl CommandServer {
                     let handle: FontHandle = self.command_queue.read();
                     let request_id: u64 = self.command_queue.read();
                     lock.unlock();
-                    let mut assets = self.assets.borrow_mut();
-                    assets.fonts.remove(&handle);
-                    if let Some(name) = assets
+                    self.assets.fonts.remove(&handle);
+                    for name in self
+                        .assets
                         .font_assets
-                        .iter()
-                        .find_map(|(name, value)| (*value == handle).then(|| name.clone()))
+                        .unregister_resource_by_handle(handle)
                     {
-                        assets.font_assets.remove(&name);
+                        self.assets.apply_font(&name, None);
                     }
-                    drop(assets);
                     let mut messages = self.command_queue.message_lock();
                     messages.write(Message::FontDeleted);
                     messages.write(handle);
@@ -1591,7 +1721,14 @@ impl CommandServer {
                             messages.write(view_handle);
                             messages.write(request_id);
                         } else {
-                            self.error(handle, request_id, Message::StateMachineError, format!("No main view model instance bound to state machine {handle}"));
+                            self.error(
+                                handle,
+                                request_id,
+                                Message::StateMachineError,
+                                format!(
+                                    "No main view model instance bound to state machine {handle}"
+                                ),
+                            );
                         }
                     } else {
                         self.error(handle, request_id, Message::StateMachineError, format!("State machine {handle} not found for getting main view model instance."));
@@ -2343,49 +2480,79 @@ impl CommandServer {
                 }
                 Command::AddImageFileAsset => {
                     let handle = self.command_queue.read();
-                    let _request_id: u64 = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if handle != RenderImageHandle::NULL && self.get_image(handle).is_some() {
-                        self.assets.borrow_mut().image_assets.insert(name, handle);
+                    if let Some(image) = self.get_image(handle) {
+                        self.assets.image_assets.set_resource(name.clone(), handle);
+                        self.assets.apply_render_image(&name, Some(image));
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::ImageError,
+                            format!(
+                                "Invalid image handle when adding global image asset \"{name}\""
+                            ),
+                        );
                     }
                 }
                 Command::RemoveImageFileAsset => {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    self.assets.borrow_mut().image_assets.remove(&name);
+                    self.assets.image_assets.unregister_resource_by_name(&name);
+                    self.assets.apply_render_image(&name, None);
                 }
                 Command::AddAudioFileAsset => {
                     let handle = self.command_queue.read();
-                    let _request_id: u64 = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if handle != AudioSourceHandle::NULL && self.get_audio_source(handle).is_some()
-                    {
-                        self.assets.borrow_mut().audio_assets.insert(name, handle);
+                    if let Some(audio) = self.get_audio_source(handle) {
+                        self.assets.audio_assets.set_resource(name.clone(), handle);
+                        self.assets.apply_audio_source(&name, Some(audio));
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::AudioError,
+                            format!(
+                                "Invalid audio handle when adding global audio asset \"{name}\""
+                            ),
+                        );
                     }
                 }
                 Command::RemoveAudioFileAsset => {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    self.assets.borrow_mut().audio_assets.remove(&name);
+                    self.assets.audio_assets.unregister_resource_by_name(&name);
+                    self.assets.apply_audio_source(&name, None);
                 }
                 Command::AddFontFileAsset => {
                     let handle = self.command_queue.read();
-                    let _request_id: u64 = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    if handle != FontHandle::NULL && self.get_font(handle).is_some() {
-                        self.assets.borrow_mut().font_assets.insert(name, handle);
+                    if let Some(font) = self.get_font(handle) {
+                        self.assets.font_assets.set_resource(name.clone(), handle);
+                        self.assets.apply_font(&name, Some(font));
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::FontError,
+                            format!("Invalid font handle when adding global font asset \"{name}\""),
+                        );
                     }
                 }
                 Command::RemoveFontFileAsset => {
                     let _request_id: u64 = self.command_queue.read();
                     let name = self.command_queue.pop_name();
                     lock.unlock();
-                    self.assets.borrow_mut().font_assets.remove(&name);
+                    self.assets.font_assets.unregister_resource_by_name(&name);
+                    self.assets.apply_font(&name, None);
                 }
                 Command::Disconnect => {
                     lock.unlock();
@@ -2761,42 +2928,27 @@ impl CommandServer {
     pub fn testing_get_subscriptions(&self) -> &[Subscription] {
         &self.property_subscriptions
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn testing_global_image_named(&self, name: &str) -> RenderImageHandle {
-        self.assets
-            .borrow()
-            .image_assets
-            .get(name)
-            .copied()
-            .unwrap_or(RenderImageHandle::NULL)
+        self.assets.image_assets.get_resource_handle(name)
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn testing_global_audio_named(&self, name: &str) -> AudioSourceHandle {
-        self.assets
-            .borrow()
-            .audio_assets
-            .get(name)
-            .copied()
-            .unwrap_or(AudioSourceHandle::NULL)
+        self.assets.audio_assets.get_resource_handle(name)
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn testing_global_font_named(&self, name: &str) -> FontHandle {
-        self.assets
-            .borrow()
-            .font_assets
-            .get(name)
-            .copied()
-            .unwrap_or(FontHandle::NULL)
+        self.assets.font_assets.get_resource_handle(name)
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn testing_global_image_contains(&self, name: &str) -> bool {
         self.testing_global_image_named(name) != RenderImageHandle::NULL
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn testing_global_audio_contains(&self, name: &str) -> bool {
         self.testing_global_audio_named(name) != AudioSourceHandle::NULL
     }
-    #[cfg(test)]
+    #[cfg(any(test, feature = "tools"))]
     pub fn testing_global_font_contains(&self, name: &str) -> bool {
         self.testing_global_font_named(name) != FontHandle::NULL
     }

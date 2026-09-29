@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `890ed9a48355b487be471b59b2363d51f9a429ee`
+- LAST_SYNCED_SHA: `83acdadc2e528848066d28f771d961a7eec6dad8`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 98 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 98 require a Rust translation.
+  There are 97 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 97 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `83acdadc2e528848066d28f771d961a7eec6dad8` | After an ORE replay resource fails to resolve, suppress all eight subsequent pipeline/buffer/bind-group and dynamic-state commands as well as draws until the next pass; retain command decoding, resource resolution and pass completion. The image-paint GM already uses the matching f32 PI constant and arithmetic. C++ check-golds/deployment/Unreal packaging and testing-window external-backend aliases have no Rust product counterpart and are not imported. | — |
 | `890ed9a48355b487be471b59b2363d51f9a429ee` | **DEFERRED:** Nintendo WAMR platform/shims, prelinked-AOT registry/baker/loading and fallback, tier-ladder restrictions, and Wasm GC benchmark verification/tuning. Add the exact new `wasm/prelinked_aot` owner to the deferred inventory. **NOT APPLICABLE:** Nintendo-only Vulkan build selection and upstream C++ test-player dump/async-pump changes; this repository does not ship that test player or Nintendo platform. No shared runtime, supported renderer or native Luau implementation changes are present, and no such behavior is claimed translated. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `edcf7d9d0c6042b8882311733e5103992c3d4d84` | Carry reflected uniform-block minimum sizes through binding-map serialization, layout identity and stage merging; reject undersized/out-of-bounds uniform ranges before native bind-group creation and while recording deferred commands. Default zero-sized ranges to bytes remaining after the offset. Translate shared and deferred regressions across supported backends. **DEFERRED:** Wasm guest GPU proxy validation, factory-error traps and locale import remain with guest execution; unsupported D3D backends are not introduced. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `c5faa1fad8e95a6f8639696e08d646f3b2968e48` | Expose module-loaded and module-error host hooks at the upstream boundaries: the loaded closure is available before execution, and failed/yielded module frames remain available before result transfer. Default hooks are no-ops. The public delta contains these runtime hooks, not the VS Code debugger or CLI integration described by its title. | — |

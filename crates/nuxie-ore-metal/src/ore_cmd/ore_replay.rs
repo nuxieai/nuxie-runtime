@@ -1,4 +1,4 @@
-//! renderer/ore/cmd/ore_replay.hpp at e949498e.
+//! renderer/ore/cmd/ore_replay.hpp at 83acdadc.
 #![allow(non_snake_case)]
 use super::{
     ore_command_buffer::{OreCommandBuffer, OreCommandReader},
@@ -15,6 +15,8 @@ use crate::{
     types::*,
 };
 
+// Returns false for lifecycle opcodes. A failed handle poisons the open
+// pass: skip pipeline-dependent state as well as draws until the next pass.
 pub fn replayPassCommand(
     ctx: &mut dyn ContextApi,
     pass: &mut Option<Box<dyn RenderPassApi>>,
@@ -86,7 +88,7 @@ pub fn replayPassCommand(
             let p = resolve(c.pipeline, OreKind::pipeline);
             if p.is_none() && c.pipeline != INVALID_HANDLE {
                 churned(dropDraws, "pipeline", c.pipeline);
-            } else if let Some(pass) = pass {
+            } else if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setPipeline(p.as_ref());
             }
         }
@@ -95,7 +97,7 @@ pub fn replayPassCommand(
             let b = resolve(c.buffer, OreKind::buffer);
             if b.is_none() && c.buffer != INVALID_HANDLE {
                 churned(dropDraws, "vertex buffer", c.buffer);
-            } else if let Some(pass) = pass {
+            } else if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setVertexBuffer(c.slot, b.as_ref(), c.offset);
             }
         }
@@ -104,7 +106,7 @@ pub fn replayPassCommand(
             let b = resolve(c.buffer, OreKind::buffer);
             if b.is_none() && c.buffer != INVALID_HANDLE {
                 churned(dropDraws, "index buffer", c.buffer);
-            } else if let Some(pass) = pass {
+            } else if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setIndexBuffer(b.as_ref(), c.format, c.offset);
             }
         }
@@ -121,7 +123,7 @@ pub fn replayPassCommand(
             let b = resolve(c.bindGroup, OreKind::bindGroup);
             if b.is_none() && c.bindGroup != INVALID_HANDLE {
                 churned(dropDraws, "bind group", c.bindGroup);
-            } else if let Some(pass) = pass {
+            } else if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setBindGroup(
                     c.groupIndex,
                     b.as_ref(),
@@ -132,25 +134,25 @@ pub fn replayPassCommand(
         }
         CommandType::setViewport => {
             let c: SetViewportCmd = reader.read();
-            if let Some(pass) = pass {
+            if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setViewport(c.x, c.y, c.width, c.height, c.minDepth, c.maxDepth);
             }
         }
         CommandType::setScissorRect => {
             let c: SetScissorRectCmd = reader.read();
-            if let Some(pass) = pass {
+            if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setScissorRect(c.x, c.y, c.width, c.height);
             }
         }
         CommandType::setStencilReference => {
             let c: SetStencilReferenceCmd = reader.read();
-            if let Some(pass) = pass {
+            if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setStencilReference(c.reference);
             }
         }
         CommandType::setBlendColor => {
             let c: SetBlendColorCmd = reader.read();
-            if let Some(pass) = pass {
+            if let Some(pass) = pass.as_mut().filter(|_| !*dropDraws) {
                 pass.setBlendColor(c.r, c.g, c.b, c.a);
             }
         }
@@ -261,4 +263,221 @@ pub fn replayCommandBuffer(
             Some(r.clone())
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::context::{Context, FrameDescriptor, ShaderTarget};
+    use crate::ore_cmd::ore_render_pass_recording::RenderPassRecording;
+    use std::{cell::RefCell, rc::Rc};
+
+    struct RecordingContext(Rc<RefCell<OreCommandBuffer>>);
+    impl ContextApi for RecordingContext {
+        fn contextBase(&self) -> &Context {
+            unreachable!()
+        }
+        fn features(&self) -> Features {
+            unreachable!()
+        }
+        fn lastError(&self) -> String {
+            unreachable!()
+        }
+        fn clearLastError(&self) {
+            unreachable!()
+        }
+        fn setLastError(&self, _: &str) {
+            unreachable!()
+        }
+        fn makeBuffer(&mut self, _: &BufferDesc<'_>) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makeTexture(&mut self, _: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makeTextureView(&mut self, _: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makeSampler(&mut self, _: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makeShaderModule(&mut self, _: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makeBindGroupLayout(
+            &mut self,
+            _: &BindGroupLayoutDesc<'_>,
+        ) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makePipeline(
+            &mut self,
+            _: &PipelineDesc<'_>,
+            _: Option<&mut String>,
+        ) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn makeBindGroup(&mut self, _: &BindGroupDesc<'_>) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn beginRenderPass(
+            &mut self,
+            desc: &RenderPassDesc<'_>,
+            _: Option<&mut String>,
+        ) -> Option<Box<dyn RenderPassApi>> {
+            Some(Box::new(RenderPassRecording::new(
+                None,
+                self.0.clone(),
+                desc,
+            )))
+        }
+        fn beginFrame(&mut self, _: &FrameDescriptor) {
+            unreachable!()
+        }
+        fn endFrame(&mut self) {
+            unreachable!()
+        }
+        fn waitForGPU(&mut self) {
+            unreachable!()
+        }
+        unsafe fn wrapCanvasTexture(
+            &mut self,
+            _: *mut core::ffi::c_void,
+        ) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        unsafe fn wrapRiveTexture(
+            &mut self,
+            _: *mut core::ffi::c_void,
+            _: u32,
+            _: u32,
+        ) -> Option<AnyResourceHandle> {
+            unreachable!()
+        }
+        fn shaderTarget(&self) -> ShaderTarget {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn poisoned_pass_skips_all_state_but_resolves_handles_and_next_pass_recovers() {
+        let mut commands = OreCommandBuffer::default();
+        for poison in [true, false] {
+            commands.append(
+                CommandType::beginRenderPass,
+                &BeginRenderPassCmd {
+                    depthStencil: DepthStencilAttachmentPOD {
+                        view: INVALID_HANDLE,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            );
+            if poison {
+                commands.append(CommandType::setPipeline, &SetPipelineCmd { pipeline: 7 });
+            }
+            commands.append(
+                CommandType::setPipeline,
+                &SetPipelineCmd {
+                    pipeline: INVALID_HANDLE,
+                },
+            );
+            commands.append(
+                CommandType::setVertexBuffer,
+                &SetVertexBufferCmd {
+                    buffer: INVALID_HANDLE,
+                    ..Default::default()
+                },
+            );
+            commands.append(
+                CommandType::setIndexBuffer,
+                &SetIndexBufferCmd {
+                    buffer: INVALID_HANDLE,
+                    ..Default::default()
+                },
+            );
+            commands.append(
+                CommandType::setBindGroup,
+                &SetBindGroupCmd {
+                    bindGroup: INVALID_HANDLE,
+                    ..Default::default()
+                },
+            );
+            commands.append(CommandType::setViewport, &SetViewportCmd::default());
+            commands.append(CommandType::setScissorRect, &SetScissorRectCmd::default());
+            commands.append(
+                CommandType::setStencilReference,
+                &SetStencilReferenceCmd::default(),
+            );
+            commands.append(CommandType::setBlendColor, &SetBlendColorCmd::default());
+            commands.append(CommandType::draw, &DrawCmd::default());
+            commands.append(CommandType::drawIndexed, &DrawIndexedCmd::default());
+            commands.appendOpcode(CommandType::finish);
+        }
+        let output = Rc::new(RefCell::new(OreCommandBuffer::default()));
+        let mut context = RecordingContext(output.clone());
+        let mut pass = None;
+        let mut drop_draws = false;
+        let mut resolved = Vec::new();
+        let mut reader = OreCommandReader::new(commands.command_bytes(), commands.blob_bytes());
+        while let Some(kind) = reader.next::<CommandType>() {
+            assert!(replayPassCommand(
+                &mut context,
+                &mut pass,
+                &mut drop_draws,
+                kind,
+                &mut reader,
+                &mut |handle, _| {
+                    resolved.push(handle);
+                    None
+                }
+            ));
+        }
+        assert!(pass.is_none());
+        assert!(!drop_draws);
+        // Depth attachment resolution + all four state resource resolutions
+        // still happen in each pass, including after the first handle churns.
+        assert_eq!(
+            resolved,
+            [
+                INVALID_HANDLE,
+                7,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE,
+                INVALID_HANDLE
+            ]
+        );
+        let output = output.borrow();
+        let mut reader = OreCommandReader::new(output.command_bytes(), output.blob_bytes());
+        let mut observed = Vec::new();
+        while let Some(kind) = reader.next::<CommandType>() {
+            observed.push(kind);
+            reader.skip(ore_payload_size_of(kind));
+        }
+        assert_eq!(
+            observed,
+            [
+                CommandType::beginRenderPass,
+                CommandType::finish,
+                CommandType::beginRenderPass,
+                CommandType::setPipeline,
+                CommandType::setVertexBuffer,
+                CommandType::setIndexBuffer,
+                CommandType::setBindGroup,
+                CommandType::setViewport,
+                CommandType::setScissorRect,
+                CommandType::setStencilReference,
+                CommandType::setBlendColor,
+                CommandType::draw,
+                CommandType::drawIndexed,
+                CommandType::finish
+            ]
+        );
+    }
 }

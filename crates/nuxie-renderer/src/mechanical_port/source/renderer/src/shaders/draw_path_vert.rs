@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: 4ad6fcf47526b033e5cbe16275e9219365551d76
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ad6fcf47526b033e5cbe16275e9219365551d76";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "61cb7a9875b263f101e1621d89c139404fbc2406ae570b1235cb36060dfe1650";
+    "d5c52b73fc3e1d0077a2fe03f1076d07125a80a97207e34d30be219af8cfd486";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 549;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18959;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 19148;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -70,14 +70,14 @@ NO_PERSPECTIVE VARYING(0, float4, v_paint);
 
 #ifdef @FEATHER_ATLAS_BLIT
 NO_PERSPECTIVE VARYING(1, float2, v_atlasCoord);
-#elif !defined(@RENDER_MODE_MSAA)
+#elif !defined(@RENDER_MODE_DEPTH_STENCIL)
 #ifdef @DRAW_INTERIOR_TRIANGLES
 @OPTIONALLY_FLAT VARYING(1, half, v_windingWeight);
 #else
 NO_PERSPECTIVE VARYING(2, COVERAGE_TYPE, v_coverages);
 #endif //@DRAW_INTERIOR_TRIANGLES
 @OPTIONALLY_FLAT VARYING(3, half, v_pathID);
-#endif // !@RENDER_MODE_MSAA
+#endif // !@RENDER_MODE_DEPTH_STENCIL
 
 #ifdef @ENABLE_CLIPPING
 #ifdef @FEATHER_ATLAS_BLIT
@@ -86,7 +86,7 @@ NO_PERSPECTIVE VARYING(2, COVERAGE_TYPE, v_coverages);
 @OPTIONALLY_FLAT VARYING(4, half2, v_clipIDs); // [clipID, outerClipID]
 #endif
 #endif // @ENABLE_CLIPPING
-#if defined(@ENABLE_CLIP_RECT) && !defined(@RENDER_MODE_MSAA)
+#if defined(@ENABLE_CLIP_RECT) && !defined(@RENDER_MODE_DEPTH_STENCIL)
 NO_PERSPECTIVE VARYING(5, float4, v_clipRect);
 #endif
 #ifdef @ENABLE_ADVANCED_BLEND
@@ -131,14 +131,14 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
 #ifdef @FEATHER_ATLAS_BLIT
     VARYING_INIT(v_atlasCoord, float2);
-#elif !defined(@RENDER_MODE_MSAA)
+#elif !defined(@RENDER_MODE_DEPTH_STENCIL)
 #ifdef @DRAW_INTERIOR_TRIANGLES
     VARYING_INIT(v_windingWeight, half);
 #else
     VARYING_INIT(v_coverages, COVERAGE_TYPE);
 #endif //@DRAW_INTERIOR_TRIANGLES
     VARYING_INIT(v_pathID, half);
-#endif // !@RENDER_MODE_MSAA
+#endif // !@RENDER_MODE_DEPTH_STENCIL
 
 #ifdef @ENABLE_CLIPPING
 #ifdef @FEATHER_ATLAS_BLIT
@@ -147,7 +147,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     VARYING_INIT(v_clipIDs, half2);
 #endif
 #endif // @ENABLE_CLIPPING
-#if defined(@ENABLE_CLIP_RECT) && !defined(@RENDER_MODE_MSAA)
+#if defined(@ENABLE_CLIP_RECT) && !defined(@RENDER_MODE_DEPTH_STENCIL)
     VARYING_INIT(v_clipRect, float4);
 #endif
 #ifdef @ENABLE_ADVANCED_BLEND
@@ -161,7 +161,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     bool shouldDiscardVertex = false;
     uint pathID;
     float2 vertexPosition;
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
     ushort pathZIndex;
 #endif
 
@@ -169,14 +169,14 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     vertexPosition =
         unpack_atlas_coverage_vertex(@a_triangleVertex,
                                      pathID,
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
                                      pathZIndex,
 #endif
                                      v_atlasCoord VERTEX_CONTEXT_UNPACK);
 #elif defined(@DRAW_INTERIOR_TRIANGLES)
     vertexPosition = unpack_interior_triangle_vertex(@a_triangleVertex,
                                                      pathID
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
                                                      ,
                                                      pathZIndex
 #else
@@ -192,7 +192,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
                                         _instanceID,
                                         pathID,
                                         vertexPosition
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
                                         ,
                                         coverages
 #else
@@ -200,7 +200,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
                                         pathZIndex
 #endif
                                             VERTEX_CONTEXT_UNPACK);
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
 #if defined(@ENABLE_FEATHER) || defined(METAL)
     v_coverages = coverages;
 #else
@@ -211,7 +211,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
     uint2 paintData = STORAGE_BUFFER_LOAD2(@paintBuffer, pathID);
 
-#if !defined(@FEATHER_ATLAS_BLIT) && !defined(@RENDER_MODE_MSAA)
+#if !defined(@FEATHER_ATLAS_BLIT) && !defined(@RENDER_MODE_DEPTH_STENCIL)
     // Encode the integral pathID as a "half" that we know the hardware will see
     // as a unique value in the fragment shader.
     v_pathID = id_bits_to_f16(pathID, uniforms.pathIDGranularity);
@@ -219,7 +219,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     // Indicate even-odd fill rule by making pathID negative.
     if ((paintData.x & PAINT_FLAG_EVEN_ODD_FILL) != 0u)
         v_pathID = -v_pathID;
-#endif // !@FEATHER_ATLAS_BLIT && !@RENDER_MODE_MSAA
+#endif // !@FEATHER_ATLAS_BLIT && !@RENDER_MODE_DEPTH_STENCIL
 
     uint paintType = paintData.x & 0xfu;
 #ifdef @ENABLE_CLIPPING
@@ -265,16 +265,16 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         float4 clipRectInverseTranslate =
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
                                  pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 3u);
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
         v_clipRect =
             find_clip_rect_coverage_distances(clipRectInverseMatrix,
                                               clipRectInverseTranslate.xy,
                                               fragCoord);
-#else  // !@RENDER_MODE_MSAA => @RENDER_MODE_MSAA
+#else  // !@RENDER_MODE_DEPTH_STENCIL => @RENDER_MODE_DEPTH_STENCIL
         set_clip_rect_plane_distances(clipRectInverseMatrix,
                                       clipRectInverseTranslate.xy,
                                       fragCoord CLIP_CONTEXT_UNPACK);
-#endif // @RENDER_MODE_MSAA
+#endif // @RENDER_MODE_DEPTH_STENCIL
     }
 #endif // ENABLE_CLIP_RECT
 
@@ -390,7 +390,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #ifdef @POST_INVERT_Y
         pos.y = -pos.y;
 #endif
-#ifdef @RENDER_MODE_MSAA
+#ifdef @RENDER_MODE_DEPTH_STENCIL
         pos.z = normalize_z_index(pathZIndex);
 #elif defined(@RENDER_MODE_CLOCKWISE_ATOMIC)
         uint4 coverageData =
@@ -413,14 +413,14 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif
 #ifdef @FEATHER_ATLAS_BLIT
     VARYING_PACK(v_atlasCoord);
-#elif !defined(@RENDER_MODE_MSAA)
+#elif !defined(@RENDER_MODE_DEPTH_STENCIL)
 #ifdef @DRAW_INTERIOR_TRIANGLES
     VARYING_PACK(v_windingWeight);
 #else
     VARYING_PACK(v_coverages);
 #endif //@DRAW_INTERIOR_TRIANGLES
     VARYING_PACK(v_pathID);
-#endif // !@RENDER_MODE_MSAA
+#endif // !@RENDER_MODE_DEPTH_STENCIL
 
 #ifdef @ENABLE_CLIPPING
 #ifdef @FEATHER_ATLAS_BLIT
@@ -429,7 +429,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     VARYING_PACK(v_clipIDs);
 #endif
 #endif // @ENABLE_CLIPPING
-#if defined(@ENABLE_CLIP_RECT) && !defined(@RENDER_MODE_MSAA)
+#if defined(@ENABLE_CLIP_RECT) && !defined(@RENDER_MODE_DEPTH_STENCIL)
     VARYING_PACK(v_clipRect);
 #endif
 #ifdef @ENABLE_ADVANCED_BLEND

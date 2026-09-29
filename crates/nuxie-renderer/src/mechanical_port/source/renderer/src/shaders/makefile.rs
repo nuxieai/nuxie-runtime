@@ -6,7 +6,7 @@
  * recovery, and C-array generation rules are executable below. All remaining
  * source branches (including SPIR-V, WGSL, and D3D) remain represented.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -23,10 +23,10 @@ use std::process::{Command, Output};
 
 use super::minify_py;
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/Makefile";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ec5d0d98d78051e98cda80f92cd67858cb1fb70be64cddd8ad13bcd4ad5f50fc";
+    "5b7af29c582e5731f07ba5a4f623cc33469a7e8332242e4cabf6384ce851b9f7";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 502;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -627,17 +627,17 @@ SPIRV_DRAW_ATOMIC_INPUTS := \
 # MSAA shaders need separate builds with FIXED_FUNCTION_COLOR_OUTPUT and/or
 # DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS, as well as builds for WebGPU.
 SPIRV_DRAW_MSAA_INPUTS := \
-    spirv/draw_msaa_atlas_blit.main \
-    spirv/draw_msaa_image_mesh.main \
-    spirv/draw_msaa_path.main \
-    spirv/draw_msaa_stencil.main \
+    spirv/draw_depthstencil_atlas_blit.main \
+    spirv/draw_depthstencil_image_mesh.main \
+    spirv/draw_depthstencil_path.main \
+    spirv/draw_depthstencil_triangles_nocolor.main \
 
 # WebGPU (compatibility mode) doesn't always support storage buffers in the
 # vertex shader. These files specifically need WebGPU "nossbo" build variants
 # that polyfill the buffers via textures.
 WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS := \
-    spirv/draw_msaa_path.main \
-    spirv/draw_msaa_atlas_blit.main
+    spirv/draw_depthstencil_path.main \
+    spirv/draw_depthstencil_atlas_blit.main
 WEBGPU_NOSSBO_INPUTS := \
     $(WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS) \
     spirv/tessellate.main \
@@ -856,8 +856,8 @@ WGSL_OUTPUTS := \
                  %.webgpu_frag.spv \
                  %.webgpu_fixedcolor_frag.spv, \
                  $(SPIRV_OUTPUTS_BINARY))) \
-    $(OUT)/wgsl/draw_msaa_stencil.vert.wgsl \
-    $(OUT)/wgsl/draw_msaa_stencil.frag.wgsl \
+    $(OUT)/wgsl/draw_depthstencil_triangles_nocolor.vert.wgsl \
+    $(OUT)/wgsl/draw_depthstencil_triangles_nocolor.frag.wgsl \
     $(OUT)/wgsl/color_ramp.vert.wgsl \
     $(OUT)/wgsl/color_ramp.frag.wgsl
 
@@ -1048,13 +1048,13 @@ pub const MAKE_VARIABLES: &[MakeVariable] = &[
         source_line: 200,
         name: "SPIRV_DRAW_MSAA_INPUTS",
         operator: ":=",
-        source: "SPIRV_DRAW_MSAA_INPUTS := \\\n    spirv/draw_msaa_atlas_blit.main \\\n    spirv/draw_msaa_image_mesh.main \\\n    spirv/draw_msaa_path.main \\\n    spirv/draw_msaa_stencil.main \\\n",
+        source: "SPIRV_DRAW_MSAA_INPUTS := \\\n    spirv/draw_depthstencil_atlas_blit.main \\\n    spirv/draw_depthstencil_image_mesh.main \\\n    spirv/draw_depthstencil_path.main \\\n    spirv/draw_depthstencil_triangles_nocolor.main \\\n",
     },
     MakeVariable {
         source_line: 209,
         name: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS",
         operator: ":=",
-        source: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS := \\\n    spirv/draw_msaa_path.main \\\n    spirv/draw_msaa_atlas_blit.main",
+        source: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS := \\\n    spirv/draw_depthstencil_path.main \\\n    spirv/draw_depthstencil_atlas_blit.main",
     },
     MakeVariable {
         source_line: 212,
@@ -1144,7 +1144,7 @@ pub const MAKE_VARIABLES: &[MakeVariable] = &[
         source_line: 421,
         name: "WGSL_OUTPUTS",
         operator: ":=",
-        source: "WGSL_OUTPUTS := \\\n    $(patsubst $(OUT)/spirv/%.spv,$(OUT)/wgsl/%.wgsl, \\\n        $(filter %.webgpu_vert.spv \\\n                 %.webgpu_noclipdistance_vert.spv \\\n                 %.webgpu_nossbo_vert.spv \\\n                 %.webgpu_nossbo_noclipdistance_vert.spv \\\n                 %.webgpu_frag.spv \\\n                 %.webgpu_fixedcolor_frag.spv, \\\n                 $(SPIRV_OUTPUTS_BINARY))) \\\n    $(OUT)/wgsl/draw_msaa_stencil.vert.wgsl \\\n    $(OUT)/wgsl/draw_msaa_stencil.frag.wgsl \\\n    $(OUT)/wgsl/color_ramp.vert.wgsl \\\n    $(OUT)/wgsl/color_ramp.frag.wgsl",
+        source: "WGSL_OUTPUTS := \\\n    $(patsubst $(OUT)/spirv/%.spv,$(OUT)/wgsl/%.wgsl, \\\n        $(filter %.webgpu_vert.spv \\\n                 %.webgpu_noclipdistance_vert.spv \\\n                 %.webgpu_nossbo_vert.spv \\\n                 %.webgpu_nossbo_noclipdistance_vert.spv \\\n                 %.webgpu_frag.spv \\\n                 %.webgpu_fixedcolor_frag.spv, \\\n                 $(SPIRV_OUTPUTS_BINARY))) \\\n    $(OUT)/wgsl/draw_depthstencil_triangles_nocolor.vert.wgsl \\\n    $(OUT)/wgsl/draw_depthstencil_triangles_nocolor.frag.wgsl \\\n    $(OUT)/wgsl/color_ramp.vert.wgsl \\\n    $(OUT)/wgsl/color_ramp.frag.wgsl",
     },
     MakeVariable {
         source_line: 460,
@@ -2490,17 +2490,17 @@ pub const SPIRV_SOURCE_ORDER: &[(&str, &[&str])] = &[
     (
         "SPIRV_DRAW_MSAA_INPUTS",
         &[
-            "spirv/draw_msaa_atlas_blit.main",
-            "spirv/draw_msaa_image_mesh.main",
-            "spirv/draw_msaa_path.main",
-            "spirv/draw_msaa_stencil.main",
+            "spirv/draw_depthstencil_atlas_blit.main",
+            "spirv/draw_depthstencil_image_mesh.main",
+            "spirv/draw_depthstencil_path.main",
+            "spirv/draw_depthstencil_triangles_nocolor.main",
         ],
     ),
     (
         "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS",
         &[
-            "spirv/draw_msaa_path.main",
-            "spirv/draw_msaa_atlas_blit.main",
+            "spirv/draw_depthstencil_path.main",
+            "spirv/draw_depthstencil_atlas_blit.main",
         ],
     ),
     (

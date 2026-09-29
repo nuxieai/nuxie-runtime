@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/glsl.glsl.
  *
- * Upstream source revision: 4ad6fcf47526b033e5cbe16275e9219365551d76
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ad6fcf47526b033e5cbe16275e9219365551d76";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/glsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "980cefe2bdf70e2e9ee86be2c1e9fe806d78277a5d55033032b362b5c6461db5";
+    "95ed8ed5e9e35b0d34c30b4415ccc204f113406b83a833ac738d659b418a4cb6";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 736;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 30718;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 30772;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
@@ -101,13 +101,13 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 #endif
 
 // clang-format off
-#if defined(@RENDER_MODE_MSAA) && defined(@ENABLE_CLIP_RECT) && defined(GL_ES) && !defined(@DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS)
+#if defined(@RENDER_MODE_DEPTH_STENCIL) && defined(@ENABLE_CLIP_RECT) && defined(GL_ES) && !defined(@DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS)
 #ifdef GL_EXT_clip_cull_distance
 #extension GL_EXT_clip_cull_distance : require
 #elif defined(GL_ANGLE_clip_cull_distance)
 #extension GL_ANGLE_clip_cull_distance : require
 #endif
-#endif // RENDER_MODE_MSAA && ENABLE_CLIP_RECT && GL_ES && !DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
+#endif // RENDER_MODE_DEPTH_STENCIL && ENABLE_CLIP_RECT && GL_ES && !DISABLE_CLIP_DISTANCE_FOR_UBERSHADERS
 // clang-format on
 
 #if @GLSL_VERSION >= 310
@@ -198,8 +198,8 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
     layout(binding = IDX) uniform highp itexture2D NAME
 #define TEXTURE_R32UI(SET, IDX, NAME)                                          \
     layout(binding = IDX) uniform highp utexture2D NAME
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA)
-#endif // @FRAGMENT && @RENDER_MODE_MSAA
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL)
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL
 #elif @GLSL_VERSION >= 310
 #define TEXTURE_RGBA32UI(SET, IDX, NAME)                                       \
     layout(binding = IDX) uniform highp usampler2D NAME
@@ -248,9 +248,9 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
     texture(sampler2D(NAME, SAMPLER_NAME), COORD, LODBIAS)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(sampler2D(NAME, SAMPLER_NAME), COORD, DDX, DDY)
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA)
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL)
 #extension GL_OES_sample_variables : require
-#endif // @FRAGMENT && @RENDER_MODE_MSAA
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL
 
 #else // @TARGET_SPIRV -> !@TARGET_SPIRV
 

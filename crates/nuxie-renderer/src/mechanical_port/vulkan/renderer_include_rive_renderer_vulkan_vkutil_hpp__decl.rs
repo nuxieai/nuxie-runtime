@@ -305,7 +305,7 @@ mod tests {
         assert_eq!(vkCullMode(CullFace::none), vk::CullModeFlags::NONE);
         assert_eq!(vkCullMode(CullFace::clockwise), vk::CullModeFlags::FRONT);
         assert_eq!(vkCullMode(CullFace::counterclockwise), vk::CullModeFlags::BACK);
-        assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(DrawType::msaaDynamicMidpointFans));
+        assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(DrawType::stencilDynamicMidpointFans));
     }
 
     #[test]

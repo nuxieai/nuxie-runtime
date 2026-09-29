@@ -1,7 +1,7 @@
 #define D3 3.14159265359
 #define p8 6.28318530718
 #define W6 1.57079632679
-#ifndef RENDER_MODE_MSAA
+#ifndef RENDER_MODE_DEPTH_STENCIL
 #define p4 float(.5)
 #else
 #define p4 float(.0)
@@ -48,7 +48,7 @@ e c ga(d L0,float C2,float o3){return 0.;}e A F2(A j,c d7,d L0,c C2,c o3){return
 #endif
 #ifdef VERTEX
 e g o8(d zc,float xf,float Ac){return g(zc.x*xf-1.,zc.y*Ac-sign(Ac),0.,1.);}
-#ifndef RENDER_MODE_MSAA
+#ifndef RENDER_MODE_DEPTH_STENCIL
 e g T7(f0 Z3,d G4,d ha){d ia=abs(Z3[0])+abs(Z3[1]);if(ia.x!=.0&&ia.y!=.0){d K=1./ia;d k5=R0(Z3,ha)+G4;const float yf=.5;return g(k5,-k5)*K.xyxy+K.xyxy+yf;}else{return G4.xyxy;}}
 #else
 e float ja(uint ka){return 1.-float(ka)*(2./32768.);}
@@ -66,6 +66,6 @@ if(any(notEqual(g(Z3),g(.0,.0,.0,.0)))){d k5=R0(Z3,ha)+G4.xy;gl_ClipDistance[0]=
 e c m3(c j){return(j<=0.04045)?j/12.92:pow(abs((j+0.055)/1.055),2.4);}e A m3(A j){return Q0(m3(j.x),m3(j.y),m3(j.z));}e i m3(i j){return C0(m3(j.xyz),j.w);}
 #endif
 #endif
-#if defined(FRAGMENT)&&defined(RENDER_MODE_MSAA)&&!defined(FIXED_FUNCTION_COLOR_OUTPUT)
+#if defined(FRAGMENT)&&defined(RENDER_MODE_DEPTH_STENCIL)&&!defined(FIXED_FUNCTION_COLOR_OUTPUT)
 e i Cc(j5 f7,int v8){if(v8==0xf){return(f7[0]+f7[1]+f7[2]+f7[3])*.25;}else{i zf=g(notEqual(v8&e6(1,2,4,8),e6(0,0,0,0)));i T=R0(f7,zf);int w8=(v8&5)+((v8>>1)&5);w8=(w8&3)+(w8>>2);T*=1./float(w8);return T;}}
 #endif

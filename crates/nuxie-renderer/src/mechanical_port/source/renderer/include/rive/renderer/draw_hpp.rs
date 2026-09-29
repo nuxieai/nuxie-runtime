@@ -35,7 +35,7 @@ pub enum PathCoverageType {
     pixelLocalStorage,
     clockwise,
     clockwiseAtomic,
-    msaa,
+    depthStencil,
     featherAtlas,
 }
 

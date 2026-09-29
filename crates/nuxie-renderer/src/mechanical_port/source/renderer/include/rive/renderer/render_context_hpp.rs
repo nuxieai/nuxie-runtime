@@ -2324,7 +2324,7 @@ impl RenderContext {
                 m_last_resource_trim_time_in_seconds: 0.0,
                 m_triangulation_controller: TriangulationController::default(),
                 m_frame_descriptor: FrameDescriptor::default(),
-                m_frame_interlock_mode: gpu::InterlockMode::msaa,
+                m_frame_interlock_mode: gpu::InterlockMode::depthStencil,
                 m_frame_shader_features_mask: gpu::ShaderFeatures::NONE,
                 #[cfg(debug_assertions)]
                 m_did_begin_frame: false,
@@ -2498,7 +2498,9 @@ pub trait RenderContextContract: RiveRenderFactoryContract {
     fn parametricSegmentCountsAllocator(&mut self) -> &mut TrivialArrayAllocator<u32, 16>;
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas>;
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| RenderCanvas::new(width, height))
+        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| {
+            RenderCanvas::new(width, height)
+        })
     }
     #[cfg(any(
         feature = "native-ore-metal-experimental",

@@ -58,7 +58,7 @@ impl DrawPipelineLayoutVulkan {
                     .stage_flags(vk::ShaderStageFlags::FRAGMENT),
             );
         }
-        if interlockMode != InterlockMode::msaa {
+        if interlockMode != InterlockMode::depthStencil {
             plsLayoutBindings.push(
                 vk::DescriptorSetLayoutBinding::default()
                     .binding(CLIP_PLANE_IDX)
@@ -99,7 +99,7 @@ impl DrawPipelineLayoutVulkan {
                     .descriptor_count(1)
                     .stage_flags(vk::ShaderStageFlags::FRAGMENT),
             );
-        } else if interlockMode == InterlockMode::msaa {
+        } else if interlockMode == InterlockMode::depthStencil {
             plsLayoutBindings.push(
                 vk::DescriptorSetLayoutBinding::default()
                     .binding(COVERAGE_PLANE_IDX)
@@ -134,7 +134,7 @@ impl DrawPipelineLayoutVulkan {
         let pushConstantRanges = [super::vkutil_decl::ColorWriteEnablePushConstant];
         let mut info =
             vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptorSetLayouts[..setCount]);
-        if interlockMode == InterlockMode::msaa {
+        if interlockMode == InterlockMode::depthStencil {
             info = info.push_constant_ranges(&pushConstantRanges);
         }
         let pipelineLayout =
@@ -197,7 +197,7 @@ fn colorAttachmentCountForMode(
             assert!(subpassIndex == 0 || subpassIndex == 1);
             2
         }
-        InterlockMode::msaa => {
+        InterlockMode::depthStencil => {
             assert!(subpassIndex <= 2);
             1
         }
@@ -263,11 +263,11 @@ mod tests {
             2
         );
         assert_eq!(
-            colorAttachmentCountForMode(InterlockMode::msaa, 0, RenderPassOptionsVulkan::none),
+            colorAttachmentCountForMode(InterlockMode::depthStencil, 0, RenderPassOptionsVulkan::none),
             1
         );
         assert_eq!(
-            colorAttachmentCountForMode(InterlockMode::msaa, 2, RenderPassOptionsVulkan::none),
+            colorAttachmentCountForMode(InterlockMode::depthStencil, 2, RenderPassOptionsVulkan::none),
             1
         );
     }

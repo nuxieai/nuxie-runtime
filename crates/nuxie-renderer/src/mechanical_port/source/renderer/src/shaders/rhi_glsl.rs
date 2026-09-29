@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/rhi.glsl.
  *
- * Upstream source revision: 4ad6fcf47526b033e5cbe16275e9219365551d76
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ad6fcf47526b033e5cbe16275e9219365551d76";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/rhi.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "b246364cde3d724f5d4b9682cff39ae17845011a0ebc2151f97911422fce0b9d";
+    "c3bd05a76788fd61dad2581e82aea4fcbfa85fa5890bb0659909987c29cd906f";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 590;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 24414;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 24432;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_RHI_GLSL_SOURCE: &str = r###"/*
@@ -224,7 +224,7 @@ $typedef $uint ushort;
 #define PLS_TEX2D $RWTexture2D
 #endif
 
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA)
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL)
 
 #ifdef @SUPPORTS_SUBPASS_LOAD
 // Unreal reserves input attachment slot 0 for depth (see
@@ -248,7 +248,7 @@ $typedef $uint ushort;
 
 #define DST_COLOR_FETCH(NAME) NAME[_plsCoord]
 #endif
-#endif // @FRAGMENT && @RENDER_MODE_MSAA
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL
 
 #define PLS_BLOCK_BEGIN
 #define PLS_BLOCK_END

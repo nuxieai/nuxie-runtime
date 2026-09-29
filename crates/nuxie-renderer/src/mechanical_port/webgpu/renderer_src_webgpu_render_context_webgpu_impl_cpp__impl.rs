@@ -149,7 +149,7 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "GB";
 const GLSL_POST_INVERT_Y: &str = "SC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "LF";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "MF";
 const GLSL_DRAW_PATH: &str = "KD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
 const GLSL_ENABLE_INSTANCE_INDEX: &str = "PE";
@@ -160,7 +160,7 @@ const GLSL_CLEAR_COLOR: &str = "SE";
 const GLSL_LOAD_COLOR: &str = "UE";
 const GLSL_STORE_COLOR: &str = "CE";
 const GLSL_CLEAR_COVERAGE: &str = "DE";
-const GLSL_CLEAR_CLIP: &str = "SF";
+const GLSL_CLEAR_CLIP: &str = "TF";
 const GLSL_ENABLE_CLIPPING: &str = "I";
 const GLSL_ENABLE_CLIP_RECT: &str = "BB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "AB";
@@ -170,9 +170,9 @@ const GLSL_ENABLE_HSL_BLEND_MODES: &str = "GC";
 const GLSL_ENABLE_DITHER: &str = "MB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "KB";
 const GLSL_TARGET_SPIRV: &str = "EC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "NF";
-const GLSL_PLS_IMPL_NONE: &str = "PF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "OF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "OF";
+const GLSL_PLS_IMPL_NONE: &str = "QF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "PF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_DRAW_IMAGE: &str = "KE";
@@ -1503,19 +1503,19 @@ pub(crate) fn makeDrawPipeline(
         DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches
         | DrawType::outerCurvePatches
-        | DrawType::msaaOuterCubicBorrowedCoverage
-        | DrawType::msaaOuterCubicStencilReset
-        | DrawType::msaaOuterCubicPathsStencil
-        | DrawType::msaaOuterCubicPathsCover
-        | DrawType::msaaOuterCubics
-        | DrawType::msaaStrokes
-        | DrawType::msaaMidpointFanBorrowedCoverage
-        | DrawType::msaaDynamicMidpointFans
-        | DrawType::msaaDynamicOuterCubics
-        | DrawType::msaaMidpointFans
-        | DrawType::msaaMidpointFanStencilReset
-        | DrawType::msaaMidpointFanPathsStencil
-        | DrawType::msaaMidpointFanPathsCover => {
+        | DrawType::stencilOuterCubicBorrowedCoverage
+        | DrawType::stencilOuterCubicReset
+        | DrawType::stencilOuterCubicWinding
+        | DrawType::stencilOuterCubicCover
+        | DrawType::stencilOuterCubics
+        | DrawType::depthStrokes
+        | DrawType::stencilMidpointFanBorrowedCoverage
+        | DrawType::stencilDynamicMidpointFans
+        | DrawType::stencilDynamicOuterCubics
+        | DrawType::stencilMidpointFans
+        | DrawType::stencilMidpointFanReset
+        | DrawType::stencilMidpointFanWinding
+        | DrawType::stencilMidpointFanCover => {
             for index in 0..2 {
                 let mut attribute = WGPUVertexAttribute::default();
                 attribute.format = super::webgpu_cpp_decl::VertexFormat::Float32x4.into();
@@ -1710,7 +1710,7 @@ pub(crate) fn makeDrawPipeline(
     descriptor.primitive.topology = topology.into();
     descriptor.primitive.frontFace = RIVE_FRONT_FACE.into();
     descriptor.primitive.cullMode = wgpuCullMode(pipelineState.cullFace);
-    descriptor.multisample.count = if interlockMode == InterlockMode::msaa {
+    descriptor.multisample.count = if interlockMode == InterlockMode::depthStencil {
         MSAA_SAMPLE_COUNT
     } else {
         1
@@ -1719,7 +1719,7 @@ pub(crate) fn makeDrawPipeline(
     descriptor.fragment = &fragmentState;
 
     let mut depthStencilState = super::webgpu_decl::WGPUDepthStencilState::default();
-    if interlockMode == InterlockMode::msaa {
+    if interlockMode == InterlockMode::depthStencil {
         depthStencilState.format = TextureFormat::Depth24PlusStencil8.into();
         depthStencilState.depthWriteEnabled = if pipelineState.depthWriteEnabled {
             super::webgpu_decl::WGPUOptionalBool_True
@@ -2064,57 +2064,57 @@ pub(crate) fn newDrawPipeline(
                 Some(fragment),
             )
         }
-        InterlockMode::msaa => {
+        InterlockMode::depthStencil => {
             let clipRect = shaderFeatures.0 & ShaderFeatures::ENABLE_CLIP_RECT.0 != 0;
             let (vertex, fragment, vertexLabel, fragmentLabel) = match drawType {
-                DrawType::msaaOuterCubicBorrowedCoverage
-                | DrawType::msaaOuterCubicStencilReset
-                | DrawType::msaaOuterCubicPathsStencil
-                | DrawType::msaaOuterCubicPathsCover
-                | DrawType::msaaOuterCubics
-                | DrawType::msaaStrokes
-                | DrawType::msaaMidpointFanBorrowedCoverage
-                | DrawType::msaaDynamicMidpointFans
-                | DrawType::msaaDynamicOuterCubics
-                | DrawType::msaaMidpointFans
-                | DrawType::msaaMidpointFanStencilReset
-                | DrawType::msaaMidpointFanPathsStencil
-                | DrawType::msaaMidpointFanPathsCover => {
+                DrawType::stencilOuterCubicBorrowedCoverage
+                | DrawType::stencilOuterCubicReset
+                | DrawType::stencilOuterCubicWinding
+                | DrawType::stencilOuterCubicCover
+                | DrawType::stencilOuterCubics
+                | DrawType::depthStrokes
+                | DrawType::stencilMidpointFanBorrowedCoverage
+                | DrawType::stencilDynamicMidpointFans
+                | DrawType::stencilDynamicOuterCubics
+                | DrawType::stencilMidpointFans
+                | DrawType::stencilMidpointFanReset
+                | DrawType::stencilMidpointFanWinding
+                | DrawType::stencilMidpointFanCover => {
                     let vertex = match (
                         context.m_capabilities.polyfillVertexStorageBuffers,
                         clipRect,
                     ) {
                         (true, true) => {
-                            include_str!("../../generated/draw_msaa_path.webgpu_nossbo_vert.wgsl")
+                            include_str!("../../generated/draw_depthstencil_path.webgpu_nossbo_vert.wgsl")
                         }
                         (true, false) => include_str!(
-                            "../../generated/draw_msaa_path.webgpu_nossbo_noclipdistance_vert.wgsl"
+                            "../../generated/draw_depthstencil_path.webgpu_nossbo_noclipdistance_vert.wgsl"
                         ),
                         (false, true) => {
-                            include_str!("../../generated/draw_msaa_path.webgpu_vert.wgsl")
+                            include_str!("../../generated/draw_depthstencil_path.webgpu_vert.wgsl")
                         }
                         (false, false) => include_str!(
-                            "../../generated/draw_msaa_path.webgpu_noclipdistance_vert.wgsl"
+                            "../../generated/draw_depthstencil_path.webgpu_noclipdistance_vert.wgsl"
                         ),
                     };
                     (
                         vertex,
                         if fixedColor {
                             include_str!(
-                                "../../generated/draw_msaa_path.webgpu_fixedcolor_frag.wgsl"
+                                "../../generated/draw_depthstencil_path.webgpu_fixedcolor_frag.wgsl"
                             )
                         } else {
-                            include_str!("../../generated/draw_msaa_path.webgpu_frag.wgsl")
+                            include_str!("../../generated/draw_depthstencil_path.webgpu_frag.wgsl")
                         },
-                        "draw_msaa_path.webgpu.vert",
-                        "draw_msaa_path.webgpu.frag",
+                        "draw_depthstencil_path.webgpu.vert",
+                        "draw_depthstencil_path.webgpu.frag",
                     )
                 }
                 DrawType::clipReset => (
-                    include_str!("../../generated/draw_msaa_stencil.vert.wgsl"),
-                    include_str!("../../generated/draw_msaa_stencil.frag.wgsl"),
-                    "draw_msaa_stencil.vert",
-                    "draw_msaa_stencil.frag",
+                    include_str!("../../generated/draw_depthstencil_triangles_nocolor.vert.wgsl"),
+                    include_str!("../../generated/draw_depthstencil_triangles_nocolor.frag.wgsl"),
+                    "draw_depthstencil_triangles_nocolor.vert",
+                    "draw_depthstencil_triangles_nocolor.frag",
                 ),
                 DrawType::featherAtlasBlit => {
                     let vertex = match (
@@ -2122,48 +2122,48 @@ pub(crate) fn newDrawPipeline(
                         clipRect,
                     ) {
                         (true, true) => include_str!(
-                            "../../generated/draw_msaa_atlas_blit.webgpu_nossbo_vert.wgsl"
+                            "../../generated/draw_depthstencil_atlas_blit.webgpu_nossbo_vert.wgsl"
                         ),
                         (true, false) => include_str!(
-                            "../../generated/draw_msaa_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"
+                            "../../generated/draw_depthstencil_atlas_blit.webgpu_nossbo_noclipdistance_vert.wgsl"
                         ),
                         (false, true) => {
-                            include_str!("../../generated/draw_msaa_atlas_blit.webgpu_vert.wgsl")
+                            include_str!("../../generated/draw_depthstencil_atlas_blit.webgpu_vert.wgsl")
                         }
                         (false, false) => include_str!(
-                            "../../generated/draw_msaa_atlas_blit.webgpu_noclipdistance_vert.wgsl"
+                            "../../generated/draw_depthstencil_atlas_blit.webgpu_noclipdistance_vert.wgsl"
                         ),
                     };
                     (
                         vertex,
                         if fixedColor {
                             include_str!(
-                                "../../generated/draw_msaa_atlas_blit.webgpu_fixedcolor_frag.wgsl"
+                                "../../generated/draw_depthstencil_atlas_blit.webgpu_fixedcolor_frag.wgsl"
                             )
                         } else {
-                            include_str!("../../generated/draw_msaa_atlas_blit.webgpu_frag.wgsl")
+                            include_str!("../../generated/draw_depthstencil_atlas_blit.webgpu_frag.wgsl")
                         },
-                        "draw_msaa_atlas_blit.webgpu.vert",
-                        "draw_msaa_atlas_blit.webgpu.frag",
+                        "draw_depthstencil_atlas_blit.webgpu.vert",
+                        "draw_depthstencil_atlas_blit.webgpu.frag",
                     )
                 }
                 DrawType::imageMesh => (
                     if clipRect {
-                        include_str!("../../generated/draw_msaa_image_mesh.webgpu_vert.wgsl")
+                        include_str!("../../generated/draw_depthstencil_image_mesh.webgpu_vert.wgsl")
                     } else {
                         include_str!(
-                            "../../generated/draw_msaa_image_mesh.webgpu_noclipdistance_vert.wgsl"
+                            "../../generated/draw_depthstencil_image_mesh.webgpu_noclipdistance_vert.wgsl"
                         )
                     },
                     if fixedColor {
                         include_str!(
-                            "../../generated/draw_msaa_image_mesh.webgpu_fixedcolor_frag.wgsl"
+                            "../../generated/draw_depthstencil_image_mesh.webgpu_fixedcolor_frag.wgsl"
                         )
                     } else {
-                        include_str!("../../generated/draw_msaa_image_mesh.webgpu_frag.wgsl")
+                        include_str!("../../generated/draw_depthstencil_image_mesh.webgpu_frag.wgsl")
                     },
-                    "draw_msaa_image_mesh.webgpu.vert",
-                    "draw_msaa_image_mesh.webgpu.frag",
+                    "draw_depthstencil_image_mesh.webgpu.vert",
+                    "draw_depthstencil_image_mesh.webgpu.frag",
                 ),
                 DrawType::renderPassInitialize => (
                     include_str!("../../generated/blit_texture_as_draw_filtered.webgpu_vert.wgsl"),
@@ -2171,7 +2171,7 @@ pub(crate) fn newDrawPipeline(
                     "blit_texture_as_draw_filtered.webgpu.vert",
                     "blit_texture_as_draw_filtered.webgpu.frag",
                 ),
-                _ => unreachable!("unsupported draw type in MSAA shader selection"),
+                _ => unreachable!("unsupported draw type in depthStencil shader selection"),
             };
             (
                 compileWGSLDrawShader(&context.m_device, vertex, vertexLabel),
@@ -2305,9 +2305,9 @@ impl DrawRenderPassBase {
             if desc.interlockMode == InterlockMode::atomics {
                 // Work around an issue in atomic mode where some gms render just a
                 // little outside of the draw bounds (causing the texture preserve
-                // to fail). Don't do this in MSAA mode because it fails to restore
+                // to fail). Don't do this in depthStencil mode because it fails to restore
                 // properly
-                // TODO: Figure out why this fails in MSAA and also implement the
+                // TODO: Figure out why this fails in depthStencil and also implement the
                 // clipScissor functionality to get scissor working more completely
                 let [left, top, width, height] = checkedScissorRect(&desc.renderTargetUpdateBounds);
                 self.m_encoder.SetScissorRect(left, top, width, height);
@@ -2597,25 +2597,25 @@ impl DrawRenderPassApi for AtomicDrawRenderPass {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum MSAABeginType {
+enum DepthStencilBeginType {
     primary,
     restartAfterDstCopy,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum MSAAEndType {
+enum DepthStencilEndType {
     finish,
     breakForDstCopy,
 }
 
-struct MSAADrawRenderPass {
+struct DepthStencilDrawRenderPass {
     base: std::mem::ManuallyDrop<DrawRenderPassBase>,
     m_msaaColorTextureView: std::mem::ManuallyDrop<TextureView>,
     m_targetTextureView: std::mem::ManuallyDrop<TextureView>,
     m_msaaDepthStencilTextureView: std::mem::ManuallyDrop<TextureView>,
 }
 
-impl MSAADrawRenderPass {
+impl DepthStencilDrawRenderPass {
     unsafe fn new(
         implementation: *mut RenderContextWebGPUImpl,
         descriptor: *const crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::FlushDescriptor,
@@ -2642,11 +2642,11 @@ impl MSAADrawRenderPass {
         if !beginsWithInitialize {
             unsafe {
                 pass.begin(
-                    MSAABeginType::primary,
+                    DepthStencilBeginType::primary,
                     if desc.firstDstBlendBarrier.is_some() {
-                        MSAAEndType::breakForDstCopy
+                        DepthStencilEndType::breakForDstCopy
                     } else {
-                        MSAAEndType::finish
+                        DepthStencilEndType::finish
                     },
                 )
             };
@@ -2654,14 +2654,14 @@ impl MSAADrawRenderPass {
         pass
     }
 
-    unsafe fn begin(&mut self, beginType: MSAABeginType, endType: MSAAEndType) {
+    unsafe fn begin(&mut self, beginType: DepthStencilBeginType, endType: DepthStencilEndType) {
         let desc = unsafe { &*self.base.m_desc };
-        let loadOp = if beginType == MSAABeginType::restartAfterDstCopy {
+        let loadOp = if beginType == DepthStencilBeginType::restartAfterDstCopy {
             super::webgpu_cpp_decl::LoadOp::Load
         } else {
             super::webgpu_cpp_decl::LoadOp::Clear
         };
-        let storeOp = if endType == MSAAEndType::breakForDstCopy {
+        let storeOp = if endType == DepthStencilEndType::breakForDstCopy {
             super::webgpu_cpp_decl::StoreOp::Store
         } else {
             super::webgpu_cpp_decl::StoreOp::Discard
@@ -2684,7 +2684,7 @@ impl MSAADrawRenderPass {
         depthStencil.stencilClearValue = u32::from(desc.stencilClearValue);
         depthStencil.stencilReadOnly = super::webgpu_decl::WGPU_FALSE;
         let mut passDescriptor = super::webgpu_decl::WGPURenderPassDescriptor::default();
-        passDescriptor.label = stringView("RIVE_MSAA_RenderPass");
+        passDescriptor.label = stringView("RIVE_DepthStencil_RenderPass");
         passDescriptor.colorAttachmentCount = 1;
         passDescriptor.colorAttachments = &color;
         passDescriptor.depthStencilAttachment = &depthStencil;
@@ -2694,7 +2694,7 @@ impl MSAADrawRenderPass {
     }
 }
 
-impl Drop for MSAADrawRenderPass {
+impl Drop for DepthStencilDrawRenderPass {
     fn drop(&mut self) {
         unsafe {
             std::mem::ManuallyDrop::drop(&mut self.m_msaaDepthStencilTextureView);
@@ -2705,7 +2705,7 @@ impl Drop for MSAADrawRenderPass {
     }
 }
 
-impl DrawRenderPassApi for MSAADrawRenderPass {
+impl DrawRenderPassApi for DepthStencilDrawRenderPass {
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -2728,7 +2728,7 @@ impl DrawRenderPassApi for MSAADrawRenderPass {
             let target = unsafe { &mut *self.base.m_renderTarget };
             let bounds = target.base.bounds();
             copyTargetToDstColorTexture(target, &self.base.m_commandEncoder, bounds);
-            beginType = MSAABeginType::primary;
+            beginType = DepthStencilBeginType::primary;
         } else {
             self.base.end();
             let target = unsafe { &mut *self.base.m_renderTarget };
@@ -2746,15 +2746,15 @@ impl DrawRenderPassApi for MSAADrawRenderPass {
                 );
                 draw = drawRef.nextDstRead();
             }
-            beginType = MSAABeginType::restartAfterDstCopy;
+            beginType = DepthStencilBeginType::restartAfterDstCopy;
         }
         unsafe {
             self.begin(
                 beginType,
                 if batch.nextDstBlendBarrier.is_some() {
-                    MSAAEndType::breakForDstCopy
+                    DepthStencilEndType::breakForDstCopy
                 } else {
-                    MSAAEndType::finish
+                    DepthStencilEndType::finish
                 },
             )
         };
@@ -2774,8 +2774,8 @@ unsafe fn makeDrawRenderPass(
         InterlockMode::atomics => Box::new(unsafe {
             AtomicDrawRenderPass::new(implementation, descriptor, commandEncoder)
         }),
-        InterlockMode::msaa => {
-            Box::new(unsafe { MSAADrawRenderPass::new(implementation, descriptor, commandEncoder) })
+        InterlockMode::depthStencil => {
+            Box::new(unsafe { DepthStencilDrawRenderPass::new(implementation, descriptor, commandEncoder) })
         }
         _ => {
             Box::new(unsafe { PLSDrawRenderPass::new(implementation, descriptor, commandEncoder) })
@@ -3865,7 +3865,7 @@ unsafe fn executeDrawList(
         {
             if desc.interlockMode == InterlockMode::atomics && !desc.fixedFunctionColorOutput {
                 imageTextureView = renderTarget.targetTextureView();
-            } else if desc.interlockMode == InterlockMode::msaa {
+            } else if desc.interlockMode == InterlockMode::depthStencil {
                 imageTextureView = dstColorTextureView(renderTarget);
             }
         }
@@ -3988,19 +3988,19 @@ unsafe fn executeDrawList(
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
-            | DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
-            | DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaDynamicMidpointFans
-            | DrawType::msaaDynamicOuterCubics
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover => unsafe {
+            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
+            | DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilDynamicMidpointFans
+            | DrawType::stencilDynamicOuterCubics
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover => unsafe {
                 drawEncoder.SetVertexBuffer(
                     0,
                     context.m_pathPatchVertexBuffer.Get(),
@@ -4235,7 +4235,7 @@ pub(crate) unsafe fn flush(
         (
             9,
             DST_COLOR_TEXTURE_IDX,
-            if desc.interlockMode == InterlockMode::msaa && !desc.fixedFunctionColorOutput {
+            if desc.interlockMode == InterlockMode::depthStencil && !desc.fixedFunctionColorOutput {
                 dstColorTextureView(renderTarget).Get()
             } else {
                 context.m_nullTextureView.Get()
@@ -4623,9 +4623,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4858;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4906;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 194045] = [(); PINNED_SOURCE.len()];
+const _: [(); 196884] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4785,7 +4785,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            51_511
+            51_895
         );
     }
 

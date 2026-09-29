@@ -13,7 +13,7 @@
 
 pub(crate) use super::capabilities::{ApplePlatform, AtomicBarrierType};
 pub(crate) use super::pipeline_names::{
-    CLOCKWISE_FILL, ENABLE_ADVANCED_BLEND, ENABLE_CLIP_RECT, ENABLE_CLIPPING, ENABLE_DITHER,
+    CLOCKWISE_FILL, ENABLE_ADVANCED_BLEND, ENABLE_CLIPPING, ENABLE_CLIP_RECT, ENABLE_DITHER,
     ENABLE_EVEN_ODD, ENABLE_FEATHER, ENABLE_HSL_BLEND_MODES, ENABLE_MODULATED_IMAGE,
     ENABLE_NESTED_CLIPPING, FIXED_FUNCTION_COLOR_OUTPUT, SHADER_FEATURE_COUNT,
 };
@@ -26,7 +26,7 @@ pub(crate) enum InterlockMode {
     Atomics,
     Clockwise,
     ClockwiseAtomic,
-    Msaa,
+    DepthStencil,
 }
 
 /// The feature-mask input to `BackgroundCompileJob`.
@@ -538,19 +538,19 @@ fn append_draw_defines(
                 defines.push(empty(ShaderMacro::CoalescedPlsResolveAndTransfer));
             }
         }
-        DrawType::MsaaStrokes
-        | DrawType::MsaaMidpointFanBorrowedCoverage
-        | DrawType::MsaaDynamicMidpointFans
-        | DrawType::MsaaDynamicOuterCubics
-        | DrawType::MsaaMidpointFans
-        | DrawType::MsaaMidpointFanStencilReset
-        | DrawType::MsaaMidpointFanPathsStencil
-        | DrawType::MsaaMidpointFanPathsCover
-        | DrawType::MsaaOuterCubicBorrowedCoverage
-        | DrawType::MsaaOuterCubicStencilReset
-        | DrawType::MsaaOuterCubicPathsStencil
-        | DrawType::MsaaOuterCubicPathsCover
-        | DrawType::MsaaOuterCubics
+        DrawType::DepthStrokes
+        | DrawType::StencilMidpointFanBorrowedCoverage
+        | DrawType::StencilDynamicMidpointFans
+        | DrawType::StencilDynamicOuterCubics
+        | DrawType::StencilMidpointFans
+        | DrawType::StencilMidpointFanReset
+        | DrawType::StencilMidpointFanWinding
+        | DrawType::StencilMidpointFanCover
+        | DrawType::StencilOuterCubicBorrowedCoverage
+        | DrawType::StencilOuterCubicReset
+        | DrawType::StencilOuterCubicWinding
+        | DrawType::StencilOuterCubicCover
+        | DrawType::StencilOuterCubics
         | DrawType::ClipReset => {
             return Err(BackgroundCompilePlanError::UnsupportedDrawType {
                 draw_type: job.draw_type,
@@ -599,26 +599,26 @@ fn append_interlock_sources(
                     interlock_mode: job.interlock_mode,
                 });
             }
-            DrawType::MsaaStrokes
-            | DrawType::MsaaMidpointFanBorrowedCoverage
-            | DrawType::MsaaDynamicMidpointFans
-            | DrawType::MsaaDynamicOuterCubics
-            | DrawType::MsaaMidpointFans
-            | DrawType::MsaaMidpointFanStencilReset
-            | DrawType::MsaaMidpointFanPathsStencil
-            | DrawType::MsaaMidpointFanPathsCover
-            | DrawType::MsaaOuterCubicBorrowedCoverage
-            | DrawType::MsaaOuterCubicStencilReset
-            | DrawType::MsaaOuterCubicPathsStencil
-            | DrawType::MsaaOuterCubicPathsCover
-            | DrawType::MsaaOuterCubics
+            DrawType::DepthStrokes
+            | DrawType::StencilMidpointFanBorrowedCoverage
+            | DrawType::StencilDynamicMidpointFans
+            | DrawType::StencilDynamicOuterCubics
+            | DrawType::StencilMidpointFans
+            | DrawType::StencilMidpointFanReset
+            | DrawType::StencilMidpointFanWinding
+            | DrawType::StencilMidpointFanCover
+            | DrawType::StencilOuterCubicBorrowedCoverage
+            | DrawType::StencilOuterCubicReset
+            | DrawType::StencilOuterCubicWinding
+            | DrawType::StencilOuterCubicCover
+            | DrawType::StencilOuterCubics
             | DrawType::ClipReset => {
                 return Err(BackgroundCompilePlanError::UnsupportedDrawType {
                     draw_type: job.draw_type,
                 });
             }
         },
-        InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic | InterlockMode::Msaa => {
+        InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic | InterlockMode::DepthStencil => {
             return Err(BackgroundCompilePlanError::UnsupportedInterlockMode {
                 interlock_mode: job.interlock_mode,
             });
@@ -1062,14 +1062,14 @@ mod tests {
     #[test]
     fn every_unreachable_draw_and_interlock_combination_is_typed() {
         for draw_type in [
-            DrawType::MsaaStrokes,
-            DrawType::MsaaMidpointFanBorrowedCoverage,
-            DrawType::MsaaMidpointFans,
-            DrawType::MsaaMidpointFanStencilReset,
-            DrawType::MsaaDynamicMidpointFans,
-            DrawType::MsaaMidpointFanPathsStencil,
-            DrawType::MsaaMidpointFanPathsCover,
-            DrawType::MsaaOuterCubics,
+            DrawType::DepthStrokes,
+            DrawType::StencilMidpointFanBorrowedCoverage,
+            DrawType::StencilMidpointFans,
+            DrawType::StencilMidpointFanReset,
+            DrawType::StencilDynamicMidpointFans,
+            DrawType::StencilMidpointFanWinding,
+            DrawType::StencilMidpointFanCover,
+            DrawType::StencilOuterCubics,
             DrawType::ClipReset,
         ] {
             assert_eq!(
@@ -1085,7 +1085,7 @@ mod tests {
         for interlock_mode in [
             InterlockMode::Clockwise,
             InterlockMode::ClockwiseAtomic,
-            InterlockMode::Msaa,
+            InterlockMode::DepthStencil,
         ] {
             assert_eq!(
                 build_shader_compile_plan(
@@ -1106,7 +1106,7 @@ mod tests {
                 InterlockMode::RasterOrdering,
                 InterlockMode::Clockwise,
                 InterlockMode::ClockwiseAtomic,
-                InterlockMode::Msaa,
+                InterlockMode::DepthStencil,
             ] {
                 assert_eq!(
                     build_shader_compile_plan(
@@ -1126,14 +1126,12 @@ mod tests {
     #[test]
     fn ios_device_and_simulator_preprocessor_boundaries_stay_distinct() {
         for draw_type in [DrawType::MidpointFanPatches, DrawType::ImageMesh] {
-            assert!(
-                build_shader_compile_plan(
-                    default_job(draw_type, InterlockMode::RasterOrdering),
-                    MetalFeatures::default(),
-                    IOS_DEVICE,
-                )
-                .is_ok()
-            );
+            assert!(build_shader_compile_plan(
+                default_job(draw_type, InterlockMode::RasterOrdering),
+                MetalFeatures::default(),
+                IOS_DEVICE,
+            )
+            .is_ok());
         }
 
         for draw_type in [
@@ -1170,14 +1168,12 @@ mod tests {
             ),
             Err(BackgroundCompilePlanError::AtomicInterlockUnavailableOnIos)
         );
-        assert!(
-            build_shader_compile_plan(
-                default_job(DrawType::ImageMesh, InterlockMode::Atomics),
-                MetalFeatures::default(),
-                IOS_SIMULATOR,
-            )
-            .is_ok()
-        );
+        assert!(build_shader_compile_plan(
+            default_job(DrawType::ImageMesh, InterlockMode::Atomics),
+            MetalFeatures::default(),
+            IOS_SIMULATOR,
+        )
+        .is_ok());
     }
 
     #[test]
@@ -1210,10 +1206,9 @@ mod tests {
                 ShaderMacro::FixedFunctionColorOutput,
                 MacroValue::Empty
             )));
-            assert!(
-                plan.defines
-                    .contains(&definition(ShaderMacro::ClockwiseFill, MacroValue::One))
-            );
+            assert!(plan
+                .defines
+                .contains(&definition(ShaderMacro::ClockwiseFill, MacroValue::One)));
         }
 
         let raster_plan = build_shader_compile_plan(
@@ -1227,12 +1222,10 @@ mod tests {
             MAC,
         )
         .unwrap();
-        assert!(
-            !raster_plan
-                .defines
-                .iter()
-                .any(|definition| definition.name == ShaderMacro::FixedFunctionColorOutput)
-        );
+        assert!(!raster_plan
+            .defines
+            .iter()
+            .any(|definition| definition.name == ShaderMacro::FixedFunctionColorOutput));
 
         let ignored_misc_plan = build_shader_compile_plan(
             BackgroundCompileJob::new(
@@ -1258,11 +1251,9 @@ mod tests {
             MAC,
         )
         .unwrap();
-        assert!(
-            initialize_plan
-                .defines
-                .contains(&definition(ShaderMacro::StoreColorClear, MacroValue::True))
-        );
+        assert!(initialize_plan
+            .defines
+            .contains(&definition(ShaderMacro::StoreColorClear, MacroValue::True)));
         assert!(initialize_plan.defines.contains(&definition(
             ShaderMacro::SwizzleColorBgraToRgba,
             MacroValue::Empty

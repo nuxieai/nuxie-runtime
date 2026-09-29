@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/common.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "37d9f72c2ec84a9a24b42d8798c56c77e396c7b57a39f24edece8c95fe8b3881";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 494;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 16550;
+    "7a6fff449a340673add5a68490524bb4682bf4a2583637dc462573aa80c07c6a";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 495;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 16623;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -29,7 +29,7 @@ pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
 #define PI_OVER_2 1.57079632679
 #define ONE_OVER_SQRT_2 0.70710678118 // 1/sqrt(2)
 
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
 #define AA_RADIUS float(.5)
 #else
 #define AA_RADIUS float(.0)
@@ -387,7 +387,7 @@ INLINE float4 pixel_coord_to_clip_coord(float2 pixelCoord,
                   1.);
 }
 
-#ifndef @RENDER_MODE_MSAA
+#ifndef @RENDER_MODE_DEPTH_STENCIL
 // Calculates the Manhattan distance in pixels from the given pixelPosition, to
 // the point at each edge of the clipRect where coverage = 0.
 //
@@ -419,7 +419,7 @@ INLINE float4 find_clip_rect_coverage_distances(float2x2 clipRectInverseMatrix,
     }
 }
 
-#else // !@RENDER_MODE_MSAA => @RENDER_MODE_MSAA
+#else // !@RENDER_MODE_DEPTH_STENCIL => @RENDER_MODE_DEPTH_STENCIL
 
 INLINE float normalize_z_index(uint zIndex)
 {
@@ -460,7 +460,7 @@ INLINE void set_clip_rect_plane_distances(float2x2 clipRectInverseMatrix,
 }
 #endif // ENABLE_CLIP_RECT
 
-#endif // @RENDER_MODE_MSAA
+#endif // @RENDER_MODE_DEPTH_STENCIL
 #endif // VERTEX
 
 #ifdef @FRAGMENT
@@ -487,7 +487,7 @@ INLINE half4 gamma_to_linear(half4 color)
 
 // The Qualcomm compiler can't handle line breaks in #ifs.
 // clang-format off
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_MSAA) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL) && !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
 // clang-format on
 INLINE half4 dst_color_fetch(half4x4 dstSamples, int sampleMask)
 {
@@ -511,7 +511,8 @@ INLINE half4 dst_color_fetch(half4x4 dstSamples, int sampleMask)
         return ret;
     }
 }
-#endif // @FRAGMENT && @RENDER_MODE_MSAA && !@FIXED_FUNCTION_COLOR_OUTPUT
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL &&
+       // !@FIXED_FUNCTION_COLOR_OUTPUT
 "###;
 
 pub const PINNED_COMMON_SOURCE: &str = PINNED_COMMON_GLSL_SOURCE;

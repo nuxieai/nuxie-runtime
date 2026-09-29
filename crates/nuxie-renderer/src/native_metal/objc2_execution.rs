@@ -3,14 +3,14 @@
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, ProtocolObject, Sel};
-use objc2::{ClassType, Message, msg_send};
+use objc2::{msg_send, ClassType, Message};
 use objc2_foundation::{NSError, NSString};
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandBufferStatus, MTLCommandQueue, MTLDevice, MTLGPUFamily,
     MTLLibrary, MTLPixelFormat, MTLRenderPipelineDescriptor, MTLResourceOptions,
     MTLSamplerDescriptor, MTLTexture, MTLTextureDescriptor, MTLTextureUsage,
 };
-use std::ffi::{CString, c_void};
+use std::ffi::{c_void, CString};
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -750,11 +750,11 @@ impl Objc2MetalExecution {
                         inventory.snapshot.midpoint_fan_draw_calls += 1
                     }
                     DrawType::OuterCurvePatches
-                    | DrawType::MsaaDynamicOuterCubics
-                    | DrawType::MsaaOuterCubicBorrowedCoverage
-                    | DrawType::MsaaOuterCubicPathsStencil
-                    | DrawType::MsaaOuterCubicPathsCover
-                    | DrawType::MsaaOuterCubics => {
+                    | DrawType::StencilDynamicOuterCubics
+                    | DrawType::StencilOuterCubicBorrowedCoverage
+                    | DrawType::StencilOuterCubicWinding
+                    | DrawType::StencilOuterCubicCover
+                    | DrawType::StencilOuterCubics => {
                         inventory.snapshot.outer_curve_draw_calls += 1
                     }
                     DrawType::InteriorTriangulation => {
@@ -762,8 +762,9 @@ impl Objc2MetalExecution {
                     }
                     DrawType::ImageRect => inventory.snapshot.image_rect_draw_calls += 1,
                     DrawType::ImageMesh => inventory.snapshot.image_mesh_draw_calls += 1,
-                    DrawType::ClipReset | DrawType::MsaaMidpointFanStencilReset
-                    | DrawType::MsaaOuterCubicStencilReset => {
+                    DrawType::ClipReset
+                    | DrawType::StencilMidpointFanReset
+                    | DrawType::StencilOuterCubicReset => {
                         inventory.snapshot.clip_reset_draw_calls += 1
                     }
                     DrawType::RenderPassInitialize => {
@@ -773,12 +774,12 @@ impl Objc2MetalExecution {
                         inventory.snapshot.render_pass_resolve_draw_calls += 1
                     }
                     DrawType::FeatherAtlasBlit
-                    | DrawType::MsaaStrokes
-                    | DrawType::MsaaMidpointFanBorrowedCoverage
-                    | DrawType::MsaaMidpointFans
-                    | DrawType::MsaaDynamicMidpointFans
-                    | DrawType::MsaaMidpointFanPathsStencil
-                    | DrawType::MsaaMidpointFanPathsCover => {}
+                    | DrawType::DepthStrokes
+                    | DrawType::StencilMidpointFanBorrowedCoverage
+                    | DrawType::StencilMidpointFans
+                    | DrawType::StencilDynamicMidpointFans
+                    | DrawType::StencilMidpointFanWinding
+                    | DrawType::StencilMidpointFanCover => {}
                 }
 
                 const ENABLE_CLIPPING: u32 = 1 << 0;
@@ -2604,19 +2605,15 @@ mod ownership_transfer_tests {
         let mut execution = execution_without_real_device();
         let (handle, observer) = insert_probe(&mut execution, MetalObjectKind::Texture);
 
-        assert!(
-            execution
-                .take_owned(handle, MetalObjectKind::Buffer)
-                .is_none()
-        );
+        assert!(execution
+            .take_owned(handle, MetalObjectKind::Buffer)
+            .is_none());
         let owner = execution
             .take_owned(handle, MetalObjectKind::Texture)
             .expect("first exact typed transfer must succeed");
-        assert!(
-            execution
-                .take_owned(handle, MetalObjectKind::Texture)
-                .is_none()
-        );
+        assert!(execution
+            .take_owned(handle, MetalObjectKind::Texture)
+            .is_none());
         assert!(execution.object(handle, MetalObjectKind::Texture).is_some());
 
         let cloned_owner = execution
@@ -2685,14 +2682,12 @@ mod ownership_transfer_tests {
         assert_ne!(framebuffer.handle(), attachment_alias);
         assert_eq!(attachment_observer.retainCount(), attachment_count + 1);
         execution.retire_handle(attachment_alias);
-        assert!(
-            execution
-                .object(
-                    framebuffer.handle(),
-                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-                )
-                .is_some()
-        );
+        assert!(execution
+            .object(
+                framebuffer.handle(),
+                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+            )
+            .is_some());
         assert_eq!(attachment_observer.retainCount(), attachment_count + 1);
         drop(framebuffer);
         assert_eq!(attachment_observer.retainCount(), attachment_count);
@@ -2725,29 +2720,23 @@ mod ownership_transfer_tests {
             retain_count_before_alias,
             "publishing a descriptor-owned +0 child must not retain it"
         );
-        assert!(
-            execution
-                .object(
-                    alias,
-                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-                )
-                .is_some()
-        );
+        assert!(execution
+            .object(
+                alias,
+                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+            )
+            .is_some());
 
         execution.retire_handle(parent);
-        assert!(
-            execution
-                .object(parent, MetalObjectKind::RenderPipelineDescriptor)
-                .is_none()
-        );
-        assert!(
-            execution
-                .object(
-                    alias,
-                    MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
-                )
-                .is_none()
-        );
+        assert!(execution
+            .object(parent, MetalObjectKind::RenderPipelineDescriptor)
+            .is_none());
+        assert!(execution
+            .object(
+                alias,
+                MetalObjectKind::RenderPipelineColorAttachmentDescriptor,
+            )
+            .is_none());
         assert_eq!(parent_observer.retainCount(), 1);
         assert_eq!(child_observer.retainCount(), retain_count_before_alias);
         drop(child);
@@ -2794,11 +2783,9 @@ mod ownership_transfer_tests {
             assert_eq!(collection_observer.retainCount(), collection_retain_count);
             assert_eq!(child_observer.retainCount(), child_retain_count);
             execution.retire_handle(collection_alias);
-            assert!(
-                execution
-                    .object(collection_alias, collection_kind)
-                    .is_none()
-            );
+            assert!(execution
+                .object(collection_alias, collection_kind)
+                .is_none());
             assert!(execution.object(child_alias, child_kind).is_some());
             assert_eq!(collection_observer.retainCount(), collection_retain_count);
             assert_eq!(child_observer.retainCount(), child_retain_count);
@@ -2858,11 +2845,9 @@ mod ownership_transfer_tests {
         // A failed typed transfer is the source failpoint equivalent: it
         // must not consume the creation owner or leave a second alias.
         let (handle, observer) = insert_probe(&mut execution, MetalObjectKind::Texture);
-        assert!(
-            execution
-                .take_owned(handle, MetalObjectKind::Buffer)
-                .is_none()
-        );
+        assert!(execution
+            .take_owned(handle, MetalObjectKind::Buffer)
+            .is_none());
         assert!(execution.object(handle, MetalObjectKind::Texture).is_some());
         let owner = execution
             .take_owned(handle, MetalObjectKind::Texture)
@@ -2880,17 +2865,13 @@ mod ownership_transfer_tests {
             .expect("native NSString owner must be created");
         let handle = owner.handle();
         assert_eq!(handle.kind, MetalObjectKind::NSString);
-        assert!(
-            execution
-                .object(handle, MetalObjectKind::NSString)
-                .is_some()
-        );
+        assert!(execution
+            .object(handle, MetalObjectKind::NSString)
+            .is_some());
         drop(owner);
-        assert!(
-            execution
-                .object(handle, MetalObjectKind::NSString)
-                .is_none()
-        );
+        assert!(execution
+            .object(handle, MetalObjectKind::NSString)
+            .is_none());
     }
 
     #[test]
@@ -2914,30 +2895,22 @@ mod ownership_transfer_tests {
             // alias ends before the pool drains; it is never turned into a
             // synthetic strong owner by the bridge.
             execution.retire_handle(handle);
-            assert!(
-                execution
-                    .object(handle, MetalObjectKind::NSString)
-                    .is_none()
-            );
+            assert!(execution
+                .object(handle, MetalObjectKind::NSString)
+                .is_none());
             handle
         });
-        assert!(
-            execution
-                .object(handle, MetalObjectKind::NSString)
-                .is_none()
-        );
+        assert!(execution
+            .object(handle, MetalObjectKind::NSString)
+            .is_none());
 
         let slots_before_failure = execution.objects.len();
-        assert!(
-            execution
-                .make_precompiled_function_name(b'p', "bad\0namespace", "HC")
-                .is_none()
-        );
-        assert!(
-            execution
-                .make_precompiled_function_name(b'p', "00000000000", "bad\0base")
-                .is_none()
-        );
+        assert!(execution
+            .make_precompiled_function_name(b'p', "bad\0namespace", "HC")
+            .is_none());
+        assert!(execution
+            .make_precompiled_function_name(b'p', "00000000000", "bad\0base")
+            .is_none());
         assert_eq!(execution.objects.len(), slots_before_failure);
     }
 
@@ -3037,11 +3010,9 @@ mod ownership_transfer_tests {
         assert_eq!(replacement.slot, handle.slot);
         assert_eq!(replacement.generation, handle.generation + 1);
         assert!(execution.object(handle, MetalObjectKind::Texture).is_none());
-        assert!(
-            execution
-                .take_owned(handle, MetalObjectKind::Texture)
-                .is_none()
-        );
+        assert!(execution
+            .take_owned(handle, MetalObjectKind::Texture)
+            .is_none());
     }
 
     #[test]
@@ -3075,22 +3046,16 @@ mod ownership_transfer_tests {
             .publish_owned(&mut owner)
             .expect("owner must republish after the old executor invalidates its alias");
         assert_ne!(replacement.registry, handle.registry);
-        assert!(
-            replacement_execution
-                .object(handle, MetalObjectKind::Buffer)
-                .is_none()
-        );
-        assert!(
-            replacement_execution
-                .object(replacement, MetalObjectKind::Buffer)
-                .is_some()
-        );
+        assert!(replacement_execution
+            .object(handle, MetalObjectKind::Buffer)
+            .is_none());
+        assert!(replacement_execution
+            .object(replacement, MetalObjectKind::Buffer)
+            .is_some());
         drop(owner);
-        assert!(
-            replacement_execution
-                .object(replacement, MetalObjectKind::Buffer)
-                .is_none()
-        );
+        assert!(replacement_execution
+            .object(replacement, MetalObjectKind::Buffer)
+            .is_none());
         assert_eq!(observer.retainCount(), 1);
     }
 
@@ -3108,16 +3073,12 @@ mod ownership_transfer_tests {
             .publish_owned(&mut owner)
             .expect("canonical owner must move its alias to the new executor");
         assert_ne!(second_handle.registry, first_handle.registry);
-        assert!(
-            first
-                .object(first_handle, MetalObjectKind::Texture)
-                .is_none()
-        );
-        assert!(
-            second
-                .object(second_handle, MetalObjectKind::Texture)
-                .is_some()
-        );
+        assert!(first
+            .object(first_handle, MetalObjectKind::Texture)
+            .is_none());
+        assert!(second
+            .object(second_handle, MetalObjectKind::Texture)
+            .is_some());
         assert_eq!(
             observer.retainCount(),
             2,
@@ -3125,11 +3086,9 @@ mod ownership_transfer_tests {
         );
 
         drop(owner);
-        assert!(
-            second
-                .object(second_handle, MetalObjectKind::Texture)
-                .is_none()
-        );
+        assert!(second
+            .object(second_handle, MetalObjectKind::Texture)
+            .is_none());
         assert_eq!(observer.retainCount(), 1);
     }
 
@@ -3252,11 +3211,9 @@ mod ownership_transfer_tests {
 
         drop(owner);
         assert_eq!(observer.retainCount(), 1);
-        assert!(
-            execution
-                .object(handle, MetalObjectKind::CommandQueue)
-                .is_none()
-        );
+        assert!(execution
+            .object(handle, MetalObjectKind::CommandQueue)
+            .is_none());
         assert!(execution.retire_command_queue(handle));
         assert!(!execution.retire_command_queue(handle));
 
@@ -3265,11 +3222,9 @@ mod ownership_transfer_tests {
         assert_eq!(replacement.slot, handle.slot);
         assert!(replacement.generation > handle.generation);
         assert!(!execution.retire_command_queue(handle));
-        assert!(
-            execution
-                .object(replacement, MetalObjectKind::CommandQueue)
-                .is_some()
-        );
+        assert!(execution
+            .object(replacement, MetalObjectKind::CommandQueue)
+            .is_some());
     }
 
     #[test]
@@ -3281,11 +3236,9 @@ mod ownership_transfer_tests {
                 MetalAliasValidity::live(),
             )
         };
-        assert!(
-            owner
-                .new_buffer_with_length(16, MTLResourceOptions::StorageModeShared)
-                .is_none()
-        );
+        assert!(owner
+            .new_buffer_with_length(16, MTLResourceOptions::StorageModeShared)
+            .is_none());
         assert!(owner.buffer_contents().is_none());
     }
 }

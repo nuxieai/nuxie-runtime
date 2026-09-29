@@ -2149,7 +2149,7 @@ pub(crate) unsafe fn wantsManualRenderPassResolve(
                 .contains(vk::ImageUsageFlags::INPUT_ATTACHMENT);
         }
     }
-    if interlock_mode == InterlockMode::msaa
+    if interlock_mode == InterlockMode::depthStencil
         && !implementation.m_workarounds.avoidManualMSAAResolves
     {
         let target = unsafe { &*render_target };
@@ -2585,7 +2585,7 @@ impl DrawRenderPass {
                 });
                 clears.push(vk::ClearValue::default());
             }
-            InterlockMode::msaa => {
+            InterlockMode::depthStencil => {
                 debug_assert_eq!(views.len(), MSAA_DEPTH_STENCIL_IDX);
                 let depth = target.msaaDepthStencilTexture();
                 views.push(unsafe { (&*depth).vkImageView() });
@@ -2739,11 +2739,11 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     }
     if desc.manuallyResolved {
         options |= RenderPassOptionsVulkan::manuallyResolved;
-    } else if desc.interlockMode == InterlockMode::msaa {
+    } else if desc.interlockMode == InterlockMode::depthStencil {
         draw_bounds = target.bounds();
     }
     debug_assert!(
-        desc.interlockMode != InterlockMode::msaa
+        desc.interlockMode != InterlockMode::depthStencil
             || desc.manuallyResolved
             || draw_bounds == target.bounds()
     );
@@ -2766,19 +2766,19 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
-            | DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
-            | DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaDynamicMidpointFans
-            | DrawType::msaaDynamicOuterCubics
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover => pending_tess_patches += batch.elementCount,
+            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
+            | DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilDynamicMidpointFans
+            | DrawType::stencilDynamicOuterCubics
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover => pending_tess_patches += batch.elementCount,
             _ => {}
         }
     }
@@ -3358,7 +3358,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     let mut color_offscreen = false;
     let mut msaa_resolve_view = vk::ImageView::null();
     let mut msaa_seed_view = vk::ImageView::null();
-    if desc.interlockMode == InterlockMode::msaa {
+    if desc.interlockMode == InterlockMode::depthStencil {
         color_view = unsafe { (&*target.msaaColorTexture()).vkImageView() };
         if desc.colorLoadAction == LoadAction::preserveRenderTarget {
             let copied = target.copyTargetImageToOffscreenColorTexture(
@@ -3598,7 +3598,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     let mut tile_height = draw_bounds.height();
     if desc.virtualTileWidth != 0
         && desc.virtualTileHeight != 0
-        && desc.interlockMode != InterlockMode::msaa
+        && desc.interlockMode != InterlockMode::depthStencil
     {
         tile_width = desc.virtualTileWidth as i32;
         tile_height = desc.virtualTileHeight as i32;
@@ -3636,7 +3636,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 vk::ImageLayout::GENERAL,
             );
         }
-        if desc.interlockMode != InterlockMode::msaa {
+        if desc.interlockMode != InterlockMode::depthStencil {
             let view = if desc.interlockMode == InterlockMode::atomics {
                 unsafe { (&*plsTransientScratchColorTexture(implementation)).vkImageView() }
             } else if desc.interlockMode == InterlockMode::clockwiseAtomic {
@@ -3777,7 +3777,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     {
         debug_assert!(
             desc.interlockMode != InterlockMode::atomics
-                && desc.interlockMode != InterlockMode::msaa
+                && desc.interlockMode != InterlockMode::depthStencil
         );
         let copy_access = ImageAccess {
             pipelineStages: vk::PipelineStageFlags::TRANSFER,
@@ -4099,17 +4099,17 @@ fn submitDrawList(
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
-            | DrawType::msaaOuterCubicBorrowedCoverage
-            | DrawType::msaaOuterCubicStencilReset
-            | DrawType::msaaOuterCubicPathsStencil
-            | DrawType::msaaOuterCubicPathsCover
-            | DrawType::msaaOuterCubics
-            | DrawType::msaaStrokes
-            | DrawType::msaaMidpointFanBorrowedCoverage
-            | DrawType::msaaMidpointFans
-            | DrawType::msaaMidpointFanStencilReset
-            | DrawType::msaaMidpointFanPathsStencil
-            | DrawType::msaaMidpointFanPathsCover => {
+            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
+            | DrawType::depthStrokes
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover => {
                 unsafe {
                     implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
                         command,
@@ -4153,7 +4153,7 @@ fn submitDrawList(
                     }
                 }
             }
-            DrawType::msaaDynamicMidpointFans | DrawType::msaaDynamicOuterCubics => {
+            DrawType::stencilDynamicMidpointFans | DrawType::stencilDynamicOuterCubics => {
                 pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {
                     continue;
@@ -4188,9 +4188,9 @@ fn submitDrawList(
                 // Outer-cubic passes use identical dynamic state to their
                 // midpoint-fan counterparts, so both use these pass types.
                 for pass in [
-                    DrawType::msaaMidpointFanBorrowedCoverage,
-                    DrawType::msaaMidpointFans,
-                    DrawType::msaaMidpointFanStencilReset,
+                    DrawType::stencilMidpointFanBorrowedCoverage,
+                    DrawType::stencilMidpointFans,
+                    DrawType::stencilMidpointFanReset,
                 ] {
                     let state =
                         crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(

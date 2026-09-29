@@ -419,14 +419,14 @@ void BackgroundShaderCompiler::threadMain()
                 }
 #endif
                 break;
-            case DrawType::msaaStrokes:
-            case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaDynamicMidpointFans:
-            case DrawType::msaaMidpointFans:
-            case DrawType::msaaMidpointFanStencilReset:
-            case DrawType::msaaMidpointFanPathsStencil:
-            case DrawType::msaaMidpointFanPathsCover:
-            case DrawType::msaaOuterCubics:
+            case DrawType::depthStrokes:
+            case DrawType::stencilMidpointFanBorrowedCoverage:
+            case DrawType::stencilDynamicMidpointFans:
+            case DrawType::stencilMidpointFans:
+            case DrawType::stencilMidpointFanReset:
+            case DrawType::stencilMidpointFanWinding:
+            case DrawType::stencilMidpointFanCover:
+            case DrawType::stencilOuterCubics:
             case DrawType::clipReset:
                 RIVE_UNREACHABLE();
         }
@@ -464,14 +464,14 @@ void BackgroundShaderCompiler::threadMain()
                     [source appendFormat:@"%s\n", gpu::glsl::draw_mesh_frag];
                     break;
                 case DrawType::imageRect:
-                case DrawType::msaaStrokes:
-                case DrawType::msaaMidpointFanBorrowedCoverage:
-                case DrawType::msaaDynamicMidpointFans:
-                case DrawType::msaaMidpointFans:
-                case DrawType::msaaMidpointFanStencilReset:
-                case DrawType::msaaMidpointFanPathsStencil:
-                case DrawType::msaaMidpointFanPathsCover:
-                case DrawType::msaaOuterCubics:
+                case DrawType::depthStrokes:
+                case DrawType::stencilMidpointFanBorrowedCoverage:
+                case DrawType::stencilDynamicMidpointFans:
+                case DrawType::stencilMidpointFans:
+                case DrawType::stencilMidpointFanReset:
+                case DrawType::stencilMidpointFanWinding:
+                case DrawType::stencilMidpointFanCover:
+                case DrawType::stencilOuterCubics:
                 case DrawType::clipReset:
                 case DrawType::renderPassInitialize:
                 case DrawType::renderPassResolve:
@@ -1967,19 +1967,19 @@ impl BackgroundShaderCompiler {
                         }
                     }
                 }
-                DrawType::msaaStrokes
-                | DrawType::msaaMidpointFanBorrowedCoverage
-                | DrawType::msaaDynamicMidpointFans
-                | DrawType::msaaDynamicOuterCubics
-                | DrawType::msaaMidpointFans
-                | DrawType::msaaMidpointFanStencilReset
-                | DrawType::msaaMidpointFanPathsStencil
-                | DrawType::msaaMidpointFanPathsCover
-                | DrawType::msaaOuterCubicBorrowedCoverage
-                | DrawType::msaaOuterCubicStencilReset
-                | DrawType::msaaOuterCubicPathsStencil
-                | DrawType::msaaOuterCubicPathsCover
-                | DrawType::msaaOuterCubics
+                DrawType::depthStrokes
+                | DrawType::stencilMidpointFanBorrowedCoverage
+                | DrawType::stencilDynamicMidpointFans
+                | DrawType::stencilDynamicOuterCubics
+                | DrawType::stencilMidpointFans
+                | DrawType::stencilMidpointFanReset
+                | DrawType::stencilMidpointFanWinding
+                | DrawType::stencilMidpointFanCover
+                | DrawType::stencilOuterCubicBorrowedCoverage
+                | DrawType::stencilOuterCubicReset
+                | DrawType::stencilOuterCubicWinding
+                | DrawType::stencilOuterCubicCover
+                | DrawType::stencilOuterCubics
                 | DrawType::clipReset => rive_unreachable(),
             }
 
@@ -2041,19 +2041,19 @@ impl BackgroundShaderCompiler {
                         );
                     }
                     DrawType::imageRect
-                    | DrawType::msaaStrokes
-                    | DrawType::msaaMidpointFanBorrowedCoverage
-                    | DrawType::msaaDynamicMidpointFans
-                    | DrawType::msaaDynamicOuterCubics
-                    | DrawType::msaaMidpointFans
-                    | DrawType::msaaMidpointFanStencilReset
-                    | DrawType::msaaMidpointFanPathsStencil
-                    | DrawType::msaaMidpointFanPathsCover
-                    | DrawType::msaaOuterCubicBorrowedCoverage
-                    | DrawType::msaaOuterCubicStencilReset
-                    | DrawType::msaaOuterCubicPathsStencil
-                    | DrawType::msaaOuterCubicPathsCover
-                    | DrawType::msaaOuterCubics
+                    | DrawType::depthStrokes
+                    | DrawType::stencilMidpointFanBorrowedCoverage
+                    | DrawType::stencilDynamicMidpointFans
+                    | DrawType::stencilDynamicOuterCubics
+                    | DrawType::stencilMidpointFans
+                    | DrawType::stencilMidpointFanReset
+                    | DrawType::stencilMidpointFanWinding
+                    | DrawType::stencilMidpointFanCover
+                    | DrawType::stencilOuterCubicBorrowedCoverage
+                    | DrawType::stencilOuterCubicReset
+                    | DrawType::stencilOuterCubicWinding
+                    | DrawType::stencilOuterCubicCover
+                    | DrawType::stencilOuterCubics
                     | DrawType::clipReset
                     | DrawType::renderPassInitialize
                     | DrawType::renderPassResolve => rive_unreachable(),

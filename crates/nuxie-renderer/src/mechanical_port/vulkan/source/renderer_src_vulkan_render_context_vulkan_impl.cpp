@@ -29,6 +29,12 @@
 #include <android/log.h>
 #include <android/api-level.h>
 #include <sys/system_properties.h>
+
+#define PRINT_ERROR_LINE(str)                                                  \
+    __android_log_print(ANDROID_LOG_ERROR, "rive_runtime", str);               \
+    fprintf(stderr, str "\n")
+#else
+#define PRINT_ERROR_LINE(str) fprintf(stderr, str "\n")
 #endif
 
 namespace rive::gpu
@@ -295,15 +301,20 @@ private:
 };
 
 #ifdef RIVE_CANVAS
-rcp<RenderCanvas> RenderContextVulkanImpl::makeRenderCanvas(uint32_t width,
-                                                            uint32_t height)
+void RenderContextVulkanImpl::ensureCanvasBacking(gpu::RenderCanvas* canvas)
 {
-    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
-    VkImageUsageFlags usage =
+    if (canvas->isBacked())
+    {
+        return;
+    }
+
+    constexpr VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    constexpr VkImageUsageFlags usage =
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
         VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
 
+    uint32_t width = canvas->width(), height = canvas->height();
     auto texture = m_vk->makeTexture2D(
         {
             .format = format,
@@ -312,36 +323,65 @@ rcp<RenderCanvas> RenderContextVulkanImpl::makeRenderCanvas(uint32_t width,
         },
         "RenderCanvas");
 
-    auto renderImage = make_rcp<RiveRenderImage>(texture);
-
     auto renderTarget = rcp(new RenderTargetVulkanTexture(m_vk,
-                                                          std::move(texture),
+                                                          texture,
                                                           width,
                                                           height,
                                                           format,
                                                           usage));
 
-    return make_rcp<RenderCanvas>(std::move(renderImage),
-                                  std::move(renderTarget));
+    canvas->setBacking(std::move(texture), std::move(renderTarget));
 }
+
 std::unique_ptr<rive::ore::Context> RenderContextVulkanImpl::makeOreContext()
 {
     return rive::ore::ContextVulkan::Make(m_vk);
 }
 #endif
 
+// Owns a VkShaderModule for the duration of pipeline creation, so init paths
+// can bail out without leaking it.
+// (Once the pipeline is fully created, we can safely destroy the shader model
+// instead of holding onto it.)
+class ScopedShaderModule
+{
+public:
+    ScopedShaderModule(VulkanContext* vk) : m_vk(vk) {}
+    ScopedShaderModule(const ScopedShaderModule&) = delete;
+    ScopedShaderModule& operator=(const ScopedShaderModule&) = delete;
+
+    ~ScopedShaderModule()
+    {
+        m_vk->DestroyShaderModule(m_vk->device, m_shaderModule, nullptr);
+    }
+
+    bool create(const VkShaderModuleCreateInfo& createInfo)
+    {
+        assert(m_shaderModule == VK_NULL_HANDLE);
+        m_shaderModule =
+            VK_CREATE_HANDLE(m_vk, CreateShaderModule, &createInfo);
+        return m_shaderModule != VK_NULL_HANDLE;
+    }
+
+    operator VkShaderModule() const { return m_shaderModule; }
+
+private:
+    VulkanContext* const m_vk;
+    VkShaderModule m_shaderModule = VK_NULL_HANDLE;
+};
+
 // Common base class for a pipeline that renders a texture resource at the
 // beginning of a flush, which is then read during the main draw pass.
 class RenderContextVulkanImpl::ResourceTexturePipeline
 {
-public:
-    ResourceTexturePipeline(rcp<VulkanContext> vk,
-                            VkFormat format,
-                            VkAttachmentLoadOp loadOp,
-                            VkPipelineStageFlags resourceConsumptionStage,
-                            const char* label,
-                            const DriverWorkarounds& workarounds) :
-        m_vk(std::move(vk))
+protected:
+    ResourceTexturePipeline(rcp<VulkanContext> vk) : m_vk(std::move(vk)) {}
+
+    bool initRenderPasses(VkFormat format,
+                          VkAttachmentLoadOp loadOp,
+                          VkPipelineStageFlags resourceConsumptionStage,
+                          const char* label,
+                          const DriverWorkarounds& workarounds)
     {
         const VkAttachmentDescription attachment = {
             .format = format,
@@ -381,10 +421,12 @@ public:
             .pDependencies = dependencies,
         };
 
-        VK_CHECK(m_vk->CreateRenderPass(m_vk->device,
-                                        &renderPassCreateInfo,
-                                        nullptr,
-                                        &m_renderPass));
+        m_renderPass =
+            VK_CREATE_HANDLE(m_vk, CreateRenderPass, &renderPassCreateInfo);
+        if (m_renderPass == VK_NULL_HANDLE)
+        {
+            return false;
+        }
 
         const std::string renderPassLabel =
             (std::ostringstream() << label << " RenderPass").str();
@@ -407,10 +449,14 @@ public:
                 renderPassCreateInfo;
             resumingRenderPassCreateInfo.pAttachments = &resumingAttachment;
 
-            VK_CHECK(m_vk->CreateRenderPass(m_vk->device,
-                                            &resumingRenderPassCreateInfo,
-                                            nullptr,
-                                            &m_resumingRenderPass));
+            m_resumingRenderPass =
+                VK_CREATE_HANDLE(m_vk,
+                                 CreateRenderPass,
+                                 &resumingRenderPassCreateInfo);
+            if (m_resumingRenderPass == VK_NULL_HANDLE)
+            {
+                return false;
+            }
 
             const std::string resumingRenderPassLabel =
                 (std::ostringstream() << label << " RESUME RenderPass").str();
@@ -418,17 +464,15 @@ public:
                                         VK_OBJECT_TYPE_RENDER_PASS,
                                         resumingRenderPassLabel.c_str());
         }
+
+        return true;
     }
 
+public:
     virtual ~ResourceTexturePipeline()
     {
         m_vk->DestroyRenderPass(m_vk->device, m_renderPass, nullptr);
-        if (m_resumingRenderPass != VK_NULL_HANDLE)
-        {
-            m_vk->DestroyRenderPass(m_vk->device,
-                                    m_resumingRenderPass,
-                                    nullptr);
-        }
+        m_vk->DestroyRenderPass(m_vk->device, m_resumingRenderPass, nullptr);
     }
 
     VkRenderPass renderPass() const { return m_renderPass; }
@@ -510,7 +554,7 @@ private:
         m_instanceCountInCurrentRenderPass = 0;
     }
 
-    VkRenderPass m_renderPass;
+    VkRenderPass m_renderPass = VK_NULL_HANDLE;
     VkRenderPass m_resumingRenderPass = VK_NULL_HANDLE;
     uint32_t m_instanceCountInCurrentRenderPass;
 };
@@ -520,15 +564,37 @@ class RenderContextVulkanImpl::ColorRampPipeline
     : public ResourceTexturePipeline
 {
 public:
-    ColorRampPipeline(PipelineManagerVulkan* pipelineManager,
-                      const DriverWorkarounds& workarounds) :
-        ResourceTexturePipeline(ref_rcp(pipelineManager->vulkanContext()),
-                                VK_FORMAT_R8G8B8A8_UNORM,
-                                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                "ColorRamp",
-                                workarounds)
+    // Returns null if the driver fails to create our objects.
+    static std::unique_ptr<ColorRampPipeline> make(
+        PipelineManagerVulkan* pipelineManager,
+        const DriverWorkarounds& workarounds)
     {
+        std::unique_ptr<ColorRampPipeline> pipeline(
+            new ColorRampPipeline(ref_rcp(pipelineManager->vulkanContext())));
+        if (!pipeline->init(pipelineManager, workarounds))
+        {
+            return nullptr;
+        }
+        return pipeline;
+    }
+
+private:
+    ColorRampPipeline(rcp<VulkanContext> vk) :
+        ResourceTexturePipeline(std::move(vk))
+    {}
+
+    bool init(PipelineManagerVulkan* pipelineManager,
+              const DriverWorkarounds& workarounds)
+    {
+        if (!initRenderPasses(VK_FORMAT_R8G8B8A8_UNORM,
+                              VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                              "ColorRamp",
+                              workarounds))
+        {
+            return false;
+        }
+
         VkDescriptorSetLayout perFlushDescriptorSetLayout =
             pipelineManager->perFlushDescriptorSetLayout();
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = {
@@ -537,10 +603,13 @@ public:
             .pSetLayouts = &perFlushDescriptorSetLayout,
         };
 
-        VK_CHECK(m_vk->CreatePipelineLayout(m_vk->device,
-                                            &pipelineLayoutCreateInfo,
-                                            nullptr,
-                                            &m_pipelineLayout));
+        m_pipelineLayout = VK_CREATE_HANDLE(m_vk,
+                                            CreatePipelineLayout,
+                                            &pipelineLayoutCreateInfo);
+        if (m_pipelineLayout == VK_NULL_HANDLE)
+        {
+            return false;
+        }
 
         VkShaderModuleCreateInfo shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -548,11 +617,11 @@ public:
             .pCode = spirv::color_ramp_vert.data(),
         };
 
-        VkShaderModule vertexShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          nullptr,
-                                          &vertexShader));
+        ScopedShaderModule vertexShader(m_vk.get());
+        if (!vertexShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -560,11 +629,11 @@ public:
             .pCode = spirv::color_ramp_frag.data(),
         };
 
-        VkShaderModule fragmentShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          nullptr,
-                                          &fragmentShader));
+        ScopedShaderModule fragmentShader(m_vk.get());
+        if (!fragmentShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         VkPipelineShaderStageCreateInfo stages[] = {
             {
@@ -618,21 +687,22 @@ public:
             .renderPass = renderPass(),
         };
 
-        VK_CHECK(m_vk->CreateGraphicsPipelines(m_vk->device,
-                                               VK_NULL_HANDLE,
-                                               1,
-                                               &pipelineCreateInfo,
-                                               nullptr,
-                                               &m_renderPipeline));
+        VK_RETURN_FALSE_ON_FAIL(
+            m_vk->CreateGraphicsPipelines(m_vk->device,
+                                          VK_NULL_HANDLE,
+                                          1,
+                                          &pipelineCreateInfo,
+                                          nullptr,
+                                          &m_renderPipeline));
         m_vk->setDebugNameIfEnabled(uint64_t(m_renderPipeline),
                                     VK_OBJECT_TYPE_PIPELINE,
                                     "Color Ramp Pipeline");
 
-        m_vk->DestroyShaderModule(m_vk->device, vertexShader, nullptr);
-        m_vk->DestroyShaderModule(m_vk->device, fragmentShader, nullptr);
+        return true;
     }
 
-    ~ColorRampPipeline()
+public:
+    ~ColorRampPipeline() override
     {
         m_vk->DestroyPipelineLayout(m_vk->device, m_pipelineLayout, nullptr);
         m_vk->DestroyPipeline(m_vk->device, m_renderPipeline, nullptr);
@@ -642,8 +712,8 @@ public:
     VkPipeline renderPipeline() const { return m_renderPipeline; }
 
 private:
-    VkPipelineLayout m_pipelineLayout;
-    VkPipeline m_renderPipeline;
+    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_renderPipeline = VK_NULL_HANDLE;
 };
 
 // Renders tessellated vertices to the tessellation texture.
@@ -651,15 +721,37 @@ class RenderContextVulkanImpl::TessellatePipeline
     : public ResourceTexturePipeline
 {
 public:
-    TessellatePipeline(PipelineManagerVulkan* pipelineManager,
-                       const DriverWorkarounds& workarounds) :
-        ResourceTexturePipeline(ref_rcp(pipelineManager->vulkanContext()),
-                                VK_FORMAT_R32G32B32A32_UINT,
-                                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                                VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
-                                "Tessellate",
-                                workarounds)
+    // Returns null if the driver fails to create our objects.
+    static std::unique_ptr<TessellatePipeline> make(
+        PipelineManagerVulkan* pipelineManager,
+        const DriverWorkarounds& workarounds)
     {
+        std::unique_ptr<TessellatePipeline> pipeline(
+            new TessellatePipeline(ref_rcp(pipelineManager->vulkanContext())));
+        if (!pipeline->init(pipelineManager, workarounds))
+        {
+            return nullptr;
+        }
+        return pipeline;
+    }
+
+private:
+    TessellatePipeline(rcp<VulkanContext> vk) :
+        ResourceTexturePipeline(std::move(vk))
+    {}
+
+    bool init(PipelineManagerVulkan* pipelineManager,
+              const DriverWorkarounds& workarounds)
+    {
+        if (!initRenderPasses(VK_FORMAT_R32G32B32A32_UINT,
+                              VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                              VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+                              "Tessellate",
+                              workarounds))
+        {
+            return false;
+        }
+
         VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
             pipelineManager->perFlushDescriptorSetLayout(),
             pipelineManager->emptyDescriptorSetLayout(),
@@ -672,10 +764,13 @@ public:
             .pSetLayouts = pipelineDescriptorSetLayouts,
         };
 
-        VK_CHECK(m_vk->CreatePipelineLayout(m_vk->device,
-                                            &pipelineLayoutCreateInfo,
-                                            nullptr,
-                                            &m_pipelineLayout));
+        m_pipelineLayout = VK_CREATE_HANDLE(m_vk,
+                                            CreatePipelineLayout,
+                                            &pipelineLayoutCreateInfo);
+        if (m_pipelineLayout == VK_NULL_HANDLE)
+        {
+            return false;
+        }
 
         VkShaderModuleCreateInfo shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -683,11 +778,11 @@ public:
             .pCode = spirv::tessellate_vert.data(),
         };
 
-        VkShaderModule vertexShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          nullptr,
-                                          &vertexShader));
+        ScopedShaderModule vertexShader(m_vk.get());
+        if (!vertexShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -695,11 +790,11 @@ public:
             .pCode = spirv::tessellate_frag.data(),
         };
 
-        VkShaderModule fragmentShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          nullptr,
-                                          &fragmentShader));
+        ScopedShaderModule fragmentShader(m_vk.get());
+        if (!fragmentShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         VkPipelineShaderStageCreateInfo stages[] = {
             {
@@ -774,20 +869,21 @@ public:
             .renderPass = renderPass(),
         };
 
-        VK_CHECK(m_vk->CreateGraphicsPipelines(m_vk->device,
-                                               VK_NULL_HANDLE,
-                                               1,
-                                               &pipelineCreateInfo,
-                                               nullptr,
-                                               &m_renderPipeline));
+        VK_RETURN_FALSE_ON_FAIL(
+            m_vk->CreateGraphicsPipelines(m_vk->device,
+                                          VK_NULL_HANDLE,
+                                          1,
+                                          &pipelineCreateInfo,
+                                          nullptr,
+                                          &m_renderPipeline));
         m_vk->setDebugNameIfEnabled(uint64_t(m_renderPipeline),
                                     VK_OBJECT_TYPE_PIPELINE,
                                     "Tesselation Pipeline");
 
-        m_vk->DestroyShaderModule(m_vk->device, vertexShader, nullptr);
-        m_vk->DestroyShaderModule(m_vk->device, fragmentShader, nullptr);
+        return true;
     }
 
+public:
     ~TessellatePipeline() override
     {
         m_vk->DestroyPipelineLayout(m_vk->device, m_pipelineLayout, nullptr);
@@ -798,8 +894,8 @@ public:
     VkPipeline renderPipeline() const { return m_renderPipeline; }
 
 private:
-    VkPipelineLayout m_pipelineLayout;
-    VkPipeline m_renderPipeline;
+    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_renderPipeline = VK_NULL_HANDLE;
 };
 
 // Renders feathers to the atlas.
@@ -807,15 +903,37 @@ class RenderContextVulkanImpl::FeatherAtlasPipeline
     : public ResourceTexturePipeline
 {
 public:
-    FeatherAtlasPipeline(PipelineManagerVulkan* pipelineManager,
-                         const DriverWorkarounds& workarounds) :
-        ResourceTexturePipeline(ref_rcp(pipelineManager->vulkanContext()),
-                                pipelineManager->featherAtlasFormat(),
-                                VK_ATTACHMENT_LOAD_OP_CLEAR,
-                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                "Feather Atlas",
-                                workarounds)
+    // Returns null if the driver fails to create our objects.
+    static std::unique_ptr<FeatherAtlasPipeline> make(
+        PipelineManagerVulkan* pipelineManager,
+        const DriverWorkarounds& workarounds)
     {
+        std::unique_ptr<FeatherAtlasPipeline> pipeline(new FeatherAtlasPipeline(
+            ref_rcp(pipelineManager->vulkanContext())));
+        if (!pipeline->init(pipelineManager, workarounds))
+        {
+            return nullptr;
+        }
+        return pipeline;
+    }
+
+private:
+    FeatherAtlasPipeline(rcp<VulkanContext> vk) :
+        ResourceTexturePipeline(std::move(vk))
+    {}
+
+    bool init(PipelineManagerVulkan* pipelineManager,
+              const DriverWorkarounds& workarounds)
+    {
+        if (!initRenderPasses(pipelineManager->featherAtlasFormat(),
+                              VK_ATTACHMENT_LOAD_OP_CLEAR,
+                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                              "Feather Atlas",
+                              workarounds))
+        {
+            return false;
+        }
+
         VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
             pipelineManager->perFlushDescriptorSetLayout(),
             pipelineManager->emptyDescriptorSetLayout(),
@@ -828,10 +946,13 @@ public:
             .pSetLayouts = pipelineDescriptorSetLayouts,
         };
 
-        VK_CHECK(m_vk->CreatePipelineLayout(m_vk->device,
-                                            &pipelineLayoutCreateInfo,
-                                            nullptr,
-                                            &m_pipelineLayout));
+        m_pipelineLayout = VK_CREATE_HANDLE(m_vk,
+                                            CreatePipelineLayout,
+                                            &pipelineLayoutCreateInfo);
+        if (m_pipelineLayout == VK_NULL_HANDLE)
+        {
+            return false;
+        }
 
         VkShaderModuleCreateInfo shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -839,11 +960,11 @@ public:
             .pCode = spirv::render_atlas_vert.data(),
         };
 
-        VkShaderModule vertexShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          nullptr,
-                                          &vertexShader));
+        ScopedShaderModule vertexShader(m_vk.get());
+        if (!vertexShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -851,11 +972,11 @@ public:
             .pCode = spirv::render_atlas_fill_frag.data(),
         };
 
-        VkShaderModule fragmentFillShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          nullptr,
-                                          &fragmentFillShader));
+        ScopedShaderModule fragmentFillShader(m_vk.get());
+        if (!fragmentFillShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         shaderModuleCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -863,11 +984,11 @@ public:
             .pCode = spirv::render_atlas_stroke_frag.data(),
         };
 
-        VkShaderModule fragmentStrokeShader;
-        VK_CHECK(m_vk->CreateShaderModule(m_vk->device,
-                                          &shaderModuleCreateInfo,
-                                          VK_NULL_HANDLE,
-                                          &fragmentStrokeShader));
+        ScopedShaderModule fragmentStrokeShader(m_vk.get());
+        if (!fragmentStrokeShader.create(shaderModuleCreateInfo))
+        {
+            return false;
+        }
 
         VkPipelineShaderStageCreateInfo stages[] = {
             {
@@ -915,33 +1036,34 @@ public:
 
         stages[1].module = fragmentFillShader;
         blendState.colorBlendOp = VK_BLEND_OP_ADD;
-        VK_CHECK(m_vk->CreateGraphicsPipelines(m_vk->device,
-                                               VK_NULL_HANDLE,
-                                               1,
-                                               &pipelineCreateInfo,
-                                               nullptr,
-                                               &m_fillPipeline));
+        VK_RETURN_FALSE_ON_FAIL(
+            m_vk->CreateGraphicsPipelines(m_vk->device,
+                                          VK_NULL_HANDLE,
+                                          1,
+                                          &pipelineCreateInfo,
+                                          nullptr,
+                                          &m_fillPipeline));
         m_vk->setDebugNameIfEnabled(uint64_t(m_fillPipeline),
                                     VK_OBJECT_TYPE_PIPELINE,
                                     "Feather Atlas Fill Pipeline");
 
         stages[1].module = fragmentStrokeShader;
         blendState.colorBlendOp = VK_BLEND_OP_MAX;
-        VK_CHECK(m_vk->CreateGraphicsPipelines(m_vk->device,
-                                               VK_NULL_HANDLE,
-                                               1,
-                                               &pipelineCreateInfo,
-                                               nullptr,
-                                               &m_strokePipeline));
+        VK_RETURN_FALSE_ON_FAIL(
+            m_vk->CreateGraphicsPipelines(m_vk->device,
+                                          VK_NULL_HANDLE,
+                                          1,
+                                          &pipelineCreateInfo,
+                                          nullptr,
+                                          &m_strokePipeline));
         m_vk->setDebugNameIfEnabled(uint64_t(m_strokePipeline),
                                     VK_OBJECT_TYPE_PIPELINE,
                                     "Feather Atlas Stroke Pipeline");
 
-        m_vk->DestroyShaderModule(m_vk->device, vertexShader, nullptr);
-        m_vk->DestroyShaderModule(m_vk->device, fragmentFillShader, nullptr);
-        m_vk->DestroyShaderModule(m_vk->device, fragmentStrokeShader, nullptr);
+        return true;
     }
 
+public:
     ~FeatherAtlasPipeline() override
     {
         m_vk->DestroyPipelineLayout(m_vk->device, m_pipelineLayout, nullptr);
@@ -954,9 +1076,9 @@ public:
     VkPipeline strokePipeline() const { return m_strokePipeline; }
 
 private:
-    VkPipelineLayout m_pipelineLayout;
-    VkPipeline m_fillPipeline;
-    VkPipeline m_strokePipeline;
+    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_fillPipeline = VK_NULL_HANDLE;
+    VkPipeline m_strokePipeline = VK_NULL_HANDLE;
 };
 
 RenderContextVulkanImpl::RenderContextVulkanImpl(
@@ -1106,9 +1228,11 @@ RenderContextVulkanImpl::RenderContextVulkanImpl(
     }
 }
 
-void RenderContextVulkanImpl::initGPUObjects(
+bool RenderContextVulkanImpl::initGPUObjects(
     ShaderCompilationMode shaderCompilationMode)
 {
+    VulkanContext::AllocationFailureScope allocationFailures(m_vk.get());
+
     // Bound when there is not an image paint.
     constexpr static uint8_t black[] = {0, 0, 0, 1};
     m_nullImageTexture = m_vk->makeTexture2D(
@@ -1117,6 +1241,10 @@ void RenderContextVulkanImpl::initGPUObjects(
             .extent = {1, 1},
         },
         "null image texture");
+    if (m_nullImageTexture->vkImageView() == VK_NULL_HANDLE)
+    {
+        return false;
+    }
     m_nullImageTexture->scheduleUpload(black, sizeof(black));
 
     if (strstr(m_vk->physicalDeviceProperties.deviceName, "Adreno (TM) 8") !=
@@ -1136,23 +1264,51 @@ void RenderContextVulkanImpl::initGPUObjects(
                          VK_IMAGE_USAGE_TRANSFER_DST_BIT,
             },
             "tesselation sync bug workaround texture");
+        if (m_tesselationSyncIssueWorkaroundTexture->vkImageView() ==
+            VK_NULL_HANDLE)
+        {
+            return false;
+        }
     }
 
-    m_pipelineManager = std::make_unique<PipelineManagerVulkan>(
-        m_vk,
-        shaderCompilationMode,
-        m_nullImageTexture->vkImageView());
+    m_pipelineManager =
+        PipelineManagerVulkan::make(m_vk,
+                                    shaderCompilationMode,
+                                    m_nullImageTexture->vkImageView());
+    if (m_pipelineManager == nullptr)
+    {
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer failed to create the pipeline manager.");
+        return false;
+    }
 
     // The pipelines reference our vulkan objects. Delete them first.
     m_colorRampPipeline =
-        std::make_unique<ColorRampPipeline>(m_pipelineManager.get(),
-                                            m_workarounds);
+        ColorRampPipeline::make(m_pipelineManager.get(), m_workarounds);
+    if (m_colorRampPipeline == nullptr)
+    {
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer failed to create the color ramp pipeline.");
+        return false;
+    }
+
     m_tessellatePipeline =
-        std::make_unique<TessellatePipeline>(m_pipelineManager.get(),
-                                             m_workarounds);
+        TessellatePipeline::make(m_pipelineManager.get(), m_workarounds);
+    if (m_tessellatePipeline == nullptr)
+    {
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer failed to create the tessellation pipeline.");
+        return false;
+    }
+
     m_featherAtlasPipeline =
-        std::make_unique<FeatherAtlasPipeline>(m_pipelineManager.get(),
-                                               m_workarounds);
+        FeatherAtlasPipeline::make(m_pipelineManager.get(), m_workarounds);
+    if (m_featherAtlasPipeline == nullptr)
+    {
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer failed to create the feather atlas pipeline.");
+        return false;
+    }
 
     // Determine usage flags for transient PLS backing textures.
     m_plsTransientUsageFlags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
@@ -1194,6 +1350,10 @@ void RenderContextVulkanImpl::initGPUObjects(
                 },
         },
         "gaussian integral texture");
+    if (m_gaussianIntegralTexture->vkImageView() == VK_NULL_HANDLE)
+    {
+        return false;
+    }
     m_gaussianIntegralTexture->scheduleUpload(
         gaussianIntegralTextureData,
         sizeof(gaussianIntegralTextureData));
@@ -1204,6 +1364,10 @@ void RenderContextVulkanImpl::initGPUObjects(
             .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         },
         vkutil::Mappability::writeOnly);
+    if (!m_tessSpanIndexBuffer->hasContents())
+    {
+        return false;
+    }
     memcpy(m_tessSpanIndexBuffer->contents(),
            gpu::kTessSpanIndices,
            sizeof(gpu::kTessSpanIndices));
@@ -1215,12 +1379,20 @@ void RenderContextVulkanImpl::initGPUObjects(
             .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         },
         vkutil::Mappability::writeOnly);
+    if (!m_pathPatchVertexBuffer->hasContents())
+    {
+        return false;
+    }
     m_pathPatchIndexBuffer = m_vk->makeBuffer(
         {
             .size = kPatchIndexBufferCount * sizeof(uint16_t),
             .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         },
         vkutil::Mappability::writeOnly);
+    if (!m_pathPatchIndexBuffer->hasContents())
+    {
+        return false;
+    }
     gpu::GeneratePatchBufferData(
         reinterpret_cast<PatchVertex*>(m_pathPatchVertexBuffer->contents()),
         reinterpret_cast<uint16_t*>(m_pathPatchIndexBuffer->contents()));
@@ -1233,20 +1405,38 @@ void RenderContextVulkanImpl::initGPUObjects(
             .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
         },
         vkutil::Mappability::writeOnly);
+    if (!m_imageRectVertexBuffer->hasContents())
+    {
+        return false;
+    }
     memcpy(m_imageRectVertexBuffer->contents(),
            gpu::kImageRectVertices,
            sizeof(gpu::kImageRectVertices));
     m_imageRectVertexBuffer->flushContents();
+
     m_imageRectIndexBuffer = m_vk->makeBuffer(
         {
             .size = sizeof(gpu::kImageRectIndices),
             .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
         },
         vkutil::Mappability::writeOnly);
+    if (!m_imageRectIndexBuffer->hasContents())
+    {
+        return false;
+    }
     memcpy(m_imageRectIndexBuffer->contents(),
            gpu::kImageRectIndices,
            sizeof(gpu::kImageRectIndices));
     m_imageRectIndexBuffer->flushContents();
+
+    // Catches any allocation that failed without being checked above, e.g. a
+    // staging buffer inside scheduleUpload().
+    if (allocationFailures.anyFailed())
+    {
+        return false;
+    }
+
+    return true;
 }
 
 RenderContextVulkanImpl::~RenderContextVulkanImpl()
@@ -1651,7 +1841,7 @@ bool RenderContextVulkanImpl::wantsManualRenderPassResolve(
                  VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 #endif
     }
-    if (interlockMode == gpu::InterlockMode::msaa &&
+    if (interlockMode == gpu::InterlockMode::depthStencil &&
         !m_workarounds.avoidManualMSAAResolves)
     {
         if (!renderTargetUpdateBounds.contains(renderTarget->bounds()))
@@ -1724,10 +1914,10 @@ void* RenderContextVulkanImpl::makeCommandBuffer()
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             .queueFamilyIndex = m_canvasQueueFamilyIndex,
         };
-        VK_CHECK(m_vk->CreateCommandPool(m_vk->device,
-                                         &ci,
-                                         nullptr,
-                                         &m_canvasCommandPool));
+        VK_ABORT_ON_FAIL(m_vk->CreateCommandPool(m_vk->device,
+                                                 &ci,
+                                                 nullptr,
+                                                 &m_canvasCommandPool));
     }
     VkCommandBuffer cmdBuf;
     VkCommandBufferAllocateInfo ai = {
@@ -1867,10 +2057,10 @@ RenderContextVulkanImpl::DescriptorSetPool::DescriptorSetPool(
         .pPoolSizes = descriptorPoolSizes,
     };
 
-    VK_CHECK(vk()->CreateDescriptorPool(vk()->device,
-                                        &descriptorPoolCreateInfo,
-                                        nullptr,
-                                        &m_vkDescriptorPool));
+    VK_ABORT_ON_FAIL(vk()->CreateDescriptorPool(vk()->device,
+                                                &descriptorPoolCreateInfo,
+                                                nullptr,
+                                                &m_vkDescriptorPool));
 }
 
 RenderContextVulkanImpl::DescriptorSetPool::~DescriptorSetPool()
@@ -1889,9 +2079,9 @@ VkDescriptorSet RenderContextVulkanImpl::DescriptorSetPool::
     };
 
     VkDescriptorSet descriptorSet;
-    VK_CHECK(vk()->AllocateDescriptorSets(vk()->device,
-                                          &descriptorSetAllocateInfo,
-                                          &descriptorSet));
+    VK_ABORT_ON_FAIL(vk()->AllocateDescriptorSets(vk()->device,
+                                                  &descriptorSetAllocateInfo,
+                                                  &descriptorSet));
 
     return descriptorSet;
 }
@@ -2087,7 +2277,7 @@ const DrawPipelineLayoutVulkan& RenderContextVulkanImpl::DrawRenderPass::begin(
             clearValues.push_back({});
             break;
 
-        case gpu::InterlockMode::msaa:
+        case gpu::InterlockMode::depthStencil:
             assert(framebufferViews.size() == MSAA_DEPTH_STENCIL_IDX);
             framebufferViews.push_back(
                 renderTarget->msaaDepthStencilTexture()->vkImageView());
@@ -2237,14 +2427,14 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
         // to handle manual resolving.
         renderPassOptions |= RenderPassOptionsVulkan::manuallyResolved;
     }
-    else if (desc.interlockMode == gpu::InterlockMode::msaa)
+    else if (desc.interlockMode == gpu::InterlockMode::depthStencil)
     {
         // Vulkan does not support partial MSAA resolves when using resolve
         // attachments.
         drawBounds = renderTarget->bounds();
     }
     // Vulkan builtin MSAA resolves don't support partial drawBounds.
-    assert(desc.interlockMode != gpu::InterlockMode::msaa ||
+    assert(desc.interlockMode != gpu::InterlockMode::depthStencil ||
            desc.manuallyResolved || drawBounds == renderTarget->bounds());
 
     const auto commandBuffer =
@@ -2271,14 +2461,19 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
             case DrawType::midpointFanPatches:
             case DrawType::midpointFanCenterAAPatches:
             case DrawType::outerCurvePatches:
-            case DrawType::msaaOuterCubics:
-            case DrawType::msaaStrokes:
-            case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaDynamicMidpointFans:
-            case DrawType::msaaMidpointFans:
-            case DrawType::msaaMidpointFanStencilReset:
-            case DrawType::msaaMidpointFanPathsStencil:
-            case DrawType::msaaMidpointFanPathsCover:
+            case DrawType::stencilOuterCubicBorrowedCoverage:
+            case DrawType::stencilOuterCubicReset:
+            case DrawType::stencilOuterCubicWinding:
+            case DrawType::stencilOuterCubicCover:
+            case DrawType::stencilOuterCubics:
+            case DrawType::depthStrokes:
+            case DrawType::stencilMidpointFanBorrowedCoverage:
+            case DrawType::stencilDynamicMidpointFans:
+            case DrawType::stencilDynamicOuterCubics:
+            case DrawType::stencilMidpointFans:
+            case DrawType::stencilMidpointFanReset:
+            case DrawType::stencilMidpointFanWinding:
+            case DrawType::stencilMidpointFanCover:
                 pendingTessPatchCount += batch.elementCount;
                 break;
             case DrawType::clipReset:
@@ -2822,7 +3017,7 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
     VkImageView msaaResolveImageView = VK_NULL_HANDLE;
     VkImageView msaaColorSeedImageView = VK_NULL_HANDLE;
 
-    if (desc.interlockMode == gpu::InterlockMode::msaa)
+    if (desc.interlockMode == gpu::InterlockMode::depthStencil)
     {
         colorImageView = renderTarget->msaaColorTexture()->vkImageView();
 
@@ -3179,11 +3374,11 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
     // for now, is to break the frame up into smaller chunks so that Rive can be
     // pre-empted by other rendering processes.
     //
-    // This is not yet supported on MSAA.
+    // This is not yet supported on depthStencil.
     int32_t virtualTileWidth = drawBounds.width();
     int32_t virtualTileHeight = drawBounds.height();
     if (desc.virtualTileWidth != 0 && desc.virtualTileHeight != 0 &&
-        desc.interlockMode != gpu::InterlockMode::msaa)
+        desc.interlockMode != gpu::InterlockMode::depthStencil)
     {
         virtualTileWidth = desc.virtualTileWidth;
         virtualTileHeight = desc.virtualTileHeight;
@@ -3236,7 +3431,7 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
                 }});
         }
 
-        if (desc.interlockMode != gpu::InterlockMode::msaa)
+        if (desc.interlockMode != gpu::InterlockMode::depthStencil)
         {
             m_vk->updateImageDescriptorSets(
                 inputAttachmentDescriptorSet,
@@ -3307,7 +3502,7 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
 
         if (msaaColorSeedImageView != VK_NULL_HANDLE)
         {
-            assert(desc.interlockMode == gpu::InterlockMode::msaa &&
+            assert(desc.interlockMode == gpu::InterlockMode::depthStencil &&
                    desc.colorLoadAction ==
                        gpu::LoadAction::preserveRenderTarget);
             m_vk->updateImageDescriptorSets(
@@ -3405,7 +3600,7 @@ void RenderContextVulkanImpl::flush(const FlushDescriptor& desc)
         assert(desc.interlockMode != gpu::InterlockMode::atomics);
 
         // MSAA never needs this copy. It handles resolves differently.
-        assert(desc.interlockMode != gpu::InterlockMode::msaa);
+        assert(desc.interlockMode != gpu::InterlockMode::depthStencil);
 
         constexpr static vkutil::ImageAccess ACCESS_COPY_FROM = {
             .pipelineStages = VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -3628,7 +3823,7 @@ void RenderContextVulkanImpl::submitDrawList(
                 : batch.shaderFeatures;
 
         auto shaderMiscFlags = batch.shaderMiscFlags;
-        if (vkutil::hasPipelineDynamicState(drawType) &&
+        if (gpu::drawTypeHasPipelineDynamicState(drawType) &&
             !m_vk->features.colorWriteEnable)
         {
             shaderMiscFlags |=
@@ -3668,7 +3863,7 @@ void RenderContextVulkanImpl::submitDrawList(
                     (!desc.fixedFunctionColorOutput ||
                      enums::is_flag_set(batch.barriers,
                                         BarrierFlags::plsAtomic))) ||
-                   (desc.interlockMode == gpu::InterlockMode::msaa &&
+                   (desc.interlockMode == gpu::InterlockMode::depthStencil &&
                     (!desc.fixedFunctionColorOutput ||
                      // The MSAA init also reads the framebuffer.
                      batch.drawType == gpu::DrawType::renderPassInitialize)));
@@ -3758,13 +3953,17 @@ void RenderContextVulkanImpl::submitDrawList(
             case DrawType::midpointFanPatches:
             case DrawType::midpointFanCenterAAPatches:
             case DrawType::outerCurvePatches:
-            case DrawType::msaaOuterCubics:
-            case DrawType::msaaStrokes:
-            case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaMidpointFans:
-            case DrawType::msaaMidpointFanStencilReset:
-            case DrawType::msaaMidpointFanPathsStencil:
-            case DrawType::msaaMidpointFanPathsCover:
+            case DrawType::stencilOuterCubicBorrowedCoverage:
+            case DrawType::stencilOuterCubicReset:
+            case DrawType::stencilOuterCubicWinding:
+            case DrawType::stencilOuterCubicCover:
+            case DrawType::stencilOuterCubics:
+            case DrawType::depthStrokes:
+            case DrawType::stencilMidpointFanBorrowedCoverage:
+            case DrawType::stencilMidpointFans:
+            case DrawType::stencilMidpointFanReset:
+            case DrawType::stencilMidpointFanWinding:
+            case DrawType::stencilMidpointFanCover:
             {
                 // Draw patches that connect the tessellation vertices.
                 m_vk->CmdBindVertexBuffers(
@@ -3798,7 +3997,8 @@ void RenderContextVulkanImpl::submitDrawList(
                 break;
             }
 
-            case DrawType::msaaDynamicMidpointFans:
+            case DrawType::stencilDynamicMidpointFans:
+            case DrawType::stencilDynamicOuterCubics:
             {
                 pendingTessPatchCount -= batch.elementCount;
                 if (drawPipeline == nullptr)
@@ -3806,13 +4006,13 @@ void RenderContextVulkanImpl::submitDrawList(
                     break;
                 }
 
-                // Combined fast-path fill: borrowed coverage, fans, and stencil
-                // reset share this one dynamic-state pipeline. Draw the whole
-                // batch (instanced across non-overlapping paths) three times,
-                // updating dynamic state between passes. depthCompareOp stays
-                // baked at LESS so Hi-Z keeps culling; color is suppressed via
-                // VK_EXT_color_write_enable (or, without the extension, a push
-                // constant that outputs color == 0).
+                // Combined fast-path fill: borrowed coverage, main fill, and
+                // stencil reset share this one dynamic-state pipeline. Draw the
+                // whole batch (instanced across non-overlapping paths) three
+                // times, updating dynamic state between passes. depthCompareOp
+                // stays baked at LESS so Hi-Z keeps culling; color is
+                // suppressed via VK_EXT_color_write_enable (or, without the
+                // extension, a push constant that outputs color == 0).
                 //
                 // The combine is gated to GPUs that don't need the "renderpass
                 // interrupt" workaround, so a single draw covers the whole
@@ -3830,12 +4030,13 @@ void RenderContextVulkanImpl::submitDrawList(
                                          *m_pathPatchIndexBuffer,
                                          0,
                                          VK_INDEX_TYPE_UINT16);
-                static constexpr DrawType Passes[] = {
-                    DrawType::msaaMidpointFanBorrowedCoverage,
-                    DrawType::msaaMidpointFans,
-                    DrawType::msaaMidpointFanStencilReset,
-                };
-                for (DrawType pass : Passes)
+                // The outer-cubic passes use identical dynamic state to their
+                // midpoint-fan counterparts, so drive both modes from the
+                // midpoint-fan types.
+                for (DrawType pass :
+                     {DrawType::stencilMidpointFanBorrowedCoverage,
+                      DrawType::stencilMidpointFans,
+                      DrawType::stencilMidpointFanReset})
                 {
                     gpu::PipelineState pipelineState =
                         gpu::get_pipeline_state(pass,
@@ -3845,7 +4046,7 @@ void RenderContextVulkanImpl::submitDrawList(
                                                 desc.fixedFunctionColorOutput,
                                                 batch.firstBlendMode,
                                                 m_platformFeatures);
-                    assert(vkutil::hasPipelineDynamicState(drawType));
+                    assert(gpu::drawTypeHasPipelineDynamicState(drawType));
                     pipelineBinder.setDynamicState(
                         commandBuffer,
                         pipelineState,
@@ -4001,16 +4202,28 @@ void RenderContextVulkanImpl::hotloadShaders(
     m_pipelineManager->clearCache();
     spirv::hotload_shaders(spirvData);
 
-    // Delete and replace old shaders
-    m_colorRampPipeline =
-        std::make_unique<ColorRampPipeline>(m_pipelineManager.get(),
-                                            m_workarounds);
-    m_tessellatePipeline =
-        std::make_unique<TessellatePipeline>(m_pipelineManager.get(),
-                                             m_workarounds);
-    m_featherAtlasPipeline =
-        std::make_unique<FeatherAtlasPipeline>(m_pipelineManager.get(),
-                                               m_workarounds);
+    // Build the new shaders before dropping the old ones, so a driver failure
+    // leaves the context in its current working state. The scope is what makes
+    // that possible: without it an allocation failure aborts instead of
+    // unwinding back to us.
+    VulkanContext::AllocationFailureScope allocationFailures(m_vk.get());
+    auto colorRampPipeline =
+        ColorRampPipeline::make(m_pipelineManager.get(), m_workarounds);
+    auto tessellatePipeline =
+        TessellatePipeline::make(m_pipelineManager.get(), m_workarounds);
+    auto featherAtlasPipeline =
+        FeatherAtlasPipeline::make(m_pipelineManager.get(), m_workarounds);
+    if (colorRampPipeline == nullptr || tessellatePipeline == nullptr ||
+        featherAtlasPipeline == nullptr)
+    {
+        PRINT_ERROR_LINE("ERROR: Rive Vulkan renderer failed to hotload "
+                         "shaders; keeping the previous pipelines.");
+        return;
+    }
+
+    m_colorRampPipeline = std::move(colorRampPipeline);
+    m_tessellatePipeline = std::move(tessellatePipeline);
+    m_featherAtlasPipeline = std::move(featherAtlasPipeline);
 }
 
 void RenderContextVulkanImpl::startAsyncPipelineCreation(
@@ -4053,10 +4266,6 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
     const ContextOptions& contextOptions)
 {
 #ifdef RIVE_ANDROID
-#define PRINT_ERROR_LINE(str)                                                  \
-    __android_log_print(ANDROID_LOG_ERROR, "rive_runtime", str);               \
-    fprintf(stderr, str "\n")
-
 #if __ANDROID_API__ >= 29
     // Android API 29 introduced this function which is simpler
     int deviceAPILevel = android_get_device_api_level();
@@ -4077,19 +4286,27 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
             "ERROR: Rive Vulkan renderer requires Android 10 or newer.");
         return nullptr;
     }
-#else
-#define PRINT_ERROR_LINE(str) fprintf(stderr, str "\n")
 #endif
-    rcp<VulkanContext> vk = make_rcp<VulkanContext>(instance,
-                                                    physicalDevice,
-                                                    device,
-                                                    features,
-                                                    pfnvkGetInstanceProcAddr);
+    rcp<VulkanContext> vk = VulkanContext::make(instance,
+                                                physicalDevice,
+                                                device,
+                                                features,
+                                                pfnvkGetInstanceProcAddr);
+    if (vk == nullptr)
+    {
+        // make() already printed which piece of it failed.
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer failed to create its context.");
+        return nullptr;
+    }
 
     if (vk->physicalDeviceProperties.apiVersion < VK_API_VERSION_1_1)
     {
         PRINT_ERROR_LINE(
             "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1.");
+        // ~GPUResourceManager expects a shutdown cycle and the
+        // RenderContextVulkanImpl hasn't taken ownership of the context yet.
+        vk->shutdown();
         return nullptr;
     }
 
@@ -4098,6 +4315,9 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
     {
         PRINT_ERROR_LINE(
             "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets.");
+        // ~GPUResourceManager expects a shutdown cycle and the
+        // RenderContextVulkanImpl hasn't taken ownership of the context yet.
+        vk->shutdown();
         return nullptr;
     }
 
@@ -4112,7 +4332,13 @@ std::unique_ptr<RenderContext> RenderContextVulkanImpl::MakeContext(
         return nullptr;
     }
 
-    impl->initGPUObjects(contextOptions.shaderCompilationMode);
+    if (!impl->initGPUObjects(contextOptions.shaderCompilationMode))
+    {
+        PRINT_ERROR_LINE(
+            "ERROR: Rive Vulkan renderer failed to initialize its GPU objects.");
+        return nullptr;
+    }
+
     return std::make_unique<RenderContext>(std::move(impl));
 }
 } // namespace rive::gpu

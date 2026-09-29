@@ -24,7 +24,7 @@ h1
 m2 H0 X(0,g,f1);
 #ifdef FEATHER_ATLAS_BLIT
 H0 X(1,d,D2);
-#elif!defined(RENDER_MODE_MSAA)
+#elif!defined(RENDER_MODE_DEPTH_STENCIL)
 #ifdef DRAW_INTERIOR_TRIANGLES
 OPTIONALLY_FLAT X(1,c,i1);
 #else
@@ -39,7 +39,7 @@ OPTIONALLY_FLAT X(4,c,K3);
 OPTIONALLY_FLAT X(4,E,V1);
 #endif
 #endif
-#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_MSAA)
+#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 H0 X(5,g,M0);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
@@ -68,7 +68,7 @@ V(A2,R);
 #endif
 #ifdef FEATHER_ATLAS_BLIT
 V(D2,d);
-#elif!defined(RENDER_MODE_MSAA)
+#elif!defined(RENDER_MODE_DEPTH_STENCIL)
 #ifdef DRAW_INTERIOR_TRIANGLES
 V(i1,c);
 #else
@@ -83,7 +83,7 @@ V(K3,c);
 V(V1,E);
 #endif
 #endif
-#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_MSAA)
+#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 V(M0,g);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
@@ -93,18 +93,18 @@ V(f2,c);
 V(f3,a1);V(n4,d);
 #endif
 bool fe=false;uint l0;d m0;
-#ifdef RENDER_MODE_MSAA
+#ifdef RENDER_MODE_DEPTH_STENCIL
 N g9;
 #endif
 #ifdef FEATHER_ATLAS_BLIT
 m0=Gb(LB,l0,
-#ifdef RENDER_MODE_MSAA
+#ifdef RENDER_MODE_DEPTH_STENCIL
 g9,
 #endif
 D2 w3);
 #elif defined(DRAW_INTERIOR_TRIANGLES)
 m0=Hb(LB,l0
-#ifdef RENDER_MODE_MSAA
+#ifdef RENDER_MODE_DEPTH_STENCIL
 ,g9
 #else
 ,i1
@@ -112,13 +112,13 @@ m0=Hb(LB,l0
 w3);
 #else
 g P;fe=!q9(VB,WB,v,l0,m0
-#ifndef RENDER_MODE_MSAA
+#ifndef RENDER_MODE_DEPTH_STENCIL
 ,P
 #else
 ,g9
 #endif
 w3);
-#ifndef RENDER_MODE_MSAA
+#ifndef RENDER_MODE_DEPTH_STENCIL
 #ifdef ENABLE_FEATHER
 O=P;
 #else
@@ -127,7 +127,7 @@ O.xy=R7(P.xy);
 #endif
 #endif
 a1 p1=P5(BD,l0);
-#if!defined(FEATHER_ATLAS_BLIT)&&!defined(RENDER_MODE_MSAA)
+#if!defined(FEATHER_ATLAS_BLIT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 B0=r8(l0,m.d6);if((p1.x&K9)!=0u)B0=-B0;
 #endif
 uint l3=p1.x&0xfu;
@@ -149,7 +149,7 @@ L0.y=float(m.Mg)-L0.y;
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){f0 Z3=h2(J0(RB,l0*A3+2u));g G4=J0(RB,l0*A3+3u);
-#ifndef RENDER_MODE_MSAA
+#ifndef RENDER_MODE_DEPTH_STENCIL
 M0=T7(Z3,G4.xy,L0);
 #else
 Bc(Z3,G4.xy,L0 x5);
@@ -171,7 +171,7 @@ g W;if(!fe){W=M3(m0);
 #ifdef POST_INVERT_Y
 W.y=-W.y;
 #endif
-#ifdef RENDER_MODE_MSAA
+#ifdef RENDER_MODE_DEPTH_STENCIL
 W.z=ja(g9);
 #elif defined(RENDER_MODE_CLOCKWISE_ATOMIC)
 G Q4=J0(QB,l0*4u+3u);f3=Q4.xy;n4=m0+uintBitsToFloat(Q4.zw);
@@ -182,7 +182,7 @@ a0(A2);
 #endif
 #ifdef FEATHER_ATLAS_BLIT
 a0(D2);
-#elif!defined(RENDER_MODE_MSAA)
+#elif!defined(RENDER_MODE_DEPTH_STENCIL)
 #ifdef DRAW_INTERIOR_TRIANGLES
 a0(i1);
 #else
@@ -197,7 +197,7 @@ a0(K3);
 a0(V1);
 #endif
 #endif
-#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_MSAA)
+#if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
 a0(M0);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND

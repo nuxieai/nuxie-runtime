@@ -226,7 +226,7 @@ const fn vk_color_load_op(
 ) -> vk::AttachmentLoadOp {
     match loadAction {
         LoadAction::preserveRenderTarget => {
-            if matches!(interlockMode, InterlockMode::msaa) {
+            if matches!(interlockMode, InterlockMode::depthStencil) {
                 vk::AttachmentLoadOp::DONT_CARE
             } else {
                 vk::AttachmentLoadOp::LOAD
@@ -282,7 +282,7 @@ impl RenderPassVulkan {
             } else {
                 vk::ImageLayout::GENERAL
             };
-        let msaaSampleCount = if interlockMode == InterlockMode::msaa {
+        let msaaSampleCount = if interlockMode == InterlockMode::depthStencil {
             vk::SampleCountFlags::TYPE_4
         } else {
             vk::SampleCountFlags::TYPE_1
@@ -306,7 +306,7 @@ impl RenderPassVulkan {
                         if renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved)
                             || renderPassOptions
                                 .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
-                            || interlockMode == InterlockMode::msaa
+                            || interlockMode == InterlockMode::depthStencil
                         {
                             vk::AttachmentStoreOp::DONT_CARE
                         } else {
@@ -317,7 +317,7 @@ impl RenderPassVulkan {
                         if (renderPassOptions
                             .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
                             && loadAction != LoadAction::preserveRenderTarget)
-                            || interlockMode == InterlockMode::msaa
+                            || interlockMode == InterlockMode::depthStencil
                         {
                             vk::ImageLayout::UNDEFINED
                         } else {
@@ -464,7 +464,7 @@ impl RenderPassVulkan {
                 assert!(resolveAttachmentRef.is_none());
                 resolveAttachmentRef = Some(colorAttachmentRefs[0]);
             }
-        } else if interlockMode == InterlockMode::msaa {
+        } else if interlockMode == InterlockMode::depthStencil {
             assert_eq!(attachments.len(), MSAA_DEPTH_STENCIL_IDX);
             attachments.push(
                 vk::AttachmentDescription::default()
@@ -539,7 +539,7 @@ impl RenderPassVulkan {
                 inputAttachmentRefs.clear();
             }
         }
-        if interlockMode == InterlockMode::msaa && loadAction == LoadAction::preserveRenderTarget {
+        if interlockMode == InterlockMode::depthStencil && loadAction == LoadAction::preserveRenderTarget {
             msaaColorSeedInputAttachmentRef.push(attachment_ref(
                 if renderPassOptions.has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture) {
                     MSAA_COLOR_SEED_IDX
@@ -575,7 +575,7 @@ impl RenderPassVulkan {
                 ));
             };
 
-        if interlockMode == InterlockMode::msaa && loadAction == LoadAction::preserveRenderTarget {
+        if interlockMode == InterlockMode::depthStencil && loadAction == LoadAction::preserveRenderTarget {
             assert_eq!(
                 msaaColorSeedInputAttachmentRef.len(),
                 colorAttachmentRefs.len()
@@ -629,7 +629,7 @@ impl RenderPassVulkan {
             addStandardColorDependencyToNextSubpass(&mut subpassDeps, subpassDescs.len() as u32);
         } else {
             let mut externalInDep = externalColorInputDependency;
-            if interlockMode == InterlockMode::msaa {
+            if interlockMode == InterlockMode::depthStencil {
                 externalInDep.src_stage_mask |= vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
                 externalInDep.dst_stage_mask |= vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS;
                 externalInDep.dst_access_mask |= vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
@@ -663,7 +663,7 @@ impl RenderPassVulkan {
             p_input_attachments: inputAttachmentRefs.as_ptr(),
             color_attachment_count: colorAttachmentRefs.len() as u32,
             p_color_attachments: colorAttachmentRefs.as_ptr(),
-            p_resolve_attachments: if interlockMode == InterlockMode::msaa
+            p_resolve_attachments: if interlockMode == InterlockMode::depthStencil
                 && !renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved)
             {
                 resolveAttachmentRef.as_ref().unwrap()
@@ -678,7 +678,7 @@ impl RenderPassVulkan {
         if (interlockMode == InterlockMode::rasterOrdering && !rasterOrderedAttachmentAccess)
             || interlockMode == InterlockMode::atomics
             || interlockMode == InterlockMode::clockwiseAtomic
-            || (interlockMode == InterlockMode::msaa
+            || (interlockMode == InterlockMode::depthStencil
                 && !renderPassOptions.has(RenderPassOptionsVulkan::fixedFunctionColorOutput))
         {
             subpassDeps.push(dependency(
@@ -691,7 +691,7 @@ impl RenderPassVulkan {
                 vk::DependencyFlags::BY_REGION,
             ));
         }
-        if interlockMode == InterlockMode::msaa {
+        if interlockMode == InterlockMode::depthStencil {
             subpassDeps.push(dependency(
                 subpassDescs.len() as u32 - 1,
                 vk::SUBPASS_EXTERNAL,

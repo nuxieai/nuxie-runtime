@@ -401,7 +401,7 @@
 // {
 //     if (frameDescriptor.msaaSampleCount != 0)
 //     {
-//         return gpu::InterlockMode::msaa;
+//         return gpu::InterlockMode::depthStencil;
 //     }
 //     if (frameDescriptor.clockwiseFillOverride)
 //     {
@@ -428,7 +428,7 @@
 //     {
 //         return gpu::InterlockMode::atomics;
 //     }
-//     return gpu::InterlockMode::msaa;
+//     return gpu::InterlockMode::depthStencil;
 // }
 //
 // void RenderContext::beginFrame(const FrameDescriptor& frameDescriptor)
@@ -442,7 +442,7 @@
 //     m_frameDescriptor = frameDescriptor;
 //     m_frameInterlockMode =
 //         select_interlock_mode(m_frameDescriptor, platformFeatures());
-//     if (m_frameInterlockMode == gpu::InterlockMode::msaa &&
+//     if (m_frameInterlockMode == gpu::InterlockMode::depthStencil &&
 //         m_frameDescriptor.msaaSampleCount == 0)
 //     {
 //         // Use 4x MSAA if msaaSampleCount wasn't already specified.
@@ -471,7 +471,7 @@
 // bool RenderContext::frameSupportsClipRects() const
 // {
 //     assert(m_didBeginFrame);
-//     return m_frameInterlockMode != gpu::InterlockMode::msaa ||
+//     return m_frameInterlockMode != gpu::InterlockMode::depthStencil ||
 //            platformFeatures().supportsClipPlanes;
 // }
 //
@@ -1083,7 +1083,7 @@
 //             }
 //             return n;
 //         }
-//         case gpu::InterlockMode::msaa:
+//         case gpu::InterlockMode::depthStencil:
 //             return 0; // N/A
 //     }
 //     RIVE_UNREACHABLE();
@@ -1115,7 +1115,7 @@
 //                    !enums::is_flag_set(combinedDrawContents,
 //                                        gpu::DrawContents::advancedBlend);
 //
-//         case gpu::InterlockMode::msaa:
+//         case gpu::InterlockMode::depthStencil:
 //             // Manual MSAA resolves read the framebuffer, so they can't use
 //             // fixedFunctionColorOutput.
 //             return !manuallyResolved &&
@@ -1800,7 +1800,7 @@
 //             // Otherwise, we put subpasses into different draw groups because it
 //             // yields better reordering.
 //             const bool allSubpassesInSameDrawGroup =
-//                 m_ctx->frameInterlockMode() == gpu::InterlockMode::msaa &&
+//                 m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
 //                 !platformFeatures.supportsBlendAdvancedKHR &&
 //                 enums::is_flag_set(m_combinedDrawContents,
 //                                    gpu::DrawContents::advancedBlend);
@@ -1929,7 +1929,7 @@
 //                                     ImageSampler::LinearClamp(),
 //                                     BarrierFlags::none);
 //         }
-//         else if (m_ctx->frameInterlockMode() == gpu::InterlockMode::msaa &&
+//         else if (m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
 //                  m_flushDesc.colorLoadAction ==
 //                      gpu::LoadAction::preserveRenderTarget &&
 //                  platformFeatures.msaaColorPreserveNeedsDraw)
@@ -2025,7 +2025,7 @@
 //                 break;
 //             }
 //
-//             case gpu::InterlockMode::msaa:
+//             case gpu::InterlockMode::depthStencil:
 //             {
 //                 // MSAA mode can't batch draws that overlap because they both
 //                 // rely on the stencil buffer across subpasses. Stop batching
@@ -2117,7 +2117,7 @@
 //             // differ".
 //             if ((m_ctx->frameInterlockMode() ==
 //                      gpu::InterlockMode::clockwiseAtomic ||
-//                  m_ctx->frameInterlockMode() == gpu::InterlockMode::msaa) &&
+//                  m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil) &&
 //                 subpassIndex == 0 && batch != nullptr)
 //             {
 //                 // Barriers at this level have to go on the first batch in the
@@ -2161,7 +2161,7 @@
 //                 assert(firstBatchInCurrentDrawGroup != nullptr);
 //
 //                 if (draw->hasAdvancedBlend() &&
-//                     (m_ctx->frameInterlockMode() != gpu::InterlockMode::msaa ||
+//                     (m_ctx->frameInterlockMode() != gpu::InterlockMode::depthStencil ||
 //                      !m_ctx->platformFeatures()
 //                           .supportsBlendAdvancedCoherentKHR))
 //                 {
@@ -2225,7 +2225,7 @@
 //                 else
 //                 {
 //                     assert(m_ctx->frameInterlockMode() ==
-//                            gpu::InterlockMode::msaa);
+//                            gpu::InterlockMode::depthStencil);
 //
 //                     // msaa doesn't mix srcOver draws with advanced blend draws.
 //                     assert(enums::is_flag_set(
@@ -3740,17 +3740,17 @@
 //             return kMidpointFanCenterAAPatchIndexCount;
 //         case DrawType::outerCurvePatches:
 //             return kOuterCurvePatchIndexCount;
-//         case DrawType::msaaStrokes:
+//         case DrawType::depthStrokes:
 //             return kMidpointFanPatchBorderIndexCount;
-//         case DrawType::msaaMidpointFanBorrowedCoverage:
-//         case DrawType::msaaDynamicMidpointFans:
-//         case DrawType::msaaMidpointFans:
-//         case DrawType::msaaMidpointFanStencilReset:
-//         case DrawType::msaaMidpointFanPathsStencil:
-//         case DrawType::msaaMidpointFanPathsCover:
+//         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilMidpointFanCover:
 //             return kMidpointFanPatchIndexCount -
 //                    kMidpointFanPatchBorderIndexCount;
-//         case DrawType::msaaOuterCubics:
+//         case DrawType::stencilOuterCubics:
 //             return kOuterCurvePatchIndexCount -
 //                    kOuterCurvePatchBorderIndexCount;
 //         case DrawType::interiorTriangulation:
@@ -3770,21 +3770,21 @@
 //     switch (drawType)
 //     {
 //         case DrawType::midpointFanPatches:
-//         case DrawType::msaaStrokes:
+//         case DrawType::depthStrokes:
 //             return kMidpointFanPatchBaseIndex;
 //         case DrawType::midpointFanCenterAAPatches:
 //             return kMidpointFanCenterAAPatchBaseIndex;
 //         case DrawType::outerCurvePatches:
 //             return kOuterCurvePatchBaseIndex;
-//         case DrawType::msaaMidpointFanBorrowedCoverage:
-//         case DrawType::msaaDynamicMidpointFans:
-//         case DrawType::msaaMidpointFans:
-//         case DrawType::msaaMidpointFanStencilReset:
-//         case DrawType::msaaMidpointFanPathsStencil:
-//         case DrawType::msaaMidpointFanPathsCover:
+//         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilMidpointFanCover:
 //             return kMidpointFanPatchBaseIndex +
 //                    kMidpointFanPatchBorderIndexCount;
-//         case DrawType::msaaOuterCubics:
+//         case DrawType::stencilOuterCubics:
 //             return kOuterCurvePatchBaseIndex + kOuterCurvePatchBorderIndexCount;
 //         case DrawType::interiorTriangulation:
 //         case DrawType::featherAtlasBlit:
@@ -3805,14 +3805,14 @@
 //         case DrawType::midpointFanPatches:
 //         case DrawType::midpointFanCenterAAPatches:
 //         case DrawType::outerCurvePatches:
-//         case DrawType::msaaStrokes:
-//         case DrawType::msaaMidpointFanBorrowedCoverage:
-//         case DrawType::msaaDynamicMidpointFans:
-//         case DrawType::msaaMidpointFans:
-//         case DrawType::msaaMidpointFanStencilReset:
-//         case DrawType::msaaMidpointFanPathsStencil:
-//         case DrawType::msaaMidpointFanPathsCover:
-//         case DrawType::msaaOuterCubics:
+//         case DrawType::depthStrokes:
+//         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubics:
 //             batch->indexCountPerInstance = patchIndexCount(drawType);
 //             batch->baseIndex = patchBaseIndex(drawType);
 //             break;
@@ -3879,7 +3879,7 @@
 //             shaderMiscFlags |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
 //         }
 //     }
-//     else if (m_ctx->frameInterlockMode() == gpu::InterlockMode::msaa &&
+//     else if (m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
 //              draw->blendMode() == BlendMode::srcOver)
 //     {
 //         shaderMiscFlags |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
@@ -3893,14 +3893,14 @@
 //         case DrawType::outerCurvePatches:
 //         case DrawType::interiorTriangulation:
 //         case DrawType::featherAtlasBlit:
-//         case DrawType::msaaStrokes:
-//         case DrawType::msaaMidpointFanBorrowedCoverage:
-//         case DrawType::msaaDynamicMidpointFans:
-//         case DrawType::msaaMidpointFans:
-//         case DrawType::msaaMidpointFanStencilReset:
-//         case DrawType::msaaMidpointFanPathsStencil:
-//         case DrawType::msaaMidpointFanPathsCover:
-//         case DrawType::msaaOuterCubics:
+//         case DrawType::depthStrokes:
+//         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilMidpointFanCover:
+//         case DrawType::stencilOuterCubics:
 //         case DrawType::clipReset:
 //             if (!m_drawList.empty() &&
 //                 !enums::is_flag_set(m_pendingBarriers,
@@ -3925,7 +3925,7 @@
 //                     // guarantee we have in other modes that mergeable batches
 //                     // will always have contiguous patches.
 //                     assert(m_ctx->frameInterlockMode() ==
-//                            gpu::InterlockMode::msaa);
+//                            gpu::InterlockMode::depthStencil);
 //                     canMergeWithPreviousBatch = false;
 //                 }
 //
@@ -3984,7 +3984,7 @@
 //                (draw->drawContents() & gpu::DrawContents::featheredFill));
 //
 //         // msaa can't mix drawContents in a batch.
-//         assert(m_ctx->frameInterlockMode() != gpu::InterlockMode::msaa ||
+//         assert(m_ctx->frameInterlockMode() != gpu::InterlockMode::depthStencil ||
 //                batch->drawContents == draw->drawContents());
 //
 //         batch->shaderMiscFlags |= shaderMiscFlags;
@@ -4665,25 +4665,25 @@ fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
             gpu::kOuterCurvePatchIndexCount,
             gpu::kOuterCurvePatchBaseIndex,
         ),
-        msaaStrokes => (
+        depthStrokes => (
             gpu::kMidpointFanPatchBorderIndexCount,
             gpu::kMidpointFanPatchBaseIndex,
         ),
-        msaaMidpointFanBorrowedCoverage
-        | msaaDynamicMidpointFans
-        | msaaMidpointFans
-        | msaaMidpointFanStencilReset
-        | msaaMidpointFanPathsStencil
-        | msaaMidpointFanPathsCover => (
+        stencilMidpointFanBorrowedCoverage
+        | stencilDynamicMidpointFans
+        | stencilMidpointFans
+        | stencilMidpointFanReset
+        | stencilMidpointFanWinding
+        | stencilMidpointFanCover => (
             gpu::kMidpointFanPatchIndexCount - gpu::kMidpointFanPatchBorderIndexCount,
             gpu::kMidpointFanPatchBaseIndex + gpu::kMidpointFanPatchBorderIndexCount,
         ),
-        msaaOuterCubicBorrowedCoverage
-        | msaaDynamicOuterCubics
-        | msaaOuterCubics
-        | msaaOuterCubicStencilReset
-        | msaaOuterCubicPathsStencil
-        | msaaOuterCubicPathsCover => (
+        stencilOuterCubicBorrowedCoverage
+        | stencilDynamicOuterCubics
+        | stencilOuterCubics
+        | stencilOuterCubicReset
+        | stencilOuterCubicWinding
+        | stencilOuterCubicCover => (
             gpu::kOuterCurvePatchIndexCount - gpu::kOuterCurvePatchBorderIndexCount,
             gpu::kOuterCurvePatchBaseIndex + gpu::kOuterCurvePatchBorderIndexCount,
         ),
@@ -4731,7 +4731,7 @@ fn pls_transient_backing_plane_count(
             }
             count
         }
-        gpu::InterlockMode::msaa => 0,
+        gpu::InterlockMode::depthStencil => 0,
     }
 }
 
@@ -4752,7 +4752,7 @@ fn wants_fixed_function_color_output(
             );
             features.supportsClockwiseFixedFunctionMode && !advanced
         }
-        gpu::InterlockMode::msaa => !manually_resolved && !advanced,
+        gpu::InterlockMode::depthStencil => !manually_resolved && !advanced,
     }
 }
 
@@ -4813,7 +4813,7 @@ fn select_interlock_mode(
     platform_features: &gpu::PlatformFeatures,
 ) -> gpu::InterlockMode {
     if frame_descriptor.msaaSampleCount != 0 {
-        return gpu::InterlockMode::msaa;
+        return gpu::InterlockMode::depthStencil;
     }
     if frame_descriptor.clockwiseFillOverride {
         if platform_features.supportsClockwiseMode && !frame_descriptor.disableRasterOrdering {
@@ -4831,7 +4831,7 @@ fn select_interlock_mode(
     if platform_features.supportsAtomicMode {
         return gpu::InterlockMode::atomics;
     }
-    gpu::InterlockMode::msaa
+    gpu::InterlockMode::depthStencil
 }
 
 impl RenderContext {
@@ -5158,7 +5158,7 @@ impl RenderContext {
         self.m_frame_descriptor = *frame_descriptor;
         self.m_frame_interlock_mode =
             select_interlock_mode(&self.m_frame_descriptor, self.platformFeatures());
-        if self.m_frame_interlock_mode == gpu::InterlockMode::msaa
+        if self.m_frame_interlock_mode == gpu::InterlockMode::depthStencil
             && self.m_frame_descriptor.msaaSampleCount == 0
         {
             self.m_frame_descriptor.msaaSampleCount = 4;
@@ -5218,7 +5218,7 @@ impl RenderContext {
     pub fn frameSupportsClipRectsExecutable(&self) -> bool {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_did_begin_frame);
-        self.m_frame_interlock_mode != gpu::InterlockMode::msaa
+        self.m_frame_interlock_mode != gpu::InterlockMode::depthStencil
             || self.platformFeatures().supportsClipPlanes
     }
 
@@ -6566,7 +6566,7 @@ impl LogicalFlush {
             {
                 misc |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
             }
-        } else if context.frameInterlockMode() == gpu::InterlockMode::msaa
+        } else if context.frameInterlockMode() == gpu::InterlockMode::depthStencil
             && draw.blendMode() == nuxie_render_api::BlendMode::SrcOver
         {
             misc |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
@@ -6605,7 +6605,10 @@ impl LogicalFlush {
                 && (current.shaderMiscFlags & compare_mask) == (misc & compare_mask)
                 && images_combine;
             if can_merge && current.baseElement + current.elementCount != base {
-                debug_assert_eq!(context.frameInterlockMode(), gpu::InterlockMode::msaa);
+                debug_assert_eq!(
+                    context.frameInterlockMode(),
+                    gpu::InterlockMode::depthStencil
+                );
                 can_merge = false;
             }
             if context.platformFeatures().supportsClipScissor {
@@ -6940,7 +6943,8 @@ impl LogicalFlush {
                         context.frameDescriptor().renderTargetHeight,
                     );
                 }
-                let all_same_group = context.frameInterlockMode() == gpu::InterlockMode::msaa
+                let all_same_group = context.frameInterlockMode()
+                    == gpu::InterlockMode::depthStencil
                     && !features.supportsBlendAdvancedKHR
                     && (self.m_combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0;
                 let max_subpasses = draw.prepassCount().max(draw.subpassCount()) as i8;
@@ -7133,7 +7137,7 @@ impl LogicalFlush {
                 crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler::LinearClamp(),
                 gpu::BarrierFlags::none,
             ));
-        } else if context.frameInterlockMode() == gpu::InterlockMode::msaa
+        } else if context.frameInterlockMode() == gpu::InterlockMode::depthStencil
             && self.m_flush_desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget
             && features.msaaColorPreserveNeedsDraw
         {
@@ -7196,7 +7200,7 @@ impl LogicalFlush {
                             self.pushBarriersExecutable(gpu::BarrierFlags::drawBatchBreak);
                         }
                     }
-                    gpu::InterlockMode::msaa => {
+                    gpu::InterlockMode::depthStencil => {
                         let mut mask = SORT_GROUP_MASK | SORT_CONTENTS_MASK;
                         if features.supportsBlendAdvancedKHR {
                             mask |= SORT_BLEND_MASK;
@@ -7230,7 +7234,7 @@ impl LogicalFlush {
             }
             if matches!(
                 context.frameInterlockMode(),
-                gpu::InterlockMode::clockwiseAtomic | gpu::InterlockMode::msaa
+                gpu::InterlockMode::clockwiseAtomic | gpu::InterlockMode::depthStencil
             ) && subpass == 0
                 && !batch.is_null()
             {
@@ -7243,7 +7247,7 @@ impl LogicalFlush {
                     current_group = group;
                 }
                 if draw.hasAdvancedBlend()
-                    && (context.frameInterlockMode() != gpu::InterlockMode::msaa
+                    && (context.frameInterlockMode() != gpu::InterlockMode::depthStencil
                         || !features.supportsBlendAdvancedCoherentKHR)
                 {
                     debug_assert!(draw.nextDstRead().is_null());
@@ -7269,7 +7273,10 @@ impl LogicalFlush {
                         has_cwa_clip_read_barrier = true;
                     }
                 } else {
-                    debug_assert_eq!(context.frameInterlockMode(), gpu::InterlockMode::msaa);
+                    debug_assert_eq!(
+                        context.frameInterlockMode(),
+                        gpu::InterlockMode::depthStencil
+                    );
                 }
             }
             prior = Some(signed_key);

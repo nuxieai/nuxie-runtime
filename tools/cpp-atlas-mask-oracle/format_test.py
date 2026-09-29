@@ -1208,8 +1208,8 @@ class FormatTests(unittest.TestCase):
             "directRawTextCase || directDegenerateCubicCase ||",
             ".msaaSampleCount = directOutputCase ? 0u : 4u",
             "(directCase && !directDegenerateCubicCase)",
-            "rive::gpu::DrawType::msaaStrokes",
-            "directDegenerateCubicCase ? rive::gpu::InterlockMode::msaa",
+            "rive::gpu::DrawType::depthStrokes",
+            "directDegenerateCubicCase ? rive::gpu::InterlockMode::depthStencil",
             "rive::gpu::DrawContents::opaquePaint",
             "void onMap(WGPUMapAsyncStatus status,",
             "status == WGPUMapAsyncStatus_Success",
@@ -1297,15 +1297,15 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(
             re.findall(r"DrawType::(\w+)", type_block),
             [
-                "msaaMidpointFanBorrowedCoverage",
-                "msaaMidpointFans",
-                "msaaMidpointFanStencilReset",
-                "msaaMidpointFanBorrowedCoverage",
-                "msaaMidpointFans",
-                "msaaMidpointFanStencilReset",
-                "msaaMidpointFanBorrowedCoverage",
-                "msaaMidpointFans",
-                "msaaMidpointFanStencilReset",
+                "stencilMidpointFanBorrowedCoverage",
+                "stencilMidpointFans",
+                "stencilMidpointFanReset",
+                "stencilMidpointFanBorrowedCoverage",
+                "stencilMidpointFans",
+                "stencilMidpointFanReset",
+                "stencilMidpointFanBorrowedCoverage",
+                "stencilMidpointFans",
+                "stencilMidpointFanReset",
             ],
         )
         contents_block = assertion[
@@ -2209,8 +2209,8 @@ class FormatTests(unittest.TestCase):
             "kMsaaReferenceRegistrySha256",
             "facts.drawBatches.empty()",
             'std::strcmp(msaaReference->id, "gm-poly_clockwise-msaa") == 0',
-            "rive::gpu::DrawType::msaaMidpointFanPathsStencil",
-            "rive::gpu::DrawType::msaaMidpointFanBorrowedCoverage",
+            "rive::gpu::DrawType::stencilMidpointFanWinding",
+            "rive::gpu::DrawType::stencilMidpointFanBorrowedCoverage",
             'fail("poly MSAA reference must preserve the exact fill-rule draw schedule")',
         ):
             self.assertIn(fragment, exporter)

@@ -467,6 +467,9 @@ impl SemanticManager {
             }
             if p.role != n.role
                 || p.label != n.label
+                || p.value != n.value
+                || p.hint != n.hint
+                || p.heading_level != n.heading_level
                 || p.state_flags != n.state_flags
                 || p.trait_flags != n.trait_flags
             {
@@ -565,11 +568,6 @@ impl SemanticManager {
         if !structure && !bounds && !content {
             return;
         }
-        let rederive = content
-            && self
-                .dirty_content_nodes
-                .iter()
-                .any(|id| self.excluded_ids.contains(id));
         let mut needs_reorder = false;
         if bounds && !structure && !self.last_flat_snapshot.is_empty() {
             let mut parents = Vec::new();
@@ -596,6 +594,21 @@ impl SemanticManager {
                 && self.roots.len() > 1
                 && !Self::nodes_in_visual_order(&self.roots));
         }
+        // Content changes can invalidate absorbed children, a derived label,
+        // or an interactive node whose explicit label has been cleared. The
+        // incremental path reuses the previous derivation, so flatten again.
+        let rederive = content
+            && self.dirty_content_nodes.iter().any(|id| {
+                if self.excluded_ids.contains(id) || self.derived_labels.contains_key(id) {
+                    return true;
+                }
+                self.nodes_by_id.get(id).is_some_and(|node| {
+                    let node = node.borrow();
+                    is_interactive_role_value(node.role)
+                        && node.label.is_empty()
+                        && !node.children.is_empty()
+                })
+            });
         if structure || rederive || needs_reorder || self.last_flat_snapshot.is_empty() {
             if structure || needs_reorder || self.last_flat_snapshot.is_empty() {
                 Self::sort_nodes(&mut self.roots);

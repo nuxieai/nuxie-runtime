@@ -2222,17 +2222,19 @@
 //                               uint32_t renderTargetHeight,
 //                               Mat2D& paintMatrixOut,
 //                               float (&gradTextureHorizontalSpanOut)[2]);
+//
+// float featherRadiusFromFeather(float feather);
+//
 // } // namespace rive::gpu
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/gpu.hpp.
-// Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+// Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
 // Ownership unit: generic-gpu-contract.
 // Include/dependency authority: the pinned header and source-shaped modules.
 
-// Rust declaration pass for the complete source header above.  The source
-// comments are intentionally retained verbatim; this file is a mechanical
-// owner and is not the place to introduce a cross-backend GPU abstraction.
+// Rust declaration pass for the complete source header above. The source
+// comments retain declaration order for the mechanical owner.
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -2243,6 +2245,7 @@ use core::marker::PhantomData;
 use core::ops::{BitAnd, BitOr, Not};
 use core::ptr::NonNull;
 
+pub use crate::mechanical_port::source::renderer::src::gpu_cpp::featherRadiusFromFeather;
 pub use nuxie_render_api::{AABBu16, IntegerAabb as IAABB};
 use nuxie_render_api::{Aabb as AABB, BlendMode, ColorInt, Mat2D, Vec2D};
 

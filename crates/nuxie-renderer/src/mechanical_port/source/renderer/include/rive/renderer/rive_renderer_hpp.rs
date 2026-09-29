@@ -1,6 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
  * The literal source is retained below in declaration/order form.
  */
 
@@ -27,6 +27,15 @@
 // class GrInnerFanTriangulator;
 // class RiveRenderPath;
 // class RiveRenderPaint;
+//
+// // Common parameters to describe a path's stroke (used internally across the
+// // RiveRenderer's classes)
+// struct StrokeParams
+// {
+//     float thickness;
+//     StrokeJoin join;
+//     StrokeCap cap;
+// };
 //
 // // Renderer implementation for Rive's pixel local storage renderer.
 // class RiveRenderer : public Renderer
@@ -80,7 +89,9 @@
 //
 // private:
 //     void clipRectImpl(AABB, const RiveRenderPath* originalPath);
-//     void clipPathImpl(const RiveRenderPath*);
+//     void clipPathImpl(const RiveRenderPath*,
+//                       std::optional<StrokeParams> = {},
+//                       float feather = 0.0f);
 //
 //     // Clips and pushes the given draw to m_context. If the clipped draw is too
 //     // complex to be supported by the GPU buffers, even after a logical flush,
@@ -121,13 +132,17 @@
 //         ClipElement(const Mat2D&,
 //                     const RiveRenderPath*,
 //                     FillRule,
-//                     IAABB pixelBounds);
+//                     IAABB pixelBounds,
+//                     std::optional<StrokeParams>,
+//                     float feather);
 //         ~ClipElement();
 //
 //         void reset(const Mat2D&,
 //                    const RiveRenderPath*,
 //                    FillRule,
-//                    IAABB pixelBounds);
+//                    IAABB pixelBounds,
+//                    std::optional<StrokeParams>,
+//                    float feather);
 //         bool isEquivalent(const Mat2D&, const RiveRenderPath*) const;
 //
 //         Mat2D matrix;
@@ -138,6 +153,9 @@
 //         FillRule fillRule; // Bc RiveRenderPath fillRule can mutate during the
 //                            // artboard draw process.
 //         uint32_t clipID;
+//
+//         std::optional<StrokeParams> stroke;
+//         float feather;
 //     };
 //     std::vector<ClipElement> m_clipStack;
 //
@@ -149,7 +167,6 @@
 //     rcp<RiveRenderPath> m_unitRectPath;
 // };
 // } // namespace rive
-//
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -161,8 +178,15 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp a
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DrawUniquePtr;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
-use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath};
+use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath, StrokeCap, StrokeJoin};
 use std::mem::ManuallyDrop;
+
+#[derive(Clone, Copy)]
+pub struct StrokeParams {
+    pub thickness: f32,
+    pub join: StrokeJoin,
+    pub cap: StrokeCap,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -199,6 +223,8 @@ pub struct ClipElement {
     pub path: Option<rcp<RiveRenderPath>>,
     pub fillRule: FillRule,
     pub clipID: u32,
+    pub stroke: Option<StrokeParams>,
+    pub feather: f32,
 }
 impl ClipElement {
     pub unsafe fn new(
@@ -206,6 +232,8 @@ impl ClipElement {
         path: &RiveRenderPath,
         fill_rule: FillRule,
         pixel_bounds: gpu::IAABB,
+        stroke: Option<StrokeParams>,
+        feather: f32,
     ) -> Self {
         let mut value = Self {
             matrix,
@@ -221,8 +249,10 @@ impl ClipElement {
             },
             fillRule: fill_rule,
             clipID: 0,
+            stroke,
+            feather,
         };
-        unsafe { value.reset(matrix, path, fill_rule, pixel_bounds) };
+        unsafe { value.reset(matrix, path, fill_rule, pixel_bounds, stroke, feather) };
         value
     }
     pub unsafe fn reset(
@@ -231,6 +261,8 @@ impl ClipElement {
         path: &RiveRenderPath,
         fill_rule: FillRule,
         pixel_bounds: gpu::IAABB,
+        stroke: Option<StrokeParams>,
+        feather: f32,
     ) {
         self.matrix = matrix;
         self.rawPathMutationID = path.getRawPathMutationID();
@@ -245,6 +277,8 @@ impl ClipElement {
         self.fillRule = fill_rule;
         self.pixelBounds = pixel_bounds;
         self.clipID = 0;
+        self.stroke = stroke;
+        self.feather = feather;
     }
     pub fn isEquivalent(&self, matrix: Mat2D, path: &RiveRenderPath) -> bool {
         self.matrix == matrix

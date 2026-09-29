@@ -12,6 +12,13 @@ pub(crate) const TESS_TEXTURE_WIDTH: i32 = 2048;
 pub(crate) const MIP_MAP_LOD_BIAS: f32 = -0.5;
 pub(crate) const FEATHER_JOIN_CONTOUR_FLAG: u32 = 1 << 26;
 
+pub(crate) const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 3.0;
+
+pub(crate) fn feather_radius_from_feather(feather: f32) -> f32 {
+    // Blur magnitudes customarily span -1 standard deviation to +1.
+    feather * (GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS / 2.0)
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub(crate) struct GradientSpan {

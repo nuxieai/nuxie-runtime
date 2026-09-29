@@ -4951,6 +4951,7 @@ fn wave_b_focus_test_070_direct_port_expected_red() {
 
     binding_set_number(&opacity, 0.0);
     fixture.advance(0.016);
+    assert!(binding_primary(&manager).is_none());
     fixture.advance(0.016);
     assert!(binding_primary(&manager).is_none());
     fixture.artboard.draw(&mut renderer);

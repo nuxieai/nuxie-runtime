@@ -307,6 +307,24 @@ fn root_artboard(mut artboard: CoreHandle) -> CoreHandle {
     artboard
 }
 
+fn focus_root_artboard(node: &FocusNodeRef) -> Option<CoreHandle> {
+    let mut current = Some(node.clone());
+    while let Some(node) = current {
+        let focusable = node.borrow().focusable();
+        if let Some(artboard) =
+            focusable.and_then(|focusable| focusable.borrow().focusable_artboard())
+        {
+            return Some(root_artboard(artboard));
+        }
+        current = node.borrow().parent();
+    }
+    None
+}
+
+fn belongs_to_another_root(node: &FocusNodeRef, root: &Option<CoreHandle>) -> bool {
+    focus_root_artboard(node).is_some_and(|artboard| Some(artboard) != *root)
+}
+
 fn root_position(node: &FocusNodeRef) -> Option<(f32, f32)> {
     let node = node.borrow();
     if let Some(focusable) = node.focusable.as_ref() {
@@ -489,13 +507,62 @@ impl FocusManager {
     }
 
     pub fn drop_focus_if_focus_target_hidden(&mut self) {
-        if self
-            .primary_focus
-            .as_ref()
-            .is_some_and(|node| !eligible_for_traversal(node))
-        {
-            self.clear_focus();
+        let Some(focus) = self.primary_focus.as_ref() else {
+            return;
+        };
+        if eligible_for_traversal(focus) {
+            return;
         }
+        // Stay in this ancestor chain; unrelated manager roots are not a
+        // fallback. Each ancestor prefers its first eligible leaf over itself.
+        let mut ancestor = focus.borrow().parent();
+        while let Some(node) = ancestor {
+            if let Some(leaf) = self.get_first_leaf(&node) {
+                self.set_focus(leaf);
+                return;
+            }
+            ancestor = node.borrow().parent();
+        }
+        self.clear_focus();
+    }
+
+    pub fn drop_focus_if_focus_target_hidden_for_root(&mut self, root: Option<CoreHandle>) {
+        let Some(focus) = self.primary_focus.as_ref() else {
+            return;
+        };
+        if belongs_to_another_root(focus, &root) {
+            return;
+        }
+        self.drop_focus_if_focus_target_hidden();
+    }
+
+    pub fn descend_focus_to_leaf(&mut self, root: Option<CoreHandle>) {
+        self.apply_descend_focus_to_leaf(root, false);
+    }
+
+    pub fn descend_focus_to_leaf_all_roots(&mut self) {
+        self.apply_descend_focus_to_leaf(None, true);
+    }
+
+    fn apply_descend_focus_to_leaf(&mut self, root: Option<CoreHandle>, all_roots: bool) {
+        let Some(focus) = self.primary_focus.as_ref() else {
+            return;
+        };
+        if focus.borrow().children().is_empty() {
+            return;
+        }
+        let Some(leaf) = self.get_first_leaf(focus) else {
+            return;
+        };
+        if Rc::ptr_eq(&leaf, focus) {
+            return;
+        }
+        // Scope the destination, not the existing focus. Host-created nodes
+        // without an attributable artboard are never deferred.
+        if !all_roots && belongs_to_another_root(&leaf, &root) {
+            return;
+        }
+        self.set_focus(leaf);
     }
 
     pub fn set_focus(&mut self, mut node: FocusNodeRef) {
@@ -846,23 +913,23 @@ impl FocusManager {
     }
 
     fn get_first_leaf(&self, node: &FocusNodeRef) -> Option<FocusNodeRef> {
-        for child in self.get_traversable_nodes(Some(node)) {
-            if let Some(leaf) = self.get_first_leaf(&child) {
+        let children = self.get_traversable_nodes(Some(node));
+        for child in &children {
+            if let Some(leaf) = self.get_first_leaf(child) {
                 return Some(leaf);
             }
         }
-        (eligible_for_traversal(node) && !has_eligible_traversable_child(node))
-            .then(|| node.clone())
+        (children.is_empty() && eligible_for_traversal(node)).then(|| node.clone())
     }
 
     fn get_last_leaf(&self, node: &FocusNodeRef) -> Option<FocusNodeRef> {
-        for child in self.get_traversable_nodes(Some(node)).into_iter().rev() {
-            if let Some(leaf) = self.get_last_leaf(&child) {
+        let children = self.get_traversable_nodes(Some(node));
+        for child in children.iter().rev() {
+            if let Some(leaf) = self.get_last_leaf(child) {
                 return Some(leaf);
             }
         }
-        (eligible_for_traversal(node) && !has_eligible_traversable_child(node))
-            .then(|| node.clone())
+        (children.is_empty() && eligible_for_traversal(node)).then(|| node.clone())
     }
 
     fn first_eligible_leaf_from(

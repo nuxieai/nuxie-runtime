@@ -2108,8 +2108,11 @@ impl RuntimeStateMachineInstanceHandle {
             let (manager, root) =
                 self.with_instance(|machine| (machine.focus_manager(), machine.root_artboard()));
             if let Some(manager) = manager {
-                manager
-                    .with_focus_manager_mut(|manager| manager.process_pending_focus_requests(root));
+                manager.with_focus_manager_mut(|manager| {
+                    manager.process_pending_focus_requests(root.clone());
+                    manager.drop_focus_if_focus_target_hidden_for_root(root.clone());
+                    manager.descend_focus_to_leaf(root);
+                });
             }
             if self.with_instance_mut(StateMachineInstance::try_change_state) {
                 self.with_instance_mut(|machine| machine.advance(0.0, false));

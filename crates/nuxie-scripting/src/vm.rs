@@ -901,14 +901,15 @@ trait ProtectedScriptCall {
 
 impl ProtectedScriptCall for Function {
     fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
-        let result = self.call(args);
         let lua = self.lua();
-        close_orphan_script_work(&lua);
+        let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&lua);
+        let result = self.call(args);
+        exit_script_call_gpu_scope(&lua, &scope);
         result
     }
 }
 
-fn close_orphan_script_work(lua: &Lua) {
+fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGpuScope) {
     if let Some(bindings) = RendererBindings::for_lua(lua) {
         let logging = lua
             .app_data_ref::<LoggingScriptingContext>()
@@ -920,11 +921,14 @@ fn close_orphan_script_work(lua: &Lua) {
             Err(error) => logging.log_error(&error),
         };
         report(
-            crate::gpu_canvas::close_orphan_render_pass(&bindings),
+            crate::gpu_canvas::close_orphan_render_pass(
+                &bindings,
+                scope.inherited_render_pass.as_ref(),
+            ),
             "GPU render pass left open at script return. Call :finish() on render passes before returning.",
         );
         report(
-            lua_canvas::close_orphan_canvas_frames(&bindings),
+            lua_canvas::close_orphan_canvas_frames(&bindings, scope.open_canvas_frame_token),
             "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
         );
     }
@@ -1185,8 +1189,9 @@ impl LuaScriptInstance {
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
+        let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&lua);
         let result = table.call_function_truthy(ScriptMethod::Advance.as_str(), call_args);
-        close_orphan_script_work(&lua);
+        exit_script_call_gpu_scope(&lua, &scope);
         result.map_err(|error| self.script_error(error))
     }
 
@@ -2196,8 +2201,9 @@ impl ScriptVm {
         self.ensure_initialized()?;
         self.reserve_parent_stack_headroom()?;
         self.reset_execution_budget();
+        let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&self.lua);
         let result = self.lua.load(source).eval();
-        close_orphan_script_work(&self.lua);
+        exit_script_call_gpu_scope(&self.lua, &scope);
         self.track_resource_result(result)
     }
 
@@ -5030,6 +5036,9 @@ mod bytecode_validation_tests {
         assert!(type_version.to_string().contains("type version"));
     }
 }
+
+#[cfg(test)]
+mod script_call_gpu_scope_tests;
 
 #[cfg(test)]
 mod gpu_canvas_tests {

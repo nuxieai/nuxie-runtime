@@ -131,8 +131,8 @@ pub(crate) fn allocate_script_render_canvas(
 }
 
 /// Called after every protected call, including a script error.
-pub(crate) fn close_orphan_canvas_frames(bindings: &RendererBindings) -> Result<bool> {
-    let frames = bindings.take_open_canvas_frames();
+pub(crate) fn close_orphan_canvas_frames(bindings: &RendererBindings, token: u64) -> Result<bool> {
+    let frames = bindings.take_open_canvas_frames_from(token);
     let had_orphans = !frames.is_empty();
     for userdata in frames {
         let mut canvas = userdata.borrow_mut::<ScriptedCanvas>()?;

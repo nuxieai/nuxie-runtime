@@ -12,13 +12,32 @@ use super::view_model::ScriptViewModelFrameContext;
 pub(crate) struct RendererBindings {
     render_context: PersistentRenderContext,
     routing: Rc<RefCell<ScriptingRouting>>,
-    open_canvas_frames: Rc<RefCell<Vec<AnyUserData>>>,
+    open_canvas_frames: Rc<RefCell<OpenCanvasFrames>>,
     pub(super) view_model_frame_context: ScriptViewModelFrameContext,
 }
 
 #[derive(Default)]
 struct ScriptingRouting {
     render_context: Option<PersistentFactoryContext>,
+}
+
+struct OpenCanvasFrame {
+    token: u64,
+    canvas: AnyUserData,
+}
+
+struct OpenCanvasFrames {
+    frames: Vec<OpenCanvasFrame>,
+    next_token: u64,
+}
+
+impl Default for OpenCanvasFrames {
+    fn default() -> Self {
+        Self {
+            frames: Vec::new(),
+            next_token: 1,
+        }
+    }
 }
 
 impl RendererBindings {
@@ -36,17 +55,38 @@ impl RendererBindings {
     }
 
     pub(crate) fn register_open_canvas_frame(&self, canvas: AnyUserData) {
-        self.open_canvas_frames.borrow_mut().push(canvas);
+        let mut open = self.open_canvas_frames.borrow_mut();
+        let token = open.next_token;
+        open.next_token = token.wrapping_add(1);
+        open.frames.push(OpenCanvasFrame { token, canvas });
     }
 
     pub(crate) fn unregister_open_canvas_frame(&self, canvas: &AnyUserData) {
-        self.open_canvas_frames
-            .borrow_mut()
-            .retain(|open| open != canvas);
+        let mut open = self.open_canvas_frames.borrow_mut();
+        if let Some(index) = open.frames.iter().position(|frame| &frame.canvas == canvas) {
+            open.frames.remove(index);
+        }
     }
 
-    pub(crate) fn take_open_canvas_frames(&self) -> Vec<AnyUserData> {
-        std::mem::take(&mut *self.open_canvas_frames.borrow_mut())
+    pub(crate) fn open_canvas_frame_count(&self) -> usize {
+        self.open_canvas_frames.borrow().frames.len()
+    }
+
+    pub(crate) fn next_open_canvas_frame_token(&self) -> u64 {
+        self.open_canvas_frames.borrow().next_token
+    }
+
+    pub(crate) fn take_open_canvas_frames_from(&self, token: u64) -> Vec<AnyUserData> {
+        let mut taken = Vec::new();
+        self.open_canvas_frames.borrow_mut().frames.retain(|frame| {
+            if frame.token >= token {
+                taken.push(frame.canvas.clone());
+                false
+            } else {
+                true
+            }
+        });
+        taken
     }
 
     pub(crate) fn verify_render_context(&self, factory: &mut dyn RenderFactory) -> Result<()> {

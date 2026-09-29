@@ -73,37 +73,44 @@ impl NestedArtboardLayout {
         self.update_height_override();
     }
 
-    // Compose the layout slot minus mounted origin in parent space before
-    // constraints run. A post-update recomposition would erase their result.
-    pub fn compose_world_transform(&mut self) {
+    // Apply the layout slot minus mounted origin after constraints, which may
+    // replace the composed translation. Rotate/scale placement in the parent's
+    // frame without adding its translation a second time.
+    pub(crate) fn apply_layout_placement(&mut self) {
         let Some(instance) = self.base.base.artboard_instance_handle(0) else {
-            self.base.base.compose_world_transform();
             return;
         };
         let mut base = instance.with_artboard(|instance| {
             Vec2D::new(instance.layout_x(), instance.layout_y()) - instance.origin()
         });
-        let parent = self
-            .base
-            .base
-            .parent_handle()
-            .expect("mounted NestedArtboardLayout parent");
-        let (parent_origin, parent_world) = parent
-            .with(|parent| {
-                (
-                    parent.as_artboard().map(Artboard::origin),
-                    parent
-                        .as_world_transform_component()
-                        .map(|parent| *parent.world_transform())
-                        .unwrap_or_else(Mat2D::identity),
-                )
-            })
-            .expect("live NestedArtboardLayout parent");
-        if let Some(origin) = parent_origin {
+        if let Some(origin) = self.base.base.parent_handle().and_then(|parent| {
+            parent
+                .with(|parent| parent.as_artboard().map(Artboard::origin))
+                .flatten()
+        }) {
             base += origin;
         }
-        *self.base.base.mutable_world_transform() =
-            parent_world * Mat2D::from_translation(base) * *self.base.base.transform();
+        let parent_world = self
+            .base
+            .base
+            .parent_transform_component()
+            .and_then(|parent| {
+                parent
+                    .with(|parent| {
+                        parent
+                            .as_world_transform_component()
+                            .map(|parent| *parent.world_transform())
+                    })
+                    .flatten()
+            });
+        let world = self.base.base.mutable_world_transform();
+        if let Some(parent) = parent_world {
+            world[4] += parent[0] * base.x + parent[2] * base.y;
+            world[5] += parent[1] * base.x + parent[3] * base.y;
+        } else {
+            world[4] += base.x;
+            world[5] += base.y;
+        }
     }
 
     pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {

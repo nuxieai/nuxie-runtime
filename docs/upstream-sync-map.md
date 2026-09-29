@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `bc97fa18fdd658f7c0c80f935121276d3b28ffaf`
+- LAST_SYNCED_SHA: `a6b6723ba291f6f00888c09a1f975c6c23936095`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 141 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 141 require a Rust translation.
+  There are 140 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 140 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `a6b6723ba291f6f00888c09a1f975c6c23936095` | Apply nested-artboard layout placement after constraints, using the mounted instance's origin and the parent's linear transform; remove the superseded world-composition override. Translate all six constraint/follow-path/origin-override regressions with the three exact upstream fixtures and original tolerances. Retain the approved Taffy boundary. | — |
 | `bc97fa18fdd658f7c0c80f935121276d3b28ffaf` | Carry backend display scale into Luau layout-resize callbacks, with upstream default/equality behavior, snapshot-based registered-object notifications, and known-size guarding before redispatch. Preserve the separate local context pixel-ratio extension. The Wasm execution owner's v2/legacy export dispatch remains deferred under UNIV-3728; shared runtime and Luau behavior are not deferred. | — |
 | `2f3cf360a4637718d1f2fcab301666b2664b7cc8` | Mirror the RHI shader's four-sample destination-fetch branch and retain coherent shared shader-generation inputs; this does not introduce or qualify an Unreal renderer. The `RIVE_NO_FILESYSTEM` guard affects only upstream's optional tarnished-Silver file writer: Rust's `SerializingFactory` exposes in-memory bytes and has no corresponding file-writing method or filesystem dependency to guard. Serialization bytes and runtime playback are unchanged. | — |
 | `9ed5b5168d95aab07e873db341fb65613d317cfc` | **SKIP:** exact 128-bit fractional-index comparison is entirely inside `WITH_RIVE_EDITOR`, in the native editor-only sibling-order owner already excluded at d4fe1022. Runtime `.riv` deserialization and playback do not use this type. No native editor ordering API is introduced or claimed; the public delta otherwise changes only `.rive_head`. | — |

@@ -2142,10 +2142,7 @@ pub fn component_update_handle(
             if let Some(node) = object.as_node_mut() {
                 node.update_world_transform_before_super();
             }
-            let overridden = if let Some(nested) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>() {
-                nested.compose_world_transform();
-                true
-            } else if let Some(layout) = object.as_layout_component_mut() {
+            let overridden = if let Some(layout) = object.as_layout_component_mut() {
                 layout.compose_world_transform();
                 true
             } else if let Some(text) = object.as_text_mut() {
@@ -2399,6 +2396,11 @@ pub fn component_update_constraints_handle(handle: &CoreHandle) {
             }
         });
     }
+    handle.with_mut(|object| {
+        if let Some(nested) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
+            nested.apply_layout_placement();
+        }
+    });
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

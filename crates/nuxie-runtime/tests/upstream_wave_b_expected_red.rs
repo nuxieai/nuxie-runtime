@@ -3689,6 +3689,8 @@ fn binding_empty_focus_machine() -> (
         RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
     ));
     let instance = Artboard::instance_from_handle(&source).expect("empty artboard instance");
+    // Directly-instanced artboards skip File::instanceArtboard's root manager.
+    instance.ensure_focus_manager();
     let definition = arena.insert(StateMachine::default());
     let machine = StateMachineInstance::new(definition, instance.downgrade());
     (arena, instance, machine)
@@ -4100,6 +4102,7 @@ fn wave_b_focus_test_037_direct_port_expected_red() {
     scope.borrow_mut().set_can_focus(false);
     scope.borrow_mut().set_can_traverse(false);
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, scope.clone(), None));
     assert!(smi.with_instance(StateMachineInstance::has_focus_nodes) == false);
 }
@@ -4114,12 +4117,14 @@ fn wave_b_focus_test_038_direct_port_expected_red() {
     scope.borrow_mut().set_can_traverse(false);
     scope.borrow_mut().set_can_touch(false);
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, scope.clone(), None));
 
     assert!(smi.with_instance(StateMachineInstance::has_focus_nodes) == false);
 
     let leaf = FocusNode::new(None);
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| {
             manager.add_child(Some(scope.clone()), leaf.clone(), None)
         });
@@ -4140,6 +4145,7 @@ fn wave_b_focus_test_039_direct_port_expected_red() {
     focus_data.base = base;
     let node = focus_data.focus_node();
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node, None));
     assert!(smi.with_instance(StateMachineInstance::has_focus_nodes));
 }
@@ -4246,7 +4252,9 @@ fn wave_b_focus_test_042_direct_port_expected_red() {
 fn wave_b_focus_test_043_direct_port_expected_red() {
     let (_arena, _instance, smi) = binding_empty_focus_machine();
 
-    let fm = smi.with_instance(StateMachineInstance::focus_manager);
+    let fm = smi
+        .with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager");
     let f1 = binding_focus_observer();
     let f2 = binding_focus_observer();
     let node1 = FocusNode::new(Some(f1.clone()));
@@ -4266,7 +4274,9 @@ fn wave_b_focus_test_043_direct_port_expected_red() {
 fn wave_b_focus_test_044_direct_port_expected_red() {
     let (_arena, _instance, smi) = binding_empty_focus_machine();
 
-    let fm = smi.with_instance(StateMachineInstance::focus_manager);
+    let fm = smi
+        .with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager");
     let f1 = binding_focus_observer();
     let f2 = binding_focus_observer();
     let node1 = FocusNode::new(Some(f1.clone()));
@@ -4286,7 +4296,9 @@ fn wave_b_focus_test_044_direct_port_expected_red() {
 fn wave_b_focus_test_045_direct_port_expected_red() {
     let (_arena, _instance, smi) = binding_empty_focus_machine();
 
-    let fm = smi.with_instance(StateMachineInstance::focus_manager);
+    let fm = smi
+        .with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager");
     let f1 = binding_focus_observer();
     let f2 = binding_focus_observer();
     let node1 = FocusNode::new(Some(f1.clone()));
@@ -4314,10 +4326,13 @@ fn wave_b_focus_test_046_direct_port_expected_red() {
     assert!(smi.with_instance(StateMachineInstance::has_focus_nodes) == false);
 
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node1.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node2.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(node1.clone()));
 
     assert!(smi.with_instance(StateMachineInstance::has_focus_nodes) == true);
@@ -4359,8 +4374,10 @@ fn wave_b_focus_test_050_direct_port_expected_red() {
     let f = binding_focus_observer();
     let node = FocusNode::new(Some(f.clone()));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(node.clone()));
 
     let state = smi.with_instance(StateMachineInstance::focus_state);
@@ -4377,8 +4394,10 @@ fn wave_b_focus_test_051_direct_port_expected_red() {
     kf.borrow_mut().accepts_keyboard = true;
     let node = FocusNode::new(Some(kf.clone()));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(node.clone()));
 
     let state = smi.with_instance(StateMachineInstance::focus_state);
@@ -4395,8 +4414,10 @@ fn wave_b_focus_test_052_direct_port_expected_red() {
     kf.borrow_mut().accepts_keyboard = true;
     let node = FocusNode::new(Some(kf.clone()));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(node.clone()));
 
     assert!(
@@ -4406,6 +4427,7 @@ fn wave_b_focus_test_052_direct_port_expected_red() {
     );
 
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(FocusManager::clear_focus);
 
     let state = smi.with_instance(StateMachineInstance::focus_state);
@@ -4424,11 +4446,14 @@ fn wave_b_focus_test_053_direct_port_expected_red() {
     let plainNode = FocusNode::new(Some(plain.clone()));
     let kfNode = FocusNode::new(Some(kf.clone()));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, plainNode.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, kfNode.clone(), None));
 
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(plainNode.clone()));
     {
         let state = smi.with_instance(StateMachineInstance::focus_state);
@@ -4437,6 +4462,7 @@ fn wave_b_focus_test_053_direct_port_expected_red() {
     }
 
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(kfNode.clone()));
     {
         let state = smi.with_instance(StateMachineInstance::focus_state);
@@ -4445,6 +4471,7 @@ fn wave_b_focus_test_053_direct_port_expected_red() {
     }
 
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(plainNode.clone()));
     {
         let state = smi.with_instance(StateMachineInstance::focus_state);
@@ -4487,8 +4514,10 @@ fn wave_b_focus_test_055_direct_port_expected_red() {
     kf.borrow_mut().accepts_keyboard = true;
     let node = FocusNode::new(Some(kf.clone()));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.add_child(None, node.clone(), None));
     smi.with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager")
         .with_focus_manager_mut(|manager| manager.set_focus(node.clone()));
 
     assert!(
@@ -4625,7 +4654,9 @@ fn wave_b_focus_test_061_direct_port_expected_red() {
 fn wave_b_focus_test_062_direct_port_expected_red() {
     let (_arena, _instance, smi) = binding_empty_focus_machine();
 
-    let fm = smi.with_instance(StateMachineInstance::focus_manager);
+    let fm = smi
+        .with_instance(StateMachineInstance::focus_manager)
+        .expect("artboard focus manager");
     let f1 = binding_focus_observer();
     let node1 = FocusNode::new(Some(f1.clone()));
     fm.with_focus_manager_mut(|manager| manager.add_child(None, node1.clone(), None));
@@ -4645,6 +4676,7 @@ fn wave_b_focus_test_063_direct_port_expected_red() {
 
     assert!(
         smi.with_instance(StateMachineInstance::focus_manager)
+            .expect("artboard focus manager")
             .with_focus_manager(|manager| manager.primary_focus().is_none())
     );
 
@@ -4653,6 +4685,7 @@ fn wave_b_focus_test_063_direct_port_expected_red() {
 
     assert!(
         smi.with_instance(StateMachineInstance::focus_manager)
+            .expect("artboard focus manager")
             .with_focus_manager(|manager| manager.primary_focus().is_none())
     );
 }
@@ -4735,6 +4768,7 @@ impl BindingFocusFixture {
     fn manager(&self) -> RuntimeFocusManagerHandle {
         self.machine
             .with_instance(|machine| machine.focus_manager())
+            .expect("artboard focus manager")
     }
 
     fn bindable(&self, name: &str) -> RuntimeBindableArtboardHandle {
@@ -4883,7 +4917,8 @@ fn wave_b_focus_test_070_direct_port_expected_red() {
         .with_instance_mut(|machine| machine.bind_view_model_instance(instance));
     let manager = fixture
         .machine
-        .with_instance(|machine| machine.focus_manager());
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     let mut renderer = fixture.silver.borrow().make_renderer();
 
     fixture.advance(0.016);
@@ -5002,7 +5037,8 @@ fn wave_b_focus_test_071_direct_port_expected_red() {
         .with_instance_mut(|machine| machine.bind_view_model_instance(instance));
     let manager = fixture
         .machine
-        .with_instance(|machine| machine.focus_manager());
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
@@ -5073,7 +5109,8 @@ fn wave_b_focus_test_072_direct_port_expected_red() {
         .with_instance_mut(|machine| machine.bind_view_model_instance(instance));
     let manager = fixture
         .machine
-        .with_instance(|machine| machine.focus_manager());
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
@@ -5261,7 +5298,8 @@ fn wave_b_focus_test_075_direct_port_expected_red() {
         .with_instance_mut(|machine| machine.bind_view_model_instance(instance));
     let manager = fixture
         .machine
-        .with_instance(|machine| machine.focus_manager());
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.advance(0.1);
     fixture.artboard.draw(&mut renderer);
@@ -5367,7 +5405,8 @@ fn wave_b_focus_test_078_direct_port_expected_red() {
         .with_instance_mut(|machine| machine.bind_view_model_instance(instance));
     let manager = fixture
         .machine
-        .with_instance(|machine| machine.focus_manager());
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
@@ -5476,7 +5515,7 @@ fn wave_b_focus_test_080_direct_port_expected_red() {
     assert!(
         !item_machine
             .with_instance(|machine| machine.focus_manager())
-            .ptr_eq(&manager)
+            .is_some_and(|current| current.ptr_eq(&manager))
     );
 
     fixture.artboard.cleanup_focus_tree();
@@ -5495,6 +5534,7 @@ fn wave_b_focus_test_080_direct_port_expected_red() {
     assert!(
         item_machine
             .with_instance(|machine| machine.focus_manager())
+            .expect("artboard focus manager")
             .ptr_eq(&manager)
     );
 }
@@ -5662,6 +5702,7 @@ fn wave_b_focus_test_083_direct_port_expected_red() {
     assert!(
         bound_machine
             .with_instance(|machine| machine.focus_manager())
+            .expect("artboard focus manager")
             .ptr_eq(&manager)
     );
 }
@@ -6175,6 +6216,7 @@ fn wave_b_gamepad_test_007_direct_port_expected_red() {
         fixture
             .machine
             .with_instance(|machine| machine.focus_manager())
+            .expect("artboard focus manager")
             .with_focus_manager_mut(FocusManager::focus_next);
         fixture.silver.borrow_mut().add_frame();
         let mut wire = BindingGamepadWire::new();

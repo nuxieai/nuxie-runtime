@@ -237,7 +237,9 @@ fn listener_action_script_receives_pointer_types_and_the_data() {
     machine.advance_and_apply(0.016);
     assert_context(&view_model, "", "click", "", 250.0, 251.0, false);
 
-    let focus_manager = machine.with_instance(|machine| machine.focus_manager());
+    let focus_manager = machine
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     focus_manager.with_focus_manager_mut(|manager| manager.focus_next());
     machine.advance_and_apply(0.016);
     assert_context(&view_model, "", "click", "", 250.0, 251.0, true);

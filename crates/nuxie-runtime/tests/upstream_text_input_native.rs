@@ -225,6 +225,58 @@ fn cursor_has_local_path(cursor: &CoreHandle) -> bool {
 }
 
 #[test]
+fn losing_focus_clears_the_text_input_selection() {
+    use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let find = |type_key| {
+        artboard
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .find(|object| object.is_type_of(type_key))
+                    .cloned()
+            })
+            .expect("authored child")
+    };
+    let cursor = find(TextInputCursor::TYPE_KEY);
+    assert!(!with_input(&input, |input| input.is_focused()));
+    assert!(!cursor_has_local_path(&cursor));
+    let focus = find(FocusData::TYPE_KEY);
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert!(with_input(&input, |input| input.is_focused()));
+    assert!(cursor_has_local_path(&cursor));
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into());
+        input.raw_text_input().select_all();
+    });
+    assert!(with_input(&input, |input| input
+        .raw_text_input()
+        .cursor()
+        .has_selection()));
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(with_input(&input, |input| input
+        .raw_text_input()
+        .cursor()
+        .is_collapsed()));
+    assert_eq!(
+        with_input(&input, |input| input
+            .raw_text_input()
+            .cursor()
+            .end()
+            .code_point_index()),
+        11
+    );
+    assert!(!with_input(&input, |input| input.is_focused()));
+    assert!(!cursor_has_local_path(&cursor));
+}
+
+#[test]
 fn text_input_cursor_blinks_while_focused() {
     use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
     let (_file, artboard, _input) = input_fixture();
@@ -482,7 +534,9 @@ fn selected_text_reaches_host_through_focus_data_and_structural_focus_child() {
                 .cloned()
         })
         .expect("TextInput's FocusData child");
-    let manager = machine.with_instance(|machine| machine.focus_manager());
+    let manager = machine
+        .with_instance(|machine| machine.focus_manager())
+        .expect("artboard focus manager");
     machine.with_instance_mut(|machine| machine.set_focus(Some(focus_data)));
     with_input(&text_input, |input| {
         let raw = input.raw_text_input();

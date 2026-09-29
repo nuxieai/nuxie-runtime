@@ -128,21 +128,23 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
                     .start_drag(position)
             });
             self.is_dragging.set(true);
-            let children = self
-                .text_input
-                .with(|input| {
-                    input
-                        .as_container_component()
-                        .map(|container| container.children().to_vec())
-                })
-                .flatten()
-                .expect("TextInput retains its component children");
-            for child in children {
-                if let Some(node) = child.with_downcast_mut::<FocusData, _>(FocusData::focus_node) {
-                    machine
-                        .focus_manager()
-                        .with_focus_manager_mut(|manager| manager.set_focus(node));
-                    break;
+            if let Some(manager) = machine.focus_manager() {
+                let children = self
+                    .text_input
+                    .with(|input| {
+                        input
+                            .as_container_component()
+                            .map(|container| container.children().to_vec())
+                    })
+                    .flatten()
+                    .expect("TextInput retains its component children");
+                for child in children {
+                    if let Some(node) =
+                        child.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
+                    {
+                        manager.with_focus_manager_mut(|manager| manager.set_focus(node));
+                        break;
+                    }
                 }
             }
             self.text_input.with_mut(|input| {

@@ -460,8 +460,15 @@ impl Execution {
             );
         }
         let source = select_artboard(&file, &case.artboard)?;
-        let first_instance =
-            NativeArtboard::instance_from_handle(&source).context("instantiate native artboard")?;
+        let first_instance = file
+            .with_file(|file| {
+                if case.artboard == "default" {
+                    file.artboard_default()
+                } else {
+                    file.artboard_named(&case.artboard)
+                }
+            })
+            .context("instantiate native root artboard through File")?;
         // File::artboardNamed already instances the source. Some pinned tests
         // then call instance() again and retain both instances for the replay.
         let instance = if case.clone_artboard_instance {
@@ -1079,7 +1086,9 @@ impl Execution {
                 Action::TextInput { text } => {
                     let focus =
                         machine(&state_machine)?.with_instance(|machine| machine.focus_manager());
-                    if !focus.with_focus_manager_mut(|focus| focus.text_input(text)) {
+                    if !focus.is_some_and(|focus| {
+                        focus.with_focus_manager_mut(|focus| focus.text_input(text))
+                    }) {
                         bail!("text input was not handled");
                     }
                 }
@@ -1097,14 +1106,16 @@ impl Execution {
                 } => {
                     let focus =
                         machine(&state_machine)?.with_instance(|machine| machine.focus_manager());
-                    focus.with_focus_manager_mut(|focus| {
-                        focus.key_input(
-                            Key::from_raw(*key),
-                            KeyModifiers::from_raw(*modifiers),
-                            *pressed,
-                            *repeat,
-                        )
-                    });
+                    if let Some(focus) = focus {
+                        focus.with_focus_manager_mut(|focus| {
+                            focus.key_input(
+                                Key::from_raw(*key),
+                                KeyModifiers::from_raw(*modifiers),
+                                *pressed,
+                                *repeat,
+                            )
+                        });
+                    }
                 }
                 Action::GamepadBatch { records } => {
                     let bytes = encode_gamepad_batch(records);

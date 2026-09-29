@@ -451,9 +451,10 @@ impl CoreHandle {
 
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
-        if let Some(root) = slot.runtime_artboard.borrow().as_ref() {
-            let root = root.upgrade()?;
-            return Some(f(&root.borrow().base));
+        let runtime_artboard = slot.runtime_artboard.borrow().clone();
+        if let Some(root) = runtime_artboard {
+            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root.upgrade()?);
+            return Some(root.with_artboard(|root| f(&root.base)));
         }
         let object = slot.object.borrow();
         let object = object.as_deref()?;
@@ -462,9 +463,10 @@ impl CoreHandle {
 
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
-        if let Some(root) = slot.runtime_artboard.borrow().as_ref() {
-            let root = root.upgrade()?;
-            return Some(f(&mut root.borrow_mut().base));
+        let runtime_artboard = slot.runtime_artboard.borrow().clone();
+        if let Some(root) = runtime_artboard {
+            let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root.upgrade()?);
+            return Some(root.with_artboard_mut(|root| f(&mut root.base)));
         }
         let mut object = slot.object.borrow_mut();
         let object = object.as_deref_mut()?;

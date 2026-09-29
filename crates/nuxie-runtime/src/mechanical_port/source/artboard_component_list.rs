@@ -732,7 +732,9 @@ impl ArtboardComponentList {
             }
             if let Some(state_machine) = self.state_machine_instance(index as i32) {
                 state_machine.with_instance_mut(|state_machine| {
-                    let needs_parent = !state_machine.focus_manager().ptr_eq(&focus_manager);
+                    let needs_parent = !state_machine
+                        .focus_manager()
+                        .is_some_and(|manager| manager.ptr_eq(&focus_manager));
                     if needs_parent {
                         state_machine.set_external_focus_manager(Some(focus_manager.clone()));
                     }

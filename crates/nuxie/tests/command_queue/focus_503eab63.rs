@@ -88,14 +88,17 @@ fn check_focus(queue: &mut CommandQueue, machine: StateMachineHandle, expected: 
     queue.run_once(Box::new(move |server| {
         server
             .with_state_machine_instance_mut(machine, |instance| {
-                instance.focus_manager().with_focus_manager(|manager| {
-                    assert_eq!(
-                        manager
-                            .primary_focus()
-                            .map(|node| Rc::as_ptr(&node) as usize),
-                        expected
-                    );
-                });
+                instance
+                    .focus_manager()
+                    .expect("artboard focus manager")
+                    .with_focus_manager(|manager| {
+                        assert_eq!(
+                            manager
+                                .primary_focus()
+                                .map(|node| Rc::as_ptr(&node) as usize),
+                            expected
+                        );
+                    });
             })
             .expect("state machine");
     }));
@@ -116,14 +119,17 @@ fn focus_commands_mirror_state_machine_instance_traversal_and_queries() {
     fx.queue.run_once(Box::new(move |server| {
         server
             .with_state_machine_instance_mut(machine, |instance| {
-                instance.focus_manager().with_focus_manager_mut(|manager| {
-                    let first = FocusNode::new(None);
-                    let second = FocusNode::new(None);
-                    *captured.lock().unwrap() =
-                        [Rc::as_ptr(&first) as usize, Rc::as_ptr(&second) as usize];
-                    manager.add_child(None, first, None);
-                    manager.add_child(None, second, None);
-                });
+                instance
+                    .focus_manager()
+                    .expect("artboard focus manager")
+                    .with_focus_manager_mut(|manager| {
+                        let first = FocusNode::new(None);
+                        let second = FocusNode::new(None);
+                        *captured.lock().unwrap() =
+                            [Rc::as_ptr(&first) as usize, Rc::as_ptr(&second) as usize];
+                        manager.add_child(None, first, None);
+                        manager.add_child(None, second, None);
+                    });
             })
             .expect("state machine");
     }));
@@ -166,10 +172,13 @@ fn synchronized_focus_traversal_mirrors_state_machine_instance() {
     queue.run_once(Box::new(move |server| {
         server
             .with_state_machine_instance_mut(machine, |instance| {
-                instance.focus_manager().with_focus_manager_mut(|manager| {
-                    manager.add_child(None, FocusNode::new(None), None);
-                    manager.add_child(None, FocusNode::new(None), None);
-                });
+                instance
+                    .focus_manager()
+                    .expect("artboard focus manager")
+                    .with_focus_manager_mut(|manager| {
+                        manager.add_child(None, FocusNode::new(None), None);
+                        manager.add_child(None, FocusNode::new(None), None);
+                    });
             })
             .expect("state machine");
     }));
@@ -210,12 +219,15 @@ fn focus_state_query_reports_internal_focus_changes() {
     fx.queue.run_once(Box::new(move |server| {
         server
             .with_state_machine_instance_mut(machine, |instance| {
-                instance.focus_manager().with_focus_manager_mut(|manager| {
-                    let node =
-                        FocusNode::new(Some(Rc::new(RefCell::new(KeyboardAcceptingFocusable))));
-                    manager.add_child(None, node.clone(), None);
-                    manager.set_focus(node);
-                });
+                instance
+                    .focus_manager()
+                    .expect("artboard focus manager")
+                    .with_focus_manager_mut(|manager| {
+                        let node =
+                            FocusNode::new(Some(Rc::new(RefCell::new(KeyboardAcceptingFocusable))));
+                        manager.add_child(None, node.clone(), None);
+                        manager.set_focus(node);
+                    });
             })
             .expect("state machine");
     }));
@@ -254,17 +266,20 @@ fn focus_command_preserves_current_stop_traversal_result() {
     fx.queue.run_once(Box::new(move |server| {
         server
             .with_state_machine_instance_mut(machine, |instance| {
-                instance.focus_manager().with_focus_manager_mut(|manager| {
-                    let scope = FocusNode::new(None);
-                    let first = FocusNode::new(None);
-                    let second = FocusNode::new(None);
-                    scope.borrow_mut().set_edge_behavior(EdgeBehavior::Stop);
-                    *captured.lock().unwrap() = Rc::as_ptr(&second) as usize;
-                    manager.add_child(None, scope.clone(), None);
-                    manager.add_child(Some(scope.clone()), first, None);
-                    manager.add_child(Some(scope), second.clone(), None);
-                    manager.set_focus(second);
-                });
+                instance
+                    .focus_manager()
+                    .expect("artboard focus manager")
+                    .with_focus_manager_mut(|manager| {
+                        let scope = FocusNode::new(None);
+                        let first = FocusNode::new(None);
+                        let second = FocusNode::new(None);
+                        scope.borrow_mut().set_edge_behavior(EdgeBehavior::Stop);
+                        *captured.lock().unwrap() = Rc::as_ptr(&second) as usize;
+                        manager.add_child(None, scope.clone(), None);
+                        manager.add_child(Some(scope.clone()), first, None);
+                        manager.add_child(Some(scope), second.clone(), None);
+                        manager.set_focus(second);
+                    });
             })
             .expect("state machine");
     }));

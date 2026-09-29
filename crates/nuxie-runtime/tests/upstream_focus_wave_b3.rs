@@ -453,6 +453,53 @@ fn observed_node(events: &Rc<RefCell<Vec<FocusEventKind>>>) -> FocusNodeRef {
     }))))
 }
 
+#[test]
+fn primary_focus_accepts_text_reports_text_consuming_focus() {
+    // A focusable that consumes typed text, like TextInput and its FocusData.
+    struct MockTextFocusable(ObservedFocusable);
+    impl Focusable for MockTextFocusable {
+        fn key_input(&mut self, key: Key, modifiers: KeyModifiers, pressed: bool, repeat: bool) -> bool {
+            self.0.key_input(key, modifiers, pressed, repeat)
+        }
+        fn text_input(&mut self, text: &str) -> bool {
+            self.0.text_input(text)
+        }
+        fn focused(&mut self) {
+            self.0.focused();
+        }
+        fn blurred(&mut self) {
+            self.0.blurred();
+        }
+        fn accepts_text_input(&self) -> bool {
+            true
+        }
+    }
+
+    let manager = RuntimeFocusManagerHandle::new(FocusManager::new());
+    let plain = Rc::new(RefCell::new(ObservedFocusable {
+        events: Rc::new(RefCell::new(Vec::new())),
+        eligible: Rc::new(Cell::new(true)),
+    }));
+    let text = Rc::new(RefCell::new(MockTextFocusable(ObservedFocusable {
+        events: Rc::new(RefCell::new(Vec::new())),
+        eligible: Rc::new(Cell::new(true)),
+    })));
+    let plain_node = attached(&manager, None, FocusNode::new(Some(plain.clone())));
+    let text_node = attached(&manager, None, FocusNode::new(Some(text)));
+    // A non-text child bubbles to its text-accepting parent, like text routing.
+    let child_of_text = attached(&manager, Some(&text_node), FocusNode::new(Some(plain)));
+
+    assert!(!manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+    manager.with_focus_manager_mut(|manager| manager.set_focus(plain_node));
+    assert!(!manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+    manager.with_focus_manager_mut(|manager| manager.set_focus(text_node));
+    assert!(manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+    manager.with_focus_manager_mut(|manager| manager.set_focus(child_of_text));
+    assert!(manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+    manager.with_focus_manager_mut(|manager| manager.clear_focus());
+    assert!(!manager.with_focus_manager(|manager| manager.primary_focus_accepts_text()));
+}
+
 #[derive(Default)]
 struct RoutedInputObservations {
     return_value: Cell<bool>,

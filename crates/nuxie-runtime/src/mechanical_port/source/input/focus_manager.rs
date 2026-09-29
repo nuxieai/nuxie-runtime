@@ -1197,6 +1197,19 @@ impl FocusManager {
         false
     }
 
+    /// Whether primary focus or an ancestor consumes typed text.
+    pub fn primary_focus_accepts_text(&self) -> bool {
+        let mut node = self.primary_focus.clone();
+        while let Some(current) = node {
+            let focusable = current.borrow().focusable();
+            if focusable.is_some_and(|focusable| focusable.borrow().accepts_text_input()) {
+                return true;
+            }
+            node = current.borrow().parent();
+        }
+        false
+    }
+
     pub fn selected_text(&self) -> String {
         let mut node = self.primary_focus.clone();
         while let Some(current) = node {

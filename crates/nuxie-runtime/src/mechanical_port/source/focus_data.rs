@@ -271,6 +271,12 @@ impl FocusData {
                 .any(RuntimeKeyboardListenerHandle::is_alive)
     }
 
+    pub fn accepts_text_input(&self) -> bool {
+        self.component().parent_handle().is_some_and(|parent| {
+            parent.is_type_of(crate::mechanical_port::source::text::text_input::TextInput::TYPE_KEY)
+        })
+    }
+
     pub fn focusable_artboard(&self) -> Option<CoreHandle> {
         self.component().artboard_handle()
     }
@@ -343,6 +349,13 @@ impl ComponentBaseCallbacks for FocusData {
 }
 
 impl Focusable for FocusDataFocusable {
+    fn accepts_text_input(&self) -> bool {
+        self.owner
+            .as_ref()
+            .and_then(|owner| owner.with_downcast::<FocusData, _>(FocusData::accepts_text_input))
+            .unwrap_or(false)
+    }
+
     fn gamepad_dispatch_owner(&self) -> Option<CoreHandle> {
         self.owner.clone()
     }

@@ -17,8 +17,9 @@ use crate::mechanical_port::source::{
     command_queue::{
         ArtboardHandle, AudioSourceHandle, BlobAssetHandle, Command, CommandQueue,
         CommandServerCallback, CommandServerDrawCallback, DataType, DrawKey, FileHandle,
-        FontHandle, Message, PointerEvent, PropertyData, RenderImageHandle, StateMachineHandle,
-        ViewModelInstanceData, ViewModelInstanceHandle, ViewModelInstanceValue,
+        FocusState, FocusTraversalResult, FontHandle, Message, PointerEvent, PropertyData,
+        RenderImageHandle, StateMachineHandle, ViewModelInstanceData, ViewModelInstanceHandle,
+        ViewModelInstanceValue,
     },
     core::{CoreArena, CoreHandle},
     factory::RuntimeFactoryHandle,
@@ -30,7 +31,10 @@ use crate::mechanical_port::source::{
     },
     generated::core_registry::CoreCapabilities,
     hit_result::HitResult,
-    input::focusable::{Key, KeyModifiers},
+    input::{
+        focus_manager::Direction,
+        focusable::{Key, KeyModifiers},
+    },
     layout::Alignment,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     renderer::RenderImageRef,
@@ -608,17 +612,85 @@ impl CommandServer {
     }
 
     pub fn focus_next_synchronized(&self, handle: StateMachineHandle) -> bool {
-        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
-            return false;
-        };
-        wrapper.lock().focus_next()
+        self.focus_next_with_result_synchronized(handle).moved
     }
 
     pub fn focus_previous_synchronized(&self, handle: StateMachineHandle) -> bool {
+        self.focus_previous_with_result_synchronized(handle).moved
+    }
+
+    pub fn focus_next_with_result_synchronized(
+        &self,
+        handle: StateMachineHandle,
+    ) -> FocusTraversalResult {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return FocusTraversalResult::default();
+        };
+        let mut instance = wrapper.lock();
+        let moved = instance.focus_next();
+        let state = instance.focus_state();
+        FocusTraversalResult {
+            moved,
+            focus_state: FocusState {
+                has_focus: state.has_focus,
+                expects_keyboard_input: state.expects_keyboard_input,
+            },
+        }
+    }
+
+    pub fn focus_previous_with_result_synchronized(
+        &self,
+        handle: StateMachineHandle,
+    ) -> FocusTraversalResult {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return FocusTraversalResult::default();
+        };
+        let mut instance = wrapper.lock();
+        let moved = instance.focus_previous();
+        let state = instance.focus_state();
+        FocusTraversalResult {
+            moved,
+            focus_state: FocusState {
+                has_focus: state.has_focus,
+                expects_keyboard_input: state.expects_keyboard_input,
+            },
+        }
+    }
+
+    pub fn key_input_synchronized(
+        &self,
+        handle: StateMachineHandle,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
         let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
             return false;
         };
-        wrapper.lock().focus_previous()
+        wrapper
+            .lock()
+            .key_input(key, modifiers, is_pressed, is_repeat)
+    }
+
+    pub fn focus_in_direction_synchronized(
+        &self,
+        handle: StateMachineHandle,
+        direction: Direction,
+    ) -> bool {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return false;
+        };
+        let instance = wrapper.lock();
+        let Some(manager) = instance.focus_manager() else {
+            return false;
+        };
+        manager.with_focus_manager_mut(|manager| match direction {
+            Direction::Left => manager.focus_left(),
+            Direction::Right => manager.focus_right(),
+            Direction::Up => manager.focus_up(),
+            Direction::Down => manager.focus_down(),
+        })
     }
 
     pub fn pointer_move_synchronized(
@@ -749,9 +821,7 @@ impl CommandServer {
                 | DataType::AssetFont
                 | DataType::AssetBlob
                 | DataType::Trigger
-                | DataType::List => {
-                    ViewModelInstanceValue::None
-                }
+                | DataType::List => ViewModelInstanceValue::None,
                 DataType::Boolean => ViewModelInstanceValue::Bool(
                     view_model
                         .property_boolean(&data.meta_data.name)

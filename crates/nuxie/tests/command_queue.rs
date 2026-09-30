@@ -13,6 +13,9 @@ mod runtime_messages_407f9a35;
 #[path = "command_queue/keyboard_input_ead02826.rs"]
 mod keyboard_input_ead02826;
 
+#[path = "command_queue/synchronized_input_794f432a.rs"]
+mod synchronized_input_794f432a;
+
 // Complete font-binding additions from command_queue_test.cpp at 30742b4c.
 #[cfg(feature = "test-support")]
 mod font_data_binding_30742b4c {

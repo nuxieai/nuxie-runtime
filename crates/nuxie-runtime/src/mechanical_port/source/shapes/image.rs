@@ -98,28 +98,39 @@ impl Default for Image {
 
 impl Image {
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
-        let Some((image, mesh, sampler, save, world, origin_x, origin_y, blend_mode, opacity)) =
-            owner
-                .with(|owner| {
-                    let owner = owner.as_any().downcast_ref::<Self>().or_else(|| {
-                        owner
-                            .as_any()
-                            .downcast_ref::<crate::video::Video>()
-                            .map(|video| video.image())
-                    })?;
-                    Some((
-                        owner.render_image()?,
-                        owner.mesh.clone(),
-                        owner.image_sampler(),
-                        owner.base.needs_save_operation(),
-                        *owner.base.world_transform(),
-                        owner.base.origin_x(),
-                        owner.base.origin_y(),
-                        owner.base.blend_mode(),
-                        owner.base.render_opacity(),
-                    ))
-                })
-                .flatten()
+        let Some((
+            image,
+            mesh,
+            sampler,
+            save,
+            world,
+            origin_x,
+            origin_y,
+            blend_mode,
+            opacity,
+            additiveness,
+        )) = owner
+            .with(|owner| {
+                let owner = owner.as_any().downcast_ref::<Self>().or_else(|| {
+                    owner
+                        .as_any()
+                        .downcast_ref::<crate::video::Video>()
+                        .map(|video| video.image())
+                })?;
+                Some((
+                    owner.render_image()?,
+                    owner.mesh.clone(),
+                    owner.image_sampler(),
+                    owner.base.needs_save_operation(),
+                    *owner.base.world_transform(),
+                    owner.base.origin_x(),
+                    owner.base.origin_y(),
+                    owner.base.blend_mode(),
+                    owner.base.render_opacity(),
+                    owner.base.additiveness(),
+                ))
+            })
+            .flatten()
         else {
             return;
         };
@@ -134,6 +145,7 @@ impl Image {
                     sampler.into(),
                     blend_mode.into(),
                     opacity,
+                    additiveness,
                 )
             });
         } else {
@@ -142,11 +154,12 @@ impl Image {
                 -(image.width() as f32) * origin_x,
                 -(image.height() as f32) * origin_y,
             );
-            renderer.draw_image(
+            renderer.draw_image_with_additiveness(
                 Some(image.as_ref()),
                 sampler.into(),
                 blend_mode.into(),
                 opacity,
+                additiveness,
             );
         }
         if save {
@@ -205,6 +218,7 @@ impl Image {
                     sampler.into(),
                     self.base.blend_mode().into(),
                     self.base.render_opacity(),
+                    self.base.additiveness(),
                 );
             });
         } else {
@@ -215,11 +229,12 @@ impl Image {
                 -width * self.base.origin_x(),
                 -height * self.base.origin_y(),
             );
-            renderer.draw_image(
+            renderer.draw_image_with_additiveness(
                 Some(render_image.as_ref()),
                 sampler.into(),
                 self.base.blend_mode().into(),
                 self.base.render_opacity(),
+                self.base.additiveness(),
             );
         }
         if self.base.needs_save_operation() {

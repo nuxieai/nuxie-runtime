@@ -2,6 +2,7 @@
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BlendMode {
     SrcOver = 3,
+    Additive = 12,
     Screen = 14,
     Overlay = 15,
     Darken = 16,
@@ -20,10 +21,19 @@ pub enum BlendMode {
 }
 pub const BLEND_MODE_BIT_COUNT: u32 = 5;
 
+pub fn additiveness_for(mode: impl Into<nuxie_render_api::BlendMode>, additive_amount: u8) -> f32 {
+    if mode.into() == nuxie_render_api::BlendMode::Additive {
+        f32::from(additive_amount) / 255.0
+    } else {
+        0.0
+    }
+}
+
 impl From<BlendMode> for nuxie_render_api::BlendMode {
     fn from(value: BlendMode) -> Self {
         match value {
             BlendMode::SrcOver => Self::SrcOver,
+            BlendMode::Additive => Self::Additive,
             BlendMode::Screen => Self::Screen,
             BlendMode::Overlay => Self::Overlay,
             BlendMode::Darken => Self::Darken,

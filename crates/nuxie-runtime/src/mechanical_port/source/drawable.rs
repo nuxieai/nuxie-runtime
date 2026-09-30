@@ -155,6 +155,7 @@ impl Drawable {
     pub fn blend_mode(&self) -> BlendMode {
         match self.base.blend_mode_value() as u8 {
             3 => BlendMode::SrcOver,
+            12 => BlendMode::Additive,
             14 => BlendMode::Screen,
             15 => BlendMode::Overlay,
             16 => BlendMode::Darken,
@@ -174,6 +175,12 @@ impl Drawable {
         }
     }
 
+    pub fn additiveness(&self) -> f32 {
+        crate::mechanical_port::source::shapes::paint::blend_mode::additiveness_for(
+            self.blend_mode(),
+            self.base.additive_amount(),
+        )
+    }
     pub fn draw(&mut self, _renderer: &mut Renderer) {
         panic!("abstract Drawable::draw");
     }
@@ -324,7 +331,7 @@ impl Drawable {
         // cases. Validate that byte before constructing a Rust enum, so a
         // malformed drawable follows InvalidObject instead of panicking.
         match self.base.blend_mode_value() as u8 {
-            3 | 14..=28 => StatusCode::Ok,
+            3 | 12 | 14..=28 => StatusCode::Ok,
             _ => StatusCode::InvalidObject,
         }
     }

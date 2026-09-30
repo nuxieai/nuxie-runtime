@@ -58,6 +58,7 @@ pub fn lua_to_blend_mode(state: &mut LuaState, index: i32) -> BlendMode {
     }
     match atom {
         LuaAtoms::SrcOver => BlendMode::SrcOver,
+        LuaAtoms::Additive => BlendMode::Additive,
         LuaAtoms::Screen => BlendMode::Screen,
         LuaAtoms::Overlay => BlendMode::Overlay,
         LuaAtoms::Darken => BlendMode::Darken,
@@ -130,6 +131,7 @@ impl ScriptedPaintData {
     fn push_blend_mode(&self, state: &mut LuaState) {
         state.push_string(match self.blend_mode() {
             BlendMode::SrcOver => "srcOver",
+            BlendMode::Additive => "additive",
             BlendMode::Screen => "screen",
             BlendMode::Overlay => "overlay",
             BlendMode::Darken => "darken",

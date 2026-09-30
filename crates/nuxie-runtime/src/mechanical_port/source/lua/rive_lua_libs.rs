@@ -261,6 +261,7 @@ pub enum LuaAtoms {
     Butt,
     Square,
     SrcOver,
+    Additive,
     Screen,
     Overlay,
     Darken,
@@ -671,6 +672,10 @@ const ATOMS: &[LuaAtomName] = &[
     LuaAtomName {
         name: "srcOver",
         atom: LuaAtoms::SrcOver,
+    },
+    LuaAtomName {
+        name: "additive",
+        atom: LuaAtoms::Additive,
     },
     LuaAtomName {
         name: "screen",
@@ -1554,6 +1559,9 @@ impl ScriptedPaint {
     pub fn set_blend_mode(&mut self, value: BlendMode) {
         self.data.set_blend_mode(value);
         self.render_paint.blend_mode(value.into());
+        self.render_paint.additiveness(
+            crate::mechanical_port::source::shapes::paint::blend_mode::additiveness_for(value, 255),
+        );
     }
 
     pub fn set_gradient(&mut self, value: Option<Rc<RenderShader>>) {
@@ -1600,9 +1608,14 @@ pub struct TransitionChild {
 }
 impl TransitionChild {
     pub fn new(artboard: CoreHandle, world_transform: Mat2D) -> Self {
-        Self { artboard: Some(artboard), world_transform }
+        Self {
+            artboard: Some(artboard),
+            world_transform,
+        }
     }
-    pub fn invalidate(&mut self) { self.artboard = None; }
+    pub fn invalidate(&mut self) {
+        self.artboard = None;
+    }
 }
 impl_lua_rive!(TransitionChild, 68, "TransitionChild");
 

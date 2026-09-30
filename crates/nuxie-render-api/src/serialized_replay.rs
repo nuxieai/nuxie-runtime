@@ -97,7 +97,7 @@ pub fn replay_serialized_commands(
                     _ => path.add_raw_path(&deserialize_raw_path(&mut reader)),
                 }
             }
-            COLOR | STYLE | THICKNESS | JOIN | CAP | FEATHER | BLEND_MODE => {
+            COLOR | STYLE | THICKNESS | JOIN | CAP | FEATHER | BLEND_MODE | ADDITIVENESS => {
                 let id = reader.read_var_uint();
                 let Some(paint) = paints.get_mut(&id) else {
                     return false;
@@ -123,6 +123,7 @@ pub fn replay_serialized_commands(
                         _ => return false,
                     }),
                     FEATHER => paint.feather(reader.read_float32()),
+                    ADDITIVENESS => paint.additiveness(reader.read_float32()),
                     _ => {
                         let Some(mode) = blend(reader.read_var_uint()) else {
                             return false;
@@ -273,26 +274,39 @@ pub fn replay_serialized_commands(
                     .renderer(renderer, &mut dropped_content)
                     .clip_path(path.as_ref());
             }
-            DRAW_IMAGE | DRAW_IMAGE_MESH => {
+            DRAW_IMAGE | DRAW_IMAGE_MESH | DRAW_IMAGE_ADDITIVE | DRAW_IMAGE_MESH_ADDITIVE => {
                 let id = reader.read_var_uint();
                 let Some(mode) = blend(reader.read_var_uint()) else {
                     return false;
                 };
                 let opacity = reader.read_float32();
                 let image = images.get(&id).and_then(|image| image.as_deref());
-                if op == DRAW_IMAGE {
+                if op == DRAW_IMAGE || op == DRAW_IMAGE_ADDITIVE {
+                    let additiveness = if op == DRAW_IMAGE_ADDITIVE {
+                        reader.read_float32()
+                    } else {
+                        0.0
+                    };
                     if let Some(image) = image {
-                        active.renderer(renderer, &mut dropped_content).draw_image(
-                            Some(image),
-                            ImageSampler::LINEAR_CLAMP,
-                            mode,
-                            opacity,
-                        );
+                        active
+                            .renderer(renderer, &mut dropped_content)
+                            .draw_image_with_additiveness(
+                                Some(image),
+                                ImageSampler::LINEAR_CLAMP,
+                                mode,
+                                opacity,
+                                additiveness,
+                            );
                     }
                 } else {
                     let pos = reader.read_var_uint();
                     let uv = reader.read_var_uint();
                     let idx = reader.read_var_uint();
+                    let additiveness = if op == DRAW_IMAGE_MESH_ADDITIVE {
+                        reader.read_float32()
+                    } else {
+                        0.0
+                    };
                     let pos = buffers.get(&pos).map(|value| value.as_ref());
                     let uv = buffers.get(&uv).map(|value| value.as_ref());
                     let idx = buffers.get(&idx).map(|value| value.as_ref());
@@ -301,7 +315,7 @@ pub fn replay_serialized_commands(
                     if let Some(image) = image {
                         active
                             .renderer(renderer, &mut dropped_content)
-                            .draw_image_mesh(
+                            .draw_image_mesh_with_additiveness(
                                 Some(image),
                                 ImageSampler::LINEAR_CLAMP,
                                 pos,
@@ -311,6 +325,7 @@ pub fn replay_serialized_commands(
                                 indices,
                                 mode,
                                 opacity,
+                                additiveness,
                             );
                     }
                 }
@@ -376,6 +391,7 @@ pub fn replay_serialized_commands(
 fn blend(value: u64) -> Option<BlendMode> {
     Some(match value as u8 {
         3 => BlendMode::SrcOver,
+        12 => BlendMode::Additive,
         14 => BlendMode::Screen,
         15 => BlendMode::Overlay,
         16 => BlendMode::Darken,

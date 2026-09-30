@@ -46,6 +46,9 @@ operations! {
     CANVAS_CONTENT_BEGIN = canvasContentBegin = 33,
     CANVAS_CONTENT_END = canvasContentEnd = 34,
     MODULATE_COLOR = modulateColor = 35,
+    ADDITIVENESS = additiveness = 36,
+    DRAW_IMAGE_ADDITIVE = drawImageAdditive = 37,
+    DRAW_IMAGE_MESH_ADDITIVE = drawImageMeshAdditive = 38,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {

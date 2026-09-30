@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-1a360ac87346e89cff18335a140bc8c686a54896}
+ref=${RIVE_RUNTIME_REF:-3d0d3f56ba21caa2ae13ef64451526639d793aee}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/additive_blendmode_test.riv|b158c8ac4434208913915ac364d1597ea83f06043a79fc94c7f2918bee9ff2cf|3d0d3f56ba21caa2ae13ef64451526639d793aee|additive_blendmode_test.riv"
   "sync/hidden_hit_targets.riv|cbc906bd9c7741e8e0446d60a0e47ce14d941163bee22f07a6d51ec980ce898f|8f3690df4346c8b8b9072bc5c3de6f3ab0c37203|hidden_hit_targets.riv"
   "sync/collapsed_databinds_test.riv|ec4bbbf220b8226eabf1e836f7ff662547f4ba1babe42a225d79eebfe548a70e|074bfb139e5390760e04a9fd953d410f71fa6384|collapsed_databinds_test.riv"
   "sync/collapsed_nested_databind.riv|128afb39dbd57b2e6a0106f0ccfddf4348beaf5d236ead17942907dd71b76294|074bfb139e5390760e04a9fd953d410f71fa6384|collapsed_nested_databind.riv"

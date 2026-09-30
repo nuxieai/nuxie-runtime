@@ -354,6 +354,7 @@ impl Factory for SerializingFactory {
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
             feather: 0.0,
+            additiveness: 0.0,
             blend_mode: BlendMode::SrcOver,
             shader_id: None,
         })
@@ -464,6 +465,7 @@ struct SerializingRenderPaint {
     join: StrokeJoin,
     cap: StrokeCap,
     feather: f32,
+    additiveness: f32,
     blend_mode: BlendMode,
     shader_id: Option<u64>,
 }
@@ -535,6 +537,14 @@ impl RenderPaint for SerializingRenderPaint {
             self.feather = value;
             self.write_float(FEATHER, value);
         }
+    }
+
+    fn additiveness(&mut self, value: f32) {
+        if self.additiveness == value {
+            return;
+        }
+        self.additiveness = value;
+        self.write_float(ADDITIVENESS, value);
     }
 
     fn blend_mode(&mut self, value: BlendMode) {
@@ -786,15 +796,34 @@ impl Renderer for SerializingRenderer {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
+        self.draw_image_with_additiveness(image, _sampler, blend_mode, opacity, 0.0);
+    }
+
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
         let id = image_id(
             &self.canvases.borrow(),
             image.expect("non-null serialized image"),
         );
         let mut writer = self.writer.borrow_mut();
-        writer.varuint(DRAW_IMAGE);
+        let is_additive = additiveness != 0.0;
+        writer.varuint(if is_additive {
+            DRAW_IMAGE_ADDITIVE
+        } else {
+            DRAW_IMAGE
+        });
         writer.varuint(id);
         writer.varuint(blend_mode as u64);
         writer.float(opacity);
+        if is_additive {
+            writer.float(additiveness);
+        }
     }
 
     fn draw_image_mesh(
@@ -809,17 +838,52 @@ impl Renderer for SerializingRenderer {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
+        self.draw_image_mesh_with_additiveness(
+            image,
+            _sampler,
+            vertices,
+            uv_coords,
+            indices,
+            _vertex_count,
+            _index_count,
+            blend_mode,
+            opacity,
+            0.0,
+        );
+    }
+
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        _vertex_count: u32,
+        _index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
         let id = image_id(
             &self.canvases.borrow(),
             image.expect("non-null serialized image"),
         );
         let mut writer = self.writer.borrow_mut();
-        writer.varuint(DRAW_IMAGE_MESH);
+        let is_additive = additiveness != 0.0;
+        writer.varuint(if is_additive {
+            DRAW_IMAGE_MESH_ADDITIVE
+        } else {
+            DRAW_IMAGE_MESH
+        });
         writer.varuint(id);
         writer.varuint(blend_mode as u64);
         writer.float(opacity);
         for buffer in [vertices, uv_coords, indices] {
             writer.varuint(serializing_buffer(buffer).id);
+        }
+        if is_additive {
+            writer.float(additiveness);
         }
     }
 

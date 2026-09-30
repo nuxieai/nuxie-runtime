@@ -554,6 +554,19 @@ TEST_CASE("renders selected board", "[silver]")
         if not runtime_dir.is_dir() or not manifest.is_file():
             self.skipTest("pinned upstream or checked-in manifest is unavailable")
         producers = generate_manifest.discover(runtime_dir)
+        additive = next(item for item in producers if item.id == "additive_blendmode_test")
+        self.assertEqual(additive.source, "additive_blendmode_test.riv")
+        self.assertEqual(additive.artboard, "default")
+        self.assertEqual(additive.actions[:5], (
+            {"kind": "frame-size"},
+            {"kind": "select-state-machine"},
+            {"kind": "bind-selected-artboard-fresh-view-model"},
+            {"kind": "advance", "target": "state-machine", "seconds": 0.0},
+            {"kind": "draw"},
+        ))
+        self.assertEqual(generate_manifest.cpp_float_division_to_int("1.0", "0.016"), 62)
+        self.assertEqual(additive.actions[5:], tuple(generate_manifest.repeated_frames(63, 0.016)))
+        self.assertEqual(sum(item["kind"] == "draw" for item in additive.actions), 64)
         interrupted = next(item for item in producers if item.id == "layout_animation_transition_test")
         self.assertEqual(interrupted.source, "layout_animation_transition_test.riv")
         self.assertEqual(interrupted.state_machine, "default")

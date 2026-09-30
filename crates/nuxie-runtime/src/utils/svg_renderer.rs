@@ -421,6 +421,7 @@ impl Renderer for SVGRenderer {
 fn blend_style(mode: BlendMode) -> String {
     let css = match mode {
         BlendMode::SrcOver => return String::new(),
+        BlendMode::Additive => "plus-lighter",
         BlendMode::Screen => "screen",
         BlendMode::Overlay => "overlay",
         BlendMode::Darken => "darken",

@@ -1,5 +1,5 @@
 //! renderer/cmd/render_commands.hpp at e949498e: pointer-free wire vocabulary.
-use super::command_stream::{WirePod, wire_pod};
+use super::command_stream::{wire_pod, WirePod};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,6 +24,7 @@ pub enum RenderCmd {
     PaintCap,
     PaintStrokePosition,
     PaintFeather,
+    PaintAdditiveness,
     PaintBlendMode,
     PaintShader,
     PaintModulatedImage,
@@ -44,7 +45,7 @@ pub enum RenderCmd {
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 37] = [
+        const COMMANDS: [RenderCmd; 38] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -65,6 +66,7 @@ impl RenderCmd {
             RenderCmd::PaintCap,
             RenderCmd::PaintStrokePosition,
             RenderCmd::PaintFeather,
+            RenderCmd::PaintAdditiveness,
             RenderCmd::PaintBlendMode,
             RenderCmd::PaintShader,
             RenderCmd::PaintModulatedImage,
@@ -247,7 +249,8 @@ wire_pod!(DrawImagePod {
     wrap_y: u8,
     filter: u8,
     blend_mode: u8,
-    opacity: f32
+    opacity: f32,
+    additiveness: f32
 });
 wire_pod!(DrawImageMeshPod {
     image: u32,
@@ -263,7 +266,8 @@ wire_pod!(DrawImageMeshPod {
     wrap_y: u8,
     filter: u8,
     blend_mode: u8,
-    opacity: f32
+    opacity: f32,
+    additiveness: f32
 });
 wire_pod!(OpacityPod { opacity: f32 });
 wire_pod!(ModulateColorPod {
@@ -297,7 +301,9 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         | RenderCmd::PaintStrokePosition
         | RenderCmd::PaintBlendMode => PaintU8Pod::SIZE,
         RenderCmd::PaintColor => PaintColorPod::SIZE,
-        RenderCmd::PaintThickness | RenderCmd::PaintFeather => PaintFloatPod::SIZE,
+        RenderCmd::PaintThickness | RenderCmd::PaintFeather | RenderCmd::PaintAdditiveness => {
+            PaintFloatPod::SIZE
+        }
         RenderCmd::PaintShader => PaintShaderPod::SIZE,
         RenderCmd::PaintModulatedImage => PaintModulatedImagePod::SIZE,
         RenderCmd::Save | RenderCmd::Restore => 0,

@@ -6844,7 +6844,7 @@ impl LogicalFlush {
                 | nuxie_render_api::BlendMode::Multiply => {
                     shader_features |= gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND
                 }
-                nuxie_render_api::BlendMode::SrcOver => {}
+                nuxie_render_api::BlendMode::Additive | nuxie_render_api::BlendMode::SrcOver => {}
             }
         }
         if !draw.imageTexture().is_null() {

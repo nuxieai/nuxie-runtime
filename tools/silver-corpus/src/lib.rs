@@ -12,11 +12,11 @@ pub use action::{
     PointerCoordinate,
 };
 
-pub const EXPECTED_ENTRIES: usize = 278;
-pub const EXPECTED_RUNTIME: usize = 230;
+pub const EXPECTED_ENTRIES: usize = 279;
+pub const EXPECTED_RUNTIME: usize = 231;
 pub const EXPECTED_SCRIPTED: usize = 45;
 pub const MAX_PROVENANCE_UNKNOWN: usize = 3;
-pub const UPSTREAM_REF: &str = "1a360ac87346e89cff18335a140bc8c686a54896";
+pub const UPSTREAM_REF: &str = "3d0d3f56ba21caa2ae13ef64451526639d793aee";
 
 pub use nuxie_sriv::*;
 

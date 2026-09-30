@@ -15,8 +15,8 @@ use std::{
     collections::HashMap,
     rc::{Rc, Weak},
     sync::{
-        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
     },
 };
 
@@ -520,7 +520,10 @@ impl Renderer for DeferredRenderer {
         self.route();
         self.buffer.lock().unwrap().append(
             RenderCmd::ModulateColor,
-            &ModulateColorPod { color, replace: u32::from(replace) },
+            &ModulateColorPod {
+                color,
+                replace: u32::from(replace),
+            },
         );
     }
     fn draw_image(
@@ -529,6 +532,16 @@ impl Renderer for DeferredRenderer {
         sampler: ImageSampler,
         blend_mode: BlendMode,
         opacity: f32,
+    ) {
+        self.draw_image_with_additiveness(image, sampler, blend_mode, opacity, 0.0);
+    }
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
     ) {
         let image = self.image_id(image);
         if image == INVALID_RENDER_HANDLE {
@@ -545,6 +558,7 @@ impl Renderer for DeferredRenderer {
                 filter: sampler.filter as u8,
                 blend_mode: blend_mode as u8,
                 opacity,
+                additiveness,
             },
         );
     }
@@ -559,6 +573,32 @@ impl Renderer for DeferredRenderer {
         index_count: u32,
         blend_mode: BlendMode,
         opacity: f32,
+    ) {
+        self.draw_image_mesh_with_additiveness(
+            image,
+            sampler,
+            vertices,
+            uv_coords,
+            indices,
+            vertex_count,
+            index_count,
+            blend_mode,
+            opacity,
+            0.0,
+        );
+    }
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
     ) {
         let image = self.image_id(image);
         fn downcast(buffer: Option<&dyn RenderBuffer>) -> Option<&DeferredRenderBuffer> {
@@ -595,6 +635,7 @@ impl Renderer for DeferredRenderer {
                 filter: sampler.filter as u8,
                 blend_mode: blend_mode as u8,
                 opacity,
+                additiveness,
             },
         );
     }

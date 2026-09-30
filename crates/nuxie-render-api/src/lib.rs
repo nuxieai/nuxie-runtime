@@ -533,7 +533,10 @@ pub fn compute_alignment_from_origin_size(
 pub fn is_white_space(character: char) -> bool {
     let character = character as u32;
     character <= u32::from(b' ')
-        || matches!(character, 0x0085 | 0x1680 | 0x2028 | 0x2029 | 0x205F | 0x3000)
+        || matches!(
+            character,
+            0x0085 | 0x1680 | 0x2028 | 0x2029 | 0x205F | 0x3000
+        )
         || (0x2000..=0x200B).contains(&character) && character != 0x2007
 }
 
@@ -564,7 +567,7 @@ pub fn annotate_glyph_runs(
     text: &[char],
     run_text_indices: &[&[u32]],
 ) -> Result<Vec<GlyphRunAnnotations>, GlyphRunAnnotationError> {
-    use line_break::{compute_line_breaks, line_break_props, LineBreak, LineBreakClass};
+    use line_break::{LineBreak, LineBreakClass, compute_line_breaks, line_break_props};
     // Adapt the public char slice without allocating for typical UI strings.
     let mut inline_unichars = [0u32; 256];
     let mut heap_unichars = Vec::new();
@@ -1345,6 +1348,7 @@ impl Default for RawPath {
 pub enum BlendMode {
     #[default]
     SrcOver = 3,
+    Additive = 12,
     Screen = 14,
     Overlay = 15,
     Darken = 16,
@@ -4753,7 +4757,8 @@ impl Renderer for RecordingRenderer {
 
     fn modulate_color(&mut self, color: ColorInt, replace: bool) {
         self.stream.borrow_mut().semantic_line(format!(
-            "modulateColor color=0x{color:08x} replace={}", u8::from(replace)
+            "modulateColor color=0x{color:08x} replace={}",
+            u8::from(replace)
         ));
     }
 }

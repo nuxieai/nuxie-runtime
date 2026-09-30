@@ -60,6 +60,9 @@ pub enum OpKind {
     CanvasContentBegin = 33,
     CanvasContentEnd = 34,
     ModulateColor = 35,
+    Additiveness = 36,
+    DrawImageAdditive = 37,
+    DrawImageMeshAdditive = 38,
 }
 
 impl OpKind {
@@ -99,6 +102,9 @@ impl OpKind {
             33 => Self::CanvasContentBegin,
             34 => Self::CanvasContentEnd,
             35 => Self::ModulateColor,
+            36 => Self::Additiveness,
+            37 => Self::DrawImageAdditive,
+            38 => Self::DrawImageMeshAdditive,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -146,6 +152,9 @@ impl Display for OpKind {
             Self::CanvasContentBegin => "canvasContentBegin",
             Self::CanvasContentEnd => "canvasContentEnd",
             Self::ModulateColor => "modulateColor",
+            Self::Additiveness => "additiveness",
+            Self::DrawImageAdditive => "drawImageAdditive",
+            Self::DrawImageMeshAdditive => "drawImageMeshAdditive",
         })
     }
 }
@@ -474,18 +483,24 @@ fn parse_fields(
         OpKind::ClipPath => {
             push_uint(reader, fields, "path_id")?;
         }
-        OpKind::DrawImage => {
+        OpKind::DrawImage | OpKind::DrawImageAdditive => {
             push_uint(reader, fields, "image_id")?;
             push_uint(reader, fields, "blend_mode")?;
             push_float(reader, fields, "opacity")?;
+            if kind == OpKind::DrawImageAdditive {
+                push_float(reader, fields, "additiveness")?;
+            }
         }
-        OpKind::DrawImageMesh => {
+        OpKind::DrawImageMesh | OpKind::DrawImageMeshAdditive => {
             push_uint(reader, fields, "image_id")?;
             push_uint(reader, fields, "blend_mode")?;
             push_float(reader, fields, "opacity")?;
             push_uint(reader, fields, "positions_id")?;
             push_uint(reader, fields, "uvs_id")?;
             push_uint(reader, fields, "indices_id")?;
+            if kind == OpKind::DrawImageMeshAdditive {
+                push_float(reader, fields, "additiveness")?;
+            }
         }
         OpKind::SetVertexBufferData | OpKind::SetIndexBufferData => {
             let id = push_uint(reader, fields, "id")?;
@@ -559,7 +574,7 @@ fn parse_fields(
             push_uint(reader, fields, "paint_id")?;
             push_uint(reader, fields, "value")?;
         }
-        OpKind::Thickness | OpKind::Feather => {
+        OpKind::Thickness | OpKind::Feather | OpKind::Additiveness => {
             push_uint(reader, fields, "paint_id")?;
             push_float(reader, fields, "value")?;
         }

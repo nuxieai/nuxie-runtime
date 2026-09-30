@@ -52,9 +52,10 @@ impl NSlicer {
         sampler: nuxie_render_api::ImageSampler,
         blend: nuxie_render_api::BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) {
         let mesh = std::mem::take(&mut self.slice_mesh);
-        mesh.draw(self, renderer, image, sampler, blend, opacity);
+        mesh.draw(self, renderer, image, sampler, blend, opacity, additiveness);
         self.slice_mesh = mesh;
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {

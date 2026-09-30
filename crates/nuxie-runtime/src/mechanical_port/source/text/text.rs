@@ -1668,6 +1668,7 @@ impl Text {
         }
         let world_transform = self.shape_world_transform;
         let blend_mode = self.base.blend_mode().into();
+        let additive_amount = self.base.additive_amount();
         // Backgrounds precede every glyph, in style child order.
         for style in &self.text_style_paints {
             if let Some(background) = style
@@ -1675,7 +1676,7 @@ impl Text {
                 .flatten()
             {
                 background.with_downcast_mut::<TextStyleBackground, _>(|background| {
-                    background.draw(renderer, &world_transform, blend_mode);
+                    background.draw(renderer, &world_transform, blend_mode, additive_amount);
                 });
             }
         }
@@ -1686,7 +1687,7 @@ impl Text {
             match &self.draw_commands[index] {
                 TextDrawCommand::Style(style) => {
                     style.with_downcast_mut::<TextStylePaint, _>(|style| {
-                        style.draw(renderer, &world_transform, blend_mode)
+                        style.draw(renderer, &world_transform, blend_mode, additive_amount)
                     });
                 }
                 TextDrawCommand::ColorGlyph {

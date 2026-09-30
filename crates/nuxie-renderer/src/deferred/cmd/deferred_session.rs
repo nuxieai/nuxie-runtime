@@ -4,7 +4,7 @@ use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
     foreign_image_registry::ForeignImageRegistry, render_commands::*, render_handle::*,
 };
-use crate::authored_ore_shader::{ExactGpuCanvasShaderOccurrence, profile_for_target};
+use crate::authored_ore_shader::{profile_for_target, ExactGpuCanvasShaderOccurrence};
 use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;
@@ -472,6 +472,18 @@ impl Renderer for ScopedRenderer {
     fn draw_image(&mut self, i: Option<&dyn RenderImage>, s: ImageSampler, b: BlendMode, o: f32) {
         self.0.borrow_mut().draw_image(i, s, b, o);
     }
+    fn draw_image_with_additiveness(
+        &mut self,
+        i: Option<&dyn RenderImage>,
+        s: ImageSampler,
+        b: BlendMode,
+        o: f32,
+        additiveness: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .draw_image_with_additiveness(i, s, b, o, additiveness);
+    }
     fn draw_image_mesh(
         &mut self,
         i: Option<&dyn RenderImage>,
@@ -487,6 +499,32 @@ impl Renderer for ScopedRenderer {
         self.0
             .borrow_mut()
             .draw_image_mesh(i, s, v, uv, indices, vc, ic, b, o);
+    }
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        i: Option<&dyn RenderImage>,
+        s: ImageSampler,
+        v: Option<&dyn RenderBuffer>,
+        uv: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vc: u32,
+        ic: u32,
+        b: BlendMode,
+        o: f32,
+        additiveness: f32,
+    ) {
+        self.0.borrow_mut().draw_image_mesh_with_additiveness(
+            i,
+            s,
+            v,
+            uv,
+            indices,
+            vc,
+            ic,
+            b,
+            o,
+            additiveness,
+        );
     }
     fn modulate_opacity(&mut self, o: f32) {
         self.0.borrow_mut().modulate_opacity(o);

@@ -144,12 +144,13 @@ impl Tendon {
             return code;
         }
         let Some(core_object) = context.resolve(self.base.bone_id()) else {
-            return StatusCode::MissingObject;
+            // Runtime import must reject a tendon whose bone cannot be used.
+            return StatusCode::InvalidObject;
         };
         if !core_object.is_type_of(
             crate::mechanical_port::source::generated::bones::bone_base::BoneBase::TYPE_KEY,
         ) {
-            return StatusCode::MissingObject;
+            return StatusCode::InvalidObject;
         }
         self.bone = Some(core_object);
         StatusCode::Ok

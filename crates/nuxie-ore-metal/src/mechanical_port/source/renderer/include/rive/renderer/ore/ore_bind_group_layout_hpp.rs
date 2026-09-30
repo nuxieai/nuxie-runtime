@@ -42,6 +42,8 @@ use super::ore_types_hpp::BindGroupLayoutEntry;
 // implemented in the paired ore_bind_group_layout_cpp.rs and exposed through
 // the public bind_group_layout module. Slices carry the pointer/count pairs;
 // Option<&ShaderModule> preserves the nullable upstream shader argument.
+// makeBindGroupLayoutFromBindingMap additionally accepts both nullable stage
+// pair sources; these determine depth-only sampler flags and salted intern IDs.
 // Population returns the total required group count, even when the caller's
 // slice is shorter. Only the slice's prefix is written; retry with more room.
 // validateBindGroupDesc: paired implementation validates UBO ranges before

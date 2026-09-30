@@ -886,8 +886,10 @@ pub struct BindGroupLayoutEntry {
     // backends map to the Dawn enum.
     pub textureSampleType: SampleType,
     pub textureMultisampled: bool,
+    // Samplers paired only with depth textures must be non-filtering on WebGPU.
+    pub samplerNonFiltering: bool,
     // Named so recording an entry array copies no indeterminate bytes.
-    pub pad: [u8; 2],
+    pub pad: [u8; 1],
 
     // UBO-only: smallest valid bind size for this entry. 0 = no minimum
     // (use the full buffer range). Matches WebGPU's
@@ -921,7 +923,8 @@ impl Default for BindGroupLayoutEntry {
             textureViewDim: TextureViewDimension::texture2D,
             textureSampleType: SampleType::floatFilterable,
             textureMultisampled: false,
-            pad: [0; 2],
+            samplerNonFiltering: false,
+            pad: [0; 1],
             minBindingSize: 0,
             nativeSlotVS: Self::kNativeSlotAbsent,
             nativeSlotFS: Self::kNativeSlotAbsent,

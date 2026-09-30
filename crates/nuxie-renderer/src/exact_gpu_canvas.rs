@@ -606,11 +606,13 @@ fn build_pipeline(
             ),
             FragmentSelection::None => None,
         };
-    // Mirrors pinned lua_gpu.cpp:2181-2217 exactly. Automatic layouts always
-    // come from the vertex module's complete binding map. They are not stage
-    // filtered and an explicitly separate fragment module is not merged in.
-    let bindings = vertex.bindings();
-    let layouts = make_layouts(context, bindings)?;
+    // Shared upstream reflection includes both stage maps and their sampler
+    // pair sources, including the WebGPU depth-only sampler declaration.
+    let layouts = make_layouts(
+        context,
+        vertex_module.shaderModuleBase(),
+        fragment_module_and_entry.and_then(|(module, _)| module.shaderModuleBase()),
+    )?;
     let layout_refs = layouts.iter().map(Option::as_ref).collect::<Vec<_>>();
     let (depth_stencil, stencil_front, stencil_back, stencil_read_mask, stencil_write_mask) =
         depth_stencil(plan.pipeline_state.depth_stencil.as_ref())?;
@@ -659,7 +661,7 @@ fn build_pipeline(
             })
         })?;
 
-    let resources = make_pipeline_resources(context, bindings, plan, &layouts, retained_textures)?;
+    let resources = make_pipeline_resources(context, plan, &layouts, retained_textures)?;
     Ok(BuiltPipeline {
         pipeline,
         groups: resources.groups,
@@ -713,9 +715,12 @@ fn shader_occurrence<'a>(
 
 fn make_layouts(
     context: &mut dyn ContextApi,
-    bindings: &[GpuCanvasShaderBinding],
+    vertex: Option<&nuxie_ore_metal::shader_module::ShaderModule>,
+    fragment: Option<&nuxie_ore_metal::shader_module::ShaderModule>,
 ) -> Result<Vec<Option<AnyResourceHandle>>, GpuCanvasError> {
-    let Some(max_group) = bindings.iter().map(|binding| binding.group).max() else {
+    use nuxie_ore_metal::bind_group_layout::{bindingMapForStages, makeBindGroupLayoutFromBindingMap};
+    let bindings = bindingMapForStages(vertex, fragment);
+    let Some(max_group) = (0..bindings.size()).map(|i| bindings.at(i).group).max() else {
         return Ok(Vec::new());
     };
     if u32::from(max_group) >= kMaxBindGroups {
@@ -723,22 +728,12 @@ fn make_layouts(
     }
     let mut layouts = (0..=max_group).map(|_| None).collect::<Vec<_>>();
     for group in 0..=max_group {
-        let entries = bindings
-            .iter()
-            .filter(|binding| binding.group == group)
-            .map(layout_entry)
-            .collect::<Result<Vec<_>, _>>()?;
-        if entries.is_empty() {
+        if !(0..bindings.size()).any(|i| bindings.at(i).group == group) {
             continue;
         }
-        let layout = context
-            .makeBindGroupLayout(&BindGroupLayoutDesc {
-                groupIndex: u32::from(group),
-                entries: Some(&entries),
-                entryCount: u32::try_from(entries.len())
-                    .map_err(|_| rejected("binding layout count exceeds u32"))?,
-                label: Some("authored GPU-canvas bind-group layout"),
-            })
+        let layout = makeBindGroupLayoutFromBindingMap(
+                context, &bindings, u32::from(group), &[], vertex, fragment,
+            )
             .ok_or_else(|| rejected(context_error(context, "create bind-group layout")))?;
         layouts[usize::from(group)] = Some(layout);
     }
@@ -793,7 +788,6 @@ struct PipelineResources {
 
 fn make_pipeline_resources(
     context: &mut dyn ContextApi,
-    bindings: &[GpuCanvasShaderBinding],
     plan: &GpuCanvasPipelinePlan,
     layouts: &[Option<AnyResourceHandle>],
     retained_textures: &BTreeMap<u64, RetainedTextureResource>,
@@ -881,13 +875,14 @@ fn make_pipeline_resources(
         let mut ubos = Vec::new();
         let mut tex = Vec::new();
         let mut samp = Vec::new();
-        for binding in bindings
-            .iter()
-            .filter(|binding| usize::from(binding.group) == group_index)
-        {
+        // The layout is the shared builder's merged stage declaration. Use
+        // that same declaration for resources, including fragment-only pairs.
+        let layout_base = layout.bindGroupLayoutBase()
+            .ok_or_else(|| rejected("bind-group layout has no source layout base"))?;
+        for binding in layout_base.entries() {
             let identity = (group_index_u32, u32::from(binding.binding));
             match binding.kind {
-                GpuCanvasShaderResourceKind::UniformBuffer => {
+                BindingKind::uniformBuffer => {
                     let buffer = uniform_buffers.get(&identity).ok_or_else(|| {
                         rejected(format!(
                             "uniform group {} binding {} is missing",
@@ -910,7 +905,7 @@ fn make_pipeline_resources(
                         size,
                     });
                 }
-                GpuCanvasShaderResourceKind::SampledTexture => {
+                BindingKind::sampledTexture => {
                     let view = texture_views.get(&identity).ok_or_else(|| {
                         rejected(format!(
                             "texture group {} binding {} is missing",
@@ -922,8 +917,8 @@ fn make_pipeline_resources(
                         view: Some(view),
                     });
                 }
-                GpuCanvasShaderResourceKind::Sampler
-                | GpuCanvasShaderResourceKind::ComparisonSampler => {
+                BindingKind::sampler
+                | BindingKind::comparisonSampler => {
                     let sampler = sampler_resources.get(&identity).ok_or_else(|| {
                         rejected(format!(
                             "sampler group {} binding {} is missing",

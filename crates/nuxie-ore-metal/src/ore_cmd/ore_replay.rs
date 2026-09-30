@@ -3,7 +3,7 @@
 use super::{
     ore_command_buffer::{OreCommandBuffer, OreCommandReader},
     ore_commands::*,
-    ore_handle::INVALID_HANDLE,
+    ore_handle::{INVALID_HANDLE, REAL_RESOURCE_FLAG},
     ore_make_replay::{
         OreKind, OreResident, decodePods, replayOreLifecycle, resolveOre, warn_throttled,
     },
@@ -24,15 +24,25 @@ pub fn replayPassCommand(
     kind: CommandType,
     reader: &mut OreCommandReader<'_>,
     resolve: &mut dyn FnMut(u32, OreKind) -> Option<AnyResourceHandle>,
+    describe: Option<&dyn Fn(u32) -> Option<String>>,
 ) -> bool {
-    fn churned(dropDraws: &mut bool, what: &str, h: u32) {
+    let churned = |dropDraws: &mut bool, what: &str, h: u32| {
         *dropDraws = true;
-        warn_throttled!(
-            "rive ore replay: {} handle {} churned, dropping pass draws",
-            what,
-            h
-        );
-    }
+        if let Some(note) = describe.and_then(|describe| describe(h)) {
+            warn_throttled!(
+                "rive ore replay: {} handle {} dropped pass draws: {}",
+                what,
+                h,
+                note
+            );
+        } else {
+            warn_throttled!(
+                "rive ore replay: {} handle {} churned, dropping pass draws",
+                what,
+                h
+            );
+        }
+    };
     match kind {
         CommandType::beginRenderPass => {
             let c: BeginRenderPassCmd = reader.read();
@@ -215,6 +225,7 @@ pub fn replayCommandBufferResolved(
                     resolveHandle(h)
                 }
             },
+            None,
         ) {
             debug_assert!(false, "lifecycle opcode in passes-only stream");
             break;
@@ -242,6 +253,13 @@ pub fn replayOreStream(
                 kind,
                 &mut reader,
                 &mut |h, k| resolveOre(table, real, h, k),
+                Some(&|h| {
+                    if h & REAL_RESOURCE_FLAG != 0 {
+                        None
+                    } else {
+                        table.failureNote(h).map(str::to_owned)
+                    }
+                }),
             )
         {
             debug_assert!(false, "unknown ORE opcode");
@@ -430,7 +448,8 @@ mod tests {
                 &mut |handle, _| {
                     resolved.push(handle);
                     None
-                }
+                },
+                None,
             ));
         }
         assert!(pass.is_none());

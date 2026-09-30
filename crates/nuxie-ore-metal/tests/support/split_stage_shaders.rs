@@ -1,4 +1,4 @@
-// Exact target-2 MSL and target-10 maps extracted from upstream d7fff883
+// Exact target-2 MSL and target-10 maps extracted from upstream 50ba2f5a
 // tests/gm/ore_gm_shaders.rstb.hpp (triangle index 0, binding_witness index 6).
 pub const TRIANGLE_MSL: &[u8] = br#"// language: metal1.0
 #include <metal_stdlib>
@@ -43,7 +43,7 @@ fragment fs_mainOutput fs_main(
     return fs_mainOutput { in.color };
 }
 "#;
-pub const TRIANGLE_MAP: &[u8] = &[3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+pub const TRIANGLE_MAP: &[u8] = &[3, 2, 18, 0, 0, 0, 0, 0, 9, 0, 0, 0];
 pub const WITNESS_MSL: &[u8] = br#"// language: metal1.0
 #include <metal_stdlib>
 #include <simd/simd.h>
@@ -84,6 +84,6 @@ fragment fs_mainOutput fs_main(
 }
 "#;
 pub const WITNESS_MAP: &[u8] = &[
-    3, 2, 14, 0, 2, 0, 0, 0, 9, 0, 1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 0, 7, 0,
-    1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 163, 244, 48, 8, 105, 107, 173, 150,
+    3, 2, 18, 0, 2, 0, 0, 0, 9, 0, 1, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0,
+    7, 0, 7, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 16, 0, 0, 0, 0, 51, 25, 188, 109, 89, 12, 185, 250,
 ];

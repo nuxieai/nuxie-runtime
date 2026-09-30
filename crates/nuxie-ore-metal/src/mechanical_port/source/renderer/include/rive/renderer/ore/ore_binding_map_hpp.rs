@@ -1291,8 +1291,7 @@ impl BindingMap {
         &self.m_entries
     }
 
-    #[cfg(feature = "with-rive-tools")]
-    // Slot-unaware lookup for tools that want the full entry.
+    // Slot-unaware lookup, including the runtime depth-only sampler scan.
     pub fn lookupEntry(&self, group: u32, binding: u32) -> Option<&Entry> {
         self.findEntry(group, binding)
     }

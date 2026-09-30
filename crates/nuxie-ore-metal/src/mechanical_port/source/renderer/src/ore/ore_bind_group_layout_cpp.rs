@@ -272,6 +272,8 @@ pub fn makeBindGroupLayoutFromShader(
         shader.map(|shader| &shader.m_bindingMap).unwrap_or(&empty),
         groupIndex,
         dynamicUBOBindings,
+        shader,
+        None,
     )
 }
 
@@ -365,18 +367,83 @@ pub fn populateBindGroupLayoutEntries(
     n as u32
 }
 
-/// Intern by baked identity, with heap storage for groups wider than sixteen.
+fn samplerPairsDepthOnly(
+    bm: &BindingMap,
+    vertexPairSource: Option<&ShaderModule>,
+    fragmentPairSource: Option<&ShaderModule>,
+    groupIndex: u32,
+    binding: u32,
+) -> bool {
+    let fragment = fragmentPairSource.filter(|fragment| {
+        !vertexPairSource.is_some_and(|vertex| std::ptr::eq(vertex, *fragment))
+    });
+    let mut paired = false;
+    for module in [vertexPairSource, fragment].into_iter().flatten() {
+        for p in &module.m_textureSamplerPairs {
+            if u32::from(p.samplerGroup) != groupIndex || u32::from(p.samplerBinding) != binding {
+                continue;
+            }
+            let tex = bm.lookupEntry(u32::from(p.textureGroup), u32::from(p.textureBinding));
+            if !tex.is_some_and(|tex| tex.textureSampleType == TextureSampleType::Depth) {
+                return false;
+            }
+            paired = true;
+        }
+    }
+    paired
+}
+
+fn collectDepthOnlySamplers(
+    bm: &BindingMap,
+    vertexPairSource: Option<&ShaderModule>,
+    fragmentPairSource: Option<&ShaderModule>,
+    groupIndex: u32,
+) -> Vec<u32> {
+    let mut bindings = Vec::new();
+    for i in 0..bm.size() {
+        let e = bm.at(i);
+        if u32::from(e.group) == groupIndex
+            && e.kind == ResourceKind::Sampler
+            && samplerPairsDepthOnly(bm, vertexPairSource, fragmentPairSource, groupIndex, u32::from(e.binding))
+        {
+            bindings.push(u32::from(e.binding));
+        }
+    }
+    bindings
+}
+
+const kNonFilteringLayoutIdSalt: u64 = 0x9e3779b97f4a7c15;
+fn saltLayoutId(mut layoutId: u64, nonFiltering: &[u32]) -> u64 {
+    for &binding in nonFiltering {
+        layoutId = (layoutId ^ kNonFilteringLayoutIdSalt.wrapping_add(u64::from(binding)))
+            .wrapping_mul(0x100000001b3);
+    }
+    layoutId
+}
+
+/// Intern by baked identity plus depth-only sampler flags. Pair sources must
+/// include every module whose binding map was merged.
 pub fn makeBindGroupLayoutFromBindingMap(
     ctx: &mut dyn ContextApi,
     bindingMap: &BindingMap,
     groupIndex: u32,
     dynamicUBOBindings: &[u32],
+    vertexPairSource: Option<&ShaderModule>,
+    fragmentPairSource: Option<&ShaderModule>,
 ) -> Option<AnyResourceHandle> {
-    let layoutId = if dynamicUBOBindings.is_empty() {
+    let nonFiltering = if vertexPairSource.is_some() || fragmentPairSource.is_some() {
+        collectDepthOnlySamplers(bindingMap, vertexPairSource, fragmentPairSource, groupIndex)
+    } else {
+        Vec::new()
+    };
+    let mut layoutId = if dynamicUBOBindings.is_empty() {
         bindingMap.layoutIdForGroup(groupIndex)
     } else {
         BindingMap::kNoLayoutId
     };
+    if layoutId != BindingMap::kNoLayoutId && !nonFiltering.is_empty() {
+        layoutId = saltLayoutId(layoutId, &nonFiltering);
+    }
     if layoutId != BindingMap::kNoLayoutId {
         if let Some(hit) = ctx.findInternedBindGroupLayout(layoutId) {
             return Some(hit);
@@ -389,10 +456,15 @@ pub fn makeBindGroupLayoutFromBindingMap(
     let entries = if n > entries.len() as u32 {
         spilled.resize(n as usize, BindGroupLayoutEntry::default());
         populateBindGroupLayoutEntries(&mut spilled, bindingMap, groupIndex, dynamicUBOBindings);
-        spilled.as_slice()
+        spilled.as_mut_slice()
     } else {
-        entries.as_slice()
+        entries.as_mut_slice()
     };
+    if !nonFiltering.is_empty() {
+        for e in entries.iter_mut().take(n as usize) {
+            e.samplerNonFiltering = e.kind == BindingKind::sampler && nonFiltering.contains(&e.binding);
+        }
+    }
     let layout = ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
         groupIndex,
         entries: Some(entries),

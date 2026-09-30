@@ -175,7 +175,11 @@ pub(crate) fn makeWGPUBGLEntryFromDesc(src: &OreBindGroupLayoutEntry) -> WGPUBin
             e.storageTexture.format = WGPUTextureFormat_RGBA8Unorm;
             e.storageTexture.viewDimension = toWGPUDescViewDim(src.textureViewDim).into();
         }
-        BindingKind::sampler => e.sampler.r#type = SamplerBindingType::Filtering.into(),
+        BindingKind::sampler => e.sampler.r#type = if src.samplerNonFiltering {
+            SamplerBindingType::NonFiltering
+        } else {
+            SamplerBindingType::Filtering
+        }.into(),
         BindingKind::comparisonSampler => {
             e.sampler.r#type = SamplerBindingType::Comparison.into();
         }
@@ -236,7 +240,7 @@ pub(crate) const SOURCE_RESOURCE_KIND_CASE_COUNT: usize = 7;
 pub(crate) const SOURCE_BINDING_KIND_CASE_COUNT: usize = 7;
 pub(crate) const SOURCE_DEFAULT_ARGUMENT_COUNT: usize = 3;
 pub(crate) const SOURCE_CREATE_BIND_GROUP_LAYOUT_CALL_COUNT: usize = 1;
-const _: [(); 11573] = [(); PINNED_SOURCE.len()];
+const _: [(); 11706] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -252,7 +256,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 283);
+        assert_eq!(PINNED_SOURCE.lines().count(), 285);
         assert_eq!(kWGPUMaxGroups, kMaxBindGroups);
         assert_eq!(SOURCE_INLINE_FUNCTION_COUNT, 5);
         assert_eq!(SOURCE_SWITCH_COUNT, 6);

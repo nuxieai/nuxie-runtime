@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7732f41ef93e4cb74286934ee596e1041d0a0ba7`
+- LAST_SYNCED_SHA: `814f89ac5314a72c07df3b9c998c58ece33573a8`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 92 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 92 require a Rust translation.
+  There are 91 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 91 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `814f89ac5314a72c07df3b9c998c58ece33573a8` | **DEFERRED:** Wasm debugger enter/line/leave ABI and native/web bindings, module-call/boot/detach hooks, thread-local boot context and debug tier pinning. All executable changes belong to the parked Wasm scripting VM/binding lane; no native Luau, shared runtime or browser renderer change is present. The private CLI preview debugger named in the title is not part of the public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7732f41ef93e4cb74286934ee596e1041d0a0ba7` | Render GL canvases top-down through per-target orientation, carrying the target direction through viewport, scissor, blit, gradient/image/clip coordinates, winding and shaders. Remove the superseded GL canvas-mirror textures/registry and ORE/scripting flip paths; retain direct imported views. Translate new canvas mesh/winding regressions and affected existing DAG cases. Preserve Vulkan's compiled-atomics admission and distinct unsupported-build error. Previously unported C++ GM/test-window baseline plumbing is not claimed as a Rust implementation. | — |
 | `1cc2396f0d0d3f6d9c0b16809904e85265f617eb` | Translate single-sample depth/stencil rendering across Vulkan, WebGPU and WebGL2, including direct target attachments, sample-specific resources, shader destination reads, compact shader/pipeline keys and the upstream key-collision/GL retarget regressions. Expose clockwise single-sample mode through the Rust product and replay hosts; preserve Metal's upstream-supported modes. Regenerate affected shader inputs/artifacts. C++ GLFW/EGL test-window plumbing, D3D and deployment-only changes are not Rust product implementations. | — |
 | `c5ac0a130a6ff425e38721183eb1f8f05af8e54a` | **ALREADY SATISFIED AT THE RUST HOST BOUNDARY:** upstream's shared `HostFrameSink` now supplies `oreCommandBuffer()` at ORE frame begin. Rust uses backend-specific hosts: Android Vulkan opens its native frame before replay and passes its recording command buffer through `begin_frame_external`; WebGPU installs its retained command encoder via `beginFrameExternal` for normal and standalone canvas frames. The C++ shared-host class itself is not shipped. Windows viewer/D3D12 and HiDPI changes described by the title are not present in this public delta or claimed imported. | — |

@@ -54,6 +54,20 @@ fn fail(
     Err(error)
 }
 
+impl TextureVulkan {
+    /// Marks the subresource written and reports whether it already was.
+    pub(crate) fn vkMarkWritten(&self, mip: u32, layer: u32) -> bool {
+        let index = layer as usize * self.numMipmaps() as usize + mip as usize;
+        let mut written = self.m_vkWritten.borrow_mut();
+        if index >= written.len() {
+            written.resize(index + 1, false);
+        }
+        let was_written = written[index];
+        written[index] = true;
+        was_written
+    }
+}
+
 pub(crate) fn upload(
     texture: &TextureVulkan,
     data: &TextureDataDesc<'_>,
@@ -329,6 +343,7 @@ pub(crate) fn upload(
             depth,
         },
     };
+    texture.vkMarkWritten(data.mipLevel, data.layer);
     texture
         .oreContextMut()
         .vkQueuePendingTextureUpload(VkPendingTextureUpload {

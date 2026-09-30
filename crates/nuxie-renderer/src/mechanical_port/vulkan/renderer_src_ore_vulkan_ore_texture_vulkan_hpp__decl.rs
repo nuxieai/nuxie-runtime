@@ -14,7 +14,7 @@ use nuxie_ore_metal::texture::{Texture, TextureApi, TextureUploadError, TextureV
 use nuxie_ore_metal::types::{
     TextureDataDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
 };
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
 use std::rc::{Rc, Weak};
@@ -26,6 +26,8 @@ pub(crate) struct TextureVulkan {
     pub(crate) m_vkImage: vk::Image,
     pub(crate) m_vmaAllocation: Option<Box<vk_mem::Allocation>>,
     pub(crate) m_vkLayout: Cell<vk::ImageLayout>,
+    // One flag per mip and layer, including pending uploads.
+    pub(crate) m_vkWritten: RefCell<Vec<bool>>,
     pub(crate) m_vkDevice: vk::Device,
     pub(crate) m_vk: ManuallyDrop<Option<Arc<VulkanContext>>>,
     pub(crate) m_vkOreContext: Cell<*mut ContextVulkan>,
@@ -43,6 +45,7 @@ impl TextureVulkan {
             m_vkImage: vk::Image::null(),
             m_vmaAllocation: None,
             m_vkLayout: Cell::new(vk::ImageLayout::UNDEFINED),
+            m_vkWritten: RefCell::new(Vec::new()),
             m_vkDevice: context.m_vk.device,
             m_vk: ManuallyDrop::new(Some(Arc::clone(&context.m_vk))),
             m_vkOreContext: Cell::new(context),

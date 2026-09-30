@@ -349,6 +349,20 @@ fn pipelineStageAndAccessForLayout(
     }
 }
 
+pub(super) fn firstUseLoadOp(view: &TextureViewVulkan, loadOp: LoadOp) -> LoadOp {
+    let texture = view
+        .texture()
+        .downcast_ref::<TextureVulkan>()
+        .expect("TextureViewVulkan retains TextureVulkan");
+    // The framebuffer renders one layer, so only the base layer gets contents.
+    let written = texture.vkMarkWritten(view.baseMipLevel(), view.baseLayer());
+    if loadOp == LoadOp::load && !written {
+        LoadOp::clear
+    } else {
+        loadOp
+    }
+}
+
 pub(crate) fn vkQueueTransitionToLayout(
     context: &mut ContextVulkan,
     texture: &AnyResourceHandle,
@@ -1154,7 +1168,7 @@ pub(crate) fn beginRenderPass(
             .expect("TextureViewVulkan retains TextureVulkan");
         key.colorFormats[index] = texture.format();
         colorFormats[index] = texture.format();
-        key.colorLoadOps[index] = attachment.loadOp;
+        key.colorLoadOps[index] = ContextVulkan::firstUseLoadOp(view, attachment.loadOp);
         key.colorStoreOps[index] = attachment.storeOp;
         key.colorHasResolve[index] = attachment.resolveTarget.is_some();
 
@@ -1168,6 +1182,7 @@ pub(crate) fn beginRenderPass(
             if let Some(resolveTexture) = resolveTextureHandle.downcast_ref::<TextureVulkan>() {
                 state.m_vkResolveTargets[index].image = resolveTexture.m_vkImage;
                 state.m_vkResolveTargets[index].texture = Some(resolveTextureHandle.clone());
+                resolveTexture.vkMarkWritten(resolveView.baseMipLevel(), resolveView.baseLayer());
             }
             state.m_vkResolveTargets[index].baseMip = resolveView.baseMipLevel();
             state.m_vkResolveTargets[index].baseLayer = resolveView.baseLayer();
@@ -1186,7 +1201,7 @@ pub(crate) fn beginRenderPass(
         state.m_vkColorLayerCount[index] = view.layerCount();
         state.m_vkColorRenderTargets[index] = view.m_vkRenderTarget.clone();
         state.m_vkColorTextures[index] = Some(textureHandle.clone());
-        if attachment.loadOp == LoadOp::load {
+        if key.colorLoadOps[index] == LoadOp::load {
             context.vkQueueTransitionToLayout(
                 textureHandle,
                 vk::ImageAspectFlags::COLOR,
@@ -1216,7 +1231,7 @@ pub(crate) fn beginRenderPass(
         key.hasDepth = true;
         key.depthFormat = depthTexture.format();
         depthFormat = depthTexture.format();
-        key.depthLoadOp = desc.depthStencil.depthLoadOp;
+        key.depthLoadOp = ContextVulkan::firstUseLoadOp(depthView, desc.depthStencil.depthLoadOp);
         key.depthStoreOp = desc.depthStencil.depthStoreOp;
         attachmentViews[attachmentCount] = depthView.m_vkImageView;
         attachmentCount += 1;
@@ -1224,7 +1239,7 @@ pub(crate) fn beginRenderPass(
         state.m_vkDepthBaseLayer = depthView.baseLayer();
         state.m_vkDepthLayerCount = depthView.layerCount();
         *state.m_vkDepthTexture = Some(depthTextureHandle.clone());
-        if desc.depthStencil.depthLoadOp == LoadOp::load {
+        if key.depthLoadOp == LoadOp::load {
             let mut aspect = vk::ImageAspectFlags::DEPTH;
             if hasStencilLocal(depthTexture.format()) {
                 aspect |= vk::ImageAspectFlags::STENCIL;
@@ -1392,6 +1407,10 @@ pub(crate) unsafe fn wrapCanvasTexture(
     let mut texture = TextureVulkan::new(manager.clone(), &desc, context);
     texture.m_vkImage = image;
     texture.m_vkLayout.set(vk::ImageLayout::UNDEFINED);
+    // Rive's tracker still says undefined until something draws the canvas.
+    if binding.targetLastAccess.layout != vk::ImageLayout::UNDEFINED {
+        texture.vkMarkWritten(0, 0);
+    }
     let texture =
         ResourceHandle::new_texture_with_installed_manager_in_domain(domain.clone(), texture)
             .erase();
@@ -1444,6 +1463,7 @@ pub(crate) unsafe fn wrapRiveTexture(
     wrapped
         .m_vkLayout
         .set(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
+    wrapped.vkMarkWritten(0, 0);
     let wrapped =
         ResourceHandle::new_texture_with_installed_manager_in_domain(domain.clone(), wrapped)
             .erase();

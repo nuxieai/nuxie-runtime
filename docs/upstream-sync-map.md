@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6a8cf4a3adad93a20fb496ce3910e418d47a7d02`
+- LAST_SYNCED_SHA: `f7c3d1f9975c4993b68fd5f0fbf568bb4607e77c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 87 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 87 require a Rust translation.
+  There are 86 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 86 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f7c3d1f9975c4993b68fd5f0fbf568bb4607e77c` | Track Vulkan texture contents per mip/layer, including pending uploads and resolve targets. Convert load to clear for never-written attachment subresources, mark only the framebuffer's base layer, and preserve canvas/Rive texture contents through target access tracking. **DEFERRED:** the Wasm-only player frame-boundary nursery scavenging call belongs to parked Wasm execution. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `6a8cf4a3adad93a20fb496ce3910e418d47a7d02` | Add bounded state-machine hit testing for host-owned input decisions. Scripted layouts count only inside their last-known layout box after world-to-local conversion; unboxed scripted drawables retain everywhere-hit behavior. Propagate bounded queries through nested state machines and reverse-ordered artboard lists without changing ordinary pointer hit testing. Private macOS window chrome is not present in the public delta. | — |
 | `19c0fad37c35405ae08bda3779be49affc532b32` | Keep Vulkan depth testing enabled when a depth attachment is present and depth writes are requested, including always-compare writes. Preserve the attachment/compare/write predicates and translate the three-overlapping-quads regression: the nearest always-write quad must occlude later lessEqual draws. | — |
 | `5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555` | Remove the clockwise-atomic unmultiplied-paint workaround. Return incremental coverage from stroke/fill helpers, scale the complete premultiplied color for fixed-function output, and retain alpha-only coverage followed by RGB premultiplication for the programmable blend path. Remove obsolete defines from all entry points and regenerate affected supported shader artifacts, retaining historical capture provenance and the approved Metal feather ABI adaptation. | — |

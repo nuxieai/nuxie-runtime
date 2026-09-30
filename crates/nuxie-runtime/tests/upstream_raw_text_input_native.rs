@@ -1229,6 +1229,68 @@ fn text_input_journal_works() {
     assert_cursor(text_input.cursor(), 4, 7);
 }
 
+// Upstream 074bfb13: moving left from a selection lands before its first character.
+#[test]
+fn moving_left_from_a_selection_lands_before_its_first_character() {
+    let font = load_font("assets/fonts/IBMPlexSansArabic-Regular.ttf");
+    let mut text_input = RawTextInput::new();
+    text_input.insert("hello world");
+    text_input.set_font(Some(font));
+    text_input.set_sizing(TextSizing::AutoHeight);
+    text_input.set_max_width(500.0);
+    text_input.set_font_size(72.0);
+    let factory = retained_factory();
+    text_input.update(&factory);
+
+    // Forward selection collapses off its leading edge.
+    text_input.set_cursor(Cursor::new(
+        CursorPosition::new(0, 2),
+        CursorPosition::new(0, 5),
+    ));
+    text_input.cursor_left(CursorBoundary::Character, false);
+    assert_cursor(text_input.cursor(), 1, 1);
+
+    // Backward selection has the same leading edge.
+    text_input.set_cursor(Cursor::new(
+        CursorPosition::new(0, 5),
+        CursorPosition::new(0, 2),
+    ));
+    text_input.cursor_left(CursorBoundary::Character, false);
+    assert_cursor(text_input.cursor(), 1, 1);
+
+    // The beginning clamps the leftward move.
+    text_input.set_cursor(Cursor::new(
+        CursorPosition::new(0, 0),
+        CursorPosition::new(0, 5),
+    ));
+    text_input.cursor_left(CursorBoundary::Character, false);
+    assert_cursor(text_input.cursor(), 0, 0);
+
+    // Word movement also starts from the leading edge.
+    text_input.set_cursor(Cursor::new(
+        CursorPosition::new(0, 6),
+        CursorPosition::new(0, 9),
+    ));
+    text_input.cursor_left(CursorBoundary::Word, false);
+    assert_cursor(text_input.cursor(), 0, 0);
+
+    // Shift+left extends from the active end.
+    text_input.set_cursor(Cursor::new(
+        CursorPosition::new(0, 2),
+        CursorPosition::new(0, 5),
+    ));
+    text_input.cursor_left(CursorBoundary::Character, true);
+    assert_cursor(text_input.cursor(), 2, 4);
+
+    // Rightward movement still collapses off the active end.
+    text_input.set_cursor(Cursor::new(
+        CursorPosition::new(0, 2),
+        CursorPosition::new(0, 5),
+    ));
+    text_input.cursor_right(CursorBoundary::Character, false);
+    assert_cursor(text_input.cursor(), 6, 6);
+}
+
 // clearSelection collapses to the selection end
 #[test]
 fn clear_selection_collapses_to_the_selection_end() {

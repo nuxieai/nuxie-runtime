@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7133967b25572642eb228f29254e64ed0b626469`
+- LAST_SYNCED_SHA: `074bfb139e5390760e04a9fd953d410f71fa6384`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 36 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 36 require a Rust translation.
+  There are 35 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 35 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `074bfb139e5390760e04a9fd953d410f71fa6384` | Collapse a leftward text selection from its leading edge and suppress all nested/list data-bind work while the host is collapsed, retaining queued source dirt. Port the full cursor and nested-binding regressions and three-draw collapsed-binding Silver producer. The inventory scripted reference uses upstream's updated bytes; its preexisting pending classification is unchanged. Private RML exporter changes described in the message are absent from the public delta. | — |
 | `7133967b25572642eb228f29254e64ed0b626469` | Measure shape control-point hulls directly without copying paths, compose the optional transform after each path transform, and memoize local bounds with geometry, transform and collapse invalidation. Preserve separate precise intrinsic measurement. Port the complete upstream local-bounds mutation regression. | — |
 | `f0ec99212cc7bbc1d4755c22794eff81d103319b` | Translate hugUnbounded sizing property 451, per-hug-axis available-space unbounding, min-content probe widening and bounded participant shape measurement. Retain the approved Taffy layout boundary and distinguish actual min-content probes from real zero available space. Port all four new hug cases and updated upstream layout-matrix fixtures. The Yoga dependency update is reference-oracle provenance, not a new Rust runtime dependency. | — |
 | `912312dc744a989ea561064bcd7291e7659e02ef` | Drain queued 2D and ORE resource destroys from idle deferred sessions and replay them without a frame, factory or renderer. Return only newly drained command tails while retaining those bytes in their streams; preserve generation-safe repeated replay. Port all four upstream idle-session/pending-destroy cases. Private editor texture-owner changes described by the commit are absent from the public delta and are not claimed imported. | — |

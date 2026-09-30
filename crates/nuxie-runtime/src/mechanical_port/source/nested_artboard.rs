@@ -1291,18 +1291,20 @@ impl NestedArtboard {
     }
 
     pub fn update_data_binds(&mut self) {
-        if !self.base.is_paused() {
-            if let Some(instance) = self.instance.as_ref() {
-                instance.update_data_binds(true);
-            }
+        if self.instance.is_none() || self.base.is_paused() || self.is_collapsed() {
+            return;
         }
+        self.instance.as_ref().unwrap().update_data_binds(true);
     }
 
     pub(crate) fn update_data_binds_occurrence(owner: &CoreHandle) {
         let instance = owner
             .with(|owner| {
                 let nested = owner.as_nested_artboard().expect("NestedArtboard host");
-                nested.instance.clone().filter(|_| !nested.base.is_paused())
+                nested
+                    .instance
+                    .clone()
+                    .filter(|_| !nested.base.is_paused() && !nested.is_collapsed())
             })
             .flatten();
         if let Some(instance) = instance {

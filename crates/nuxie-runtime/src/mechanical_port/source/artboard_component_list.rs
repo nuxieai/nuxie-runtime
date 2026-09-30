@@ -1618,6 +1618,11 @@ impl ArtboardComponentList {
     }
 
     pub fn update_data_binds(&mut self) {
+        // Collapse stops the entire bind subtree, including state machines and
+        // nested mounts: the row contents themselves are not marked collapsed.
+        if self.component().is_collapsed() {
+            return;
+        }
         for index in 0..self.artboard_count() as i32 {
             if let Some(state_machine) = self.state_machine_instance(index) {
                 let container = state_machine
@@ -1631,6 +1636,12 @@ impl ArtboardComponentList {
     }
 
     pub(crate) fn update_data_binds_occurrence(owner: &CoreHandle) {
+        if owner
+            .with_downcast::<Self, _>(|list| list.component().is_collapsed())
+            .expect("ArtboardComponentList host")
+        {
+            return;
+        }
         let mut index = 0;
         while index
             < owner

@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-7133967b25572642eb228f29254e64ed0b626469}
+ref=${RIVE_RUNTIME_REF:-074bfb139e5390760e04a9fd953d410f71fa6384}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/collapsed_databinds_test.riv|ec4bbbf220b8226eabf1e836f7ff662547f4ba1babe42a225d79eebfe548a70e|074bfb139e5390760e04a9fd953d410f71fa6384|collapsed_databinds_test.riv"
+  "sync/collapsed_nested_databind.riv|128afb39dbd57b2e6a0106f0ccfddf4348beaf5d236ead17942907dd71b76294|074bfb139e5390760e04a9fd953d410f71fa6384|collapsed_nested_databind.riv"
   "sync/ik_stacked_constraints.riv|ee6894232d6e40963998123053a8b46a8876fddc5741dffb3e189ca62a94040e|cb8aa75d06b0341deaf5a55171844f37bf1ac882|ik_stacked_constraints.riv"
   "sync/ik_over_rotation_constraint.riv|7b3dc32441aa9d013f01f0218d1e2a64c7d8631e90238bc3ba5c3fe6e015e37c|cb8aa75d06b0341deaf5a55171844f37bf1ac882|ik_over_rotation_constraint.riv"
   "sync/drawable_custom_properties.riv|7821e97a0bde90ea12113e1dda47af6f4b29dfacd770bb8b031c8cf0632d3940|df0cc777d8211f81824943a7665884f5565aecb8|drawable_custom_properties.riv"

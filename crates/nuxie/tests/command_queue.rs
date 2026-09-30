@@ -4009,6 +4009,146 @@ fn view_model_property_async_subscriptions() {
 }
 
 #[test]
+fn child_listener_destruction_preserves_parent_subscriptions() {
+    struct ChildListener {
+        events: ViewModelEvents,
+        destroyed_handle: Arc<Mutex<Option<ViewModelInstanceHandle>>>,
+    }
+    impl ViewModelInstanceListener for ChildListener {
+        fn listener_base(&mut self) -> &mut ListenerBase<ViewModelInstanceHandle> {
+            &mut self.events.base
+        }
+        fn on_view_model_instance_error(
+            &mut self,
+            handle: ViewModelInstanceHandle,
+            id: u64,
+            error: String,
+        ) {
+            self.events.on_view_model_instance_error(handle, id, error);
+        }
+    }
+    impl Drop for ChildListener {
+        fn drop(&mut self) {
+            *self.destroyed_handle.lock().unwrap() = Some(self.events.base.handle);
+        }
+    }
+    // Each loop is one upstream SECTION, with its own queue and parent.
+    for list_child in [false, true] {
+        let mut queue = CommandQueue::new();
+        let mut server = server(&queue);
+        let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0, None);
+        let (parent, parent_log) = event_log();
+        let parent_handle = queue.instantiate_blank_view_model_instance_named(
+            file,
+            "Test All".to_owned(),
+            Some(&parent.view_model),
+            0,
+        );
+        queue.subscribe_to_view_model_property(
+            parent_handle,
+            "Test Num".to_owned(),
+            DataType::Number,
+            0,
+        );
+        let check_parent = |expected: &[f32]| {
+            let log = events(&parent_log);
+            let values: Vec<f32> = log
+                .iter()
+                .filter_map(|event| match event {
+                    ObservedEvent::ViewModelValue {
+                        handle,
+                        path,
+                        value,
+                        ..
+                    } => {
+                        assert_eq!(*handle, parent_handle);
+                        assert_eq!(path, "Test Num");
+                        let ObservedValue::Number(number) = value else {
+                            panic!("number subscription payload");
+                        };
+                        Some(*number)
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(values, expected);
+            assert!(
+                !log.iter()
+                    .any(|event| matches!(event, ObservedEvent::ViewModelError { .. }))
+            );
+        };
+        queue.set_view_model_instance_number(parent_handle, "Test Num".to_owned(), 10.0, 0);
+        server.process_commands();
+        queue.process_messages();
+        check_parent(&[10.0]);
+        let destroyed_handle = Arc::new(Mutex::new(None));
+        let child_handle;
+        {
+            let child_log = EventLog::default();
+            let child: ViewModelInstanceListenerHandle =
+                ListenerHandle::new(Box::new(ChildListener {
+                    events: ViewModelEvents {
+                        base: ListenerBase::new(),
+                        log: child_log.clone(),
+                    },
+                    destroyed_handle: destroyed_handle.clone(),
+                }));
+            child_handle = if list_child {
+                let nested = queue.reference_nested_view_model_instance(
+                    parent_handle,
+                    "Test Nested".to_owned(),
+                    None,
+                    0,
+                );
+                queue.insert_view_model_instance_list_view_model(
+                    parent_handle,
+                    "Test List".to_owned(),
+                    nested,
+                    0,
+                    0,
+                );
+                queue.reference_list_view_model_instance(
+                    parent_handle,
+                    "Test List".to_owned(),
+                    0,
+                    Some(&child),
+                    0,
+                )
+            } else {
+                queue.reference_nested_view_model_instance(
+                    parent_handle,
+                    "Test Nested".to_owned(),
+                    Some(&child),
+                    0,
+                )
+            };
+            server.process_commands();
+            queue.process_messages();
+            assert!(server.get_view_model_instance(child_handle).is_some());
+            assert!(
+                !events(&child_log)
+                    .iter()
+                    .any(|event| matches!(event, ObservedEvent::ViewModelError { .. }))
+            );
+            queue.set_view_model_instance_number(parent_handle, "Test Num".to_owned(), 20.0, 0);
+            server.process_commands();
+            queue.process_messages();
+            check_parent(&[10.0, 20.0]);
+            // Scope exit drops the caller-owned listener. Queue registrations
+            // hold Weak handles, the approved counterpart of C++ destruction.
+        }
+        // The weak-registration adaptation does not unregister in Drop; also
+        // verify the actual base handle so this exercises the fixed assignment.
+        assert_eq!(*destroyed_handle.lock().unwrap(), Some(child_handle));
+        queue.set_view_model_instance_number(parent_handle, "Test Num".to_owned(), 30.0, 0);
+        server.process_commands();
+        queue.process_messages();
+        check_parent(&[10.0, 20.0, 30.0]);
+        queue.disconnect();
+    }
+}
+
+#[test]
 fn list_view_model_property_set_get() {
     let mut queue = CommandQueue::new();
     let (listener, log) = event_log();

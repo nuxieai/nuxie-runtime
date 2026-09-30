@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1cdd96e32f8a7366ed682e834a4d84def51498ed`
+- LAST_SYNCED_SHA: `1cfd492e4041ff7d1e35f3697bf47d9d97e6a13e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 75 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 75 require a Rust translation.
+  There are 74 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 74 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1cfd492e4041ff7d1e35f3697bf47d9d97e6a13e` | Register list-child listeners against the newly allocated child handle rather than the parent handle. Port both upstream child-listener destruction cases (nested property and list element), retaining parent subscription callbacks across child teardown and the approved weak Rust listener lifetime. | — |
 | `1cdd96e32f8a7366ed682e834a4d84def51498ed` | Translate keyboard listener claims after matched actions run, and dispatch to every peer on a FocusData before reporting the accumulated claim upward. Preserve text-input handling and the existing Rust callback-safe listener snapshot. Port both upstream peer-claim tests. Private CLI/RML changes described in the message are absent from the published runtime delta and are not claimed implemented. | — |
 | `aeb29dde6845b6f31f8bb986dee0857408271922` | Preserve upstream's documentation that keyboard modifier bits are a raw RML bitmask and key enum values mirror the editor's keyboard-input definition. The published runtime delta is comments plus private editor revision metadata; no executable CLI/runtime behavior or numeric values changed. | — |
 | `be0935d3ce4998dd1216ddaf83638901732a4c80` | Translate dependency sorting's append-then-reverse ordering and borrowed per-component dependent traversal. Preserve root ordering, cycle detection and partial output on failure, including the Rust active-root adapter. No change to authored dependency semantics or graph identity. | — |

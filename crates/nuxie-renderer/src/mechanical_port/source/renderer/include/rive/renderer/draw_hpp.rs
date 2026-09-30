@@ -21,12 +21,11 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::rende
 pub use nuxie_render_api::{BlendMode, FillRule, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D};
 
 pub(crate) use crate::draw::{
-    build_feather_tessellation_with_direction, build_fill_tessellation,
+    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
+    StrokeTessellation, build_feather_tessellation_with_direction, build_fill_tessellation,
     build_interior_tessellation, build_stroke_tessellation_with_layout,
     clockwise_atomic_negate_coverage, feather_atlas_fill_direction, feather_atlas_scale,
     feather_pixel_bounds, feather_requires_atlas, path_coarse_area, path_pixel_bounds,
-    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
-    StrokeTessellation,
 };
 
 #[repr(i32)]
@@ -84,6 +83,16 @@ pub trait RiveRenderPaintContract {
     fn getThickness(&self) -> f32;
     fn getJoin(&self) -> StrokeJoin;
     fn getCap(&self) -> StrokeCap;
+    fn getStrokePosition(&self) -> nuxie_render_api::StrokePosition;
+    fn getForceClosed(&self) -> bool;
+    fn getStrokeParams(&self) -> nuxie_render_api::StrokeParams {
+        nuxie_render_api::StrokeParams {
+            thickness: self.getThickness(),
+            join: self.getJoin(),
+            cap: self.getCap(),
+            position: self.getStrokePosition(),
+        }
+    }
 }
 
 /// Exact data-backed paint implementation for mechanical callers that do not
@@ -107,6 +116,8 @@ pub struct RiveRenderPaintData {
     pub thickness: f32,
     pub join: StrokeJoin,
     pub cap: StrokeCap,
+    pub stroke_position: nuxie_render_api::StrokePosition,
+    pub force_closed: bool,
 }
 
 impl RiveRenderPaintContract for RiveRenderPaintData {
@@ -161,6 +172,12 @@ impl RiveRenderPaintContract for RiveRenderPaintData {
     }
     fn getCap(&self) -> StrokeCap {
         self.cap
+    }
+    fn getStrokePosition(&self) -> nuxie_render_api::StrokePosition {
+        self.stroke_position
+    }
+    fn getForceClosed(&self) -> bool {
+        self.force_closed
     }
 }
 

@@ -91,6 +91,14 @@ fn cap(value: u8) -> StrokeCap {
         _ => panic!("invalid recorded cap"),
     }
 }
+fn stroke_position(value: u8) -> StrokePosition {
+    match value {
+        0 => StrokePosition::Inside,
+        1 => StrokePosition::Center,
+        2 => StrokePosition::Outside,
+        _ => panic!("invalid recorded stroke position"),
+    }
+}
 fn blend(value: u8) -> BlendMode {
     match value {
         3 => BlendMode::SrcOver,
@@ -384,6 +392,7 @@ pub fn replay_render_commands(
                             fresh.thickness(shadow.thickness);
                             fresh.join(join(shadow.join));
                             fresh.cap(cap(shadow.cap));
+                            fresh.stroke_position(stroke_position(shadow.stroke_position));
                             fresh.feather(shadow.feather);
                             fresh.blend_mode(blend(shadow.blend_mode));
                             if shadow.shader != INVALID_RENDER_HANDLE {
@@ -478,6 +487,7 @@ pub fn replay_render_commands(
             RenderCmd::PaintStyle
             | RenderCmd::PaintJoin
             | RenderCmd::PaintCap
+            | RenderCmd::PaintStrokePosition
             | RenderCmd::PaintBlendMode => {
                 let c: PaintU8Pod = reader.read();
                 if let Some(paint) = table.paints.get(c.paint) {
@@ -495,6 +505,10 @@ pub fn replay_render_commands(
                         RenderCmd::PaintCap => {
                             paint.cap(cap(c.value));
                             shadow.cap = c.value;
+                        }
+                        RenderCmd::PaintStrokePosition => {
+                            paint.stroke_position(stroke_position(c.value));
+                            shadow.stroke_position = c.value;
                         }
                         _ => {
                             paint.blend_mode(blend(c.value));
@@ -606,6 +620,7 @@ pub fn replay_render_commands(
                                 thickness: c.thickness,
                                 join: join(c.join),
                                 cap: cap(c.cap),
+                                position: stroke_position(c.position),
                             },
                         );
                     }

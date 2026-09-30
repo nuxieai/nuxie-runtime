@@ -739,6 +739,9 @@ pub(crate) fn calculate_pixel_bounds(
     debug_assert!(mapped_bounds.width() >= 0.0);
     debug_assert!(mapped_bounds.height() >= 0.0);
     if stroke.is_some() || feather != 0.0 {
+        if let Some(stroke) = stroke {
+            debug_assert_eq!(stroke.position, nuxie_render_api::StrokePosition::Center);
+        }
         let outset = RiveRenderPath::calculateBoundsOutset(stroke, feather);
         let stroke_pixel_outset =
             matrix.map_bounds(nuxie_render_api::Aabb::new(0.0, 0.0, outset, outset));

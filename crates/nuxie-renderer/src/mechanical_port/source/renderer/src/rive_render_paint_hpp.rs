@@ -1,7 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
- * The literal source is retained below in declaration/order form.
+ * Upstream source revision: ee60b7014f1a28fa6bb5f2588cb274c273080f32
  */
 
 // /*
@@ -30,14 +29,25 @@
 //
 //     void style(RenderPaintStyle style) override
 //     {
-//         m_stroked = style == RenderPaintStyle::stroke;
+//         m_data.m_stroked = style == RenderPaintStyle::stroke;
 //     }
 //     void color(ColorInt color) override;
-//     void thickness(float thickness) override { m_thickness = fabsf(thickness); }
-//     void join(StrokeJoin join) override { m_join = join; }
-//     void cap(StrokeCap cap) override { m_cap = cap; }
-//     void feather(float feather) override { m_feather = fabsf(feather); }
-//     void blendMode(BlendMode mode) override { m_blendMode = mode; }
+//     void thickness(float thickness) override
+//     {
+//         m_data.m_thickness = fabsf(thickness);
+//     }
+//     void join(StrokeJoin join) override { m_data.m_join = join; }
+//     void cap(StrokeCap cap) override { m_data.m_cap = cap; }
+//     void feather(float feather) override { m_data.m_feather = fabsf(feather); }
+//     void strokePosition(StrokePosition pos) override
+//     {
+//         m_data.m_strokePosition = pos;
+//     }
+//     void additiveness(float additiveness) override
+//     {
+//         m_data.m_additiveness = additiveness;
+//     }
+//     void blendMode(BlendMode mode) override { m_data.m_blendMode = mode; }
 //     void shader(rcp<RenderShader> shader) override;
 //
 //     void modulatedImage(const RenderImage*,
@@ -46,52 +56,82 @@
 //     void image(rcp<gpu::Texture>, float opacity);
 //     void imageSampler(ImageSampler imageSampler)
 //     {
-//         m_imageSampler = imageSampler;
+//         m_data.m_imageSampler = imageSampler;
 //     }
 //     void clipUpdate(uint32_t outerClipID);
 //     void invalidateStroke() override {}
 //
-//     gpu::PaintType getType() const { return m_paintType; }
-//     bool getIsStroked() const { return m_stroked; }
-//     ColorInt getColor() const { return m_simpleValue.color; }
-//     const gpu::Gradient* getGradient() const { return m_gradient.get(); }
+//     gpu::PaintType getType() const { return m_data.m_paintType; }
+//     bool getIsStroked() const { return m_data.m_stroked; }
+//     ColorInt getColor() const { return m_data.m_simpleValue.color; }
+//     const gpu::Gradient* getGradient() const { return m_data.m_gradient.get(); }
 //     rcp<gpu::Gradient> getGradientWithOpacity(float opacity) const;
-//     gpu::Texture* getImageTexture() const { return m_imageTexture.get(); }
-//     ImageSampler getImageSampler() const { return m_imageSampler; }
-//     float getOuterClipID() const { return m_simpleValue.outerClipID; }
-//     float getThickness() const { return m_thickness; }
-//     const Mat2D& getImageTransform() const { return m_imageTransform; }
+//     gpu::Texture* getImageTexture() const
+//     {
+//         return m_data.m_imageTexture.get();
+//     }
+//     ImageSampler getImageSampler() const { return m_data.m_imageSampler; }
+//     float getOuterClipID() const { return m_data.m_simpleValue.outerClipID; }
+//     float getThickness() const { return m_data.m_thickness; }
+//     const Mat2D& getImageTransform() const { return m_data.m_imageTransform; }
 //     StrokeJoin getJoin() const
 //     {
 //         // Feathers ignore the join and always use round.
-//         return m_feather != 0 ? StrokeJoin::round : m_join;
+//         return m_data.m_feather != 0.0f ? StrokeJoin::round : m_data.m_join;
 //     }
 //     StrokeCap getCap() const
 //     {
 //         // Feathers ignore the cap and always use round.
-//         return m_feather != .0 ? StrokeCap::round : m_cap;
+//         return m_data.m_feather != 0.0f ? StrokeCap::round : m_data.m_cap;
 //     }
-//     float getFeather() const { return m_feather; }
-//     BlendMode getBlendMode() const { return m_blendMode; }
-//     gpu::SimplePaintValue getSimpleValue() const { return m_simpleValue; }
+//
+//     StrokePosition getStrokePosition() const { return m_data.m_strokePosition; }
+//     float getFeather() const { return m_data.m_feather; }
+//     float getAdditiveness() const { return m_data.m_additiveness; }
+//     BlendMode getBlendMode() const { return m_data.m_blendMode; }
+//     gpu::SimplePaintValue getSimpleValue() const
+//     {
+//         return m_data.m_simpleValue;
+//     }
 //     bool getIsOpaque() const;
 //
+//     StrokeParams getStrokeParams() const
+//     {
+//         return {getThickness(), getJoin(), getCap(), getStrokePosition()};
+//     }
+//
+//     rcp<RiveRenderPaint> clone() const;
+//
+//     // RiveRenderPaint-specific functionality to force a stroke to draw as if
+//     // the path's contours were closed - used for inner/outer strokes.
+//     void forceClosed(bool force) { m_data.m_forceClosed = force; }
+//     bool getForceClosed() const { return m_data.m_forceClosed; }
+//
 // private:
-//     gpu::PaintType m_paintType = gpu::PaintType::solidColor;
-//     gpu::SimplePaintValue m_simpleValue;
-//     rcp<const gpu::Gradient> m_gradient;
-//     rcp<gpu::Texture> m_imageTexture;
-//     ImageSampler m_imageSampler = ImageSampler::LinearClamp();
-//     float m_thickness = 1;
-//     StrokeJoin m_join = StrokeJoin::miter;
-//     StrokeCap m_cap = StrokeCap::butt;
-//     float m_feather = 0;
-//     BlendMode m_blendMode = BlendMode::srcOver;
-//     bool m_stroked = false;
-//     Mat2D m_imageTransform;
+//     // Wrap all the internals in a struct to make the copy
+//     // constructor/assignment less error-prone.
+//     struct Data
+//     {
+//         gpu::PaintType m_paintType = gpu::PaintType::solidColor;
+//         gpu::SimplePaintValue m_simpleValue;
+//         rcp<const gpu::Gradient> m_gradient;
+//         rcp<gpu::Texture> m_imageTexture;
+//         ImageSampler m_imageSampler = ImageSampler::LinearClamp();
+//         float m_thickness = 1;
+//         StrokeJoin m_join = StrokeJoin::miter;
+//         StrokeCap m_cap = StrokeCap::butt;
+//         StrokePosition m_strokePosition = StrokePosition::center;
+//         float m_feather = 0;
+//         float m_additiveness = 0;
+//         BlendMode m_blendMode = BlendMode::srcOver;
+//         bool m_stroked = false;
+//         Mat2D m_imageTransform;
+//         bool m_forceClosed = false;
+//     };
+//
+//     Data m_data;
 // };
 // } // namespace rive
-//
 
 #![allow(dead_code)]
 #![allow(non_camel_case_types)]
@@ -117,7 +157,7 @@ use crate::mechanical_port::source::renderer::src::gradient_hpp::{Gradient, Grad
 use nuxie_render_api::{
     BlendMode, ColorInt, ImageFilter as ApiImageFilter, ImageSampler as ApiImageSampler,
     ImageWrap as ApiImageWrap, Mat2D, RenderImage as ApiRenderImage, RenderPaint, RenderPaintStyle,
-    RenderShader, StrokeCap, StrokeJoin,
+    RenderShader, StrokeCap, StrokeJoin, StrokeParams, StrokePosition,
 };
 use std::any::Any;
 use std::mem::ManuallyDrop;
@@ -126,6 +166,11 @@ use std::rc::Rc;
 #[repr(C)]
 pub struct RiveRenderPaint {
     pub(crate) base: SourceRenderPaint,
+    pub(crate) m_data: ManuallyDrop<Data>,
+}
+
+#[derive(Clone)]
+pub(crate) struct Data {
     pub m_paintType: gpu::PaintType,
     pub m_simpleValue: gpu::SimplePaintValue,
     pub(crate) m_gradient: ManuallyDrop<rcp<Gradient>>,
@@ -134,33 +179,45 @@ pub struct RiveRenderPaint {
     pub m_thickness: f32,
     pub m_join: StrokeJoin,
     pub m_cap: StrokeCap,
+    pub m_strokePosition: StrokePosition,
     pub m_feather: f32,
     pub m_additiveness: f32,
     pub m_blendMode: BlendMode,
     pub m_stroked: bool,
     pub m_imageTransform: Mat2D,
+    pub m_forceClosed: bool,
 }
 impl Default for RiveRenderPaint {
     fn default() -> Self {
         Self {
             base: unsafe { SourceRenderPaint::new_for_owner::<Self>() },
-            m_paintType: gpu::PaintType::solidColor,
-            m_simpleValue: gpu::SimplePaintValue::default(),
-            m_gradient: ManuallyDrop::new(rcp::new()),
-            m_imageTexture: ManuallyDrop::new(rcp::new()),
-            m_imageSampler: ImageSampler::LinearClamp(),
-            m_thickness: 1.0,
-            m_join: StrokeJoin::Miter,
-            m_cap: StrokeCap::Butt,
-            m_feather: 0.0,
-            m_additiveness: 0.0,
-            m_blendMode: BlendMode::SrcOver,
-            m_stroked: false,
-            m_imageTransform: Mat2D::IDENTITY,
+            m_data: ManuallyDrop::new(Data {
+                m_paintType: gpu::PaintType::solidColor,
+                m_simpleValue: gpu::SimplePaintValue::default(),
+                m_gradient: ManuallyDrop::new(rcp::new()),
+                m_imageTexture: ManuallyDrop::new(rcp::new()),
+                m_imageSampler: ImageSampler::LinearClamp(),
+                m_thickness: 1.0,
+                m_join: StrokeJoin::Miter,
+                m_cap: StrokeCap::Butt,
+                m_strokePosition: StrokePosition::Center,
+                m_feather: 0.0,
+                m_additiveness: 0.0,
+                m_blendMode: BlendMode::SrcOver,
+                m_stroked: false,
+                m_imageTransform: Mat2D::IDENTITY,
+                m_forceClosed: false,
+            }),
         }
     }
 }
 impl Drop for RiveRenderPaint {
+    fn drop(&mut self) {
+        // Destroy paint state before its intrusive base, matching C++.
+        unsafe { ManuallyDrop::drop(&mut self.m_data) };
+    }
+}
+impl Drop for Data {
     fn drop(&mut self) {
         // C++ destroys members in reverse declaration order, then the base.
         // ManuallyDrop preserves the physical field order while making that
@@ -179,50 +236,76 @@ impl RiveRenderPaint {
         self as *const Self as *mut SourceRenderPaint
     }
     pub fn style(&mut self, style: RenderPaintStyle) {
-        self.m_stroked = style == RenderPaintStyle::Stroke;
+        self.m_data.m_stroked = style == RenderPaintStyle::Stroke;
     }
     pub fn color(&mut self, color: ColorInt) {
-        self.m_paintType = gpu::PaintType::solidColor;
-        self.m_simpleValue = gpu::SimplePaintValue { color };
-        *self.m_gradient = rcp::new();
+        self.m_data.m_paintType = gpu::PaintType::solidColor;
+        self.m_data.m_simpleValue = gpu::SimplePaintValue { color };
+        *self.m_data.m_gradient = rcp::new();
     }
     pub fn thickness(&mut self, v: f32) {
-        self.m_thickness = v.abs();
+        self.m_data.m_thickness = v.abs();
     }
     pub fn join(&mut self, v: StrokeJoin) {
-        self.m_join = v;
+        self.m_data.m_join = v;
     }
     pub fn cap(&mut self, v: StrokeCap) {
-        self.m_cap = v;
+        self.m_data.m_cap = v;
+    }
+    pub fn strokePosition(&mut self, value: StrokePosition) {
+        self.m_data.m_strokePosition = value;
+    }
+    pub fn getStrokePosition(&self) -> StrokePosition {
+        self.m_data.m_strokePosition
+    }
+    pub fn getStrokeParams(&self) -> StrokeParams {
+        StrokeParams {
+            thickness: self.getThickness(),
+            join: self.getJoin(),
+            cap: self.getCap(),
+            position: self.getStrokePosition(),
+        }
+    }
+    pub fn forceClosed(&mut self, force: bool) {
+        self.m_data.m_forceClosed = force;
+    }
+    pub fn getForceClosed(&self) -> bool {
+        self.m_data.m_forceClosed
+    }
+    pub fn clone(&self) -> rcp<Self> {
+        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| Self {
+            base: unsafe { SourceRenderPaint::new_for_owner::<Self>() },
+            m_data: self.m_data.clone(),
+        })
     }
     pub fn feather(&mut self, v: f32) {
-        self.m_feather = v.abs();
+        self.m_data.m_feather = v.abs();
     }
     pub fn additiveness(&mut self, v: f32) {
-        self.m_additiveness = v;
+        self.m_data.m_additiveness = v;
     }
     pub fn getAdditiveness(&self) -> f32 {
-        self.m_additiveness
+        self.m_data.m_additiveness
     }
     pub fn blendMode(&mut self, v: BlendMode) {
-        self.m_blendMode = v;
+        self.m_data.m_blendMode = v;
     }
     pub fn imageSampler(&mut self, v: ImageSampler) {
-        self.m_imageSampler = v;
+        self.m_data.m_imageSampler = v;
     }
     pub fn image(&mut self, texture: rcp<Texture>, opacity: f32) {
-        self.m_paintType = gpu::PaintType::solidColor;
-        self.m_simpleValue = gpu::SimplePaintValue {
+        self.m_data.m_paintType = gpu::PaintType::solidColor;
+        self.m_data.m_simpleValue = gpu::SimplePaintValue {
             color: color_modulate_opacity(0xffff_ffff, opacity),
         };
-        *self.m_gradient = rcp::new();
-        *self.m_imageTexture = texture;
+        *self.m_data.m_gradient = rcp::new();
+        *self.m_data.m_imageTexture = texture;
     }
     pub fn clipUpdate(&mut self, id: u32) {
-        self.m_paintType = gpu::PaintType::clipUpdate;
-        self.m_simpleValue = gpu::SimplePaintValue { outerClipID: id };
-        *self.m_gradient = rcp::new();
-        *self.m_imageTexture = rcp::new();
+        self.m_data.m_paintType = gpu::PaintType::clipUpdate;
+        self.m_data.m_simpleValue = gpu::SimplePaintValue { outerClipID: id };
+        *self.m_data.m_gradient = rcp::new();
+        *self.m_data.m_imageTexture = rcp::new();
     }
     /// Installs the source gradient shader slot.
     ///
@@ -236,15 +319,15 @@ impl RiveRenderPaint {
         &mut self,
         shader: crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<SourceRenderShader>,
     ) {
-        *self.m_gradient = unsafe {
+        *self.m_data.m_gradient = unsafe {
             crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(shader)
         };
-        self.m_paintType = if self.m_gradient.get().is_null() {
+        self.m_data.m_paintType = if self.m_data.m_gradient.get().is_null() {
             gpu::PaintType::solidColor
         } else {
-            unsafe { (&*self.m_gradient.get()).paintType() }
+            unsafe { (&*self.m_data.m_gradient.get()).paintType() }
         };
-        self.m_simpleValue.color = 0xff000000;
+        self.m_data.m_simpleValue.color = 0xff000000;
     }
     pub fn shader_api(&mut self, shader: Option<&dyn RenderShader>) {
         let Some(shader) = shader else {
@@ -261,69 +344,72 @@ impl RiveRenderPaint {
         unsafe { self.shader_source(owned) };
     }
     pub fn getType(&self) -> gpu::PaintType {
-        self.m_paintType
+        self.m_data.m_paintType
     }
     pub fn getIsStroked(&self) -> bool {
-        self.m_stroked
+        self.m_data.m_stroked
     }
     pub fn getColor(&self) -> ColorInt {
-        unsafe { self.m_simpleValue.color }
+        unsafe { self.m_data.m_simpleValue.color }
     }
     pub fn getGradient(&self) -> *const Gradient {
-        self.m_gradient.get() as *const _
+        self.m_data.m_gradient.get() as *const _
     }
     pub fn getImageTexture(&self) -> *mut Texture {
-        self.m_imageTexture.get()
+        self.m_data.m_imageTexture.get()
     }
     pub fn getImageSampler(&self) -> ImageSampler {
-        self.m_imageSampler
+        self.m_data.m_imageSampler
     }
     pub fn getOuterClipID(&self) -> f32 {
-        unsafe { self.m_simpleValue.outerClipID as f32 }
+        unsafe { self.m_data.m_simpleValue.outerClipID as f32 }
     }
     pub fn getThickness(&self) -> f32 {
-        self.m_thickness
+        self.m_data.m_thickness
     }
     pub fn getImageTransform(&self) -> &Mat2D {
-        &self.m_imageTransform
+        &self.m_data.m_imageTransform
     }
     pub fn getJoin(&self) -> StrokeJoin {
-        if self.m_feather != 0.0 {
+        if self.m_data.m_feather != 0.0 {
             StrokeJoin::Round
         } else {
-            self.m_join
+            self.m_data.m_join
         }
     }
     pub fn getCap(&self) -> StrokeCap {
-        if self.m_feather != 0.0 {
+        if self.m_data.m_feather != 0.0 {
             StrokeCap::Round
         } else {
-            self.m_cap
+            self.m_data.m_cap
         }
     }
     pub fn getFeather(&self) -> f32 {
-        self.m_feather
+        self.m_data.m_feather
     }
     pub fn getBlendMode(&self) -> BlendMode {
-        self.m_blendMode
+        self.m_data.m_blendMode
     }
     pub fn getSimpleValue(&self) -> gpu::SimplePaintValue {
-        self.m_simpleValue
+        self.m_data.m_simpleValue
     }
     pub fn getIsOpaque(&self) -> bool {
-        if self.m_feather != 0.0
-            || self.m_blendMode != BlendMode::SrcOver
-            || self.m_additiveness != 0.0
+        if self.m_data.m_feather != 0.0
+            || self.m_data.m_blendMode != BlendMode::SrcOver
+            || self.m_data.m_additiveness != 0.0
         {
             return false;
         }
-        if !self.m_imageTexture.get().is_null() {
+        if !self.m_data.m_imageTexture.get().is_null() {
             return false;
         }
-        match self.m_paintType {
-            gpu::PaintType::solidColor => (unsafe { self.m_simpleValue.color } >> 24) == 0xff,
+        match self.m_data.m_paintType {
+            gpu::PaintType::solidColor => {
+                (unsafe { self.m_data.m_simpleValue.color } >> 24) == 0xff
+            }
             gpu::PaintType::linearGradient | gpu::PaintType::radialGradient => {
-                !self.m_gradient.get().is_null() && unsafe { (&*self.m_gradient.get()).isOpaque() }
+                !self.m_data.m_gradient.get().is_null()
+                    && unsafe { (&*self.m_data.m_gradient.get()).isOpaque() }
             }
             gpu::PaintType::clipUpdate => false,
         }
@@ -336,16 +422,16 @@ impl RiveRenderPaint {
         matrix: &Mat2D,
     ) {
         if render_image.is_null() {
-            *self.m_imageTexture = rcp::new();
+            *self.m_data.m_imageTexture = rcp::new();
             return;
         }
-        self.m_imageSampler = sampler;
-        self.m_imageTransform = *matrix;
+        self.m_data.m_imageSampler = sampler;
+        self.m_data.m_imageTransform = *matrix;
         let rive_image = unsafe { lite_rtti_cast::<RiveRenderImage, _>(render_image.cast_mut()) };
         if rive_image.is_null() {
             return;
         }
-        *self.m_imageTexture = unsafe { (&*rive_image).refTexture() };
+        *self.m_data.m_imageTexture = unsafe { (&*rive_image).refTexture() };
     }
 
     fn modulated_image_api(
@@ -360,8 +446,8 @@ impl RiveRenderPaint {
             return;
         };
         let Some(image) = image.as_any().downcast_ref::<RiveRenderImageHandle>() else {
-            self.m_imageSampler = sampler;
-            self.m_imageTransform = transform;
+            self.m_data.m_imageSampler = sampler;
+            self.m_data.m_imageTransform = transform;
             return;
         };
         let source = &image.source().base as *const SourceRenderImage;
@@ -441,6 +527,9 @@ impl RenderPaintContract for RiveRenderPaint {
     fn cap(&mut self, value: StrokeCap) {
         self.cap(value);
     }
+    fn strokePosition(&mut self, value: StrokePosition) {
+        self.strokePosition(value);
+    }
     fn feather(&mut self, value: f32) {
         self.feather(value);
     }
@@ -486,6 +575,9 @@ impl RenderPaint for RiveRenderPaint {
     }
     fn cap(&mut self, v: StrokeCap) {
         self.cap(v)
+    }
+    fn stroke_position(&mut self, value: StrokePosition) {
+        self.strokePosition(value);
     }
     fn feather(&mut self, v: f32) {
         self.feather(v)
@@ -618,6 +710,9 @@ impl RenderPaint for RiveRenderPaintHandle {
     fn cap(&mut self, value: StrokeCap) {
         self.source_mut().cap(value);
     }
+    fn stroke_position(&mut self, value: StrokePosition) {
+        self.source_mut().strokePosition(value);
+    }
     fn feather(&mut self, value: f32) {
         self.source_mut().feather(value);
     }
@@ -654,8 +749,8 @@ impl RenderPaint for RiveRenderPaintHandle {
         };
         let Some(image) = image.as_any().downcast_ref::<RiveRenderImageHandle>() else {
             let source = self.source_mut();
-            source.m_imageSampler = sampler;
-            source.m_imageTransform = transform;
+            source.m_data.m_imageSampler = sampler;
+            source.m_data.m_imageTransform = transform;
             return;
         };
         let Some(image) = image.source_base_for(&resource_domain) else {
@@ -784,15 +879,13 @@ mod handle_tests {
         };
         let transform = Mat2D([2.0, 0.0, 0.0, 3.0, 4.0, 5.0]);
 
-        RenderPaint::modulated_image(
-            &mut paint,
-            Some(&ForeignImage),
-            sampler,
-            transform,
-        );
+        RenderPaint::modulated_image(&mut paint, Some(&ForeignImage), sampler, transform);
 
         assert_eq!(paint.source().getImageTexture(), seeded_texture_ptr);
-        assert_eq!(paint.source().getImageSampler(), source_image_sampler(sampler));
+        assert_eq!(
+            paint.source().getImageSampler(),
+            source_image_sampler(sampler)
+        );
         assert_eq!(*paint.source().getImageTransform(), transform);
     }
 

@@ -129,6 +129,7 @@ pub struct DeferredRenderPaint {
     thickness: f32,
     join: u8,
     cap: u8,
+    stroke_position: u8,
     feather: f32,
     blend_mode: u8,
     shader: Option<Rc<dyn RenderShader>>,
@@ -163,6 +164,7 @@ impl DeferredRenderPaint {
             thickness: 1.0,
             join: 0,
             cap: 0,
+            stroke_position: 1,
             feather: 0.0,
             blend_mode: 3,
             shader: None,
@@ -251,6 +253,14 @@ impl RenderPaint for DeferredRenderPaint {
         }
         self.cap = value;
         self.emit_u8(RenderCmd::PaintCap, value);
+    }
+    fn stroke_position(&mut self, value: StrokePosition) {
+        let value = value as u8;
+        if self.stroke_position == value {
+            return;
+        }
+        self.stroke_position = value;
+        self.emit_u8(RenderCmd::PaintStrokePosition, value);
     }
     fn feather(&mut self, value: f32) {
         if self.feather == value {

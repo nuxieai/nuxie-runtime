@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `30742b4ced290af534e00a784a4a36d4cdb1d45b`
+- LAST_SYNCED_SHA: `ee60b7014f1a28fa6bb5f2588cb274c273080f32`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 63 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 63 require a Rust translation.
+  There are 62 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 62 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ee60b7014f1a28fa6bb5f2588cb274c273080f32` | Translate inside/center/outside stroke positioning, paint cloning/state, forced contour closure, positioned clip recursion and complete clip-cache identity. Carry stroke position through public and deferred APIs, preserving bitwise stroke-parameter equality and deterministic command padding. Port the three complete new GPU scenes and existing clip-stroke helper refactor. Shader sources are unchanged; unsupported renderers retain upstream's default no-op, and no serialized SRIV or foreign callback opcode is invented. The interactive path-fiddle keyboard control has no shipped Rust counterpart. | — |
 | `30742b4ced290af534e00a784a4a36d4cdb1d45b` | Add command-queue font-property setting, replacement and clearing; preserve the property and report an error for an invalid nonnull font handle. Carry font metadata through subscriptions/messages and mirror the updated asset-property error text. Port all five upstream font-binding cases using existing decoded-font handles and the approved Rust same-thread queue/server pump. | — |
 | `7db8b61f747b24553bc4783df50cff997610e17c` | Translate author-controlled text word breaking: historical break-word, overflowing whole words, and cluster-boundary break-all. Wire serialized/bindable property 446 through generated dispatch, shaping, fitting, measurement and invalidation; retain the approved Rust shaping/layout boundaries. Port all eight line-break regressions, the Text-object propagation case, and the 21 added layout-matrix cases. Private Dart/editor/RML/compiler wrapper changes mentioned in the message are absent from the public delta and are not claimed imported. | — |
 | `5705446d6aeb0dad34a63d8ddadbb79fbe327a37` | Apply retained vertex bindings under the current ORE pipeline at draw time, release bound resources on finish, surface GL framebuffer errors, and share native Lua draw guard messages. Remove the obsolete Chrome 136 float tessellation texture workaround and regenerate supported shaders. Port the three complete vertex-order/pipeline-switch/buffer-offset scenes. Wasm VM draw guards and init-trap retention remain deferred; unshipped D3D backends and private CLI tests are not imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

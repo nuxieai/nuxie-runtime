@@ -258,7 +258,7 @@ impl DeferredFrameSink for MSink {
     }
 }
 struct Census {
-    count: [u64; 35],
+    count: [u64; 36],
     geom_bytes: u64,
     command_bytes: u64,
     blob_bytes: u64,
@@ -268,7 +268,7 @@ struct Census {
 impl Default for Census {
     fn default() -> Self {
         Self {
-            count: [0; 35],
+            count: [0; 36],
             geom_bytes: 0,
             command_bytes: 0,
             blob_bytes: 0,
@@ -317,7 +317,7 @@ struct Phase {
 fn row(riv: &str, phase: &str, metric: &str, value: f64) {
     println!("MEASURE,{riv},{phase},{metric},{value:.6}");
 }
-const COMMAND_NAMES: [&str; 35] = [
+const COMMAND_NAMES: [&str; 36] = [
     "makePath",
     "makeEmptyPath",
     "makePaint",
@@ -336,6 +336,7 @@ const COMMAND_NAMES: [&str; 35] = [
     "paintThickness",
     "paintJoin",
     "paintCap",
+    "paintStrokePosition",
     "paintFeather",
     "paintBlendMode",
     "paintShader",

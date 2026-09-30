@@ -96,7 +96,7 @@ impl PreparedPathGeometry {
                 stroke.tessellation.instance_count * gpu::kMidpointFanPatchSegmentSpan as u32
             }
             Self::Interior(interior) => {
-                interior.instance_count * gpu::OuterCubicPatchSegmentSpanPlusJoin
+                interior.instance_count * gpu::OuterCubicPatchSegmentSpanPlusBowtie
             }
         }
     }
@@ -119,7 +119,7 @@ impl PreparedPathGeometry {
                 &mut interior.spans,
                 &mut interior.base_instance,
                 &mut interior.contours,
-                gpu::OuterCubicPatchSegmentSpanPlusJoin,
+                gpu::OuterCubicPatchSegmentSpanPlusBowtie,
             ),
         };
         debug_assert_eq!(tess_location % segment_span, 0);
@@ -188,7 +188,7 @@ impl PreparedPathGeometry {
                 &mut interior.spans,
                 &mut interior.base_instance,
                 &mut interior.contours,
-                gpu::OuterCubicPatchSegmentSpanPlusJoin,
+                gpu::OuterCubicPatchSegmentSpanPlusBowtie,
             ),
         }
     }
@@ -600,7 +600,7 @@ fn build_source_fill_tessellation(path: &RawPath, matrix: Mat2D) -> Option<FillT
     }
     let geometry_spans = spans.split_off(1);
     let outer_aligned_location =
-        location.next_multiple_of(crate::gpu::OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as u32);
+        location.next_multiple_of(crate::gpu::OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE as u32);
     if outer_aligned_location != location {
         push_forward_span_fragments(
             &mut spans,
@@ -692,7 +692,7 @@ fn make_fill_single_sided_reverse(fill: &mut FillTessellation, negate_coverage: 
         1,
         0,
     ));
-    let outer_aligned_end = end.next_multiple_of(gpu::OuterCubicPatchSegmentSpanPlusJoin);
+    let outer_aligned_end = end.next_multiple_of(gpu::OuterCubicPatchSegmentSpanPlusBowtie);
     if outer_aligned_end != end {
         push_forward_span_fragments(
             &mut reversed,

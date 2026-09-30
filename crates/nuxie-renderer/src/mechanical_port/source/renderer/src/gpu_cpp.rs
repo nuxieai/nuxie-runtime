@@ -1,21 +1,3 @@
-/*
- * Copyright 2022 Rive
- */
-
-// Mechanical translation of the complete pinned source implementation
-// renderer/src/gpu.cpp.
-// Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
-
-#![allow(dead_code)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
-#![allow(non_upper_case_globals)]
-
-// The complete source is retained below in source order.  Every source line
-// is translated into the source-shaped Rust owner that follows it; comments
-// retain preprocessor, assertion, and native-generator intent even while this
-// Phase-1 owner remains unwired.
-
 // /*
 //  * Copyright 2022 Rive
 //  */
@@ -30,6 +12,8 @@
 // #include "image_draw_attributes.hpp"
 // #include "rive_render_paint.hpp"
 //
+// #include <limits>
+//
 // #include "generated/shaders/draw_path.vert.exports.h"
 //
 // namespace rive::gpu
@@ -39,10 +23,35 @@
 // static_assert(kTessTextureWidthLog2 == TESS_TEXTURE_WIDTH_LOG2);
 // static_assert(kMidpointFanPatchSegmentSpan == MIDPOINT_FAN_PATCH_SEGMENT_SPAN);
 // static_assert(OuterCubicPatchSegmentSpan == OUTER_CUBIC_PATCH_SEGMENT_SPAN);
+// static_assert(OuterCubicPatchSegmentSpanPlusBowtie ==
+//               OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE);
+//
+// static_assert(DSMidpointFanFillPatchStrideLog2 == DS_MIDPOINT_FAN_STRIDE_LOG2);
+// static_assert(DSOuterCubicFillPatchStrideLog2 == DS_OUTER_CUBIC_STRIDE_LOG2);
+// static_assert(DSFillVertexFlagsShift == VERTEX_FLAGS_SHIFT);
+// static_assert(DSFillVertexFlagDisableColorWrite ==
+//               VERTEX_FLAG_DISABLE_COLOR_WRITE);
+// static_assert(DSFillVertexFlagOuterCubic == VERTEX_FLAG_OUTER_CUBIC);
+//
+// static_assert(DS_MIDPOINT_VERTEX_ID == MIDPOINT_FAN_PATCH_SEGMENT_SPAN + 1);
+// static_assert(DS_MIDPOINT_VERTEX_ID < DS_PATCH_STRIDE(/*outerCubic=*/false));
+// static_assert(OUTER_CUBIC_PATCH_SEGMENT_SPAN <
+//               DS_PATCH_STRIDE(/*outerCubic=*/true));
+// // Since index patterns use a pow2 vertex stride, their vertex IDs span the
+// // entire uint16 range.
+// static_assert(DS_PATCH_STRIDE(/*outerCubic=*/false) *
+//                   DSMidpointFanFillPatchMaxReps ==
+//               1u << 16);
+// static_assert(DS_PATCH_STRIDE(/*outerCubic=*/true) *
+//                   DSOuterCubicFillPatchMaxReps ==
+//               1u << 16);
 //
 // static_assert(sizeof(PaintAuxData) / StorageBufferElementSizeInBytes(
 //                                          PaintAuxData::kBufferStructure) ==
 //               PAINT_AUX_ENTRY_ELEMENT_COUNT);
+//
+// // packNormalizedDepth() only supports 23 bits of payload. (See common.glsl.)
+// static_assert(DEPTH_Z_INDEX_BIT_COUNT + DEPTH_COVERAGE_BIT_COUNT == 23);
 //
 // static Span<const DrawType> get_valid_draw_types(InterlockMode mode)
 // {
@@ -205,25 +214,87 @@
 //
 //     switch (mode)
 //     {
-//         case InterlockMode::atomics:
-//         case InterlockMode::clockwise:
-//         case InterlockMode::clockwiseAtomic:
-//         case InterlockMode::depthStencil:
+//         case InterlockMode::rasterOrdering:
+//             outFlags |= ShaderMiscFlags::clockwiseFill;
+//             // FIXME(https://github.com/rive-app/rive/issues/14021): Some
+//             // backends generate fixedFunctionColorOutput for rasterOrdering
+//             // mode. Remove once this is resolved.
 //             outFlags |= ShaderMiscFlags::fixedFunctionColorOutput;
 //             break;
 //
-//         case InterlockMode::rasterOrdering:
-//             outFlags |= ShaderMiscFlags::clockwiseFill;
+//         case InterlockMode::atomics:
+//         case InterlockMode::clockwise:
+//         case InterlockMode::clockwiseAtomic:
+//             outFlags |= ShaderMiscFlags::fixedFunctionColorOutput;
 //             break;
-//     }
 //
-//     if (drawTypeHasPipelineDynamicState(drawType))
-//     {
-//         outFlags |= ShaderMiscFlags::emulateDynamicColorWriteDisable;
+//         case InterlockMode::depthStencil:
+//             outFlags |= ShaderMiscFlags::fixedFunctionColorOutput;
+//             if (drawType != DrawType::renderPassInitialize)
+//             {
+//                 outFlags |= ShaderMiscFlags::msaaDstRead;
+//             }
+//             break;
 //     }
 //
 //     return outFlags;
 // }
+//
+// // Returns the mask of ShaderMiscFlags that are valid for the given
+// // InterlockMode.
+// // This allows us to pack the ShaderMiscFlags into shader keys more densely, by
+// // only including the relevant bits (since InterlockMode is part of the shader
+// // key anyway).
+// constexpr static ShaderMiscFlags shaderMiscFlagKeyMask(InterlockMode mode)
+// {
+//     switch (mode)
+//     {
+//         case InterlockMode::rasterOrdering:
+//             // FIXME(https://github.com/rive-app/rive/issues/14021): Some
+//             // backends generate fixedFunctionColorOutput for rasterOrdering
+//             // mode. Remove once this is resolved.
+//             return ShaderMiscFlags::clockwiseFill |
+//                    ShaderMiscFlags::fixedFunctionColorOutput;
+//
+//         case InterlockMode::atomics:
+//             return ShaderMiscFlags::fixedFunctionColorOutput |
+//                    ShaderMiscFlags::storeColorClear |
+//                    ShaderMiscFlags::loadColorFromDstTexture |
+//                    ShaderMiscFlags::swizzleColorBGRAToRGBA |
+//                    ShaderMiscFlags::coalescedResolveAndTransfer;
+//
+//         case InterlockMode::clockwise:
+//             return ShaderMiscFlags::fixedFunctionColorOutput |
+//                    ShaderMiscFlags::clipUpdateOnly |
+//                    ShaderMiscFlags::borrowedCoveragePass;
+//
+//         case InterlockMode::clockwiseAtomic:
+//             return ShaderMiscFlags::fixedFunctionColorOutput |
+//                    ShaderMiscFlags::clipUpdateOnly |
+//                    ShaderMiscFlags::nestedClipUpdateOnly |
+//                    ShaderMiscFlags::borrowedCoveragePass;
+//
+//         case InterlockMode::depthStencil:
+//             return ShaderMiscFlags::fixedFunctionColorOutput |
+//                    ShaderMiscFlags::msaaDstRead;
+//     }
+//     RIVE_UNREACHABLE();
+// }
+//
+// constexpr static uint32_t maxShaderMiscFlagKeyMaskBitCount()
+// {
+//     uint32_t maxBitCount = 0;
+//     for (size_t i = 0; i < INTERLOCK_MODE_COUNT; ++i)
+//     {
+//         const uint32_t bitCount = math::count_set_bits(
+//             static_cast<uint32_t>(shaderMiscFlagKeyMask(InterlockMode(i))));
+//         maxBitCount = std::max(maxBitCount, bitCount);
+//     }
+//     return maxBitCount;
+// }
+//
+// // ShaderMiscFlagKeyBitCount must be exactly enough for the widest key mask.
+// static_assert(maxShaderMiscFlagKeyMaskBitCount() == ShaderMiscFlagKeyBitCount);
 //
 // void ForEachUbershaderPermutation(
 //     InterlockMode interlockMode,
@@ -305,9 +376,19 @@
 //                     }
 //                     break;
 //
+//                 case InterlockMode::depthStencil:
+//                     // fixedFunctionColorOutput does no dstRead, by definition.
+//                     if (enums::all_flags_set(
+//                             curMiscFlags,
+//                             ShaderMiscFlags::msaaDstRead |
+//                                 ShaderMiscFlags::fixedFunctionColorOutput))
+//                     {
+//                         continue;
+//                     }
+//                     break;
+//
 //                 case InterlockMode::rasterOrdering:
 //                 case InterlockMode::clockwise:
-//                 case InterlockMode::depthStencil:
 //                     break;
 //             }
 //
@@ -350,33 +431,20 @@
 //     }
 // }
 //
-// uint32_t ShaderUniqueKey(DrawType drawType,
-//                          ShaderFeatures shaderFeatures,
-//                          InterlockMode interlockMode,
-//                          ShaderMiscFlags miscFlags)
+// // Collapses drawType down to DrawTypeKeyBitCount bits. Many drawTypes share
+// // a value because they use the same shader. (They only differ in the input
+// // triangle patch.)
+// static uint32_t drawTypeKey(DrawType drawType, InterlockMode interlockMode)
 // {
-//     if (enums::is_flag_set(miscFlags,
-//                            ShaderMiscFlags::coalescedResolveAndTransfer))
-//     {
-//         assert(drawType == DrawType::renderPassResolve);
-//         assert(enums::is_flag_set(shaderFeatures,
-//                                   ShaderFeatures::ENABLE_ADVANCED_BLEND));
-//         assert(interlockMode == InterlockMode::atomics);
-//     }
-//     if (enums::any_flag_set(miscFlags,
-//                             ShaderMiscFlags::storeColorClear |
-//                                 ShaderMiscFlags::swizzleColorBGRAToRGBA))
-//     {
-//         assert(drawType == DrawType::renderPassInitialize);
-//         assert(interlockMode == InterlockMode::atomics);
-//     }
-//     uint32_t drawTypeKey;
 //     switch (drawType)
 //     {
 //         case DrawType::midpointFanPatches:
 //         case DrawType::midpointFanCenterAAPatches:
 //         case DrawType::outerCurvePatches:
 //         case DrawType::depthStrokes:
+//             return 0;
+//         // depthStencil fills have their own, attribute-free vertex
+//         // shader, so they can't share a key with the patch draws above.
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilDynamicMidpointFans:
 //         case DrawType::stencilDynamicOuterCubics:
@@ -389,48 +457,85 @@
 //         case DrawType::stencilOuterCubicReset:
 //         case DrawType::stencilOuterCubicWinding:
 //         case DrawType::stencilOuterCubicCover:
-//             drawTypeKey = 0;
-//             break;
+//             assert(interlockMode == InterlockMode::depthStencil);
+//             return 1;
 //         case DrawType::interiorTriangulation:
-//             drawTypeKey = 1;
-//             break;
+//             return 2;
 //         case DrawType::featherAtlasBlit:
-//             drawTypeKey = 2;
-//             break;
+//             return 3;
 //         case DrawType::imageRect:
-//             drawTypeKey = 3;
-//             break;
+//             return 4;
 //         case DrawType::imageMesh:
-//             drawTypeKey = 4;
-//             break;
+//             return 5;
 //         case DrawType::clipReset:
 //             assert(interlockMode == InterlockMode::clockwiseAtomic ||
 //                    interlockMode == InterlockMode::depthStencil);
-//             drawTypeKey = 7;
-//             break;
+//             return 6;
 //         case DrawType::renderPassInitialize:
 //             assert(interlockMode == InterlockMode::atomics ||
 //                    interlockMode == InterlockMode::depthStencil ||
 //                    interlockMode == InterlockMode::clockwiseAtomic);
-//             drawTypeKey = 5;
-//             break;
+//             return 7;
 //         case DrawType::renderPassResolve:
 //             assert(interlockMode == InterlockMode::rasterOrdering ||
 //                    interlockMode == InterlockMode::atomics ||
 //                    interlockMode == InterlockMode::depthStencil);
-//             drawTypeKey = 6;
-//             break;
+//             return 8;
 //     }
-//     uint32_t key = static_cast<uint32_t>(miscFlags);
-//     assert(static_cast<uint32_t>(interlockMode) <
-//            1 << INTERLOCK_MODE_BIT_COUNT);
-//     key = (key << INTERLOCK_MODE_BIT_COUNT) |
-//           static_cast<uint32_t>(interlockMode);
-//     key = (key << kShaderFeatureCount) |
+//     RIVE_UNREACHABLE();
+// }
+//
+// // Collapses shaderMiscFlags down to ShaderMiscFlagKeyBitCount bits. Since
+// // shader keys also pack the interlockMode and drawType, they don't have to pack
+// // the entire ShaderMiscFlags mask -- only the relevant bits from
+// // shaderMiscFlagKeyMask().
+// static uint32_t shaderMiscFlagKey(ShaderMiscFlags shaderMiscFlags,
+//                                   DrawType drawType,
+//                                   InterlockMode interlockMode)
+// {
+//     const ShaderMiscFlags keyMask = shaderMiscFlagKeyMask(interlockMode);
+// #ifndef NDEBUG
+//     // Every valid flag for the drawType must be in keyMask.
+//     const ShaderMiscFlags validFlagsForDrawType =
+//         get_valid_shader_misc_flags(drawType, interlockMode);
+//     assert(enums::no_flags_set(validFlagsForDrawType, ~keyMask));
+//     // And every flag we were given must be valid for this specific drawType
+//     // (which also validates they're valid for the interlockMode).
+//     assert(enums::no_flags_set(shaderMiscFlags, ~validFlagsForDrawType));
+//     assert(math::count_set_bits(uint32_t(keyMask)) <=
+//            ShaderMiscFlagKeyBitCount);
+// #endif
+//     return math::compact_bitmask_value(uint32_t(shaderMiscFlags),
+//                                        uint32_t(keyMask));
+// }
+//
+// uint32_t ShaderUniqueKey(DrawType drawType,
+//                          ShaderFeatures shaderFeatures,
+//                          InterlockMode interlockMode,
+//                          ShaderMiscFlags shaderMiscFlags)
+// {
+//     if (enums::is_flag_set(shaderMiscFlags,
+//                            ShaderMiscFlags::coalescedResolveAndTransfer))
+//     {
+//         assert(drawType == DrawType::renderPassResolve);
+//         assert(enums::is_flag_set(shaderFeatures,
+//                                   ShaderFeatures::ENABLE_ADVANCED_BLEND));
+//         assert(interlockMode == InterlockMode::atomics);
+//     }
+//     if (enums::any_flag_set(shaderMiscFlags,
+//                             ShaderMiscFlags::storeColorClear |
+//                                 ShaderMiscFlags::swizzleColorBGRAToRGBA))
+//     {
+//         assert(drawType == DrawType::renderPassInitialize);
+//         assert(interlockMode == InterlockMode::atomics);
+//     }
+//     uint32_t key = shaderMiscFlagKey(shaderMiscFlags, drawType, interlockMode);
+//     assert(static_cast<uint32_t>(interlockMode) < 1 << InterlockModeBitCount);
+//     key = (key << InterlockModeBitCount) | static_cast<uint32_t>(interlockMode);
+//     key = (key << ShaderFeatureCount) |
 //           uint32_t(shaderFeatures &
 //                    ShaderFeaturesMaskFor(drawType, interlockMode));
-//     assert(drawTypeKey < 1 << 3);
-//     key = (key << 3) | drawTypeKey;
+//     key = (key << DrawTypeKeyBitCount) | drawTypeKey(drawType, interlockMode);
 //     return key;
 // }
 //
@@ -476,7 +581,7 @@
 //     // without a fan triangle whose purpose is to be a bowtie join.
 //     size_t vertexCount = 0;
 //     int32_t patchSegmentSpan = patchType == PatchType::outerCurves
-//                                    ? OuterCubicPatchSegmentSpanPlusJoin
+//                                    ? OuterCubicPatchSegmentSpanPlusBowtie
 //                                    : kMidpointFanPatchSegmentSpan;
 //     for (int i = 0; i < patchSegmentSpan; ++i)
 //     {
@@ -690,6 +795,66 @@
 //     }
 // }
 //
+// // Writes one patch type's depthStencil fill region, at its own base within the
+// // shared patch index buffer.
+// static void generateDepthStencilFillIndices(
+//     PatchType patchType,
+//     uint16_t indices[kPatchIndexBufferCount])
+// {
+//     const bool isOuterCubic = patchType == PatchType::outerCurves;
+//     assert(isOuterCubic || patchType == PatchType::midpointFan);
+//     const uint32_t patchCount = dsFillPatchMaxReps(isOuterCubic);
+//     indices += dsFillBaseIndex(isOuterCubic);
+//     const uint32_t fanSegmentSpan = isOuterCubic ? OuterCubicPatchSegmentSpan
+//                                                  : kMidpointFanPatchSegmentSpan;
+//
+//     // Per-patch vertex IDs are aligned on pow2 strides, specifically so the
+//     // shader can decode gl_VertexID without divides and mods. (Using integer
+//     // division costs 10% total framerate on PowerVR and 3% on Adreno.)
+//     // NOTE: The patches don't actually have pow2 numbers of vertices; the index
+//     // buffers just never reference those vertex IDs between the end of one
+//     // patch and the beginning of another.
+//     const uint32_t patchStrideLog2 = DS_PATCH_STRIDE_LOG2(isOuterCubic);
+//
+//     size_t indexCount = 0;
+//     for (uint32_t patch = 0; patch < patchCount; ++patch)
+//     {
+//         const uint32_t patchBaseVertex = patch << patchStrideLog2;
+//         const auto emitPatchVertex = [&](uint32_t patchVertexID) {
+//             indices[indexCount++] = math::lossless_numeric_cast<uint16_t>(
+//                 patchBaseVertex + patchVertexID);
+//         };
+//         // Middle-out fan topology, matching the fan half of
+//         // generate_buffer_data_for_patch_type().
+//         for (uint32_t step = 1; step < fanSegmentSpan; step <<= 1)
+//         {
+//             for (uint32_t i = 0; i < fanSegmentSpan; i += step * 2)
+//             {
+//                 emitPatchVertex(i);
+//                 emitPatchVertex(i + step);
+//                 emitPatchVertex(i + step * 2);
+//             }
+//         }
+//         if (!isOuterCubic)
+//         {
+//             // Triangle to the contour midpoint.
+//             emitPatchVertex(0);
+//             emitPatchVertex(fanSegmentSpan);
+//             emitPatchVertex(DS_MIDPOINT_VERTEX_ID);
+//         }
+//         else
+//         {
+//             // outerCubics tessellate a bowtie vertex at the end of each patch,
+//             // but it is completely unused by depthStencil fills, so just don't
+//             // reference it in the index buffer.
+//         }
+//     }
+//
+//     assert(indexCount == patchCount * (isOuterCubic
+//                                            ? DSOuterCubicFillPatchIndexCount
+//                                            : DSMidpointFanFillPatchIndexCount));
+// }
+//
 // void GeneratePatchBufferData(PatchVertex vertices[kPatchVertexBufferCount],
 //                              uint16_t indices[kPatchIndexBufferCount])
 // {
@@ -708,6 +873,11 @@
 //         indices + kMidpointFanPatchIndexCount +
 //             kMidpointFanCenterAAPatchIndexCount,
 //         kMidpointFanPatchVertexCount + kMidpointFanCenterAAPatchVertexCount);
+//
+//     for (auto patchType : {PatchType::midpointFan, PatchType::outerCurves})
+//     {
+//         generateDepthStencilFillIndices(patchType, indices);
+//     }
 // }
 //
 // void ClipRectInverseMatrix::reset(const Mat2D& clipMatrix, const AABB& clipRect)
@@ -743,6 +913,12 @@
 //     switch (riveMode)
 //     {
 //         case BlendMode::srcOver:
+//             return BLEND_SRC_OVER;
+//         case BlendMode::additive:
+//             // RiveRenderPaint::blendMode() and RiveRenderer::drawImage() both
+//             // fold additive into srcOver, so it should never reach here. The
+//             // case exists to keep the switch exhaustive over BlendMode.
+//             assert(!"additive should have been resolved to srcOver");
 //             return BLEND_SRC_OVER;
 //         case BlendMode::screen:
 //             return BLEND_MODE_SCREEN;
@@ -787,6 +963,21 @@
 //     return simd::reduce_or(premul << uint4{0, 8, 16, 24});
 // }
 //
+// // Swizzles the byte order of ColorInt to little-endian RGBA, premultiplies
+// // rgb by alpha, and scales only the A channel by
+// // complementAdditiveness (1.0 - additiveness)
+// static uint32_t swizzleRiveColorToRGBAPremulAdditive(
+//     ColorInt riveColor,
+//     float complementAdditiveness)
+// {
+//     uint4 rgba = (rive::uint4(riveColor) >> uint4{16, 8, 0, 24}) & 0xffu;
+//     uint32_t alpha = rgba.w;
+//     uint4 premul = (rgba * alpha + 127) / 255;
+//     premul.w = static_cast<uint32_t>(
+//         static_cast<float>(alpha) * complementAdditiveness + .5f);
+//     return simd::reduce_or(premul << uint4{0, 8, 16, 24});
+// }
+//
 // FlushUniforms::InverseViewports::InverseViewports(
 //     const FlushDescriptor& flushDesc,
 //     const PlatformFeatures& platformFeatures)
@@ -802,10 +993,12 @@
 //         numerators.xy = -numerators.xy;
 //     }
 //     // When drawing to a render target, ensure that Y=0 (in Rive pixel space)
-//     // gets drawn to the top of thew viewport.
-//     // This requires a Y inversion if Rive pixel space and clip space have
-//     // opposing senses of which way is up.
-//     if (platformFeatures.clipSpaceBottomUp)
+//     // lands on the row the target keeps its visual top in. Clip space and the
+//     // framebuffer each contribute a possible inversion, and so does a target
+//     // that stores its bottom in row 0.
+//     if ((platformFeatures.clipSpaceBottomUp !=
+//          platformFeatures.framebufferBottomUp) !=
+//         flushDesc.renderTarget->bottomUp(platformFeatures))
 //     {
 //         numerators.w = -numerators.w;
 //     }
@@ -850,7 +1043,12 @@
 //     m_ditherConversionToRGB10((flushDesc.ditherMode == DitherMode::none)
 //                                   ? 0.0f
 //                                   : (-1.0f / 1024.0f) / m_ditherScale),
-//     m_wireframeEnabled(flushDesc.wireframe)
+//     m_wireframeEnabled(flushDesc.wireframe),
+//     m_renderTargetBottomUp(flushDesc.renderTarget->bottomUp(platformFeatures)),
+//     m_gradTextureYScale(1.f / flushDesc.gradTextureHeight),
+//     // Use a bias of -0.5 here as we encode the row+1 so we can negate it
+//     // robustly
+//     m_gradTextureYBias(-0.5f / flushDesc.gradTextureHeight)
 // {}
 //
 // static void write_matrix(volatile float* dst, const Mat2D& matrix)
@@ -900,8 +1098,9 @@
 //     m_coverageBufferRange.offsetY = coverageBufferRange.offsetY;
 // }
 //
-// float getGradientY(ColorRampLocation rampLocation,
-//                    GradTextureLayout gradTextureLayout)
+// // Returns integral row number
+// uint32_t getGradientRow(ColorRampLocation rampLocation,
+//                         GradTextureLayout gradTextureLayout)
 // {
 //     uint32_t row = rampLocation.row;
 //     if (rampLocation.isComplex())
@@ -910,6 +1109,14 @@
 //         row += gradTextureLayout.complexOffsetY;
 //     }
 //
+//     return row;
+// }
+//
+// // Returns Normalized value for row in the texture
+// float getGradientY(ColorRampLocation rampLocation,
+//                    GradTextureLayout gradTextureLayout)
+// {
+//     uint32_t row = getGradientRow(rampLocation, gradTextureLayout);
 //     return (static_cast<float>(row) + .5f) * gradTextureLayout.inverseHeight;
 // }
 //
@@ -921,29 +1128,52 @@
 //                     bool hasClipRect,
 //                     bool hasImage,
 //                     BlendMode blendMode,
-//                     bool solidUnmultiplied)
+//                     bool solidUnmultiplied,
+//                     float additiveness)
 // {
 //     uint32_t shiftedClipID = clipID << 16;
 //     uint32_t shiftedBlendMode = ConvertBlendModeToPLSBlendMode(blendMode) << 4;
 //     uint32_t localParams = paint_type_to_glsl_id(paintType);
+//
+//     assert(additiveness >= 0.f && additiveness <= 1.f); // Draw clamps it.
+//     // GPU wants 1.0 - additiveness as this is used to scale the final alpha
+//     // Input of 0.0 leads to GPU using 1.0 which is no scale.
+//     // Input of 1.0 leads to GPU using 0.0 which is full scale
+//     float complementAdditiveness =
+//         blendMode != BlendMode::srcOver ? 1.f : 1.f - additiveness;
 //     switch (paintType)
 //     {
 //         case PaintType::solidColor:
 //         {
 //             // Swizzle the riveColor to little-endian RGBA (the order expected
-//             // by GLSL). Advanced blend draws take unmultiplied color, srcOver
-//             // draws and KHR fixed-function blend path are premult
+//             // by GLSL).
+//             // Advanced-blend draws take unmultiplied color and ignore
+//             // additiveness. srcOver draws are premultiplied with additiveness
+//             // baked into alpha. The KHR fixed-function blend path is
+//             // premultiplied with no additiveness.
 //             m_color = solidUnmultiplied
 //                           ? SwizzleRiveColorToRGBA(simplePaintValue.color)
-//                           : SwizzleRiveColorToRGBAPremul(simplePaintValue.color);
+//                           : swizzleRiveColorToRGBAPremulAdditive(
+//                                 simplePaintValue.color,
+//                                 complementAdditiveness);
 //             localParams |= shiftedClipID | shiftedBlendMode;
 //             break;
 //         }
 //         case PaintType::linearGradient:
 //         case PaintType::radialGradient:
 //         {
-//             m_gradTextureY = getGradientY(simplePaintValue.colorRampLocation,
-//                                           gradTextureLayout);
+//             // Pack the gradient texture row in the integer part and
+//             // Additiveness in range 0/256 to 255/256, in the fraction.
+//             // The row is biased +1 so we can always negate a non zero value
+//             uint32_t gradTextureRow =
+//                 getGradientRow(simplePaintValue.colorRampLocation,
+//                                gradTextureLayout);
+//             assert(gradTextureRow <= 0xffffu);
+//             m_gradTextureRowAndAdditiveness =
+//                 static_cast<float>(gradTextureRow + 1) +
+//                 static_cast<float>(static_cast<uint32_t>(
+//                     complementAdditiveness * 255.f + .5f)) *
+//                     (1.f / 256.f);
 //             localParams |= shiftedClipID | shiftedBlendMode;
 //             break;
 //         }
@@ -976,8 +1206,8 @@
 // void getGradientMatrixAndSpan(const Gradient* gradient,
 //                               ColorRampLocation rampLocation,
 //                               const Mat2D& viewMatrix,
+//                               const RenderTarget* renderTarget,
 //                               const PlatformFeatures& platformFeatures,
-//                               uint32_t renderTargetHeight,
 //                               Mat2D& paintMatrixOut,
 //                               float (&gradTextureHorizontalSpanOut)[2])
 // {
@@ -991,10 +1221,10 @@
 //     // failed.
 //     paintMatrixOut = viewMatrix.invertOrIdentity();
 //
-//     if (platformFeatures.framebufferBottomUp)
+//     if (renderTarget->bottomUp(platformFeatures))
 //     {
 //         // Flip _fragCoord.y.
-//         paintMatrixOut *= Mat2D(1, 0, 0, -1, 0, renderTargetHeight);
+//         paintMatrixOut *= Mat2D(1, 0, 0, -1, 0, renderTarget->height());
 //     }
 //
 //     if (gradient->paintType() == PaintType::linearGradient)
@@ -1056,8 +1286,8 @@
 //             getGradientMatrixAndSpan(gradient,
 //                                      simplePaintValue.colorRampLocation,
 //                                      viewMatrix,
+//                                      renderTarget,
 //                                      platformFeatures,
-//                                      renderTarget->height(),
 //                                      paintMatrix,
 //                                      gradTextureHorizontalSpan);
 //             m_gradTextureHorizontalSpan[0] = gradTextureHorizontalSpan[0];
@@ -1073,7 +1303,7 @@
 //             {
 //                 Mat2D matrix;
 //                 imageMatrix.invert(&matrix);
-//                 if (platformFeatures.framebufferBottomUp)
+//                 if (renderTarget->bottomUp(platformFeatures))
 //                 {
 //                     // Flip _fragCoord.y.
 //                     matrix *= Mat2D(1, 0, 0, -1, 0, renderTarget->height());
@@ -1108,7 +1338,7 @@
 //     if (clipRectInverseMatrix != nullptr)
 //     {
 //         Mat2D m = clipRectInverseMatrix->inverseMatrix();
-//         if (platformFeatures.framebufferBottomUp)
+//         if (renderTarget->bottomUp(platformFeatures))
 //         {
 //             // Flip _fragCoord.y.
 //             m = m * Mat2D(1, 0, 0, -1, 0, renderTarget->height());
@@ -1137,7 +1367,8 @@
 //     const ClipRectInverseMatrix* clipRectInverseMatrix,
 //     uint32_t clipID,
 //     BlendMode blendMode,
-//     uint32_t zIndex)
+//     uint32_t zIndex,
+//     float additiveness)
 // {
 //     static_assert(FirstAttribIdx == IMAGE_FIRST_ATTRIB_IDX);
 //     static_assert(LastAttribIdx == IMAGE_COMMON_LAST_ATTRIB_IDX);
@@ -1179,7 +1410,18 @@
 //     write2x2(m_clipRectInverseMatrix, clipRectInverseMatrixToWrite);
 //     writeTranslate(m_translate, matrix);
 //     writeTranslate(m_clipRectInverseTranslate, clipRectInverseMatrixToWrite);
-//     m_modulatedColor = SwizzleRiveColorToRGBAPremul(color);
+//     // The shaders multiply the (premultiplied) image color by this modulated
+//     // color component-wise, so scaling only its alpha implements additiveness
+//     // for every image draw with no shader changes.
+//     assert(additiveness >= 0.f && additiveness <= 1.f); // Draw clamps it.
+//     // GPU wants 1.0 - additiveness as this is used to scale the final alpha
+//     // Input of 0.0 leads to GPU using 1.0 which is no scale.
+//     // Input of 1.0 leads to GPU using 0.0 which is full scale
+//     float complementAdditiveness =
+//         blendMode != BlendMode::srcOver ? 1.f : 1.f - additiveness;
+//
+//     m_modulatedColor =
+//         swizzleRiveColorToRGBAPremulAdditive(color, complementAdditiveness);
 //     m_clipID = clipID;
 //     m_blendMode = ConvertBlendModeToPLSBlendMode(blendMode);
 //     m_zIndex = zIndex;
@@ -1202,8 +1444,15 @@
 //     const Mat2D& gradientMatrix,
 //     uint32_t gradientType,
 //     const float (&gradTextureHorizontalSpan)[2],
-//     float gradTextureY) :
-//     m_commons{matrix, color, clipRectInverseMatrix, clipID, blendMode, zIndex}
+//     float gradTextureY,
+//     float additiveness) :
+//     m_commons{matrix,
+//               color,
+//               clipRectInverseMatrix,
+//               clipID,
+//               blendMode,
+//               zIndex,
+//               additiveness}
 // {
 //     static_assert(offsetof(ImageRectInstance, m_commons) == 0);
 //     STATIC_ASSERT_ATTRIB(ImageRectInstance,
@@ -1252,19 +1501,31 @@
 //
 // ImageMeshInstance::ImageMeshInstance(
 //     const Mat2D& matrix,
-//     float opacity,
+//     ColorInt modulatedColor,
 //     const ClipRectInverseMatrix* clipRectInverseMatrix,
 //     uint32_t clipID,
 //     BlendMode blendMode,
-//     uint32_t zIndex) :
+//     uint32_t zIndex,
+//     float additiveness,
+//     Vec2D uvTranslate,
+//     Vec2D uvScale) :
 //     m_commons{matrix,
-//               colorModulateOpacity(0xFFFFFFFF, opacity),
+//               modulatedColor,
 //               clipRectInverseMatrix,
 //               clipID,
 //               blendMode,
-//               zIndex}
+//               zIndex,
+//               additiveness}
 // {
 //     static_assert(offsetof(ImageMeshInstance, m_commons) == 0);
+//     STATIC_ASSERT_ATTRIB(ImageMeshInstance,
+//                          m_uvTransform,
+//                          IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX);
+//
+//     m_uvTransform[0] = uvTranslate.x;
+//     m_uvTransform[1] = uvTranslate.y;
+//     m_uvTransform[2] = uvScale.x;
+//     m_uvTransform[3] = uvScale.y;
 // }
 //
 // const std::array<VertexAttribute, ImageMeshInstance::AttributeCount>&
@@ -1837,18 +2098,15 @@
 //         case InterlockMode::depthStencil:
 //             if (enums::is_flag_set(drawContents, DrawContents::opaquePaint))
 //             {
-//                 // ShaderMiscFlags::emulateDynamicColorWriteDisable suppresses
-//                 // color writes by outputting color == 0, which only works if
-//                 // blending is ENABLED (if you output "color == 0" with blending
-//                 // enabled, it's a no-op like we want; if you output "color ==
-//                 // 0" with blending DISABLED, the pixel turns blank and erases
-//                 // whatever used to be there).
-//                 // NOTE: Other than disabling color write, the output is
+//                 // A dynamic-state draw may suppress color writes by outputting
+//                 // color == 0, which only works if blending is ENABLED (if you
+//                 // output "color == 0" with blending enabled, it's a no-op like
+//                 // we want; if you output "color == 0" with blending DISABLED,
+//                 // the pixel turns blank and erases whatever used to be there).
+//                 // NOTE: Other than disabling color write, this output is
 //                 // equivalent with or without blend, since opaquePaint emits
 //                 // alpha == 1.
-//                 return enums::is_flag_set(
-//                            shaderMiscFlags,
-//                            ShaderMiscFlags::emulateDynamicColorWriteDisable)
+//                 return drawTypeHasPipelineDynamicState(drawType)
 //                            ? BlendEquation::srcOver
 //                            : BlendEquation::none;
 //             }
@@ -1935,14 +2193,14 @@
 //     RIVE_UNREACHABLE();
 // }
 //
-// uint64_t pipeline_unique_key(DrawType drawType,
-//                              ShaderFeatures shaderFeatures,
-//                              InterlockMode interlockMode,
-//                              ShaderMiscFlags shaderMiscFlags,
-//                              DrawContents drawContents,
-//                              bool fixedFunctionColorOutput,
-//                              rive::BlendMode blendMode,
-//                              const PlatformFeatures& platformFeatures)
+// uint64_t getPipelineUniqueKey(DrawType drawType,
+//                               ShaderFeatures shaderFeatures,
+//                               InterlockMode interlockMode,
+//                               ShaderMiscFlags shaderMiscFlags,
+//                               DrawContents drawContents,
+//                               bool fixedFunctionColorOutput,
+//                               rive::BlendMode blendMode,
+//                               const PlatformFeatures& platformFeatures)
 // {
 //     uint64_t key = gpu::ShaderUniqueKey(drawType,
 //                                         shaderFeatures,
@@ -1993,7 +2251,7 @@
 //
 //     key = math::add_bits_to_key(key,
 //                                 uint32_t(stencilInfo.stencilType),
-//                                 STENCIL_TYPE_BIT_COUNT);
+//                                 StencilTypeBitCount);
 //
 //     const bool colorWriteEnabled =
 //         get_color_write_enable(drawType,
@@ -2008,7 +2266,7 @@
 //     key = math::add_bits_to_key(key, uint32_t(depthState.depthWriteEnabled), 1);
 //     key = math::add_bits_to_key(key,
 //                                 uint32_t(get_cull_face(drawType)),
-//                                 CULL_FACE_BIT_COUNT);
+//                                 CullFaceBitCount);
 //     return key;
 // }
 //
@@ -2463,6 +2721,20 @@ const _: [(); kMidpointFanPatchSegmentSpan as usize] =
     [(); crate::gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN];
 const _: [(); OuterCubicPatchSegmentSpan as usize] =
     [(); crate::gpu::OUTER_CUBIC_PATCH_SEGMENT_SPAN];
+const _: () = {
+    use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::*;
+    assert!(OuterCubicPatchSegmentSpanPlusBowtie == OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE);
+    assert!(DSMidpointFanFillPatchStrideLog2 == DS_MIDPOINT_FAN_STRIDE_LOG2);
+    assert!(DSOuterCubicFillPatchStrideLog2 == DS_OUTER_CUBIC_STRIDE_LOG2);
+    assert!(DSFillVertexFlagsShift == VERTEX_FLAGS_SHIFT);
+    assert!(DSFillVertexFlagDisableColorWrite == VERTEX_FLAG_DISABLE_COLOR_WRITE);
+    assert!(DSFillVertexFlagOuterCubic == VERTEX_FLAG_OUTER_CUBIC);
+    assert!(DS_MIDPOINT_VERTEX_ID == MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 1);
+    assert!(DS_MIDPOINT_VERTEX_ID < DS_PATCH_STRIDE(false) as i32);
+    assert!(OUTER_CUBIC_PATCH_SEGMENT_SPAN < DS_PATCH_STRIDE(true) as u32);
+    assert!(DS_PATCH_STRIDE(false) as u32 * DSMidpointFanFillPatchMaxReps == 1u32 << 16);
+    assert!(DS_PATCH_STRIDE(true) as u32 * DSOuterCubicFillPatchMaxReps == 1u32 << 16);
+};
 
 // Exact source-owned value from renderer/src/shaders/constants.glsl, which
 // gpu.cpp includes directly and the generated shaders pair with shift 7/mask 0x7f.
@@ -2628,14 +2900,8 @@ fn get_valid_shader_misc_flags(draw_type: DrawType, mode: InterlockMode) -> u32 
             if draw_type != DrawType::renderPassInitialize {
                 flags |= ShaderMiscFlags::msaaDstRead.0;
             }
-            if drawTypeHasPipelineDynamicState(draw_type) {
-                flags |= ShaderMiscFlags::emulateDynamicColorWriteDisable.0;
-            }
         }
         _ => {}
-    }
-    if drawTypeHasPipelineDynamicState(draw_type) {
-        flags |= ShaderMiscFlags::emulateDynamicColorWriteDisable.0;
     }
     flags
 }
@@ -2661,11 +2927,7 @@ const fn shaderMiscFlagKeyMask(mode: InterlockMode) -> u32 {
                 | ShaderMiscFlags::nestedClipUpdateOnly.0
                 | ShaderMiscFlags::borrowedCoveragePass.0
         }
-        InterlockMode::depthStencil => {
-            fixed
-                | ShaderMiscFlags::emulateDynamicColorWriteDisable.0
-                | ShaderMiscFlags::msaaDstRead.0
-        }
+        InterlockMode::depthStencil => fixed | ShaderMiscFlags::msaaDstRead.0,
     }
 }
 
@@ -2785,8 +3047,8 @@ pub fn ShaderUniqueKey(
         DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches
         | DrawType::outerCurvePatches
-        | DrawType::depthStrokes
-        | DrawType::stencilMidpointFanBorrowedCoverage
+        | DrawType::depthStrokes => 0,
+        DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilMidpointFans
         | DrawType::stencilMidpointFanReset
@@ -2797,11 +3059,14 @@ pub fn ShaderUniqueKey(
         | DrawType::stencilOuterCubicReset
         | DrawType::stencilDynamicOuterCubics
         | DrawType::stencilOuterCubicWinding
-        | DrawType::stencilOuterCubicCover => 0,
-        DrawType::interiorTriangulation => 1,
-        DrawType::featherAtlasBlit => 2,
-        DrawType::imageRect => 3,
-        DrawType::imageMesh => 4,
+        | DrawType::stencilOuterCubicCover => {
+            debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
+            1
+        }
+        DrawType::interiorTriangulation => 2,
+        DrawType::featherAtlasBlit => 3,
+        DrawType::imageRect => 4,
+        DrawType::imageMesh => 5,
         DrawType::renderPassInitialize => {
             debug_assert!(matches!(
                 interlockMode,
@@ -2809,7 +3074,7 @@ pub fn ShaderUniqueKey(
                     | InterlockMode::depthStencil
                     | InterlockMode::clockwiseAtomic
             ));
-            5
+            7
         }
         DrawType::renderPassResolve => {
             debug_assert!(matches!(
@@ -2818,14 +3083,14 @@ pub fn ShaderUniqueKey(
                     | InterlockMode::atomics
                     | InterlockMode::depthStencil
             ));
-            6
+            8
         }
         DrawType::clipReset => {
             debug_assert!(matches!(
                 interlockMode,
                 InterlockMode::clockwiseAtomic | InterlockMode::depthStencil
             ));
-            7
+            6
         }
     };
     let mask = ShaderFeaturesMaskForDraw(drawType, interlockMode).0;
@@ -2869,7 +3134,7 @@ fn generate_buffer_data_for_patch_type(
     baseVertex: u16,
 ) {
     let patch_span = if patchType == PatchType::outerCurves {
-        OuterCubicPatchSegmentSpanPlusJoin as i32
+        OuterCubicPatchSegmentSpanPlusBowtie as i32
     } else {
         kMidpointFanPatchSegmentSpan as i32
     };
@@ -3025,6 +3290,32 @@ fn generate_buffer_data_for_patch_type(
     debug_assert!(index_count <= indices.len());
 }
 
+pub(crate) fn generateDepthStencilFillIndices(patchType: PatchType, indices: &mut [u16]) {
+    // The algorithm is shared with the cfg-independent host GPU adapter.
+    // Keep its inputs tied to the exact source constants at compile time.
+    const _: () = {
+        use crate::gpu as host;
+        use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
+            DS_MIDPOINT_VERTEX_ID, DS_PATCH_STRIDE_LOG2,
+        };
+        assert!(host::PATCH_INDEX_BUFFER_COUNT == kPatchIndexBufferCount as usize);
+        assert!(host::DS_MIDPOINT_FILL_BASE_INDEX == DSMidpointFanFillBaseIndex as usize);
+        assert!(host::DS_OUTER_FILL_BASE_INDEX == DSOuterCubicFillBaseIndex as usize);
+        assert!(host::DS_MIDPOINT_FILL_MAX_REPS == DSMidpointFanFillPatchMaxReps as usize);
+        assert!(host::DS_OUTER_FILL_MAX_REPS == DSOuterCubicFillPatchMaxReps as usize);
+        assert!(host::DS_MIDPOINT_FILL_INDEX_COUNT == DSMidpointFanFillPatchIndexCount as usize);
+        assert!(host::DS_OUTER_FILL_INDEX_COUNT == DSOuterCubicFillPatchIndexCount as usize);
+        assert!(host::MIDPOINT_FAN_PATCH_SEGMENT_SPAN == kMidpointFanPatchSegmentSpan as usize);
+        assert!(host::OUTER_CUBIC_PATCH_SEGMENT_SPAN == OuterCubicPatchSegmentSpan as usize);
+        assert!(host::DS_MIDPOINT_FILL_STRIDE_LOG2 == DS_PATCH_STRIDE_LOG2(false));
+        assert!(host::DS_OUTER_FILL_STRIDE_LOG2 == DS_PATCH_STRIDE_LOG2(true));
+        assert!(host::MIDPOINT_FAN_PATCH_SEGMENT_SPAN + 1 == DS_MIDPOINT_VERTEX_ID as usize);
+    };
+    let outer = patchType == PatchType::outerCurves;
+    debug_assert!(outer || patchType == PatchType::midpointFan);
+    crate::gpu::generate_depth_stencil_fill_indices(outer, indices);
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn GeneratePatchBufferData(vertices: *mut PatchVertex, indices: *mut u16) {
     let vertices =
@@ -3048,6 +3339,9 @@ pub unsafe extern "C" fn GeneratePatchBufferData(vertices: *mut PatchVertex, ind
         &mut indices[midpoint_indices + center_indices..],
         (midpoint_vertices + center_vertices) as u16,
     );
+    for patch_type in [PatchType::midpointFan, PatchType::outerCurves] {
+        generateDepthStencilFillIndices(patch_type, indices);
+    }
 }
 
 #[inline]
@@ -4312,10 +4606,7 @@ fn get_blend_equation(
             if has_u32(drawContents.0, DrawContents::opaquePaint.0) {
                 // A transparent shader output suppresses color writes only
                 // with blending enabled; otherwise it erases the destination.
-                if has_u32(
-                    shaderMiscFlags.0,
-                    ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
-                ) {
+                if drawTypeHasPipelineDynamicState(drawType) {
                     BlendEquation::srcOver
                 } else {
                     BlendEquation::none
@@ -4510,7 +4801,7 @@ mod dynamic_color_write_tests {
     }
 
     #[test]
-    fn dynamic_state_permutations_include_color_write_emulation() {
+    fn dynamic_state_permutations_have_fragment_misc_flags_only() {
         let platform = PlatformFeatures {
             supportsPipelineDynamicState: true,
             ..PlatformFeatures::default()
@@ -4522,11 +4813,6 @@ mod dynamic_color_write_tests {
             |draw_type, _, misc| {
                 if drawTypeHasPipelineDynamicState(draw_type) {
                     observed.entry(draw_type as u8).or_default().insert(misc.0);
-                } else {
-                    assert_eq!(
-                        misc.0 & ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
-                        0
-                    );
                 }
                 true
             },
@@ -4540,12 +4826,7 @@ mod dynamic_color_write_tests {
                 std::collections::BTreeSet::from([
                     0,
                     ShaderMiscFlags::fixedFunctionColorOutput.0,
-                    ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
-                    ShaderMiscFlags::fixedFunctionColorOutput.0
-                        | ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
                     ShaderMiscFlags::msaaDstRead.0,
-                    ShaderMiscFlags::msaaDstRead.0
-                        | ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
                 ])
             );
         }
@@ -4553,8 +4834,8 @@ mod dynamic_color_write_tests {
 
     #[test]
     fn opaque_msaa_keeps_blending_when_color_write_is_emulated() {
-        // Upstream 2b2203f4: transparent shader output must preserve the
-        // destination even for content normally drawn without blending.
+        // Upstream c14cb251: dynamic draws must keep blending enabled because
+        // their vertex IDs can carry the color-write-disable flag.
         for supports_advanced_blend in [false, true] {
             let platform = PlatformFeatures {
                 supportsBlendAdvancedKHR: supports_advanced_blend,
@@ -4564,13 +4845,17 @@ mod dynamic_color_write_tests {
                 DrawType::stencilMidpointFans,
                 DrawType::stencilMidpointFanBorrowedCoverage,
                 DrawType::stencilMidpointFanReset,
+                DrawType::stencilDynamicMidpointFans,
+                DrawType::stencilDynamicOuterCubics,
             ] {
-                for (flags, expected) in [
-                    (ShaderMiscFlags::none, BlendEquation::none),
-                    (
-                        ShaderMiscFlags::emulateDynamicColorWriteDisable,
-                        BlendEquation::srcOver,
-                    ),
+                let expected = if drawTypeHasPipelineDynamicState(draw_type) {
+                    BlendEquation::srcOver
+                } else {
+                    BlendEquation::none
+                };
+                for flags in [
+                    ShaderMiscFlags::none,
+                    ShaderMiscFlags::fixedFunctionColorOutput,
                 ] {
                     let state = get_pipeline_state(
                         draw_type,
@@ -4593,15 +4878,15 @@ mod dynamic_color_write_tests {
             supportsBlendAdvancedKHR: true,
             ..PlatformFeatures::default()
         };
-        for flags in [
-            ShaderMiscFlags::none,
-            ShaderMiscFlags::emulateDynamicColorWriteDisable,
+        for draw_type in [
+            DrawType::stencilMidpointFans,
+            DrawType::stencilDynamicMidpointFans,
         ] {
             assert_eq!(
                 get_blend_equation(
-                    DrawType::stencilMidpointFans,
+                    draw_type,
                     InterlockMode::depthStencil,
-                    flags,
+                    ShaderMiscFlags::none,
                     DrawContents::none,
                     BlendMode::Multiply,
                     false,
@@ -4615,12 +4900,11 @@ mod dynamic_color_write_tests {
     #[test]
     fn shader_misc_flags_preserve_upstream_bit_positions() {
         assert_eq!(ShaderMiscFlags::borrowedCoveragePass.0, 1 << 4);
-        assert_eq!(ShaderMiscFlags::emulateDynamicColorWriteDisable.0, 1 << 5);
-        assert_eq!(ShaderMiscFlags::msaaDstRead.0, 1 << 6);
-        assert_eq!(ShaderMiscFlags::storeColorClear.0, 1 << 7);
-        assert_eq!(ShaderMiscFlags::loadColorFromDstTexture.0, 1 << 8);
-        assert_eq!(ShaderMiscFlags::swizzleColorBGRAToRGBA.0, 1 << 9);
-        assert_eq!(ShaderMiscFlags::coalescedResolveAndTransfer.0, 1 << 10);
+        assert_eq!(ShaderMiscFlags::msaaDstRead.0, 1 << 5);
+        assert_eq!(ShaderMiscFlags::storeColorClear.0, 1 << 6);
+        assert_eq!(ShaderMiscFlags::loadColorFromDstTexture.0, 1 << 7);
+        assert_eq!(ShaderMiscFlags::swizzleColorBGRAToRGBA.0, 1 << 8);
+        assert_eq!(ShaderMiscFlags::coalescedResolveAndTransfer.0, 1 << 9);
     }
 }
 

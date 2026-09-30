@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 4921ab8169d2d8bfc4d2d25761b99689bc85a72d
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "f3e9643c431550a677552d5248674ddb868ca206e84a84dd7ff2e57b6e918438";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 357;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14849;
+    "040e8e34e9767b7c642fbdbb9a60ce35cc21636d3c1c684350567c8618b0e592";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 385;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 16503;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -30,6 +30,35 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // the static_asserts in gpu.cpp).
 #define MIDPOINT_FAN_PATCH_SEGMENT_SPAN 8u
 #define OUTER_CUBIC_PATCH_SEGMENT_SPAN 16u
+// An outer cubic's tessellation stride also covers its trailing zero-length
+// bowtie-join segment. (gpu::OuterCubicPatchSegmentSpanPlusBowtie.)
+#define OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE                             \
+    (OUTER_CUBIC_PATCH_SEGMENT_SPAN + 1u)
+
+// depthStencil fills use repeating index patterns instead of instancing.
+// Per-patch vertex IDs are aligned on pow2 strides, specifically so the
+// shader can decode gl_VertexID without divides and mods. (Using integer
+// division costs 10% total framerate on PowerVR and 3% on Adreno.)
+// NOTE: The patches don't actually have pow2 numbers of vertices; the index
+// buffers just never reference those vertex IDs between the end of one patch
+// and the beginning of another.
+#define DS_MIDPOINT_FAN_STRIDE_LOG2 4
+#define DS_OUTER_CUBIC_STRIDE_LOG2 5
+#define DS_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC)                                   \
+    ((IS_OUTER_CUBIC) ? DS_OUTER_CUBIC_STRIDE_LOG2                             \
+                      : DS_MIDPOINT_FAN_STRIDE_LOG2)
+#define DS_PATCH_STRIDE(IS_OUTER_CUBIC)                                        \
+    (1 << DS_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC))
+#define DS_MIDPOINT_VERTEX_ID (int(MIDPOINT_FAN_PATCH_SEGMENT_SPAN) + 1)
+
+// depthStencil fills encode some attributes as flags on gl_VertexID, in order
+// to avoid input attribs.
+// NOTE: vertexIDs are 16-bit in the index buffer, but they get offset per draw
+// into the tessellation texture. So these flags have to live above the entire
+// tessellation range. Hence a shift of 29 and not 16.
+#define VERTEX_FLAGS_SHIFT 29
+#define VERTEX_FLAG_DISABLE_COLOR_WRITE (1 << VERTEX_FLAGS_SHIFT)
+#define VERTEX_FLAG_OUTER_CUBIC (1 << (VERTEX_FLAGS_SHIFT + 1))
 
 #define GRAD_TEXTURE_WIDTH float(512)
 #define GRAD_TEXTURE_INVERSE_WIDTH float(0.001953125)
@@ -345,11 +374,10 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define CLOCKWISE_FILL_SPECIALIZATION_IDX 9
 #define NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX 10
 #define BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX 11
-#define EMULATE_DYNAMIC_COLOR_WRITE_DISABLE_SPECIALIZATION_IDX 12
-#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 13
-#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 14
-#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 15
-#define SPECIALIZATION_COUNT 16
+#define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 12
+#define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 13
+#define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 14
+#define SPECIALIZATION_COUNT 15
 
 // When rendering to an r32i feather atlas, use 16:16 fixed point.
 #define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
@@ -392,3 +420,22 @@ pub const fn pinned_source() -> &'static str {
 // Host counterparts of the shader constants above, shared with CPU validation.
 pub const DEPTH_Z_INDEX_BIT_COUNT: u32 = 15;
 pub const DEPTH_COVERAGE_BIT_COUNT: u32 = 8;
+pub const MIDPOINT_FAN_PATCH_SEGMENT_SPAN: u32 = 8;
+pub const OUTER_CUBIC_PATCH_SEGMENT_SPAN: u32 = 16;
+pub const OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE: u32 = OUTER_CUBIC_PATCH_SEGMENT_SPAN + 1;
+pub const DS_MIDPOINT_FAN_STRIDE_LOG2: u32 = 4;
+pub const DS_OUTER_CUBIC_STRIDE_LOG2: u32 = 5;
+pub const fn DS_PATCH_STRIDE_LOG2(outer_cubic: bool) -> u32 {
+    if outer_cubic {
+        DS_OUTER_CUBIC_STRIDE_LOG2
+    } else {
+        DS_MIDPOINT_FAN_STRIDE_LOG2
+    }
+}
+pub const fn DS_PATCH_STRIDE(outer_cubic: bool) -> u32 {
+    1 << DS_PATCH_STRIDE_LOG2(outer_cubic)
+}
+pub const DS_MIDPOINT_VERTEX_ID: i32 = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 1;
+pub const VERTEX_FLAGS_SHIFT: i32 = 29;
+pub const VERTEX_FLAG_DISABLE_COLOR_WRITE: i32 = 1 << VERTEX_FLAGS_SHIFT;
+pub const VERTEX_FLAG_OUTER_CUBIC: i32 = 1 << (VERTEX_FLAGS_SHIFT + 1);

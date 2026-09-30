@@ -1,15 +1,15 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/vkutil.hpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use super::vulkan_context_decl::VulkanContext;
+use crate::mechanical_port::source::include::rive::refcnt_hpp::RefCntTarget;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    CullFace, DrawType, IAABB, StencilCompareOp, StencilOp, DEPTH_MAX, DEPTH_MIN,
+    CullFace, DEPTH_MAX, DEPTH_MIN, DrawType, IAABB, StencilCompareOp, StencilOp,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
-use crate::mechanical_port::source::include::rive::refcnt_hpp::RefCntTarget;
 use ash::vk;
 use nuxie_ore_metal::gpu_resource::{
     GPUResource, GPUResourcePool, GpuResourcePayload, ResourceHandle,
@@ -29,13 +29,12 @@ pub(crate) const Intel: u32 = 0x8086;
 pub(crate) const Samsung: u32 = 0x144d;
 
 pub(crate) const kColorWriteMaskNone: vk::ColorComponentFlags = vk::ColorComponentFlags::empty();
-pub(crate) const kColorWriteMaskRGBA: vk::ColorComponentFlags =
-    vk::ColorComponentFlags::from_raw(
-        vk::ColorComponentFlags::R.as_raw()
-            | vk::ColorComponentFlags::G.as_raw()
-            | vk::ColorComponentFlags::B.as_raw()
-            | vk::ColorComponentFlags::A.as_raw(),
-    );
+pub(crate) const kColorWriteMaskRGBA: vk::ColorComponentFlags = vk::ColorComponentFlags::from_raw(
+    vk::ColorComponentFlags::R.as_raw()
+        | vk::ColorComponentFlags::G.as_raw()
+        | vk::ColorComponentFlags::B.as_raw()
+        | vk::ColorComponentFlags::A.as_raw(),
+);
 
 pub(crate) fn vkStencilOp(op: StencilOp) -> vk::StencilOp {
     match op {
@@ -66,24 +65,13 @@ pub(crate) fn vkCullMode(face: CullFace) -> vk::CullModeFlags {
     }
 }
 
-// Vertex shaders multiply paint by this float: one writes, zero suppresses.
-pub(crate) const ColorWriteEnablePushConstant: vk::PushConstantRange = vk::PushConstantRange {
-    stage_flags: vk::ShaderStageFlags::VERTEX,
-    offset: 0,
-    size: std::mem::size_of::<f32>() as u32,
-};
-
-#[cfg(test)]
-#[test]
-fn color_write_enable_push_constant_matches_vertex_float_contract() {
-    assert_eq!(ColorWriteEnablePushConstant.stage_flags, vk::ShaderStageFlags::VERTEX);
-    assert_eq!(ColorWriteEnablePushConstant.offset, 0);
-    assert_eq!(ColorWriteEnablePushConstant.size, 4);
-}
-
 #[repr(i32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Mappability { none, writeOnly, readWrite }
+pub(crate) enum Mappability {
+    none,
+    writeOnly,
+    readWrite,
+}
 
 #[repr(C)]
 pub(crate) struct Resource {
@@ -98,12 +86,18 @@ impl Resource {
             m_vk: ManuallyDrop::new(vk),
         }
     }
-    pub(crate) fn vk(&self) -> &VulkanContext { &self.m_vk }
+    pub(crate) fn vk(&self) -> &VulkanContext {
+        &self.m_vk
+    }
 }
 
 unsafe impl GpuResourcePayload for Resource {
-    fn gpu_resource(&self) -> &GPUResource { &self.base }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { &mut self.base }
+    fn gpu_resource(&self) -> &GPUResource {
+        &self.base
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        &mut self.base
+    }
 }
 
 impl Drop for Resource {
@@ -127,10 +121,19 @@ pub(crate) struct Buffer {
 
 unsafe impl Send for Buffer {}
 unsafe impl GpuResourcePayload for Buffer {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
-impl Deref for Buffer { type Target = Resource; fn deref(&self) -> &Resource { &self.base } }
+impl Deref for Buffer {
+    type Target = Resource;
+    fn deref(&self) -> &Resource {
+        &self.base
+    }
+}
 
 #[repr(C)]
 pub(crate) struct BufferPool {
@@ -142,8 +145,12 @@ pub(crate) struct BufferPool {
 unsafe impl Send for BufferPool {}
 
 unsafe impl GpuResourcePayload for BufferPool {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
 
 impl BufferPool {
@@ -159,10 +166,19 @@ pub(crate) struct Image {
 }
 unsafe impl Send for Image {}
 unsafe impl GpuResourcePayload for Image {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
-impl Deref for Image { type Target = Resource; fn deref(&self) -> &Resource { &self.base } }
+impl Deref for Image {
+    type Target = Resource;
+    fn deref(&self) -> &Resource {
+        &self.base
+    }
+}
 
 #[repr(C)]
 pub(crate) struct ImageView {
@@ -173,10 +189,19 @@ pub(crate) struct ImageView {
 }
 unsafe impl Send for ImageView {}
 unsafe impl GpuResourcePayload for ImageView {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
-impl Deref for ImageView { type Target = Resource; fn deref(&self) -> &Resource { &self.base } }
+impl Deref for ImageView {
+    type Target = Resource;
+    fn deref(&self) -> &Resource {
+        &self.base
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -187,14 +212,20 @@ pub(crate) struct ImageAccess {
 }
 impl Default for ImageAccess {
     fn default() -> Self {
-        Self { pipelineStages: vk::PipelineStageFlags::TOP_OF_PIPE,
-            accessMask: vk::AccessFlags::NONE, layout: vk::ImageLayout::UNDEFINED }
+        Self {
+            pipelineStages: vk::PipelineStageFlags::TOP_OF_PIPE,
+            accessMask: vk::AccessFlags::NONE,
+            layout: vk::ImageLayout::UNDEFINED,
+        }
     }
 }
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ImageAccessAction { preserveContents, invalidateContents }
+pub(crate) enum ImageAccessAction {
+    preserveContents,
+    invalidateContents,
+}
 
 #[repr(C)]
 pub(crate) struct Texture2D {
@@ -211,8 +242,12 @@ pub(crate) struct Texture2D {
 unsafe impl Send for Texture2D {}
 
 unsafe impl RefCntTarget for Texture2D {
-    fn r#ref(&self) { self.base.r#ref(); }
-    unsafe fn unref(&self) { unsafe { self.base.unref() }; }
+    fn r#ref(&self) {
+        self.base.r#ref();
+    }
+    unsafe fn unref(&self) {
+        unsafe { self.base.unref() };
+    }
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
         let base = ptr.cast::<Texture>().cast_mut();
         unsafe { ((*base).destroy_complete)(base) };
@@ -227,19 +262,39 @@ pub(crate) struct Framebuffer {
 }
 unsafe impl Send for Framebuffer {}
 unsafe impl GpuResourcePayload for Framebuffer {
-    fn gpu_resource(&self) -> &GPUResource { self.base.gpu_resource() }
-    fn gpu_resource_mut(&mut self) -> &mut GPUResource { self.base.gpu_resource_mut() }
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
 }
-impl Deref for Framebuffer { type Target = Resource; fn deref(&self) -> &Resource { &self.base } }
+impl Deref for Framebuffer {
+    type Target = Resource;
+    fn deref(&self) -> &Resource {
+        &self.base
+    }
+}
 
-pub(crate) struct ViewportFromRect2D { m_viewport: vk::Viewport }
+pub(crate) struct ViewportFromRect2D {
+    m_viewport: vk::Viewport,
+}
 impl ViewportFromRect2D {
     pub(crate) fn new(rect: vk::Rect2D) -> Self {
-        Self { m_viewport: vk::Viewport { x: rect.offset.x as f32, y: rect.offset.y as f32,
-            width: rect.extent.width as f32, height: rect.extent.height as f32,
-            min_depth: DEPTH_MIN, max_depth: DEPTH_MAX } }
+        Self {
+            m_viewport: vk::Viewport {
+                x: rect.offset.x as f32,
+                y: rect.offset.y as f32,
+                width: rect.extent.width as f32,
+                height: rect.extent.height as f32,
+                min_depth: DEPTH_MIN,
+                max_depth: DEPTH_MAX,
+            },
+        }
     }
-    pub(crate) fn as_ptr(&self) -> *const vk::Viewport { &self.m_viewport }
+    pub(crate) fn as_ptr(&self) -> *const vk::Viewport {
+        &self.m_viewport
+    }
 }
 
 pub(crate) fn set_shader_code<'a>(info: &mut vk::ShaderModuleCreateInfo<'a>, code: &'a [u32]) {
@@ -247,18 +302,33 @@ pub(crate) fn set_shader_code<'a>(info: &mut vk::ShaderModuleCreateInfo<'a>, cod
 }
 /// # Safety
 /// `code` must remain valid for `code_size` bytes through Vulkan consumption.
-pub(crate) unsafe fn set_shader_code_raw<'a>(info: &mut vk::ShaderModuleCreateInfo<'a>, code: *const u32, code_size: usize) {
+pub(crate) unsafe fn set_shader_code_raw<'a>(
+    info: &mut vk::ShaderModuleCreateInfo<'a>,
+    code: *const u32,
+    code_size: usize,
+) {
     info.code_size = code_size;
     info.p_code = code;
 }
-pub(crate) fn set_shader_code_if_then_else<'a>(info: &mut vk::ShaderModuleCreateInfo<'a>, choose_if: bool, code_if: &'a [u32], code_else: &'a [u32]) {
+pub(crate) fn set_shader_code_if_then_else<'a>(
+    info: &mut vk::ShaderModuleCreateInfo<'a>,
+    choose_if: bool,
+    code_if: &'a [u32],
+    code_else: &'a [u32],
+) {
     set_shader_code(info, if choose_if { code_if } else { code_else });
 }
 /// # Safety
 /// The selected pointer must remain valid for its selected byte count through
 /// Vulkan consumption.
-pub(crate) unsafe fn set_shader_code_if_then_else_raw<'a>(info: &mut vk::ShaderModuleCreateInfo<'a>, choose_if: bool,
-    code_if: *const u32, code_size_if: usize, code_else: *const u32, code_size_else: usize) {
+pub(crate) unsafe fn set_shader_code_if_then_else_raw<'a>(
+    info: &mut vk::ShaderModuleCreateInfo<'a>,
+    choose_if: bool,
+    code_if: *const u32,
+    code_size_if: usize,
+    code_else: *const u32,
+    code_size_else: usize,
+) {
     if choose_if {
         unsafe { set_shader_code_raw(info, code_if, code_size_if) };
     } else {
@@ -268,19 +338,38 @@ pub(crate) unsafe fn set_shader_code_if_then_else_raw<'a>(info: &mut vk::ShaderM
 pub(crate) fn color_clear_rgba32f(color: ColorInt) -> vk::ClearColorValue {
     let [a, r, g, b] = color.to_be_bytes();
     let alpha = f32::from(a) / 255.0;
-    vk::ClearColorValue { float32: [f32::from(r) / 255.0 * alpha,
-        f32::from(g) / 255.0 * alpha, f32::from(b) / 255.0 * alpha, alpha] }
+    vk::ClearColorValue {
+        float32: [
+            f32::from(r) / 255.0 * alpha,
+            f32::from(g) / 255.0 * alpha,
+            f32::from(b) / 255.0 * alpha,
+            alpha,
+        ],
+    }
 }
 pub(crate) fn color_clear_r32ui(value: u32) -> vk::ClearColorValue {
-    vk::ClearColorValue { uint32: [value, 0, 0, 0] }
+    vk::ClearColorValue {
+        uint32: [value, 0, 0, 0],
+    }
 }
 pub(crate) fn get_preferred_depth_stencil_format(d24: bool) -> vk::Format {
-    if d24 { vk::Format::D24_UNORM_S8_UINT } else { vk::Format::D32_SFLOAT_S8_UINT }
+    if d24 {
+        vk::Format::D24_UNORM_S8_UINT
+    } else {
+        vk::Format::D32_SFLOAT_S8_UINT
+    }
 }
 pub(crate) fn rect2d(bounds: &IAABB) -> vk::Rect2D {
-    vk::Rect2D { offset: vk::Offset2D { x: bounds.left, y: bounds.top },
-        extent: vk::Extent2D { width: (bounds.right - bounds.left) as u32,
-            height: (bounds.bottom - bounds.top) as u32 } }
+    vk::Rect2D {
+        offset: vk::Offset2D {
+            x: bounds.left,
+            y: bounds.top,
+        },
+        extent: vk::Extent2D {
+            width: (bounds.right - bounds.left) as u32,
+            height: (bounds.bottom - bounds.top) as u32,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -292,19 +381,37 @@ mod tests {
         assert_eq!(vkStencilOp(StencilOp::keep), vk::StencilOp::KEEP);
         assert_eq!(vkStencilOp(StencilOp::replace), vk::StencilOp::REPLACE);
         assert_eq!(vkStencilOp(StencilOp::zero), vk::StencilOp::ZERO);
-        assert_eq!(vkStencilOp(StencilOp::decrClamp), vk::StencilOp::DECREMENT_AND_CLAMP);
-        assert_eq!(vkStencilOp(StencilOp::incrWrap), vk::StencilOp::INCREMENT_AND_WRAP);
-        assert_eq!(vkStencilOp(StencilOp::decrWrap), vk::StencilOp::DECREMENT_AND_WRAP);
+        assert_eq!(
+            vkStencilOp(StencilOp::decrClamp),
+            vk::StencilOp::DECREMENT_AND_CLAMP
+        );
+        assert_eq!(
+            vkStencilOp(StencilOp::incrWrap),
+            vk::StencilOp::INCREMENT_AND_WRAP
+        );
+        assert_eq!(
+            vkStencilOp(StencilOp::decrWrap),
+            vk::StencilOp::DECREMENT_AND_WRAP
+        );
 
         assert_eq!(vkCompareOp(StencilCompareOp::less), vk::CompareOp::LESS);
         assert_eq!(vkCompareOp(StencilCompareOp::equal), vk::CompareOp::EQUAL);
-        assert_eq!(vkCompareOp(StencilCompareOp::lessOrEqual), vk::CompareOp::LESS_OR_EQUAL);
-        assert_eq!(vkCompareOp(StencilCompareOp::notEqual), vk::CompareOp::NOT_EQUAL);
+        assert_eq!(
+            vkCompareOp(StencilCompareOp::lessOrEqual),
+            vk::CompareOp::LESS_OR_EQUAL
+        );
+        assert_eq!(
+            vkCompareOp(StencilCompareOp::notEqual),
+            vk::CompareOp::NOT_EQUAL
+        );
         assert_eq!(vkCompareOp(StencilCompareOp::always), vk::CompareOp::ALWAYS);
 
         assert_eq!(vkCullMode(CullFace::none), vk::CullModeFlags::NONE);
         assert_eq!(vkCullMode(CullFace::clockwise), vk::CullModeFlags::FRONT);
-        assert_eq!(vkCullMode(CullFace::counterclockwise), vk::CullModeFlags::BACK);
+        assert_eq!(
+            vkCullMode(CullFace::counterclockwise),
+            vk::CullModeFlags::BACK
+        );
         assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(DrawType::stencilDynamicMidpointFans));
     }
 
@@ -313,8 +420,15 @@ mod tests {
         let clear = color_clear_rgba32f(0x80402010);
         let actual = unsafe { clear.float32 };
         let alpha = 128.0 / 255.0;
-        assert_eq!(actual, [64.0 / 255.0 * alpha, 32.0 / 255.0 * alpha,
-            16.0 / 255.0 * alpha, alpha]);
+        assert_eq!(
+            actual,
+            [
+                64.0 / 255.0 * alpha,
+                32.0 / 255.0 * alpha,
+                16.0 / 255.0 * alpha,
+                alpha
+            ]
+        );
         assert_eq!(unsafe { color_clear_r32ui(17).uint32 }, [17, 0, 0, 0]);
     }
 

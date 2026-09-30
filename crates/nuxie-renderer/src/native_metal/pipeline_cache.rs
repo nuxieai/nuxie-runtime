@@ -30,7 +30,7 @@ const ALL_SHADER_FEATURES: ShaderFeatures = (1 << 9) - 1;
 const EXCLUSIVE_ATOMIC_UBERSHADER_FEATURES: ShaderFeatures = ENABLE_ADVANCED_BLEND;
 const INTERLOCK_MODE_BIT_COUNT: u32 = 3;
 const SHADER_FEATURE_COUNT: u32 = 9;
-const DRAW_TYPE_KEY_BIT_COUNT: u32 = 3;
+const DRAW_TYPE_KEY_BIT_COUNT: u32 = 4;
 const CLOCKWISE_FILL: ShaderMiscFlags = 1 << 1;
 
 /// Platform facts read by upstream `UbershaderFeaturesMaskFor`.
@@ -285,8 +285,8 @@ pub(crate) fn pipeline_key(
         DrawType::MidpointFanPatches
         | DrawType::MidpointFanCenterAaPatches
         | DrawType::OuterCurvePatches
-        | DrawType::DepthStrokes
-        | DrawType::StencilMidpointFanBorrowedCoverage
+        | DrawType::DepthStrokes => 0,
+        DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilDynamicMidpointFans
         | DrawType::StencilDynamicOuterCubics
         | DrawType::StencilMidpointFans
@@ -297,11 +297,14 @@ pub(crate) fn pipeline_key(
         | DrawType::StencilOuterCubicReset
         | DrawType::StencilOuterCubicWinding
         | DrawType::StencilOuterCubicCover
-        | DrawType::StencilOuterCubics => 0,
-        DrawType::InteriorTriangulation => 1,
-        DrawType::AtlasBlit => 2,
-        DrawType::ImageRect => 3,
-        DrawType::ImageMesh => 4,
+        | DrawType::StencilOuterCubics => {
+            debug_assert_eq!(interlock_mode, InterlockMode::DepthStencil);
+            1
+        }
+        DrawType::InteriorTriangulation => 2,
+        DrawType::AtlasBlit => 3,
+        DrawType::ImageRect => 4,
+        DrawType::ImageMesh => 5,
         DrawType::RenderPassInitialize => {
             if !matches!(
                 interlock_mode,
@@ -313,7 +316,7 @@ pub(crate) fn pipeline_key(
                     "render-pass initialize has an invalid interlock",
                 ));
             }
-            5
+            7
         }
         DrawType::RenderPassResolve => {
             if !matches!(
@@ -326,7 +329,7 @@ pub(crate) fn pipeline_key(
                     "render-pass resolve has an invalid interlock",
                 ));
             }
-            6
+            8
         }
         DrawType::ClipReset => {
             if !matches!(
@@ -337,7 +340,7 @@ pub(crate) fn pipeline_key(
                     "clip reset requires clockwise-atomic or MSAA",
                 ));
             }
-            7
+            6
         }
     };
     let interlock_key = match interlock_mode {
@@ -349,8 +352,7 @@ pub(crate) fn pipeline_key(
     };
     let masked_features = shader_features & shader_features_mask_for(draw_type, interlock_mode)?;
     use super::shader_compile_plan::{
-        CLIP_UPDATE_ONLY, EMULATE_DYNAMIC_COLOR_WRITE_DISABLE, LOAD_COLOR_FROM_DST_TEXTURE,
-        MSAA_DST_READ, NESTED_CLIP_UPDATE_ONLY,
+        CLIP_UPDATE_ONLY, LOAD_COLOR_FROM_DST_TEXTURE, MSAA_DST_READ, NESTED_CLIP_UPDATE_ONLY,
     };
     let key_mask = match interlock_mode {
         InterlockMode::RasterOrdering => FIXED_FUNCTION_COLOR_OUTPUT | CLOCKWISE_FILL,
@@ -370,9 +372,7 @@ pub(crate) fn pipeline_key(
                 | NESTED_CLIP_UPDATE_ONLY
                 | BORROWED_COVERAGE_PASS
         }
-        InterlockMode::DepthStencil => {
-            FIXED_FUNCTION_COLOR_OUTPUT | EMULATE_DYNAMIC_COLOR_WRITE_DISABLE | MSAA_DST_READ
-        }
+        InterlockMode::DepthStencil => FIXED_FUNCTION_COLOR_OUTPUT | MSAA_DST_READ,
     };
     debug_assert_eq!(shader_misc_flags & !key_mask, 0);
     // Match gpu.cpp's per-draw admission assertion as well as its compact mask.
@@ -416,12 +416,6 @@ pub(crate) fn pipeline_key(
     {
         valid_flags |= MSAA_DST_READ;
     }
-    if matches!(
-        draw_type,
-        DrawType::StencilDynamicMidpointFans | DrawType::StencilDynamicOuterCubics
-    ) {
-        valid_flags |= EMULATE_DYNAMIC_COLOR_WRITE_DISABLE;
-    }
     debug_assert_eq!(valid_flags & !key_mask, 0);
     debug_assert_eq!(shader_misc_flags & !valid_flags, 0);
     let mut compact_flags = 0;
@@ -446,83 +440,87 @@ pub(crate) fn pipeline_key(
 /// One constructor-time raster-ordering ubershader from upstream lines
 /// 651-704. Order is observable to the injected backend and matches the two
 /// nested source loops, including the skipped clockwise AtlasBlit case.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RasterPreloadSpec {
     pub(crate) job: PipelineJob,
     pub(crate) key: PipelineKey,
-    pub(crate) vertex_function: &'static str,
-    pub(crate) fragment_function: &'static str,
+    pub(crate) vertex_function: String,
+    pub(crate) fragment_function: String,
 }
 
 /// The exact seven constructor-time raster ubershaders and their metallib
-/// names. The short `EC`/`HB` exports are pinned by `DrawShaderLibrary`.
+/// names. Entry points come from the same generated exports as `DrawShaderLibrary`.
 pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineCacheError> {
-    let make =
-        |draw_type, shader_features, shader_misc_flags, vertex_function, fragment_function| {
-            let job = PipelineJob {
-                draw_type,
+    use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
+    let make = |draw_type,
                 shader_features,
-                interlock_mode: InterlockMode::RasterOrdering,
                 shader_misc_flags,
-                failure_injection: PipelineFailureInjection::None,
-            };
-            Ok(RasterPreloadSpec {
-                job,
-                key: job.key()?,
                 vertex_function,
-                fragment_function,
-            })
+                fragment_function| {
+        let job = PipelineJob {
+            draw_type,
+            shader_features,
+            interlock_mode: InterlockMode::RasterOrdering,
+            shader_misc_flags,
+            failure_injection: PipelineFailureInjection::None,
         };
+        Ok(RasterPreloadSpec {
+            job,
+            key: job.key()?,
+            vertex_function: format!("{vertex_function}::{}", exports::GLSL_drawVertexMain),
+            fragment_function: format!("{fragment_function}::{}", exports::GLSL_drawFragmentMain),
+        })
+    };
 
     Ok([
         make(
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000100::EC",
-            "p11111111100::HB",
+            "p11110000100",
+            "p11111111100",
         )?,
         make(
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000100::EC",
-            "c11111111100::HB",
+            "p11110000100",
+            "c11111111100",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000110::EC",
-            "p11111111110::HB",
+            "p11110000110",
+            "p11111111110",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000110::EC",
-            "c11111111110::HB",
+            "p11110000110",
+            "c11111111110",
         )?,
         make(
             DrawType::AtlasBlit,
             shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::RasterOrdering)?,
             0,
-            "p11100000111::EC",
-            "p11100011111::HB",
+            "p11100000111",
+            "p11100011111",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             0,
-            "m11100000000::EC",
-            "m11100011000::HB",
+            "m11100000000",
+            "m11100011000",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             CLOCKWISE_FILL,
-            "m11100000000::EC",
-            "m11100011000::HB",
+            "m11100000000",
+            "m11100011000",
         )?,
     ])
 }
@@ -619,11 +617,12 @@ impl<Backend: PipelineCacheBackend> CompatibleDrawPipelineCache<Backend> {
         let mut entries = HashMap::new();
         if platform.supports_raster_ordering {
             for spec in raster_preload_specs()? {
+                let key = spec.key;
                 let entry = match backend.preload(spec) {
                     Ok(pipeline) => PipelineEntry::Ready(pipeline),
                     Err(error) => PipelineEntry::Failed(PipelineFailure::Preload(error)),
                 };
-                if entries.insert(spec.key, entry).is_some() {
+                if entries.insert(key, entry).is_some() {
                     return Err(PipelineCacheError::InvalidCompletion(
                         "duplicate raster preload key",
                     ));
@@ -911,8 +910,8 @@ mod metal_backend {
             DrawPipeline::new(
                 &self.device,
                 Some(precompiled_library.library()),
-                &NSString::from_str(spec.vertex_function),
-                &NSString::from_str(spec.fragment_function),
+                &NSString::from_str(&spec.vertex_function),
+                &NSString::from_str(&spec.fragment_function),
                 spec.job.draw_type,
                 metal_interlock_mode(spec.job.interlock_mode)?,
                 spec.job.shader_misc_flags,
@@ -1056,8 +1055,9 @@ mod tests {
         type Error = TestError;
 
         fn preload(&mut self, spec: RasterPreloadSpec) -> Result<Self::Pipeline, Self::Error> {
+            let key = spec.key;
             self.state.lock().unwrap().preloads.push(spec);
-            Ok(TestPipeline(spec.key))
+            Ok(TestPipeline(key))
         }
 
         fn schedule(&mut self, job: PipelineJob) -> Result<(), Self::Error> {
@@ -1169,7 +1169,7 @@ mod tests {
         assert_eq!(ubershader_features_mask_for(midpoint, platform), Ok(0x1ff));
         assert_eq!(
             pipeline_key(midpoint.draw_type, 0x1ff, midpoint.interlock_mode, 0),
-            Ok(PipelineKey(0x0ff8))
+            Ok(PipelineKey(0x1ff0))
         );
 
         let atomic_resolve = PipelineRequest::new(
@@ -1191,8 +1191,8 @@ mod tests {
             )
             .map(PipelineKey::get),
             // gpu.cpp::ShaderUniqueKey compacts the atomic resolve flag to bit4,
-            // advanced-blend feature bit2, and renderPassResolve draw key6.
-            Ok((1 << (4 + 3 + 9 + 3)) | (1 << (9 + 3)) | (4 << 3) | 6)
+            // advanced-blend feature bit2, and renderPassResolve draw key8.
+            Ok((1 << (4 + 3 + 9 + 4)) | (1 << (9 + 4)) | (4 << 4) | 8)
         );
 
         let msaa_midpoint = PipelineRequest::new(
@@ -1245,6 +1245,47 @@ mod tests {
     }
 
     #[test]
+    fn depth_stencil_keys_distinguish_attribute_free_fills_from_strokes() {
+        use super::super::shader_compile_plan::MSAA_DST_READ;
+        for (draw_type, draw_key) in [
+            (DrawType::MidpointFanPatches, 0),
+            (DrawType::MidpointFanCenterAaPatches, 0),
+            (DrawType::OuterCurvePatches, 0),
+            (DrawType::DepthStrokes, 0),
+            (DrawType::StencilMidpointFanBorrowedCoverage, 1),
+            (DrawType::StencilDynamicMidpointFans, 1),
+            (DrawType::StencilDynamicOuterCubics, 1),
+            (DrawType::StencilMidpointFans, 1),
+            (DrawType::StencilMidpointFanReset, 1),
+            (DrawType::StencilMidpointFanWinding, 1),
+            (DrawType::StencilMidpointFanCover, 1),
+            (DrawType::StencilOuterCubicBorrowedCoverage, 1),
+            (DrawType::StencilOuterCubicReset, 1),
+            (DrawType::StencilOuterCubicWinding, 1),
+            (DrawType::StencilOuterCubicCover, 1),
+            (DrawType::StencilOuterCubics, 1),
+            (DrawType::InteriorTriangulation, 2),
+            (DrawType::AtlasBlit, 3),
+            (DrawType::ImageRect, 4),
+            (DrawType::ImageMesh, 5),
+            (DrawType::ClipReset, 6),
+            (DrawType::RenderPassInitialize, 7),
+            (DrawType::RenderPassResolve, 8),
+        ] {
+            assert_eq!(
+                pipeline_key(draw_type, 0, InterlockMode::DepthStencil, 0),
+                Ok(PipelineKey((4 << (9 + 4)) | draw_key)),
+            );
+            if draw_type != DrawType::RenderPassInitialize {
+                assert_eq!(
+                    pipeline_key(draw_type, 0, InterlockMode::DepthStencil, MSAA_DST_READ),
+                    Ok(PipelineKey((2 << (3 + 9 + 4)) | (4 << (9 + 4)) | draw_key)),
+                );
+            }
+        }
+    }
+
+    #[test]
     fn context_level_synthesized_failure_is_stored_but_inert() {
         let backend = ScriptBackend::default();
         let state = backend.state();
@@ -1269,6 +1310,7 @@ mod tests {
 
     #[test]
     fn raster_preloads_are_exact_and_do_not_schedule_the_compiler() {
+        use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
         let backend = ScriptBackend::default();
         let state = backend.state();
         let _cache = cache(ShaderCompilationMode::AllowAsynchronous, true, backend);
@@ -1279,23 +1321,29 @@ mod tests {
                 .iter()
                 .map(|spec| spec.key.get())
                 .collect::<Vec<_>>(),
-            vec![0x0ff8, 0x10ff8, 0x0ff9, 0x10ff9, 0x0e3a, 0x063c, 0x1063c]
+            vec![0x1ff0, 0x21ff0, 0x1ff2, 0x21ff2, 0x1c73, 0x0c75, 0x20c75]
         );
         assert_eq!(
             state
                 .preloads
                 .iter()
-                .map(|spec| (spec.vertex_function, spec.fragment_function))
+                .map(|spec| (spec.vertex_function.clone(), spec.fragment_function.clone()))
                 .collect::<Vec<_>>(),
             vec![
-                ("p11110000100::EC", "p11111111100::HB"),
-                ("p11110000100::EC", "c11111111100::HB"),
-                ("p11110000110::EC", "p11111111110::HB"),
-                ("p11110000110::EC", "c11111111110::HB"),
-                ("p11100000111::EC", "p11100011111::HB"),
-                ("m11100000000::EC", "m11100011000::HB"),
-                ("m11100000000::EC", "m11100011000::HB"),
+                ("p11110000100", "p11111111100"),
+                ("p11110000100", "c11111111100"),
+                ("p11110000110", "p11111111110"),
+                ("p11110000110", "c11111111110"),
+                ("p11100000111", "p11100011111"),
+                ("m11100000000", "m11100011000"),
+                ("m11100000000", "m11100011000"),
             ]
+            .into_iter()
+            .map(|(vertex, fragment)| (
+                format!("{vertex}::{}", exports::GLSL_drawVertexMain),
+                format!("{fragment}::{}", exports::GLSL_drawFragmentMain),
+            ))
+            .collect::<Vec<_>>()
         );
         assert!(state.scheduled.is_empty());
     }

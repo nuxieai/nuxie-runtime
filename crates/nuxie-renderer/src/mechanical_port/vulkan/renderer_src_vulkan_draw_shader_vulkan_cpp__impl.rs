@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_shader_vulkan.cpp`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_snake_case)]
 
@@ -396,10 +397,16 @@ fn select_shader_pair(
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
             | DrawType::stencilMidpointFanCover => ShaderPair {
-                vert: if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
-                    &spirv::draw_depthstencil_path_vert
+                vert: if drawType == DrawType::depthStrokes {
+                    if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
+                        &spirv::draw_depthstencil_path_vert
+                    } else {
+                        &spirv::draw_depthstencil_path_noclipdistance_vert
+                    }
+                } else if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
+                    &spirv::draw_depthstencil_fill_vert
                 } else {
-                    &spirv::draw_depthstencil_path_noclipdistance_vert
+                    &spirv::draw_depthstencil_fill_noclipdistance_vert
                 },
                 frag: if fixedFunctionColorOutput {
                     &spirv::draw_depthstencil_path_fixedcolor_frag
@@ -629,6 +636,60 @@ mod tests {
                 vertex,
                 fragment,
             );
+        }
+    }
+
+    #[test]
+    fn depth_stencil_fills_use_index_derived_vertices_and_existing_fragments() {
+        for draw_type in [
+            DrawType::stencilOuterCubicBorrowedCoverage,
+            DrawType::stencilOuterCubicReset,
+            DrawType::stencilOuterCubicWinding,
+            DrawType::stencilOuterCubicCover,
+            DrawType::stencilOuterCubics,
+            DrawType::stencilMidpointFanBorrowedCoverage,
+            DrawType::stencilDynamicMidpointFans,
+            DrawType::stencilDynamicOuterCubics,
+            DrawType::stencilMidpointFans,
+            DrawType::stencilMidpointFanReset,
+            DrawType::stencilMidpointFanWinding,
+            DrawType::stencilMidpointFanCover,
+            DrawType::depthStrokes,
+        ] {
+            for clip_rect in [false, true] {
+                let vert = match (draw_type == DrawType::depthStrokes, clip_rect) {
+                    (true, true) => &spirv::draw_depthstencil_path_vert,
+                    (true, false) => &spirv::draw_depthstencil_path_noclipdistance_vert,
+                    (false, true) => &spirv::draw_depthstencil_fill_vert,
+                    (false, false) => &spirv::draw_depthstencil_fill_noclipdistance_vert,
+                };
+                for (misc, frag) in [
+                    (ShaderMiscFlags::none, &spirv::draw_depthstencil_path_frag),
+                    (
+                        ShaderMiscFlags::fixedFunctionColorOutput,
+                        &spirv::draw_depthstencil_path_fixedcolor_frag,
+                    ),
+                    (
+                        ShaderMiscFlags::msaaDstRead,
+                        &spirv::draw_depthstencil_path_msaa_frag,
+                    ),
+                ] {
+                    assert_pair(
+                        select_shader_pair(
+                            draw_type,
+                            if clip_rect {
+                                ShaderFeatures::ENABLE_CLIP_RECT
+                            } else {
+                                ShaderFeatures::NONE
+                            },
+                            InterlockMode::depthStencil,
+                            misc,
+                        ),
+                        vert,
+                        frag,
+                    );
+                }
+            }
         }
     }
 

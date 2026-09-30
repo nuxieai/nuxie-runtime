@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/render_context_vulkan_impl.cpp`.
-//! Updated through upstream `39afeca44449b12d41c91aaf78f1ed96913ed69a`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -46,14 +46,17 @@ use super::vkutil_decl::{
 use super::vulkan_context_decl::{VulkanContext, VulkanFeatures};
 use super::vulkan_shaders_decl as spirv;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast;
-use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, RefCntTarget};
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCntTarget, make_rcp, rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiCastFrom, LiteRttiTypeId,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
+use crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::{
+    DSIndexRangeChunker, RangeChunker,
+};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, RenderContext, RenderContextContract,
@@ -64,12 +67,13 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
+use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::VERTEX_FLAG_DISABLE_COLOR_WRITE;
 use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::gpu_resource::{GpuResourcePayload, ResourceHandle};
 use nuxie_render_api::{BlendMode, ColorInt};
-use std::ffi::{c_void, CStr};
-use std::mem::{size_of, ManuallyDrop};
+use std::ffi::{CStr, c_void};
+use std::mem::{ManuallyDrop, size_of};
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::time::Instant;
@@ -151,19 +155,10 @@ fn product_sampler(
     }
 }
 
-fn instance_chunks(count: u32, first: u32, max: u32) -> impl Iterator<Item = (u32, u32)> {
-    let mut remaining = count;
-    let mut cursor = first;
-    std::iter::from_fn(move || {
-        if remaining == 0 {
-            return None;
-        }
-        let chunk = remaining.min(max);
-        let result = (chunk, cursor);
-        remaining -= chunk;
-        cursor += chunk;
-        Some(result)
-    })
+fn range_chunks(count: u32, first: u32, max: u32) -> impl Iterator<Item = (u32, u32)> {
+    RangeChunker::new(count, first, max)
+        .into_iter()
+        .map(|chunk| (chunk.count, chunk.first))
 }
 
 fn cstr(bytes: &'static [u8]) -> &'static CStr {
@@ -1240,9 +1235,8 @@ impl RenderContextVulkanImpl {
             base.m_platformFeatures.supportsAtomicMode;
         base.m_platformFeatures.supportsClipPlanes =
             vk_context.features.shaderClipDistance && properties.limits.max_clip_distances >= 4;
-        base.m_platformFeatures.supportsPipelineDynamicState = vk_context.features.apiVersion
-            >= vk::API_VERSION_1_3
-            && !workarounds.needsInterruptibleRenderPasses();
+        base.m_platformFeatures.supportsPipelineDynamicState =
+            vk_context.features.apiVersion >= vk::API_VERSION_1_3;
         base.m_platformFeatures.clipSpaceBottomUp = false;
         base.m_platformFeatures.framebufferBottomUp = false;
         base.m_platformFeatures.msaaColorPreserveNeedsDraw = true;
@@ -2878,9 +2872,11 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.interlockMode == InterlockMode::rasterOrdering
         && pending_tess_patches > implementation.m_workarounds.maxInstancesPerRenderPass
     {
-        debug_assert!(!implementation
-            .m_plsTransientUsageFlags
-            .contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT));
+        debug_assert!(
+            !implementation
+                .m_plsTransientUsageFlags
+                .contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT)
+        );
         debug_assert!(!desc.manuallyResolved);
         options |= RenderPassOptionsVulkan::rasterOrderingInterruptible;
     }
@@ -3045,7 +3041,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 pipeline.m_renderPipeline,
             );
         }
-        for (count, first) in instance_chunks(
+        for (count, first) in range_chunks(
             desc.gradSpanCount,
             0,
             implementation.m_workarounds.maxInstancesPerRenderPass,
@@ -3145,7 +3141,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                 pipeline.m_renderPipeline,
             );
         }
-        for (count, first) in instance_chunks(
+        for (count, first) in range_chunks(
             desc.tessVertexSpanCount,
             0,
             implementation.m_workarounds.maxInstancesPerRenderPass,
@@ -3318,7 +3314,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                         .ashDevice()
                         .cmd_set_scissor(command, 0, &[scissor])
                 };
-                for (count, first) in instance_chunks(
+                for (count, first) in range_chunks(
                     batch.patchCount,
                     batch.basePatch,
                     implementation.m_workarounds.maxInstancesPerRenderPass,
@@ -3382,7 +3378,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
                         .ashDevice()
                         .cmd_set_scissor(command, 0, &[scissor])
                 };
-                for (count, first) in instance_chunks(
+                for (count, first) in range_chunks(
                     batch.patchCount,
                     batch.basePatch,
                     implementation.m_workarounds.maxInstancesPerRenderPass,
@@ -3943,6 +3939,9 @@ struct PipelineBinder<'a> {
     pipeline: vk::Pipeline,
     scissor: IAABB,
     have_scissor: bool,
+    vertex_buffers: [vk::Buffer; layout::MaxVertexBinding as usize + 1],
+    index_buffer_u16: vk::Buffer,
+    index_buffer_u16_offset: vk::DeviceSize,
 }
 
 impl<'a> PipelineBinder<'a> {
@@ -3952,15 +3951,12 @@ impl<'a> PipelineBinder<'a> {
             pipeline: vk::Pipeline::null(),
             scissor: IAABB::default(),
             have_scissor: false,
+            vertex_buffers: [vk::Buffer::null(); layout::MaxVertexBinding as usize + 1],
+            index_buffer_u16: vk::Buffer::null(),
+            index_buffer_u16_offset: 0,
         }
     }
-    fn bind(
-        &mut self,
-        command: vk::CommandBuffer,
-        pipeline: vk::Pipeline,
-        scissor: IAABB,
-        layout: &DrawPipelineLayoutVulkan,
-    ) {
+    fn bind(&mut self, command: vk::CommandBuffer, pipeline: vk::Pipeline, scissor: IAABB) {
         unsafe {
             if pipeline != self.pipeline {
                 self.vk.ashDevice().cmd_bind_pipeline(
@@ -3969,9 +3965,6 @@ impl<'a> PipelineBinder<'a> {
                     pipeline,
                 );
                 self.pipeline = pipeline;
-                if layout.hasColorWriteDisablePushConstant() {
-                    self.setEmulatedColorWriteEnable(command, layout, true);
-                }
             }
             if !self.have_scissor || scissor != self.scissor {
                 self.vk
@@ -3982,36 +3975,40 @@ impl<'a> PipelineBinder<'a> {
             }
         }
     }
-    fn setEmulatedColorWriteEnable(
-        &self,
-        command: vk::CommandBuffer,
-        layout: &DrawPipelineLayoutVulkan,
-        enabled: bool,
-    ) {
-        assert!(layout.hasColorWriteDisablePushConstant());
-        let value: f32 = if enabled { 1.0 } else { 0.0 };
-        let range = vkutil::ColorWriteEnablePushConstant;
-        unsafe {
-            (self
-                .vk
-                .CmdPushConstants
-                .expect("Vulkan push constants command"))(
-                command,
-                layout.vkPipelineLayout(),
-                range.stage_flags,
-                range.offset,
-                range.size,
-                std::ptr::from_ref(&value).cast(),
-            );
+    fn bindVertexBuffer(&mut self, command: vk::CommandBuffer, binding: u32, buffer: vk::Buffer) {
+        let binding_index = binding as usize;
+        assert!(binding_index < self.vertex_buffers.len());
+        if buffer != self.vertex_buffers[binding_index] {
+            unsafe {
+                self.vk
+                    .ashDevice()
+                    .cmd_bind_vertex_buffers(command, binding, &[buffer], &[0]);
+            }
+            self.vertex_buffers[binding_index] = buffer;
         }
     }
 
-    fn setDynamicState(
-        &self,
+    fn bindIndexBufferU16(
+        &mut self,
         command: vk::CommandBuffer,
-        state: &PipelineState,
-        layout: &DrawPipelineLayoutVulkan,
+        buffer: vk::Buffer,
+        offset: vk::DeviceSize,
     ) {
+        if buffer != self.index_buffer_u16 || offset != self.index_buffer_u16_offset {
+            unsafe {
+                self.vk.ashDevice().cmd_bind_index_buffer(
+                    command,
+                    buffer,
+                    offset,
+                    vk::IndexType::UINT16,
+                );
+            }
+            self.index_buffer_u16 = buffer;
+            self.index_buffer_u16_offset = offset;
+        }
+    }
+
+    fn setDynamicState(&self, command: vk::CommandBuffer, state: &PipelineState) {
         unsafe {
             (self
                 .vk
@@ -4060,8 +4057,6 @@ impl<'a> PipelineBinder<'a> {
                     .vk
                     .CmdSetColorWriteEnableEXT
                     .expect("color write enable command"))(command, 1, &color_write);
-            } else {
-                self.setEmulatedColorWriteEnable(command, layout, state.colorWriteEnabled);
             }
         }
     }
@@ -4125,11 +4120,6 @@ fn submitDrawList(
             batch.shaderFeatures
         };
         let mut misc = batch.shaderMiscFlags;
-        if crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(batch.drawType)
-            && !implementation.m_vk.features.colorWriteEnable
-        {
-            misc |= ShaderMiscFlags::emulateDynamicColorWriteDisable;
-        }
         if draw_pass
             .m_renderPassOptions
             .has(RenderPassOptionsVulkan::msaa)
@@ -4211,51 +4201,32 @@ fn submitDrawList(
             } else {
                 render_pass_scissor
             };
-            binder.bind(
-                command,
-                pipeline.m_vkPipeline,
-                desired,
-                draw_pass.pipelineLayout(),
-            );
+            binder.bind(command, pipeline.m_vkPipeline, desired);
         }
         match batch.drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
-            | DrawType::stencilOuterCubicBorrowedCoverage
-            | DrawType::stencilOuterCubicReset
-            | DrawType::stencilOuterCubicWinding
-            | DrawType::stencilOuterCubicCover
-            | DrawType::stencilOuterCubics
-            | DrawType::depthStrokes
-            | DrawType::stencilMidpointFanBorrowedCoverage
-            | DrawType::stencilMidpointFans
-            | DrawType::stencilMidpointFanReset
-            | DrawType::stencilMidpointFanWinding
-            | DrawType::stencilMidpointFanCover => {
-                unsafe {
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
-                        command,
-                        0,
-                        &[implementation
-                            .m_pathPatchVertexBuffer
-                            .as_ref()
-                            .unwrap()
-                            .vkBuffer()],
-                        &[0],
-                    );
-                    implementation.m_vk.ashDevice().cmd_bind_index_buffer(
-                        command,
-                        implementation
-                            .m_pathPatchIndexBuffer
-                            .as_ref()
-                            .unwrap()
-                            .vkBuffer(),
-                        0,
-                        vk::IndexType::UINT16,
-                    );
-                }
-                for (count, first) in instance_chunks(
+            | DrawType::depthStrokes => {
+                binder.bindVertexBuffer(
+                    command,
+                    0,
+                    implementation
+                        .m_pathPatchVertexBuffer
+                        .as_ref()
+                        .unwrap()
+                        .vkBuffer(),
+                );
+                binder.bindIndexBufferU16(
+                    command,
+                    implementation
+                        .m_pathPatchIndexBuffer
+                        .as_ref()
+                        .unwrap()
+                        .vkBuffer(),
+                    0,
+                );
+                for (count, first) in range_chunks(
                     batch.elementCount,
                     batch.baseElement,
                     implementation.m_workarounds.maxInstancesPerRenderPass,
@@ -4276,36 +4247,70 @@ fn submitDrawList(
                     }
                 }
             }
+            DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::stencilOuterCubicReset
+            | DrawType::stencilOuterCubicWinding
+            | DrawType::stencilOuterCubicCover
+            | DrawType::stencilOuterCubics
+            | DrawType::stencilMidpointFanBorrowedCoverage
+            | DrawType::stencilMidpointFans
+            | DrawType::stencilMidpointFanReset
+            | DrawType::stencilMidpointFanWinding
+            | DrawType::stencilMidpointFanCover => {
+                debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
+                pending_tess_patches -= batch.elementCount;
+                if pipeline.is_none() {
+                    continue;
+                }
+                let outer_cubic = drawTypeSubmitsOuterCubicPatches(batch.drawType);
+                binder.bindIndexBufferU16(
+                    command,
+                    implementation
+                        .m_pathPatchIndexBuffer
+                        .as_ref()
+                        .unwrap()
+                        .vkBuffer(),
+                    dsFillIndexOffset(outer_cubic) as vk::DeviceSize,
+                );
+                // Fills derive their vertex data from gl_VertexID, with no vertex buffer.
+                for draw in DSIndexRangeChunker::new(
+                    batch.drawType,
+                    batch.elementCount,
+                    batch.baseElement,
+                    0,
+                ) {
+                    unsafe {
+                        implementation.m_vk.ashDevice().cmd_draw_indexed(
+                            command,
+                            draw.indexCount,
+                            1,
+                            0,
+                            draw.baseVertex,
+                            0,
+                        );
+                    }
+                }
+            }
             DrawType::stencilDynamicMidpointFans | DrawType::stencilDynamicOuterCubics => {
                 pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {
                     continue;
                 }
-                debug_assert!(!implementation
-                    .m_workarounds
-                    .needsInterruptibleRenderPasses());
-                unsafe {
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
-                        command,
-                        0,
-                        &[implementation
-                            .m_pathPatchVertexBuffer
-                            .as_ref()
-                            .unwrap()
-                            .vkBuffer()],
-                        &[0],
-                    );
-                    implementation.m_vk.ashDevice().cmd_bind_index_buffer(
-                        command,
-                        implementation
-                            .m_pathPatchIndexBuffer
-                            .as_ref()
-                            .unwrap()
-                            .vkBuffer(),
-                        0,
-                        vk::IndexType::UINT16,
-                    );
-                }
+                debug_assert!(
+                    !implementation
+                        .m_workarounds
+                        .needsInterruptibleRenderPasses()
+                );
+                let outer_cubic = drawTypeSubmitsOuterCubicPatches(batch.drawType);
+                binder.bindIndexBufferU16(
+                    command,
+                    implementation
+                        .m_pathPatchIndexBuffer
+                        .as_ref()
+                        .unwrap()
+                        .vkBuffer(),
+                    dsFillIndexOffset(outer_cubic) as vk::DeviceSize,
+                );
                 // Outer-cubic passes use identical dynamic state to their
                 // midpoint-fan counterparts, so both use these pass types.
                 for pass in [
@@ -4324,28 +4329,39 @@ fn submitDrawList(
                             &implementation.base.m_platformFeatures,
                         );
                     assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(batch.drawType));
-                    binder.setDynamicState(command, &state, draw_pass.pipelineLayout());
-                    unsafe {
-                        implementation.m_vk.ashDevice().cmd_draw_indexed(
-                            command,
-                            batch.indexCountPerInstance,
-                            batch.elementCount,
-                            batch.baseIndex,
-                            0,
-                            batch.baseElement,
-                        )
+                    binder.setDynamicState(command, &state);
+                    let vertex_flags = if !state.colorWriteEnabled
+                        && !implementation.m_vk.features.colorWriteEnable
+                    {
+                        VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
+                    } else {
+                        0
                     };
+                    for draw in DSIndexRangeChunker::new(
+                        batch.drawType,
+                        batch.elementCount,
+                        batch.baseElement,
+                        vertex_flags,
+                    ) {
+                        unsafe {
+                            implementation.m_vk.ashDevice().cmd_draw_indexed(
+                                command,
+                                draw.indexCount,
+                                1,
+                                0,
+                                draw.baseVertex,
+                                0,
+                            );
+                        }
+                    }
                 }
             }
             DrawType::clipReset | DrawType::interiorTriangulation | DrawType::featherAtlasBlit => {
-                unsafe {
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
-                        command,
-                        0,
-                        &[implementation.m_triangleBuffer.as_ref().unwrap().vkBuffer()],
-                        &[0],
-                    )
-                };
+                binder.bindVertexBuffer(
+                    command,
+                    0,
+                    implementation.m_triangleBuffer.as_ref().unwrap().vkBuffer(),
+                );
                 if pipeline.is_some() {
                     unsafe {
                         implementation.m_vk.ashDevice().cmd_draw(
@@ -4361,27 +4377,25 @@ fn submitDrawList(
             DrawType::imageRect => {
                 debug_assert_eq!(desc.interlockMode, InterlockMode::atomics);
                 unsafe {
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
+                    binder.bindVertexBuffer(
                         command,
                         layout::ImageRectGeometryBufferBinding,
-                        &[implementation
+                        implementation
                             .m_imageRectVertexBuffer
                             .as_ref()
                             .unwrap()
-                            .vkBuffer()],
-                        &[0],
+                            .vkBuffer(),
                     );
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
+                    binder.bindVertexBuffer(
                         command,
                         layout::ImageRectImageAttribBufferBinding,
-                        &[implementation
+                        implementation
                             .m_imageRectInstanceBuffer
                             .as_ref()
                             .unwrap()
-                            .vkBuffer()],
-                        &[0],
+                            .vkBuffer(),
                     );
-                    implementation.m_vk.ashDevice().cmd_bind_index_buffer(
+                    binder.bindIndexBufferU16(
                         command,
                         implementation
                             .m_imageRectIndexBuffer
@@ -4389,7 +4403,6 @@ fn submitDrawList(
                             .unwrap()
                             .vkBuffer(),
                         0,
-                        vk::IndexType::UINT16,
                     );
                     if pipeline.is_some() {
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
@@ -4429,34 +4442,26 @@ fn submitDrawList(
                     continue;
                 };
                 unsafe {
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
+                    binder.bindVertexBuffer(
                         command,
                         layout::ImageMeshVertexBufferBinding,
-                        &[vertex.vkBuffer()],
-                        &[0],
+                        vertex.vkBuffer(),
                     );
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
+                    binder.bindVertexBuffer(
                         command,
                         layout::ImageMeshUVBufferBinding,
-                        &[uv.vkBuffer()],
-                        &[0],
+                        uv.vkBuffer(),
                     );
-                    implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
+                    binder.bindVertexBuffer(
                         command,
                         layout::ImageMeshImageAttribBufferBinding,
-                        &[implementation
+                        implementation
                             .m_imageMeshInstanceBuffer
                             .as_ref()
                             .unwrap()
-                            .vkBuffer()],
-                        &[0],
+                            .vkBuffer(),
                     );
-                    implementation.m_vk.ashDevice().cmd_bind_index_buffer(
-                        command,
-                        index.vkBuffer(),
-                        0,
-                        vk::IndexType::UINT16,
-                    );
+                    binder.bindIndexBufferU16(command, index.vkBuffer(), 0);
                     if pipeline.is_some() {
                         implementation.m_vk.ashDevice().cmd_draw_indexed(
                             command,
@@ -4544,7 +4549,7 @@ pub(crate) fn hotloadShaders(implementation: &mut RenderContextVulkanImpl, data:
     let feather = FeatherAtlasPipeline::make(manager, implementation.m_workarounds);
     if color.is_none() || tessellate.is_none() || feather.is_none() {
         print_error_line(
-            "ERROR: Rive Vulkan renderer failed to hotload shaders; keeping the previous pipelines."
+            "ERROR: Rive Vulkan renderer failed to hotload shaders; keeping the previous pipelines.",
         );
         return;
     }
@@ -4874,7 +4879,7 @@ pub(crate) unsafe fn MakeContext(
     }
     if properties.vendor_id == vkutil::Imagination && properties.api_version < vk::API_VERSION_1_3 {
         print_error_line(
-            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets."
+            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets.",
         );
         vk_context.shutdown();
         return None;
@@ -4883,11 +4888,11 @@ pub(crate) unsafe fn MakeContext(
     if options.forceAtomicMode && !implementation.platformFeatures().supportsAtomicMode {
         #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         print_error_line(
-            "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform."
+            "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform.",
         );
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
         print_error_line(
-            "ERROR: Requested \"atomic\" mode but Rive was not compiled with atomic support (--with_android_vulkan_atomics)."
+            "ERROR: Requested \"atomic\" mode but Rive was not compiled with atomic support (--with_android_vulkan_atomics).",
         );
         return None;
     }

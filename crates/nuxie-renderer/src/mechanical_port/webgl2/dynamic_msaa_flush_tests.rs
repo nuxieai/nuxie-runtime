@@ -95,6 +95,7 @@ fn dynamic_msaa_flush_commands(draw_type: gpu::DrawType) -> Vec<GLCommand> {
         m_vertexShader: std::ptr::null(),
         m_pipelineStatus: PipelineStatus::ready,
         m_id: 77,
+        m_baseVertexUniformLocation: 24,
         m_baseInstanceUniformLocation: 23,
         m_state: ManuallyDrop::new((&*context.m_state).clone()),
         #[cfg(feature = "with-rive-tools")]
@@ -149,7 +150,7 @@ fn dynamic_msaa_batches_use_three_exact_states_without_changing_draw_or_scissor(
             .iter()
             .enumerate()
             .filter_map(|(i, command)| {
-                matches!(command, GLCommand::DrawElementsInstanced { .. }).then_some(i)
+                matches!(command, GLCommand::DrawElements { .. }).then_some(i)
             })
             .collect();
         assert_eq!(draws.len(), 3);
@@ -164,19 +165,22 @@ fn dynamic_msaa_batches_use_three_exact_states_without_changing_draw_or_scissor(
         for (pass, &index) in draws.iter().enumerate() {
             assert_eq!(
                 commands[index],
-                GLCommand::DrawElementsInstanced {
+                GLCommand::DrawElements {
                     mode: GL_TRIANGLES,
-                    count: 12,
+                    count: 5 * gpu::dsFillPatchIndexCount(gpu::drawTypeSubmitsOuterCubicPatches(draw_type)),
                     type_: GL_UNSIGNED_SHORT,
-                    offset: 6,
-                    instanceCount: 5,
+                    offset: gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(draw_type)) as u32,
                 }
             );
             assert_eq!(
                 commands[index - 1],
                 GLCommand::Uniform1iLocation {
-                    location: 23,
-                    value: 7
+                    location: 24,
+                    value: if gpu::drawTypeSubmitsOuterCubicPatches(draw_type) {
+                        (7 << gpu::DSOuterCubicFillPatchStrideLog2) | gpu::DSFillVertexFlagOuterCubic
+                    } else {
+                        7 << gpu::DSMidpointFanFillPatchStrideLog2
+                    }
                 }
             );
             assert_eq!(
@@ -265,7 +269,7 @@ fn ordinary_msaa_batch_still_issues_one_draw() {
     assert_eq!(
         commands
             .iter()
-            .filter(|c| matches!(c, GLCommand::DrawElementsInstanced { .. }))
+            .filter(|c| matches!(c, GLCommand::DrawElements { .. }))
             .count(),
         1
     );

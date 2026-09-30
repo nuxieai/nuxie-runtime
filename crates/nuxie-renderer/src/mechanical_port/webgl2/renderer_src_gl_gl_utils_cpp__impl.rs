@@ -71,11 +71,12 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
     RECLAIMED_COUNT.load(Ordering::Relaxed)
 }
 
-const GLSL_GLSL_VERSION: &str = "KC";
-const GLSL_VERTEX: &str = "CB";
+const GLSL_GLSL_VERSION: &str = "LC";
+const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "EB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
-const GLSL_GL_RENDERER_MALI: &str = "OF";
+const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "VE";
+const GLSL_GL_RENDERER_MALI: &str = "PF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -286,6 +287,10 @@ pub(crate) fn CompileShaderParts(
     for define in defines {
         shaderSource.push_str(&format!("#define {define} true\n"));
     }
+    shaderSource.push_str(&format!(
+        "#define {GLSL_BASE_VERTEX_UNIFORM_NAME} {}\n",
+        super::gl_utils_decl::BASE_VERTEX_UNIFORM_NAME
+    ));
     if !capabilities.ANGLE_base_vertex_base_instance_shader_builtin() {
         shaderSource.push_str(&format!(
             "#define {GLSL_BASE_INSTANCE_UNIFORM_NAME} {}\n",
@@ -536,10 +541,10 @@ mod tests {
     fn complete_source_and_generated_input_denominators_are_frozen() {
         assert_eq!(
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
-            290
+            294
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 498);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10646);
+        assert_eq!(PINNED_SOURCE.lines().count(), 500);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10680);
     }
 
     #[test]
@@ -549,6 +554,7 @@ mod tests {
             ("GLSL_VERSION", GLSL_GLSL_VERSION),
             ("VERTEX", GLSL_VERTEX),
             ("FRAGMENT", GLSL_FRAGMENT),
+            ("BASE_VERTEX_UNIFORM_NAME", GLSL_BASE_VERTEX_UNIFORM_NAME),
             (
                 "BASE_INSTANCE_UNIFORM_NAME",
                 GLSL_BASE_INSTANCE_UNIFORM_NAME,
@@ -581,11 +587,12 @@ mod tests {
         };
         let expectedPrefix = concat!(
             "#version 300 es\n",
-            "#define KC 300\n",
+            "#define LC 300\n",
             "#define EB\n",
             "#define CUSTOM true\n",
-            "#define DE _baseInstance\n",
-            "#define NF\n",
+            "#define VE _baseVertex\n",
+            "#define EE _baseInstance\n",
+            "#define PF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

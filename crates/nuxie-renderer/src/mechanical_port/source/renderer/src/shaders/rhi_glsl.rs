@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/rhi.glsl.
  *
- * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/rhi.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "685dde8c6a3520bf8df87c21bb167e7200e3b4e1d246d1834ded658dcba701d3";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 608;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 25248;
+    "1762e95a0cac23926472b303350cd06f5fee876980076050f129c850824d50ac";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 610;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 25399;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_RHI_GLSL_SOURCE: &str = r###"/*
@@ -115,17 +115,6 @@ $typedef $uint ushort;
     }                                                                          \
     NAME;                                                                      \
     }
-
-#define PUSH_CONSTANT_BLOCK_BEGIN(NAME)                                        \
-    struct NAME                                                                \
-    {
-
-#define PUSH_CONSTANT(TYPE, NAME) TYPE NAME;
-
-#define PUSH_CONSTANT_BLOCK_END(NAME)                                          \
-    }                                                                          \
-    ;                                                                          \
-    [[$vk::$push_constant]] $ConstantBuffer<PushConstants> NAME;
 
 #define VARYING_BLOCK_BEGIN                                                    \
     struct Varyings                                                            \
@@ -357,17 +346,28 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
     ((_instanceIDWithoutBase) + $baseInstance)
 #endif
 
+#if defined(@ENABLE_BASE_VERTEX) && !defined(@SV_VERTEX_ID_INCLUDES_BASE)
+#define BASE_VERTEX_DECL uint $baseVertex;
+#define RESOLVE_VERTEX_ID(_vertexIDWithoutBase)                                \
+    ((_vertexIDWithoutBase) + $baseVertex)
+#else
+#define BASE_VERTEX_DECL
+#define RESOLVE_VERTEX_ID(_vertexIDWithoutBase) (_vertexIDWithoutBase)
+#endif
+
 #ifdef @NO_VARYING
 
 #define VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)                \
                                                                                \
     BASE_INSTANCE_DECL                                                         \
+    BASE_VERTEX_DECL                                                           \
                                                                                \
     float4 NAME(Attrs attrs,                                                   \
-                uint _vertexID : $SV_VertexID,                                 \
+                uint _vertexIDWithoutBase : $SV_VertexID,                      \
                 uint _instanceIDWithoutBase : $SV_InstanceID) :                \
         $SV_Position                                                           \
     {                                                                          \
+        uint _vertexID = RESOLVE_VERTEX_ID(_vertexIDWithoutBase);              \
         uint _instanceID = RESOLVE_INSTANCE_ID(_instanceIDWithoutBase);
 
 #define EMIT_VERTEX(POSITION)                                                  \
@@ -379,11 +379,13 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
 #define VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)                \
                                                                                \
     BASE_INSTANCE_DECL                                                         \
+    BASE_VERTEX_DECL                                                           \
                                                                                \
     Varyings NAME(Attrs attrs,                                                 \
-                  uint _vertexID : $SV_VertexID,                               \
+                  uint _vertexIDWithoutBase : $SV_VertexID,                    \
                   uint _instanceIDWithoutBase : $SV_InstanceID)                \
     {                                                                          \
+        uint _vertexID = RESOLVE_VERTEX_ID(_vertexIDWithoutBase);              \
         uint _instanceID = RESOLVE_INSTANCE_ID(_instanceIDWithoutBase);        \
         Varyings _varyings;
 

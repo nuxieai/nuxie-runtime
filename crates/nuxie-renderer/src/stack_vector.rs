@@ -1,4 +1,4 @@
-//! renderer/include/rive/renderer/stack_vector.hpp at f7c22102.
+//! renderer/include/rive/renderer/stack_vector.hpp at c14cb251.
 #![allow(dead_code)]
 use std::ops::{Index, IndexMut};
 
@@ -21,6 +21,9 @@ impl<T: Copy, const N: usize> StackVector<T, N> {
     }
     pub(crate) fn size(&self) -> usize {
         self.size
+    }
+    pub(crate) fn empty(&self) -> bool {
+        self.size == 0
     }
     pub(crate) fn as_slice(&self) -> &[T] {
         &self.data[..self.size]
@@ -81,6 +84,27 @@ impl<T: Copy, const N: usize> IndexMut<usize> for StackVector<T, N> {
 mod tests {
     use super::StackVector;
     const VALUES: [u32; 8] = [99999, 12345, 0, 1, 2468, 1358, 777777, u32::MAX];
+    #[test]
+    fn empty() {
+        let mut vec = StackVector::<u32, 8>::new(0);
+        assert!(vec.empty());
+        assert!((&vec).empty());
+        vec.push_back(VALUES[0]);
+        assert!(!vec.empty());
+        assert!(!(&vec).empty());
+        vec.clear();
+        assert!(vec.empty());
+        vec.push_back_n(VALUES.len(), Some(&VALUES));
+        assert!(!vec.empty());
+        vec.clear();
+        assert!(vec.empty());
+        for value in VALUES {
+            assert_eq!(vec.empty(), vec.size() == 0);
+            vec.push_back(value);
+            assert_eq!(vec.empty(), vec.size() == 0);
+            assert!(!vec.empty());
+        }
+    }
     #[test]
     fn insert_into_empty() {
         let mut vec = StackVector::<u32, 8>::new(0);

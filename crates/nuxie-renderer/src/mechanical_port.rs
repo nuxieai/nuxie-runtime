@@ -396,6 +396,7 @@ pub(crate) mod source {
                     pub(crate) mod buffer_ring_hpp;
                     pub(crate) mod draw_hpp;
                     pub(crate) mod gpu_hpp;
+                    pub(crate) mod range_chunker_hpp;
                     pub(crate) mod render_canvas_hpp;
                     pub(crate) mod render_context_helper_impl_hpp;
                     pub(crate) mod render_context_hpp;
@@ -473,6 +474,7 @@ pub(crate) mod source {
                 pub(crate) mod draw_clockwise_clip_frag;
                 pub(crate) mod draw_clockwise_path_frag;
                 pub(crate) mod draw_depthstencil_object_frag;
+                pub(crate) mod draw_depthstencil_fill_vert;
                 pub(crate) mod draw_fullscreen_quad_vert;
                 pub(crate) mod draw_image_mesh_vert;
                 pub(crate) mod draw_input_attachment_frag;

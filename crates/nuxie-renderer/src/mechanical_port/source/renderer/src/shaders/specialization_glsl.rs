@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/specialization.glsl.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "71aa0115c2fceae04efe7a46261d0c2f0845c9299466814afc410661629faa12";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 60;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2908;
+    "efbc2e65e159ae25f7cbd0f9859cd4809abafdc37429c87471041b29e2df3781";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 46;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2213;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_SPECIALIZATION_GLSL_SOURCE: &str = r###"layout(constant_id = CLIPPING_SPECIALIZATION_IDX) const
@@ -41,8 +41,6 @@ layout(constant_id = NESTED_CLIP_UPDATE_ONLY_SPECIALIZATION_IDX) const
     bool NestedClipUpdateOnly = false;
 layout(constant_id = BORROWED_COVERAGE_PASS_SPECIALIZATION_IDX) const
     bool BorrowedCoveragePrepass = false;
-layout(constant_id = EMULATE_DYNAMIC_COLOR_WRITE_DISABLE_SPECIALIZATION_IDX)
-    const bool EmulateDynamicColorWriteDisable = false;
 layout(constant_id = STORE_COLOR_CLEAR_SPECIALIZATION_IDX) const
     bool StoreColorClear = false;
 layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
@@ -66,18 +64,6 @@ layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
 #define @STORE_COLOR_CLEAR StoreColorClear
 #define @LOAD_COLOR_FROM_DST_TEXTURE LoadColorFromDstTexture
 #define @VULKAN_VENDOR_ARM VulkanVendorARM
-
-// WebGPU has no concept of dynamic state, so we don't use the dynamic rendering
-// drawTypes there, and there is no missing dynamic state to emulate.
-// Furthermore, this feature gets emulated via push constant, for which
-// naga/WGSL have no equivalent.
-#ifndef @TARGET_WGSL
-// Since SPIR-V can't omit declarations via specialization constants, only
-// define @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE where it is used (i.e., MSAA).
-#if defined(@RENDER_MODE_DEPTH_STENCIL)
-#define @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE EmulateDynamicColorWriteDisable
-#endif
-#endif
 "###;
 
 /// Stable source aliases.

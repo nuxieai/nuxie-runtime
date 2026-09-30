@@ -64,14 +64,6 @@ public:
                                    GLuint textureID);
 
 #ifdef RIVE_CANVAS
-    rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
-                                       uint32_t height) override;
-
-    // Creates a shell canvas with no texture; the deferred replay worker
-    // backs it on its own context via ensureCanvasBacking.
-    rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width,
-                                               uint32_t height) override;
-
     void ensureCanvasBacking(gpu::RenderCanvas* canvas) override;
 
     std::unique_ptr<rive::ore::Context> makeOreContext() override;
@@ -146,13 +138,6 @@ public:
 #endif
 
 private:
-#ifdef RIVE_CANVAS
-    // Shared canvas wiring; `tex` of 0 makes an unbacked shell canvas.
-    rcp<RenderCanvas> wrapCanvasBacking(uint32_t width,
-                                        uint32_t height,
-                                        GLuint tex);
-#endif
-
     class DrawProgram;
 
     // Manages how we implement pixel local storage in shaders.
@@ -427,6 +412,10 @@ private:
         ~DrawProgram();
 
         GLuint id() const { return m_id; }
+        GLint baseVertexUniformLocation() const
+        {
+            return m_baseVertexUniformLocation;
+        }
         GLint baseInstanceUniformLocation() const
         {
             return m_baseInstanceUniformLocation;
@@ -446,6 +435,7 @@ private:
         const DrawShader* m_vertexShader = nullptr;
         PipelineStatus m_pipelineStatus = PipelineStatus::notReady;
         GLuint m_id = 0;
+        GLint m_baseVertexUniformLocation = -1;
         GLint m_baseInstanceUniformLocation = -1;
         const rcp<GLState> m_state;
 #ifdef WITH_RIVE_TOOLS
@@ -490,6 +480,14 @@ private:
     };
 
     GLPipelineManager m_pipelineManager;
+
+#ifdef WITH_RIVE_TOOLS
+    ShaderCompilationMode testingOnly_setShaderCompilationMode(
+        ShaderCompilationMode mode) override
+    {
+        return m_pipelineManager.testingOnly_setShaderCompilationMode(mode);
+    }
+#endif
 
     // Vertex/index buffers for drawing paths.
     glutils::VAO m_drawVAO;

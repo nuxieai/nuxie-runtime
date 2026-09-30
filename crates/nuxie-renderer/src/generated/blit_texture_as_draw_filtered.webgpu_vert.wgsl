@@ -5,31 +5,31 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct TB {
-    tc: f32,
-    Bd: f32,
-    Hf: f32,
-    If: f32,
-    o6_: u32,
-    Nb: u32,
-    tf: u32,
-    uf: u32,
-    T7_: vec4<i32>,
-    hh: vec2<f32>,
-    Cd: vec2<f32>,
-    f2_: u32,
-    lh: f32,
-    c6_: u32,
-    X2_: f32,
-    Dd: f32,
-    nf: u32,
-    F3_: f32,
-    G3_: f32,
-    Ed: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
-    ac: f32,
+struct UB {
+    Qc: f32,
+    Td: f32,
+    Yf: f32,
+    Zf: f32,
+    z6_: u32,
+    X9_: u32,
+    Kf: u32,
+    Lf: u32,
+    i8_: vec4<i32>,
+    Ch: vec2<f32>,
+    Ud: vec2<f32>,
+    i2_: u32,
+    Gh: f32,
+    T4_: u32,
+    c3_: f32,
+    Vd: f32,
+    Ef: u32,
+    M3_: f32,
+    N3_: f32,
+    Wd: f32,
+    zh: u32,
+    W9_: u32,
+    wc: f32,
+    xc: f32,
 }
 
 struct VertexOutput {
@@ -38,17 +38,17 @@ struct VertexOutput {
 }
 
 var<private> gl_VertexIndex_1: i32;
-var<private> c2_: vec2<f32>;
+var<private> e2_: vec2<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(0)
-var<uniform> j: TB;
+var<uniform> j: UB;
 
 fn main_1() {
     let _e14 = gl_VertexIndex_1;
     let _e17 = select(1f, -1f, ((_e14 & 1i) == 0i));
     let _e20 = select(1f, -1f, ((_e14 & 2i) == 0i));
-    c2_[0u] = ((_e17 * 0.5f) + 0.5f);
-    c2_[1u] = ((_e20 * -0.5f) + 0.5f);
+    e2_[0u] = ((_e17 * 0.5f) + 0.5f);
+    e2_[1u] = ((_e20 * -0.5f) + 0.5f);
     unnamed.gl_Position = vec4<f32>(_e17, _e20, 0f, 1f);
     return;
 }
@@ -57,7 +57,7 @@ fn main_1() {
 fn main(@builtin(vertex_index) gl_VertexIndex: u32) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     main_1();
-    let _e6 = c2_;
+    let _e6 = e2_;
     let _e7 = unnamed.gl_Position;
     return VertexOutput(_e6, _e7);
 }

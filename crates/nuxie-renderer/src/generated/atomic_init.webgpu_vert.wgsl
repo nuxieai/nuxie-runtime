@@ -1,28 +1,28 @@
-struct TB {
-    tc: f32,
-    Bd: f32,
-    Hf: f32,
-    If: f32,
-    o6_: u32,
-    Nb: u32,
-    tf: u32,
-    uf: u32,
-    T7_: vec4<i32>,
-    hh: vec2<f32>,
-    Cd: vec2<f32>,
-    f2_: u32,
-    lh: f32,
-    c6_: u32,
-    X2_: f32,
-    Dd: f32,
-    nf: u32,
-    F3_: f32,
-    G3_: f32,
-    Ed: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
-    ac: f32,
+struct UB {
+    Qc: f32,
+    Td: f32,
+    Yf: f32,
+    Zf: f32,
+    z6_: u32,
+    X9_: u32,
+    Kf: u32,
+    Lf: u32,
+    i8_: vec4<i32>,
+    Ch: vec2<f32>,
+    Ud: vec2<f32>,
+    i2_: u32,
+    Gh: f32,
+    T4_: u32,
+    c3_: f32,
+    Vd: f32,
+    Ef: u32,
+    M3_: f32,
+    N3_: f32,
+    Wd: f32,
+    zh: u32,
+    W9_: u32,
+    wc: f32,
+    xc: f32,
 }
 
 struct gl_PerVertex {
@@ -32,66 +32,66 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct Ig {
-    g2_: array<vec4<u32>>,
+struct dh {
+    j2_: array<vec4<u32>>,
 }
 
-struct kf {
-    g2_: array<vec2<u32>>,
+struct Bf {
+    j2_: array<vec2<u32>>,
 }
 
-struct lf {
-    g2_: array<vec4<f32>>,
+struct Cf {
+    j2_: array<vec4<f32>>,
 }
 
-struct Jg {
-    g2_: array<vec4<u32>>,
+struct eh {
+    j2_: array<vec4<u32>>,
 }
 
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 @group(0) @binding(0)
-var<uniform> j: TB;
+var<uniform> j: UB;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
-var MC: texture_2d<u32>;
+var TB: texture_2d<u32>;
 @group(0) @binding(9)
-var YC: texture_2d<f32>;
+var ZC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> OB: Ig;
+var<storage> LB: dh;
 @group(0) @binding(3)
-var<storage> DD: kf;
+var<storage> XC: Bf;
 @group(0) @binding(4)
-var<storage> PB: lf;
+var<storage> JB: Cf;
 @group(0) @binding(5)
-var<storage> ID: Jg;
+var<storage> AD: eh;
 @group(3) @binding(9)
-var ca: sampler;
+var wa: sampler;
 
 fn main_1() {
-    var phi_172_: i32;
-    var phi_175_: i32;
+    var phi_171_: i32;
+    var phi_174_: i32;
 
     let _e22 = gl_VertexIndex_1;
     if ((_e22 & 1i) == 0i) {
-        let _e27 = j.T7_[0u];
-        phi_172_ = _e27;
+        let _e27 = j.i8_[0u];
+        phi_171_ = _e27;
     } else {
-        let _e30 = j.T7_[2u];
-        phi_172_ = _e30;
+        let _e30 = j.i8_[2u];
+        phi_171_ = _e30;
     }
-    let _e32 = phi_172_;
+    let _e32 = phi_171_;
     if ((_e22 & 2i) == 0i) {
-        let _e37 = j.T7_[1u];
-        phi_175_ = _e37;
+        let _e37 = j.i8_[1u];
+        phi_174_ = _e37;
     } else {
-        let _e40 = j.T7_[3u];
-        phi_175_ = _e40;
+        let _e40 = j.i8_[3u];
+        phi_174_ = _e40;
     }
-    let _e42 = phi_175_;
+    let _e42 = phi_174_;
     let _e44 = vec2<f32>(vec2<i32>(_e32, _e42));
-    let _e46 = j.Hf;
-    let _e48 = j.If;
+    let _e46 = j.Yf;
+    let _e48 = j.Zf;
     unnamed.gl_Position = vec4<f32>(((_e44.x * _e46) - 1f), ((_e44.y * _e48) - sign(_e48)), 0f, 1f);
     return;
 }

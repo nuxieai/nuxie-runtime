@@ -38,12 +38,11 @@ pub(crate) type ShaderMiscFlags = u32;
 pub(crate) const CLIP_UPDATE_ONLY: ShaderMiscFlags = 1 << 2;
 pub(crate) const NESTED_CLIP_UPDATE_ONLY: ShaderMiscFlags = 1 << 3;
 pub(crate) const BORROWED_COVERAGE_PASS: ShaderMiscFlags = 1 << 4;
-pub(crate) const EMULATE_DYNAMIC_COLOR_WRITE_DISABLE: ShaderMiscFlags = 1 << 5;
-pub(crate) const MSAA_DST_READ: ShaderMiscFlags = 1 << 6;
-pub(crate) const STORE_COLOR_CLEAR: ShaderMiscFlags = 1 << 7;
-pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 8;
-pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 9;
-pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 10;
+pub(crate) const MSAA_DST_READ: ShaderMiscFlags = 1 << 5;
+pub(crate) const STORE_COLOR_CLEAR: ShaderMiscFlags = 1 << 6;
+pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 7;
+pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 8;
+pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 9;
 
 /// The `MetalFeatures` input used by the upstream compiler. The only member
 /// read by `background_shader_compiler.mm:115-119` is the atomic barrier type.
@@ -809,7 +808,6 @@ mod tests {
                 CLIP_UPDATE_ONLY,
                 NESTED_CLIP_UPDATE_ONLY,
                 BORROWED_COVERAGE_PASS,
-                EMULATE_DYNAMIC_COLOR_WRITE_DISABLE,
                 MSAA_DST_READ,
                 STORE_COLOR_CLEAR,
                 LOAD_COLOR_FROM_DST_TEXTURE,
@@ -827,7 +825,6 @@ mod tests {
                 1 << 7,
                 1 << 8,
                 1 << 9,
-                1 << 10,
             ]
         );
     }

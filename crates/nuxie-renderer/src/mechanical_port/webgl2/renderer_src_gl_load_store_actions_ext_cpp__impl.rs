@@ -11,11 +11,11 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_load_store_actions_ext.cpp");
 
-const GLSL_CLEAR_COLOR: &str = "XE";
-const GLSL_LOAD_COLOR: &str = "ZE";
+const GLSL_CLEAR_COLOR: &str = "YE";
+const GLSL_LOAD_COLOR: &str = "AF";
 const GLSL_STORE_COLOR: &str = "FE";
 const GLSL_CLEAR_COVERAGE: &str = "GE";
-const GLSL_CLEAR_CLIP: &str = "XF";
+const GLSL_CLEAR_CLIP: &str = "YF";
 const GLSL_PLS_LOAD_STORE_EXT: &str =
     include_str!("source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 
@@ -91,7 +91,7 @@ mod tests {
                 | LoadStoreActionsEXT::clearClip.0,
         );
         BuildLoadStoreEXTGLSL(&mut shader, all);
-        assert!(shader.starts_with("#define WE\n#define YE\n#define EE\n#define FE\n#define WF\n"));
+        assert!(shader.starts_with("#define YE\n#define AF\n#define FE\n#define GE\n#define YF\n"));
         assert!(shader.ends_with(GLSL_PLS_LOAD_STORE_EXT));
     }
 }

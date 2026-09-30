@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/glsl.glsl.
  *
- * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/glsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "4ea69005b08d721c305d9addc94de8033f58ac0b881f8a24afe023d6954c3dc5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 751;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 31560;
+    "c24401654da284230ffbf34a71e4546592b184aee27709f88a9fadbd174081db";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 750;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 31545;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
@@ -122,16 +122,6 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 // clang-format barrier... Otherwise it tries to merge this #define into the
 // above macro...
 #define UNIFORM_BLOCK_END(NAME)                                                \
-    }                                                                          \
-    NAME;
-
-#define PUSH_CONSTANT_BLOCK_BEGIN(NAME)                                        \
-    layout(push_constant) uniform NAME                                         \
-    {
-
-#define PUSH_CONSTANT(TYPE, NAME) TYPE NAME;
-
-#define PUSH_CONSTANT_BLOCK_END(NAME)                                          \
     }                                                                          \
     NAME;
 
@@ -627,26 +617,35 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 #define PLS_DECL4F_READONLY PLS_DECL4F
 #endif
 
-#ifdef @TARGET_SPIRV
-#define gl_VertexID gl_VertexIndex
-#endif
-
 // clang-format off
-#ifdef @ENABLE_INSTANCE_INDEX
-#  ifdef @TARGET_SPIRV
+#ifdef @TARGET_SPIRV
+#  define VERTEX_INDEX gl_VertexIndex
+#  ifdef @ENABLE_INSTANCE_INDEX
 #    define INSTANCE_INDEX gl_InstanceIndex
 #  else
+#    define INSTANCE_INDEX 0
+#  endif
+#else
+#  ifdef @ENABLE_BASE_VERTEX
+     // GL has no base vertex for indexed draws. The rendering backend sets
+     // this uniform for us instead.
+     uniform highp int @BASE_VERTEX_UNIFORM_NAME;
+#    define VERTEX_INDEX (gl_VertexID + @BASE_VERTEX_UNIFORM_NAME)
+#  else
+#    define VERTEX_INDEX gl_VertexID
+#  endif
+#  ifdef @ENABLE_INSTANCE_INDEX
 #    ifdef @BASE_INSTANCE_UNIFORM_NAME
        // gl_BaseInstance isn't supported on this platform. The rendering
        // backend will set this uniform for us instead.
        uniform highp int @BASE_INSTANCE_UNIFORM_NAME;
 #      define INSTANCE_INDEX (gl_InstanceID + @BASE_INSTANCE_UNIFORM_NAME)
 #    else
-#        define INSTANCE_INDEX (gl_InstanceID + gl_BaseInstance)
+#      define INSTANCE_INDEX (gl_InstanceID + gl_BaseInstance)
 #    endif
+#  else
+#    define INSTANCE_INDEX 0
 #  endif
-#else
-#  define INSTANCE_INDEX 0
 #endif
 // clang-format on
 
@@ -656,17 +655,17 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 #define CLIP_CONTEXT_FORWARD
 #define CLIP_CONTEXT_UNPACK
 
-#define VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)                \
+#define VERTEX_MAIN(NAME, Attrs, attrs, _vertexIdx, _instanceIdx)              \
     void main()                                                                \
     {                                                                          \
-        int _vertexID = gl_VertexID;                                           \
-        int _instanceID = INSTANCE_INDEX;
+        int _vertexIdx = VERTEX_INDEX;                                         \
+        int _instanceIdx = INSTANCE_INDEX;
 
 // clang-format off
-#define IMAGE_RECT_VERTEX_MAIN(NAME, Attrs, attrs, ImageDrawAttrs, imageDrawAttrs, _vertexID, _instanceID)                                    \
-    VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)
-#define IMAGE_MESH_VERTEX_MAIN(NAME, PositionAttr, position, UVAttr, uv, ImageDrawAttrs,  imageDrawAttrs, _vertexID)                                      \
-    VERTEX_MAIN(NAME, PositionAttr, position, _vertexID, _instanceID)
+#define IMAGE_RECT_VERTEX_MAIN(NAME, Attrs, attrs, ImageDrawAttrs, imageDrawAttrs, _vertexIdx, _instanceIdx)                                    \
+    VERTEX_MAIN(NAME, Attrs, attrs, _vertexIdx, _instanceIdx)
+#define IMAGE_MESH_VERTEX_MAIN(NAME, PositionAttr, position, UVAttr, uv, ImageDrawAttrs,  imageDrawAttrs, _vertexIdx)                                      \
+    VERTEX_MAIN(NAME, PositionAttr, position, _vertexIdx, _instanceIdx)
 // clang-format on
 
 #define VARYING_INIT(NAME, TYPE)

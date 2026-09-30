@@ -1,5 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/vulkan_shaders.hpp`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_camel_case_types)]
 
@@ -70,7 +71,8 @@ pub(crate) use super::vulkan_shaders_impl::{
     color_ramp_frag, color_ramp_vert, draw_atlas_blit_frag, draw_atlas_blit_vert,
     draw_depthstencil_atlas_blit_fixedcolor_frag, draw_depthstencil_atlas_blit_frag,
     draw_depthstencil_atlas_blit_msaa_frag, draw_depthstencil_atlas_blit_noclipdistance_vert,
-    draw_depthstencil_atlas_blit_vert, draw_depthstencil_image_mesh_fixedcolor_frag,
+    draw_depthstencil_atlas_blit_vert, draw_depthstencil_fill_noclipdistance_vert,
+    draw_depthstencil_fill_vert, draw_depthstencil_image_mesh_fixedcolor_frag,
     draw_depthstencil_image_mesh_frag, draw_depthstencil_image_mesh_msaa_frag,
     draw_depthstencil_image_mesh_noclipdistance_vert, draw_depthstencil_image_mesh_vert,
     draw_depthstencil_path_fixedcolor_frag, draw_depthstencil_path_frag,
@@ -123,7 +125,7 @@ pub(crate) use super::vulkan_shaders_impl::{
     draw_clockwise_path_frag, draw_clockwise_path_vert,
 };
 
-pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 97;
+pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 99;
 #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
 pub(crate) const TARGET_SHADER_SYMBOL_COUNT: usize = DECLARED_SHADER_SYMBOL_COUNT - 16;
 #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]

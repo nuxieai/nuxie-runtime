@@ -10,43 +10,43 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         format: VertexElementFormat::float4,
         attributeIndex: 2,
         byteOffset: 0,
-        semanticName: "XB",
+        semanticName: "YB",
     },
     VertexAttribute {
         format: VertexElementFormat::float4,
         attributeIndex: 3,
         byteOffset: 16,
-        semanticName: "RB",
+        semanticName: "SB",
     },
     VertexAttribute {
         format: VertexElementFormat::float4,
         attributeIndex: 4,
         byteOffset: 32,
-        semanticName: "NB",
+        semanticName: "PB",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 5,
         byteOffset: 48,
-        semanticName: "YB",
+        semanticName: "ZB",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 6,
         byteOffset: 52,
-        semanticName: "ZB",
+        semanticName: "AC",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 7,
         byteOffset: 56,
-        semanticName: "AC",
+        semanticName: "BC",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 8,
         byteOffset: 60,
-        semanticName: "LC",
+        semanticName: "MC",
     },
 ];
 pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [
@@ -57,17 +57,17 @@ pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [
     ImageDrawInstanceBaseAttributes[4],
     ImageDrawInstanceBaseAttributes[5],
     ImageDrawInstanceBaseAttributes[6],
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "PD" },
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 10, byteOffset: 80, semanticName: "QD" },
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 11, byteOffset: 96, semanticName: "BD" },
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 12, byteOffset: 112, semanticName: "OC" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "OD" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 10, byteOffset: 80, semanticName: "PD" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 11, byteOffset: 96, semanticName: "DD" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 12, byteOffset: 112, semanticName: "PC" },
 ];
 pub const ImageMeshInstanceAttributes: [VertexAttribute; 8] = [
     ImageDrawInstanceBaseAttributes[0], ImageDrawInstanceBaseAttributes[1],
     ImageDrawInstanceBaseAttributes[2], ImageDrawInstanceBaseAttributes[3],
     ImageDrawInstanceBaseAttributes[4], ImageDrawInstanceBaseAttributes[5],
     ImageDrawInstanceBaseAttributes[6],
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "GC" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "HC" },
 ];
 
 const _: () = {

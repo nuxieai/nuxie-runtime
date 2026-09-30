@@ -1203,7 +1203,7 @@
 //         // outerCubic tessellation vertices reside after the midpointFan
 //         // vertices, aligned on a multiple of the outerCubic patch size.
 //         uint32_t interiorPadding =
-//             math::padding_to_align_up<gpu::OuterCubicPatchSegmentSpanPlusJoin>(
+//             math::padding_to_align_up<gpu::OuterCubicPatchSegmentSpanPlusBowtie>(
 //                 m_midpointFanTessEndLocation);
 //         m_outerCubicTessVertexIdx =
 //             m_midpointFanTessEndLocation + interiorPadding;
@@ -3537,14 +3537,14 @@
 //     assert(m_hasDoneLayout);
 //
 //     uint32_t baseInstance = math::lossless_numeric_cast<uint32_t>(
-//         tessLocation / OuterCubicPatchSegmentSpanPlusJoin);
+//         tessLocation / OuterCubicPatchSegmentSpanPlusBowtie);
 //     // flush() is responsible for alignment.
-//     assert(baseInstance * OuterCubicPatchSegmentSpanPlusJoin == tessLocation);
+//     assert(baseInstance * OuterCubicPatchSegmentSpanPlusBowtie == tessLocation);
 //
 //     uint32_t instanceCount =
-//         tessVertexCount / OuterCubicPatchSegmentSpanPlusJoin;
+//         tessVertexCount / OuterCubicPatchSegmentSpanPlusBowtie;
 //     // flush() is responsible for alignment.
-//     assert(instanceCount * OuterCubicPatchSegmentSpanPlusJoin ==
+//     assert(instanceCount * OuterCubicPatchSegmentSpanPlusBowtie ==
 //            tessVertexCount);
 //
 //     return pushPathDraw(draw,
@@ -6473,10 +6473,10 @@ impl LogicalFlush {
         location: u32,
         misc: gpu::ShaderMiscFlags,
     ) -> *mut gpu::DrawBatch {
-        let base = location / gpu::OuterCubicPatchSegmentSpanPlusJoin;
-        debug_assert_eq!(base * gpu::OuterCubicPatchSegmentSpanPlusJoin, location);
-        let instances = count / gpu::OuterCubicPatchSegmentSpanPlusJoin;
-        debug_assert_eq!(instances * gpu::OuterCubicPatchSegmentSpanPlusJoin, count);
+        let base = location / gpu::OuterCubicPatchSegmentSpanPlusBowtie;
+        debug_assert_eq!(base * gpu::OuterCubicPatchSegmentSpanPlusBowtie, location);
+        let instances = count / gpu::OuterCubicPatchSegmentSpanPlusBowtie;
+        debug_assert_eq!(instances * gpu::OuterCubicPatchSegmentSpanPlusBowtie, count);
         unsafe { self.pushPathDrawExecutable(draw, draw_type, misc, instances, base) }
     }
 
@@ -7710,7 +7710,7 @@ impl LogicalFlush {
                 pre_padding + self.m_resource_counts.midpointFanTessVertexCount as u32;
             let interior_padding = padding_to_align_up(
                 self.m_midpoint_fan_tess_end_location as usize,
-                gpu::OuterCubicPatchSegmentSpanPlusJoin as usize,
+                gpu::OuterCubicPatchSegmentSpanPlusBowtie as usize,
             ) as u32;
             self.m_outer_cubic_tess_vertex_idx =
                 self.m_midpoint_fan_tess_end_location + interior_padding;

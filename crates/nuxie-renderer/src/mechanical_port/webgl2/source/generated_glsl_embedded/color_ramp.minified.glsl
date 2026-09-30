@@ -1,26 +1,26 @@
-#ifdef CB
-g1(h0)
-#ifdef Z9
-I(0,uint,UD);I(1,uint,VD);I(2,uint,WD);I(3,uint,XD);
+#ifdef BB
+c1(d0)
+#ifdef ta
+K(0,uint,UD);K(1,uint,VD);K(2,uint,WD);K(3,uint,XD);
 #else
-I(0,R,JC);
+K(0,N,KC);
 #endif
-h1
+d1
 #endif
-r2 I0 W(0,i,W6);i2
-#ifdef CB
-Y3 Z3 G4 H4 i Ff(uint k){return sc((R(k,k,k,k)>>R(16,8,0,24))&0xffu)/255.;}A1(MF,h0,F,A,q){
-#ifdef Z9
-J(q,F,UD,uint);J(q,F,VD,uint);J(q,F,WD,uint);J(q,F,XD,uint);R JC=R(UD,VD,WD,XD);
+l2 E0 W(0,i,g7);d2
+#ifdef BB
+j4 k4 P4 Q4 i Wf(uint l){return Pc((N(l,l,l,l)>>N(16,8,0,24))&0xffu)/255.;}r1(NF,d0,D,G,r){
+#ifdef ta
+L(r,D,UD,uint);L(r,D,VD,uint);L(r,D,WD,uint);L(r,D,XD,uint);N KC=N(UD,VD,WD,XD);
 #else
-J(q,F,JC,R);
+L(r,D,KC,N);
 #endif
-V(W6,i);int n8=A>>1;float x=float(n8<=1?JC.x&0xffffu:JC.x>>16)/65536.;float aa=(A&1)==0?.0:1.;if(j.tc<.0){aa=1.-aa;}uint X6=JC.y;float y=float(X6&~Gf)+aa;if((X6&uc)!=0u&&n8==0){if((X6&ba)!=0u) x=.0;else x-=vc;}if((X6&wc)!=0u&&n8==3){if((X6&ba)!=0u) x=1.;else x+=vc;}W6=Ff(n8<=1?JC.z:JC.w);f X=o8(c(x,y),2.,j.tc);
-#ifdef SC
-X.y=-X.y;
+T(g7,i);int D8=G>>1;float x=float(D8<=1?KC.x&0xffffu:KC.x>>16)/65536.;float ua=(G&1)==0?.0:1.;if(j.Qc<.0){ua=1.-ua;}uint h7=KC.y;float y=float(h7&~Xf)+ua;if((h7&Rc)!=0u&&D8==0){if((h7&va)!=0u) x=.0;else x-=Sc;}if((h7&Tc)!=0u&&D8==3){if((h7&va)!=0u) x=1.;else x+=Sc;}g7=Wf(D8<=1?KC.z:KC.w);e I=E8(c(x,y),2.,j.Qc);
+#ifdef NC
+I.y=-I.y;
 #endif
-c0(W6);B1(X);}
+Z(g7);v1(I);}
 #endif
 #ifdef EB
-H3 I3 f3(i,NF){r(W6,i);N2(W6);}
+O3 P3 j3(i,OF){q(g7,i);Q2(g7);}
 #endif

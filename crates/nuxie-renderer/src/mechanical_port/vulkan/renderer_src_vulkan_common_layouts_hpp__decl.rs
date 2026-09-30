@@ -1,12 +1,13 @@
 //! Complete mechanical declaration translation of
 //! `renderer/src/vulkan/common_layouts.hpp`.
-//! Updated through upstream `9463ff7b5b9a1452d0c32e41390a99cd39b6c946`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
 use super::vkutil_decl::kColorWriteMaskRGBA;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    ImageRectInstance, ImageMeshInstance, ImageRectVertex, PatchVertex, TriangleVertex, VertexElementFormat, VertexAttribute,
+    ImageMeshInstance, ImageRectInstance, ImageRectVertex, PatchVertex, TriangleVertex,
+    VertexAttribute, VertexElementFormat,
 };
 use ash::vk;
 use std::sync::LazyLock;
@@ -15,6 +16,10 @@ use std::sync::LazyLock;
 const PLS_PLANE_COUNT: u32 = 4;
 
 pub(crate) const MAX_RENDER_PASS_ATTACHMENTS: u32 = PLS_PLANE_COUNT + 1;
+
+pub(crate) static EMPTY_VERTEX_INPUT_STATE: LazyLock<
+    vk::PipelineVertexInputStateCreateInfo<'static>,
+> = LazyLock::new(vk::PipelineVertexInputStateCreateInfo::default);
 
 pub(crate) static PATH_INPUT_BINDINGS: [vk::VertexInputBindingDescription; 1] =
     [vk::VertexInputBindingDescription {
@@ -99,15 +104,24 @@ pub(crate) const fn appendImageDrawInstanceAttribs<const N: usize, const OUT: us
 ) -> [vk::VertexInputAttributeDescription; OUT] {
     assert!(OUT == N + attributes.len());
     let mut result = [vk::VertexInputAttributeDescription {
-        location: 0, binding: 0, format: vk::Format::UNDEFINED, offset: 0,
+        location: 0,
+        binding: 0,
+        format: vk::Format::UNDEFINED,
+        offset: 0,
     }; OUT];
     let mut i = 0;
-    while i < N { result[i] = geometryAttribs[i]; i += 1; }
+    while i < N {
+        result[i] = geometryAttribs[i];
+        i += 1;
+    }
     let mut i = 0;
     while i < attributes.len() {
         let src = &attributes[i];
-        result[N+i] = vk::VertexInputAttributeDescription {
-            location: src.attributeIndex, binding, format: getVkFormat(src.format), offset: src.byteOffset,
+        result[N + i] = vk::VertexInputAttributeDescription {
+            location: src.attributeIndex,
+            binding,
+            format: getVkFormat(src.format),
+            offset: src.byteOffset,
         };
         i += 1;
     }
@@ -167,10 +181,9 @@ pub(crate) static ImageMeshInputBindings: [vk::VertexInputBindingDescription; 3]
         input_rate: vk::VertexInputRate::INSTANCE,
     },
 ];
-pub(crate) static ImageMeshVertexAttribs: [
-    vk::VertexInputAttributeDescription;
-    2 + ImageMeshInstance::AttributeCount
-] = appendImageDrawInstanceAttribs::<2, { 2 + ImageMeshInstance::AttributeCount }>(
+pub(crate) static ImageMeshVertexAttribs: [vk::VertexInputAttributeDescription;
+    2 + ImageMeshInstance::AttributeCount] =
+    appendImageDrawInstanceAttribs::<2, { 2 + ImageMeshInstance::AttributeCount }>(
         ImageMeshImageAttribBufferBinding,
         [
             vk::VertexInputAttributeDescription {
@@ -196,9 +209,7 @@ pub(crate) static IMAGE_MESH_VERTEX_INPUT_STATE: LazyLock<
         .vertex_attribute_descriptions(&ImageMeshVertexAttribs)
 });
 
-pub(crate) static EMPTY_VERTEX_INPUT_STATE: LazyLock<
-    vk::PipelineVertexInputStateCreateInfo<'static>,
-> = LazyLock::new(vk::PipelineVertexInputStateCreateInfo::default);
+pub(crate) const MaxVertexBinding: u32 = ImageMeshImageAttribBufferBinding;
 
 pub(crate) static INPUT_ASSEMBLY_TRIANGLE_STRIP: LazyLock<
     vk::PipelineInputAssemblyStateCreateInfo<'static>,
@@ -271,12 +282,11 @@ pub(crate) static SINGLE_ATTACHMENT_BLEND_DISABLED: LazyLock<
 
 pub(crate) static DYNAMIC_VIEWPORT_SCISSOR_VALUES: [vk::DynamicState; 2] =
     [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-pub(crate) static DYNAMIC_VIEWPORT_SCISSOR: LazyLock<
-    vk::PipelineDynamicStateCreateInfo<'static>,
-> = LazyLock::new(|| {
-    vk::PipelineDynamicStateCreateInfo::default()
-        .dynamic_states(&DYNAMIC_VIEWPORT_SCISSOR_VALUES)
-});
+pub(crate) static DYNAMIC_VIEWPORT_SCISSOR: LazyLock<vk::PipelineDynamicStateCreateInfo<'static>> =
+    LazyLock::new(|| {
+        vk::PipelineDynamicStateCreateInfo::default()
+            .dynamic_states(&DYNAMIC_VIEWPORT_SCISSOR_VALUES)
+    });
 
 pub(crate) static SINGLE_ATTACHMENT_SUBPASS_REFERENCE: LazyLock<vk::AttachmentReference> =
     LazyLock::new(|| {
@@ -288,9 +298,7 @@ pub(crate) static SINGLE_ATTACHMENT_SUBPASS: LazyLock<vk::SubpassDescription<'st
     LazyLock::new(|| {
         vk::SubpassDescription::default()
             .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-            .color_attachments(core::slice::from_ref(
-                &*SINGLE_ATTACHMENT_SUBPASS_REFERENCE,
-            ))
+            .color_attachments(core::slice::from_ref(&*SINGLE_ATTACHMENT_SUBPASS_REFERENCE))
     });
 
 #[cfg(test)]
@@ -316,9 +324,11 @@ mod tests {
             [0, 0, 16, 32, 48, 52, 56, 60, 64, 80, 96, 112]
         );
         assert_eq!(ImageRectVertexAttribs[4].format, vk::Format::R32_UINT);
-        assert!(ImageRectVertexAttribs[8..].iter().all(|attribute| {
-            attribute.format == vk::Format::R32G32B32A32_SFLOAT
-        }));
+        assert!(
+            ImageRectVertexAttribs[8..]
+                .iter()
+                .all(|attribute| { attribute.format == vk::Format::R32G32B32A32_SFLOAT })
+        );
         assert_eq!(ImageMeshInputBindings.len(), 3);
         assert_eq!(ImageMeshVertexAttribs.len(), 10);
         assert_eq!(
@@ -330,7 +340,10 @@ mod tests {
             [0, 0, 0, 16, 32, 48, 52, 56, 60, 64]
         );
         assert_eq!(PATH_VERTEX_INPUT_STATE.vertex_binding_description_count, 1);
-        assert_eq!(PATH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 2);
+        assert_eq!(
+            PATH_VERTEX_INPUT_STATE.vertex_attribute_description_count,
+            2
+        );
         assert_eq!(
             PATH_VERTEX_INPUT_STATE.p_vertex_binding_descriptions,
             PATH_INPUT_BINDINGS.as_ptr()
@@ -339,10 +352,22 @@ mod tests {
             PATH_VERTEX_INPUT_STATE.p_vertex_attribute_descriptions,
             PATH_VERTEX_ATTRIBS.as_ptr()
         );
-        assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_binding_description_count, 2);
-        assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count, 12);
-        assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_binding_description_count, 3);
-        assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 10);
+        assert_eq!(
+            IMAGE_RECT_VERTEX_INPUT_STATE.vertex_binding_description_count,
+            2
+        );
+        assert_eq!(
+            IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count,
+            12
+        );
+        assert_eq!(
+            IMAGE_MESH_VERTEX_INPUT_STATE.vertex_binding_description_count,
+            3
+        );
+        assert_eq!(
+            IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count,
+            10
+        );
         assert_eq!(
             IMAGE_MESH_VERTEX_INPUT_STATE.p_vertex_binding_descriptions,
             ImageMeshInputBindings.as_ptr()
@@ -352,30 +377,60 @@ mod tests {
             ImageMeshVertexAttribs.as_ptr()
         );
         assert_eq!(EMPTY_VERTEX_INPUT_STATE.vertex_binding_description_count, 0);
-        assert_eq!(EMPTY_VERTEX_INPUT_STATE.vertex_attribute_description_count, 0);
+        assert_eq!(
+            EMPTY_VERTEX_INPUT_STATE.vertex_attribute_description_count,
+            0
+        );
     }
 
     #[test]
     fn complete_fixed_and_dynamic_pipeline_state_denominator_matches_source() {
-        assert_eq!(INPUT_ASSEMBLY_TRIANGLE_STRIP.topology, vk::PrimitiveTopology::TRIANGLE_STRIP);
-        assert_eq!(INPUT_ASSEMBLY_TRIANGLE_LIST.topology, vk::PrimitiveTopology::TRIANGLE_LIST);
+        assert_eq!(
+            INPUT_ASSEMBLY_TRIANGLE_STRIP.topology,
+            vk::PrimitiveTopology::TRIANGLE_STRIP
+        );
+        assert_eq!(
+            INPUT_ASSEMBLY_TRIANGLE_LIST.topology,
+            vk::PrimitiveTopology::TRIANGLE_LIST
+        );
         assert_eq!(SINGLE_VIEWPORT.viewport_count, 1);
         assert_eq!(SINGLE_VIEWPORT.scissor_count, 1);
-        assert_eq!(RASTER_STATE_CULL_BACK_CCW.cull_mode, vk::CullModeFlags::BACK);
-        assert_eq!(RASTER_STATE_CULL_BACK_CCW.front_face, vk::FrontFace::COUNTER_CLOCKWISE);
-        assert_eq!(RASTER_STATE_CULL_BACK_CW.front_face, vk::FrontFace::CLOCKWISE);
+        assert_eq!(
+            RASTER_STATE_CULL_BACK_CCW.cull_mode,
+            vk::CullModeFlags::BACK
+        );
+        assert_eq!(
+            RASTER_STATE_CULL_BACK_CCW.front_face,
+            vk::FrontFace::COUNTER_CLOCKWISE
+        );
+        assert_eq!(
+            RASTER_STATE_CULL_BACK_CW.front_face,
+            vk::FrontFace::CLOCKWISE
+        );
         assert_eq!(RASTER_STATE_CULL_NONE_CW.cull_mode, vk::CullModeFlags::NONE);
-        assert_eq!(MSAA_DISABLED.rasterization_samples, vk::SampleCountFlags::TYPE_1);
+        assert_eq!(
+            MSAA_DISABLED.rasterization_samples,
+            vk::SampleCountFlags::TYPE_1
+        );
         assert_eq!(BLEND_DISABLED_VALUES.color_write_mask, kColorWriteMaskRGBA);
         assert_eq!(SINGLE_ATTACHMENT_BLEND_DISABLED.attachment_count, 1);
         assert_eq!(
             SINGLE_ATTACHMENT_BLEND_DISABLED.p_attachments,
             core::ptr::from_ref(&*BLEND_DISABLED_VALUES)
         );
-        assert_eq!(DYNAMIC_VIEWPORT_SCISSOR_VALUES, [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]);
+        assert_eq!(
+            DYNAMIC_VIEWPORT_SCISSOR_VALUES,
+            [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR]
+        );
         assert_eq!(SINGLE_ATTACHMENT_SUBPASS_REFERENCE.attachment, 0);
-        assert_eq!(SINGLE_ATTACHMENT_SUBPASS_REFERENCE.layout, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-        assert_eq!(SINGLE_ATTACHMENT_SUBPASS.pipeline_bind_point, vk::PipelineBindPoint::GRAPHICS);
+        assert_eq!(
+            SINGLE_ATTACHMENT_SUBPASS_REFERENCE.layout,
+            vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+        );
+        assert_eq!(
+            SINGLE_ATTACHMENT_SUBPASS.pipeline_bind_point,
+            vk::PipelineBindPoint::GRAPHICS
+        );
         assert_eq!(SINGLE_ATTACHMENT_SUBPASS.color_attachment_count, 1);
         assert_eq!(
             SINGLE_ATTACHMENT_SUBPASS.p_color_attachments,

@@ -1,89 +1,89 @@
 #ifdef FRAGMENT
-M1 z0(H2,l0);j1(Y2,i0);z0(f6,q4);j1(K6,F7);N1 P1(HB){r(X1,f);
+Q1 A0(L2,o0);o1(d3,m0);A0(n6,B4);o1(T6,R7);R1 T1(IB){q(a1,e);
 #ifdef ENABLE_MODULATED_IMAGE
-r(D2,S);
+q(F1,P);
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-r(i1,d);
+q(m1,d);
 #else
-r(O,C2);
+q(S,H2);
 #endif
-r(D0,d);
+q(F0,d);
 #ifdef ENABLE_CLIPPING
-r(Y1,D);
+q(l1,C);
 #endif
 #ifdef ENABLE_CLIP_RECT
-r(P0,f);
+q(R0,e);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-r(f1,d);
+q(Q0,d);
 #endif
 #if!defined(DRAW_INTERIOR_TRIANGLES)
-A2;
+F2;
 #endif
-D V4=unpackHalf2x16(a1(F7));d j9=V4.y;d r0=j9==D0?V4.x:J0(.0);
+C d5=unpackHalf2x16(h1(R7));d C9=d5.y;d w0=C9==F0?d5.x:M0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
-r0+=i1;h2(F7);
+w0+=m1;k2(R7);
 #else
-r0=xi(r0,O e1);d1(F7,packHalf2x16(E2(r0,D0)));
+w0=Ni(w0,S k1);j1(R7,packHalf2x16(I2(w0,F0)));
 #endif
 d o;
 #ifdef CLOCKWISE_FILL
-if(CLOCKWISE_FILL){o=ga(r0,J0(.0),J0(1.));}else
+if(CLOCKWISE_FILL){o=Aa(w0,M0(.0),M0(1.));}else
 #endif
-{o=abs(r0);
+{o=abs(w0);
 #ifdef ENABLE_EVEN_ODD
-if(ENABLE_EVEN_ODD&&D0<.0){o=1.-J0(abs(fract(o*.5)*2.+-1.));}
+if(ENABLE_EVEN_ODD&&F0<.0){o=1.-M0(abs(fract(o*.5)*2.+-1.));}
 #endif
-o=min(o,J0(1.));}
+o=min(o,M0(1.));}
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&Y1.x<.0){d l1=-Y1.x;
+if(ENABLE_CLIPPING&&l1.x<.0){d X0=-l1.x;
 #ifdef ENABLE_NESTED_CLIPPING
-if(ENABLE_NESTED_CLIPPING){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d F6=Q0.y;d x4;if(F6!=l1){x4=F6==K5?Q0.x:.0;
+if(ENABLE_NESTED_CLIPPING){d E4=l1.y;if(E4!=.0){C T0=unpackHalf2x16(h1(m0));d O6=T0.y;d G4;if(O6!=X0){G4=O6==E4?T0.x:.0;
 #ifndef DRAW_INTERIOR_TRIANGLES
-A0(q4,E0(x4,.0,.0,.0));
+B0(B4,G0(G4,.0,.0,.0));
 #endif
-}else{x4=K0(q4).x;
+}else{G4=N0(B4).x;
 #ifndef DRAW_INTERIOR_TRIANGLES
-z2(q4);
+E2(B4);
 #endif
-}o=min(o,x4);}}
+}o=min(o,G4);}}
 #endif
-d1(i0,packHalf2x16(E2(o,l1)));z2(l0);}else
+j1(m0,packHalf2x16(I2(o,X0)));E2(o0);}else
 #endif
 {
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){d l1=Y1.x;if(l1!=.0){D Q0=unpackHalf2x16(a1(i0));d F6=Q0.y;o=(F6==l1)?min(Q0.x,o):J0(.0);}}
+if(ENABLE_CLIPPING){d X0=l1.x;if(X0!=.0){C T0=unpackHalf2x16(h1(m0));d O6=T0.y;o=(O6==X0)?min(T0.x,o):M0(.0);}}
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d d5=m3(h5(P0));o=clamp(d5,J0(.0),o);}
+if(ENABLE_CLIP_RECT){d l5=v3(q5(R0));o=clamp(l5,M0(.0),o);}
 #endif
-i k=K7(
+i l=Y7(
 #ifdef ENABLE_MODULATED_IMAGE
-D2,
+F1,
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-g3(f1),
+k3(Q0),
 #endif
-X1 Z2);i O1;if(j9!=D0){O1=K0(l0);
+a1 e3);i S1;if(C9!=F0){S1=N0(o0);
 #ifndef DRAW_INTERIOR_TRIANGLES
-A0(q4,O1);
+B0(B4,S1);
 #endif
-}else{O1=K0(q4);
+}else{S1=N0(B4);
 #ifndef DRAW_INTERIOR_TRIANGLES
-z2(q4);
+E2(B4);
 #endif
 }
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND&&f1!=Z5(C4)){k.xyz=Z4(k.xyz,O1,g3(f1))*k.w;}
+if(ENABLE_ADVANCED_BLEND&&Q0!=i6(L4)){l.xyz=h5(l.xyz,S1,k3(Q0))*l.w;}
 #endif
-k*=o;
+l*=o;
 #ifdef NEEDS_GAMMA_CORRECTION
-if(NEEDS_GAMMA_CORRECTION){k=q3(k);}
+if(NEEDS_GAMMA_CORRECTION){l=z3(l);}
 #endif
-d j3=k.w;k+=O1*(1.-j3);k.xyz=L2(k.xyz,j3,e0.xy,j.F3,j.G3);A0(l0,k);h2(i0);}
+d n3=l.w;l+=S1*(1.-n3);l.xyz=O2(l.xyz,n3,f0.xy,j.M3,j.N3);B0(o0,l);k2(m0);}
 #if!defined(DRAW_INTERIOR_TRIANGLES)
-B2;
+G2;
 #endif
-d2;}
+g2;}
 #endif

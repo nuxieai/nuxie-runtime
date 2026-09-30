@@ -1,24 +1,29 @@
-//! Complete skinned_winding_test.cpp at upstream 8ff564a3.
+//! Complete skinned_winding_test.cpp at upstream ea030d1b.
 use nuxie_render_api::{FillRule, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
     artboard::Artboard,
     bones::{
-        bone::Bone, root_bone::RootBone, skin::Skin, skinnable::SkinnableBehavior, tendon::Tendon,
-        weight::Weight,
+        bone::Bone, cubic_weight::CubicWeight, root_bone::RootBone, skin::Skin,
+        skinnable::SkinnableBehavior, tendon::Tendon, weight::Weight,
     },
     core::{CoreArena, CoreHandle, CoreType},
     generated::{
-        bones::{root_bone_base::RootBoneBase, tendon_base::TendonBase, weight_base::WeightBase},
+        bones::{
+            cubic_weight_base::CubicWeightBase, root_bone_base::RootBoneBase,
+            tendon_base::TendonBase, weight_base::WeightBase,
+        },
         component_base::ComponentBase,
         core_registry::CoreRegistry,
         shapes::{
-            paint::fill_base::FillBase, path_base::PathBase,
-            points_common_path_base::PointsCommonPathBase, vertex_base::VertexBase,
+            cubic_detached_vertex_base::CubicDetachedVertexBase, paint::fill_base::FillBase,
+            path_base::PathBase, points_common_path_base::PointsCommonPathBase,
+            vertex_base::VertexBase,
         },
         transform_component_base::TransformComponentBase,
     },
     shapes::{
+        cubic_detached_vertex::CubicDetachedVertex,
         paint::{fill::Fill, shape_paint::ShapePaintPathKind, solid_color::SolidColor},
         points_path::PointsPath,
         shape::Shape,
@@ -77,6 +82,9 @@ impl QuadRig {
         Self::with_top_start_y(clockwise, 0.0)
     }
     fn with_top_start_y(clockwise: bool, top_start_y: f32) -> Self {
+        Self::with_options(clockwise, top_start_y, false, 100.0)
+    }
+    fn with_options(clockwise: bool, top_start_y: f32, lens: bool, size: f32) -> Self {
         let arena = CoreArena::default();
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
@@ -102,7 +110,7 @@ impl QuadRig {
         let path = arena.insert(PointsPath::default());
         let skin = arena.insert(Skin::default());
         add(&top, &artboard);
-        number(&bottom, RootBoneBase::Y_PROPERTY_KEY, 100.0);
+        number(&bottom, RootBoneBase::Y_PROPERTY_KEY, size);
         add(&bottom, &artboard);
         add(&shape, &artboard);
         let fill = arena.insert(Fill::default());
@@ -128,11 +136,59 @@ impl QuadRig {
         add(&path, &shape);
         let corners = [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)];
         let mut vertices = Vec::new();
-        for i in 0..4 {
+        for i in 0..if lens { 2 } else { 0 } {
+            let vertex = arena.insert(CubicDetachedVertex::default());
+            number(
+                &vertex,
+                VertexBase::X_PROPERTY_KEY,
+                if (i == 0) == clockwise { 0.0 } else { size },
+            );
+            number(&vertex, VertexBase::Y_PROPERTY_KEY, size / 2.0);
+            let pi = nuxie_runtime::source::math::math_types::PI;
+            number(
+                &vertex,
+                CubicDetachedVertexBase::OUT_ROTATION_PROPERTY_KEY,
+                (if i == 0 { -0.5 } else { 0.5 }) * pi,
+            );
+            number(
+                &vertex,
+                CubicDetachedVertexBase::IN_ROTATION_PROPERTY_KEY,
+                (if i == 0 { 0.5 } else { -0.5 }) * pi,
+            );
+            number(
+                &vertex,
+                CubicDetachedVertexBase::OUT_DISTANCE_PROPERTY_KEY,
+                size / 2.0,
+            );
+            number(
+                &vertex,
+                CubicDetachedVertexBase::IN_DISTANCE_PROPERTY_KEY,
+                size / 2.0,
+            );
+            add(&vertex, &path);
+            let weight = arena.insert(CubicWeight::default());
+            uint(&weight, WeightBase::VALUES_PROPERTY_KEY, 255);
+            uint(&weight, WeightBase::INDICES_PROPERTY_KEY, 2);
+            uint(&weight, CubicWeightBase::OUT_VALUES_PROPERTY_KEY, 255);
+            uint(
+                &weight,
+                CubicWeightBase::OUT_INDICES_PROPERTY_KEY,
+                if i == 0 { 1 } else { 2 },
+            );
+            uint(&weight, CubicWeightBase::IN_VALUES_PROPERTY_KEY, 255);
+            uint(
+                &weight,
+                CubicWeightBase::IN_INDICES_PROPERTY_KEY,
+                if i == 0 { 2 } else { 1 },
+            );
+            add(&weight, &vertex);
+            vertices.push(vertex);
+        }
+        for i in 0..if lens { 0 } else { 4 } {
             let (x, y) = corners[if clockwise { i } else { 3 - i }];
             let vertex = arena.insert(StraightVertex::default());
-            number(&vertex, VertexBase::X_PROPERTY_KEY, x);
-            number(&vertex, VertexBase::Y_PROPERTY_KEY, y);
+            number(&vertex, VertexBase::X_PROPERTY_KEY, x * size / 100.0);
+            number(&vertex, VertexBase::Y_PROPERTY_KEY, y * size / 100.0);
             add(&vertex, &path);
             let weight = arena.insert(Weight::default());
             uint(&weight, WeightBase::VALUES_PROPERTY_KEY, 255);
@@ -273,7 +329,7 @@ fn moving_vertex_measures_winding_again() {
     assert!(rig.deformed_area() < 0.0);
 }
 #[test]
-fn fold_without_mirroring_keeps_measured_winding() {
+fn fold_without_mirroring_keeps_bound_winding() {
     let rig = QuadRig::new(true);
     assert!(rig.composed_area() > 0.0);
     number(&rig.top, RootBoneBase::Y_PROPERTY_KEY, 200.0);
@@ -294,6 +350,43 @@ fn folded_first_frame_is_not_cached_as_winding() {
         number(&rig.top, RootBoneBase::Y_PROPERTY_KEY, 0.0);
         assert!(rig.composed_area() > 0.0);
         assert_eq!(rig.deformed_area() > 0.0, clockwise);
+    }
+}
+
+#[test]
+fn curved_path_takes_its_bound_winding_from_its_handles() {
+    for clockwise in [true, false] {
+        let rig = QuadRig::with_options(clockwise, 200.0, true, 100.0);
+        assert!(rig.composed_area() < 0.0);
+        assert_eq!(rig.deformed_area() < 0.0, clockwise);
+        number(&rig.top, RootBoneBase::Y_PROPERTY_KEY, 0.0);
+        assert!(rig.composed_area() > 0.0);
+        assert_eq!(rig.deformed_area() > 0.0, clockwise);
+    }
+}
+
+#[test]
+fn small_curved_path_follows_mirroring_from_its_handles() {
+    for clockwise in [true, false] {
+        let rig = QuadRig::with_options(clockwise, 0.0, true, 8.0);
+        let authored = if clockwise { 1 } else { -1 };
+        advance(&rig.artboard);
+        assert_eq!(
+            rig.path
+                .with_downcast_mut::<PointsPath, _>(PointsPath::winding)
+                .unwrap(),
+            authored
+        );
+        scale(&rig.top, -1.0, 1.0);
+        scale(&rig.bottom, -1.0, 1.0);
+        advance(&rig.artboard);
+        assert_eq!(winding(&rig.skin), -1);
+        assert_eq!(
+            rig.path
+                .with_downcast_mut::<PointsPath, _>(PointsPath::winding)
+                .unwrap(),
+            -authored
+        );
     }
 }
 

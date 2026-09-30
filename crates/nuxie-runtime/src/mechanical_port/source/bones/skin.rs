@@ -40,7 +40,7 @@ impl Default for Skin {
 
 impl Skin {
     /// The skinnable's world transform at bind time.
-    pub fn world_transform(&self) -> &Mat2D {
+    pub fn bind_transform(&self) -> &Mat2D {
         &self.world_transform
     }
 
@@ -225,19 +225,9 @@ impl Skin {
         for _tendon in &self.tendons {
             transform_index += 6;
             let transform = &transforms[transform_index..];
-            let xxyy = transform[0] * transform[3];
-            let xyyx = transform[1] * transform[2];
-            let determinant = xxyy - xyyx;
-            // A collapsed bone carries no orientation, allowing for rounding
-            // of the two products in its determinant.
-            if determinant.abs() <= 1e-6_f32 * (xxyy.abs() + xyyx.abs()) {
-                continue;
-            }
-            if determinant < 0.0 {
-                any_mirrored = true;
-            } else {
-                any_upright = true;
-            }
+            let sign = Self::orientation(transform[0], transform[1], transform[2], transform[3]);
+            any_mirrored |= sign < 0;
+            any_upright |= sign > 0;
         }
         if any_mirrored == any_upright {
             0
@@ -246,6 +236,16 @@ impl Skin {
         } else {
             1
         }
+    }
+
+    pub fn orientation(xx: f32, xy: f32, yx: f32, yy: f32) -> i32 {
+        let xxyy = xx * yy;
+        let xyyx = xy * yx;
+        let determinant = xxyy - xyyx;
+        if determinant.abs() <= 1e-6_f32 * (xxyy.abs() + xyyx.abs()) {
+            return 0;
+        }
+        if determinant < 0.0 { -1 } else { 1 }
     }
 
     pub fn build_dependencies(&mut self, this: CoreHandle) {

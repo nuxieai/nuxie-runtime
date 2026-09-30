@@ -208,6 +208,41 @@ impl Skin {
         }
     }
 
+    /// 1 when all oriented bones are upright, -1 when all are mirrored,
+    /// and 0 when they disagree or none carries an orientation.
+    pub fn winding_sign(&self) -> i32 {
+        let Some(transforms) = self.bone_transforms.as_ref() else {
+            return 0;
+        };
+        let mut any_mirrored = false;
+        let mut any_upright = false;
+        let mut transform_index = 0;
+        for _tendon in &self.tendons {
+            transform_index += 6;
+            let transform = &transforms[transform_index..];
+            let xxyy = transform[0] * transform[3];
+            let xyyx = transform[1] * transform[2];
+            let determinant = xxyy - xyyx;
+            // A collapsed bone carries no orientation, allowing for rounding
+            // of the two products in its determinant.
+            if determinant.abs() <= 1e-6_f32 * (xxyy.abs() + xyyx.abs()) {
+                continue;
+            }
+            if determinant < 0.0 {
+                any_mirrored = true;
+            } else {
+                any_upright = true;
+            }
+        }
+        if any_mirrored == any_upright {
+            0
+        } else if any_mirrored {
+            -1
+        } else {
+            1
+        }
+    }
+
     pub fn build_dependencies(&mut self, this: CoreHandle) {
         for tendon_handle in self.tendons.iter().cloned() {
             let bone_handle = tendon_handle

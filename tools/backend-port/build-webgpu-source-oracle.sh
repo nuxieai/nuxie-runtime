@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 runtime_dir="${RIVE_RUNTIME_DIR:?RIVE_RUNTIME_DIR must point at the pinned rive-runtime checkout}"
-runtime_revision="9b9cd7b185398629f10ae0131e2a53322ed4a9b4"
+runtime_revision="1f7efd6c629383d00ab6daf4923e37e501901f48"
 dawn_revision="211333b2e3e429c3508f25c81c547f602adf448c"
 emsdk_revision="948c31acd3f369a5da276e33ab2ed57108c165e5"
 emsdk_dir="${EMSDK_DIR:-$repo_root/target/backend-port/emsdk-5.0.6}"

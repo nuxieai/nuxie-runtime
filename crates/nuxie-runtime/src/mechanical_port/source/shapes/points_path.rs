@@ -123,16 +123,19 @@ impl PointsPath {
     fn bind_winding(&self) -> i32 {
         let points = self.base.vertices();
         let count = points.len();
-        if count < 2 {
-            return 0;
-        }
-        let world = self
+        let bind = self
             .skin()
             .expect("bound PointsPath skin")
-            .with_downcast::<Skin, _>(|skin| *skin.world_transform())
+            .with_downcast::<Skin, _>(|skin| *skin.bind_transform())
             .expect("live PointsPath skin");
-        let mut bound = RawPath::default();
-        bound.move_to_point(world * bind_point(&points[0], None).0);
+        let orientation = Skin::orientation(bind.xx(), bind.xy(), bind.yx(), bind.yy());
+        if count < 2 || orientation == 0 {
+            return 0;
+        }
+        let origin = bind_point(&points[0], None).0;
+        let mut p0 = Vec2D::new(0.0, 0.0);
+        let (mut area, mut min_x, mut min_y, mut max_x, mut max_y) =
+            (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32);
         let segments = if self.is_path_closed() {
             count
         } else {
@@ -142,26 +145,43 @@ impl PointsPath {
             let from = &points[i];
             let to = &points[(i + 1) % count];
             let (to_point, to_cubic) = bind_point(to, None);
-            let (from_point, from_cubic) = bind_point(from, None);
-            let end = world * to_point;
-            if from_cubic || to_cubic {
-                let out = if from_cubic {
-                    bind_point(from, Some(false)).0
-                } else {
-                    from_point
-                };
-                let incoming = if to_cubic {
-                    bind_point(to, Some(true)).0
-                } else {
-                    to_point
-                };
-                bound.cubic_to_points(world * out, world * incoming, end);
+            let (_, from_cubic) = bind_point(from, None);
+            let p3 = to_point - origin;
+            let p1 = if from_cubic {
+                bind_point(from, Some(false)).0 - origin
             } else {
-                bound.line_to_point(end);
+                p0
+            };
+            let p2 = if to_cubic {
+                bind_point(to, Some(true)).0 - origin
+            } else {
+                p3
+            };
+            area += 6.0 * Vec2D::cross(p0, p1)
+                + 3.0 * Vec2D::cross(p0, p2)
+                + Vec2D::cross(p0, p3)
+                + 3.0 * Vec2D::cross(p1, p2)
+                + 3.0 * Vec2D::cross(p1, p3)
+                + 6.0 * Vec2D::cross(p2, p3);
+            for p in [p1, p2, p3] {
+                // std::min/max retain their first operand for unordered comparisons.
+                min_x = if p.x < min_x { p.x } else { min_x };
+                min_y = if p.y < min_y { p.y } else { min_y };
+                max_x = if max_x < p.x { p.x } else { max_x };
+                max_y = if max_y < p.y { p.y } else { max_y };
             }
+            p0 = p3;
         }
-        bound.close();
-        measure_winding(&bound)
+        area /= 20.0;
+        let extent = if max_x - min_x < max_y - min_y {
+            max_y - min_y
+        } else {
+            max_x - min_x
+        };
+        if area.abs() <= 1e-5_f32 * extent * extent {
+            return 0;
+        }
+        (if area < 0.0 { -1 } else { 1 }) * orientation
     }
 
     /// Taken from the bind pose, then follows bone mirroring. A fold without

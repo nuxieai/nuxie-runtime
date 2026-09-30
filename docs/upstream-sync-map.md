@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f415694b7737e03b8b1aa93f9756645c30b50a6d`
+- LAST_SYNCED_SHA: `d59ea0d564d11c5eb1685b3e719a94e12a605881`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 11 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 11 require a Rust translation.
+  There are 10 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 10 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d59ea0d564d11c5eb1685b3e719a94e12a605881` | **INAPPLICABLE TEST-PLAYER HOST:** adds an explicit --fit option, defaults styled artboards to layout fit, resizes them to the rotated window dimensions with a zero-time advance, and uses the selected fit for drawing and pointer-coordinate alignment. The Rust render-only GM/window adapters do not ship this interactive Player. No shared runtime/layout algorithm, fixture or assertion changes; do not impose this test-host fit policy on product APIs or claim new player functionality. | — |
 | `f415694b7737e03b8b1aa93f9756645c30b50a6d` | **INAPPLICABLE UPSTREAM IMAGE-DIFF REPORT HOST:** classify image-size mismatches before generic OpenCV failures, carry both dimensions into a dedicated HTML section, and update status parsing, sorting, CSV totals, cleanup and failure accounting. The Rust pixel/golden comparison tools have independent contracts and neither ship nor invoke this Python reporter; no shared runtime, renderer, fixture or assertion changes. Upstream reporting remains available through the advanced pin, not claimed implemented in Rust. | — |
 | `57dddb3727306e284773ec20c653cf686c45abee` | Pack 15-bit z indices and 8-bit coverage into normalized depth, pass z indices explicitly through sorted draw emission, and use greater-than depth testing with zero clears. Translate shader/constants and SIMD changes, new exhaustive depth-packing tests and swizzle assertions; regenerate supported backend artifacts. Add shared closeable deferred-canvas retirement, carry retired backings in snapshots, drain inline/idle sessions and route Luau allocation through the deferred host. Existing Rust deferred frames remain non-Send; lifetime behavior is preserved without claiming newly supported cross-thread frame replay. Wasm execution callers remain parked. C++ advanced-blend constructor/common-source harness scaffolding and the signature-only retrofitcubictristrips GM change have no corresponding Rust test host; they remain in the upstream oracle, not newly ported Rust tests. | UNIV-3728 (Wasm slice only) |
 | `696345630f860112d0496e0d1844e9d7087250d8` | Preserve a separating space before an identifier after a closing parenthesis in the shader minifier, matching upstream for compact and human-readable output. Update the executable Rust generator and pinned Python source authority, regenerate affected backend artifacts and retain build-time generation for Metal. This is generator behavior, not a runtime shader compiler dependency. | — |

@@ -232,6 +232,12 @@ pub(crate) fn uploadImpl(
 
 impl Drop for TextureVulkan {
     fn drop(&mut self) {
+        if !self.m_vkRiveTexture.get().is_null() && !self.m_vkOreContext.get().is_null() {
+            if let Some(registry) = self.m_riveWrappedRegistry.upgrade() {
+                let this = std::ptr::NonNull::from(&mut *self);
+                registry.borrow_mut().retain(|texture| *texture != this);
+            }
+        }
         if self.m_vkImage != vk::Image::null() {
             if let Some(mut allocation) = self.m_vmaAllocation.take() {
                 let vk_context = self
@@ -246,6 +252,7 @@ impl Drop for TextureVulkan {
             }
         }
         unsafe {
+            ManuallyDrop::drop(&mut self.m_vkRiveTexture);
             ManuallyDrop::drop(&mut self.m_vk);
             ManuallyDrop::drop(&mut self.base);
         }

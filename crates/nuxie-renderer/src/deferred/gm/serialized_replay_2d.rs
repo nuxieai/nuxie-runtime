@@ -44,5 +44,5 @@ fn scene(replay: bool) -> Vec<u8> {
 }
 #[test]
 fn serialized_replay_2d() {
-    assert_pixels_equal(&scene(false), &scene(true));
+    assert_pixels_equal("serialized_replay_2d", 1, &scene(false), &scene(true));
 }

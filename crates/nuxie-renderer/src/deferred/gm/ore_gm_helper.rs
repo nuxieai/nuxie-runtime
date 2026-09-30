@@ -22,7 +22,26 @@ pub(super) fn fixture(relative: &str) -> Vec<u8> {
     std::fs::read(&path)
         .unwrap_or_else(|e| panic!("{}: {e}; run tools/fetch-test-assets.sh", path.display()))
 }
-pub(super) fn assert_pixels_equal(a: &[u8], b: &[u8]) {
+pub(super) fn assert_pixels_equal(name: &str, variant: usize, a: &[u8], b: &[u8]) {
+    if a != b {
+        let save = |suffix: &str, pixels: &[u8]| {
+            // A short readback is itself a parity failure. Save each valid
+            // image independently, as GMRunner::runParityGM does upstream.
+            if pixels.len() != SIZE as usize * SIZE as usize * 4 {
+                return;
+            }
+            let image = pixel_compare::RgbaImage::new(SIZE, SIZE, pixels.to_vec())
+                .expect("GM dimensions");
+            let path = std::env::temp_dir().join(format!("nuxie-{name}{suffix}.png"));
+            if let Err(error) = image.write_png(&path) {
+                eprintln!("could not save GM diagnostic {}: {error}", path.display());
+            } else {
+                eprintln!("GM parity diagnostic: {}", path.display());
+            }
+        };
+        save("_immediate", a);
+        save(&format!("_variant{variant}"), b);
+    }
     assert_eq!(a.len(), SIZE as usize * SIZE as usize * 4);
     assert_eq!(b.len(), a.len());
     // Upstream gmmain.cpp: parityMaxChannelDiff = atomic ? 8 : 0.
@@ -372,7 +391,12 @@ fn screen_canvas_screen_brackets_preserve_main_pixels() {
         }
         host.finish()
     };
-    assert_pixels_equal(&render(false), &render(true));
+    assert_pixels_equal(
+        "screen_canvas_screen_brackets_preserve_main_pixels",
+        1,
+        &render(false),
+        &render(true),
+    );
 }
 
 pub(super) fn wrap_canvas(

@@ -167,6 +167,6 @@ fn scene(mode: NestMode) -> Vec<u8> {
 #[test]
 fn ore_nested_pass() {
     let immediate = scene(NestMode::Immediate);
-    assert_pixels_equal(&immediate, &scene(NestMode::Inline));
-    assert_pixels_equal(&immediate, &scene(NestMode::Recorded));
+    assert_pixels_equal("ore_nested_pass", 1, &immediate, &scene(NestMode::Inline));
+    assert_pixels_equal("ore_nested_pass", 2, &immediate, &scene(NestMode::Recorded));
 }

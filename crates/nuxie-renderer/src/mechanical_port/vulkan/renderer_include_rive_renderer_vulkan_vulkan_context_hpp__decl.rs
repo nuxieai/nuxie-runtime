@@ -1,6 +1,6 @@
 //! Complete mechanical declaration translation of
 //! `renderer/include/rive/renderer/vulkan/vulkan_context.hpp`.
-//! Updated through upstream `39afeca44449b12d41c91aaf78f1ed96913ed69a`.
+//! Updated through upstream `6a717fa59880458141ac955bc00f86e80da54189`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -17,6 +17,8 @@ pub(crate) struct VulkanFeatures {
     pub(crate) fillModeNonSolid: bool,
     pub(crate) fragmentStoresAndAtomics: bool,
     pub(crate) shaderClipDistance: bool,
+    pub(crate) samplerAnisotropy: bool,
+    pub(crate) depthBiasClamp: bool,
     pub(crate) rasterizationOrderColorAttachmentAccess: bool,
     pub(crate) fragmentShaderPixelInterlock: bool,
     pub(crate) colorWriteEnable: bool,
@@ -34,6 +36,8 @@ impl Default for VulkanFeatures {
             fillModeNonSolid: false,
             fragmentStoresAndAtomics: false,
             shaderClipDistance: false,
+            samplerAnisotropy: false,
+            depthBiasClamp: false,
             rasterizationOrderColorAttachmentAccess: false,
             fragmentShaderPixelInterlock: false,
             colorWriteEnable: false,

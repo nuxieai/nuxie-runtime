@@ -148,9 +148,9 @@ fn cycle_immediate_reference() -> Vec<u8> {
 }
 #[test]
 fn canvas_dag_chain() {
-    assert_pixels_equal(&chain(false), &chain(true));
+    assert_pixels_equal("canvas_dag_chain", 1, &chain(false), &chain(true));
 }
 #[test]
 fn canvas_dag_cycle() {
-    assert_pixels_equal(&cycle_immediate_reference(), &cycle());
+    assert_pixels_equal("canvas_dag_cycle", 1, &cycle_immediate_reference(), &cycle());
 }

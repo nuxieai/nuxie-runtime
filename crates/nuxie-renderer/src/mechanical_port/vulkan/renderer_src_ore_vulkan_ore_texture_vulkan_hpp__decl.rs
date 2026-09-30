@@ -6,6 +6,8 @@
 use super::ore_context_vulkan_decl::{ContextVulkan, ContextVulkanLifetime};
 use super::render_target_vulkan_decl::RetainedRenderTargetVulkan;
 use super::vulkan_context_decl::VulkanContext;
+use super::vkutil_decl::Texture2D;
+use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 use ash::vk;
 use nuxie_ore_metal::gpu_resource::{
     AnyResourceHandle, GPUResource, GPUResourceManager, GpuResourcePayload,
@@ -17,6 +19,7 @@ use nuxie_ore_metal::types::{
 use std::cell::{Cell, RefCell};
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+use std::ptr::NonNull;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 
@@ -32,6 +35,9 @@ pub(crate) struct TextureVulkan {
     pub(crate) m_vk: ManuallyDrop<Option<Arc<VulkanContext>>>,
     pub(crate) m_vkOreContext: Cell<*mut ContextVulkan>,
     pub(super) m_contextLifetime: Weak<ContextVulkanLifetime>,
+    // Source texture stays alive while Rive's layout tracker is sampled.
+    pub(crate) m_vkRiveTexture: ManuallyDrop<rcp<Texture2D>>,
+    pub(super) m_riveWrappedRegistry: Weak<RefCell<Vec<NonNull<TextureVulkan>>>>,
 }
 
 impl TextureVulkan {
@@ -50,6 +56,8 @@ impl TextureVulkan {
             m_vk: ManuallyDrop::new(Some(Arc::clone(&context.m_vk))),
             m_vkOreContext: Cell::new(context),
             m_contextLifetime: Rc::downgrade(&context.m_lifetime),
+            m_vkRiveTexture: ManuallyDrop::new(rcp::new()),
+            m_riveWrappedRegistry: Weak::new(),
         }
     }
 

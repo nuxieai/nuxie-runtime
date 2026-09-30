@@ -286,6 +286,6 @@ fn scene(deferred: bool) -> Vec<u8> {
 #[test]
 fn ore_mip_render_target() {
     let immediate = scene(false);
-    assert_pixels_equal(&immediate, &scene(true));
+    assert_pixels_equal("ore_mip_render_target", 1, &immediate, &scene(true));
     assert_cpp_gm_pixels("ore_mip_render_target", immediate);
 }

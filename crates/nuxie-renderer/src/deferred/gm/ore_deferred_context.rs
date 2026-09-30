@@ -52,5 +52,5 @@ fn scene(deferred: bool) -> Vec<u8> {
 }
 #[test]
 fn ore_deferred_context() {
-    assert_pixels_equal(&scene(false), &scene(true));
+    assert_pixels_equal("ore_deferred_context", 1, &scene(false), &scene(true));
 }

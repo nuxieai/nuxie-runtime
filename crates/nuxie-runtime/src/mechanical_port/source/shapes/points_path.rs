@@ -5,8 +5,10 @@ use crate::mechanical_port::source::{
     },
     component::{ComponentDirt, has_dirt},
     generated::shapes::points_path_base::PointsPathBase,
-    math::{mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
-    shapes::{cubic_vertex::CubicVertexBehavior, path::PathVertexOccurrence},
+    math::{mat2d::Mat2D, vec2d::Vec2D},
+    shapes::{
+        cubic_vertex::CubicVertexBehavior, path::PathVertexOccurrence, vertex::VertexBehavior,
+    },
 };
 static IDENTITY: Mat2D = Mat2D::identity();
 impl std::ops::Deref for PointsPath {
@@ -120,19 +122,13 @@ impl PointsPath {
         self.base.base.base.mark_path_dirty(true);
     }
 
-    fn bind_winding(&self) -> i32 {
+    fn measure_winding(&self, deformed: bool) -> i32 {
         let points = self.base.vertices();
         let count = points.len();
-        let bind = self
-            .skin()
-            .expect("bound PointsPath skin")
-            .with_downcast::<Skin, _>(|skin| *skin.bind_transform())
-            .expect("live PointsPath skin");
-        let orientation = Skin::orientation(bind.xx(), bind.xy(), bind.yx(), bind.yy());
-        if count < 2 || orientation == 0 {
+        if count < 2 {
             return 0;
         }
-        let origin = bind_point(&points[0], None).0;
+        let origin = winding_point(&points[0], None, deformed).0;
         let mut p0 = Vec2D::new(0.0, 0.0);
         let (mut area, mut min_x, mut min_y, mut max_x, mut max_y) =
             (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32);
@@ -144,16 +140,16 @@ impl PointsPath {
         for i in 0..segments {
             let from = &points[i];
             let to = &points[(i + 1) % count];
-            let (to_point, to_cubic) = bind_point(to, None);
-            let (_, from_cubic) = bind_point(from, None);
+            let (to_point, to_cubic) = winding_point(to, None, deformed);
+            let (_, from_cubic) = winding_point(from, None, deformed);
             let p3 = to_point - origin;
             let p1 = if from_cubic {
-                bind_point(from, Some(false)).0 - origin
+                winding_point(from, Some(false), deformed).0 - origin
             } else {
                 p0
             };
             let p2 = if to_cubic {
-                bind_point(to, Some(true)).0 - origin
+                winding_point(to, Some(true), deformed).0 - origin
             } else {
                 p3
             };
@@ -181,7 +177,7 @@ impl PointsPath {
         if area.abs() <= 1e-5_f32 * extent * extent {
             return 0;
         }
-        (if area < 0.0 { -1 } else { 1 }) * orientation
+        if area < 0.0 { -1 } else { 1 }
     }
 
     /// Taken from the bind pose, then follows bone mirroring. A fold without
@@ -192,7 +188,11 @@ impl PointsPath {
             return authored;
         };
         if self.winding_reference == 0 {
-            self.winding_reference = self.bind_winding();
+            let bind = skin
+                .with_downcast::<Skin, _>(|skin| *skin.bind_transform())
+                .expect("live PointsPath skin");
+            self.winding_reference = self.measure_winding(false)
+                * Skin::orientation(bind.xx(), bind.xy(), bind.yx(), bind.yy());
         }
         let sign = skin
             .with_downcast::<Skin, _>(Skin::winding_sign)
@@ -200,7 +200,7 @@ impl PointsPath {
         if sign != 0 && self.winding_reference != 0 {
             return self.winding_reference * sign;
         }
-        let measured = measure_winding(self.raw_path());
+        let measured = self.measure_winding(true);
         if measured == 0 {
             return authored;
         }
@@ -211,49 +211,78 @@ impl PointsPath {
     }
 }
 
-fn measure_winding(path: &RawPath) -> i32 {
-    let bounds = path.bounds();
-    let area = path.compute_coarse_area_with_origin(bounds.center());
-    // Match std::max's first-operand behavior for unordered comparisons.
-    let extent = if bounds.width() < bounds.height() {
-        bounds.height()
-    } else {
-        bounds.width()
-    };
-    if area.abs() <= 1e-5_f32 * extent * extent {
-        return 0;
-    }
-    if area < 0.0 { -1 } else { 1 }
-}
-
-// Read authored positions, never render translations or deformed tangents.
+// Select authored positions or where the bones put the vertices and controls.
 // A requested cubic control point may lazily populate its source cache.
-fn bind_point(vertex: &PathVertexOccurrence, incoming: Option<bool>) -> (Vec2D, bool) {
+fn winding_point(
+    vertex: &PathVertexOccurrence,
+    incoming: Option<bool>,
+    deformed: bool,
+) -> (Vec2D, bool) {
     match vertex {
         PathVertexOccurrence::Authored(vertex) => vertex
             .with_mut(|vertex| {
                 if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
                     let point = match incoming {
-                        Some(true) => cubic.in_point(),
-                        Some(false) => cubic.out_point(),
+                        Some(true) => {
+                            if deformed {
+                                cubic.render_in()
+                            } else {
+                                cubic.in_point()
+                            }
+                        }
+                        Some(false) => {
+                            if deformed {
+                                cubic.render_out()
+                            } else {
+                                cubic.out_point()
+                            }
+                        }
+                        None if deformed => cubic.render_translation(),
                         None => Vec2D::new(cubic.vertex().base.x(), cubic.vertex().base.y()),
                     };
                     (point, true)
                 } else {
-                    let vertex = vertex.as_vertex_behavior().expect("path vertex").vertex();
-                    (Vec2D::new(vertex.base.x(), vertex.base.y()), false)
+                    let vertex = vertex.as_vertex_behavior().expect("path vertex");
+                    (
+                        if deformed {
+                            vertex.render_translation()
+                        } else {
+                            Vec2D::new(vertex.vertex().base.x(), vertex.vertex().base.y())
+                        },
+                        false,
+                    )
                 }
             })
             .expect("live path vertex"),
         PathVertexOccurrence::RuntimeStraight(vertex) => {
             let vertex = vertex.borrow();
-            (Vec2D::new(vertex.x(), vertex.y()), false)
+            (
+                if deformed {
+                    vertex.render_translation()
+                } else {
+                    Vec2D::new(vertex.x(), vertex.y())
+                },
+                false,
+            )
         }
         PathVertexOccurrence::RuntimeCubicDetached(vertex) => {
             let mut vertex = vertex.borrow_mut();
             let point = match incoming {
-                Some(true) => vertex.in_point(),
-                Some(false) => vertex.out_point(),
+                Some(true) => {
+                    if deformed {
+                        vertex.render_in()
+                    } else {
+                        vertex.in_point()
+                    }
+                }
+                Some(false) => {
+                    if deformed {
+                        vertex.render_out()
+                    } else {
+                        vertex.out_point()
+                    }
+                }
+                None if deformed => vertex.render_translation(),
                 None => Vec2D::new(vertex.x(), vertex.y()),
             };
             (point, true)

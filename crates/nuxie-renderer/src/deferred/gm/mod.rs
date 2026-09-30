@@ -11,6 +11,7 @@ mod ore_deferred_multipass;
 mod ore_deferred_replay;
 mod ore_deferred_resource;
 mod ore_depth_write_always;
+mod ore_mip_render_target;
 mod ore_buffer_offsets;
 mod ore_pipeline_switch;
 mod ore_vertex_buffer_before_pipeline;

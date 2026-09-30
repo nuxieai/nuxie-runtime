@@ -460,6 +460,7 @@ pub fn replayOreLifecycle(
             let bytes = blob(reader, p.bytes).unwrap_or(&[]);
             let d = TextureDataDesc {
                 data: (!bytes.is_empty()).then_some(bytes),
+                dataSize: bytes.len() as u32,
                 bytesPerRow: p.bytesPerRow,
                 rowsPerImage: p.rowsPerImage,
                 mipLevel: p.mipLevel,

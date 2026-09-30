@@ -135,7 +135,7 @@ impl ContextApi for OwnedContext {
     fn makeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         self.context.borrow_mut().makeTexture(desc)
     }
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         self.context.borrow_mut().makeTextureView(desc)
     }
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {

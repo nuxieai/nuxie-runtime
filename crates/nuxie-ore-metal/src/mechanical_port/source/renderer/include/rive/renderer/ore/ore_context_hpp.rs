@@ -49,7 +49,7 @@ use super::super::gpu_resource_hpp::{
 };
 use super::ore_types_hpp::{
     BindGroupDesc, BindGroupLayoutDesc, BufferDesc, Features, PipelineDesc, RenderPassDesc,
-    SamplerDesc, ShaderModuleDesc, TextureDesc, TextureFormat, TextureViewDesc,
+    SamplerDesc, ShaderModuleDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
 };
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 use crate::mechanical_port::source::renderer::src::ore::metal::ore_buffer_metal_hpp::BufferErrorSink;
@@ -363,7 +363,28 @@ pub trait ContextApi {
     fn setLastError(&self, message: &str);
     fn makeBuffer(&mut self, desc: &BufferDesc<'_>) -> Option<AnyResourceHandle>;
     fn makeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle>;
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle>;
+    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        let desc = *desc;
+        let fail = |message: String| {
+            self.setLastError(&message);
+            None
+        };
+        let Some(texture) = desc.texture else {
+            return fail("makeTextureView: texture is null".into());
+        };
+        let mips = texture.numMipmaps()?;
+        let layers = match texture.r#type()? {
+            TextureType::cube => 6,
+            TextureType::array2D => texture.depthOrArrayLayers()?,
+            _ => 1,
+        };
+        let desc = match normalizeTextureView(&desc, mips, layers) {
+            Ok(desc) => desc,
+            Err(error) => return fail(error),
+        };
+        self.makeTextureViewImpl(&desc)
+    }
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle>;
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle>;
     fn makeShaderModule(&mut self, desc: &ShaderModuleDesc<'_>) -> Option<AnyResourceHandle>;
     fn makeBindGroupLayout(&mut self, desc: &BindGroupLayoutDesc<'_>) -> Option<AnyResourceHandle>;
@@ -967,4 +988,48 @@ mod tests {
         assert_eq!(ShaderTarget::msl as u8, 2);
         assert_eq!(ShaderTarget::spirv as u8, 5);
     }
+}
+
+pub fn normalizeTextureView<'a>(
+    desc: &TextureViewDesc<'a>,
+    mips: u32,
+    layers: u32,
+) -> Result<TextureViewDesc<'a>, String> {
+    let mut desc = *desc;
+    if desc.baseMipLevel >= mips {
+        return Err(format!(
+            "makeTextureView: baseMipLevel {} exceeds {} levels",
+            desc.baseMipLevel, mips
+        ));
+    }
+    if desc.baseLayer >= layers {
+        return Err(format!(
+            "makeTextureView: baseLayer {} exceeds {} layers",
+            desc.baseLayer, layers
+        ));
+    }
+    if desc.mipCount == 0 {
+        desc.mipCount = mips - desc.baseMipLevel;
+    }
+    if desc.layerCount == 0 {
+        desc.layerCount = layers - desc.baseLayer;
+    }
+    if desc.mipCount > mips - desc.baseMipLevel {
+        return Err(format!(
+            "makeTextureView: mip range [{}, {}) exceeds {} levels",
+            desc.baseMipLevel,
+            desc.baseMipLevel.wrapping_add(desc.mipCount),
+            mips
+        ));
+    }
+    if desc.layerCount > layers - desc.baseLayer {
+        return Err(format!(
+            "makeTextureView: layer range [{}, {}) exceeds {} layers",
+            desc.baseLayer,
+            desc.baseLayer.wrapping_add(desc.layerCount),
+            layers
+        ));
+    }
+
+    Ok(desc)
 }

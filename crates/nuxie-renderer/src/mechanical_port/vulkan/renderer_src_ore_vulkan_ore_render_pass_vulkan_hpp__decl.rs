@@ -17,9 +17,7 @@ use std::rc::{Rc, Weak as RcWeak};
 
 pub(crate) struct ResolveTarget {
     pub(crate) image: vk::Image,
-    pub(crate) baseMip: u32,
-    pub(crate) baseLayer: u32,
-    pub(crate) layerCount: u32,
+    pub(crate) range: vk::ImageSubresourceRange,
     pub(crate) renderTarget: Option<RetainedRenderTargetVulkan>,
     pub(crate) texture: Option<AnyResourceHandle>,
 }
@@ -28,9 +26,7 @@ impl Default for ResolveTarget {
     fn default() -> Self {
         Self {
             image: vk::Image::null(),
-            baseMip: 0,
-            baseLayer: 0,
-            layerCount: 1,
+            range: vk::ImageSubresourceRange::default(),
             renderTarget: None,
             texture: None,
         }
@@ -49,15 +45,13 @@ pub(crate) struct RenderPassVulkanState {
     pub(crate) m_vkIndexType: vk::IndexType,
     pub(crate) m_vkIndexOffset: u32,
     pub(crate) m_vkColorImages: [vk::Image; 4],
-    pub(crate) m_vkColorBaseLayer: [u32; 4],
-    pub(crate) m_vkColorLayerCount: [u32; 4],
+    pub(crate) m_vkColorRanges: [vk::ImageSubresourceRange; 4],
     pub(crate) m_vkColorCount: u32,
     pub(crate) m_vkColorRenderTargets: [Option<RetainedRenderTargetVulkan>; 4],
     pub(crate) m_vkColorTextures: ManuallyDrop<[Option<AnyResourceHandle>; 4]>,
     pub(crate) m_vkResolveTargets: ManuallyDrop<[ResolveTarget; 4]>,
     pub(crate) m_vkDepthImage: vk::Image,
-    pub(crate) m_vkDepthBaseLayer: u32,
-    pub(crate) m_vkDepthLayerCount: u32,
+    pub(crate) m_vkDepthRange: vk::ImageSubresourceRange,
     pub(crate) m_vkDepthTexture: ManuallyDrop<Option<AnyResourceHandle>>,
     pub(crate) m_vkStencilRef: u32,
 }
@@ -75,8 +69,7 @@ impl RenderPassVulkanState {
             m_vkIndexType: vk::IndexType::UINT16,
             m_vkIndexOffset: 0,
             m_vkColorImages: [vk::Image::null(); 4],
-            m_vkColorBaseLayer: [0; 4],
-            m_vkColorLayerCount: [0; 4],
+            m_vkColorRanges: [vk::ImageSubresourceRange::default(); 4],
             m_vkColorCount: 0,
             m_vkColorRenderTargets: std::array::from_fn(|_| None),
             m_vkColorTextures: ManuallyDrop::new(std::array::from_fn(|_| None)),
@@ -84,8 +77,7 @@ impl RenderPassVulkanState {
                 ResolveTarget::default()
             })),
             m_vkDepthImage: vk::Image::null(),
-            m_vkDepthBaseLayer: 0,
-            m_vkDepthLayerCount: 1,
+            m_vkDepthRange: vk::ImageSubresourceRange::default(),
             m_vkDepthTexture: ManuallyDrop::new(None),
             m_vkStencilRef: 0,
         }

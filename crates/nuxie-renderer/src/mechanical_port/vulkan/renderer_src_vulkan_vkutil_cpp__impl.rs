@@ -42,7 +42,8 @@ pub(crate) fn string_from_vk_result(result: vk::Result) -> &'static str {
 }
 
 pub(crate) fn vkReportError(result: vk::Result, file: &str, line: u32) -> bool {
-    if result == vk::Result::SUCCESS { return true; }
+    // Positive statuses, including SUBOPTIMAL_KHR, are successful operations.
+    if result.as_raw() >= 0 { return true; }
     eprintln!("{file}:{line}: vulkan error: {} ({})", string_from_vk_result(result), result.as_raw());
     false
 }

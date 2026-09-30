@@ -1768,6 +1768,10 @@ impl ContextMetal {
     // ============================================================================
 
     pub fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        <Self as ContextApi>::makeTextureView(self, desc)
+    }
+
+    pub fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         self.mtlMakeTextureView(desc)
     }
 
@@ -2025,8 +2029,8 @@ impl ContextApi for ContextMetal {
         ContextMetal::makeTexture(self, desc)
     }
 
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
-        ContextMetal::makeTextureView(self, desc)
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        ContextMetal::makeTextureViewImpl(self, desc)
     }
 
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {

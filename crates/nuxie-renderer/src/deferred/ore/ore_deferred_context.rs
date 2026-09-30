@@ -354,7 +354,7 @@ impl ContextApi for DeferredOreContext {
             .erase(),
         )
     }
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         let a = self.alloc();
         let texture = self.handleFor(desc.texture);
         recordMakeTextureView(

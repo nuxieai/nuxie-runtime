@@ -90,8 +90,8 @@ impl TextureApi for TextureGL {
     fn isRenderTarget(&self) -> bool {
         self.base.isRenderTarget()
     }
-    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
-        super::ore_texture_gl_impl::upload(self, data)
+    fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+        super::ore_texture_gl_impl::uploadImpl(self, data)
     }
 }
 

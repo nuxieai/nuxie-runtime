@@ -1754,8 +1754,8 @@ fn beginRenderPassCurrent(
     submit(context, GLCommand::BindVertexArray(state.m_glVAO));
 
     let (defaultWidth, defaultHeight) = colors[0]
-        .map(|(_, texture)| (texture.width(), texture.height()))
-        .or_else(|| depth.map(|(_, texture)| (texture.width(), texture.height())))
+        .map(|(view, _)| (view.base.width(), view.base.height()))
+        .or_else(|| depth.map(|(view, _)| (view.base.width(), view.base.height())))
         .unwrap_or((0, 0));
     if defaultWidth > 0 && defaultHeight > 0 {
         submit(
@@ -1908,7 +1908,11 @@ pub(crate) fn makeTexture(
     withCurrentContext(context, |context| makeTextureCurrent(context, desc))
 }
 
-pub(crate) fn makeTextureView(
+pub(crate) fn makeTextureView(context: &mut ContextGL, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+    ContextApi::makeTextureView(context, desc)
+}
+
+pub(crate) fn makeTextureViewImpl(
     context: &mut ContextGL,
     desc: &TextureViewDesc<'_>,
 ) -> Option<AnyResourceHandle> {
@@ -2026,8 +2030,8 @@ impl ContextApi for ContextGL {
         makeTexture(self, desc)
     }
 
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
-        makeTextureView(self, desc)
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        makeTextureViewImpl(self, desc)
     }
 
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
@@ -2095,7 +2099,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 51369] = [(); PINNED_SOURCE.len()];
+const _: [(); 51329] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2956,9 +2960,9 @@ mod tests {
         clearTrace(&state);
 
         let result = textureOwner.upload(&nuxie_ore_metal::types::TextureDataDesc {
-            data: Some(&[0; 15]),
+            data: Some(&[0; 31]),
             bytesPerRow: 8,
-            rowsPerImage: 2,
+            rowsPerImage: 4,
             width: 4,
             height: 4,
             ..nuxie_ore_metal::types::TextureDataDesc::default()
@@ -2966,8 +2970,8 @@ mod tests {
         assert_eq!(
             result,
             Err(nuxie_ore_metal::texture::TextureUploadError::DataTooShort {
-                required: 16,
-                actual: 15,
+                required: 32,
+                actual: 31,
             })
         );
         let trace = state.borrow();

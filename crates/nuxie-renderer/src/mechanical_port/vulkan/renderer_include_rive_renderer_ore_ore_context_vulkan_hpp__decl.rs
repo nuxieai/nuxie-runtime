@@ -126,8 +126,7 @@ pub(crate) struct DescriptorSetAllocation {
 
 pub(crate) struct VkPendingImageTransition {
     pub(crate) texture: AnyResourceHandle,
-    pub(crate) aspectMask: vk::ImageAspectFlags,
-    pub(crate) oldLayout: vk::ImageLayout,
+    pub(crate) range: vk::ImageSubresourceRange,
     pub(crate) newLayout: vk::ImageLayout,
 }
 
@@ -179,11 +178,11 @@ impl ContextVulkan {
     pub(crate) fn vkQueueTransitionToLayout(
         &mut self,
         texture: &AnyResourceHandle,
-        aspectMask: vk::ImageAspectFlags,
+        range: vk::ImageSubresourceRange,
         newLayout: vk::ImageLayout,
     ) {
         super::ore_context_vulkan_impl::vkQueueTransitionToLayout(
-            self, texture, aspectMask, newLayout,
+            self, texture, range, newLayout,
         )
     }
 
@@ -248,7 +247,7 @@ impl ContextVulkan {
         &mut self,
         desc: &TextureViewDesc<'_>,
     ) -> Option<AnyResourceHandle> {
-        super::ore_context_vulkan_impl::makeTextureView(self, desc)
+        nuxie_ore_metal::context::ContextApi::makeTextureView(self, desc)
     }
 
     pub(crate) fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {

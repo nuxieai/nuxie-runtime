@@ -421,7 +421,11 @@ pub(crate) fn makeTexture(
     Some(ResourceHandle::new_texture_in_domain(Some(manager), domain, texture).erase())
 }
 
-pub(crate) fn makeTextureView(
+pub(crate) fn makeTextureView(context: &mut ContextWGPU, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+    ContextApi::makeTextureView(context, desc)
+}
+
+pub(crate) fn makeTextureViewImpl(
     context: &mut ContextWGPU,
     desc: &TextureViewDesc<'_>,
 ) -> Option<AnyResourceHandle> {
@@ -1261,8 +1265,8 @@ impl ContextApi for ContextWGPU {
     fn makeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         makeTexture(self, desc)
     }
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
-        makeTextureView(self, desc)
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        makeTextureViewImpl(self, desc)
     }
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         makeSampler(self, desc)
@@ -1321,7 +1325,7 @@ impl ContextApi for ContextWGPU {
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 16;
 pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 21;
-const _: [(); 47166] = [(); PINNED_SOURCE.len()];
+const _: [(); 47170] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

@@ -127,7 +127,7 @@ pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 20;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
 pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 5;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
-const _: [(); 3796] = [(); PINNED_SOURCE.len()];
+const _: [(); 3800] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

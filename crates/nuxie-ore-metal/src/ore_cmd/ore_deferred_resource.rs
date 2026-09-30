@@ -242,7 +242,7 @@ impl TextureApi for DeferredTexture {
     fn isRenderTarget(&self) -> bool {
         self.base.isRenderTarget()
     }
-    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+    fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
         self.deferred
             .withStream(|s| recordTextureUpload(s, self.clientHandle(), data));
         Ok(())

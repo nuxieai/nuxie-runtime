@@ -1,0 +1,24 @@
+provenance_schema=1
+renderer_implementation=cpp-native-metal-pristine-upstream
+capture_tool=upstream-gms
+build_command=PREMAKE_PATH=<upstream>/build premake5 gmake2 --config=release --out=out/14-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/14-gms-text-canvas -j8 gms
+capture_command=MTL_DEBUG_LAYER=1 tests/out/14-gms-text-canvas/gms --backend metal --headless --match ore_mip_render_target --output <capture-dir> -p1 --verbose
+backend=metal
+adapter_vendor=apple
+adapter_device=Apple M5 Max
+adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
+case_id=ore_mip_render_target
+gm_source=tests/gm/ore_mip_render_target.cpp
+gm_source_sha256=a9ef4719ce70fbe73f10c423e58f3214b417a8594e2aa3472536aaccb1cc89ba
+runtime_revision=14bdbfaf603065435cd8393cef3ca5a47b4cf80b
+metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
+xcode_version=27.0
+xcode_build=27A266a
+capture_binary_sha256=defac1a8422aa0efb418a3e1a34e9935bef892a55ffee9886cf0582d1d75f7ec
+png_sha256=414b8ee031cbe438394a7ddead3a677212cf6f37633ad1925ced78387617c04f
+frame=0
+frame_width=256
+frame_height=256
+mode=raster-ordering
+shader_compilation_mode=always-synchronous
+sample_count=1

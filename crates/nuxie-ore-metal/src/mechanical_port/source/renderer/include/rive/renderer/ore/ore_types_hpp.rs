@@ -508,6 +508,7 @@ impl Default for TextureViewDesc<'_> {
 #[derive(Clone, Copy)]
 pub struct TextureDataDesc<'a> {
     pub data: Option<&'a [u8]>,
+    pub dataSize: u32,
     pub bytesPerRow: u32,
     pub rowsPerImage: u32,
     pub mipLevel: u32,
@@ -524,6 +525,7 @@ impl Default for TextureDataDesc<'_> {
     fn default() -> Self {
         Self {
             data: None,
+            dataSize: 0,
             bytesPerRow: 0,
             rowsPerImage: 0,
             mipLevel: 0,
@@ -1417,6 +1419,7 @@ pub mod raw_abi {
     #[derive(Clone, Copy)]
     pub struct TextureDataDesc {
         pub data: *const c_void,
+        pub dataSize: u32,
         pub bytesPerRow: u32,
         pub rowsPerImage: u32,
         pub mipLevel: u32,
@@ -1431,7 +1434,7 @@ pub mod raw_abi {
 
     impl TextureDataDesc {
         /// `byte_count` is supplied by the caller because the pinned C++
-        /// aggregate intentionally carries only a pointer, not its span size.
+        /// aggregate may leave dataSize zero to skip the source size check.
         pub unsafe fn borrow<'a>(
             &self,
             byte_count: usize,
@@ -1444,6 +1447,7 @@ pub mod raw_abi {
             };
             Ok(super::TextureDataDesc {
                 data,
+                dataSize: self.dataSize,
                 bytesPerRow: self.bytesPerRow,
                 rowsPerImage: self.rowsPerImage,
                 mipLevel: self.mipLevel,

@@ -142,7 +142,7 @@ pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
 pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 15;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
 pub(crate) const RUST_EXECUTION_SIDECAR_COUNT: usize = 1;
-const _: [(); 4754] = [(); PINNED_SOURCE.len()];
+const _: [(); 4758] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

@@ -363,10 +363,17 @@ pub(super) fn firstUseLoadOp(view: &TextureViewVulkan, loadOp: LoadOp) -> LoadOp
     }
 }
 
+fn sameRange(a: vk::ImageSubresourceRange, b: vk::ImageSubresourceRange) -> bool {
+    a.base_mip_level == b.base_mip_level
+        && a.level_count == b.level_count
+        && a.base_array_layer == b.base_array_layer
+        && a.layer_count == b.layer_count
+}
+
 pub(crate) fn vkQueueTransitionToLayout(
     context: &mut ContextVulkan,
     texture: &AnyResourceHandle,
-    aspectMask: vk::ImageAspectFlags,
+    range: vk::ImageSubresourceRange,
     newLayout: vk::ImageLayout,
 ) {
     let Some(vk_texture) = texture.downcast_ref::<TextureVulkan>() else {
@@ -378,9 +385,9 @@ pub(crate) fn vkQueueTransitionToLayout(
     if let Some(existing) = context
         .m_vkPendingInitialTransitions
         .iter_mut()
-        .find(|existing| existing.texture.ptr_eq(texture))
+        .find(|existing| existing.texture.ptr_eq(texture) && sameRange(existing.range, range))
     {
-        existing.aspectMask |= aspectMask;
+        existing.range.aspect_mask |= range.aspect_mask;
         existing.newLayout = newLayout;
         return;
     }
@@ -388,8 +395,7 @@ pub(crate) fn vkQueueTransitionToLayout(
         .m_vkPendingInitialTransitions
         .push(VkPendingImageTransition {
             texture: texture.clone(),
-            aspectMask,
-            oldLayout: vk_texture.m_vkLayout.get(),
+            range,
             newLayout,
         });
 }
@@ -422,15 +428,14 @@ pub(crate) fn vkFlushPendingInitialTransitions(context: &mut ContextVulkan) {
                 .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                 .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                 .image(texture.m_vkImage)
-                .subresource_range(vk::ImageSubresourceRange {
-                    aspect_mask: pending.aspectMask,
-                    base_mip_level: 0,
-                    level_count: vk::REMAINING_MIP_LEVELS,
-                    base_array_layer: 0,
-                    layer_count: vk::REMAINING_ARRAY_LAYERS,
-                }),
+                .subresource_range(pending.range),
         );
-        texture.m_vkLayout.set(pending.newLayout);
+    }
+    // All barriers in this batch leave the pre-batch layout.
+    for pending in &context.m_vkPendingInitialTransitions {
+        if let Some(texture) = pending.texture.downcast_ref::<TextureVulkan>() {
+            texture.m_vkLayout.set(pending.newLayout);
+        }
     }
     if !barriers.is_empty() {
         unsafe {
@@ -740,7 +745,7 @@ pub(crate) fn makeTexture(
     Some(ResourceHandle::new_texture_with_installed_manager_in_domain(domain, texture).erase())
 }
 
-pub(crate) fn makeTextureView(
+pub(crate) fn makeTextureViewImpl(
     context: &mut ContextVulkan,
     desc: &TextureViewDesc<'_>,
 ) -> Option<AnyResourceHandle> {
@@ -775,20 +780,17 @@ pub(crate) fn makeTextureView(
         .subresource_range(vk::ImageSubresourceRange {
             aspect_mask,
             base_mip_level: desc.baseMipLevel,
-            level_count: if desc.mipCount > 0 {
-                desc.mipCount
-            } else {
-                vk::REMAINING_MIP_LEVELS
-            },
+            level_count: desc.mipCount,
             base_array_layer: desc.baseLayer,
-            layer_count: if desc.layerCount > 0 {
-                desc.layerCount
-            } else {
-                vk::REMAINING_ARRAY_LAYERS
-            },
+            layer_count: desc.layerCount,
         });
-    view.m_vkImageView = unsafe { context.m_vk.m_ashDevice.create_image_view(&view_info, None) }
-        .unwrap_or(vk::ImageView::null());
+    view.m_vkImageView = match unsafe { context.m_vk.m_ashDevice.create_image_view(&view_info, None) } {
+        Ok(view) => view,
+        Err(_) => {
+            context.setLastError("makeTextureView: vkCreateImageView failed");
+            return None;
+        }
+    };
     view.m_vkDestroyImageView = Some(context.m_vk.m_ashDevice.fp_v1_0().destroy_image_view);
     Some(ResourceHandle::new_with_installed_manager_in_domain(domain, view).erase())
 }
@@ -1077,7 +1079,13 @@ pub(crate) fn makeBindGroup(
         }
         context.vkQueueTransitionToLayout(
             base_texture_handle,
-            aspect,
+            vk::ImageSubresourceRange {
+                aspect_mask: aspect,
+                base_mip_level: 0,
+                level_count: vk::REMAINING_MIP_LEVELS,
+                base_array_layer: 0,
+                layer_count: vk::REMAINING_ARRAY_LAYERS,
+            },
             vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
         );
         bg.m_imageWrites.push(ImageWrite {
@@ -1184,27 +1192,27 @@ pub(crate) fn beginRenderPass(
                 state.m_vkResolveTargets[index].texture = Some(resolveTextureHandle.clone());
                 resolveTexture.vkMarkWritten(resolveView.baseMipLevel(), resolveView.baseLayer());
             }
-            state.m_vkResolveTargets[index].baseMip = resolveView.baseMipLevel();
-            state.m_vkResolveTargets[index].baseLayer = resolveView.baseLayer();
-            state.m_vkResolveTargets[index].layerCount = resolveView.layerCount();
+            state.m_vkResolveTargets[index].range =
+                resolveView.vkAttachmentRange(vk::ImageAspectFlags::COLOR);
             state.m_vkResolveTargets[index].renderTarget = resolveView.m_vkRenderTarget.clone();
         }
         if key.sampleCount == 1 {
             key.sampleCount = texture.sampleCount();
         }
-        passWidth = texture.width();
-        passHeight = texture.height();
+        if index == 0 {
+            passWidth = view.width();
+            passHeight = view.height();
+        }
         attachmentViews[attachmentCount] = view.m_vkImageView;
         attachmentCount += 1;
         state.m_vkColorImages[index] = texture.m_vkImage;
-        state.m_vkColorBaseLayer[index] = view.baseLayer();
-        state.m_vkColorLayerCount[index] = view.layerCount();
+        state.m_vkColorRanges[index] = view.vkAttachmentRange(vk::ImageAspectFlags::COLOR);
         state.m_vkColorRenderTargets[index] = view.m_vkRenderTarget.clone();
         state.m_vkColorTextures[index] = Some(textureHandle.clone());
         if key.colorLoadOps[index] == LoadOp::load {
             context.vkQueueTransitionToLayout(
                 textureHandle,
-                vk::ImageAspectFlags::COLOR,
+                state.m_vkColorRanges[index],
                 vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
             );
         }
@@ -1236,23 +1244,26 @@ pub(crate) fn beginRenderPass(
         attachmentViews[attachmentCount] = depthView.m_vkImageView;
         attachmentCount += 1;
         state.m_vkDepthImage = depthTexture.m_vkImage;
-        state.m_vkDepthBaseLayer = depthView.baseLayer();
-        state.m_vkDepthLayerCount = depthView.layerCount();
+        // Strict drivers require stencil in the barrier when present.
+        state.m_vkDepthRange = depthView.vkAttachmentRange(
+            vk::ImageAspectFlags::DEPTH
+                | if hasStencilLocal(depthTexture.format()) {
+                    vk::ImageAspectFlags::STENCIL
+                } else {
+                    vk::ImageAspectFlags::empty()
+                },
+        );
         *state.m_vkDepthTexture = Some(depthTextureHandle.clone());
         if key.depthLoadOp == LoadOp::load {
-            let mut aspect = vk::ImageAspectFlags::DEPTH;
-            if hasStencilLocal(depthTexture.format()) {
-                aspect |= vk::ImageAspectFlags::STENCIL;
-            }
             context.vkQueueTransitionToLayout(
                 depthTextureHandle,
-                aspect,
+                state.m_vkDepthRange,
                 vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             );
         }
         if passWidth == 0 {
-            passWidth = depthTexture.width();
-            passHeight = depthTexture.height();
+            passWidth = depthView.width();
+            passHeight = depthView.height();
         }
     }
     nuxie_ore_metal::render_pass_install_attachment_metadata(
@@ -1503,8 +1514,8 @@ impl ContextApi for ContextVulkan {
     fn makeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         ContextVulkan::makeTexture(self, desc)
     }
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
-        ContextVulkan::makeTextureView(self, desc)
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        makeTextureViewImpl(self, desc)
     }
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         ContextVulkan::makeSampler(self, desc)

@@ -173,7 +173,7 @@ impl ContextApi for LiveStubContext {
     fn makeTexture(&mut self, _: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         None
     }
-    fn makeTextureView(&mut self, _: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+    fn makeTextureViewImpl(&mut self, _: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
         None
     }
     fn makeSampler(&mut self, _: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {

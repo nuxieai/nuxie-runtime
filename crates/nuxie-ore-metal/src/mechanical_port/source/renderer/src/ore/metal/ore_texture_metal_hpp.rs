@@ -99,7 +99,7 @@ impl TextureMetal {
     // Rust's default drop glue releases the retained native texture owner
     // before the remaining source-shaped fields.
 
-    // void upload(const TextureDataDesc& data) override;
+    // void uploadImpl(const TextureDataDesc& data) override;
     // The paired ore_texture_metal.mm translation owns the complete upload
     // implementation. The source borrowed descriptor remains explicit there.
 
@@ -246,6 +246,7 @@ mod tests {
     fn upload_desc<'a>(data: &'a [u8]) -> TextureDataDesc<'a> {
         TextureDataDesc {
             data: Some(data),
+            dataSize: data.len() as u32,
             bytesPerRow: 16,
             rowsPerImage: 4,
             mipLevel: 2,
@@ -333,6 +334,7 @@ mod tests {
         texture
             .upload(&TextureDataDesc {
                 data: Some(&[1, 2, 3, 4]),
+                dataSize: 4,
                 bytesPerRow: 4,
                 rowsPerImage: 1,
                 mipLevel: 0,

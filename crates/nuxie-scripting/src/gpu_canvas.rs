@@ -455,24 +455,14 @@ impl UserData for GpuTexture {
                             .get::<Option<String>>("dimension")?
                             .unwrap_or_else(|| default_dimension.into()),
                         descriptor.get::<Option<u32>>("baseMipLevel")?.unwrap_or(0),
-                        descriptor
-                            .get::<Option<u32>>("mipCount")?
-                            .unwrap_or(this.mip_level_count),
+                        descriptor.get::<Option<u32>>("mipCount")?.unwrap_or(0),
                         descriptor.get::<Option<u32>>("baseLayer")?.unwrap_or(0),
-                        descriptor
-                            .get::<Option<u32>>("layerCount")?
-                            .unwrap_or(this.depth_or_array_layers),
+                        descriptor.get::<Option<u32>>("layerCount")?.unwrap_or(0),
                     )
                 } else {
-                    (
-                        default_dimension.into(),
-                        0,
-                        this.mip_level_count,
-                        0,
-                        this.depth_or_array_layers,
-                    )
+                    (default_dimension.into(), 0, 0, 0, 0)
                 };
-            validate_texture_view(
+            let (mip_level_count, array_layer_count) = validate_texture_view(
                 this,
                 &dimension,
                 base_mip_level,
@@ -508,72 +498,50 @@ impl UserData for GpuTexture {
                 ],
                 "GPUTexture upload",
             )?;
-            if this.sample_count != 1 {
-                return Err(Error::runtime(
-                    "GPUTexture:upload cannot write a multisampled texture",
-                ));
-            }
             let data: LuaBuffer = descriptor.get("data")?;
-            let mip_level = descriptor.get::<Option<u32>>("mipLevel")?.unwrap_or(0);
-            if mip_level >= this.mip_level_count {
-                return Err(Error::runtime(format!(
-                    "upload mipLevel {mip_level} is outside {} levels",
-                    this.mip_level_count
-                )));
-            }
-            let mip_width = (this.width >> mip_level).max(1);
-            let mip_height = (this.height >> mip_level).max(1);
-            let width = descriptor.get::<Option<u32>>("width")?.unwrap_or(mip_width);
-            let height = descriptor
-                .get::<Option<u32>>("height")?
-                .unwrap_or(mip_height);
-            let depth = descriptor.get::<Option<u32>>("depth")?.unwrap_or(1);
-            let x = descriptor.get::<Option<u32>>("x")?.unwrap_or(0);
-            let y = descriptor.get::<Option<u32>>("y")?.unwrap_or(0);
-            let z = descriptor.get::<Option<u32>>("z")?.unwrap_or(0);
-            let array_layer = descriptor.get::<Option<u32>>("layer")?.unwrap_or(0);
-            if x.checked_add(width).is_none_or(|end| end > mip_width)
-                || y.checked_add(height).is_none_or(|end| end > mip_height)
-                || array_layer >= this.depth_or_array_layers
-            {
-                return Err(Error::runtime("GPUTexture upload region is out of bounds"));
-            }
-            let bytes_per_texel =
-                texture_format_bytes_per_texel(&this.format).ok_or_else(|| {
-                    Error::runtime(
-                        "GPUTexture upload requires bytesPerRow for a block-compressed format",
-                    )
-                })?;
-            let bytes_per_row = descriptor
-                .get::<Option<u32>>("bytesPerRow")?
-                .unwrap_or_else(|| width.saturating_mul(bytes_per_texel));
-            let rows_per_image = descriptor
-                .get::<Option<u32>>("rowsPerImage")?
-                .unwrap_or(height);
-            let required_bytes = usize::try_from(bytes_per_row)
-                .ok()
-                .and_then(|bytes| bytes.checked_mul(rows_per_image as usize))
-                .and_then(|bytes| bytes.checked_mul(depth.max(1) as usize))
-                .ok_or_else(|| Error::runtime("GPUTexture upload byte length overflow"))?;
-            if data.len() < required_bytes {
-                return Err(Error::runtime(format!(
-                    "GPUTexture upload has {} bytes but requires {required_bytes}",
-                    data.len()
-                )));
-            }
-            this.uploads.borrow_mut().push(GpuCanvasTextureUpload {
-                bytes: data.to_vec(),
-                width,
-                height,
-                depth,
-                x,
-                y,
-                z,
-                mip_level,
-                array_layer,
-                bytes_per_row,
-                rows_per_image,
-            });
+            let bytes = data.to_vec();
+            let texture_desc = nuxie_ore_metal::types::TextureDesc {
+                width: this.width,
+                height: this.height,
+                depthOrArrayLayers: this.depth_or_array_layers,
+                format: ore::texture_format_for_host(&this.format)?,
+                r#type: ore::texture_type_for_host(&this.texture_type)?,
+                renderTarget: this.render_target,
+                numMipmaps: this.mip_level_count,
+                sampleCount: this.sample_count,
+                label: None,
+            };
+            let data_desc = nuxie_ore_metal::types::TextureDataDesc {
+                data: Some(&bytes),
+                dataSize: bytes.len() as u32,
+                mipLevel: descriptor.get::<Option<u32>>("mipLevel")?.unwrap_or(0),
+                layer: descriptor.get::<Option<u32>>("layer")?.unwrap_or(0),
+                x: descriptor.get::<Option<u32>>("x")?.unwrap_or(0),
+                y: descriptor.get::<Option<u32>>("y")?.unwrap_or(0),
+                z: descriptor.get::<Option<u32>>("z")?.unwrap_or(0),
+                width: descriptor.get::<Option<u32>>("width")?.unwrap_or(0),
+                height: descriptor.get::<Option<u32>>("height")?.unwrap_or(0),
+                depth: descriptor.get::<Option<u32>>("depth")?.unwrap_or(1),
+                bytesPerRow: descriptor.get::<Option<u32>>("bytesPerRow")?.unwrap_or(0),
+                rowsPerImage: descriptor.get::<Option<u32>>("rowsPerImage")?.unwrap_or(0),
+            };
+            let data_desc =
+                nuxie_ore_metal::texture::normalizeTextureUploadForDesc(&texture_desc, &data_desc)
+                    .map_err(|error| Error::runtime(error.to_string()))?;
+            let upload = GpuCanvasTextureUpload {
+                width: data_desc.width,
+                height: data_desc.height,
+                depth: data_desc.depth,
+                x: data_desc.x,
+                y: data_desc.y,
+                z: data_desc.z,
+                mip_level: data_desc.mipLevel,
+                array_layer: data_desc.layer,
+                bytes_per_row: data_desc.bytesPerRow,
+                rows_per_image: data_desc.rowsPerImage,
+                bytes,
+            };
+            this.uploads.borrow_mut().push(upload);
             Ok(())
         });
     }
@@ -586,41 +554,39 @@ fn validate_texture_view(
     mip_level_count: u32,
     base_array_layer: u32,
     array_layer_count: u32,
-) -> Result<()> {
-    if !matches!(dimension, "2d" | "cube" | "3d" | "2d-array") {
-        return Err(Error::runtime(format!(
-            "invalid GPUTextureView dimension '{dimension}'"
-        )));
-    }
-    if mip_level_count == 0
-        || base_mip_level
-            .checked_add(mip_level_count)
-            .is_none_or(|end| end > texture.mip_level_count)
-        || array_layer_count == 0
-        || base_array_layer
-            .checked_add(array_layer_count)
-            .is_none_or(|end| end > texture.depth_or_array_layers)
-    {
-        return Err(Error::runtime("GPUTexture view range is out of bounds"));
-    }
-    if dimension == "cube" && array_layer_count != 6 {
-        return Err(Error::runtime(
-            "GPUTexture cube views require exactly six array layers",
-        ));
-    }
-    Ok(())
-}
-
-fn texture_format_bytes_per_texel(format: &str) -> Option<u32> {
-    match format {
-        "r8unorm" => Some(1),
-        "rg8unorm" | "r16float" => Some(2),
-        "rgba8unorm" | "bgra8unorm" | "rg16float" | "rgb10a2unorm" | "rg11b10ufloat"
-        | "depth32float" => Some(4),
-        "rgba16float" | "rg32float" => Some(8),
-        "rgba32float" => Some(16),
-        _ => None,
-    }
+) -> Result<(u32, u32)> {
+    use nuxie_ore_metal::types::{TextureViewDesc, TextureViewDimension};
+    let dimension = match dimension {
+        "2d" => TextureViewDimension::texture2D,
+        "cube" => TextureViewDimension::cube,
+        "3d" => TextureViewDimension::texture3D,
+        "2d-array" => TextureViewDimension::array2D,
+        _ => {
+            return Err(Error::runtime(format!(
+                "invalid GPUTextureView dimension '{dimension}'"
+            )));
+        }
+    };
+    // This collector owns the texture metadata; actual ORE resource existence
+    // is checked by ContextApi, while the range normalization is shared here.
+    let desc = nuxie_ore_metal::context::normalizeTextureView(
+        &TextureViewDesc {
+            dimension,
+            baseMipLevel: base_mip_level,
+            mipCount: mip_level_count,
+            baseLayer: base_array_layer,
+            layerCount: array_layer_count,
+            ..TextureViewDesc::default()
+        },
+        texture.mip_level_count,
+        match texture.texture_type.as_str() {
+            "cube" => 6,
+            "2d-array" => texture.depth_or_array_layers,
+            _ => 1,
+        },
+    )
+    .map_err(Error::runtime)?;
+    Ok((desc.mipCount, desc.layerCount))
 }
 
 fn checked_gpu_buffer_write_range(
@@ -2391,10 +2357,7 @@ pub(crate) fn enter_script_call_gpu_scope(lua: &luaur_rt::Lua) -> ScriptCallGpuS
     }
 }
 
-pub(crate) fn close_orphan_render_pass(
-    bindings: &RendererBindings,
-    token: u64,
-) -> Result<bool> {
+pub(crate) fn close_orphan_render_pass(bindings: &RendererBindings, token: u64) -> Result<bool> {
     ore::close_orphan_render_pass(bindings, token)
 }
 

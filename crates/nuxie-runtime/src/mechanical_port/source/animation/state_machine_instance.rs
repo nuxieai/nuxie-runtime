@@ -1261,6 +1261,13 @@ fn component_is_collapsed(component: &CoreHandle) -> bool {
         .expect("a hit target is a live Component")
 }
 
+fn component_is_hidden(component: &CoreHandle) -> bool {
+    component
+        .with(|component| component.as_drawable().map(|drawable| drawable.is_hidden()))
+        .flatten()
+        .expect("a nested or list hit target is a live Drawable")
+}
+
 fn nested_is_paused(component: &CoreHandle) -> bool {
     component
         .with(|component| {
@@ -1516,7 +1523,10 @@ impl HitComponent for HitNestedArtboard {
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+        if component_is_collapsed(&self.component)
+            || component_is_hidden(&self.component)
+            || nested_is_paused(&self.component)
+        {
             return false;
         }
         let Some(local) = nested_world_to_local(&self.component, position) else {
@@ -1532,7 +1542,10 @@ impl HitComponent for HitNestedArtboard {
     }
 
     fn hit_test_bounded(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+        if component_is_collapsed(&self.component)
+            || component_is_hidden(&self.component)
+            || nested_is_paused(&self.component)
+        {
             return false;
         }
         let Some(local) = nested_world_to_local(&self.component, position) else {
@@ -1557,7 +1570,10 @@ impl HitComponent for HitNestedArtboard {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+        if component_is_collapsed(&self.component)
+            || component_is_hidden(&self.component)
+            || nested_is_paused(&self.component)
+        {
             return HitResult::None;
         }
         let Some(local) = nested_world_to_local(&self.component, position) else {
@@ -1630,7 +1646,7 @@ impl HitComponent for HitComponentList {
     }
 
     fn hit_test(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) {
+        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
@@ -1648,7 +1664,7 @@ impl HitComponent for HitComponentList {
     }
 
     fn hit_test_bounded(&self, position: Vec2D) -> bool {
-        if component_is_collapsed(&self.component) {
+        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
@@ -1674,7 +1690,7 @@ impl HitComponent for HitComponentList {
         timestamp: f32,
         pointer_id: i32,
     ) -> HitResult {
-        if component_is_collapsed(&self.component) {
+        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
             return HitResult::None;
         }
         let mut result = HitResult::None;

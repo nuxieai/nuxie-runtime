@@ -1,5 +1,6 @@
 //! One-for-one ports of
-//! `tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp`.
+//! `tests/unit_tests/runtime/scripting/scripting_wake_advance_test.cpp` and
+//! `scripting_drawable_pointer_type_test.cpp` (167932b7).
 #![cfg(all(
     feature = "luau",
     feature = "compiler",
@@ -80,6 +81,124 @@ end
 const ADVANCES: u32 = 1 << 0;
 const WANTS_POINTER_DOWN: u32 = 1 << 3;
 const WANTS_KEYBOARD_INPUT: u32 = 1 << 16;
+
+const POINTER_TYPE_SCRIPT: &str = r#"type MyDrawing = {}
+local lastHandler = ''
+local lastType = ''
+local lastTimeStamp = -1
+
+local function record(handler: string, event: PointerEvent)
+  lastHandler = handler
+  lastType = event.type
+  lastTimeStamp = event.timeStamp
+end
+
+function init(self: MyDrawing, context: Context): boolean
+  return true
+end
+
+function pointerDown(self: MyDrawing, event: PointerEvent)
+  record('pointerDown', event)
+end
+
+function pointerMove(self: MyDrawing, event: PointerEvent)
+  record('pointerMove', event)
+end
+
+function pointerUp(self: MyDrawing, event: PointerEvent)
+  record('pointerUp', event)
+end
+
+function pointerExit(self: MyDrawing, event: PointerEvent)
+  record('pointerExit', event)
+end
+
+function getLastHandler(): string
+  return lastHandler
+end
+
+function getLastType(): string
+  return lastType
+end
+
+function getLastTimeStamp(): number
+  return lastTimeStamp
+end
+
+return function(): Node<MyDrawing>
+  return {
+    init = init,
+    pointerDown = pointerDown,
+    pointerMove = pointerMove,
+    pointerUp = pointerUp,
+    pointerExit = pointerExit,
+  }
+end
+"#;
+
+#[test]
+fn scripted_drawable_pointer_events_report_their_type_and_timestamp() {
+    let fixture = WakeFixture::with_source(
+        (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6),
+        POINTER_TYPE_SCRIPT,
+    );
+    let hit = HitScriptedDrawable::new(fixture.drawable.clone());
+    for (position, hit_type, can_hit, timestamp, expected) in [
+        (
+            Vec2D::new(1.0, 1.0),
+            ListenerType::Down,
+            true,
+            1.5,
+            "pointerDown",
+        ),
+        (
+            Vec2D::new(2.0, 1.0),
+            ListenerType::Move,
+            true,
+            2.25,
+            "pointerMove",
+        ),
+        (
+            Vec2D::new(2.0, 1.0),
+            ListenerType::Up,
+            true,
+            3.0,
+            "pointerUp",
+        ),
+        (
+            Vec2D::new(2.0, 1.0),
+            ListenerType::Move,
+            false,
+            4.0,
+            "pointerExit",
+        ),
+    ] {
+        fixture.machine.with_instance_mut(|machine| {
+            hit.process_event(machine, position, hit_type, can_hit, timestamp, 0);
+        });
+        assert_eq!(
+            fixture
+                .program
+                .upstream_test_module_string_getter("getLastHandler")
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            fixture
+                .program
+                .upstream_test_module_string_getter("getLastType")
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            fixture
+                .program
+                .upstream_test_module_f32_getter("getLastTimeStamp")
+                .unwrap(),
+            timestamp
+        );
+    }
+}
 
 struct WakeFixture {
     _vm: RuntimeScriptingVmHandle,
@@ -163,7 +282,10 @@ impl WakeFixture {
                     .as_scripted_drawable()
                     .expect("scripted drawable owner");
                 assert!(!drawable.base.base.base.base.base.is_collapsed());
-                assert!(drawable.scripted.advances());
+                assert_eq!(
+                    drawable.scripted.advances(),
+                    implemented_methods & ADVANCES != 0
+                );
             })
             .expect("scripted drawable remains live");
         Self {

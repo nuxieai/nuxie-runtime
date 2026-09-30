@@ -7,17 +7,17 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8ff564a3fcd233a316ac8c827b8aaf82674c5b80`
+- LAST_SYNCED_SHA: `167932b72bc6e08791057dfa04d3c18aa51c7f32`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` (refreshed 2026-09-30 after PR #872 merged).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 10 upstream commits after the checkpoint at this fetched target.
-  All 158 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (180 after `5892bb05`); this
+  There are 9 upstream commits after the checkpoint at this fetched target.
+  All 159 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (181 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
-  is green. Continue oldest-first with `167932b7`, then refresh again at catch-up.
+  is green. Continue oldest-first with `ea030d1b`, then refresh again at catch-up.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -43,6 +43,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `167932b72bc6e08791057dfa04d3c18aa51c7f32` | Carry actual listener type and host timestamp through the scripted drawable/native Luau pointer dispatch; force Exit for an occluded target while preserving zero previous-position, pointer narrowing, hit result and wake behavior. Port the complete upstream script/four-event regression through the live owner route, retaining the exact pointer-only method mask. Independent source and separate Rust-integration reviews are clean. Scripting library: 324 pass/one existing ignored; 17 listener/wake integration tests pass including the new case; wasm32 WebGPU/WebGL2/scripting compilation passes. Manifest tests pass 26; structural correspondence remains 1,054 mirrored/ten adapted; no corpus classification changes. Full Golden/Silver and hardware/pixel suites were not rerun. Wasm VM signature acceptance (upstream still discards the new fields at its guest ABI) remains deferred with execution. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `8ff564a3fcd233a316ac8c827b8aaf82674c5b80` | Measure skinned path reference winding from authored vertices/cubic controls through the bind-world transform before following bone mirroring. Preserve collapsed/mixed-pose fallback, area threshold, invalidation and the pinned fold-without-mirroring limitation. Add the complete folded-first-frame regression for both authored orientations. Independent source and separate Rust-integration reviews are clean. All 18 skinned-winding/paint/trim/nested-opacity tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; no Silver classification changes. Full Golden/Silver, GPU pixels and hardware coverage were not rerun for this narrow source fix. | — |
 | `9b958d4703c905c90cb6f311c2a7365d9877d230` | **DEFERRED WASM EXECUTION:** Remove AOT memory pregrowth at instantiation/tier swap and install WAMR on-demand memory-growth failure diagnostics. The complete public delta touches only the Wasm VM pair and private editor revision metadata; no shared runtime, native Luau or browser-renderer changes. Active source/validation pins remain at 75a22f94; this accounted checkpoint is not implemented Wasm parity. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `75a22f94f7d744020868662d9bdbeeae97c40319` | Translate BlendAccumulator frame-tagged mixing/reset seeding; component-list indexed rows, duplicate identity/pooling and focus synchronization; cached layout display-none and paint image/fill classification; indexed view-model advancement with tools retention. Port all five upstream regressions. Source and separate Rust-integration reviews correct synchronous trigger/nested-property callback borrow boundaries and all live advance/fire routes; five supplemental mutation cases preserve upstream shifted-successor behavior and self-bound removal. Reviews and correction rereviews are clean. Validation: 45 tools tests, 40 non-tools tests and 19 related tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes. Manifest tests pass 26, source-correspondence tests seven; 1,054 mirrored and ten adapted owners. Full runtime Silver: 95 byte-exact, 108 operation-exact within unchanged epsilon, seven recorded divergences, 20 unsupported, and the unchanged stateful_multi_property failure at frame 16/op 1061 (UNIV-3751). Three changed blend recordings are byte-exact; rewards_demo retains its recorded frame 0/op 1461 divergence. Ordinary/scripted Golden each process 364 entries with identical previous failure lines: three focus/semantic failures (UNIV-3793), plus scripted converter teardown abort (UNIV-3795). No corpus assertion weakened. Upstream ArtboardFrame benchmarks remain oracle-only; no timing gain or new hardware/browser-pixel coverage is claimed. | [UNIV-3751](https://universe.basis.dev/issue/UNIV-3751) |

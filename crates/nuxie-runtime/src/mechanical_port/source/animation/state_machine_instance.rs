@@ -4884,10 +4884,7 @@ impl StateMachineInstance {
     }
 
     pub fn bindable_property_instance(&self, property: &CoreHandle) -> Option<CoreHandle> {
-        self.bindables
-            .get()?
-            .property_instances
-            .find(property)
+        self.bindables.get()?.property_instances.find(property)
     }
 
     pub fn bindable_data_bind_to_source(&self, property: &CoreHandle) -> Option<CoreHandle> {
@@ -4953,6 +4950,7 @@ impl StateMachineInstance {
         can_hit: bool,
         position: Vec2D,
         pointer_id: i32,
+        timestamp: f32,
     ) -> HitResult {
         use crate::scripting::{ScriptMethod, ScriptedDrawablePointerHit};
         let Some((method, local)) = owner
@@ -4989,7 +4987,19 @@ impl StateMachineInstance {
             return HitResult::None;
         };
         let mut host = ScriptUpdateRequestHost::default();
-        let result = ScriptedObject::perform_pointer(owner, method, pointer_id, local, &mut host);
+        let result = ScriptedObject::perform_pointer(
+            owner,
+            method,
+            pointer_id,
+            local,
+            if can_hit {
+                hit_type
+            } else {
+                ListenerType::Exit
+            },
+            timestamp,
+            &mut host,
+        );
         if host.take_requested() {
             ScriptedObject::apply_update_request(owner);
         }

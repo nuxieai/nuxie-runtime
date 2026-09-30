@@ -441,10 +441,17 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         position: crate::mechanical_port::source::math::vec2d::Vec2D,
         hit_type: crate::mechanical_port::source::listener_type::ListenerType,
         can_hit: bool,
-        _timestamp: f32,
+        timestamp: f32,
         pointer_id: i32,
     ) -> crate::mechanical_port::source::hit_result::HitResult {
-        machine.perform_scripted_pointer(&self.drawable, hit_type, can_hit, position, pointer_id)
+        machine.perform_scripted_pointer(
+            &self.drawable,
+            hit_type,
+            can_hit,
+            position,
+            pointer_id,
+            timestamp,
+        )
     }
     fn process_gamepad_invocation(
         &self,

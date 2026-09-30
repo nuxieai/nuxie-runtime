@@ -163,8 +163,22 @@ pub(super) fn scripted_drawable_pointer_argument(
     pointer_id: i32,
     local_x: f32,
     local_y: f32,
+    hit_type: nuxie_runtime::source::listener_type::ListenerType,
+    timestamp: f32,
 ) -> Result<(AnyUserData, ScriptedPointerHitResultHandle)> {
-    let event = ScriptedPointerEvent::new(pointer_id as u8, local_x, local_y);
+    use nuxie_runtime::source::listener_type::ListenerType;
+    let mut event = ScriptedPointerEvent::new(pointer_id as u8, local_x, local_y);
+    event.timestamp_seconds = timestamp;
+    event.event = match hit_type {
+        ListenerType::Enter => Some(ScriptPointerEventKind::Enter),
+        ListenerType::Exit => Some(ScriptPointerEventKind::Exit),
+        ListenerType::Down => Some(ScriptPointerEventKind::Down),
+        ListenerType::Up => Some(ScriptPointerEventKind::Up),
+        ListenerType::Move => Some(ScriptPointerEventKind::Move),
+        ListenerType::Click => Some(ScriptPointerEventKind::Click),
+        ListenerType::Drag => Some(ScriptPointerEventKind::Drag),
+        _ => None,
+    };
     let result = event.hit_result.clone();
     Ok((lua.create_userdata(event)?, result))
 }

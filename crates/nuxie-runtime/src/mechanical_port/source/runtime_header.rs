@@ -4,7 +4,7 @@ use crate::mechanical_port::source::core::binary_reader::BinaryReader;
 
 pub const RUNTIME_HEADER_FINGERPRINT: &[u8; 4] = b"RIVE";
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct RuntimeHeader {
     major_version: i32,
     minor_version: i32,

@@ -496,7 +496,8 @@ impl Default for Component {
             base: ComponentBase::default(),
             dependency_helper: DependencyHelper::default(),
             parent: None,
-            graph_order: 0,
+            // No dependency order can assign the unsorted sentinel.
+            graph_order: u32::MAX,
             artboard: None,
             collapsables: Vec::new(),
             dirt: ComponentDirt::FILTHY,

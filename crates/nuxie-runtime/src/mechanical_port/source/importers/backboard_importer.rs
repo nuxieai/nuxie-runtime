@@ -143,6 +143,11 @@ impl BackboardImporter {
         self.physics.push(physics);
     }
 
+    /// Retain an already initialized file-global interpolator for partial import.
+    pub fn seed_interpolator(&mut self, interpolator: CoreHandle) {
+        self.interpolators.push(interpolator);
+    }
+
     pub fn add_view_model_instance(&mut self, instance: &mut ViewModelInstance) {
         let Some(models) = self.file_view_models.as_ref() else {
             return;

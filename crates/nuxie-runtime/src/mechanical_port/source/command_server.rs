@@ -289,6 +289,7 @@ fn data_type_name(value: DataType) -> &'static str {
         DataType::Integer => "Integer",
         DataType::SymbolListIndex => "Symbol List Index",
         DataType::AssetImage => "Asset Image",
+        DataType::AssetFont => "Asset Font",
         DataType::AssetBlob => "Asset Blob",
         _ => "Unknown DataType",
     }
@@ -734,7 +735,11 @@ impl CommandServer {
             }
             property.clear_changes();
             data.value = match data.meta_data.data_type {
-                DataType::AssetImage | DataType::AssetBlob | DataType::Trigger | DataType::List => {
+                DataType::AssetImage
+                | DataType::AssetFont
+                | DataType::AssetBlob
+                | DataType::Trigger
+                | DataType::List => {
                     ViewModelInstanceValue::None
                 }
                 DataType::Boolean => ViewModelInstanceValue::Bool(
@@ -2311,6 +2316,7 @@ impl CommandServer {
                     });
                     let mut nested = ViewModelInstanceHandle::NULL;
                     let mut image = RenderImageHandle::NULL;
+                    let mut font = FontHandle::NULL;
                     let mut blob = BlobAssetHandle::NULL;
                     let mut artboard = ArtboardHandle::NULL;
                     value.value = match data_type {
@@ -2333,6 +2339,10 @@ impl CommandServer {
                             image = self.command_queue.read();
                             ViewModelInstanceValue::None
                         }
+                        DataType::AssetFont => {
+                            font = self.command_queue.read();
+                            ViewModelInstanceValue::None
+                        }
                         DataType::AssetBlob => {
                             blob = self.command_queue.read();
                             ViewModelInstanceValue::None
@@ -2345,7 +2355,7 @@ impl CommandServer {
                     };
                     lock.unlock();
                     self.set_view_model_value(
-                        handle, request_id, value, nested, image, blob, artboard,
+                        handle, request_id, value, nested, image, font, blob, artboard,
                     );
                 }
                 Command::ListViewModelPropertyValue => {
@@ -2663,6 +2673,7 @@ impl CommandServer {
         value: ViewModelInstanceData,
         nested_handle: ViewModelInstanceHandle,
         image_handle: RenderImageHandle,
+        font_handle: FontHandle,
         blob_handle: BlobAssetHandle,
         artboard_handle: ArtboardHandle,
     ) {
@@ -2777,7 +2788,25 @@ impl CommandServer {
                         handle,
                         request_id,
                         Message::ViewModelError,
-                        format!("Could not find image property at path {name}"),
+                        format!("Could not find image property at path {name} for view model instance {handle}"),
+                    );
+                }
+            }
+            DataType::AssetFont => {
+                if let Some(property) = view.property_font(name) {
+                    if font_handle == FontHandle::NULL {
+                        property.set_value(None);
+                    } else if let Some(font) = self.get_font(font_handle) {
+                        property.set_value(Some(font));
+                    } else {
+                        self.error(handle, request_id, Message::ViewModelError, format!("Could not find font {font_handle} to set for view model instance when setting property with path {name}"));
+                    }
+                } else {
+                    self.error(
+                        handle,
+                        request_id,
+                        Message::ViewModelError,
+                        format!("Could not find font property at path {name} for view model instance {handle}"),
                     );
                 }
             }
@@ -2795,7 +2824,7 @@ impl CommandServer {
                         handle,
                         request_id,
                         Message::ViewModelError,
-                        format!("Could not find blob property at path {name}"),
+                        format!("Could not find blob property at path {name} for view model instance {handle}"),
                     );
                 }
             }
@@ -2813,7 +2842,7 @@ impl CommandServer {
                         handle,
                         request_id,
                         Message::ViewModelError,
-                        format!("Could not find artboard property at path {name}"),
+                        format!("Could not find artboard property at path {name} for view model instance {handle}"),
                     );
                 }
             }

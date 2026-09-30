@@ -110,6 +110,12 @@ impl NestedStateMachine {
             .is_some_and(|instance| instance.with_instance(|instance| instance.hit_test(position)))
     }
 
+    pub fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        self.instance.as_ref().is_some_and(|instance| {
+            instance.with_instance(|instance| instance.hit_test_bounded(position))
+        })
+    }
+
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32) -> HitResult {
         self.instance.as_ref().map_or(HitResult::None, |instance| {
             instance.with_instance_mut(|instance| {

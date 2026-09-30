@@ -26,6 +26,14 @@ impl Drop for ScriptedLayout {
 }
 
 impl ScriptedLayout {
+    /// The size the layout engine last gave this box; absent before it has.
+    pub fn layout_size(&self) -> Option<Vec2> {
+        if !self.size_known {
+            return None;
+        }
+        Some(self.size)
+    }
+
     pub fn did_hydrate_script_inputs(&mut self) {
         self.base.base.did_hydrate_script_inputs();
         if let Some(parent) = self.base.parent_handle() {

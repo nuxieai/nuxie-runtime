@@ -105,7 +105,11 @@ impl ElasticScrollPhysicsHelper {
         self.is_running = true;
         self.run_range_min = range_min;
         self.run_range_max = range_max;
-        self.speed = if acceleration.abs() > 100.0 {
+        // An axis whose content fits its viewport has nowhere to fling to.
+        // Skip velocity and snapping, but retain the elastic return from
+        // wherever the pointer left the content.
+        let can_scroll = range_min < range_max;
+        self.speed = if can_scroll && acceleration.abs() > 100.0 {
             acceleration * 0.16 * 0.16 * 0.1 * self.speed_multiplier
         } else {
             0.0
@@ -118,7 +122,7 @@ impl ElasticScrollPhysicsHelper {
             value
         };
         self.current = value;
-        if !snapping_points.is_empty() {
+        if can_scroll && !snapping_points.is_empty() {
             let end_target = -(self.current + self.speed / self.friction);
             let section_size = if content_size != 0.0 {
                 content_size

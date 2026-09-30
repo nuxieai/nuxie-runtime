@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "ce5a0eefbea8d75eac98dad68261f14e9d041fb0"
+upstream_ref = "09e85e1f63df628c0828ae0c740c1248032cadd8"
 expected_entries = 275
 expected_runtime = 227
 expected_scripted = 45
@@ -3003,7 +3003,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "Carousel snap swipe right settles past index 0"
-producer_line = 241
+producer_line = 243
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3094,7 +3094,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "ScrollConstraint scrollIndex with hidden items"
-producer_line = 652
+producer_line = 707
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4854,7 +4854,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_scroll_test.cpp"
 provenance_test = "ScrollConstraint index intent across hidden layout"
-producer_line = 758
+producer_line = 813
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

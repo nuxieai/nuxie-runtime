@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ce5a0eefbea8d75eac98dad68261f14e9d041fb0`
+- LAST_SYNCED_SHA: `09e85e1f63df628c0828ae0c740c1248032cadd8`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 67 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 67 require a Rust translation.
+  There are 66 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 66 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `09e85e1f63df628c0828ae0c740c1248032cadd8` | Gate elastic release velocity and snapping on a nonempty scroll range, preserving pointer-driven overscroll and settle behavior; port all three upstream release regression sections. Authoring-only threshold defaults described in the message are absent from the public delta; the runtime deserialization default remains unchanged. | — |
 | `ce5a0eefbea8d75eac98dad68261f14e9d041fb0` | **DEFERRED:** Wasm module calendar/time-zone imports and native calendar/strftime bridges for AssemblyScript and the Wasm-hosted Luau blob. All executable changes belong to the parked Wasm execution lane, not our native Rust Luau engine or browser renderer. Private compiler/library/test changes named in the message are absent from this public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `69f43681303ec4e17c131c9f8d584c19f1c34290` | Translate the tessellated path vertex single-exit control flow: retain computation after discarded stroke/fill vertices and return the discard predicate at the end. Regenerate supported shader artifacts; do not claim upstream vendor performance measurements as local validation. | — |
 | `b86b7ecb0256842cc37823f63c8699d5bffe081e` | Translate additive blending for supported renderers: paint/image draw inputs, clamped per-draw state, srcOver-only alpha modulation, gradient row/fraction packing and gradient-coordinate uniforms, and corresponding shader decoding. Preserve upstream defaults for unsupported renderer overloads and advanced blend modes. Port both complete additive rendering scenes; no new serialized opcode or runtime shader compiler is introduced. | — |

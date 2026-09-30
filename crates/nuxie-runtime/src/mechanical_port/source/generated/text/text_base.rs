@@ -18,26 +18,28 @@ pub trait TextBaseCallbacks:
     fn wrap_value_changed(&mut self) {}
     fn vertical_align_value_changed(&mut self) {}
     fn fit_from_baseline_changed(&mut self) {}
+    fn fit_font_size_resizes_box_changed(&mut self) {}
     fn text_run_list_source_changed(&mut self) {}
     fn vertical_trim_value_changed(&mut self) {}
 }
 
 pub struct TextBase {
     pub base: Drawable,
-    align_value: u32,
-    sizing_value: u32,
-    overflow_value: u32,
+    align_value: u8,
+    sizing_value: u8,
+    overflow_value: u8,
     width: f32,
     height: f32,
     origin_x: f32,
     origin_y: f32,
     paragraph_spacing: f32,
-    origin_value: u32,
-    wrap_value: u32,
-    vertical_align_value: u32,
+    origin_value: u8,
+    wrap_value: u8,
+    vertical_align_value: u8,
     fit_from_baseline: bool,
+    fit_font_size_resizes_box: bool,
     text_run_list_source: u32,
-    vertical_trim_value: u32,
+    vertical_trim_value: u16,
 }
 
 impl Default for TextBase {
@@ -56,6 +58,7 @@ impl Default for TextBase {
             wrap_value: 0,
             vertical_align_value: 0,
             fit_from_baseline: true,
+            fit_font_size_resizes_box: true,
             text_run_list_source: u32::MAX,
             vertical_trim_value: 0,
         }
@@ -76,6 +79,7 @@ impl TextBase {
     pub const WRAP_VALUE_PROPERTY_KEY: u16 = 683;
     pub const VERTICAL_ALIGN_VALUE_PROPERTY_KEY: u16 = 685;
     pub const FIT_FROM_BASELINE_PROPERTY_KEY: u16 = 703;
+    pub const FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY: u16 = 315;
     pub const TEXT_RUN_LIST_SOURCE_PROPERTY_KEY: u16 = 932;
     pub const VERTICAL_TRIM_VALUE_PROPERTY_KEY: u16 = 1026;
     pub const VERTICAL_TRIM_TOP_VALUE_PROPERTY_KEY: u16 = 1027;
@@ -91,10 +95,10 @@ impl TextBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn align_value(&self) -> u32 {
+    pub fn align_value(&self) -> u8 {
         self.align_value
     }
-    pub fn set_align_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_align_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_align_value_value(value) {
             return;
         }
@@ -102,17 +106,17 @@ impl TextBase {
         TextBaseCallbacks::notify_property_changed(callbacks, Self::ALIGN_VALUE_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_align_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_align_value_value(&mut self, value: u8) -> bool {
         if self.align_value == value {
             return false;
         }
         self.align_value = value;
         true
     }
-    pub fn sizing_value(&self) -> u32 {
+    pub fn sizing_value(&self) -> u8 {
         self.sizing_value
     }
-    pub fn set_sizing_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_sizing_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_sizing_value_value(value) {
             return;
         }
@@ -120,17 +124,17 @@ impl TextBase {
         TextBaseCallbacks::notify_property_changed(callbacks, Self::SIZING_VALUE_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_sizing_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_sizing_value_value(&mut self, value: u8) -> bool {
         if self.sizing_value == value {
             return false;
         }
         self.sizing_value = value;
         true
     }
-    pub fn overflow_value(&self) -> u32 {
+    pub fn overflow_value(&self) -> u8 {
         self.overflow_value
     }
-    pub fn set_overflow_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_overflow_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_overflow_value_value(value) {
             return;
         }
@@ -138,7 +142,7 @@ impl TextBase {
         TextBaseCallbacks::notify_property_changed(callbacks, Self::OVERFLOW_VALUE_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_overflow_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_overflow_value_value(&mut self, value: u8) -> bool {
         if self.overflow_value == value {
             return false;
         }
@@ -235,10 +239,10 @@ impl TextBase {
         self.paragraph_spacing = value;
         true
     }
-    pub fn origin_value(&self) -> u32 {
+    pub fn origin_value(&self) -> u8 {
         self.origin_value
     }
-    pub fn set_origin_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_origin_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_origin_value_value(value) {
             return;
         }
@@ -246,17 +250,17 @@ impl TextBase {
         TextBaseCallbacks::notify_property_changed(callbacks, Self::ORIGIN_VALUE_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_origin_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_origin_value_value(&mut self, value: u8) -> bool {
         if self.origin_value == value {
             return false;
         }
         self.origin_value = value;
         true
     }
-    pub fn wrap_value(&self) -> u32 {
+    pub fn wrap_value(&self) -> u8 {
         self.wrap_value
     }
-    pub fn set_wrap_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_wrap_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_wrap_value_value(value) {
             return;
         }
@@ -264,17 +268,17 @@ impl TextBase {
         TextBaseCallbacks::notify_property_changed(callbacks, Self::WRAP_VALUE_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_wrap_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_wrap_value_value(&mut self, value: u8) -> bool {
         if self.wrap_value == value {
             return false;
         }
         self.wrap_value = value;
         true
     }
-    pub fn vertical_align_value(&self) -> u32 {
+    pub fn vertical_align_value(&self) -> u8 {
         self.vertical_align_value
     }
-    pub fn set_vertical_align_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_vertical_align_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_vertical_align_value_value(value) {
             return;
         }
@@ -285,7 +289,7 @@ impl TextBase {
         );
     }
 
-    pub(crate) fn set_vertical_align_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_vertical_align_value_value(&mut self, value: u8) -> bool {
         if self.vertical_align_value == value {
             return false;
         }
@@ -310,6 +314,31 @@ impl TextBase {
         self.fit_from_baseline = value;
         true
     }
+    pub fn fit_font_size_resizes_box(&self) -> bool {
+        self.fit_font_size_resizes_box
+    }
+    pub fn set_fit_font_size_resizes_box(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl TextBaseCallbacks,
+    ) {
+        if !self.set_fit_font_size_resizes_box_value(value) {
+            return;
+        }
+        callbacks.fit_font_size_resizes_box_changed();
+        TextBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY,
+        );
+    }
+
+    pub(crate) fn set_fit_font_size_resizes_box_value(&mut self, value: bool) -> bool {
+        if self.fit_font_size_resizes_box == value {
+            return false;
+        }
+        self.fit_font_size_resizes_box = value;
+        true
+    }
     pub fn text_run_list_source(&self) -> u32 {
         self.text_run_list_source
     }
@@ -331,10 +360,10 @@ impl TextBase {
         self.text_run_list_source = value;
         true
     }
-    pub fn vertical_trim_value(&self) -> u32 {
+    pub fn vertical_trim_value(&self) -> u16 {
         self.vertical_trim_value
     }
-    pub fn set_vertical_trim_value(&mut self, value: u32, callbacks: &mut impl TextBaseCallbacks) {
+    pub fn set_vertical_trim_value(&mut self, value: u16, callbacks: &mut impl TextBaseCallbacks) {
         if !self.set_vertical_trim_value_value(value) {
             return;
         }
@@ -345,12 +374,34 @@ impl TextBase {
         );
     }
 
-    pub(crate) fn set_vertical_trim_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_vertical_trim_value_value(&mut self, value: u16) -> bool {
         if self.vertical_trim_value == value {
             return false;
         }
         self.vertical_trim_value = value;
         true
+    }
+    pub fn vertical_trim_top_value(&self) -> u8 {
+        self.vertical_trim_value as u8
+    }
+    pub fn set_vertical_trim_top_value(
+        &mut self,
+        value: u8,
+        callbacks: &mut impl TextBaseCallbacks,
+    ) {
+        let next = (self.vertical_trim_value & !255u16) | u16::from(value);
+        self.set_vertical_trim_value(next, callbacks);
+    }
+    pub fn vertical_trim_bottom_value(&self) -> u8 {
+        (self.vertical_trim_value >> 8) as u8
+    }
+    pub fn set_vertical_trim_bottom_value(
+        &mut self,
+        value: u8,
+        callbacks: &mut impl TextBaseCallbacks,
+    ) {
+        let next = (self.vertical_trim_value & !65280u16) | (u16::from(value) << 8);
+        self.set_vertical_trim_value(next, callbacks);
     }
     pub fn clone_into(&self, callbacks: &mut impl TextBaseCallbacks) -> Text {
         let mut cloned = Text::default();
@@ -370,6 +421,7 @@ impl TextBase {
         self.wrap_value = object.wrap_value;
         self.vertical_align_value = object.vertical_align_value;
         self.fit_from_baseline = object.fit_from_baseline;
+        self.fit_font_size_resizes_box = object.fit_font_size_resizes_box;
         self.text_run_list_source = object.text_run_list_source;
         self.vertical_trim_value = object.vertical_trim_value;
         self.base.copy(&object.base, callbacks);
@@ -382,15 +434,15 @@ impl TextBase {
     ) -> bool {
         match property_key {
             Self::ALIGN_VALUE_PROPERTY_KEY => {
-                self.align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::SIZING_VALUE_PROPERTY_KEY => {
-                self.sizing_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.sizing_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::OVERFLOW_VALUE_PROPERTY_KEY => {
-                self.overflow_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.overflow_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::WIDTH_PROPERTY_KEY => {
@@ -414,19 +466,23 @@ impl TextBase {
                 true
             }
             Self::ORIGIN_VALUE_PROPERTY_KEY => {
-                self.origin_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.origin_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::WRAP_VALUE_PROPERTY_KEY => {
-                self.wrap_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.wrap_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY => {
-                self.vertical_align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.vertical_align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::FIT_FROM_BASELINE_PROPERTY_KEY => {
                 self.fit_from_baseline = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY => {
+                self.fit_font_size_resizes_box = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true
             }
             Self::TEXT_RUN_LIST_SOURCE_PROPERTY_KEY => {
@@ -434,7 +490,7 @@ impl TextBase {
                 true
             }
             Self::VERTICAL_TRIM_VALUE_PROPERTY_KEY => {
-                self.vertical_trim_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.vertical_trim_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u16;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

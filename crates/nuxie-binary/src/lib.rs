@@ -54,7 +54,7 @@ use core::{
 };
 
 pub const SUPPORTED_MAJOR_VERSION: u64 = 7;
-pub const SUPPORTED_MINOR_VERSION: u64 = 3;
+pub const SUPPORTED_MINOR_VERSION: u64 = 4;
 pub const VIEW_MODEL_SYMBOL_ITEM_INDEX: u8 = 15;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -7636,10 +7636,12 @@ fn fixture_record_to_runtime_object(
         }
 
         let mut value = authored_property.value.into_field_value();
-        if property.uint_storage() == Some(UintStorage::Uint8)
-            && let FieldValue::Uint(uint) = &mut value
-        {
-            *uint = u64::from(*uint as u8);
+        if let FieldValue::Uint(uint) = &mut value {
+            match property.uint_storage() {
+                Some(UintStorage::Uint8) => *uint = u64::from(*uint as u8),
+                Some(UintStorage::Uint16) => *uint = u64::from(*uint as u16),
+                _ => {}
+            }
         }
 
         properties.push(RuntimeProperty {

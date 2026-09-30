@@ -128,6 +128,8 @@ struct AlgoConstants {
     is_wrap: bool,
     /// Is the wrap direction inverted
     is_wrap_reverse: bool,
+    /// The container's overflow policy in each axis.
+    overflow: Point<Overflow>,
 
     /// The item's min_size style
     min_size: Size<Option<f32>>,
@@ -485,6 +487,7 @@ fn compute_constants(
         is_column,
         is_wrap,
         is_wrap_reverse,
+        overflow: style.overflow(),
         min_size: style
             .min_size()
             .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
@@ -769,11 +772,16 @@ fn determine_flex_base_size(
             let child_available_space = Size::MAX_CONTENT
                 .with_main(
                     dir,
-                    // Map AvailableSpace::Definite to AvailableSpace::MaxContent
-                    if available_space.main(dir) == AvailableSpace::MinContent {
-                        AvailableSpace::MinContent
-                    } else {
-                        AvailableSpace::MaxContent
+                    // Rive's Yoga.cpp, YGNodeComputeFlexBasisForChild, forwards a
+                    // finite parent offer as AtMost on the main axis unless the
+                    // parent scrolls. Preserve that offer for measured hug
+                    // children; MaxContent would discard their height/width bound.
+                    match available_space.main(dir) {
+                        AvailableSpace::Definite(value) if constants.overflow.main(dir) != Overflow::Scroll => {
+                            AvailableSpace::Definite(value)
+                        }
+                        AvailableSpace::MinContent => AvailableSpace::MinContent,
+                        _ => AvailableSpace::MaxContent,
                     },
                 )
                 .with_cross(dir, cross_axis_available_space);

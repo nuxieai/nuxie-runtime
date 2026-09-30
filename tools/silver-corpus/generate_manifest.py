@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "814f89ac5314a72c07df3b9c998c58ece33573a8"
+UPSTREAM_REF = "45d4d01dfd1fe70d3f9e73764538c16f63a04d07"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -270,6 +270,7 @@ EXACT = (
     "viewmodel_image_reset",
     "zero_width_space_line_break",
     "fit_font_size_test",
+    "fit_font_size_hug_test",
     "advance_blend_mode-inputs",
     "advance_blend_mode-vms",
     "animated_clipping-layout",
@@ -975,6 +976,18 @@ def p1q_view_model_actions(
             action("frame"),
             action("pointer-down", x=425.0, y=70.0, pointer_id=0),
             action("pointer-up", x=425.0, y=70.0, pointer_id=0),
+            advance(0.016),
+            draw,
+        )
+
+    if silver_id == "fit_font_size_hug_test":
+        return (
+            action("frame-size"),
+            action("select-state-machine"),
+            action("bind-selected-artboard-fresh-view-model"),
+            advance(0.0),
+            draw,
+            action("frame"),
             advance(0.016),
             draw,
         )
@@ -2537,10 +2550,10 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
     for path in files:
         relative = path.relative_to(runtime_dir).as_posix()
         source = strip_cpp_comments(path.read_text(encoding="utf-8", errors="replace"))
-        # This helper sits between TEST_CASEs. Keep its body out of the preceding
-        # Vertical Trim producer while preserving upstream provenance line numbers.
+        # These helpers sit between TEST_CASEs. Keep their bodies out of preceding
+        # producers while preserving upstream provenance line numbers.
         source = re.sub(
-            r"static void (?:checkTextLayoutSilver|renderSoloLeafArtboard)\([^)]*\)\s*\{.*?^\}",
+            r"static (?:void (?:checkTextLayoutSilver|renderSoloLeafArtboard)|rive::rcp<rive::File> importTextWithMinorVersion|std::pair<float, float> solveTitleLayout)\([^)]*\)\s*\{.*?^\}",
             lambda match: "\n" * match.group(0).count("\n"),
             source,
             flags=re.MULTILINE | re.DOTALL,
@@ -3305,7 +3318,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (274, 226, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (275, 227, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3318,8 +3331,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 274",
-        "expected_runtime = 226",
+        "expected_entries = 275",
+        "expected_runtime = 227",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

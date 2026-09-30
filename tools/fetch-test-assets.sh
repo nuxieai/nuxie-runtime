@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-814f89ac5314a72c07df3b9c998c58ece33573a8}
+ref=${RIVE_RUNTIME_REF:-45d4d01dfd1fe70d3f9e73764538c16f63a04d07}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -11,15 +11,16 @@ assets=(
   "sync/solo_nested_artboard_leaf.riv|50e22279a323c5880eefcc971437b6f8d514ff6e4018d82529749cc9a5b66e89|3b2c51e2dd957722fd3061112667d884b1ec60c3|solo_nested_artboard_leaf.riv"
   "semantic/zero_area_semantics.riv|7f53903646eb07548f68d349fd31833c81aa0ccb623d4665f530829ec6a5f2b8|293eaf002cdda1ab6ec20316ee2d67ebd2854775|semantic/zero_area_semantics.riv"
   "sync/layout/matrix/matrix.expect|6ae71099b8a03f18e3002d934d39abc1735157ad11d47a81c89cfa45ae82f09c|3b2c51e2dd957722fd3061112667d884b1ec60c3|layout/matrix/matrix.expect"
-  "sync/layout/matrix/matrix.riv|e8f330db63cd9e32f57afbfc3770e4af81c094c142867d14f196f8fd8ea103fd|3b2c51e2dd957722fd3061112667d884b1ec60c3|layout/matrix/matrix.riv"
-  "sync/layout/matrix/matrix_font.expect|c424ee40a6584ea57a739a37dd00347baaabdb401276c93aafe89f526887b470|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_font.expect"
-  "sync/layout/matrix/matrix_font.riv|af67d69b052c9db367c5ec2e75e9460543fda56ee73faa92852969526bbf9e14|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_font.riv"
+  "sync/layout/matrix/matrix.riv|4d00f48241a5963854c37c01acf28796a7ddf696ce1d9df935388b4e53589bc3|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix.riv"
+  "sync/layout/matrix/matrix_font.expect|664ba0749c57d6f36af76f1ed582252d4675c813af66be1f6a40e3b5830ccf3c|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_font.expect"
+  "sync/layout/matrix/matrix_font.riv|6ffa960c660fa5f28f0f15e46741e027cb5f366cfed74a14be6754794f5cf7ca|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_font.riv"
   "sync/layout/matrix/matrix_image.expect|175bf6c4e9539bd698f13007bb82969323da8b6b1efc9d5339acd8d071178d1c|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_image.expect"
-  "sync/layout/matrix/matrix_image.riv|ef60985de9441593094bc6478a8fdb4b6bac573bf143938c627487447a328d01|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_image.riv"
+  "sync/layout/matrix/matrix_image.riv|bd8940cfc111c1565928cf11ce46307cbf1750ac4d9c22f39482d497abeaa0bb|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_image.riv"
   "sync/layout/matrix/matrix_legacy.expect|62068a77f1e4b4883a145ae0118310aee7620b4c6125a178d32e9764f57788a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.expect"
   "sync/layout/matrix/matrix_legacy.riv|0f788e1abe9d074b348a7cca55f077325f4a8242ce8758324518daa1ba154716|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.riv"
   "sync/layout/matrix/README.md|36e3afa7769913e9a3d0a0420d6b3115e81e67b8a9ee1230883e9039829bd0a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/README.md"
-  "sync/layout/matrix/CORPUS.md|4fa7ff6d72dfffaab58b324525b862952ce16d6f37eb0493032d59e39e8036f8|3b2c51e2dd957722fd3061112667d884b1ec60c3|layout/matrix/CORPUS.md"
+  "sync/layout/matrix/CORPUS.md|5308fedcc113cb2237c332318089949b4d68db02950a2af31fe2ce7d93e6c3e3|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/CORPUS.md"
+  "sync/fit_font_size_hug_test.riv|7b3c156ce6d6e9455ff42745a102f00709ecc163ba87cebf713f43c9c03b8f49|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|fit_font_size_hug_test.riv"
   "sync/layout/assets/Montserrat.ttf|a4fe82b4bfd40c71320ab0f1daca8ba2f230b55a56ffa94d5d1b349675b70d73|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|Montserrat.ttf"
   "sync/layout/assets/batdude.png|32c86d18c059d4338cca1771faf9b43a80827ae8ea30d6cc10d64f681bfeec01|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|batdude.png"
   "sync/nested_artboard_constrained.riv|a6c0d028124595f97545c5d3ea34a1b72ce42f5154b791fb7f8619de73f75e68|a6b6723ba291f6f00888c09a1f975c6c23936095|layout/nested_artboard_constrained.riv"
@@ -264,6 +265,24 @@ fi
 global_view_models_silver_actual=$(sha256 "$global_view_models_silver_destination")
 if [[ "$global_view_models_silver_actual" != "$global_view_models_silver_expected" ]]; then
   echo "fixture checksum mismatch: sync/global_view_models_scripting_test.sriv (expected $global_view_models_silver_expected, got $global_view_models_silver_actual)" >&2
+  exit 1
+fi
+
+fit_hug_silver_destination="$repo_root/fixtures/sync/fit_font_size_hug_test.sriv"
+fit_hug_silver_expected="405da71bda084b2146c30fd475044d376fd312b87907ab83f3fb90c8aeefffca"
+if [[ -n "$runtime_dir" ]]; then
+  git -C "$runtime_dir" show \
+    "45d4d01dfd1fe70d3f9e73764538c16f63a04d07:tests/unit_tests/silvers/fit_font_size_hug_test.sriv" \
+    > "$fit_hug_silver_destination"
+elif [[ ! -f "$fit_hug_silver_destination" \
+  || "$(sha256 "$fit_hug_silver_destination")" != "$fit_hug_silver_expected" ]]; then
+  curl --fail --location --silent --show-error \
+    "$base_url/45d4d01dfd1fe70d3f9e73764538c16f63a04d07/tests/unit_tests/silvers/fit_font_size_hug_test.sriv" \
+    --output "$fit_hug_silver_destination"
+fi
+fit_hug_silver_actual=$(sha256 "$fit_hug_silver_destination")
+if [[ "$fit_hug_silver_actual" != "$fit_hug_silver_expected" ]]; then
+  echo "fixture checksum mismatch: sync/fit_font_size_hug_test.sriv (expected $fit_hug_silver_expected, got $fit_hug_silver_actual)" >&2
   exit 1
 fi
 

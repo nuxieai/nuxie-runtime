@@ -55,6 +55,7 @@ pub(crate) fn read_known_uint_field(
 ) -> Result<u64> {
     match property.uint_storage() {
         Some(UintStorage::Uint8) => core_uint_type::deserialize_uint8(reader, label),
+        Some(UintStorage::Uint16) => core_uint_type::deserialize_uint16(reader, label),
         Some(UintStorage::Uint32) => core_uint_type::deserialize(reader, label),
         None => bail!("{label} schema property is not uint-like"),
     }

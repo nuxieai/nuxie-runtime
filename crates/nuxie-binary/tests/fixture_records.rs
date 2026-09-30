@@ -75,14 +75,14 @@ fn fixture_records_build_an_importable_runtime_file() {
     .expect("valid fixture records should build a runtime file");
 
     assert_eq!(SUPPORTED_MAJOR_VERSION, 7);
-    assert_eq!(SUPPORTED_MINOR_VERSION, 3);
+    assert_eq!(SUPPORTED_MINOR_VERSION, 4);
     assert_eq!(file.header.major_version, 7);
-    assert_eq!(file.header.minor_version, 3);
+    assert_eq!(file.header.minor_version, 4);
     assert_eq!(
         encode_runtime_file(&file)
             .expect("fixture runtime file should encode")
             .get(..6),
-        Some(b"RIVE\x07\x03".as_slice()),
+        Some(b"RIVE\x07\x04".as_slice()),
     );
     assert_eq!(file.header.file_id, 0);
     assert_eq!(file.object_count(), 6);

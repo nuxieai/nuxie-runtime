@@ -78,6 +78,20 @@ This adaptation is awaiting source/integration review and differential
 validation; the pre-change seven-case runtime test passed six cases and failed
 WrapRigidGrid (600 rather than 400).
 
+## Finite flex-basis measurement at runtime 45d4d01d
+
+The fitted-text matrix added by runtime
+`45d4d01dfd1fe70d3f9e73764538c16f63a04d07` exercises a column's
+fill-width/hug-height child with a minimum height larger than available space.
+Pinned `rive_changes_v2_0_1_3_grid` Yoga.cpp's
+`YGNodeComputeFlexBasisForChild` forwards finite parent main-axis space as
+AtMost unless the parent scrolls. Stock Taffy instead replaces that offer with
+MaxContent during flex-basis measurement. This fork preserves the finite offer
+for non-scroll parents at that boundary, leaving definite flex bases, scroll
+containers, and intrinsic MinContent/MaxContent requests on their existing paths.
+The existing leaf sizing code continues to apply child margins and min/max bounds.
+No text-specific or fixture-specific size clamp is introduced.
+
 ## Prior differential evidence
 
 `wave_b_focus_test_078_direct_port_expected_red` compares the complete native

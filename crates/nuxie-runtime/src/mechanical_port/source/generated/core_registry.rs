@@ -3182,6 +3182,7 @@ pub enum CoreField {
     TextAlignValue,
     TextAssetFolderPath,
     TextFitFromBaseline,
+    TextFitFontSizeResizesBox,
     TextFollowPathModifierEnd,
     TextFollowPathModifierOffset,
     TextFollowPathModifierOrient,
@@ -6058,37 +6059,37 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 }
             }
             CoreField::TextAlignValue => {
-                if self.base.set_align_value_value(value) {
+                if self.base.set_align_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::align_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::ALIGN_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextSizingValue => {
-                if self.base.set_sizing_value_value(value) {
+                if self.base.set_sizing_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::sizing_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::SIZING_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextOverflowValue => {
-                if self.base.set_overflow_value_value(value) {
+                if self.base.set_overflow_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::overflow_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::OVERFLOW_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextOriginValue => {
-                if self.base.set_origin_value_value(value) {
+                if self.base.set_origin_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::origin_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::ORIGIN_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextWrapValue => {
-                if self.base.set_wrap_value_value(value) {
+                if self.base.set_wrap_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::wrap_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::WRAP_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextVerticalAlignValue => {
-                if self.base.set_vertical_align_value_value(value) {
+                if self.base.set_vertical_align_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::vertical_align_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::VERTICAL_ALIGN_VALUE_PROPERTY_KEY);
                 }
@@ -6100,23 +6101,23 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 }
             }
             CoreField::TextVerticalTrimValue => {
-                if self.base.set_vertical_trim_value_value(value) {
+                if self.base.set_vertical_trim_value_value(value as u16) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::vertical_trim_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::VERTICAL_TRIM_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextVerticalTrimTopValue => {
-                let current = self.base.vertical_trim_value();
+                let current = self.base.vertical_trim_value() as u32;
                 let next = (current & !255u32) | ((value << 0) & 255u32);
-                if self.base.set_vertical_trim_value_value(next) {
+                if self.base.set_vertical_trim_value_value(next as u16) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::vertical_trim_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::VERTICAL_TRIM_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::TextVerticalTrimBottomValue => {
-                let current = self.base.vertical_trim_value();
+                let current = self.base.vertical_trim_value() as u32;
                 let next = (current & !65280u32) | ((value << 8) & 65280u32);
-                if self.base.set_vertical_trim_value_value(next) {
+                if self.base.set_vertical_trim_value_value(next as u16) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::vertical_trim_value_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::VERTICAL_TRIM_VALUE_PROPERTY_KEY);
                 }
@@ -6159,6 +6160,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 if self.base.set_fit_from_baseline_value(value) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::fit_from_baseline_changed(self);
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::FIT_FROM_BASELINE_PROPERTY_KEY);
+                }
+            }
+            CoreField::TextFitFontSizeResizesBox => {
+                if self.base.set_fit_font_size_resizes_box_value(value) {
+                    <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::fit_font_size_resizes_box_changed(self);
+                    <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY);
                 }
             }
             _ => (),
@@ -6354,17 +6361,19 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
-            CoreField::TextAlignValue => self.base.align_value(),
-            CoreField::TextSizingValue => self.base.sizing_value(),
-            CoreField::TextOverflowValue => self.base.overflow_value(),
-            CoreField::TextOriginValue => self.base.origin_value(),
-            CoreField::TextWrapValue => self.base.wrap_value(),
-            CoreField::TextVerticalAlignValue => self.base.vertical_align_value(),
+            CoreField::TextAlignValue => self.base.align_value() as u32,
+            CoreField::TextSizingValue => self.base.sizing_value() as u32,
+            CoreField::TextOverflowValue => self.base.overflow_value() as u32,
+            CoreField::TextOriginValue => self.base.origin_value() as u32,
+            CoreField::TextWrapValue => self.base.wrap_value() as u32,
+            CoreField::TextVerticalAlignValue => self.base.vertical_align_value() as u32,
             CoreField::TextTextRunListSource => self.base.text_run_list_source(),
-            CoreField::TextVerticalTrimValue => self.base.vertical_trim_value(),
-            CoreField::TextVerticalTrimTopValue => (self.base.vertical_trim_value() >> 0) & 255u32,
+            CoreField::TextVerticalTrimValue => self.base.vertical_trim_value() as u32,
+            CoreField::TextVerticalTrimTopValue => {
+                (u32::from(self.base.vertical_trim_value()) >> 0) & 255u32
+            }
             CoreField::TextVerticalTrimBottomValue => {
-                (self.base.vertical_trim_value() >> 8) & 255u32
+                (u32::from(self.base.vertical_trim_value()) >> 8) & 255u32
             }
             _ => 0,
         }
@@ -6397,6 +6406,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
     fn get_bool(&mut self, field: CoreField) -> bool {
         match field {
             CoreField::TextFitFromBaseline => self.base.fit_from_baseline(),
+            CoreField::TextFitFontSizeResizesBox => self.base.fit_font_size_resizes_box(),
             _ => false,
         }
     }
@@ -7351,6 +7361,7 @@ impl CoreRegistry {
             1095 => CoreField::TextInputObscured,
             1099 => CoreField::TextInputSelectAllOnFocus,
             703 => CoreField::TextFitFromBaseline,
+            315 => CoreField::TextFitFontSizeResizesBox,
             914 => CoreField::ScriptAssetIsModule,
             _ => return,
         };
@@ -8107,6 +8118,7 @@ impl CoreRegistry {
             1095 => CoreField::TextInputObscured,
             1099 => CoreField::TextInputSelectAllOnFocus,
             703 => CoreField::TextFitFromBaseline,
+            315 => CoreField::TextFitFontSizeResizesBox,
             914 => CoreField::ScriptAssetIsModule,
             _ => return false,
         };
@@ -8872,6 +8884,7 @@ impl CoreRegistry {
             979 => 4,
             1099 => 4,
             703 => 4,
+            315 => 4,
             914 => 4,
             575 => 2,
             243 => 2,
@@ -9502,6 +9515,7 @@ impl CoreRegistry {
             979 => 569,
             1099 => 569,
             703 => 134,
+            315 => 134,
             914 => 529,
             575 => 442,
             243 => 127,
@@ -40210,10 +40224,14 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                 )
             }
             CoreField::NodeComputedWidth => {
-                crate::mechanical_port::source::layout_component::LayoutComponent::computed_width(self)
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_width(
+                    self,
+                )
             }
             CoreField::NodeComputedHeight => {
-                crate::mechanical_port::source::layout_component::LayoutComponent::computed_height(self)
+                crate::mechanical_port::source::layout_component::LayoutComponent::computed_height(
+                    self,
+                )
             }
             CoreField::LayoutComponentWidth => self.base.width(),
             CoreField::LayoutComponentHeight => self.base.height(),
@@ -75540,7 +75558,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks
     for crate::mechanical_port::source::text::text::Text
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text::Text; align_value_changed, height_changed, origin_value_changed, origin_x_changed, origin_y_changed, overflow_value_changed, paragraph_spacing_changed, sizing_value_changed, vertical_trim_value_changed, width_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text::Text; align_value_changed, height_changed, origin_value_changed, origin_x_changed, origin_y_changed, overflow_value_changed, paragraph_spacing_changed, sizing_value_changed, vertical_trim_value_changed, width_changed, fit_font_size_resizes_box_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
     }

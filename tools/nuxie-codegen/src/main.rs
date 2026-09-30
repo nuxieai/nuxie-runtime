@@ -1834,9 +1834,18 @@ impl Schema {
                 let target_type = target.raw.runtime_type().with_context(|| {
                     format!("{file}:{} bitmask target has no runtime type", target.name)
                 })?;
-                if !matches!(target_type, "uint" | "Color") {
+                let target_bits = match target_type {
+                    "uint" | "Color" => 32,
+                    "uint16" => 16,
+                    "uint8" => 8,
+                    _ => bail!(
+                        "{file}:{} passthroughForBitmask target {target_name:?} must be uint, uint16, uint8 or Color, got {target_type}",
+                        property.name
+                    ),
+                };
+                if width < 1 || end > target_bits {
                     bail!(
-                        "{file}:{} passthroughForBitmask target {target_name:?} must be uint or Color, got {target_type}",
+                        "{file}:{} passthroughBit/passthroughBitWidth must fit in 0..{target_bits}, the width of {target_name} ({target_type})",
                         property.name
                     );
                 }

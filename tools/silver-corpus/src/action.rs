@@ -151,6 +151,7 @@ pub enum Action {
     BindAuthoredViewModel,
     BindAuthoredViewModelIfPresent,
     SelectStateMachine,
+    BindSelectedArtboardFreshViewModel,
     BindSelectedArtboardAuthoredViewModel {
         if_present: bool,
     },
@@ -519,10 +520,16 @@ impl Execution {
             match action {
                 Action::SelectStateMachine => {
                     state_machine = select_state_machine(&instance, &case.state_machine)?;
-                    anyhow::ensure!(
-                        state_machine.is_some(),
-                        "producer requires a state machine"
-                    );
+                    anyhow::ensure!(state_machine.is_some(), "producer requires a state machine");
+                }
+                Action::BindSelectedArtboardFreshViewModel => {
+                    let main = file.with_file_mut(|file| {
+                        file.create_view_model_instance_for_artboard(instance.core_handle())
+                    });
+                    owned_context = machine(&state_machine)?.with_instance_mut(|machine| {
+                        machine.bind_view_model_instance(main);
+                        machine.data_context()
+                    });
                 }
                 Action::BindSelectedArtboardAuthoredViewModel { if_present } => {
                     let id = instance.with_artboard(|artboard| artboard.base.view_model_id());

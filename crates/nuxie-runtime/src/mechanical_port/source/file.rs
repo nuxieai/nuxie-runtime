@@ -280,7 +280,9 @@ impl Drop for File {
 
 impl File {
     pub const MAJOR_VERSION: i32 = 7;
-    pub const MINOR_VERSION: i32 = 3;
+    // 7.4: fitFontSize text reports its fitted size to layout. Older files
+    // reserve the authored-size box; Text::import gates the resize behavior.
+    pub const MINOR_VERSION: i32 = 4;
 
     pub fn set_deterministic_mode(value: bool) {
         DETERMINISTIC_MODE.store(value, std::sync::atomic::Ordering::Relaxed);

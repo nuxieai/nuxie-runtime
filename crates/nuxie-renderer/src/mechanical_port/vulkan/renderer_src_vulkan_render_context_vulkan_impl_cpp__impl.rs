@@ -468,6 +468,9 @@ impl RenderTargetVulkanApi for RenderTargetVulkanTexture {
     fn updateLastAccess(&mut self, access: ImageAccess) {
         unsafe { *rcp_ref(&self.m_texture).lastAccessMut() = access };
     }
+    fn targetLastAccess(&self) -> ImageAccess {
+        unsafe { rcp_ref(&self.m_texture) }.lastAccess()
+    }
     fn accessTargetImage(
         &mut self,
         command_buffer: vk::CommandBuffer,
@@ -2091,6 +2094,7 @@ pub(crate) struct RenderTargetVulkanTextureBinding {
     pub(crate) framebufferFormat: vk::Format,
     pub(crate) width: u32,
     pub(crate) height: u32,
+    pub(crate) targetLastAccess: ImageAccess,
 }
 
 /// Snapshots the by-value source virtual results needed by
@@ -2111,6 +2115,7 @@ pub(crate) unsafe fn liveRenderTargetVulkanTextureBinding(
         framebufferFormat: target.base().framebufferFormat(),
         width: target.base().width(),
         height: target.base().height(),
+        targetLastAccess: target.targetLastAccess(),
     })
 }
 

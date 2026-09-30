@@ -21,6 +21,9 @@ pub(crate) trait RenderTargetVulkanApi {
     fn targetImage(&self) -> vk::Image;
     fn targetImageView(&self) -> vk::ImageView;
     fn updateLastAccess(&mut self, _access: ImageAccess) {}
+    fn targetLastAccess(&self) -> ImageAccess {
+        ImageAccess::default()
+    }
     fn accessTargetImage(
         &mut self,
         command_buffer: vk::CommandBuffer,
@@ -55,6 +58,13 @@ pub(crate) struct RetainedRenderTargetVulkan {
 }
 
 impl RetainedRenderTargetVulkan {
+    pub(crate) fn targetLastAccess(&self) -> ImageAccess {
+        // The retained complete allocation remains live; no borrow escapes.
+        unsafe {
+            super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(self.target)
+                .targetLastAccess
+        }
+    }
     /// # Safety
     /// `target` must carry the original allocation provenance for a live,
     /// heap-published intrusive render target whose offset-zero base owns a
@@ -170,8 +180,8 @@ impl RenderTargetVulkanImpl {
         self.m_targetLastAccess = target_last_access;
     }
 
-    pub(crate) fn targetLastAccess(&self) -> &ImageAccess {
-        &self.m_targetLastAccess
+    pub(crate) fn targetLastAccess(&self) -> ImageAccess {
+        self.m_targetLastAccess
     }
 }
 
@@ -202,6 +212,9 @@ impl RenderTargetVulkanApi for RenderTargetVulkanImpl {
     }
     fn updateLastAccess(&mut self, access: ImageAccess) {
         self.m_targetLastAccess = access;
+    }
+    fn targetLastAccess(&self) -> ImageAccess {
+        self.m_targetLastAccess
     }
     fn accessTargetImage(
         &mut self,

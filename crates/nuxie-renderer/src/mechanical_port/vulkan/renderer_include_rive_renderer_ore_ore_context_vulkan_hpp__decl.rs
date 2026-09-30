@@ -191,6 +191,15 @@ impl ContextVulkan {
         super::ore_context_vulkan_impl::vkFlushPendingInitialTransitions(self)
     }
 
+    // Loading a never-written subresource reads undefined contents. Marks
+    // the view's base mip/layer written regardless of the requested load op.
+    pub(super) fn firstUseLoadOp(
+        view: &super::ore_texture_vulkan_decl::TextureViewVulkan,
+        loadOp: LoadOp,
+    ) -> LoadOp {
+        super::ore_context_vulkan_impl::firstUseLoadOp(view, loadOp)
+    }
+
     pub(crate) fn vkFlushPendingTextureUploads(&mut self) {
         super::ore_context_vulkan_impl::vkFlushPendingTextureUploads(self)
     }

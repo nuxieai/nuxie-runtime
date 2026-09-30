@@ -422,9 +422,22 @@ impl std::ops::DerefMut for Text {
 }
 
 impl Text {
-    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
-        let fidelity=crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&self.local_bounds(),self.base.world_transform(),None,out);
-        if fidelity==crate::mechanical_port::source::drawable::BoundsFidelity::None {fidelity}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+    pub fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        let fidelity =
+            crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+                &self.local_bounds(),
+                self.base.world_transform(),
+                None,
+                out,
+            );
+        if fidelity == crate::mechanical_port::source::drawable::BoundsFidelity::None {
+            fidelity
+        } else {
+            crate::mechanical_port::source::drawable::BoundsFidelity::Approximate
+        }
     }
     pub const TYPE_KEY: u16 = TextBase::TYPE_KEY;
 }
@@ -1250,7 +1263,13 @@ impl Text {
                 continue;
             };
             if has_font && has_text {
-                max_size = max_size.max(font_size);
+                // No scale turns infinity finite. Like std::max, ignore NaN.
+                if font_size.is_infinite() {
+                    return 1.0;
+                }
+                if max_size < font_size {
+                    max_size = font_size;
+                }
             }
         }
         if max_size <= 1.0 {
@@ -1304,8 +1323,14 @@ impl Text {
             };
             measured_width <= box_width && y - top_trim - bottom_trim <= box_height
         };
+        // Above 2^24 floats skip integers, and high + 1 must not overflow i32.
+        const MAX_SEARCH_SIZE: f32 = (1 << 24) as f32;
         let mut low = 1i32;
-        let mut high = (max_size as i32).max(1);
+        let mut high = if MAX_SEARCH_SIZE < max_size {
+            MAX_SEARCH_SIZE
+        } else {
+            max_size
+        } as i32;
         let mut best = 1i32;
         while low <= high {
             let middle = low + (high - low) / 2;

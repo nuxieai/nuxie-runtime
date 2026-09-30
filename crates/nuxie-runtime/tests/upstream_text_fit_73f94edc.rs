@@ -108,6 +108,39 @@ fn approx(actual: f32, expected: f32) {
     );
 }
 
+// Shapes ellipsis.riv at font_size in a width x height fitFontSize box.
+fn fit_run_size(font_size: f32, width: f32, height: f32) -> f32 {
+    let (_file, artboard, text) = fixture("ellipsis.riv");
+    let styles = artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.find_all_handles::<TextStyle>())
+        .unwrap();
+    for style in styles {
+        scalar(&style, TextStyleBase::FONT_SIZE_PROPERTY_KEY, font_size);
+    }
+    integer(&text, TextBase::SIZING_VALUE_PROPERTY_KEY, 2);
+    scalar(&text, TextBase::WIDTH_PROPERTY_KEY, width);
+    scalar(&text, TextBase::HEIGHT_PROPERTY_KEY, height);
+    overflow(&text, TextOverflow::FitFontSize);
+    advance(&artboard);
+    let mut renderer = nuxie_render_api::NullRenderer;
+    Artboard::draw_handle(&artboard, &mut renderer);
+    first_run(&text).0
+}
+
+#[test]
+fn fit_font_size_keeps_a_non_finite_font_size() {
+    assert!(fit_run_size(f32::INFINITY, 300.0, 60.0).is_infinite());
+    assert!(fit_run_size(f32::NAN, 300.0, 60.0).is_nan());
+}
+
+#[test]
+fn fit_font_size_caps_the_search_at_2_to_24() {
+    approx(fit_run_size(3e9, 1e38, 1e38), (1 << 24) as f32);
+    let fitted = fit_run_size(3e9, 300.0, 60.0);
+    assert!(fitted < 60.0);
+    approx(fitted, fit_run_size(100.0, 300.0, 60.0));
+}
+
 #[test]
 fn fit_font_size_scales_custom_line_height_and_letter_spacing_proportionally() {
     let (_file, artboard, text) = fixture("ellipsis.riv");

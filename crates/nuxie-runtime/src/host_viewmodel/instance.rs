@@ -570,8 +570,7 @@ impl RuntimeOwnedViewModelInstance {
     }
     pub fn advanced(&mut self) {
         mutate(|| {
-            self.instance
-                .with_downcast_mut::<ViewModelInstance, _>(ViewModelInstance::advanced);
+            ViewModelInstance::advanced_handle(&self.instance);
         });
     }
     pub fn has_parents(&self) -> bool {
@@ -1090,11 +1089,7 @@ impl RuntimeOwnedViewModelInstance {
         let Some(property) = self.property_by_path(handle.path()) else {
             return false;
         };
-        mutate(|| {
-            property
-                .with_downcast_mut::<ViewModelInstanceTrigger, _>(ViewModelInstanceTrigger::trigger)
-        })
-        .is_some()
+        mutate(|| ViewModelInstanceTrigger::trigger_handle(&property))
     }
     pub fn list_source_handle_by_property_name(
         &self,

@@ -131,8 +131,10 @@ pub struct ArtboardComponentList {
     list_scope_focus_node: Option<FocusNodeRef>,
     list_row_focus_nodes: Vec<Option<FocusNodeRef>>,
     should_reset_instances: bool,
+    list_has_duplicate_items: bool,
     list_uses_draw_index_sort: bool,
     ordered_list_indices_cache_valid: bool,
+    updating_list: bool,
     cached_ordered_list_indices: Vec<i32>,
     draw_index_dependents: HashMap<CoreHandle, Rc<RefCell<dyn ViewModelValueDependent>>>,
     provider_state: LayoutNodeProviderState,
@@ -166,8 +168,10 @@ impl Default for ArtboardComponentList {
             list_scope_focus_node: None,
             list_row_focus_nodes: Vec::new(),
             should_reset_instances: false,
+            list_has_duplicate_items: false,
             list_uses_draw_index_sort: false,
             ordered_list_indices_cache_valid: false,
+            updating_list: false,
             cached_ordered_list_indices: Vec::new(),
             draw_index_dependents: HashMap::new(),
             provider_state: LayoutNodeProviderState::default(),
@@ -257,6 +261,7 @@ impl ArtboardComponentList {
         self.state_machines_by_index.clear();
         self.artboard_instances_map.clear();
         self.list_items.clear();
+        self.list_has_duplicate_items = false;
         self.artboards_map.clear();
         self.resource_pool.clear();
         self.state_machines_pool.clear();
@@ -285,26 +290,9 @@ impl ArtboardComponentList {
     }
 
     pub fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
-        self.artboard_instance_with_virtualization(index, self.virtualization_enabled())
-    }
-
-    fn artboard_instance_with_virtualization(
-        &self,
-        index: i32,
-        virtualized: bool,
-    ) -> Option<RuntimeArtboardInstanceHandle> {
-        if !virtualized {
-            return (index >= 0)
-                .then(|| self.artboard_instances_by_index.get(index as usize))
-                .flatten()
-                .cloned()
-                .flatten();
-        }
-        if index >= 0 && (index as usize) < self.list_items.len() {
-            let item = self.list_items[index as usize].clone();
-            return self.artboard_instances_map.get(&item).cloned();
-        }
-        None
+        (index >= 0)
+            .then(|| self.artboard_instances_by_index.get(index as usize))
+            .flatten().cloned().flatten()
     }
 
     pub fn index_of_artboard_instance(&self, instance: &RuntimeArtboardInstanceHandle) -> i32 {
@@ -321,18 +309,31 @@ impl ArtboardComponentList {
     }
 
     pub fn state_machine_instance(&self, index: i32) -> Option<RuntimeStateMachineInstanceHandle> {
-        if !self.virtualization_enabled() {
-            return (index >= 0)
-                .then(|| self.state_machines_by_index.get(index as usize))
-                .flatten()
-                .cloned()
-                .flatten();
+        (index >= 0)
+            .then(|| self.state_machines_by_index.get(index as usize))
+            .flatten().cloned().flatten()
+    }
+
+    fn set_rows_for_item(
+        &mut self,
+        index: i32,
+        item: &CoreHandle,
+        artboard: Option<RuntimeArtboardInstanceHandle>,
+        state_machine: Option<RuntimeStateMachineInstanceHandle>,
+    ) {
+        if !self.list_has_duplicate_items {
+            if index >= 0 && self.list_items.get(index as usize) == Some(item) {
+                self.artboard_instances_by_index[index as usize] = artboard;
+                self.state_machines_by_index[index as usize] = state_machine;
+            }
+            return;
         }
-        if index >= 0 && (index as usize) < self.list_items.len() {
-            let item = self.list_items[index as usize].clone();
-            return self.state_machines_map.get(&item).cloned();
+        for (i, row_item) in self.list_items.iter().enumerate() {
+            if row_item == item {
+                self.artboard_instances_by_index[i] = artboard.clone();
+                self.state_machines_by_index[i] = state_machine.clone();
+            }
         }
-        None
     }
 
     pub fn mark_layout_node_dirty(&mut self, _should_force_update_layout_bounds: bool) {
@@ -668,6 +669,10 @@ impl ArtboardComponentList {
             }
             return;
         }
+        if self.list_row_nodes_in_place() {
+            self.build_list_row_focus_trees(&focus_manager);
+            return;
+        }
         let list_copy = self.list_items.clone();
         let row_copy = self.list_row_focus_nodes.clone();
         self.sync_list_row_nodes_with_previous(focus_manager, &list_copy, &row_copy);
@@ -722,7 +727,23 @@ impl ArtboardComponentList {
             }
         }
         self.reparent_list_rows_in_scope(&focus_manager);
-        for index in 0..count {
+        self.build_list_row_focus_trees(&focus_manager);
+    }
+
+    fn list_row_nodes_in_place(&self) -> bool {
+        let Some(scope) = &self.list_scope_focus_node else { return false; };
+        if self.list_row_focus_nodes.len() != self.list_items.len() {
+            return false;
+        }
+        let scope = scope.borrow();
+        let children = scope.children();
+        children.len() == self.list_row_focus_nodes.len()
+            && children.iter().zip(&self.list_row_focus_nodes)
+                .all(|(child, row)| row.as_ref().is_some_and(|row| Rc::ptr_eq(child, row)))
+    }
+
+    fn build_list_row_focus_trees(&mut self, focus_manager: &RuntimeFocusManagerHandle) {
+        for index in 0..self.list_items.len() {
             let Some(instance) = self.artboard_instance(index as i32) else {
                 continue;
             };
@@ -804,7 +825,7 @@ impl ArtboardComponentList {
     }
 
     pub fn update_list_occurrence(owner: &CoreHandle, list: &[CoreHandle]) {
-        let Some((previous_list_items, previous_row_nodes)) = owner
+        let Some((previous_list_items, previous_row_nodes, was_updating_list)) = owner
             .with_downcast_mut::<Self, _>(|owner| owner.begin_list_change(list))
             .expect("live ArtboardComponentList")
         else {
@@ -828,7 +849,7 @@ impl ArtboardComponentList {
         Self::sync_layout_children_occurrence(owner);
         owner
             .with_downcast_mut::<Self, _>(|owner| {
-                owner.finish_list_after_layout_children(&previous_list_items, &previous_row_nodes);
+                owner.finish_list_after_layout_children(&previous_list_items, &previous_row_nodes, was_updating_list);
             })
             .expect("live ArtboardComponentList");
     }
@@ -836,33 +857,36 @@ impl ArtboardComponentList {
     fn begin_list_change(
         &mut self,
         list: &[CoreHandle],
-    ) -> Option<(Vec<CoreHandle>, Vec<Option<FocusNodeRef>>)> {
+    ) -> Option<(Vec<CoreHandle>, Vec<Option<FocusNodeRef>>, bool)> {
         if Self::lists_are_equal(Some(&self.list_items), Some(list)) {
             return None;
         }
         let previous_list_items = self.list_items.clone();
         let previous_row_nodes = self.list_row_focus_nodes.clone();
+        let was_updating_list = self.updating_list;
+        self.updating_list = true;
         self.old_items.clear();
         self.old_items.extend(self.list_items.iter().cloned());
         self.list_items.clear();
         self.list_items.extend(list.iter().cloned());
+        // Items are retained while pointer identities are sorted, so arena
+        // slots cannot be recycled during duplicate detection.
+        let mut sorted: Vec<_> = self.list_items.iter().map(CoreHandle::slot_address).collect();
+        sorted.sort_unstable();
+        self.list_has_duplicate_items = sorted.windows(2).any(|pair| pair[0] == pair[1]);
         self.invalidate_ordered_list_indices_cache();
         self.artboard_sizes.clear();
         self.artboard_instances_by_index.clear();
         self.state_machines_by_index.clear();
-        if !self.virtualization_enabled() {
-            self.artboard_instances_by_index
-                .resize(self.list_items.len(), None);
-            self.state_machines_by_index
-                .resize(self.list_items.len(), None);
-        }
+        self.artboard_instances_by_index.resize(self.list_items.len(), None);
+        self.state_machines_by_index.resize(self.list_items.len(), None);
         self.layout_parent_mut(LayoutComponent::clear_layout_children);
         for item in self.old_items.clone() {
             if !self.list_items.contains(&item) {
                 self.dispose_list_item(&item);
             }
         }
-        Some((previous_list_items, previous_row_nodes))
+        Some((previous_list_items, previous_row_nodes, was_updating_list))
     }
 
     fn prepare_list_item(&mut self, index: usize) -> bool {
@@ -875,14 +899,11 @@ impl ArtboardComponentList {
                 self.artboard_sizes.push(size);
             }
         }
-        if !self.virtualization_enabled() {
-            if !self.artboard_instances_map.contains_key(&item) {
-                return true;
-            } else {
-                self.artboard_instances_by_index[index] =
-                    self.artboard_instances_map.get(&item).cloned();
-                self.state_machines_by_index[index] = self.state_machines_map.get(&item).cloned();
-            }
+        if let Some(artboard) = self.artboard_instances_map.get(&item) {
+            self.artboard_instances_by_index[index] = Some(artboard.clone());
+            self.state_machines_by_index[index] = self.state_machines_map.get(&item).cloned();
+        } else if !self.virtualization_enabled() {
+            return true;
         }
         false
     }
@@ -891,6 +912,7 @@ impl ArtboardComponentList {
         &mut self,
         previous_list_items: &[CoreHandle],
         previous_row_nodes: &[Option<FocusNodeRef>],
+        was_updating_list: bool,
     ) {
         self.mark_layout_node_dirty(false);
         self.transform_mut().mark_world_transform_dirty();
@@ -898,6 +920,7 @@ impl ArtboardComponentList {
             .add_dirt(ComponentDirt::COMPONENTS, false);
         self.recompute_list_uses_draw_index_sort();
         self.sync_draw_index_listeners();
+        self.updating_list = was_updating_list;
         let focus_manager = self
             .component()
             .with_artboard(Artboard::focus_manager_handle)
@@ -982,7 +1005,9 @@ impl ArtboardComponentList {
     }
 
     pub fn reset(&mut self) {
-        for item in self.list_items.clone() {
+        for index in 0..self.list_items.len() {
+            let item = &self.list_items[index];
+            let artboard = self.artboard_instances_by_index[index].as_ref();
             if self.should_reset_instances {
                 let view_model_instance = item
                     .with_downcast::<ViewModelInstanceListItem, _>(|item| {
@@ -990,10 +1015,9 @@ impl ArtboardComponentList {
                     })
                     .flatten();
                 if let Some(view_model_instance) = view_model_instance.as_ref() {
-                    view_model_instance
-                        .with_downcast_mut::<ViewModelInstance, _>(ViewModelInstance::advanced);
+                    ViewModelInstance::advanced_handle(view_model_instance);
                 }
-                if let Some(artboard) = self.artboard_instances_map.get(&item) {
+                if let Some(artboard) = artboard {
                     let bound_instance = artboard.with_artboard(|artboard| {
                         artboard.base.data_context().and_then(|context| {
                             context.with_context(DataContext::main_view_model_instance)
@@ -1002,12 +1026,11 @@ impl ArtboardComponentList {
                     if let Some(bound_instance) =
                         bound_instance.filter(|bound| Some(bound) != view_model_instance.as_ref())
                     {
-                        bound_instance
-                            .with_downcast_mut::<ViewModelInstance, _>(ViewModelInstance::advanced);
+                        ViewModelInstance::advanced_handle(&bound_instance);
                     }
                 }
             }
-            if let Some(artboard) = self.artboard_instances_map.get(&item) {
+            if let Some(artboard) = artboard {
                 artboard.with_artboard_mut(|artboard| artboard.reset());
             }
         }
@@ -1043,7 +1066,7 @@ impl ArtboardComponentList {
         }
         // A row can have no artboard (e.g. its view model resolves to none).
         if let Some(artboard) =
-            self.artboard_instance_with_virtualization(index as i32, virtualized)
+            self.artboard_instance(index as i32)
         {
             return artboard.with_artboard(|artboard| artboard.layout_bounds());
         }
@@ -1051,11 +1074,8 @@ impl ArtboardComponentList {
     }
 
     pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: &RuntimeArtboardInstanceHandle) {
-        for index in 0..self.artboard_count() as i32 {
-            let Some(artboard) = self.artboard_instance(index) else {
-                continue;
-            };
-            if artboard.downgrade().ptr_eq(&artboard_instance.downgrade()) {
+        if self.artboard_instances_by_index.iter().flatten()
+            .any(|artboard| artboard.downgrade().ptr_eq(&artboard_instance.downgrade())) {
                 if let Some(parent) = self.component().artboard_handle() {
                     Artboard::mark_layout_dirty_occurrence(
                         &parent,
@@ -1063,8 +1083,6 @@ impl ArtboardComponentList {
                         None,
                     );
                 }
-                break;
-            }
         }
         self.transform_mut().mark_world_transform_dirty();
     }
@@ -1756,7 +1774,7 @@ impl ArtboardComponentList {
         let item = owner
             .with_downcast_mut::<Self, _>(|owner| owner.begin_add_artboard_at(&artboard, index))
             .expect("live ArtboardComponentList");
-        let Some(item) = item else {
+        let Some((item, virtualized)) = item else {
             return;
         };
         Self::bind_artboard_occurrence(owner, &artboard, &item);
@@ -1784,18 +1802,22 @@ impl ArtboardComponentList {
         if force_layout_sync {
             Self::sync_layout_children_occurrence(owner);
         }
-        Self::finish_add_artboard_at_occurrence(owner, artboard, index, item);
+        Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
     }
 
     fn begin_add_artboard_at(
         &mut self,
         artboard: &RuntimeArtboardInstanceHandle,
         index: i32,
-    ) -> Option<CoreHandle> {
+    ) -> Option<(CoreHandle, bool)> {
         let item = self.list_item(index)?;
         self.artboard_instances_map
             .insert(item.clone(), artboard.clone());
-        Some(item)
+        let virtualized = self.virtualization_enabled();
+        if virtualized {
+            self.set_rows_for_item(index, &item, Some(artboard.clone()), None);
+        }
+        Some((item, virtualized))
     }
 
     fn finish_add_artboard_at_occurrence(
@@ -1803,6 +1825,7 @@ impl ArtboardComponentList {
         artboard: RuntimeArtboardInstanceHandle,
         index: i32,
         item: CoreHandle,
+        virtualized: bool,
     ) {
         let source_artboard = owner
             .with_downcast_mut::<Self, _>(|owner| owner.find_artboard(&item))
@@ -1827,6 +1850,9 @@ impl ArtboardComponentList {
                 owner
                     .state_machines_map
                     .insert(item.clone(), state_machine.clone());
+                if virtualized {
+                    owner.set_rows_for_item(index, &item, Some(artboard.clone()), Some(state_machine.clone()));
+                }
             });
             Self::link_state_machine_to_artboard_occurrence(owner, &state_machine, &artboard);
             owner.with_downcast_mut::<Self, _>(|owner| {
@@ -1845,19 +1871,14 @@ impl ArtboardComponentList {
                         .state_machines_map
                         .insert(item.clone(), machine.clone());
                 }
+                if virtualized {
+                    owner.set_rows_for_item(index, &item, Some(artboard.clone()), machine.clone());
+                }
             });
             machine
         };
         owner.with_downcast_mut::<Self, _>(|owner| {
-            if !owner.virtualization_enabled() {
-                if index as usize >= owner.artboard_instances_by_index.len() {
-                    owner
-                        .artboard_instances_by_index
-                        .resize(index as usize + 1, None);
-                    owner
-                        .state_machines_by_index
-                        .resize(index as usize + 1, None);
-                }
+            if !virtualized {
                 owner.artboard_instances_by_index[index as usize] = Some(artboard);
                 owner.state_machines_by_index[index as usize] = state_machine_instance;
             }
@@ -1889,14 +1910,8 @@ impl ArtboardComponentList {
     }
 
     pub fn remove_artboard_at(&mut self, index: i32) {
-        if !self.virtualization_enabled()
-            && index >= 0
-            && (index as usize) < self.artboard_instances_by_index.len()
-        {
-            self.artboard_instances_by_index[index as usize] = None;
-            self.state_machines_by_index[index as usize] = None;
-        }
         if let Some(item) = self.list_item(index) {
+            self.set_rows_for_item(index, &item, None, None);
             self.remove_artboard(item);
         }
     }
@@ -2051,6 +2066,9 @@ impl ArtboardComponentList {
     }
 
     pub fn virtualizable_changed(&mut self) {
+        if self.updating_list {
+            return;
+        }
         let focus_manager = self
             .component()
             .with_artboard(Artboard::focus_manager_handle)
@@ -2063,6 +2081,7 @@ impl ArtboardComponentList {
 
     pub fn remove_virtualizable(&mut self, index: i32) {
         if let Some(list_item) = self.list_item(index) {
+            self.set_rows_for_item(index, &list_item, None, None);
             let artboard = self.find_artboard(&list_item);
             let artboard_instance = self.artboard_instances_map.remove(&list_item);
             if let (Some(artboard), Some(artboard_instance)) =

@@ -71,6 +71,8 @@ pub struct ShapePaint {
     effects_deferred: bool,
     feather: Option<CoreHandle>,
     has_modulated_image: bool,
+    has_paint_image: bool,
+    is_fill: bool,
     script_paint_scope: Option<Rc<crate::scripting::ScriptPaint>>,
 }
 
@@ -85,6 +87,8 @@ impl Default for ShapePaint {
             effects_deferred: false,
             feather: None,
             has_modulated_image: false,
+            has_paint_image: false,
+            is_fill: false,
             script_paint_scope: None,
         }
     }
@@ -115,6 +119,15 @@ impl ShapePaint {
     }
 
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+        self.has_paint_image = self.base.children().iter().any(|child| {
+            child.is_type_of(
+                crate::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY,
+            )
+        });
+        self.is_fill = self.base.handle().is_some_and(|handle| {
+            handle
+                .is_type_of(crate::source::generated::shapes::paint::fill_base::FillBase::TYPE_KEY)
+        });
         let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) else {
             return StatusCode::MissingObject;
         };
@@ -435,7 +448,7 @@ impl ShapePaint {
 
         let mut draw_path = |path: &mut ShapePaintPath, original: Option<&ShapePaintPath>| {
             let render_path = path.render_path(factory);
-            if !use_path_fill_rule {
+            if !use_path_fill_rule && self.is_fill {
                 if let Some(fill_rule) = fill_rule {
                     match fill_rule {
                         0 => render_path.fill_rule(nuxie_render_api::FillRule::NonZero),
@@ -506,11 +519,15 @@ impl ShapePaint {
             shapes::paint::paint_image::PaintImage,
         };
         let child = self
-            .base
-            .children()
-            .iter()
-            .find(|child| child.is_type_of(PaintImageBase::TYPE_KEY))
-            .cloned();
+            .has_paint_image
+            .then(|| {
+                self.base
+                    .children()
+                    .iter()
+                    .find(|child| child.is_type_of(PaintImageBase::TYPE_KEY))
+                    .cloned()
+            })
+            .flatten();
         if let Some(child) = child {
             let applied = self
                 .with_render_paint_mut(|paint| {

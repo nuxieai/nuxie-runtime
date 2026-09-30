@@ -35,6 +35,12 @@ impl KeyFrameDouble {
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) -> bool {
+        if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
+            accumulator
+                .borrow_mut()
+                .apply_double(object, key, mix, self.effective_value(context));
+            return true;
+        }
         Self::apply_value(object, key, mix, self.effective_value(context))
     }
     pub fn apply_interpolation(
@@ -55,6 +61,12 @@ impl KeyFrameDouble {
             .base
             .transform_value(context, from, to, factor)
             .unwrap_or_else(|| from + (to - from) * factor);
+        if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
+            accumulator
+                .borrow_mut()
+                .apply_double(object, key, mix, value);
+            return true;
+        }
         Self::apply_value(object, key, mix, value)
     }
 }

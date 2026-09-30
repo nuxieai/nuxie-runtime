@@ -281,6 +281,11 @@ impl ContextBinding for CoreBinding {
         let Some(source) = self.source() else {
             return false;
         };
+        if source.with_downcast::<ViewModelInstanceTrigger, _>(|_| ()).is_some() {
+            return integer_value(value).is_some_and(|value| {
+                mutate(|| ViewModelInstanceTrigger::apply_value_handle(&source, &DataValueInteger::new(value)))
+            });
+        }
         if source
             .with_downcast::<ViewModelInstanceViewModel, _>(|_| ())
             .is_some()
@@ -310,7 +315,7 @@ impl ContextBinding for CoreBinding {
             let Some(integer) = integer_value(value) else { return false; };
             let integer = DataValueInteger::new(integer);
             macro_rules! numeric { ($($vm:ty),* $(,)?) => { $(if let Some(source) = source.as_any_mut().downcast_mut::<$vm>() { source.apply_value(&integer); return true; })* }; }
-            numeric!(ViewModelInstanceEnum, ViewModelInstanceTrigger, ViewModelInstanceSymbolListIndex, ViewModelInstanceArtboard);
+            numeric!(ViewModelInstanceEnum, ViewModelInstanceSymbolListIndex, ViewModelInstanceArtboard);
             if let Some(source) = source.as_any_mut().downcast_mut::<ViewModelInstanceAssetImage>() {
                 source.apply_data_value(value);
                 return true;

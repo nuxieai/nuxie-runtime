@@ -5557,6 +5557,9 @@ impl crate::mechanical_port::source::animation::animation_reset_factory::ResetAr
 }
 
 impl crate::mechanical_port::source::animation::animation_reset::AnimationResetTarget for Artboard {
+    fn resolve(&self, object_id: u32) -> Option<CoreHandle> {
+        self.resolve_handle(object_id)
+    }
     fn resolves(&self, object_id: u32) -> bool {
         self.resolve_handle(object_id).is_some()
     }
@@ -6117,6 +6120,9 @@ impl crate::mechanical_port::source::animation::animation_reset_factory::ResetAr
 impl crate::mechanical_port::source::animation::animation_reset::AnimationResetTarget
     for RuntimeArtboardInstanceHandle
 {
+    fn resolve(&self, object_id: u32) -> Option<CoreHandle> {
+        self.with_artboard(|artboard| artboard.resolve_handle(object_id))
+    }
     fn resolves(&self, object_id: u32) -> bool {
         self.with_artboard(|artboard| artboard.resolve_handle(object_id).is_some())
     }
@@ -6143,6 +6149,9 @@ impl crate::mechanical_port::source::animation::animation_reset::AnimationResetT
 impl crate::mechanical_port::source::animation::animation_reset::AnimationResetTarget
     for ArtboardInstance
 {
+    fn resolve(&self, object_id: u32) -> Option<CoreHandle> {
+        self.base.resolve_handle(object_id)
+    }
     fn resolves(&self, object_id: u32) -> bool {
         crate::mechanical_port::source::animation::animation_reset::AnimationResetTarget::resolves(
             &self.base, object_id,

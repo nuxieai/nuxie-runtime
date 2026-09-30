@@ -433,11 +433,9 @@ impl DataContext {
             let instance = instance
                 .as_ref()
                 .expect("DataContext::advanced requires non-null view model entries");
-            instance.with_mut(|instance| {
-                if let Some(instance) = instance.as_view_model_instance_mut() {
-                    instance.advanced();
-                }
-            });
+            crate::source::viewmodel::viewmodel_instance::ViewModelInstance::advanced_handle(
+                instance,
+            );
         }
     }
 

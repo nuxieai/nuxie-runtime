@@ -1,4 +1,4 @@
-use std::{any::Any, marker::PhantomData};
+use std::{any::Any, cell::RefCell, marker::PhantomData, rc::Rc};
 
 use crate::mechanical_port::source::{
     animation::{
@@ -62,6 +62,7 @@ where
 {
     pub base: StateInstance,
     pub(crate) animation_instances: Vec<BlendStateAnimationInstance<T>>,
+    pub(crate) accumulator: Rc<RefCell<super::blend_accumulator::BlendAccumulator>>,
     keep_going: bool,
     blend_state: CoreHandle,
     definition: PhantomData<K>,
@@ -84,8 +85,17 @@ where
             ));
         }
 
+        let accumulator = Rc::new(RefCell::new(
+            super::blend_accumulator::BlendAccumulator::default(),
+        ));
+        for animation in &mut animation_instances {
+            animation
+                .animation_instance
+                .set_blend_accumulator(&accumulator);
+        }
         Self {
             base: StateInstance::new(blend_state.clone()),
+            accumulator,
             animation_instances,
             keep_going: true,
             blend_state,
@@ -114,6 +124,7 @@ where
                 animation.animation_instance.apply(animation_mix);
             }
         }
+        self.accumulator.borrow_mut().flush();
     }
 
     pub fn clear_spilled_time(&mut self) {

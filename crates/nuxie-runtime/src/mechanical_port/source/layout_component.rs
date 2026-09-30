@@ -21,7 +21,7 @@ use crate::mechanical_port::source::{
         },
         layout_measure_mode::LayoutMeasureMode,
         layout_node_provider::{
-            layout_node_owner_for, LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState,
+            LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState, layout_node_owner_for,
         },
         layout_style_applier::{
             LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDimension, YGDirection, YGDisplay,
@@ -232,6 +232,7 @@ pub(crate) enum LayoutComponentFlags {
     JustAddedToHost = 1 << 11,
     ForceDrawableProxy = 1 << 12,
     ClipSaved = 1 << 13,
+    StyleDisplayHidden = 1 << 14,
 }
 
 #[derive(Default)]
@@ -1136,6 +1137,7 @@ impl LayoutComponent {
     }
     pub fn set_style(&mut self, style: Option<CoreHandle>) {
         self.style = style;
+        self.refresh_style_display_hidden();
     }
     pub fn proxy(&mut self) -> Option<RuntimeDrawableOccurrence> {
         if self.proxy.is_none() {
@@ -1511,6 +1513,7 @@ impl LayoutComponent {
         };
         self.style = Some(style.clone());
         self.base.add_child(style.clone());
+        self.refresh_style_display_hidden();
         let Some(this) = self.base.base.base.base.base.handle() else {
             return StatusCode::MissingObject;
         };
@@ -2512,8 +2515,13 @@ impl LayoutComponent {
         }
     }
     pub fn style_display_hidden(&self) -> bool {
-        self.with_style(|style| style.display() == YGDisplay::None)
-            .unwrap_or(false)
+        self.has_layout_flag(LayoutComponentFlags::StyleDisplayHidden)
+    }
+    fn refresh_style_display_hidden(&mut self) {
+        let hidden = self
+            .with_style(|style| style.display() == YGDisplay::None)
+            .unwrap_or(false);
+        self.set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, hidden);
     }
     pub fn actual_direction(&self) -> LayoutDirection {
         self.with_style(|style| match style.direction() {
@@ -3341,6 +3349,12 @@ impl LayoutComponent {
         if let Some(display_hidden) = Self::with_callback_style(owner, active_style, |style| {
             style.display() == YGDisplay::None
         }) {
+            owner.with_mut(|object| {
+                object
+                    .as_layout_component_mut()
+                    .expect("layout component")
+                    .set_layout_flag(LayoutComponentFlags::StyleDisplayHidden, display_hidden);
+            });
             let collapsed = owner
                 .with(|object| {
                     object

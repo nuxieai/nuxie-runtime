@@ -1145,7 +1145,7 @@ fn property_namecall_atom(
         LuaAtoms::RemoveListener => Some(property.remove_listener()),
         LuaAtoms::Fire => {
             if let Some(value) = property.instance_value_mut() {
-                value.with_downcast_mut::<ViewModelInstanceTrigger, _>(|trigger| trigger.trigger());
+                ViewModelInstanceTrigger::trigger_handle(&value);
             }
             Some(0)
         }

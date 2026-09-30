@@ -4142,6 +4142,7 @@ pub enum CoreField {
     LayoutSizingStyleHeightUnitsValue,
     LayoutSizingStyleJustifySelfValue,
     LayoutSizingStyleLayoutHeightScaleType,
+    LayoutSizingStyleHugUnbounded,
     LayoutSizingStyleLayoutWidthScaleType,
     LayoutSizingStyleMaxHeight,
     LayoutSizingStyleMaxHeightUnitsValue,
@@ -8506,6 +8507,7 @@ impl CoreRegistry {
             734 => CoreField::ScrollBarConstraintAutoSize,
             895 => CoreField::NestedArtboardIsPaused,
             1014 => CoreField::NestedArtboardIsStateful,
+            451 => CoreField::LayoutSizingStyleHugUnbounded,
             676 => CoreField::AxisNormalized,
             606 => CoreField::LayoutComponentStyleIntrinsicallySizedValue,
             639 => CoreField::LayoutComponentStyleLinkCornerRadius,
@@ -9306,6 +9308,7 @@ impl CoreRegistry {
             734 => CoreField::ScrollBarConstraintAutoSize,
             895 => CoreField::NestedArtboardIsPaused,
             1014 => CoreField::NestedArtboardIsStateful,
+            451 => CoreField::LayoutSizingStyleHugUnbounded,
             676 => CoreField::AxisNormalized,
             606 => CoreField::LayoutComponentStyleIntrinsicallySizedValue,
             639 => CoreField::LayoutComponentStyleLinkCornerRadius,
@@ -10080,6 +10083,7 @@ impl CoreRegistry {
             734 => 4,
             895 => 4,
             1014 => 4,
+            451 => 4,
             676 => 4,
             606 => 4,
             639 => 4,
@@ -10726,6 +10730,7 @@ impl CoreRegistry {
             734 => 522,
             895 => 92,
             1014 => 92,
+            451 => 1056,
             676 => 492,
             606 => 420,
             639 => 420,
@@ -22865,7 +22870,15 @@ impl CoreRegistryObject
         let _ = (field, value);
     }
     fn set_bool(&mut self, field: CoreField, value: bool) {
-        let _ = (field, value);
+        match field {
+            CoreField::LayoutSizingStyleHugUnbounded => {
+                if self.base.base.base.set_hug_unbounded_value(value) {
+                    <crate::mechanical_port::source::layout::layout_node_style::LayoutNodeStyle as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::hug_unbounded_changed(self);
+                    <crate::mechanical_port::source::layout::layout_node_style::LayoutNodeStyle as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HUG_UNBOUNDED_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
     }
     fn set_double(&mut self, field: CoreField, value: f32) {
         match field {
@@ -22971,8 +22984,10 @@ impl CoreRegistryObject
         0
     }
     fn get_bool(&mut self, field: CoreField) -> bool {
-        let _ = field;
-        false
+        match field {
+            CoreField::LayoutSizingStyleHugUnbounded => self.base.base.base.hug_unbounded(),
+            _ => false,
+        }
     }
     fn get_double(&mut self, field: CoreField) -> f32 {
         match field {
@@ -23213,7 +23228,15 @@ impl CoreRegistryObject
         let _ = (field, value);
     }
     fn set_bool(&mut self, field: CoreField, value: bool) {
-        let _ = (field, value);
+        match field {
+            CoreField::LayoutSizingStyleHugUnbounded => {
+                if self.base.base.base.base.base.set_hug_unbounded_value(value) {
+                    <crate::mechanical_port::source::layout::layout_participant::LayoutParticipant as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::hug_unbounded_changed(self);
+                    <crate::mechanical_port::source::layout::layout_participant::LayoutParticipant as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HUG_UNBOUNDED_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
     }
     fn set_double(&mut self, field: CoreField, value: f32) {
         match field {
@@ -23321,8 +23344,10 @@ impl CoreRegistryObject
         0
     }
     fn get_bool(&mut self, field: CoreField) -> bool {
-        let _ = field;
-        false
+        match field {
+            CoreField::LayoutSizingStyleHugUnbounded => self.base.base.base.base.base.hug_unbounded(),
+            _ => false,
+        }
     }
     fn get_double(&mut self, field: CoreField) -> f32 {
         match field {
@@ -23833,6 +23858,12 @@ impl CoreRegistryObject
     }
     fn set_bool(&mut self, field: CoreField, value: bool) {
         match field {
+            CoreField::LayoutSizingStyleHugUnbounded => {
+                if self.base.base.base.set_hug_unbounded_value(value) {
+                    <crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::hug_unbounded_changed(self);
+                    <crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle as crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBase::HUG_UNBOUNDED_PROPERTY_KEY);
+                }
+            }
             CoreField::LayoutComponentStyleIntrinsicallySizedValue => {
                 if self.base.set_intrinsically_sized_value_value(value) {
                     <crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle as crate::mechanical_port::source::generated::layout::layout_component_style_base::LayoutComponentStyleBaseCallbacks>::intrinsically_sized_value_changed(self);
@@ -24159,6 +24190,7 @@ impl CoreRegistryObject
     }
     fn get_bool(&mut self, field: CoreField) -> bool {
         match field {
+            CoreField::LayoutSizingStyleHugUnbounded => self.base.base.base.hug_unbounded(),
             CoreField::LayoutComponentStyleIntrinsicallySizedValue => {
                 self.base.intrinsically_sized_value()
             }
@@ -72390,6 +72422,7 @@ impl crate::mechanical_port::source::generated::layout::layout_node_style_base::
     }
 }
 impl crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks for crate::mechanical_port::source::layout::layout_participant::LayoutParticipant {
+    forward_callback_methods!(crate::mechanical_port::source::layout::layout_participant::LayoutParticipant; hug_unbounded_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -72432,7 +72465,7 @@ impl crate::mechanical_port::source::generated::layout::layout_component_style_b
     }
 }
 impl crate::mechanical_port::source::generated::layout::layout_sizing_style_base::LayoutSizingStyleBaseCallbacks for crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle {
-    forward_callback_methods!(crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle; min_width_changed, max_width_changed, min_height_changed, max_height_changed, layout_width_scale_type_changed, layout_height_scale_type_changed, width_units_value_changed, height_units_value_changed, min_width_units_value_changed, max_width_units_value_changed, min_height_units_value_changed, max_height_units_value_changed, justify_self_value_changed, display_value_changed);
+    forward_callback_methods!(crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle; min_width_changed, max_width_changed, min_height_changed, max_height_changed, layout_width_scale_type_changed, layout_height_scale_type_changed, hug_unbounded_changed, width_units_value_changed, height_units_value_changed, min_width_units_value_changed, max_width_units_value_changed, min_height_units_value_changed, max_height_units_value_changed, justify_self_value_changed, display_value_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }

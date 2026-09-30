@@ -66,8 +66,12 @@ impl core::fmt::Display for TaffyError {
             TaffyError::InvalidParentNode(parent) => {
                 write!(f, "Parent Node {parent:?} is not in the TaffyTree instance")
             }
-            TaffyError::InvalidChildNode(child) => write!(f, "Child Node {child:?} is not in the TaffyTree instance"),
-            TaffyError::InvalidInputNode(node) => write!(f, "Supplied Node {node:?} is not in the TaffyTree instance"),
+            TaffyError::InvalidChildNode(child) => {
+                write!(f, "Child Node {child:?} is not in the TaffyTree instance")
+            }
+            TaffyError::InvalidInputNode(node) => {
+                write!(f, "Supplied Node {node:?} is not in the TaffyTree instance")
+            }
         }
     }
 }
@@ -110,6 +114,10 @@ struct NodeData {
     /// The cached results of the layout computation
     pub(crate) cache: Cache,
 
+    // Rive: callbacks may distinguish an intrinsic probe from an ordinary
+    // zero-space offer even when their final LayoutInput is identical.
+    cache_measure_context: u8,
+
     /// The computation result from layout algorithm
     #[cfg(feature = "detailed_layout_info")]
     pub(crate) detailed_layout_info: DetailedLayoutInfo,
@@ -122,6 +130,7 @@ impl NodeData {
         Self {
             style,
             cache: Cache::new(),
+            cache_measure_context: 0,
             unrounded_layout: Layout::new(),
             final_layout: Layout::new(),
             has_context: false,
@@ -137,6 +146,21 @@ impl NodeData {
     #[inline]
     pub fn mark_dirty(&mut self) -> ClearState {
         self.cache.clear()
+    }
+
+    fn cached_layout(&self, input: &LayoutInput, context: u8) -> Option<LayoutOutput> {
+        if self.cache_measure_context != context {
+            return None;
+        }
+        self.cache.get(input)
+    }
+
+    fn store_layout(&mut self, input: &LayoutInput, output: LayoutOutput, context: u8) {
+        if self.cache_measure_context != context {
+            self.cache.clear();
+            self.cache_measure_context = context;
+        }
+        self.cache.store(input, output);
     }
 }
 
@@ -211,11 +235,11 @@ impl<NodeContext> TraverseTree for TaffyTree<NodeContext> {}
 // CacheTree impl for TaffyTree
 impl<NodeContext> CacheTree for TaffyTree<NodeContext> {
     fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-        self.nodes[node_id.into()].cache.get(input)
+        self.nodes[node_id.into()].cached_layout(input, 0)
     }
 
     fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
-        self.nodes[node_id.into()].cache.store(input, layout_output)
+        self.nodes[node_id.into()].store_layout(input, layout_output, 0)
     }
 
     fn cache_clear(&mut self, node_id: NodeId) {
@@ -271,6 +295,8 @@ where
     pub(crate) taffy: &'t mut TaffyTree<NodeContext>,
     /// The context provided for passing to measure functions if layout is run over this struct
     pub(crate) measure_function: MeasureFunction,
+    // Local to this solve, preserving nested probe scope without global state.
+    min_content_probe_depth: Option<&'t core::cell::Cell<usize>>,
 }
 
 impl<NodeContext, MeasureFunction> TaffyView<'_, NodeContext, MeasureFunction>
@@ -278,6 +304,14 @@ where
     MeasureFunction:
         FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
 {
+    fn measure_cache_context(&self) -> u8 {
+        match self.min_content_probe_depth {
+            None => 0,
+            Some(depth) if depth.get() == 0 => 1,
+            Some(_) => 2,
+        }
+    }
+
     #[inline(always)]
     /// Unified implementation that both `LayoutPartialTree::compute_child_layout`
     /// and `LayoutBlockContainer::compute_block_child_layout` delegate to.
@@ -401,6 +435,18 @@ where
             None,
         )
     }
+
+    fn begin_min_content_probe(&mut self) {
+        if let Some(depth) = self.min_content_probe_depth {
+            depth.set(depth.get() + 1);
+        }
+    }
+
+    fn end_min_content_probe(&mut self) {
+        if let Some(depth) = self.min_content_probe_depth {
+            depth.set(depth.get() - 1);
+        }
+    }
 }
 
 impl<NodeContext, MeasureFunction> CacheTree for TaffyView<'_, NodeContext, MeasureFunction>
@@ -409,11 +455,12 @@ where
         FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
 {
     fn cache_get(&self, node_id: NodeId, input: &LayoutInput) -> Option<LayoutOutput> {
-        self.taffy.nodes[node_id.into()].cache.get(input)
+        self.taffy.nodes[node_id.into()].cached_layout(input, self.measure_cache_context())
     }
 
     fn cache_store(&mut self, node_id: NodeId, input: &LayoutInput, layout_output: LayoutOutput) {
-        self.taffy.nodes[node_id.into()].cache.store(input, layout_output)
+        let context = self.measure_cache_context();
+        self.taffy.nodes[node_id.into()].store_layout(input, layout_output, context)
     }
 
     fn cache_clear(&mut self, node_id: NodeId) {
@@ -913,7 +960,36 @@ impl<NodeContext> TaffyTree<NodeContext> {
             FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
     {
         let use_rounding = self.config.use_rounding;
-        let mut taffy_view = TaffyView { taffy: self, measure_function };
+        let mut taffy_view = TaffyView { taffy: self, measure_function, min_content_probe_depth: None };
+        compute_root_layout(&mut taffy_view, node_id, available_space);
+        if use_rounding {
+            round_layout(&mut taffy_view, node_id);
+        }
+        Ok(())
+    }
+
+    /// Rive: measure with the same nested min-content probe context exposed by
+    /// Yoga's YGConfigIsMeasuringMinContent. Probe and ordinary cache entries
+    /// cannot alias, even if descendants receive identical constraints.
+    pub fn compute_layout_with_measure_and_probe<MeasureFunction>(
+        &mut self,
+        node_id: NodeId,
+        available_space: Size<AvailableSpace>,
+        mut measure_function: MeasureFunction,
+    ) -> Result<(), TaffyError>
+    where
+        MeasureFunction:
+            FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style, bool) -> Size<f32>,
+    {
+        let use_rounding = self.config.use_rounding;
+        let depth = core::cell::Cell::new(0);
+        let mut taffy_view = TaffyView {
+            taffy: self,
+            measure_function: |known, available, node, context, style| {
+                measure_function(known, available, node, context, style, depth.get() != 0)
+            },
+            min_content_probe_depth: Some(&depth),
+        };
         compute_root_layout(&mut taffy_view, node_id, available_space);
         if use_rounding {
             round_layout(&mut taffy_view, node_id);
@@ -935,7 +1011,7 @@ impl<NodeContext> TaffyTree<NodeContext> {
     /// Returns an instance of LayoutTree representing the TaffyTree
     #[cfg(test)]
     pub(crate) fn as_layout_tree(&mut self) -> impl LayoutPartialTree + CacheTree + '_ {
-        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO }
+        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO, min_content_probe_depth: None }
     }
 }
 
@@ -955,6 +1031,37 @@ mod tests {
         _style: &Style,
     ) -> Size<f32> {
         known_dimensions.unwrap_or(node_context.cloned().unwrap_or(Size::ZERO))
+    }
+
+    #[test]
+    fn rive_nested_probe_does_not_share_an_ordinary_zero_space_cache() {
+        let mut taffy: TaffyTree<()> = TaffyTree::new();
+        let node = taffy.new_leaf(Style::default()).unwrap();
+        let depth = core::cell::Cell::new(0usize);
+        let mut view = TaffyView {
+            taffy: &mut taffy,
+            measure_function: |_: Size<Option<f32>>,
+                               _: Size<AvailableSpace>,
+                               _: NodeId,
+                               _: Option<&mut ()>,
+                               _: &Style| {
+                Size { width: if depth.get() > 0 { 80.0 } else { 0.0 }, height: 0.0 }
+            },
+            min_content_probe_depth: Some(&depth),
+        };
+        let input = LayoutInput {
+            run_mode: RunMode::ComputeSize,
+            available_space: Size { width: AvailableSpace::Definite(0.0), height: AvailableSpace::Definite(0.0) },
+            ..LayoutInput::HIDDEN
+        };
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 0.0);
+        view.begin_min_content_probe();
+        view.begin_min_content_probe();
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 80.0);
+        view.end_min_content_probe();
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 80.0);
+        view.end_min_content_probe();
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 0.0);
     }
 
     #[test]

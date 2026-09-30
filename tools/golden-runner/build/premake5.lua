@@ -91,6 +91,7 @@ local runner_forceincludes = {
 
 if with_scripting then
     table.insert(runner_defines, 'WITH_RIVE_SCRIPTING')
+    table.insert(runner_defines, 'WITH_RIVE_SCRIPTING_LUAU')
     table.insert(runner_defines, 'RIVE_DECODERS')
     table.insert(runner_defines, 'HYDRO_SIGN_VERIFY_ONLY=1')
     table.insert(runner_forceincludes, 'rive_luau.hpp')

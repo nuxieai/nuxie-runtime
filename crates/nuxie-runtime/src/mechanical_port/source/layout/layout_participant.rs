@@ -711,6 +711,9 @@ impl LayoutParticipant {
     pub fn layout_height_scale_type_changed(&mut self) {
         self.on_sizing_changed();
     }
+    pub fn hug_unbounded_changed(&mut self) {
+        self.on_sizing_changed();
+    }
     pub fn width_changed(&mut self) {
         self.on_sizing_changed();
     }

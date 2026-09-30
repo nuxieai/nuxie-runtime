@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-expected_runtime_revision="912312dc744a989ea561064bcd7291e7659e02ef"
+expected_runtime_revision="f0ec99212cc7bbc1d4755c22794eff81d103319b"
 schema="nuxie-golden-librive-provenance-v3"
 
 # Registered local oracle patches applied on top of the pinned revision when
@@ -98,6 +98,7 @@ expected_defines() {
             "RIVE_DECODERS"
             "WITH_RIVE_AUDIO"
             "WITH_RIVE_SCRIPTING"
+            "WITH_RIVE_SCRIPTING_LUAU"
         )
     elif [[ "$mode" == "audio" ]]; then
         defines+=(

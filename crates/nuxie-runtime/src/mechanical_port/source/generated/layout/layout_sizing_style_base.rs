@@ -12,6 +12,7 @@ pub struct LayoutSizingStyleMinMaxSizingSidecar {
     pub max_width_units_value: u8,
     pub min_height_units_value: u8,
     pub max_height_units_value: u8,
+    pub hug_unbounded: bool,
 }
 
 pub trait LayoutSizingStyleBaseCallbacks:
@@ -28,6 +29,7 @@ pub trait LayoutSizingStyleBaseCallbacks:
     fn max_height_units_value_changed(&mut self) {}
     fn layout_width_scale_type_changed(&mut self) {}
     fn layout_height_scale_type_changed(&mut self) {}
+    fn hug_unbounded_changed(&mut self) {}
     fn width_units_value_changed(&mut self) {}
     fn height_units_value_changed(&mut self) {}
     fn justify_self_value_changed(&mut self) {}
@@ -72,6 +74,7 @@ impl LayoutSizingStyleBase {
     pub const MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY: u16 = 630;
     pub const LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY: u16 = 655;
     pub const LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY: u16 = 656;
+    pub const HUG_UNBOUNDED_PROPERTY_KEY: u16 = 451;
     pub const WIDTH_UNITS_VALUE_PROPERTY_KEY: u16 = 607;
     pub const HEIGHT_UNITS_VALUE_PROPERTY_KEY: u16 = 608;
     pub const JUSTIFY_SELF_VALUE_PROPERTY_KEY: u16 = 1046;
@@ -353,6 +356,32 @@ impl LayoutSizingStyleBase {
         self.layout_height_scale_type = value;
         true
     }
+    pub fn hug_unbounded(&self) -> bool {
+        self.min_max_sizing
+            .get()
+            .is_some_and(|sidecar| sidecar.hug_unbounded)
+    }
+    pub fn set_hug_unbounded(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl LayoutSizingStyleBaseCallbacks,
+    ) {
+        if !self.set_hug_unbounded_value(value) {
+            return;
+        }
+        callbacks.hug_unbounded_changed();
+        LayoutSizingStyleBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::HUG_UNBOUNDED_PROPERTY_KEY,
+        );
+    }
+    pub(crate) fn set_hug_unbounded_value(&mut self, value: bool) -> bool {
+        if self.hug_unbounded() == value {
+            return false;
+        }
+        self.min_max_sizing.ensure_allocated().hug_unbounded = value;
+        true
+    }
     pub fn width_units_value(&self) -> u8 {
         self.width_units_value
     }
@@ -512,6 +541,10 @@ impl LayoutSizingStyleBase {
             }
             Self::WIDTH_UNITS_VALUE_PROPERTY_KEY => {
                 self.width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
+            Self::HUG_UNBOUNDED_PROPERTY_KEY => {
+                self.min_max_sizing.ensure_allocated().hug_unbounded = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true
             }
             Self::HEIGHT_UNITS_VALUE_PROPERTY_KEY => {

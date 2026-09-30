@@ -439,7 +439,10 @@ impl GridItem {
             let available_space = available_space
                 .map(|opt| opt.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite))
                 .with(axis, AvailableSpace::MinContent);
-            return tree
+            // Rive Yoga _4_grid scopes the probe through nested layouts, not
+            // merely through the final leaf's available-space value.
+            tree.begin_min_content_probe();
+            let contribution = tree
                 .perform_child_layout(
                     self.node,
                     known_dimensions,
@@ -450,6 +453,8 @@ impl GridItem {
                 )
                 .size
                 .get(axis);
+            tree.end_min_content_probe();
+            return contribution;
         }
         // The child sees the grid area as its containing block during intrinsic measurement, so
         // percentage box properties resolve against the grid area when that size is definite.

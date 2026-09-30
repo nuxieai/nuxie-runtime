@@ -563,7 +563,30 @@ impl Shape {
     ) -> Vec2D {
         if self.is_participating_in_layout() {
             let bounds = self.compute_intrinsic_bounds();
-            return Vec2D::new(bounds.width(), bounds.height());
+            let available_width = if width_mode == LayoutMeasureMode::Undefined {
+                f32::MAX
+            } else {
+                width
+            };
+            let available_height = if height_mode == LayoutMeasureMode::Undefined {
+                f32::MAX
+            } else {
+                height
+            };
+            // std::min keeps its first operand when the comparison is false,
+            // including NaN; f32::min does not have that selection behavior.
+            return Vec2D::new(
+                if bounds.width() < available_width {
+                    bounds.width()
+                } else {
+                    available_width
+                },
+                if bounds.height() < available_height {
+                    bounds.height()
+                } else {
+                    available_height
+                },
+            );
         }
         self.paths().iter().fold(Vec2D::default(), |size, path| {
             let measured = path

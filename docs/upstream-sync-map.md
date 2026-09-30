@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8daed0a3dfc437bf18980244bb95222f2a32a9aa`
+- LAST_SYNCED_SHA: `af39db759ecd48fe78dfee4fff59a918368181c6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 32 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 32 require a Rust translation.
+  There are 31 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 31 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `af39db759ecd48fe78dfee4fff59a918368181c6` | **UPSTREAM TEST-DEPLOYMENT ONLY:** adds Unreal iOS package/device launch support, relocates Unreal installation, and avoids forcing window resolution on the Unreal player. No Unreal host or these deployment scripts ship in the Rust workspace, and no runtime, renderer, shader, fixture or assertion changed. Existing native Apple host APIs are unaffected. | — |
 | `8daed0a3dfc437bf18980244bb95222f2a32a9aa` | **DEFERRED WASM EXECUTION:** disables WAMR libc-wasi and removes its source/include paths. The full public delta is confined to the parked WAMR scripting backend and private source pointer; no Rust Luau, shared runtime or browser-renderer change is imported. | UNIV-3728 |
 | `93e4ce468f0aadff5622e960baa16e6c87e0d5fb` | Cache skinned-path and layout-participant lookups at registration, coalesce path/composer shape notifications per dirt cycle, and skip hidden stroke-effect measurement except for clip sources. Preserve active Rust owner borrows through explicit registration witnesses and notification extraction. Port the complete hidden-stroke visibility regression. Upstream private-editor rescans are not enabled by the distinct Rust tools feature. | — |
 | `af45192d7335c988bb7fe34ef2e9f8413e9b7a85` | Compute transformed precise RawPath bounds directly by mapping points before solving curve extrema; preserve identity-call behavior and transform-before-interpolation order for quadratics. Use the new method for built and provisional shape paths without copying them. Port the complete upstream raw-path bounds case, including its transformed-vs-copy regression. | — |

@@ -297,6 +297,12 @@ pub enum Action {
         property: String,
         value: f32,
     },
+    SetViewModelListItemBoolean {
+        list: String,
+        index: usize,
+        property: String,
+        value: bool,
+    },
     ClearRandoms,
     AddRandomValue {
         value: f32,
@@ -362,6 +368,24 @@ pub enum Action {
     },
     FocusNext,
     FocusPrevious,
+    ClearFocus,
+    AssertFocusChildCount {
+        path: Vec<usize>,
+        count: usize,
+    },
+    SetFocusNode {
+        path: Vec<usize>,
+    },
+    AssertFocusNode {
+        path: Option<Vec<usize>>,
+    },
+    ClickFocusNode {
+        path: Vec<usize>,
+    },
+    AssertFocusOrder {
+        paths: Vec<Vec<usize>>,
+        reverse: bool,
+    },
     KeyInput {
         key: u32,
         modifiers: u32,
@@ -1071,6 +1095,24 @@ impl Execution {
                         .set_value(*value);
                 }
                 Action::ClearRandoms => RandomProvider::clear_randoms(),
+                Action::SetViewModelListItemBoolean {
+                    list,
+                    index,
+                    property,
+                    value,
+                } => {
+                    let list_runtime = main_runtime(&owned_context)?
+                        .property_list(list)
+                        .with_context(|| format!("missing list property {list}"))?;
+                    let item = list_runtime
+                        .instance_at(i32::try_from(*index)?)
+                        .with_context(|| format!("missing list item {list}[{index}]"))?;
+                    item.property_boolean(property)
+                        .with_context(|| {
+                            format!("missing boolean property {list}[{index}].{property}")
+                        })?
+                        .set_value(*value);
+                }
                 Action::AddRandomValue { value } => RandomProvider::add_random_value(*value),
                 Action::AssertRandomCalls { count } => {
                     let actual = RandomProvider::total_calls();
@@ -1212,6 +1254,99 @@ impl Execution {
                 Action::FocusNext => {
                     machine(&state_machine)?.with_instance_mut(|machine| machine.focus_next());
                 }
+                Action::AssertFocusChildCount { path, count } => {
+                    let focus = machine(&state_machine)?
+                        .with_instance(|m| m.focus_manager())
+                        .context("missing focus manager")?;
+                    let actual = if path.is_empty() {
+                        focus.with_focus_manager(|m| m.root_nodes().len())
+                    } else {
+                        focus_node_at(&focus, path)?.borrow().children().len()
+                    };
+                    if actual != *count {
+                        bail!("focus children at {path:?}: expected {count}, got {actual}");
+                    }
+                }
+                Action::ClearFocus
+                | Action::SetFocusNode { .. }
+                | Action::AssertFocusNode { .. }
+                | Action::ClickFocusNode { .. }
+                | Action::AssertFocusOrder { .. } => {
+                    let machine = machine(&state_machine)?;
+                    let focus = machine
+                        .with_instance(|m| m.focus_manager())
+                        .context("missing focus manager")?;
+                    match action {
+                        Action::ClearFocus => focus.with_focus_manager_mut(|m| m.clear_focus()),
+                        Action::SetFocusNode { path } => {
+                            let node = focus_node_at(&focus, path)?;
+                            focus.with_focus_manager_mut(|m| m.set_focus(node));
+                        }
+                        Action::AssertFocusNode { path } => {
+                            let expected = path
+                                .as_ref()
+                                .map(|p| focus_node_at(&focus, p))
+                                .transpose()?;
+                            let actual = focus.with_focus_manager(|m| m.primary_focus());
+                            if !same_focus_node(actual.as_ref(), expected.as_ref()) {
+                                bail!("primary focus differs from expected path {path:?}");
+                            }
+                        }
+                        Action::ClickFocusNode { path } => {
+                            let node = focus_node_at(&focus, path)?;
+                            let focusable = node
+                                .borrow()
+                                .focusable()
+                                .context("focus node has no focusable")?;
+                            let bounds = focusable
+                                .borrow()
+                                .world_bounds()
+                                .context("focus node has no world bounds")?;
+                            let center = Vec2D::new(
+                                (bounds.min_x + bounds.max_x) * 0.5,
+                                (bounds.min_y + bounds.max_y) * 0.5,
+                            );
+                            machine.with_instance_mut(|m| {
+                                m.pointer_down(center, 0);
+                                m.pointer_up(center, 0);
+                            });
+                        }
+                        Action::AssertFocusOrder { paths, reverse } => {
+                            let expected = paths
+                                .iter()
+                                .map(|p| focus_node_at(&focus, p))
+                                .collect::<anyhow::Result<Vec<_>>>()?;
+                            let actual = focus.with_focus_manager_mut(|m| {
+                                m.clear_focus();
+                                let mut order = Vec::new();
+                                for _ in 0..32 {
+                                    let moved = if *reverse {
+                                        m.focus_previous()
+                                    } else {
+                                        m.focus_next()
+                                    };
+                                    if !moved {
+                                        break;
+                                    }
+                                    let Some(node) = m.primary_focus() else {
+                                        break;
+                                    };
+                                    order.push(node);
+                                }
+                                order
+                            });
+                            if actual.len() != expected.len()
+                                || !actual
+                                    .iter()
+                                    .zip(&expected)
+                                    .all(|(a, b)| std::rc::Rc::ptr_eq(a, b))
+                            {
+                                bail!("focus traversal differs from expected paths {paths:?}");
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 Action::FocusPrevious => {
                     machine(&state_machine)?.with_instance_mut(|machine| machine.focus_previous());
                 }
@@ -1296,6 +1431,37 @@ impl Execution {
         let bytes = factory.borrow().bytes().to_vec();
         Ok(Self { bytes })
     }
+}
+
+fn same_focus_node(
+    a: Option<&nuxie_runtime::source::input::focus_node::FocusNodeRef>,
+    b: Option<&nuxie_runtime::source::input::focus_node::FocusNodeRef>,
+) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => std::rc::Rc::ptr_eq(a, b),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn focus_node_at(
+    focus: &nuxie_runtime::source::input::focus_manager::RuntimeFocusManagerHandle,
+    path: &[usize],
+) -> anyhow::Result<nuxie_runtime::source::input::focus_node::FocusNodeRef> {
+    let (root, rest) = path.split_first().context("empty focus node path")?;
+    let mut node = focus
+        .with_focus_manager(|m| m.root_nodes().get(*root).cloned())
+        .context("missing focus root")?;
+    for index in rest {
+        let child = node
+            .borrow()
+            .children()
+            .get(*index)
+            .cloned()
+            .context("missing focus child")?;
+        node = child;
+    }
+    Ok(node)
 }
 
 fn machine(

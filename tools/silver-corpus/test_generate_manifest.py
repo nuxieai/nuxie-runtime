@@ -7,6 +7,20 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_focus_flags_producers_keep_every_draw_and_assertion_walk(self):
+        click = generate_manifest.focus_flags_actions("focus_traversal_click_to_focus")
+        bound = generate_manifest.focus_flags_actions("focus_traversal_data_bound")
+        self.assertEqual(sum(a["kind"] == "draw" for a in click), 16)
+        self.assertEqual(sum(a["kind"] == "frame" for a in click), 15)
+        self.assertEqual(sum(a["kind"] == "click-focus-node" for a in click), 15)
+        self.assertEqual(sum(a["kind"] == "draw" for a in bound), 9)
+        self.assertEqual(sum(a["kind"] == "frame" for a in bound), 8)
+        walks = [a for a in bound if a["kind"] == "assert-focus-order"]
+        self.assertEqual(len(walks), 11)
+        self.assertEqual(sum(a["reverse"] for a in walks), 3)
+        self.assertEqual(len(walks[-1]["paths"]), 10)
+        self.assertEqual([a["kind"] for a in bound[-2:]], ["advance", "draw"])
+
     def test_fitted_text_helpers_do_not_leak_into_prior_producer(self):
         source = '''
 TEST_CASE("prior", "[silver]")

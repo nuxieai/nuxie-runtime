@@ -7,6 +7,7 @@ mod ore_deferred_context;
 mod ore_deferred_multipass;
 mod ore_deferred_replay;
 mod ore_deferred_resource;
+mod ore_depth_write_always;
 mod ore_gm_helper;
 mod ore_layout_intern;
 mod ore_nested_pass;

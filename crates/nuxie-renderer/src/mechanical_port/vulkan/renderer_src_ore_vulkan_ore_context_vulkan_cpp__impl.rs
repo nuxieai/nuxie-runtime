@@ -1768,12 +1768,20 @@ pub(crate) fn getOrCreateRenderPass(
         ..Default::default()
     };
     let stages = vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
-        | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS;
+        | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+        | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS;
     let deps = [
         vk::SubpassDependency::default()
             .src_subpass(vk::SUBPASS_EXTERNAL)
             .dst_subpass(0)
-            .src_stage_mask(stages)
+            // A prior frame may still be sampling or copying these attachments
+            // when this pass clears them.
+            .src_stage_mask(
+                stages
+                    | vk::PipelineStageFlags::VERTEX_SHADER
+                    | vk::PipelineStageFlags::FRAGMENT_SHADER
+                    | vk::PipelineStageFlags::TRANSFER,
+            )
             .dst_stage_mask(stages)
             .dst_access_mask(
                 vk::AccessFlags::COLOR_ATTACHMENT_WRITE

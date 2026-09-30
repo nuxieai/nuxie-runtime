@@ -92,7 +92,9 @@ pub struct RuntimeFileHandle(Rc<RefCell<File>>, Rc<RefCell<Vec<CoreHandle>>>);
 pub struct RuntimeFileWeakHandle(Weak<RefCell<File>>, Weak<RefCell<Vec<CoreHandle>>>);
 
 impl RuntimeFileHandle {
-    pub fn ptr_eq(&self, other: &Self) -> bool { Rc::ptr_eq(&self.0, &other.0) }
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
     pub fn new(file: File) -> Self {
         // The File's one canonical model table is also reachable during its
         // synchronous import callbacks, without reborrowing File::read.
@@ -865,7 +867,10 @@ impl File {
 
     #[cfg(feature = "tools")]
     pub fn artboard_byte_range(&self, index: usize) -> ArtboardByteRange {
-        self.artboard_byte_ranges.get(index).copied().unwrap_or_default()
+        self.artboard_byte_ranges
+            .get(index)
+            .copied()
+            .unwrap_or_default()
     }
 
     /// Re-import one artboard run. All instances of the outgoing artboard must
@@ -896,7 +901,10 @@ impl File {
         for asset in &self.file_assets {
             asset.with_mut(|asset| {
                 importer.add_file_asset(
-                    asset.as_file_asset_mut().expect("file asset").file_asset_base_mut(),
+                    asset
+                        .as_file_asset_mut()
+                        .expect("file asset")
+                        .file_asset_base_mut(),
                 );
             });
         }
@@ -914,7 +922,11 @@ impl File {
         }
         let mut imported = None;
         let (result, _) = self.read_objects(
-            &mut reader, &header, &mut import_stack, Some(&mut imported), None,
+            &mut reader,
+            &header,
+            &mut import_stack,
+            Some(&mut imported),
+            None,
         );
         if result != ImportResult::Success || imported.is_none() {
             if let Some(imported) = imported {
@@ -923,7 +935,8 @@ impl File {
             return ImportResult::Malformed;
         }
         let imported = imported.expect("successful artboard capture");
-        imported.with_downcast_mut::<Artboard, _>(|artboard| artboard.set_artboard_id(index as u16));
+        imported
+            .with_downcast_mut::<Artboard, _>(|artboard| artboard.set_artboard_id(index as u16));
         let outgoing = self.artboards[index].clone();
         if let Some(identity) = outgoing.source_global_id() {
             assert!(imported.set_source_global_id(identity));
@@ -932,7 +945,10 @@ impl File {
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
             .expect("outgoing artboard");
         self.scripted_interpolators.retain(|interpolator| {
-            !outgoing_objects.iter().flatten().any(|object| object == interpolator)
+            !outgoing_objects
+                .iter()
+                .flatten()
+                .any(|object| object == interpolator)
         });
         let imported_objects = imported
             .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
@@ -1096,10 +1112,18 @@ impl File {
     }
 
     pub fn set_scripting_vm(&mut self, vm: Option<RuntimeScriptingVmHandle>) {
+        #[cfg(feature = "tools")]
+        if let Some(previous) = self.scripting_vm.as_ref() {
+            previous.dispose_orphan_scripted_properties(false);
+        }
         self.scripting_vm = vm;
     }
 
     fn cleanup_scripting_vm(&mut self) {
+        #[cfg(feature = "tools")]
+        if let Some(previous) = self.scripting_vm.as_ref() {
+            previous.dispose_orphan_scripted_properties(false);
+        }
         self.scripting_vm = None;
     }
 
@@ -1407,14 +1431,12 @@ impl File {
         if !visited.insert(instance.clone()) {
             return;
         }
-        let Some((model_id, values)) = instance
-            .with_downcast::<ViewModelInstance, _>(|instance| {
-                (
-                    instance.base.view_model_id() as usize,
-                    instance.property_values().to_vec(),
-                )
-            })
-        else {
+        let Some((model_id, values)) = instance.with_downcast::<ViewModelInstance, _>(|instance| {
+            (
+                instance.base.view_model_id() as usize,
+                instance.property_values().to_vec(),
+            )
+        }) else {
             return;
         };
         let Some(model) = models.borrow().get(model_id).cloned() else {

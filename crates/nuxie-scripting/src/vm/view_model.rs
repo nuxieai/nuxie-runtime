@@ -52,9 +52,23 @@ enum TrackedScriptedPropertyWatch {
 #[derive(Clone, Default)]
 pub(super) struct ScriptedPropertyListenerOwner {
     watches: Rc<RefCell<Vec<TrackedScriptedPropertyWatch>>>,
+    properties: Rc<RefCell<Vec<Weak<ScriptedPropertyState>>>>,
 }
 
 impl ScriptedPropertyListenerOwner {
+    fn ptr_eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.properties, &other.properties)
+    }
+
+    fn tracked_property_count(&self) -> usize {
+        self.properties
+            .borrow()
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|property| !property.disposed())
+            .count()
+    }
+
     fn track_property(&self, watch: &Rc<ScriptedPropertyWatch>) {
         self.watches
             .borrow_mut()
@@ -74,6 +88,13 @@ impl ScriptedPropertyListenerOwner {
     }
 
     pub(super) fn dispose(&self) {
+        let properties = std::mem::take(&mut *self.properties.borrow_mut());
+        for property in properties
+            .into_iter()
+            .filter_map(|property| property.upgrade())
+        {
+            property.dispose();
+        }
         let watches = std::mem::take(&mut *self.watches.borrow_mut());
         for watch in watches {
             match watch {
@@ -125,6 +146,89 @@ pub(crate) struct ScriptViewModelFrameContext {
     trigger_watches: Rc<RefCell<Vec<Rc<ScriptedTriggerWatch>>>>,
     blob_watches: Rc<RefCell<Vec<Rc<ScriptedBlobWatch>>>>,
     property_watches: Rc<RefCell<Vec<Rc<ScriptedPropertyWatch>>>>,
+    current_owner: Rc<RefCell<Option<ScriptedPropertyListenerOwner>>>,
+    orphans: Rc<RefCell<Vec<Weak<ScriptedPropertyState>>>>,
+    orphan_owner_tag: Rc<Cell<u32>>,
+}
+
+#[derive(Default)]
+struct ScriptedPropertyState {
+    disposed: Cell<bool>,
+    owning_model: RefCell<Option<ScriptViewModel>>,
+    owner_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
+    owner_watches: RefCell<Weak<RefCell<Vec<TrackedScriptedPropertyWatch>>>>,
+    orphan_properties: RefCell<Weak<RefCell<Vec<Weak<ScriptedPropertyState>>>>>,
+    orphan_owner_tag: Cell<u32>,
+    cleanup: RefCell<Option<Box<dyn Fn()>>>,
+}
+
+impl ScriptedPropertyState {
+    fn disposed(&self) -> bool {
+        self.disposed.get()
+    }
+    fn owning_instance(&self) -> Option<nuxie_runtime::source::core::CoreHandle> {
+        self.owning_model
+            .borrow()
+            .as_ref()
+            .and_then(ScriptViewModel::native_instance)
+    }
+    fn owner(&self) -> Option<ScriptedPropertyListenerOwner> {
+        Some(ScriptedPropertyListenerOwner {
+            properties: self.owner_properties.borrow().upgrade()?,
+            watches: self.owner_watches.borrow().upgrade()?,
+        })
+    }
+    fn dispose(&self) {
+        if self.disposed.replace(true) {
+            return;
+        }
+        if let Some(cleanup) = self.cleanup.borrow_mut().take() {
+            cleanup();
+        }
+        self.owning_model.borrow_mut().take();
+        if let Some(properties) = self.owner_properties.borrow().upgrade() {
+            properties.borrow_mut().retain(|property| {
+                property
+                    .upgrade()
+                    .is_some_and(|property| !property.disposed())
+            });
+        }
+        *self.owner_properties.borrow_mut() = Weak::new();
+        *self.owner_watches.borrow_mut() = Weak::new();
+        if let Some(orphans) = self.orphan_properties.borrow().upgrade() {
+            orphans.borrow_mut().retain(|property| {
+                property
+                    .upgrade()
+                    .is_some_and(|property| !property.disposed())
+            });
+        }
+        *self.orphan_properties.borrow_mut() = Weak::new();
+    }
+}
+
+impl Drop for ScriptedPropertyState {
+    fn drop(&mut self) {
+        for tracker in [
+            self.owner_properties.get_mut(),
+            self.orphan_properties.get_mut(),
+        ] {
+            if let Some(tracker) = tracker.upgrade() {
+                tracker
+                    .borrow_mut()
+                    .retain(|property| property.strong_count() != 0);
+            }
+        }
+    }
+}
+
+pub(super) struct ScriptedPropertyOwnerScope {
+    current: Rc<RefCell<Option<ScriptedPropertyListenerOwner>>>,
+    previous: Option<ScriptedPropertyListenerOwner>,
+}
+impl Drop for ScriptedPropertyOwnerScope {
+    fn drop(&mut self) {
+        *self.current.borrow_mut() = self.previous.take();
+    }
 }
 
 impl std::fmt::Debug for ScriptViewModelFrameContext {
@@ -140,6 +244,60 @@ impl std::fmt::Debug for ScriptViewModelFrameContext {
 }
 
 impl ScriptViewModelFrameContext {
+    pub(super) fn enter_owner(
+        &self,
+        owner: ScriptedPropertyListenerOwner,
+    ) -> ScriptedPropertyOwnerScope {
+        let previous = self.current_owner.borrow_mut().replace(owner);
+        ScriptedPropertyOwnerScope {
+            current: self.current_owner.clone(),
+            previous,
+        }
+    }
+
+    #[cfg(feature = "tools")]
+    pub(crate) fn set_orphan_owner_tag(&self, tag: u32) {
+        self.orphan_owner_tag.set(tag);
+    }
+
+    #[cfg(feature = "tools")]
+    pub(crate) fn dispose_orphan_scripted_properties(&self, all_tags: bool) {
+        let properties = self.orphans.borrow().clone();
+        for property in properties
+            .into_iter()
+            .filter_map(|property| property.upgrade())
+        {
+            if all_tags || property.orphan_owner_tag.get() == 0 {
+                property.dispose();
+            }
+        }
+        self.orphans.borrow_mut().retain(|property| {
+            property
+                .upgrade()
+                .is_some_and(|property| !property.disposed())
+        });
+    }
+
+    #[cfg(feature = "tools")]
+    pub(crate) fn dispose_orphan_scripted_properties_for_tag(&self, tag: u32) {
+        if tag == 0 {
+            return;
+        }
+        let properties = self.orphans.borrow().clone();
+        for property in properties
+            .into_iter()
+            .filter_map(|property| property.upgrade())
+        {
+            if property.orphan_owner_tag.get() == tag {
+                property.dispose();
+            }
+        }
+        self.orphans.borrow_mut().retain(|property| {
+            property
+                .upgrade()
+                .is_some_and(|property| !property.disposed())
+        });
+    }
     pub(crate) fn for_lua(lua: &Lua) -> Self {
         if let Some(context) = lua
             .app_data_ref::<ScriptViewModelFrameContext>()
@@ -215,7 +373,7 @@ impl ScriptViewModelFrameContext {
     fn clear_trigger_watch_dirt(&self) {
         let mut retained = self.trigger_watches.borrow_mut();
         retained.retain(|watch| {
-            let _ = watch.sink.take_dirt();
+            let _ = watch.sink.borrow().take_dirt();
             !watch.listeners.borrow().is_empty()
         });
     }
@@ -374,6 +532,118 @@ return function(property, writableValue, mutatingMethods, flush)
 end
 "#;
 
+fn scripted_property_state(property: &AnyUserData) -> Option<Rc<ScriptedPropertyState>> {
+    macro_rules! state {
+        ($($kind:ty),*) => { $(if let Ok(property) = property.borrow::<$kind>() {
+            return Some(property.watch.state.clone());
+        })* };
+    }
+    state!(
+        ScriptedPropertyNumber,
+        ScriptedPropertyColor,
+        ScriptedPropertyString,
+        ScriptedPropertyBoolean,
+        ScriptedPropertyEnum,
+        ScriptedPropertyTrigger,
+        ScriptedPropertyImage,
+        ScriptedPropertyBlob,
+        ScriptedPropertyFont,
+        ScriptedPropertyList,
+        ScriptedPropertyViewModel
+    );
+    None
+}
+
+fn dispose_property_userdata(property: &AnyUserData) {
+    macro_rules! clear {
+        ($kind:ty, $model:ident, $unregister:ident, $($extra:ident),*) => {
+            if let Ok(mut property) = property.borrow_mut::<$kind>() {
+                property.watch.listeners.borrow_mut().clear();
+                property.watch._change_registration.borrow_mut().take();
+                *property.watch.sink.borrow_mut() = RuntimeCellDirtSink::default();
+                $unregister(&property.watch);
+                property.$model.clear_scripted_property_owner();
+                $(property.$extra.borrow_mut().take();
+                  property._change_sink = RuntimeCellDirtSink::default();)*
+                return;
+            }
+        };
+    }
+    clear!(ScriptedPropertyNumber, model, unregister_property_watch,);
+    clear!(ScriptedPropertyColor, model, unregister_property_watch,);
+    clear!(ScriptedPropertyString, model, unregister_property_watch,);
+    clear!(ScriptedPropertyBoolean, model, unregister_property_watch,);
+    clear!(ScriptedPropertyEnum, model, unregister_property_watch,);
+    clear!(ScriptedPropertyTrigger, model, unregister_trigger_watch,);
+    clear!(
+        ScriptedPropertyImage,
+        model,
+        unregister_property_watch,
+        cached_value
+    );
+    clear!(
+        ScriptedPropertyBlob,
+        model,
+        unregister_blob_watch,
+        cached_value
+    );
+    clear!(
+        ScriptedPropertyFont,
+        model,
+        unregister_property_watch,
+        cached_value
+    );
+    if let Ok(mut property) = property.borrow_mut::<ScriptedPropertyViewModel>() {
+        property.watch.listeners.borrow_mut().clear();
+        property.watch._change_registration.borrow_mut().take();
+        *property.watch.sink.borrow_mut() = RuntimeCellDirtSink::default();
+        unregister_property_watch(&property.watch);
+        property.parent.clear_scripted_property_owner();
+        property.cached_value.borrow_mut().take();
+        property.listener_owner = None;
+        property._change_sink = RuntimeCellDirtSink::default();
+    }
+    if let Ok(mut property) = property.borrow_mut::<ScriptedPropertyList>() {
+        property.watch.listeners.borrow_mut().clear();
+        property.watch._change_registration.borrow_mut().take();
+        *property.watch.sink.borrow_mut() = RuntimeCellDirtSink::default();
+        unregister_property_watch(&property.watch);
+        property.model.clear_scripted_property_owner();
+        property.item_refs.clear();
+        property.listener_owner = None;
+    }
+}
+
+fn property_watch_cleanup(property: &AnyUserData) -> Box<dyn Fn()> {
+    macro_rules! cleanup {
+        ($kind:ty, $unregister:ident) => {
+            if let Ok(property) = property.borrow::<$kind>() {
+                let weak = Rc::downgrade(&property.watch);
+                return Box::new(move || {
+                    if let Some(watch) = weak.upgrade() {
+                        watch.listeners.borrow_mut().clear();
+                        watch._change_registration.borrow_mut().take();
+                        *watch.sink.borrow_mut() = RuntimeCellDirtSink::default();
+                        $unregister(&watch);
+                    }
+                });
+            }
+        };
+    }
+    cleanup!(ScriptedPropertyNumber, unregister_property_watch);
+    cleanup!(ScriptedPropertyColor, unregister_property_watch);
+    cleanup!(ScriptedPropertyString, unregister_property_watch);
+    cleanup!(ScriptedPropertyBoolean, unregister_property_watch);
+    cleanup!(ScriptedPropertyEnum, unregister_property_watch);
+    cleanup!(ScriptedPropertyImage, unregister_property_watch);
+    cleanup!(ScriptedPropertyFont, unregister_property_watch);
+    cleanup!(ScriptedPropertyList, unregister_property_watch);
+    cleanup!(ScriptedPropertyViewModel, unregister_property_watch);
+    cleanup!(ScriptedPropertyBlob, unregister_blob_watch);
+    cleanup!(ScriptedPropertyTrigger, unregister_trigger_watch);
+    unreachable!("scripted property userdata")
+}
+
 fn patch_property_userdata(
     lua: &Lua,
     model: ScriptViewModel,
@@ -386,8 +656,55 @@ fn patch_property_userdata(
         mutating.set(*method, true)?;
     }
     let patcher: Function = lua.named_registry_value(PROPERTY_METATABLE_PATCHER)?;
+    let state = scripted_property_state(&property).expect("scripted property userdata");
+    *state.owning_model.borrow_mut() = Some(model);
+    let context = ScriptViewModelFrameContext::for_lua(lua);
+    if let Some(owner) = context.current_owner.borrow().clone() {
+        owner.properties.borrow_mut().push(Rc::downgrade(&state));
+        *state.owner_properties.borrow_mut() = Rc::downgrade(&owner.properties);
+        *state.owner_watches.borrow_mut() = Rc::downgrade(&owner.watches);
+    } else {
+        #[cfg(feature = "tools")]
+        {
+            state.orphan_owner_tag.set(context.orphan_owner_tag.get());
+            context.orphans.borrow_mut().push(Rc::downgrade(&state));
+            *state.orphan_properties.borrow_mut() = Rc::downgrade(&context.orphans);
+        }
+    }
+    const WEAK_PROPERTIES: &str = "rive_weak_scripted_properties";
+    let weak_properties = match lua.named_registry_value::<Table>(WEAK_PROPERTIES) {
+        Ok(table) => table,
+        Err(_) => {
+            let table = lua.create_table();
+            let meta = lua.create_table();
+            meta.set("__mode", "v")?;
+            table.set_metatable(Some(meta))?;
+            lua.set_named_registry_value(WEAK_PROPERTIES, table.clone())?;
+            table
+        }
+    };
+    let identity = property.to_pointer() as usize as u64;
+    weak_properties.raw_set(identity, property.clone())?;
+    let weak_lua = lua.weak();
+    let cleanup_watch = property_watch_cleanup(&property);
+    let expected_state = Rc::downgrade(&state);
+    *state.cleanup.borrow_mut() = Some(Box::new(move || {
+        cleanup_watch();
+        if let Some(lua) = weak_lua.try_upgrade()
+            && let Ok(table) = lua.named_registry_value::<Table>(WEAK_PROPERTIES)
+            && let Ok(property) = table.raw_get::<AnyUserData>(identity)
+            && let Some(expected_state) = expected_state.upgrade()
+            && let Some(actual_state) = scripted_property_state(&property)
+            && Rc::ptr_eq(&expected_state, &actual_state)
+        {
+            dispose_property_userdata(&property);
+        }
+    }));
     let flush = lua.create_function(move |_, ()| {
-        model.flush_property_change_callbacks();
+        let model = state.owning_model.borrow().clone();
+        if let Some(model) = model {
+            model.flush_property_change_callbacks();
+        }
         Ok(())
     })?;
     patcher.call((property, writable_value, mutating, flush))
@@ -579,130 +896,136 @@ fn create_scripted_view_model_retained(
         })?,
     )?;
 
-    let symbol_list_index_names = model
-        .properties()
-        .iter()
-        .filter_map(|(name, kind)| {
-            (*kind == ScriptViewModelProperty::SymbolListIndex).then(|| name.clone())
-        })
-        .collect::<BTreeSet<_>>();
-    for (name, kind) in model.properties() {
-        if *kind == ScriptViewModelProperty::SymbolListIndex {
-            continue;
-        }
-        if *kind == ScriptViewModelProperty::List {
-            table.set(
-                name.as_str(),
-                create_scripted_property_list(
-                    lua,
-                    model.clone(),
-                    name.clone(),
-                    listener_owner.clone(),
-                )?,
-            )?;
-            continue;
-        }
-        let property = match kind {
-            ScriptViewModelProperty::Number => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyNumber::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::Color => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyColor::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::String => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyString::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::Boolean => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyBoolean::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::Enum => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyEnum::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::Trigger => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyTrigger::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                false,
-                TRIGGER_MUTATING_METHODS,
-            )?,
-            ScriptViewModelProperty::Image => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyImage::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::Blob => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyBlob::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::Font => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyFont::new(model.clone(), name.clone(), listener_owner.as_ref()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
-            ScriptViewModelProperty::ViewModel => create_property_userdata(
-                lua,
-                model.clone(),
-                ScriptedPropertyViewModel::new(model.clone(), name.clone(), listener_owner.clone()),
-                true,
-                &[],
-            )?,
-            ScriptViewModelProperty::SymbolListIndex => unreachable!(
-                "symbol-list indices are exposed as scalar values before property wrapping"
-            ),
-        };
-        table.set(name.as_str(), property)?;
-    }
-    if !symbol_list_index_names.is_empty() {
-        let index_model = model.clone();
-        let metatable = lua.create_table();
-        metatable.set(
-            "__index",
-            lua.create_function(move |_, (_table, key): (Table, Value)| {
-                let Value::String(key) = key else {
-                    return Ok(Value::Nil);
-                };
-                if !symbol_list_index_names.contains(key.to_str()?.as_str()) {
-                    return Ok(Value::Nil);
-                }
-                Ok(Value::Integer(
-                    index_model
+    let properties = Rc::new(RefCell::new(BTreeMap::<String, AnyUserData>::new()));
+    let metatable = lua.create_table();
+    metatable.set(
+        "__index",
+        lua.create_function(move |lua, (_table, key): (Table, Value)| {
+            let Value::String(key) = key else {
+                return Ok(Value::Nil);
+            };
+            let name = key.to_str()?.to_string();
+            let Some(kind) = model.property(&name) else {
+                return Ok(Value::Nil);
+            };
+            if kind == ScriptViewModelProperty::SymbolListIndex {
+                return Ok(Value::Integer(
+                    model
                         .component_list_item_index()
                         .and_then(|index| i64::try_from(index).ok())
                         .unwrap_or(-1),
-                ))
-            })?,
-        )?;
-        table.set_metatable(Some(metatable))?;
-    }
+                ));
+            }
+            if let Some(property) = properties.borrow().get(&name) {
+                #[cfg(feature = "tools")]
+                let reuse =
+                    !scripted_property_state(property).is_some_and(|state| state.disposed());
+                #[cfg(not(feature = "tools"))]
+                let reuse = true;
+                if reuse {
+                    return Ok(Value::UserData(property.clone()));
+                }
+            }
+            properties.borrow_mut().remove(&name);
+            let property = create_named_scripted_property(lua, model.clone(), name.clone(), kind)?;
+            properties.borrow_mut().insert(name, property.clone());
+            Ok(Value::UserData(property))
+        })?,
+    )?;
+    table.set_metatable(Some(metatable))?;
     Ok(table)
+}
+
+fn create_named_scripted_property(
+    lua: &Lua,
+    model: ScriptViewModel,
+    name: String,
+    kind: ScriptViewModelProperty,
+) -> luaur_rt::Result<AnyUserData> {
+    let listener_owner = ScriptViewModelFrameContext::for_lua(lua)
+        .current_owner
+        .borrow()
+        .clone();
+    if kind == ScriptViewModelProperty::List {
+        return create_scripted_property_list(lua, model, name, listener_owner);
+    }
+    let property = match &kind {
+        ScriptViewModelProperty::Number => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyNumber::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::Color => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyColor::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::String => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyString::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::Boolean => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyBoolean::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::Enum => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyEnum::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::Trigger => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyTrigger::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            false,
+            TRIGGER_MUTATING_METHODS,
+        )?,
+        ScriptViewModelProperty::Image => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyImage::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::Blob => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyBlob::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::Font => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyFont::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::List => unreachable!("lists are installed before wrapping"),
+        ScriptViewModelProperty::ViewModel => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyViewModel::new(model.clone(), name.clone(), listener_owner.clone()),
+            true,
+            &[],
+        )?,
+        ScriptViewModelProperty::SymbolListIndex => unreachable!(
+            "symbol-list indices are exposed as scalar values before property wrapping"
+        ),
+    };
+    Ok(property)
 }
 
 pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewModel> {
@@ -711,7 +1034,8 @@ pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewMode
 }
 
 struct ScriptedPropertyWatch {
-    sink: RuntimeCellDirtSink,
+    state: Rc<ScriptedPropertyState>,
+    sink: RefCell<RuntimeCellDirtSink>,
     listeners: Rc<RefCell<Vec<ScriptedListener>>>,
     _change_registration: RefCell<Option<ScriptViewModelChangeRegistration>>,
     retained_by: RefCell<Weak<RefCell<Vec<Rc<ScriptedPropertyWatch>>>>>,
@@ -732,7 +1056,8 @@ fn property_watch(
         })
         .unwrap_or_default();
     let watch = Rc::new(ScriptedPropertyWatch {
-        sink,
+        state: Rc::new(ScriptedPropertyState::default()),
+        sink: RefCell::new(sink),
         listeners,
         _change_registration: RefCell::new(None),
         retained_by: RefCell::new(Weak::new()),
@@ -744,7 +1069,7 @@ fn property_watch(
             let Some(watch) = weak_watch.upgrade() else {
                 return;
             };
-            if watch.sink.take_dirt().is_empty() {
+            if watch.sink.borrow().take_dirt().is_empty() {
                 return;
             }
             notify_property_listeners(&watch);
@@ -898,9 +1223,13 @@ impl UserData for ScriptedPropertyViewModel {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
                 return Ok(Value::Table(cached.clone()));
             }
-            let model = this
-                .parent
-                .referenced_view_model_value(&this.name, this.creation_time_model.clone());
+            let model = if this.watch.state.disposed() {
+                this.parent
+                    .null_scripted_reference(this.creation_time_model.clone())
+            } else {
+                this.parent
+                    .referenced_view_model_value(&this.name, this.creation_time_model.clone())
+            };
             let value = create_scripted_view_model_with_listener_owner(
                 lua,
                 model,
@@ -1202,7 +1531,8 @@ struct ScriptedPropertyImage {
 }
 
 struct ScriptedBlobWatch {
-    sink: RuntimeCellDirtSink,
+    state: Rc<ScriptedPropertyState>,
+    sink: RefCell<RuntimeCellDirtSink>,
     listeners: Rc<RefCell<Vec<ScriptedListener>>>,
     _change_registration: RefCell<Option<ScriptViewModelChangeRegistration>>,
     retained_by: RefCell<Weak<RefCell<Vec<Rc<ScriptedBlobWatch>>>>>,
@@ -1241,7 +1571,8 @@ impl ScriptedPropertyBlob {
             })
             .unwrap_or_default();
         let watch = Rc::new(ScriptedBlobWatch {
-            sink,
+            state: Rc::new(ScriptedPropertyState::default()),
+            sink: RefCell::new(sink),
             listeners,
             _change_registration: RefCell::new(None),
             retained_by: RefCell::new(Weak::new()),
@@ -1253,7 +1584,7 @@ impl ScriptedPropertyBlob {
                 let Some(watch) = weak_watch.upgrade() else {
                     return;
                 };
-                if watch.sink.take_dirt().is_empty() {
+                if watch.sink.borrow().take_dirt().is_empty() {
                     return;
                 }
                 call_property_listeners(&watch.listeners);
@@ -1729,6 +2060,57 @@ impl UserData for ScriptedPropertyList {
     }
 }
 
+// Lua values hold registry references in luaur. Retain the target alongside
+// the wrapper, exactly as ScriptedWrapperCache's rcp key and lua_ref do.
+struct ScriptedWrapperCache<K> {
+    entry: RefCell<Option<(K, Value)>>,
+}
+
+impl<K> Default for ScriptedWrapperCache<K> {
+    fn default() -> Self {
+        Self {
+            entry: RefCell::new(None),
+        }
+    }
+}
+
+impl<K> ScriptedWrapperCache<K> {
+    fn get(&self, key: &K, same: impl FnOnce(&K, &K) -> bool) -> Option<Value> {
+        self.entry
+            .borrow()
+            .as_ref()
+            .and_then(|(cached_key, value)| same(cached_key, key).then(|| value.clone()))
+    }
+
+    fn store(&self, key: K, value: Value) -> Value {
+        let old = self.entry.replace(Some((key, value.clone())));
+        drop(old);
+        value
+    }
+
+    fn release(&self) {
+        let old = self.entry.take();
+        drop(old);
+    }
+}
+
+fn cached_view_model(
+    lua: &Lua,
+    cache: &ScriptedWrapperCache<ScriptViewModel>,
+    model: ScriptViewModel,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
+) -> luaur_rt::Result<Value> {
+    if let Some(value) = cache.get(&model, |a, b| a.identity_key() == b.identity_key()) {
+        return Ok(value);
+    }
+    let value = Value::Table(create_scripted_view_model_with_listener_owner(
+        lua,
+        model.clone(),
+        listener_owner,
+    )?);
+    Ok(cache.store(model, value))
+}
+
 pub(super) struct ScriptedContext {
     model: Rc<RefCell<Option<ScriptViewModel>>>,
     context_present: Rc<Cell<bool>>,
@@ -1739,6 +2121,10 @@ pub(super) struct ScriptedContext {
     alive: Rc<Cell<bool>>,
     mark_needs_update_requested: Rc<Cell<bool>>,
     listener_owner: ScriptedPropertyListenerOwner,
+    view_model_cache: ScriptedWrapperCache<ScriptViewModel>,
+    root_view_model_cache: ScriptedWrapperCache<ScriptViewModel>,
+    global_view_model_caches: RefCell<BTreeMap<Vec<u8>, Rc<ScriptedWrapperCache<ScriptViewModel>>>>,
+    data_context_cache: ScriptedWrapperCache<ScriptedDataContextBacking>,
 }
 
 impl ScriptedContext {
@@ -1797,11 +2183,38 @@ impl ScriptedContext {
             alive,
             mark_needs_update_requested: Rc::new(Cell::new(false)),
             listener_owner: ScriptedPropertyListenerOwner::default(),
+            view_model_cache: ScriptedWrapperCache::default(),
+            root_view_model_cache: ScriptedWrapperCache::default(),
+            global_view_model_caches: RefCell::new(BTreeMap::new()),
+            data_context_cache: ScriptedWrapperCache::default(),
         }
     }
 
     pub(super) fn listener_owner(&self) -> ScriptedPropertyListenerOwner {
         self.listener_owner.clone()
+    }
+
+    pub(super) fn failed_generator(&self) {
+        let owner = self.listener_owner.clone();
+        let cleanup_owner = owner.clone();
+        let retained = self.source.borrow().as_ref().is_some_and(|source| {
+            source.retain_failed_script_cleanup(Rc::new(move || cleanup_owner.dispose()))
+        });
+        if !retained {
+            // A direct-host snapshot call has no surviving ScriptedObject to
+            // receive this failed attempt; its owner lifetime ends with the call.
+            owner.dispose();
+        }
+        self.clear_scripted_object();
+    }
+
+    pub(super) fn clear_scripted_object(&self) {
+        self.alive.set(false);
+        self.view_model_cache.release();
+        self.root_view_model_cache.release();
+        self.data_context_cache.release();
+        let old = std::mem::take(&mut *self.global_view_model_caches.borrow_mut());
+        drop(old);
     }
 
     pub(super) fn source(&self) -> Rc<RefCell<Option<ScriptedContextSource>>> {
@@ -1880,11 +2293,12 @@ impl UserData for ScriptedContext {
                 ScriptedContextDataProjection::Current(data_context) => data_context.view_model(),
             };
             Ok(match model {
-                Some(model) => Value::Table(create_scripted_view_model_with_listener_owner(
+                Some(model) => cached_view_model(
                     lua,
+                    &this.view_model_cache,
                     model,
                     Some(this.listener_owner.clone()),
-                )?),
+                )?,
                 None => {
                     this.missing_requested_data.set(true);
                     Value::Nil
@@ -1905,11 +2319,12 @@ impl UserData for ScriptedContext {
                 }
             };
             Ok(match root {
-                Some(model) => Value::Table(create_scripted_view_model_with_listener_owner(
+                Some(model) => cached_view_model(
                     lua,
+                    &this.root_view_model_cache,
                     model,
                     Some(this.listener_owner.clone()),
-                )?),
+                )?,
                 None => {
                     this.missing_requested_data.set(true);
                     Value::Nil
@@ -1925,12 +2340,16 @@ impl UserData for ScriptedContext {
                 .as_ref()
                 .and_then(|source| source.global_view_model(name.as_slice()));
             match model {
-                Some(model) => create_scripted_view_model_with_listener_owner(
-                    lua,
-                    model,
-                    Some(this.listener_owner.clone()),
-                )
-                .map(|model| MultiValue::from_vec(vec![Value::Table(model)])),
+                Some(model) => {
+                    let cache = this
+                        .global_view_model_caches
+                        .borrow_mut()
+                        .entry(name)
+                        .or_default()
+                        .clone();
+                    cached_view_model(lua, &cache, model, Some(this.listener_owner.clone()))
+                        .map(|value| MultiValue::from_vec(vec![value]))
+                }
                 None => Ok(MultiValue::new()),
             }
         });
@@ -1973,11 +2392,12 @@ impl UserData for ScriptedContext {
                 this.missing_requested_data.set(true);
                 return Ok(Value::Nil);
             };
-            lua.create_userdata(ScriptedDataContext {
+            cached_data_context(
+                lua,
+                &this.data_context_cache,
                 backing,
-                listener_owner: Some(this.listener_owner.clone()),
-            })
-            .map(Value::UserData)
+                Some(this.listener_owner.clone()),
+            )
         });
         methods.add_method("markNeedsUpdate", |_, this, ()| {
             this.require_live("markNeedsUpdate")?;
@@ -2120,6 +2540,7 @@ impl UserData for ScriptedContext {
     }
 }
 
+#[derive(Clone)]
 enum ScriptedDataContextBacking {
     Snapshot {
         model: Option<ScriptViewModel>,
@@ -2128,9 +2549,55 @@ enum ScriptedDataContextBacking {
     Runtime(ScriptedDataContextSource),
 }
 
+impl ScriptedDataContextBacking {
+    fn same_identity(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Runtime(a), Self::Runtime(b)) => a.same_identity(b),
+            (
+                Self::Snapshot {
+                    model: a,
+                    parents: ap,
+                },
+                Self::Snapshot {
+                    model: b,
+                    parents: bp,
+                },
+            ) => {
+                let key = |model: &Option<ScriptViewModel>| {
+                    model.as_ref().map(ScriptViewModel::identity_key)
+                };
+                key(a) == key(b)
+                    && ap.len() == bp.len()
+                    && ap.iter().zip(bp).all(|(a, b)| key(a) == key(b))
+            }
+            _ => false,
+        }
+    }
+}
+
+fn cached_data_context(
+    lua: &Lua,
+    cache: &ScriptedWrapperCache<ScriptedDataContextBacking>,
+    backing: ScriptedDataContextBacking,
+    listener_owner: Option<ScriptedPropertyListenerOwner>,
+) -> luaur_rt::Result<Value> {
+    if let Some(value) = cache.get(&backing, ScriptedDataContextBacking::same_identity) {
+        return Ok(value);
+    }
+    let value = Value::UserData(lua.create_userdata(ScriptedDataContext {
+        backing: backing.clone(),
+        listener_owner,
+        view_model_cache: ScriptedWrapperCache::default(),
+        parent_cache: ScriptedWrapperCache::default(),
+    })?);
+    Ok(cache.store(backing, value))
+}
+
 struct ScriptedDataContext {
     backing: ScriptedDataContextBacking,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
+    view_model_cache: ScriptedWrapperCache<ScriptViewModel>,
+    parent_cache: ScriptedWrapperCache<ScriptedDataContextBacking>,
 }
 
 impl UserData for ScriptedDataContext {
@@ -2141,12 +2608,12 @@ impl UserData for ScriptedDataContext {
                 ScriptedDataContextBacking::Runtime(data_context) => data_context.view_model(),
             };
             match model {
-                Some(model) => create_scripted_view_model_with_listener_owner(
+                Some(model) => cached_view_model(
                     lua,
+                    &this.view_model_cache,
                     model,
                     this.listener_owner.clone(),
-                )
-                .map(Value::Table),
+                ),
                 None => Ok(Value::Nil),
             }
         });
@@ -2166,11 +2633,12 @@ impl UserData for ScriptedDataContext {
             let Some(backing) = parent else {
                 return Ok(Value::Nil);
             };
-            lua.create_userdata(ScriptedDataContext {
+            cached_data_context(
+                lua,
+                &this.parent_cache,
                 backing,
-                listener_owner: this.listener_owner.clone(),
-            })
-            .map(Value::UserData)
+                this.listener_owner.clone(),
+            )
         });
     }
 }
@@ -2212,7 +2680,8 @@ pub(super) fn install_data_global(
 }
 
 struct ScriptedTriggerWatch {
-    sink: RuntimeCellDirtSink,
+    state: Rc<ScriptedPropertyState>,
+    sink: RefCell<RuntimeCellDirtSink>,
     listeners: Rc<RefCell<Vec<ScriptedListener>>>,
     _change_registration: RefCell<Option<ScriptViewModelChangeRegistration>>,
     retained_by: RefCell<Weak<RefCell<Vec<Rc<ScriptedTriggerWatch>>>>>,
@@ -2240,7 +2709,8 @@ impl ScriptedPropertyTrigger {
             })
             .unwrap_or_default();
         let watch = Rc::new(ScriptedTriggerWatch {
-            sink,
+            state: Rc::new(ScriptedPropertyState::default()),
+            sink: RefCell::new(sink),
             listeners,
             _change_registration: RefCell::new(None),
             retained_by: RefCell::new(Weak::new()),
@@ -2252,7 +2722,7 @@ impl ScriptedPropertyTrigger {
                 let Some(watch) = weak_watch.upgrade() else {
                     return;
                 };
-                if watch.sink.take_dirt().is_empty() {
+                if watch.sink.borrow().take_dirt().is_empty() {
                     return;
                 }
                 call_property_listeners(&watch.listeners);
@@ -2322,6 +2792,10 @@ impl UserData for ScriptedPropertyTrigger {
 
 #[cfg(all(test, feature = "compiler"))]
 mod wave_c12_scalar_owner_tests;
+
+#[cfg(all(test, feature = "compiler"))]
+#[path = "property_lifetime_a637_tests.rs"]
+mod property_lifetime_a637_tests;
 
 #[cfg(all(test, feature = "compiler"))]
 mod tests {

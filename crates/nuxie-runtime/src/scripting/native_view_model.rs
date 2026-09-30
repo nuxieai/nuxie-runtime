@@ -45,6 +45,9 @@ pub(super) struct NativeScriptFile {
     _lease: Option<RuntimeFileHandle>,
 }
 impl NativeScriptFile {
+    pub(super) fn release_lease(&mut self) {
+        self._lease = None;
+    }
     pub fn owning(file: RuntimeFileHandle) -> Self {
         Self {
             weak: file.downgrade(),

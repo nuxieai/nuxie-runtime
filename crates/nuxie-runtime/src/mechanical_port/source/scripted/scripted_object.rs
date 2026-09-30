@@ -93,6 +93,7 @@ pub struct ScriptedObject {
     asset: Option<Rc<[u8]>>,
     inputs: HashMap<String, ScriptValue>,
     tracked_properties: Vec<usize>,
+    failed_script_property_cleanups: Vec<Rc<dyn Fn()>>,
     data_context: Option<RuntimeDataContextHandle>,
     in_update_phase: bool,
     user_init_done: bool,
@@ -113,6 +114,7 @@ impl Default for ScriptedObject {
             asset: None,
             inputs: HashMap::new(),
             tracked_properties: Vec::new(),
+            failed_script_property_cleanups: Vec::new(),
             data_context: None,
             in_update_phase: false,
             user_init_done: false,
@@ -216,8 +218,7 @@ impl ScriptedObject {
     pub fn apply_update_request(owner: &CoreHandle) {
         use crate::mechanical_port::source::scripted::{
             scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
-            scripted_path_effect::ScriptedPathEffect,
-            scripted_transition::ScriptedTransition,
+            scripted_path_effect::ScriptedPathEffect, scripted_transition::ScriptedTransition,
         };
         owner.with_mut(|owner| {
             if let Some(drawable) = owner.as_any_mut().downcast_mut::<ScriptedDrawable>() {
@@ -226,7 +227,8 @@ impl ScriptedObject {
                 layout.base.base.mark_needs_update();
             } else if let Some(effect) = owner.as_any_mut().downcast_mut::<ScriptedPathEffect>() {
                 effect.mark_needs_update();
-            } else if let Some(transition) = owner.as_any_mut().downcast_mut::<ScriptedTransition>() {
+            } else if let Some(transition) = owner.as_any_mut().downcast_mut::<ScriptedTransition>()
+            {
                 transition.base.base.mark_needs_update();
             }
             // Other scripted owners inherit ScriptedObject::markNeedsUpdate,
@@ -310,7 +312,7 @@ impl ScriptedObject {
                 owner
                     .as_scripted_object_mut()
                     .expect("a scripted owner keeps its type")
-                    .reinit();
+                    .prepare_cold_script_init();
             });
             for property in properties {
                 if with_script_input(property, |input| input.validate_for_cold_script_init())
@@ -390,7 +392,7 @@ impl ScriptedObject {
                     owner
                         .as_scripted_object_mut()
                         .expect("a scripted owner keeps its type")
-                        .script_dispose();
+                        .detach_after_failed_user_init();
                 });
                 return false;
             }
@@ -405,8 +407,7 @@ impl ScriptedObject {
             use crate::mechanical_port::source::scripted::{
                 scripted_data_converter::ScriptedDataConverter,
                 scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
-                scripted_path_effect::ScriptedPathEffect,
-                scripted_transition::ScriptedTransition,
+                scripted_path_effect::ScriptedPathEffect, scripted_transition::ScriptedTransition,
             };
             if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedDataConverter>() {
                 value.did_hydrate_script_inputs();
@@ -735,7 +736,9 @@ impl ScriptedObject {
         instance: Box<dyn RuntimeScriptInstance>,
         vm: crate::mechanical_port::source::lua::scripting_vm::RuntimeScriptingVmHandle,
     ) {
-        self.script_dispose();
+        if self.runtime_vm.is_some() {
+            self.script_dispose();
+        }
         self.runtime_instance = Some(RuntimeScriptInstanceHandle::new(instance));
         if let Some(owner) = self.file_asset_referencer.referencer() {
             vm.register_scripted_object(owner);
@@ -837,6 +840,9 @@ impl ScriptedObject {
         if self.disposed {
             return;
         }
+        for cleanup in std::mem::take(&mut self.failed_script_property_cleanups) {
+            cleanup();
+        }
         if let Some(instance) = self.runtime_instance.take() {
             instance.borrow_mut().invalidate_for_init_retry();
         }
@@ -857,6 +863,37 @@ impl ScriptedObject {
         self.script_dispose();
         self.disposed = false;
         self.user_init_done = false
+    }
+
+    /// Failed user init releases the instance/context and unregisters its VM,
+    /// without disposing properties that remain tracked by this object.
+    pub fn detach_after_failed_user_init(&mut self) {
+        self.runtime_instance = None;
+        self.self_ref = 0;
+        self.context_ref = 0;
+        if let (Some(vm), Some(owner)) = (&self.runtime_vm, self.file_asset_referencer.referencer())
+        {
+            vm.unregister_scripted_object(&owner);
+        }
+        self.runtime_vm = None;
+        self.user_init_done = false;
+    }
+
+    /// `ensureScriptInitialized` only disposes tracked properties when an
+    /// earlier VM was installed. Failed generators never install that VM, so
+    /// their properties survive subsequent cold attempts, including success.
+    pub fn prepare_cold_script_init(&mut self) {
+        if self.runtime_vm.is_some() {
+            self.script_dispose();
+        }
+        self.disposed = false;
+        self.user_init_done = false;
+    }
+
+    /// The backend can fail before it returns an installable script instance.
+    /// Properties already created by that attempt still belong to this object.
+    pub fn retain_failed_script_property_cleanup(&mut self, cleanup: Rc<dyn Fn()>) {
+        self.failed_script_property_cleanups.push(cleanup);
     }
     pub fn reset_lua_init(&mut self) {
         self.user_init_done = false;

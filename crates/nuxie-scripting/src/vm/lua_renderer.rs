@@ -37,8 +37,9 @@ impl RendererBindings {
         table: &Table,
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
+        owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
     ) -> Result<()> {
-        self.call_draw_with_balance(table, factory, renderer)
+        self.call_draw_with_balance(table, factory, renderer, owner)
             .map(|_| ())
     }
 
@@ -47,6 +48,7 @@ impl RendererBindings {
         table: &Table,
         _factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
+        owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
     ) -> Result<bool> {
         let lua = table.lua();
         // An e949 artboard instance may use a different factory facade. Its
@@ -56,10 +58,15 @@ impl RendererBindings {
             ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, self.clone())?;
         let field: Value = table.get("draw")?;
         let result = match field {
-            Value::Function(function) => super::ProtectedScriptCall::protected_call::<()>(
-                &function,
-                (table.clone(), scripted_renderer.clone()),
-            ),
+            Value::Function(function) => {
+                let _property_owner = owner.map(|owner| {
+                    super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
+                });
+                super::ProtectedScriptCall::protected_call::<()>(
+                    &function,
+                    (table.clone(), scripted_renderer.clone()),
+                )
+            }
             // Legacy files advertise every optional method. C++ treats a
             // currently missing or non-function draw field as a balanced
             // no-op after installing the renderer userdata.
@@ -609,7 +616,7 @@ end\n";
 
         let balanced = vm
             .renderer_bindings
-            .call_draw_with_balance(&table, &mut factory, &mut renderer)
+            .call_draw_with_balance(&table, &mut factory, &mut renderer, None)
             .unwrap();
 
         assert!(!balanced);
@@ -736,7 +743,7 @@ end\n";
         // ordinary Lua error, so observe the binding error at this boundary.
         let error = vm
             .renderer_bindings
-            .call_draw(&table, &mut factory, &mut renderer)
+            .call_draw(&table, &mut factory, &mut renderer, None)
             .unwrap_err()
             .to_string();
         assert!(

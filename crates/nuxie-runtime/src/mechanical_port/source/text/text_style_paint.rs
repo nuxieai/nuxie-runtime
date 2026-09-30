@@ -74,6 +74,7 @@ impl TextStylePaint {
         renderer: &mut dyn Renderer,
         world: &Mat2D,
         blend: nuxie_render_api::BlendMode,
+        additive_amount: u8,
     ) {
         let mut paint_index = 0;
         while let Some(handle) = self.paints.shape_paints().get(paint_index).cloned() {
@@ -86,7 +87,7 @@ impl TextStylePaint {
                     return;
                 }
                 let fill_rule = paint.fill_rule();
-                paint.shape_paint_mut().blend_mode(blend);
+                paint.shape_paint_mut().blend_mode(blend, additive_amount);
                 if let Some(path) = self.opacity_paths.get_mut(&Opacity(1.0)) {
                     paint
                         .shape_paint_mut()

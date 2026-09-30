@@ -358,12 +358,19 @@ impl Shape {
         self.path_composer
             .with_mut(|helper| helper.build_path_dependencies(&paths));
         self.base.build_dependencies();
+        self.sync_shape_paint_blend_modes();
+    }
+    pub fn additive_amount_changed(&mut self) {
+        self.sync_shape_paint_blend_modes();
+    }
+    pub fn sync_shape_paint_blend_modes(&mut self) {
         let blend = self.base.blend_mode();
+        let amount = self.base.additive_amount();
         for paint in self.paint_container.shape_paints() {
             paint.with_mut(|paint| {
                 paint
                     .as_shape_paint_mut()
-                    .map(|paint| paint.blend_mode(blend.into()))
+                    .map(|paint| paint.blend_mode(blend.into(), amount))
             });
         }
     }

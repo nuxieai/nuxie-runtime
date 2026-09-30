@@ -5,12 +5,14 @@ pub trait DrawableBaseCallbacks:
 {
     fn notify_property_changed(&mut self, property_key: u16);
     fn blend_mode_value_changed(&mut self) {}
+    fn additive_amount_changed(&mut self) {}
     fn drawable_flags_changed(&mut self) {}
 }
 
 pub struct DrawableBase {
     pub base: Node,
     blend_mode_value: u8,
+    additive_amount: u8,
     drawable_flags: u16,
 }
 
@@ -19,6 +21,7 @@ impl Default for DrawableBase {
         Self {
             base: Node::default(),
             blend_mode_value: 3,
+            additive_amount: 255,
             drawable_flags: 0,
         }
     }
@@ -27,6 +30,7 @@ impl Default for DrawableBase {
 impl DrawableBase {
     pub const TYPE_KEY: u16 = 13;
     pub const BLEND_MODE_VALUE_PROPERTY_KEY: u16 = 23;
+    pub const ADDITIVE_AMOUNT_PROPERTY_KEY: u16 = 450;
     pub const DRAWABLE_FLAGS_PROPERTY_KEY: u16 = 129;
 
     pub fn is_type_of(type_key: u16) -> bool {
@@ -59,6 +63,26 @@ impl DrawableBase {
     pub fn drawable_flags(&self) -> u16 {
         self.drawable_flags
     }
+    pub fn additive_amount(&self) -> u8 {
+        self.additive_amount
+    }
+    pub fn set_additive_amount(&mut self, value: u8, callbacks: &mut impl DrawableBaseCallbacks) {
+        if !self.set_additive_amount_value(value) {
+            return;
+        }
+        callbacks.additive_amount_changed();
+        DrawableBaseCallbacks::notify_property_changed(
+            callbacks,
+            Self::ADDITIVE_AMOUNT_PROPERTY_KEY,
+        );
+    }
+    pub(crate) fn set_additive_amount_value(&mut self, value: u8) -> bool {
+        if self.additive_amount == value {
+            return false;
+        }
+        self.additive_amount = value;
+        true
+    }
     pub fn set_drawable_flags(&mut self, value: u16, callbacks: &mut impl DrawableBaseCallbacks) {
         if !self.set_drawable_flags_value(value) {
             return;
@@ -79,6 +103,7 @@ impl DrawableBase {
     }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl DrawableBaseCallbacks) {
         self.blend_mode_value = object.blend_mode_value;
+        self.additive_amount = object.additive_amount;
         self.drawable_flags = object.drawable_flags;
         self.base.copy(&object.base, callbacks);
     }
@@ -89,6 +114,10 @@ impl DrawableBase {
         callbacks: &mut impl DrawableBaseCallbacks,
     ) -> bool {
         match property_key {
+            Self::ADDITIVE_AMOUNT_PROPERTY_KEY => {
+                self.additive_amount = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
             Self::BLEND_MODE_VALUE_PROPERTY_KEY => {
                 self.blend_mode_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true

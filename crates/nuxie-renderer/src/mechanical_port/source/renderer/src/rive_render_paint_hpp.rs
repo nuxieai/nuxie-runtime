@@ -137,7 +137,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    RefCntTarget, rcp, static_rcp_cast,
+    rcp, static_rcp_cast, RefCntTarget,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderImage as SourceRenderImage, RenderPaint as SourceRenderPaint, RenderPaintContract,
@@ -145,7 +145,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
 };
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    CONST_ID, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, lite_rtti_cast,
+    lite_rtti_cast, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_buffer_hpp::RenderResourceDomain;
@@ -162,6 +162,14 @@ use nuxie_render_api::{
 use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
+
+pub fn foldAdditiveToSrcOver(mode: BlendMode) -> BlendMode {
+    if mode == BlendMode::Additive {
+        BlendMode::SrcOver
+    } else {
+        mode
+    }
+}
 
 #[repr(C)]
 pub struct RiveRenderPaint {
@@ -288,7 +296,7 @@ impl RiveRenderPaint {
         self.m_data.m_additiveness
     }
     pub fn blendMode(&mut self, v: BlendMode) {
-        self.m_data.m_blendMode = v;
+        self.m_data.m_blendMode = foldAdditiveToSrcOver(v);
     }
     pub fn imageSampler(&mut self, v: ImageSampler) {
         self.m_data.m_imageSampler = v;
@@ -765,6 +773,22 @@ impl RenderPaint for RiveRenderPaintHandle {
 
 #[cfg(test)]
 mod handle_tests {
+    #[test]
+    fn additive_resolves_to_src_over_plus_additiveness_on_the_gpu_paint() {
+        let mut paint = super::RiveRenderPaint::default();
+        paint.blendMode(nuxie_render_api::BlendMode::Additive);
+        assert_eq!(paint.getBlendMode(), nuxie_render_api::BlendMode::SrcOver);
+        paint.additiveness(128.0 / 255.0);
+        assert_eq!(paint.getAdditiveness(), 128.0 / 255.0);
+        paint.color(0xffff_ffff);
+        assert!(!paint.getIsOpaque());
+        paint.blendMode(nuxie_render_api::BlendMode::Multiply);
+        assert_eq!(paint.getBlendMode(), nuxie_render_api::BlendMode::Multiply);
+        paint.blendMode(nuxie_render_api::BlendMode::SrcOver);
+        paint.additiveness(0.0);
+        assert!(paint.getIsOpaque());
+    }
+
     use super::*;
     use crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp;
 

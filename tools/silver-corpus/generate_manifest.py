@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "1a360ac87346e89cff18335a140bc8c686a54896"
+UPSTREAM_REF = "3d0d3f56ba21caa2ae13ef64451526639d793aee"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -188,6 +188,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "additive_blendmode_test",
     "focus_traversal_click_to_focus",
     "focus_traversal_data_bound",
     "layout_text_match",
@@ -2883,6 +2884,18 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "additive_blendmode_test":
+                        # blend_mode_test.cpp: default artboard, fresh VMI bound
+                        # directly to machine 0; zero draw, then .016 and
+                        # int(1.0f/.016f) additional frames.
+                        actions = (
+                            action("frame-size"),
+                            action("select-state-machine"),
+                            action("bind-selected-artboard-fresh-view-model"),
+                            action("advance", target="state-machine", seconds=0.0),
+                            action("draw"),
+                        ) + tuple(repeated_frames(1 + cpp_float_division_to_int("1.0", "0.016"), 0.016))
+                        blocker = None
                     if silver_id == "layout_animation_transition_test":
                         # layout_test.cpp: authored VM 0 (or artboard-created
                         # default), direct machine binding; draw at zero, then
@@ -3006,6 +3019,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         note = (
                             "Exact comparison contract for the literal gamepad/focus "
                             "producer at 9b9cd7b1. Enrollment alone is not a validation result."
+                        )
+                    if silver_id == "additive_blendmode_test":
+                        note = (
+                            "Exact comparison contract for the literal 64-draw additive "
+                            "producer at 3d0d3f56: default artboard, machine 0, fresh VMI "
+                            "bound directly, zero advance/draw then 63 .016-second frames. "
+                            "Enrollment alone is not a validation result."
                         )
                     if silver_id == "layout_animation_transition_test":
                         note = (
@@ -3465,7 +3485,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (278, 230, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (279, 231, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3478,8 +3498,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 278",
-        "expected_runtime = 230",
+        "expected_entries = 279",
+        "expected_runtime = 231",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

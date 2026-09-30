@@ -34,5 +34,6 @@ pub trait MeshDrawable {
         sampler: ImageSampler,
         blend_mode: BlendMode,
         opacity: f32,
+        additiveness: f32,
     );
 }

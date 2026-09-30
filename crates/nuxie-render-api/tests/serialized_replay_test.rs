@@ -1,4 +1,4 @@
-//! `tests/unit_tests/runtime/serialized_replay_test.cpp` through a4dbc3ff.
+//! `tests/unit_tests/runtime/serialized_replay_test.cpp` through 3d0d3f56.
 use nuxie_render_api::serialized_replay::{SerializedReplayHooks, replay_serialized_commands};
 use nuxie_render_api::*;
 use std::{cell::RefCell, rc::Rc};
@@ -17,6 +17,7 @@ fn serialized_2d_commands_replay_byte_identically() {
     paint.cap(StrokeCap::Square);
     paint.blend_mode(BlendMode::Multiply);
     paint.feather(2.0);
+    paint.additiveness(0.375);
 
     let mut rp = RawPath::new();
     rp.move_to(0.0, 0.0);
@@ -69,6 +70,79 @@ fn serialized_2d_commands_replay_byte_identically() {
     renderer_a.draw_path(path.as_ref(), paint.as_ref());
     renderer_a.draw_path(path.as_ref(), paint2.as_ref());
     renderer_a.draw_path(path.as_ref(), paint3.as_ref());
+    renderer_a.draw_image(
+        Some(image.as_ref()),
+        ImageSampler::LINEAR_CLAMP,
+        BlendMode::SrcOver,
+        1.0,
+    );
+    renderer_a.draw_image_with_additiveness(
+        Some(image.as_ref()),
+        ImageSampler::LINEAR_CLAMP,
+        BlendMode::SrcOver,
+        1.0,
+        0.625,
+    );
+
+    let verts = [0.0f32, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0];
+    let uvs = [0.0f32, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+    let indices = [0u16, 1, 2, 0, 2, 3];
+    let mut vertex_buffer = a.make_render_buffer(
+        RenderBufferType::Vertex,
+        RenderBufferFlags::None,
+        std::mem::size_of_val(&verts),
+    );
+    let mut uv_buffer = a.make_render_buffer(
+        RenderBufferType::Vertex,
+        RenderBufferFlags::None,
+        std::mem::size_of_val(&uvs),
+    );
+    let mut index_buffer = a.make_render_buffer(
+        RenderBufferType::Index,
+        RenderBufferFlags::None,
+        std::mem::size_of_val(&indices),
+    );
+    vertex_buffer.map_mut().copy_from_slice(
+        &verts
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect::<Vec<_>>(),
+    );
+    vertex_buffer.unmap();
+    uv_buffer
+        .map_mut()
+        .copy_from_slice(&uvs.iter().flat_map(|v| v.to_ne_bytes()).collect::<Vec<_>>());
+    uv_buffer.unmap();
+    index_buffer.map_mut().copy_from_slice(
+        &indices
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect::<Vec<_>>(),
+    );
+    index_buffer.unmap();
+    renderer_a.draw_image_mesh(
+        Some(image.as_ref()),
+        ImageSampler::LINEAR_CLAMP,
+        Some(vertex_buffer.as_ref()),
+        Some(uv_buffer.as_ref()),
+        Some(index_buffer.as_ref()),
+        4,
+        6,
+        BlendMode::SrcOver,
+        1.0,
+    );
+    renderer_a.draw_image_mesh_with_additiveness(
+        Some(image.as_ref()),
+        ImageSampler::LINEAR_CLAMP,
+        Some(vertex_buffer.as_ref()),
+        Some(uv_buffer.as_ref()),
+        Some(index_buffer.as_ref()),
+        4,
+        6,
+        BlendMode::SrcOver,
+        1.0,
+        0.625,
+    );
     renderer_a.restore();
 
     let mut b = PersistentFactory::new(SerializingFactory::default());

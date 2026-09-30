@@ -237,32 +237,62 @@ impl ShapePaint {
         self.render_paint.clone()
     }
 
-    pub fn blend_mode(&mut self, parent_value: BlendMode) {
-        let mut render_paint = self.render_paint.as_ref().unwrap().borrow_mut();
-        if self.base.blend_mode_value() == 127 {
-            render_paint.blend_mode(parent_value);
-        } else {
-            let mode = match self.base.blend_mode_value() {
-                3 => BlendMode::SrcOver,
-                14 => BlendMode::Screen,
-                15 => BlendMode::Overlay,
-                16 => BlendMode::Darken,
-                17 => BlendMode::Lighten,
-                18 => BlendMode::ColorDodge,
-                19 => BlendMode::ColorBurn,
-                20 => BlendMode::HardLight,
-                21 => BlendMode::SoftLight,
-                22 => BlendMode::Difference,
-                23 => BlendMode::Exclusion,
-                24 => BlendMode::Multiply,
-                25 => BlendMode::Hue,
-                26 => BlendMode::Saturation,
-                27 => BlendMode::Color,
-                28 => BlendMode::Luminosity,
-                value => panic!("invalid blend mode {value}"),
-            };
-            render_paint.blend_mode(mode);
+    pub fn inherits_blend_mode(&self) -> bool {
+        self.base.blend_mode_value() == 127
+    }
+    pub fn authored_blend_mode(&self) -> BlendMode {
+        match self.base.blend_mode_value() {
+            3 => BlendMode::SrcOver,
+            12 => BlendMode::Additive,
+            14 => BlendMode::Screen,
+            15 => BlendMode::Overlay,
+            16 => BlendMode::Darken,
+            17 => BlendMode::Lighten,
+            18 => BlendMode::ColorDodge,
+            19 => BlendMode::ColorBurn,
+            20 => BlendMode::HardLight,
+            21 => BlendMode::SoftLight,
+            22 => BlendMode::Difference,
+            23 => BlendMode::Exclusion,
+            24 => BlendMode::Multiply,
+            25 => BlendMode::Hue,
+            26 => BlendMode::Saturation,
+            27 => BlendMode::Color,
+            28 => BlendMode::Luminosity,
+            value => panic!("invalid blend mode {value}"),
         }
+    }
+    pub fn blend_mode(&mut self, parent_value: BlendMode, parent_additive_amount: u8) {
+        let inherits = self.inherits_blend_mode();
+        let mode = if inherits {
+            parent_value
+        } else {
+            self.authored_blend_mode()
+        };
+        let amount = if inherits {
+            parent_additive_amount
+        } else {
+            self.base.additive_amount()
+        };
+        let mut render_paint = self
+            .render_paint
+            .as_ref()
+            .expect("initialized paint")
+            .borrow_mut();
+        render_paint.blend_mode(mode);
+        render_paint.additiveness(super::blend_mode::additiveness_for(mode, amount));
+    }
+    pub fn additive_amount_changed(&mut self) {
+        if self.render_paint.is_none() || self.inherits_blend_mode() {
+            return;
+        }
+        let mode = self.authored_blend_mode();
+        let mut render_paint = self.render_paint.as_ref().unwrap().borrow_mut();
+        render_paint.blend_mode(mode);
+        render_paint.additiveness(super::blend_mode::additiveness_for(
+            mode,
+            self.base.additive_amount(),
+        ));
     }
 
     pub fn set_feather(&mut self, feather: CoreHandle) {

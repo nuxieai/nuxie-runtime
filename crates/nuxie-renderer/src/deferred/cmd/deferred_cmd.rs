@@ -102,6 +102,7 @@ fn stroke_position(value: u8) -> StrokePosition {
 fn blend(value: u8) -> BlendMode {
     match value {
         3 => BlendMode::SrcOver,
+        12 => BlendMode::Additive,
         14 => BlendMode::Screen,
         15 => BlendMode::Overlay,
         16 => BlendMode::Darken,
@@ -448,6 +449,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                             fresh.cap(cap(shadow.cap));
                             fresh.stroke_position(stroke_position(shadow.stroke_position));
                             fresh.feather(shadow.feather);
+                            fresh.additiveness(shadow.additiveness);
                             fresh.blend_mode(blend(shadow.blend_mode));
                             if shadow.shader != INVALID_RENDER_HANDLE {
                                 fresh.shader(table.shaders.get(shadow.shader).as_deref());
@@ -598,6 +600,13 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                     }
                 }
             }
+            RenderCmd::PaintAdditiveness => {
+                let c: PaintFloatPod = reader.read();
+                if let Some(paint) = table.paints.get(c.paint) {
+                    paint.borrow_mut().additiveness(c.value);
+                    table.paint_shadows[c.paint as usize].additiveness = c.value;
+                }
+            }
             RenderCmd::PaintShader => {
                 let c: PaintShaderPod = reader.read();
                 if let Some(paint) = table.paints.get(c.paint) {
@@ -700,11 +709,12 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                 };
                 let present = with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
                     if let Some(image) = &image {
-                        r.draw_image(
+                        r.draw_image_with_additiveness(
                             Some(image.as_ref()),
                             sampler(c.wrap_x, c.wrap_y, c.filter),
                             blend(c.blend_mode),
                             c.opacity,
+                            c.additiveness,
                         );
                     }
                 });
@@ -729,7 +739,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                     if let (Some(image), Some(vertices), Some(uv), Some(indices)) =
                         (&image, &vertices, &uv, &indices)
                     {
-                        r.draw_image_mesh(
+                        r.draw_image_mesh_with_additiveness(
                             Some(image.as_ref()),
                             sampler(c.wrap_x, c.wrap_y, c.filter),
                             Some(vertices.borrow().as_ref()),
@@ -739,6 +749,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                             c.index_count,
                             blend(c.blend_mode),
                             c.opacity,
+                            c.additiveness,
                         );
                     }
                 });

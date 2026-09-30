@@ -74,6 +74,7 @@ impl SliceMesh {
         sampler: ImageSampler,
         blend_mode: BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) {
         let Some(image) = nslicer.image_handle() else {
             return;
@@ -108,7 +109,7 @@ impl SliceMesh {
             .index_render_buffer
             .as_ref()
             .map(|buffer| buffer.borrow());
-        renderer.draw_image_mesh(
+        renderer.draw_image_mesh_with_additiveness(
             Some(render_image),
             sampler,
             vertex.as_deref().map(Box::as_ref),
@@ -118,6 +119,7 @@ impl SliceMesh {
             self.indices.len() as u32,
             blend_mode,
             opacity,
+            additiveness,
         );
     }
     pub fn on_asset_loaded(&mut self, _image: Option<&dyn RenderImage>) {}

@@ -1435,6 +1435,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -1664,6 +1677,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -2283,6 +2299,13 @@ impl crate::mechanical_port::source::generated::scripted::scripted_drawable_base
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -3091,8 +3114,13 @@ pub fn drawable_draw_handle(
         crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::draw_occurrence(handle, renderer);
         return true;
     }
-    if handle.with(|owner| owner.as_nested_artboard().is_some()).unwrap_or(false) {
-        crate::mechanical_port::source::nested_artboard::NestedArtboard::draw_occurrence(handle, renderer);
+    if handle
+        .with(|owner| owner.as_nested_artboard().is_some())
+        .unwrap_or(false)
+    {
+        crate::mechanical_port::source::nested_artboard::NestedArtboard::draw_occurrence(
+            handle, renderer,
+        );
         return true;
     }
     if handle.core_type() == Some(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
@@ -3982,6 +4010,7 @@ pub enum CoreField {
     DrawableAssetHeight,
     DrawableAssetWidth,
     DrawableBlendModeValue,
+    DrawableAdditiveAmount,
     DrawableDrawableFlags,
     ElasticInterpolatorAmplitude,
     ElasticInterpolatorEasingValue,
@@ -4306,6 +4335,7 @@ pub enum CoreField {
     SemanticInputActionType,
     ShapeLength,
     ShapePaintBlendModeValue,
+    ShapePaintAdditiveAmount,
     ShapePaintIsVisible,
     SkinTx,
     SkinTy,
@@ -4631,6 +4661,7 @@ pub trait CoreCapabilities: Any {
         _sampler: nuxie_render_api::ImageSampler,
         _blend: nuxie_render_api::BlendMode,
         _opacity: f32,
+        _additiveness: f32,
     ) -> bool {
         false
     }
@@ -6820,6 +6851,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
@@ -7027,6 +7064,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
@@ -7229,6 +7267,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
@@ -7545,6 +7589,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::TextAlignValue => self.base.align_value() as u32,
             CoreField::TextSizingValue => self.base.sizing_value() as u32,
@@ -8199,6 +8244,7 @@ impl CoreRegistry {
             221 => CoreField::ScrollConstraintVirtualizeBuffer,
             725 => CoreField::ScrollBarConstraintScrollConstraintId,
             23 => CoreField::DrawableBlendModeValue,
+            450 => CoreField::DrawableAdditiveAmount,
             129 => CoreField::DrawableDrawableFlags,
             197 => CoreField::NestedArtboardArtboardId,
             800 => CoreField::ArtboardComponentListListSource,
@@ -8318,6 +8364,7 @@ impl CoreRegistry {
             962 => CoreField::ListenerInputTypeEventEventId,
             171 => CoreField::BlendStateTransitionExitBlendAnimationId,
             747 => CoreField::ShapePaintBlendModeValue,
+            452 => CoreField::ShapePaintAdditiveAmount,
             922 => CoreField::TargetEffectTargetId,
             48 => CoreField::StrokeCap,
             49 => CoreField::StrokeJoin,
@@ -8986,6 +9033,7 @@ impl CoreRegistry {
             221 => CoreField::ScrollConstraintVirtualizeBuffer,
             725 => CoreField::ScrollBarConstraintScrollConstraintId,
             23 => CoreField::DrawableBlendModeValue,
+            450 => CoreField::DrawableAdditiveAmount,
             129 => CoreField::DrawableDrawableFlags,
             197 => CoreField::NestedArtboardArtboardId,
             800 => CoreField::ArtboardComponentListListSource,
@@ -9105,6 +9153,7 @@ impl CoreRegistry {
             962 => CoreField::ListenerInputTypeEventEventId,
             171 => CoreField::BlendStateTransitionExitBlendAnimationId,
             747 => CoreField::ShapePaintBlendModeValue,
+            452 => CoreField::ShapePaintAdditiveAmount,
             922 => CoreField::TargetEffectTargetId,
             48 => CoreField::StrokeCap,
             49 => CoreField::StrokeJoin,
@@ -9805,6 +9854,7 @@ impl CoreRegistry {
             221 => 0,
             725 => 0,
             23 => 0,
+            450 => 0,
             129 => 0,
             197 => 0,
             800 => 0,
@@ -9924,6 +9974,7 @@ impl CoreRegistry {
             962 => 0,
             171 => 0,
             747 => 0,
+            452 => 0,
             922 => 0,
             48 => 0,
             49 => 0,
@@ -10394,7 +10445,7 @@ impl CoreRegistry {
         }
     }
     pub fn is_interpolatable_uint(property_key: u32) -> bool {
-        matches!(property_key, 118 | 136 | 210 | 218)
+        matches!(property_key, 450 | 452 | 118 | 136 | 210 | 218)
     }
     pub fn is_callback(property_key: u32) -> bool {
         matches!(property_key, 1016 | 869 | 401 | 395)
@@ -10453,6 +10504,7 @@ impl CoreRegistry {
             221 => 521,
             725 => 522,
             23 => 13,
+            450 => 13,
             129 => 13,
             197 => 92,
             800 => 559,
@@ -10572,6 +10624,7 @@ impl CoreRegistry {
             962 => 659,
             171 => 78,
             747 => 21,
+            452 => 21,
             922 => 644,
             48 => 24,
             49 => 24,
@@ -18774,6 +18827,12 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
@@ -18974,6 +19033,7 @@ impl CoreRegistryObject
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
@@ -19174,6 +19234,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
                 if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
@@ -19408,6 +19474,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::NestedArtboardArtboardId => self.base.artboard_id(),
             _ => 0,
@@ -19612,6 +19679,12 @@ impl CoreRegistryObject
                 if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
@@ -19820,6 +19893,7 @@ impl CoreRegistryObject
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::ArtboardComponentListListSource => self.base.list_source(),
             _ => 0,
@@ -20480,6 +20554,12 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
@@ -20686,6 +20766,7 @@ impl CoreRegistryObject
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::ScriptedDrawableScriptAssetId => self.base.script_asset_id(),
             _ => 0,
@@ -21106,6 +21187,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -21332,6 +21426,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -21824,6 +21921,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -22112,6 +22222,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -23348,7 +23461,9 @@ impl CoreRegistryObject
     }
     fn get_bool(&mut self, field: CoreField) -> bool {
         match field {
-            CoreField::LayoutSizingStyleHugUnbounded => self.base.base.base.base.base.hug_unbounded(),
+            CoreField::LayoutSizingStyleHugUnbounded => {
+                self.base.base.base.base.base.hug_unbounded()
+            }
             _ => false,
         }
     }
@@ -34125,9 +34240,15 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
                 }
             }
             CoreField::ShapePaintBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::ShapePaintAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
                 }
             }
             CoreField::StrokeCap => {
@@ -34206,6 +34327,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
         match field {
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             CoreField::ShapePaintBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::ShapePaintAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::StrokeCap => self.base.cap() as u32,
             CoreField::StrokeJoin => self.base.join() as u32,
             _ => 0,
@@ -34852,9 +34974,15 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
                 }
             }
             CoreField::ShapePaintBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::fill::Fill as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::shapes::paint::fill::Fill as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::ShapePaintAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::paint::fill::Fill as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::fill::Fill as crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
                 }
             }
             CoreField::FillFillRule => {
@@ -34913,6 +35041,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
         match field {
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             CoreField::ShapePaintBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::ShapePaintAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::FillFillRule => self.base.fill_rule() as u32,
             _ => 0,
         }
@@ -39604,6 +39733,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
@@ -39858,6 +39993,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::ImageAssetId => self.base.asset_id(),
             CoreField::ImageFit => self.base.fit(),
@@ -41255,6 +41391,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
@@ -41493,6 +41635,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::LayoutComponentStyleId => self.base.style_id(),
             _ => 0,
@@ -41705,6 +41848,19 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                 {
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
@@ -41989,6 +42145,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -42383,13 +42542,17 @@ impl CoreRegistryObject for crate::mechanical_port::source::selection_style::Sel
         let _ = (field, value);
     }
     fn set_color(&mut self, field: CoreField, value: i32) {
-        if field == CoreField::SelectionStyleHighlightColor { self.set_highlight_color(value); }
+        if field == CoreField::SelectionStyleHighlightColor {
+            self.set_highlight_color(value);
+        }
     }
     fn set_bool(&mut self, field: CoreField, value: bool) {
         let _ = (field, value);
     }
     fn set_double(&mut self, field: CoreField, value: f32) {
-        if field == CoreField::SelectionStyleCornerRadius { self.set_corner_radius(value); }
+        if field == CoreField::SelectionStyleCornerRadius {
+            self.set_corner_radius(value);
+        }
     }
     fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
         let _ = (field, value);
@@ -42406,14 +42569,22 @@ impl CoreRegistryObject for crate::mechanical_port::source::selection_style::Sel
         String::new()
     }
     fn get_color(&mut self, field: CoreField) -> i32 {
-        if field == CoreField::SelectionStyleHighlightColor { self.highlight_color() } else { 0 }
+        if field == CoreField::SelectionStyleHighlightColor {
+            self.highlight_color()
+        } else {
+            0
+        }
     }
     fn get_bool(&mut self, field: CoreField) -> bool {
         let _ = field;
         false
     }
     fn get_double(&mut self, field: CoreField) -> f32 {
-        if field == CoreField::SelectionStyleCornerRadius { self.corner_radius() } else { 0.0 }
+        if field == CoreField::SelectionStyleCornerRadius {
+            self.corner_radius()
+        } else {
+            0.0
+        }
     }
     fn get_int(&mut self, field: CoreField) -> i32 {
         let _ = field;
@@ -46916,6 +47087,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -47192,6 +47376,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -48959,6 +49146,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -49179,6 +49379,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -49410,6 +49613,19 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -49630,6 +49846,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -50617,6 +50836,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -50837,6 +51069,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -51075,6 +51310,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self.base.base.base.set_additive_amount_value(value as u8) {
+                    <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
@@ -51305,6 +51546,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                 .base
                 .parent_id(),
             CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
@@ -51653,6 +51895,19 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::DrawableAdditiveAmount => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_additive_amount_value(value as u8)
+                {
+                    <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::additive_amount_changed(self);
+                    <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::ADDITIVE_AMOUNT_PROPERTY_KEY);
+                }
+            }
             CoreField::DrawableDrawableFlags => {
                 if self
                     .base
@@ -51873,6 +52128,9 @@ impl CoreRegistryObject
                 .parent_id(),
             CoreField::DrawableBlendModeValue => {
                 self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableAdditiveAmount => {
+                self.base.base.base.base.base.additive_amount() as u32
             }
             CoreField::DrawableDrawableFlags => {
                 self.base.base.base.base.base.drawable_flags() as u32
@@ -55100,8 +55358,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger
 {
-    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(
+                &mut self.base.base,
+                context,
+            ),
+        )
     }
 
     fn is_resetting_component(&self) -> bool {
@@ -55280,8 +55546,16 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_target::DrawTarge
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_number::CustomPropertyNumber
 {
-    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(
+                &mut self.base.base,
+                context,
+            ),
+        )
     }
 
     fn lifecycle_validate(
@@ -56799,8 +57073,16 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_color::CustomPropertyColor
 {
-    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(
+                &mut self.base.base,
+                context,
+            ),
+        )
     }
 
     fn lifecycle_validate(
@@ -58509,8 +58791,9 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
         sampler: nuxie_render_api::ImageSampler,
         blend: nuxie_render_api::BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) -> bool {
-        self.draw_mesh(renderer, image, sampler, blend, opacity);
+        self.draw_mesh(renderer, image, sampler, blend, opacity, additiveness);
         true
     }
     fn component_build_dependencies(&mut self) -> bool {
@@ -63091,8 +63374,9 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
         sampler: nuxie_render_api::ImageSampler,
         blend: nuxie_render_api::BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) -> bool {
-        self.draw(renderer, image, sampler, blend, opacity);
+        self.draw(renderer, image, sampler, blend, opacity, additiveness);
         true
     }
     fn as_skinnable_behavior(
@@ -63274,8 +63558,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::P
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
             crate::mechanical_port::source::shapes::points_path::PointsPath::on_added_clean(
-                self,
-                context,
+                self, context,
             ),
         )
     }
@@ -65288,8 +65571,16 @@ impl CoreCapabilities for crate::mechanical_port::source::focus_data::FocusData 
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean
 {
-    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(
+                &mut self.base.base,
+                context,
+            ),
+        )
     }
 
     fn lifecycle_validate(
@@ -66163,7 +66454,11 @@ impl CoreCapabilities for crate::mechanical_port::source::joystick::Joystick {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::selection_style::SelectionStyle {}
-impl crate::mechanical_port::source::core::CoreType for crate::mechanical_port::source::selection_style::SelectionStyle { const TYPE_KEY: u16 = 153; }
+impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::selection_style::SelectionStyle
+{
+    const TYPE_KEY: u16 = 153;
+}
 impl CoreCapabilities for crate::mechanical_port::source::backboard::Backboard {}
 impl CoreCapabilities for crate::mechanical_port::source::open_url_event::OpenUrlEvent {
     fn lifecycle_validate(
@@ -66294,8 +66589,16 @@ impl CoreCapabilities for crate::mechanical_port::source::semantic::semantic_dat
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_string::CustomPropertyString
 {
-    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(
+                &mut self.base.base,
+                context,
+            ),
+        )
     }
 
     fn lifecycle_validate(
@@ -69430,8 +69733,16 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum {
-    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
-        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(
+                &mut self.base.base,
+                context,
+            ),
+        )
     }
 
     fn lifecycle_validate(
@@ -71324,6 +71635,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -71460,6 +71778,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::nested_artboard::NestedArtboard
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -71596,6 +71921,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -71840,6 +72172,13 @@ impl crate::mechanical_port::source::generated::scripted::scripted_drawable_base
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -71996,6 +72335,13 @@ impl crate::mechanical_port::source::generated::scripted::scripted_drawable_base
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -72197,6 +72543,13 @@ impl crate::mechanical_port::source::generated::nested_artboard_base::NestedArtb
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -73496,6 +73849,7 @@ impl crate::mechanical_port::source::generated::shapes::paint::stroke_base::Stro
     }
 }
 impl crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks for crate::mechanical_port::source::shapes::paint::stroke::Stroke {
+    fn additive_amount_changed(&mut self) { CoreCapabilities::as_shape_paint_mut(self).expect("ShapePaint").additive_amount_changed(); }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -73586,6 +73940,7 @@ impl crate::mechanical_port::source::generated::shapes::paint::fill_base::FillBa
     }
 }
 impl crate::mechanical_port::source::generated::shapes::paint::shape_paint_base::ShapePaintBaseCallbacks for crate::mechanical_port::source::shapes::paint::fill::Fill {
+    fn additive_amount_changed(&mut self) { CoreCapabilities::as_shape_paint_mut(self).expect("ShapePaint").additive_amount_changed(); }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -73643,6 +73998,13 @@ impl crate::mechanical_port::source::generated::shapes::shape_base::ShapeBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::shapes::shape::Shape
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -75108,6 +75470,13 @@ impl crate::mechanical_port::source::generated::shapes::image_base::ImageBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::shapes::image::Image
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -75333,6 +75702,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::layout_component::LayoutComponent
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -75477,6 +75853,13 @@ impl crate::mechanical_port::source::generated::layout_component_base::LayoutCom
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::artboard::Artboard
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -75911,6 +76294,13 @@ impl crate::mechanical_port::source::generated::nested_artboard_base::NestedArtb
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -76246,6 +76636,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -76400,6 +76797,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::text::text_input_text::TextInputText
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -76637,6 +77041,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -76799,6 +77210,13 @@ impl crate::mechanical_port::source::generated::text::text_input_base::TextInput
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::text::text_input::TextInput
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }
@@ -76951,6 +77369,13 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::text::text_input_selection::TextInputSelection
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -77113,6 +77538,13 @@ impl crate::mechanical_port::source::generated::text::text_base::TextBaseCallbac
 impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
     for crate::mechanical_port::source::text::text::Text
 {
+    fn additive_amount_changed(&mut self) {
+        if let Some(shape) = CoreCapabilities::as_shape_mut(self) {
+            shape.additive_amount_changed();
+        } else if let Some(layout) = CoreCapabilities::as_layout_component_mut(self) {
+            layout.additive_amount_changed();
+        }
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
     }

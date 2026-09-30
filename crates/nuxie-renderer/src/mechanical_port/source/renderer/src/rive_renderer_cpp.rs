@@ -2180,6 +2180,7 @@ impl RendererContract for RiveRenderer {
             return;
         }
         let image = unsafe { &*(image.cast::<RiveRenderImage>()) };
+        let blend = super::rive_render_paint_hpp::foldAdditiveToSrcOver(blend);
         let texture = image.refTexture();
         if texture.get().is_null() {
             return;
@@ -2211,7 +2212,11 @@ impl RendererContract for RiveRenderer {
                     self.current_state().matrix,
                     blend,
                     additiveness,
-                    super::draw_cpp::color_modulate(0xffffffff, self.current_state().modulatedColor, final_opacity),
+                    super::draw_cpp::color_modulate(
+                        0xffffffff,
+                        self.current_state().modulatedColor,
+                        final_opacity,
+                    ),
                     texture,
                     rcp::new(),
                     sampler,
@@ -2295,6 +2300,7 @@ impl RendererContract for RiveRenderer {
             return;
         }
         let image = unsafe { &*(image.cast::<RiveRenderImage>()) };
+        let blend = super::rive_render_paint_hpp::foldAdditiveToSrcOver(blend);
         let texture = image.refTexture();
         if texture.get().is_null() {
             return;
@@ -2306,7 +2312,11 @@ impl RendererContract for RiveRenderer {
                 self.current_state().matrix,
                 blend,
                 additiveness,
-                super::draw_cpp::color_modulate(0xffffffff, self.current_state().modulatedColor, final_opacity),
+                super::draw_cpp::color_modulate(
+                    0xffffffff,
+                    self.current_state().modulatedColor,
+                    final_opacity,
+                ),
                 texture,
                 sampler,
                 gpu::DrawContents::none,

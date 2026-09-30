@@ -314,6 +314,7 @@ impl Mesh {
         sampler: ImageSampler,
         blend_mode: BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) {
         if self.vertex_render_buffer_dirty
             && self.mesh.vertex_render_buffer.is_none()
@@ -381,7 +382,7 @@ impl Mesh {
             .index_render_buffer
             .as_ref()
             .map(|buffer| buffer.borrow());
-        renderer.draw_image_mesh(
+        renderer.draw_image_mesh_with_additiveness(
             Some(image),
             sampler,
             vertex.as_deref().map(Box::as_ref),
@@ -391,6 +392,7 @@ impl Mesh {
             self.index_buffer.as_ref().unwrap().0.len() as u32,
             blend_mode,
             opacity,
+            additiveness,
         );
     }
 }
@@ -411,7 +413,16 @@ impl MeshDrawable for Mesh {
         sampler: ImageSampler,
         blend_mode: BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) {
-        Mesh::draw(self, renderer, image, sampler, blend_mode, opacity);
+        Mesh::draw(
+            self,
+            renderer,
+            image,
+            sampler,
+            blend_mode,
+            opacity,
+            additiveness,
+        );
     }
 }

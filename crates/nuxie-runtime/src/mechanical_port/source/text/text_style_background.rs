@@ -103,7 +103,13 @@ impl TextStyleBackground {
 
     // Text supplies its already-borrowed transform/blend, as TextStylePaint does.
     // Reading Text through the parent chain here would reborrow that same owner.
-    pub fn draw(&mut self, renderer: &mut dyn Renderer, world: &Mat2D, blend: BlendMode) {
+    pub fn draw(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        world: &Mat2D,
+        blend: BlendMode,
+        additive_amount: u8,
+    ) {
         if self.rects.is_empty() {
             return;
         }
@@ -116,7 +122,7 @@ impl TextStyleBackground {
                     return;
                 }
                 let fill_rule = paint.fill_rule();
-                paint.shape_paint_mut().blend_mode(blend);
+                paint.shape_paint_mut().blend_mode(blend, additive_amount);
                 paint.shape_paint_mut().draw_with_fill_rule(
                     renderer,
                     &mut self.path.path,

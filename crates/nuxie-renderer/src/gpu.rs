@@ -806,6 +806,10 @@ pub(crate) fn swizzle_rive_color_to_rgba_premul(color: ColorInt) -> u32 {
 pub(crate) const fn blend_mode_id(mode: BlendMode) -> u32 {
     match mode {
         BlendMode::SrcOver => 0,
+        BlendMode::Additive => {
+            debug_assert!(false, "additive should have been resolved to srcOver");
+            0
+        }
         BlendMode::Screen => 1,
         BlendMode::Overlay => 2,
         BlendMode::Darken => 3,

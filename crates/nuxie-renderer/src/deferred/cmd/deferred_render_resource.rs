@@ -131,6 +131,7 @@ pub struct DeferredRenderPaint {
     cap: u8,
     stroke_position: u8,
     feather: f32,
+    additiveness: f32,
     blend_mode: u8,
     shader: Option<Rc<dyn RenderShader>>,
     shader_identity: Option<usize>,
@@ -166,6 +167,7 @@ impl DeferredRenderPaint {
             cap: 0,
             stroke_position: 1,
             feather: 0.0,
+            additiveness: 0.0,
             blend_mode: 3,
             shader: None,
             shader_identity: None,
@@ -268,6 +270,13 @@ impl RenderPaint for DeferredRenderPaint {
         }
         self.feather = value;
         self.emit_float(RenderCmd::PaintFeather, value);
+    }
+    fn additiveness(&mut self, value: f32) {
+        if self.additiveness == value {
+            return;
+        }
+        self.additiveness = value;
+        self.emit_float(RenderCmd::PaintAdditiveness, value);
     }
     fn blend_mode(&mut self, value: BlendMode) {
         let value = value as u8;

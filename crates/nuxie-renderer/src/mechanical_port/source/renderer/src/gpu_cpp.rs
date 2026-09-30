@@ -3076,7 +3076,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3172,6 +3172,10 @@ fn paint_type_to_glsl_id(paintType: PaintType) -> u32 {
 pub fn ConvertBlendModeToPLSBlendMode(riveMode: BlendMode) -> u32 {
     match riveMode {
         BlendMode::SrcOver => 0,
+        BlendMode::Additive => {
+            debug_assert!(false, "additive should have been resolved to srcOver");
+            0
+        }
         BlendMode::Screen => 1,
         BlendMode::Overlay => 2,
         BlendMode::Darken => 3,
@@ -3642,7 +3646,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{AABB, Mat2D, find_transformed_area};
+    use super::{find_transformed_area, Mat2D, AABB};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -4320,6 +4324,9 @@ fn get_blend_equation(
                 );
                 match blendMode {
                     BlendMode::SrcOver => BlendEquation::srcOver,
+                    BlendMode::Additive => {
+                        unreachable!("additive is folded before GPU pipeline creation")
+                    }
                     BlendMode::Screen => BlendEquation::screen,
                     BlendMode::Overlay => BlendEquation::overlay,
                     BlendMode::Darken => BlendEquation::darken,

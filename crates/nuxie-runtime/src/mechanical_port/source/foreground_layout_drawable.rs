@@ -34,15 +34,18 @@ impl ForegroundLayoutDrawable {
             .with_mut(|parent| {
                 parent.as_layout_component_mut().map(|parent| {
                     parent.register_foreground_drawable();
-                    parent.base.base.blend_mode()
+                    (
+                        parent.base.base.blend_mode(),
+                        parent.base.base.additive_amount(),
+                    )
                 })
             })
             .flatten();
-        if let Some(blend) = blend {
+        if let Some((blend, amount)) = blend {
             for paint in self.paint_container.shape_paints().iter().cloned() {
                 paint.with_mut(|paint| {
                     if let Some(paint) = paint.as_shape_paint_mut() {
-                        paint.blend_mode(blend.into());
+                        paint.blend_mode(blend.into(), amount);
                     }
                 });
             }
@@ -79,6 +82,18 @@ impl ForegroundLayoutDrawable {
                 let Some(paint) = paint.as_shape_paint_behavior_mut() else {
                     return;
                 };
+                let (blend, amount) = parent
+                    .with(|parent| {
+                        let parent = parent
+                            .as_layout_component()
+                            .expect("foreground layout parent");
+                        (
+                            parent.base.base.blend_mode(),
+                            parent.base.base.additive_amount(),
+                        )
+                    })
+                    .expect("live foreground layout parent");
+                paint.shape_paint_mut().blend_mode(blend.into(), amount);
                 if !paint.should_draw() {
                     return;
                 }

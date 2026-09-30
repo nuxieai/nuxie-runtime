@@ -164,6 +164,9 @@ impl ScriptedPaint {
     fn set_blend_mode(&mut self, blend_mode: BlendMode) {
         self.blend_mode = blend_mode;
         self.render_paint.blend_mode(blend_mode);
+        self.render_paint.additiveness(
+            nuxie_runtime::source::shapes::paint::blend_mode::additiveness_for(blend_mode, 255),
+        );
     }
 
     fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
@@ -328,6 +331,7 @@ fn parse_blend_mode(value: Value) -> Result<BlendMode> {
 pub(super) fn parse_blend_mode_name(value: &str) -> Result<BlendMode> {
     match value {
         "srcOver" => Ok(BlendMode::SrcOver),
+        "additive" => Ok(BlendMode::Additive),
         "screen" => Ok(BlendMode::Screen),
         "overlay" => Ok(BlendMode::Overlay),
         "darken" => Ok(BlendMode::Darken),
@@ -352,6 +356,7 @@ pub(super) fn parse_blend_mode_name(value: &str) -> Result<BlendMode> {
 pub(super) fn blend_mode_name(blend_mode: BlendMode) -> &'static str {
     match blend_mode {
         BlendMode::SrcOver => "srcOver",
+        BlendMode::Additive => "additive",
         BlendMode::Screen => "screen",
         BlendMode::Overlay => "overlay",
         BlendMode::Darken => "darken",
@@ -374,5 +379,114 @@ fn string_value(value: Value) -> Result<String> {
     match value {
         Value::String(value) => Ok(value.to_str()?),
         _ => Err(Error::runtime("expected string")),
+    }
+}
+
+#[cfg(test)]
+mod upstream_blend_mode_tests {
+    use super::ScriptedPaint;
+    use nuxie_render_api::*;
+    use std::any::Any;
+
+    struct RecordingPaint {
+        blend: BlendMode,
+        additive: f32,
+    }
+
+    impl RenderPaint for RecordingPaint {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+        fn style(&mut self, _: RenderPaintStyle) {}
+        fn color(&mut self, _: ColorInt) {}
+        fn thickness(&mut self, _: f32) {}
+        fn join(&mut self, _: StrokeJoin) {}
+        fn cap(&mut self, _: StrokeCap) {}
+        fn feather(&mut self, _: f32) {}
+        fn additiveness(&mut self, value: f32) {
+            self.additive = value;
+        }
+        fn blend_mode(&mut self, value: BlendMode) {
+            self.blend = value;
+        }
+        fn shader(&mut self, _: Option<&dyn RenderShader>) {}
+        fn invalidate_stroke(&mut self) {}
+    }
+
+    struct RecordingFactory(NullFactory);
+    impl Factory for RecordingFactory {
+        fn make_render_buffer(
+            &mut self,
+            kind: RenderBufferType,
+            flags: RenderBufferFlags,
+            size: usize,
+        ) -> Box<dyn RenderBuffer> {
+            self.0.make_render_buffer(kind, flags, size)
+        }
+        fn make_linear_gradient(
+            &mut self,
+            sx: f32,
+            sy: f32,
+            ex: f32,
+            ey: f32,
+            colors: &[ColorInt],
+            stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            self.0.make_linear_gradient(sx, sy, ex, ey, colors, stops)
+        }
+        fn make_radial_gradient(
+            &mut self,
+            cx: f32,
+            cy: f32,
+            radius: f32,
+            colors: &[ColorInt],
+            stops: &[f32],
+        ) -> Box<dyn RenderShader> {
+            self.0.make_radial_gradient(cx, cy, radius, colors, stops)
+        }
+        fn make_render_path(&mut self, path: RawPath, fill: FillRule) -> Box<dyn RenderPath> {
+            self.0.make_render_path(path, fill)
+        }
+        fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+            self.0.make_empty_render_path()
+        }
+        fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+            Box::new(RecordingPaint {
+                blend: BlendMode::SrcOver,
+                additive: 0.0,
+            })
+        }
+        fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+            self.0.decode_image(data)
+        }
+    }
+
+    fn recorded(paint: &ScriptedPaint) -> &RecordingPaint {
+        paint
+            .render_paint
+            .as_any()
+            .downcast_ref::<RecordingPaint>()
+            .expect("recording render paint")
+    }
+
+    // tests/unit_tests/runtime/blend_mode_test.cpp at 3d0d3f56.
+    #[test]
+    fn a_scripted_paint_sets_additiveness_alongside_the_mode() {
+        let mut factory = RecordingFactory(NullFactory::new());
+        let mut paint = ScriptedPaint::new(&mut factory);
+        let _ = recorded(&paint);
+
+        paint.set_blend_mode(BlendMode::Additive);
+        assert_eq!(recorded(&paint).blend, BlendMode::Additive);
+        assert!((recorded(&paint).additive - 1.0).abs() <= 100.0 * f32::EPSILON);
+
+        paint.set_blend_mode(BlendMode::Multiply);
+        assert_eq!(recorded(&paint).blend, BlendMode::Multiply);
+        assert_eq!(recorded(&paint).additive, 0.0);
+
+        paint.set_blend_mode(BlendMode::Additive);
+        let clone = ScriptedPaint::copy_from(&mut factory, &paint);
+        assert_eq!(recorded(&clone).blend, BlendMode::Additive);
+        assert!((recorded(&clone).additive - 1.0).abs() <= 100.0 * f32::EPSILON);
     }
 }

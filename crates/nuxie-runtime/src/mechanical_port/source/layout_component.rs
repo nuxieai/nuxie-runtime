@@ -1248,11 +1248,18 @@ impl LayoutComponent {
         ) {
             parent.with_mut(|parent| parent.component_add_dependent(this));
         }
+        self.sync_shape_paint_blend_modes();
+    }
+    pub fn additive_amount_changed(&mut self) {
+        self.sync_shape_paint_blend_modes();
+    }
+    pub fn sync_shape_paint_blend_modes(&mut self) {
         let blend = self.base.base.blend_mode();
+        let amount = self.base.base.additive_amount();
         for paint in self.paints.shape_paints().iter().cloned() {
             paint.with_mut(|paint| {
                 if let Some(paint) = paint.as_shape_paint_mut() {
-                    paint.blend_mode(blend.into());
+                    paint.blend_mode(blend.into(), amount);
                 }
             });
         }

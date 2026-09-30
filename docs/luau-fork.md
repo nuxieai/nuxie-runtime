@@ -7,12 +7,26 @@ records the fork point, the carried patches, and the port plan. It owns the
 exit path for the historical WATCH `deferred-2026-07-19-luau-engine`
 (the retired register is available in git history): its exit criterion was **fork parity
 with the pinned C++ engine**, not "luaur publishes a newer base".
-**STATUS 2026-09-06: incremental sync through `rive_0_734`.**
+**STATUS 2026-09-30: configured runtime profile accounted through `rive_0_734_ice`.**
 The vendored engine carries the configured-profile delta from its 0.724-era
 base through the Rive fork at `rive_0_734` (`fb6ff089`). Disabled experimental
 subsystems are not a claim of complete Luau feature parity.
 
 ## Current incremental checkpoint
+
+Runtime `def2e241b80f6118a1d3bda8d3689e3f8bfcd430` advances the C++
+dependency from `rive_0_734` (`fb6ff089bd5687713a59aa60a5baa86e0a5c8bfd`)
+to `rive_0_734_ice` (`c1c57894ff8f4fdacf171179eddd04c27cc5f7da`).
+The complete tree delta is one file, `Analysis/src/Frontend.cpp`: each
+concurrent module/SCC check now uses its own internal-error reporter instead
+of mutating the shared reporter's module name. No VM, parser, bytecode compiler
+or wire-format changes occur. Static analysis remains outside this runtime's
+enabled dependency graph, so no vendored engine code changes are needed or
+claimed. The editor-owned script-tools work described under UNIV-1655 must
+consider this fix if it enables the corresponding concurrent analysis path;
+this checkpoint does not claim the authoring analyzer was updated.
+
+### Previous executable engine update
 
 Runtime `64186dc048c7b81aee83a5290a2bb520fdffaa1e` changes the dependency
 from tree `f4a8c732e4166accb43789263b74229b945db029` to

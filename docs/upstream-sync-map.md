@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `576282493a805993d4ca6379e425f105fe0d03d5`
+- LAST_SYNCED_SHA: `def2e241b80f6118a1d3bda8d3689e3f8bfcd430`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 60 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 60 require a Rust translation.
+  There are 59 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 59 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `def2e241b80f6118a1d3bda8d3689e3f8bfcd430` | **OUTSIDE THE ENABLED RUNTIME PROFILE:** resolve the Luau dependency bump from rive_0_734 (`fb6ff089`) to rive_0_734_ice (`c1c57894`). The complete dependency-tree delta changes only Analysis/src/Frontend.cpp, giving concurrent type-check operations local internal-error reporters. No VM, parser, bytecode compiler or bytecode format changes occur. Static analysis is not in the shipped luaur dependency graph; record the editor-tools relevance in luau-fork.md without claiming that analyzer fix implemented. | — |
 | `576282493a805993d4ca6379e425f105fe0d03d5` | Guard missing view-model IDs/properties, visit authored property graphs once, and memoize active instance copies as null before completing them: active back-edges are dropped, while completed copies remain shared. Route root/default/runtime creation through the copy entry point. Reject null import factories before parsing and missing paint-mutator artboards/factories before paint initialization. Live Rust File factories remain nonnull retained handles. Port all four cycle/ID tests and the null-factory import regression. Private editor pickers, Dart/native plugin and Windows wrapper changes described in the message are absent from the public delta and are not claimed imported. | — |
 | `d7d5fdd8419b5e5932f56e8a51a62eb83c5a2d71` | Translate host-owned selection across regular Text objects, shared cursor layout views, lazy selection geometry, pointer/keyboard selection and copy ordering, nested selectable discovery and stable target tokens. Add ordered file SelectionStyle resources and generated type/property dispatch. Preserve weak Rust object registration and the approved shaping boundary; clipboard, focus and pointer capture remain host-owned. Port all 16 public upstream selection tests. Private editor inspector/RML changes described in the message are absent from the public delta and are not claimed imported. | — |
 | `ee60b7014f1a28fa6bb5f2588cb274c273080f32` | Translate inside/center/outside stroke positioning, paint cloning/state, forced contour closure, positioned clip recursion and complete clip-cache identity. Carry stroke position through public and deferred APIs, preserving bitwise stroke-parameter equality and deterministic command padding. Port the three complete new GPU scenes and existing clip-stroke helper refactor. Shader sources are unchanged; unsupported renderers retain upstream's default no-op, and no serialized SRIV or foreign callback opcode is invented. The interactive path-fiddle keyboard control has no shipped Rust counterpart. | — |

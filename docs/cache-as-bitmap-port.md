@@ -8,6 +8,22 @@ This commit is 91 commits past `LAST_SYNCED_SHA` (`5892bb05`). It was ported on
 its own, ahead of the sync, and adapted onto the older base. The sync map
 records the exception. The checkpoint does not move.
 
+## Chronological reconciliation (2026-09-29)
+
+The incremental sync has now reached `a4dbc3ff`. The sections below retain the
+original ahead-port scope and qualification, not the current omission list.
+The reached port reconciles the runtime and renderer owners and completes the
+opt-in serializing-factory/replay canvas lane, its replay regressions and the
+previously omitted silver-factory bitmap-cache test. The C++ test player and
+deployment harness are still not shipped Rust product implementations.
+
+The BitmapCache schema definition now lives in
+`defs/upstream-reconciliation/bitmap_cache.json`; its forward overlay is retired.
+This move reproduces the existing generated schema without changing its bytes.
+Intervening commits listed below have been accounted for chronologically in
+`upstream-sync-map.md`. See the reconciliation PR for current validation rather
+than treating the original ahead-port test results as a new run.
+
 ## What is ported
 
 | Upstream owner | Rust owner |

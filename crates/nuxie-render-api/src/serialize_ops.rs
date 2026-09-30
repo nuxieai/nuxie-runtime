@@ -42,6 +42,9 @@ operations! {
     FRAME_SIZE = frameSize = 29,
     MODULATE_OPACITY = modulateOpacity = 30,
     PAINT_MODULATED_IMAGE = paintModulatedImage = 31,
+    MAKE_RENDER_CANVAS = makeRenderCanvas = 32,
+    CANVAS_CONTENT_BEGIN = canvasContentBegin = 33,
+    CANVAS_CONTENT_END = canvasContentEnd = 34,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {

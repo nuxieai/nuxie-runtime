@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d97479357d83d10e0b440827c7905a6994263205`
+- LAST_SYNCED_SHA: `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 84 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 84 require a Rust translation.
+  There are 83 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 83 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Reconcile the ahead-ported BitmapCache, artboard raster/composite lifecycle, renderer state queries and deferred canvas hosts against the complete reached commit. Add opt-in serialized cache capture, canvas declaration/content brackets and replay routing, with the upstream serialized-replay and silver-factory regressions. Move the reached BitmapCache definition from forward overlay to runtime reconciliation. C++ player/deploy UI harness changes are not shipped Rust product implementations. | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
 | `d97479357d83d10e0b440827c7905a6994263205` | Image paints with image assets, sampler and transform properties, deferred-command and serialized replay support. Scripted transitions select among design children and lazily instanced view-model-list artboards, with scoped Lua child wrappers and changed/draw protocol callbacks. Wire generated type/property registration, data binding, lifecycle and list index propagation. **DEFERRED:** transition execution methods in WasmScriptingVM remain part of parked Wasm execution; shared protocol and native Luau are in scope. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `00943a6b29b55467e2595fe244b555293fcade68` | **DEFERRED:** WasmScriptingVM probes the major-collection counter, requests collection before warning on host-handle growth, waits for sliced collection completion, and suppresses warnings for collected modules without the counter. The complete executable delta is confined to the parked Wasm scripting VM; no ordinary Luau/shared runtime/browser renderer changes are present. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `f7c3d1f9975c4993b68fd5f0fbf568bb4607e77c` | Track Vulkan texture contents per mip/layer, including pending uploads and resolve targets. Convert load to clear for never-written attachment subresources, mark only the framebuffer's base layer, and preserve canvas/Rive texture contents through target access tracking. **DEFERRED:** the Wasm-only player frame-boundary nursery scavenging call belongs to parked Wasm execution. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
@@ -238,9 +239,10 @@ removed `dev/defs` at `d4fe1022`, schema generation uses the pinned public seed
 in `defs/upstream-runtime` plus runtime reconciliation and forward overlays.
 Move covered properties into reconciliation before retiring an overlay.
 
-| Upstream SHA | Ported slice | Work |
-| --- | --- | --- |
-| `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Cache as bitmap: the BitmapCache core type, the Artboard offscreen raster and composite, `Renderer::current_transform`/`current_modulated_opacity`, `Factory::canvas_content_host`, the three new `DeferredCanvasHost` methods, and the deferred recorder's CTM shadow. The serializing/replay utilities, player and deploy harness, and the silver-factory test are not ported. See [cache-as-bitmap-port.md](cache-as-bitmap-port.md). | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
+The cache-as-bitmap commit has now been reached and reconciled chronologically;
+its complete accounting appears above. Its original ahead-port scope is retained
+in [cache-as-bitmap-port.md](cache-as-bitmap-port.md). There are no remaining
+ahead-port rows in this inventory.
 
 The alignment and obscured-input properties are now both reached and live in
 `defs/upstream-reconciliation/text/text_input.json`. The former shared forward

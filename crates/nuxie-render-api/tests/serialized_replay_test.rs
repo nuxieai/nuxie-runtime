@@ -1,6 +1,7 @@
-//! `tests/unit_tests/runtime/serialized_replay_test.cpp` through d9747935.
+//! `tests/unit_tests/runtime/serialized_replay_test.cpp` through a4dbc3ff.
 use nuxie_render_api::serialized_replay::{SerializedReplayHooks, replay_serialized_commands};
 use nuxie_render_api::*;
+use std::{cell::RefCell, rc::Rc};
 
 #[test]
 fn serialized_2d_commands_replay_byte_identically() {
@@ -79,6 +80,7 @@ fn serialized_2d_commands_replay_byte_identically() {
         on_frame_size: Some(Box::new(move |w, h| {
             size_factory.borrow_mut().frame_size(w, h)
         })),
+        ..Default::default()
     };
     assert!(replay_serialized_commands(
         &a.bytes(),
@@ -91,6 +93,265 @@ fn serialized_2d_commands_replay_byte_identically() {
     let sb = b.bytes();
     assert_eq!(sa.len(), sb.len());
     assert_eq!(&*sa, &*sb);
+}
+
+// An unbacked RenderCanvas has an image identity before GPU allocation, just
+// like the upstream tests' directly constructed gpu::RenderCanvas.
+#[derive(Clone)]
+struct CanvasImage {
+    identity: Rc<()>,
+    width: u32,
+    height: u32,
+}
+impl RenderImage for CanvasImage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.identity) as usize
+    }
+    fn width(&self) -> u32 {
+        self.width
+    }
+    fn height(&self) -> u32 {
+        self.height
+    }
+}
+struct Canvas(CanvasImage);
+impl RenderCanvas for Canvas {
+    fn width(&self) -> u32 {
+        self.0.width
+    }
+    fn height(&self) -> u32 {
+        self.0.height
+    }
+    fn is_backed(&self) -> bool {
+        false
+    }
+    fn render_image(&self) -> Rc<dyn RenderImage> {
+        self.0.retain_image()
+    }
+    fn begin_frame(
+        &mut self,
+        _: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+        Err(RenderCanvasError::unsupported())
+    }
+}
+fn canvas(width: u32, height: u32) -> RenderCanvasHandle {
+    Rc::new(RefCell::new(Box::new(Canvas(CanvasImage {
+        identity: Rc::new(()),
+        width,
+        height,
+    }))))
+}
+
+// Supplemental coverage of the explicit nullable branches in the source API.
+#[test]
+fn serializing_canvas_null_inputs_and_cache_disable_preserve_source_behavior() {
+    let context = PersistentFactory::new(NullFactory::new());
+    let mut factory = SerializingFactory::new();
+    factory.enable_bitmap_cache(context.persistent_context());
+    assert!(factory.render_context().is_some());
+    assert!(factory.deferred_canvas_host().is_some());
+    assert!(factory.canvas_content_host().is_some());
+    factory.enable_bitmap_cache(None);
+    assert!(factory.render_context().is_none());
+    assert!(factory.deferred_canvas_host().is_none());
+    assert!(factory.canvas_content_host().is_none());
+    assert!(DeferredCanvasHost::make_content_canvas(&mut factory, 8, 8).is_none());
+    let before = factory.bytes().to_vec();
+    assert!(factory.begin_canvas_content(None, 0).is_none());
+    factory.end_canvas_content(None);
+    assert!(factory.content_canvas_image(None).is_none());
+    assert_eq!(&*factory.bytes(), before.as_slice());
+}
+
+#[derive(Clone, Default)]
+struct CountingRenderer(Rc<RefCell<(usize, usize)>>);
+impl Renderer for CountingRenderer {
+    fn save(&mut self) {}
+    fn restore(&mut self) {}
+    fn transform(&mut self, _: Mat2D) {}
+    fn draw_path(&mut self, _: &dyn RenderPath, _: &dyn RenderPaint) {
+        self.0.borrow_mut().0 += 1;
+    }
+    fn clip_path(&mut self, _: &dyn RenderPath) {}
+    fn draw_image(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler, _: BlendMode, _: f32) {
+        self.0.borrow_mut().1 += 1;
+    }
+    fn draw_image_mesh(
+        &mut self,
+        _: Option<&dyn RenderImage>,
+        _: ImageSampler,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: u32,
+        _: u32,
+        _: BlendMode,
+        _: f32,
+    ) {
+    }
+    fn modulate_opacity(&mut self, _: f32) {}
+}
+fn record_cached_stream(factory: &mut SerializingFactory, screen: &mut dyn Renderer) {
+    let mut paint = factory.make_render_paint();
+    paint.color(0xff445566);
+    let mut raw = RawPath::new();
+    raw.move_to(0.0, 0.0);
+    raw.line_to(10.0, 0.0);
+    raw.line_to(10.0, 10.0);
+    raw.close();
+    let path = factory.make_render_path(raw, FillRule::NonZero);
+    screen.draw_path(path.as_ref(), paint.as_ref());
+    let canvas = canvas(64, 48);
+    let mut content = factory
+        .begin_canvas_content(Some(canvas.clone()), 0xff204060)
+        .unwrap();
+    content.save();
+    content.scale(2.0, 2.0);
+    content.draw_path(path.as_ref(), paint.as_ref());
+    content.restore();
+    factory.end_canvas_content(Some(&canvas));
+    screen.save();
+    screen.draw_image(
+        SerializingFactory::content_canvas_image(factory, Some(&canvas)).as_deref(),
+        ImageSampler::LINEAR_CLAMP,
+        BlendMode::SrcOver,
+        1.0,
+    );
+    screen.restore();
+}
+#[test]
+fn serialized_canvas_content_replays_byte_identically() {
+    let mut a = SerializingFactory::default();
+    a.frame_size(256, 256);
+    a.add_frame();
+    let mut screen = a.make_renderer();
+    record_cached_stream(&mut a, &mut screen);
+    let mut b = PersistentFactory::new(SerializingFactory::default());
+    let mut screen = b.borrow().make_renderer();
+    let frame = b.clone();
+    let size = b.clone();
+    let begin = b.clone();
+    let end = b.clone();
+    let canvases = Rc::new(RefCell::new(Vec::<RenderCanvasHandle>::new()));
+    let begin_canvases = canvases.clone();
+    let end_canvases = canvases.clone();
+    let counts = Rc::new(RefCell::new((0, 0)));
+    let begin_counts = counts.clone();
+    let end_counts = counts.clone();
+    let mut hooks = SerializedReplayHooks {
+        on_frame: Some(Box::new(move || frame.borrow_mut().add_frame())),
+        on_frame_size: Some(Box::new(move |w, h| size.borrow_mut().frame_size(w, h))),
+        on_canvas_content_begin: Some(Box::new(move |_, w, h, clear, image| {
+            begin_counts.borrow_mut().0 += 1;
+            let canvas = canvas(w, h);
+            let renderer = begin
+                .borrow_mut()
+                .begin_canvas_content(Some(canvas.clone()), clear);
+            *image = begin.borrow().content_canvas_image(Some(&canvas));
+            begin_canvases.borrow_mut().push(canvas);
+            renderer
+        })),
+        on_canvas_content_end: Some(Box::new(move |_| {
+            end_counts.borrow_mut().1 += 1;
+            end.borrow_mut()
+                .end_canvas_content(Some(end_canvases.borrow().last().unwrap()));
+        })),
+    };
+    assert!(replay_serialized_commands(
+        &a.bytes(),
+        &mut b,
+        &mut screen,
+        &mut hooks
+    ));
+    assert_eq!(*counts.borrow(), (1, 1));
+    assert_eq!(canvases.borrow().len(), 1);
+    assert_eq!(canvases.borrow()[0].borrow().width(), 64);
+    assert_eq!(canvases.borrow()[0].borrow().height(), 48);
+    assert_eq!(&*a.bytes(), &*b.borrow().bytes());
+}
+#[test]
+fn serialized_canvas_content_without_target_is_dropped() {
+    let mut a = SerializingFactory::default();
+    a.frame_size(256, 256);
+    a.add_frame();
+    let mut screen = a.make_renderer();
+    record_cached_stream(&mut a, &mut screen);
+    let mut b = SerializingFactory::default();
+    let mut screen = CountingRenderer::default();
+    assert!(replay_serialized_commands(
+        &a.bytes(),
+        &mut b,
+        &mut screen,
+        &mut SerializedReplayHooks::default()
+    ));
+    assert_eq!(*screen.0.borrow(), (1, 0));
+}
+fn malformed_canvas_stream(wrong_end: bool) -> Vec<u8> {
+    let mut a = SerializingFactory::default();
+    a.frame_size(256, 256);
+    a.add_frame();
+    let paint = a.make_render_paint();
+    let mut raw = RawPath::new();
+    raw.move_to(0.0, 0.0);
+    raw.line_to(10.0, 10.0);
+    let path = a.make_render_path(raw, FillRule::NonZero);
+    let other = canvas(4, 4);
+    if wrong_end {
+        a.begin_canvas_content(Some(other.clone()), 0)
+            .unwrap()
+            .draw_path(path.as_ref(), paint.as_ref());
+        a.end_canvas_content(Some(&other));
+    }
+    a.begin_canvas_content(Some(canvas(8, 8)), 0)
+        .unwrap()
+        .draw_path(path.as_ref(), paint.as_ref());
+    if wrong_end {
+        a.end_canvas_content(Some(&other));
+    }
+    a.bytes().to_vec()
+}
+#[test]
+fn serialized_canvas_content_rejects_wrong_end() {
+    let mut b = SerializingFactory::default();
+    let mut screen = CountingRenderer::default();
+    let proxy = screen.clone();
+    let ends = Rc::new(RefCell::new(0));
+    let end_count = ends.clone();
+    let mut hooks = SerializedReplayHooks {
+        on_canvas_content_begin: Some(Box::new(move |_, _, _, _, _| Some(Box::new(proxy.clone())))),
+        on_canvas_content_end: Some(Box::new(move |_| *end_count.borrow_mut() += 1)),
+        ..Default::default()
+    };
+    assert!(!replay_serialized_commands(
+        &malformed_canvas_stream(true),
+        &mut b,
+        &mut screen,
+        &mut hooks
+    ));
+    assert_eq!(*ends.borrow(), 1);
+}
+#[test]
+fn serialized_canvas_content_rejects_unclosed_content() {
+    let mut b = SerializingFactory::default();
+    let mut screen = CountingRenderer::default();
+    let proxy = screen.clone();
+    let mut hooks = SerializedReplayHooks {
+        on_canvas_content_begin: Some(Box::new(move |_, _, _, _, _| Some(Box::new(proxy.clone())))),
+        ..Default::default()
+    };
+    assert!(!replay_serialized_commands(
+        &malformed_canvas_stream(false),
+        &mut b,
+        &mut screen,
+        &mut hooks
+    ));
 }
 
 #[test]

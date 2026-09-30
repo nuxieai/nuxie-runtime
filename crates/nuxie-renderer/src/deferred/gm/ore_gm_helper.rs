@@ -241,7 +241,7 @@ impl DeferredFrameSink for GmHost {
     }
     fn begin_screen_frame(&mut self, target: u64) -> Option<RendererOwner> {
         assert_eq!(target, 0);
-        // DagGMSink flushes any open main bracket and resumes that same
+        // TestingWindowFrameSink flushes any open main bracket and resumes that same
         // target with preserve. Only the first bracket performs its clear.
         self.flush_screen();
         let frame = if self.screen_initialized {

@@ -1,4 +1,4 @@
-//! Direct ports of all six cases in pinned
+//! Direct ports of all seven cases in pinned
 //! `tests/unit_tests/runtime/contour_measure_test.cpp`.
 
 use std::path::PathBuf;
@@ -205,4 +205,39 @@ fn fuzz_issue_7295() {
     let mut result = RawPath::default();
     contour.get_segment(0.0, 168.389008, &mut result, true);
     assert!((contour.length() - 168.389008).abs() <= 1.0 / 4096.0);
+}
+
+// A trim chop must preserve coincident controls exactly so the stroker does not
+// interpret floating-point residue as a tangent.
+#[test]
+fn trim_keeps_coincident_control_points() {
+    let p0 = Vec2D::new(244.19449, 186.5583);
+    let p2 = Vec2D::new(160.0, 90.0);
+    let p3 = Vec2D::new(330.0, 280.0);
+    for i in 1..1000 {
+        let mut path = RawPath::default();
+        path.move_to_point(p0);
+        path.cubic_to_points(p0, p2, p3);
+        let mut iter = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+        let cm = iter.next().expect("one measurable cubic contour");
+
+        let d = cm.length() * i as f32 / 1000.0;
+        let mut head = RawPath::default();
+        cm.get_segment(0.0, d, &mut head, true);
+        let hp = head.points();
+        assert_eq!(hp.len(), 4);
+        assert_eq!(hp[1], hp[0]);
+
+        // Mirror case: coincident end control points on the tail.
+        let mut rpath = RawPath::default();
+        rpath.move_to_point(p3);
+        rpath.cubic_to_points(p2, p0, p0);
+        let mut riter = ContourMeasureIter::new(&rpath, ContourMeasureIter::DEFAULT_TOLERANCE);
+        let rcm = riter.next().expect("one measurable reversed cubic contour");
+        let mut tail = RawPath::default();
+        rcm.get_segment(rcm.length() - d, rcm.length(), &mut tail, true);
+        let tp = tail.points();
+        assert_eq!(tp.len(), 4);
+        assert_eq!(tp[2], tp[3]);
+    }
 }

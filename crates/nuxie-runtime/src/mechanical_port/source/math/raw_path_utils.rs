@@ -47,39 +47,28 @@ impl EvalCubic {
     }
 }
 
-fn lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
-    Vec2D::new(a.x * (1.0 - t) + b.x * t, a.y * (1.0 - t) + b.y * t)
+fn exact_lerp(a: Vec2D, b: Vec2D, t: f32) -> Vec2D {
+    if t < 0.5 {
+        a + (b - a) * t
+    } else {
+        b - (b - a) * (1.0 - t)
+    }
 }
 
-pub fn quad_subdivide(src: &[Vec2D; 3], t: f32, dst: &mut [Vec2D; 5]) {
+fn quad_subdivide(src: &[Vec2D; 3], t: f32, dst: &mut [Vec2D; 5]) {
     assert!((0.0..=1.0).contains(&t));
-    let ab = lerp(src[0], src[1], t);
-    let bc = lerp(src[1], src[2], t);
+    let ab = exact_lerp(src[0], src[1], t);
+    let bc = exact_lerp(src[1], src[2], t);
     dst[0] = src[0];
     dst[1] = ab;
-    dst[2] = lerp(ab, bc, t);
+    dst[2] = exact_lerp(ab, bc, t);
     dst[3] = bc;
     dst[4] = src[2];
 }
-pub fn cubic_subdivide(src: &[Vec2D; 4], t: f32, dst: &mut [Vec2D; 7]) {
-    assert!((0.0..=1.0).contains(&t));
-    let ab = lerp(src[0], src[1], t);
-    let bc = lerp(src[1], src[2], t);
-    let cd = lerp(src[2], src[3], t);
-    let abc = lerp(ab, bc, t);
-    let bcd = lerp(bc, cd, t);
-    dst[0] = src[0];
-    dst[1] = ab;
-    dst[2] = abc;
-    dst[3] = lerp(abc, bcd, t);
-    dst[4] = bcd;
-    dst[5] = cd;
-    dst[6] = src[3];
-}
 pub fn line_extract(src: &[Vec2D; 2], start_t: f32, end_t: f32, dst: &mut [Vec2D; 2]) {
     assert!(start_t <= end_t && start_t >= 0.0 && end_t <= 1.0);
-    dst[0] = lerp(src[0], src[1], start_t);
-    dst[1] = lerp(src[0], src[1], end_t);
+    dst[0] = exact_lerp(src[0], src[1], start_t);
+    dst[1] = exact_lerp(src[0], src[1], end_t);
 }
 pub fn quad_extract(src: &[Vec2D; 3], start_t: f32, end_t: f32, dst: &mut [Vec2D; 3]) {
     assert!(start_t <= end_t && start_t >= 0.0 && end_t <= 1.0);
@@ -101,23 +90,9 @@ pub fn quad_extract(src: &[Vec2D; 3], start_t: f32, end_t: f32, dst: &mut [Vec2D
     }
 }
 pub fn cubic_extract(src: &[Vec2D; 4], start_t: f32, end_t: f32, dst: &mut [Vec2D; 4]) {
-    assert!(start_t <= end_t && start_t >= 0.0 && end_t <= 1.0);
-    let mut tmp = [Vec2D::default(); 7];
-    if start_t == 0.0 && end_t == 1.0 {
-        dst.copy_from_slice(src);
-    } else if start_t == 0.0 {
-        cubic_subdivide(src, end_t, &mut tmp);
-        dst.copy_from_slice(&tmp[..4]);
-    } else if end_t == 1.0 {
-        cubic_subdivide(src, start_t, &mut tmp);
-        dst.copy_from_slice(&tmp[3..7]);
-    } else {
-        assert!(end_t > 0.0);
-        cubic_subdivide(src, end_t, &mut tmp);
-        let mut tmp2 = [Vec2D::default(); 7];
-        cubic_subdivide((&tmp[..4]).try_into().unwrap(), start_t / end_t, &mut tmp2);
-        dst.copy_from_slice(&tmp2[3..7]);
-    }
+    let mut tmp = [Vec2D::default(); 10];
+    super::bezier_utils::chop_cubic_at_two(src, &mut tmp, start_t, end_t);
+    dst.copy_from_slice(&tmp[3..7]);
 }
 
 #[cfg(test)]

@@ -1264,7 +1264,9 @@ fn create_device(
     let supported_features = unsafe { instance.get_physical_device_features(physical_device) };
     let requested_features = vk::PhysicalDeviceFeatures::default()
         .independent_blend(supported_features.independent_blend != 0)
+        .depth_bias_clamp(supported_features.depth_bias_clamp != 0)
         .fill_mode_non_solid(supported_features.fill_mode_non_solid != 0)
+        .sampler_anisotropy(supported_features.sampler_anisotropy != 0)
         .fragment_stores_and_atomics(supported_features.fragment_stores_and_atomics != 0)
         .shader_clip_distance(supported_features.shader_clip_distance != 0)
         .texture_compression_bc(supported_features.texture_compression_bc != 0)
@@ -1374,6 +1376,8 @@ fn create_device(
             fillModeNonSolid: requested_features.fill_mode_non_solid != 0,
             fragmentStoresAndAtomics: requested_features.fragment_stores_and_atomics != 0,
             shaderClipDistance: requested_features.shader_clip_distance != 0,
+            samplerAnisotropy: requested_features.sampler_anisotropy != 0,
+            depthBiasClamp: requested_features.depth_bias_clamp != 0,
             rasterizationOrderColorAttachmentAccess: selected_raster_extension.is_some(),
             fragmentShaderPixelInterlock: has_fragment_interlock,
             colorWriteEnable: false,

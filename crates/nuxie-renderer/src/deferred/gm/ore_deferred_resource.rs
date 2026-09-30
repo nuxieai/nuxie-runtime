@@ -72,6 +72,11 @@ fn scene(mode: ResMode) -> Vec<u8> {
 #[test]
 fn ore_deferred_resource() {
     let immediate = scene(ResMode::Immediate);
-    assert_pixels_equal(&immediate, &scene(ResMode::ReplayBuffer));
-    assert_pixels_equal(&immediate, &scene(ResMode::Unified));
+    assert_pixels_equal(
+        "ore_deferred_resource",
+        1,
+        &immediate,
+        &scene(ResMode::ReplayBuffer),
+    );
+    assert_pixels_equal("ore_deferred_resource", 2, &immediate, &scene(ResMode::Unified));
 }

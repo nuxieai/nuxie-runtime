@@ -92,5 +92,5 @@ fn scene(deferred: bool) -> Vec<u8> {
 }
 #[test]
 fn render_deferred_2d() {
-    assert_pixels_equal(&scene(false), &scene(true));
+    assert_pixels_equal("render_deferred_2d", 1, &scene(false), &scene(true));
 }

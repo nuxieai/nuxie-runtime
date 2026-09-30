@@ -138,5 +138,5 @@ fn scene(deferred: bool) -> Vec<u8> {
 }
 #[test]
 fn ore_deferred_multipass() {
-    assert_pixels_equal(&scene(false), &scene(true));
+    assert_pixels_equal("ore_deferred_multipass", 1, &scene(false), &scene(true));
 }

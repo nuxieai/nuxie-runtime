@@ -51,5 +51,5 @@ fn scene(deferred: bool) -> Vec<u8> {
 }
 #[test]
 fn ore_render_deferred_canvas() {
-    assert_pixels_equal(&scene(false), &scene(true));
+    assert_pixels_equal("render_deferred_canvas", 1, &scene(false), &scene(true));
 }

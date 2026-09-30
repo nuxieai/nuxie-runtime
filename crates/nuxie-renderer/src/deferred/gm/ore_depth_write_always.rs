@@ -149,7 +149,7 @@ fn scene(first_always: bool) -> Vec<u8> {
 #[test]
 fn ore_depth_write_always() {
     let pixels = scene(true);
-    assert_pixels_equal(&pixels, &scene(false));
+    assert_pixels_equal("ore_depth_write_always", 1, &pixels, &scene(false));
     for (x, y, color) in [
         (128, 128, [255, 0, 0, 255]),
         (180, 180, [0, 255, 0, 255]),

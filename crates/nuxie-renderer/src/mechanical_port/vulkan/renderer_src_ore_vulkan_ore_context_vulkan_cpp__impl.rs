@@ -18,6 +18,7 @@ use super::ore_texture_vulkan_decl::TextureVulkan;
 use super::ore_vulkan_dsl::{createDSLFromLayoutDesc, kVkMaxBindingsPerGroup};
 use super::render_target_vulkan_decl::RetainedRenderTargetVulkan;
 use super::vkutil_decl::Texture2D;
+use crate::mechanical_port::source::include::rive::refcnt_hpp::ref_rcp;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use ash::vk;
 use ash::vk::Handle;
@@ -33,6 +34,8 @@ use nuxie_ore_metal::types::{
     TextureViewDesc, TextureViewDimension, WrapMode,
 };
 use std::mem::ManuallyDrop;
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 use vk_mem::{Alloc, AllocationCreateFlags, AllocationCreateInfo, MemoryUsage};
@@ -219,23 +222,23 @@ pub(crate) fn Make(
 
     let properties =
         unsafe { ash_instance.get_physical_device_properties(vk_context.physicalDevice) };
-    let device_features =
-        unsafe { ash_instance.get_physical_device_features(vk_context.physicalDevice) };
+    // ORE must advertise only features enabled on this device.
+    let enabled = &vk_context.features;
     let mut features = Features::default();
     features.colorBufferFloat = true;
-    features.perTargetBlend = device_features.independent_blend == vk::TRUE;
-    features.perTargetWriteMask = device_features.independent_blend == vk::TRUE;
+    features.perTargetBlend = enabled.independentBlend;
+    features.perTargetWriteMask = enabled.independentBlend;
     features.textureViewSampling = true;
     features.drawBaseInstance = true;
-    features.depthBiasClamp = device_features.depth_bias_clamp == vk::TRUE;
-    features.anisotropicFiltering = device_features.sampler_anisotropy == vk::TRUE;
+    features.depthBiasClamp = enabled.depthBiasClamp;
+    features.anisotropicFiltering = enabled.samplerAnisotropy;
     features.texture3D = true;
     features.textureArrays = true;
     features.computeShaders = true;
     features.storageBuffers = true;
-    features.bc = device_features.texture_compression_bc == vk::TRUE;
-    features.etc2 = device_features.texture_compression_etc2 == vk::TRUE;
-    features.astc = device_features.texture_compression_astc_ldr == vk::TRUE;
+    features.bc = enabled.textureCompressionBC;
+    features.etc2 = enabled.textureCompressionETC2;
+    features.astc = enabled.textureCompressionASTC_LDR;
     features.maxColorAttachments = properties.limits.max_color_attachments;
     features.maxTextureSize2D = properties.limits.max_image_dimension2_d;
     features.maxTextureSizeCube = properties.limits.max_image_dimension_cube;
@@ -264,6 +267,7 @@ pub(crate) fn Make(
         m_vkEmptyDSL: vk::DescriptorSetLayout::null(),
         m_vkRenderPassCache: Vec::new(),
         m_vkPendingInitialTransitions: Vec::new(),
+        m_vkRiveWrapped: Rc::new(RefCell::new(Vec::new())),
         m_vkPendingTextureUploads: Vec::new(),
     }))
 }
@@ -301,6 +305,11 @@ impl Drop for ContextVulkan {
                         .destroy_command_pool(self.m_vkCommandPool, None);
                 }
             }
+        }
+        for texture in self.m_vkRiveWrapped.borrow().iter() {
+            // Registered only after stable publication; its destructor removes
+            // the address before freeing it, on the resource's owner lane.
+            unsafe { texture.as_ref() }.m_vkOreContext.set(std::ptr::null_mut());
         }
         self.m_vkPendingTextureUploads.clear();
         self.m_vkPendingInitialTransitions.clear();
@@ -596,6 +605,18 @@ pub(crate) fn beginFrame(context: &mut ContextVulkan, desc: &FrameDescriptor) {
     context.m_vkCmdBufRecording = true;
     vkFlushPendingTextureUploads(context);
     vkFlushPendingInitialTransitions(context);
+    vkSyncRiveTextures(context);
+}
+
+fn vkSyncRiveTextures(context: &ContextVulkan) {
+    for texture in context.m_vkRiveWrapped.borrow().iter() {
+        // The weak registry never outlives a registered texture: Drop removes
+        // its stable address before releasing the retained source texture.
+        let texture = unsafe { texture.as_ref() };
+        let source = unsafe { texture.m_vkRiveTexture.get().as_ref() }
+            .expect("registered Rive texture has its retained source");
+        source.prepareForFragmentShaderRead(context.m_vkCommandBuffer);
+    }
 }
 
 pub(crate) fn waitForGPU(_context: &mut ContextVulkan) {}
@@ -1475,9 +1496,14 @@ pub(crate) unsafe fn wrapRiveTexture(
         .m_vkLayout
         .set(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
     wrapped.vkMarkWritten(0, 0);
+    wrapped.m_vkRiveTexture = ManuallyDrop::new(unsafe { ref_rcp(texture.cast::<Texture2D>()) });
+    wrapped.m_riveWrappedRegistry = Rc::downgrade(&context.m_vkRiveWrapped);
     let wrapped =
         ResourceHandle::new_texture_with_installed_manager_in_domain(domain.clone(), wrapped)
             .erase();
+    context.m_vkRiveWrapped.borrow_mut().push(NonNull::from(
+        wrapped.downcast_ref::<TextureVulkan>().expect("wrapped Vulkan texture"),
+    ));
     let viewDesc = TextureViewDesc {
         texture: Some(&wrapped),
         dimension: TextureViewDimension::texture2D,

@@ -14,7 +14,8 @@ use nuxie_ore_metal::types::{
     SamplerDesc, ShaderModuleDesc, StoreOp, TextureDesc, TextureFormat, TextureViewDesc,
 };
 use std::mem::ManuallyDrop;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -156,6 +157,9 @@ pub(crate) struct ContextVulkan {
     pub(super) m_vkEmptyDSL: vk::DescriptorSetLayout,
     pub(super) m_vkRenderPassCache: Vec<(VKRenderPassKey, vk::RenderPass)>,
     pub(super) m_vkPendingInitialTransitions: Vec<VkPendingImageTransition>,
+    // Non-owning stable texture addresses. Texture destruction unregisters
+    // through a weak registry handle without borrowing the Context again.
+    pub(super) m_vkRiveWrapped: Rc<RefCell<Vec<NonNull<super::ore_texture_vulkan_decl::TextureVulkan>>>>,
     pub(super) m_vkPendingTextureUploads: Vec<VkPendingTextureUpload>,
 }
 

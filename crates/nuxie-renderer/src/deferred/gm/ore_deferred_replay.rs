@@ -60,6 +60,16 @@ fn scene(mode: ReplayMode) -> Vec<u8> {
 #[test]
 fn ore_deferred_replay() {
     let immediate = scene(ReplayMode::Immediate);
-    assert_pixels_equal(&immediate, &scene(ReplayMode::RecordReplay));
-    assert_pixels_equal(&immediate, &scene(ReplayMode::InlineDeferred));
+    assert_pixels_equal(
+        "ore_deferred_replay",
+        1,
+        &immediate,
+        &scene(ReplayMode::RecordReplay),
+    );
+    assert_pixels_equal(
+        "ore_deferred_replay",
+        2,
+        &immediate,
+        &scene(ReplayMode::InlineDeferred),
+    );
 }

@@ -81,6 +81,7 @@ pub mod property_recorder;
 pub mod scripted_listener_action;
 pub mod scripted_transition_condition;
 pub mod semantic_listener_group;
+pub(crate) mod source_disposal;
 pub mod state_instance;
 pub mod state_machine;
 pub mod state_machine_bool;

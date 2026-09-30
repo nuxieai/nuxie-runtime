@@ -237,6 +237,13 @@ fn read_runtime_object(
     object
 }
 
+#[cfg(feature = "tools")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ArtboardByteRange {
+    pub start: usize,
+    pub end: usize,
+}
+
 pub struct File {
     self_handle: RuntimeFileWeakHandle,
     core_arena: CoreArena,
@@ -247,6 +254,10 @@ pub struct File {
     scripted_interpolators: Vec<CoreHandle>,
     scroll_physics: Vec<CoreHandle>,
     artboards: Vec<CoreHandle>,
+    #[cfg(feature = "tools")]
+    artboard_byte_ranges: Vec<ArtboardByteRange>,
+    #[cfg(feature = "tools")]
+    header: RuntimeHeader,
     view_models: Rc<RefCell<Vec<CoreHandle>>>,
     view_model_instances: Rc<RefCell<Vec<CoreHandle>>>,
     enums: Vec<CoreHandle>,
@@ -305,6 +316,10 @@ impl File {
             scripted_interpolators: Vec::new(),
             scroll_physics: Vec::new(),
             artboards: Vec::new(),
+            #[cfg(feature = "tools")]
+            artboard_byte_ranges: Vec::new(),
+            #[cfg(feature = "tools")]
+            header: RuntimeHeader::default(),
             view_models: Rc::default(),
             view_model_instances: Rc::default(),
             enums: Vec::new(),
@@ -421,8 +436,24 @@ impl File {
         header: &RuntimeHeader,
         admission: Option<ImportAdmissionRef>,
     ) -> (ImportResult, bool) {
+        #[cfg(feature = "tools")]
+        {
+            self.header = header.clone();
+        }
         let mut import_stack = ImportStack::default();
         import_stack.set_version(header.major_version(), header.minor_version());
+        self.read_objects(reader, header, &mut import_stack, None, admission)
+    }
+
+    fn read_objects(
+        &mut self,
+        reader: &mut BinaryReader<'_>,
+        header: &RuntimeHeader,
+        import_stack: &mut ImportStack,
+        mut captured_artboard: Option<&mut Option<CoreHandle>>,
+        admission: Option<ImportAdmissionRef>,
+    ) -> (ImportResult, bool) {
+        let whole_file = captured_artboard.is_none();
         let in_band_content = Rc::new(RefCell::new(Vec::new()));
         // Core has no type key, so the most recent non-bind object remains the
         // target for an immediately following DataBind.
@@ -431,8 +462,12 @@ impl File {
         // unknown records still consume an id, while importer-created owners
         // consume arena slots but no authored id.
         let mut source_global_id = 0_u32;
+        #[cfg(feature = "tools")]
+        let stream_start_length = reader.position().len();
 
         while !reader.reached_end() {
+            #[cfg(feature = "tools")]
+            let object_start = stream_start_length - reader.position().len();
             let object_source_global_id = source_global_id;
             let Some(next_source_global_id) = source_global_id.checked_add(1) else {
                 return (ImportResult::Malformed, false);
@@ -448,7 +483,7 @@ impl File {
                 continue;
             };
             let object = self.core_arena.insert_boxed(object);
-            if !object.set_source_global_id(object_source_global_id) {
+            if whole_file && !object.set_source_global_id(object_source_global_id) {
                 return (ImportResult::Malformed, false);
             }
             let object_type = object.core_type().unwrap_or_default();
@@ -470,18 +505,18 @@ impl File {
             {
                 crate::mechanical_port::source::data_bind::data_bind::DataBind::import_handle(
                     &object,
-                    &mut import_stack,
+                    import_stack,
                 )
             } else if object_type
                 == crate::mechanical_port::source::generated::assets::file_asset_contents_base::FileAssetContentsBase::TYPE_KEY
             {
                 crate::mechanical_port::source::assets::file_asset_contents::FileAssetContents::import_handle(
                     &object,
-                    &mut import_stack,
+                    import_stack,
                 )
             } else {
                 object
-                    .with_mut(|object| object.import(&mut import_stack))
+                    .with_mut(|object| object.import(import_stack))
                     .unwrap_or(StatusCode::MissingObject)
             };
             if import_result == StatusCode::Ok {
@@ -503,7 +538,21 @@ impl File {
                             artboard.set_file(self.self_handle.clone());
                             artboard.set_scripting_vm(self.scripting_vm.clone());
                         });
-                        self.artboards.push(object.clone());
+                        if whole_file {
+                            #[cfg(feature = "tools")]
+                            {
+                                if let Some(previous) = self.artboard_byte_ranges.last_mut() {
+                                    previous.end = object_start;
+                                }
+                                self.artboard_byte_ranges.push(ArtboardByteRange {
+                                    start: object_start,
+                                    end: object_start,
+                                });
+                            }
+                            self.artboards.push(object.clone());
+                        } else if let Some(captured) = captured_artboard.as_deref_mut() {
+                            *captured = Some(object.clone());
+                        }
                     }
                     crate::video::VideoAsset::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
@@ -755,6 +804,9 @@ impl File {
                     return (ImportResult::Malformed, false);
                 }
             }
+            if !whole_file {
+                continue;
+            }
             if object.is_type_of(crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBase::TYPE_KEY) {
                 self.data_converters.push(object.clone());
             } else if object.is_type_of(crate::mechanical_port::source::generated::animation::keyframe_interpolator_base::KeyFrameInterpolatorBase::TYPE_KEY) {
@@ -772,12 +824,115 @@ impl File {
             }
         }
 
+        #[cfg(feature = "tools")]
+        if whole_file {
+            if let Some(last) = self.artboard_byte_ranges.last_mut() {
+                last.end = stream_start_length - reader.position().len();
+            }
+        }
+        // Importers retain in_band_content; resolve before this frame ends.
         let resolved = import_stack.resolve();
         if !reader.has_error() && resolved == StatusCode::Ok {
             (ImportResult::Success, true)
         } else {
-            (ImportResult::Malformed, true)
+            (ImportResult::Malformed, false)
         }
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn artboard_byte_range(&self, index: usize) -> ArtboardByteRange {
+        self.artboard_byte_ranges.get(index).copied().unwrap_or_default()
+    }
+
+    /// Re-import one artboard run. All instances of the outgoing artboard must
+    /// have been released by the caller; other artboard instances are unaffected.
+    /// The root keeps its host identity. Partial bytes do not identify canonical
+    /// whole-file record offsets for replacement-local objects, so their optional
+    /// authored-ID snapshots are unavailable rather than assigned invented IDs.
+    #[cfg(feature = "tools")]
+    pub fn replace_artboard(&mut self, index: usize, bytes: &[u8]) -> ImportResult {
+        if index >= self.artboards.len() || bytes.is_empty() {
+            return ImportResult::Malformed;
+        }
+        let mut reader = BinaryReader::new(bytes);
+        let header = self.header.clone();
+        let mut import_stack = ImportStack::default();
+        import_stack.set_version(header.major_version(), header.minor_version());
+        let mut importer = Box::new(BackboardImporter::new(
+            self.backboard.clone().expect("imported file backboard"),
+        ));
+        importer.set_file(
+            self.self_handle.clone(),
+            self.view_models.clone(),
+            self.view_model_instances.clone(),
+        );
+        for existing in &self.artboards {
+            existing.with_downcast_mut::<Artboard, _>(|artboard| importer.add_artboard(artboard));
+        }
+        for asset in &self.file_assets {
+            asset.with_mut(|asset| {
+                importer.add_file_asset(
+                    asset.as_file_asset_mut().expect("file asset").file_asset_base_mut(),
+                );
+            });
+        }
+        for converter in &self.data_converters {
+            importer.add_data_converter(converter.clone());
+        }
+        for interpolator in &self.keyframe_interpolators {
+            importer.seed_interpolator(interpolator.clone());
+        }
+        for physics in &self.scroll_physics {
+            importer.add_physics(physics.clone());
+        }
+        if import_stack.make_latest(BackboardBase::TYPE_KEY, Some(importer)) != StatusCode::Ok {
+            return ImportResult::Malformed;
+        }
+        let mut imported = None;
+        let (result, _) = self.read_objects(
+            &mut reader, &header, &mut import_stack, Some(&mut imported), None,
+        );
+        if result != ImportResult::Success || imported.is_none() {
+            if let Some(imported) = imported {
+                Artboard::dispose_source_for_replacement(&imported);
+            }
+            return ImportResult::Malformed;
+        }
+        let imported = imported.expect("successful artboard capture");
+        imported.with_downcast_mut::<Artboard, _>(|artboard| artboard.set_artboard_id(index as u16));
+        let outgoing = self.artboards[index].clone();
+        if let Some(identity) = outgoing.source_global_id() {
+            assert!(imported.set_source_global_id(identity));
+        }
+        let outgoing_objects = outgoing
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
+            .expect("outgoing artboard");
+        self.scripted_interpolators.retain(|interpolator| {
+            !outgoing_objects.iter().flatten().any(|object| object == interpolator)
+        });
+        let imported_objects = imported
+            .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
+            .expect("imported artboard");
+        for object in imported_objects.iter().flatten() {
+            if object.is_type_of(crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY) {
+                self.scripted_interpolators.push(object.clone());
+            }
+        }
+        Artboard::dispose_source_for_replacement(&outgoing);
+        self.artboards[index] = imported.clone();
+        for artboard in &self.artboards {
+            let objects = artboard
+                .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
+                .expect("file artboard");
+            for object in objects.iter().flatten() {
+                object.with_mut(|object| {
+                    if object.artboard_referencer_referenced_artboard_id() == Some(index as i32) {
+                        object.artboard_referencer_set_referenced_artboard(imported.clone());
+                    }
+                });
+            }
+        }
+        ImportResult::Success
     }
 
     pub fn add_file_view_model_instance(&mut self, instance: CoreHandle) {

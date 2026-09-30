@@ -140,6 +140,19 @@ impl RuntimeArtboardDirtyHandle {
     }
 }
 
+#[derive(Clone, Copy)]
+struct DependencyOrderEntry {
+    object_index: u32,
+    helper_slot: u8,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RecipeState {
+    Unbuilt,
+    Valid,
+    Unusable,
+}
+
 pub struct Artboard {
     pub base: ArtboardBase,
     core_arena: CoreArena,
@@ -149,6 +162,9 @@ pub struct Artboard {
     animations: Vec<CoreHandle>,
     state_machines: Vec<CoreHandle>,
     dependency_order: Vec<crate::mechanical_port::source::component::ComponentOccurrenceHandle>,
+    dependency_order_recipe: std::cell::RefCell<Vec<DependencyOrderEntry>>,
+    recipe_state: std::cell::Cell<RecipeState>,
+    dispose_source_for_replacement: bool,
     drawables: Vec<RuntimeDrawableOccurrence>,
     clipping_shapes: Vec<CoreHandle>,
     draw_targets: Vec<CoreHandle>,
@@ -232,6 +248,9 @@ impl Default for Artboard {
             animations: Vec::new(),
             state_machines: Vec::new(),
             dependency_order: Vec::new(),
+            dependency_order_recipe: std::cell::RefCell::new(Vec::new()),
+            recipe_state: std::cell::Cell::new(RecipeState::Unbuilt),
+            dispose_source_for_replacement: false,
             drawables: Vec::new(),
             clipping_shapes: Vec::new(),
             draw_targets: Vec::new(),
@@ -1468,16 +1487,189 @@ impl Artboard {
         assert!(applied_clipping_save_operations.is_empty());
     }
 
+    fn component_for_order_entry(
+        &self,
+        entry: &DependencyOrderEntry,
+    ) -> Option<crate::mechanical_port::source::component::ComponentOccurrenceHandle> {
+        let object = self.objects.get(entry.object_index as usize)?.as_ref()?;
+        // The root may already be mutably borrowed by initialize/sort.
+        if crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .as_ref()
+            == Some(object)
+        {
+            return (entry.helper_slot == 0).then(|| object.clone().into());
+        }
+        object
+            .with(|core| match entry.helper_slot {
+                0 => core.as_component().map(|_| object.clone().into()),
+                1 => {
+                    if let Some(shape) = core.as_shape() {
+                        Some(shape.path_builder())
+                    } else {
+                        core.as_text_style()
+                            .and_then(|style| style.variation_helper())
+                            .map(|helper| helper.occurrence())
+                    }
+                }
+                _ => None,
+            })
+            .flatten()
+    }
+
+    /// Retire a replaced source without changing the arena's ordinary teardown.
+    /// VM instances/values retain the existing arena lifetime boundary rather
+    /// than acquiring a new per-object reference-counting scheme here.
+    pub(crate) fn dispose_source_for_replacement(root: &CoreHandle) {
+        // Blur callbacks must still be able to resolve the source root.
+        let owned = root
+            .with_downcast::<Artboard, _>(|artboard| {
+                artboard
+                    .owned_focus_manager
+                    .as_ref()
+                    .filter(|owned| {
+                        artboard
+                            .focus_manager()
+                            .as_ref()
+                            .is_some_and(|active| active.ptr_eq(owned))
+                    })
+                    .cloned()
+            })
+            .flatten();
+        if let Some(_manager) = owned {
+            #[cfg(feature = "tools")]
+            _manager.with_focus_manager_mut(|manager| {
+                manager.set_focus_changed_callback(None);
+                manager.set_scroll_into_view_callback(None);
+            });
+            Self::cleanup_focus_tree_handle(root);
+        }
+        root.with_downcast_mut::<Artboard, _>(|artboard| {
+            assert!(!artboard.is_instance);
+            artboard.dispose_source_for_replacement = true;
+        });
+        root.remove_occurrence();
+    }
+
+    fn dependency_order_recipe(&self) -> Option<std::cell::Ref<'_, Vec<DependencyOrderEntry>>> {
+        match self.recipe_state.get() {
+            RecipeState::Valid => return Some(self.dependency_order_recipe.borrow()),
+            RecipeState::Unusable => return None,
+            RecipeState::Unbuilt => {}
+        }
+        let count = self.dependency_order.len();
+        let mut recipe = self.dependency_order_recipe.borrow_mut();
+        recipe.clear();
+        recipe.resize(
+            count,
+            DependencyOrderEntry {
+                object_index: u32::MAX,
+                helper_slot: 0,
+            },
+        );
+        let mut filled = 0;
+        let root = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+        let mut stamp =
+            |component: crate::mechanical_port::source::component::ComponentOccurrenceHandle,
+             index: u32,
+             slot: u8| {
+                let position = if component.authored() == root.as_ref()
+                    && component.authored().is_some()
+                {
+                    crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(self)
+                    .map(|component| component.graph_order())
+                } else {
+                    component.with_component(|component| component.graph_order())
+                };
+                let Some(position) = position.map(|position| position as usize) else {
+                    return;
+                };
+                // A stale graph stamp is not membership: require exact occurrence identity.
+                if position >= count || self.dependency_order[position] != component {
+                    return;
+                }
+                if recipe[position].object_index != u32::MAX {
+                    return;
+                }
+                recipe[position] = DependencyOrderEntry {
+                    object_index: index,
+                    helper_slot: slot,
+                };
+                filled += 1;
+            };
+        for index in 0..self.objects.len() {
+            let entry = DependencyOrderEntry {
+                object_index: index as u32,
+                helper_slot: 0,
+            };
+            let Some(component) = self.component_for_order_entry(&entry) else {
+                continue;
+            };
+            stamp(component, index as u32, 0);
+            if let Some(helper) = self.component_for_order_entry(&DependencyOrderEntry {
+                object_index: index as u32,
+                helper_slot: 1,
+            }) {
+                stamp(helper, index as u32, 1);
+            }
+        }
+        if filled != count {
+            recipe.clear();
+            self.recipe_state.set(RecipeState::Unusable);
+            return None;
+        }
+        self.recipe_state.set(RecipeState::Valid);
+        drop(recipe);
+        Some(self.dependency_order_recipe.borrow())
+    }
+
+    fn replay_source_dependency_order(&mut self) -> bool {
+        let Some(source) = self.artboard_source.clone() else {
+            return false;
+        };
+        if crate::mechanical_port::source::core::CoreObject::core(self)
+            .handle()
+            .as_ref()
+            == Some(&source)
+        {
+            return false;
+        }
+        let order = source
+            .with_downcast::<Artboard, _>(|source| {
+                if source.objects.len() != self.objects.len() {
+                    return None;
+                }
+                let recipe = source.dependency_order_recipe()?;
+                let mut order = Vec::with_capacity(recipe.len());
+                for entry in recipe.iter() {
+                    order.push(self.component_for_order_entry(entry)?);
+                }
+                Some(order)
+            })
+            .flatten();
+        let Some(order) = order else {
+            return false;
+        };
+        self.dependency_order = order;
+        true
+    }
+
     fn sort_dependencies(&mut self) {
-        self.dependency_order.clear();
         let Some(root) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
         else {
             return;
         };
-        let dependents = crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(self)
-            .expect("Artboard Component").dependents_snapshot();
-        crate::mechanical_port::source::dependency_sorter::DependencySorter::default()
-            .sort_with_root_dependents(root.clone().into(), dependents, &mut self.dependency_order);
+        if !self.replay_source_dependency_order() {
+            self.dependency_order.clear();
+            let dependents = crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_component(self)
+                .expect("Artboard Component").dependents_snapshot();
+            crate::mechanical_port::source::dependency_sorter::DependencySorter::default()
+                .sort_with_root_dependents(
+                    root.clone().into(),
+                    dependents,
+                    &mut self.dependency_order,
+                );
+        }
         for (graph_order, component) in self.dependency_order.clone().into_iter().enumerate() {
             if component.authored() == Some(&root) {
                 crate::mechanical_port::source::generated::core_registry::CoreCapabilities::component_set_graph_order(self, graph_order as u32);
@@ -1487,6 +1679,8 @@ impl Artboard {
                 component.set_graph_order(graph_order as u32);
             });
         }
+        self.dependency_order_recipe.get_mut().clear();
+        self.recipe_state.set(RecipeState::Unbuilt);
         self.dirty_state.mark_components_dirty();
     }
 
@@ -4750,7 +4944,8 @@ impl Drop for Artboard {
             .owned_focus_manager
             .as_ref()
             .filter(|owned| {
-                Weak::ptr_eq(&self.runtime_self.0, &Weak::new())
+                !self.dispose_source_for_replacement
+                    && Weak::ptr_eq(&self.runtime_self.0, &Weak::new())
                     && self
                         .focus_manager()
                         .as_ref()
@@ -4780,6 +4975,37 @@ impl Drop for Artboard {
         }
         self.unbind_for_drop();
 
+        if self.dispose_source_for_replacement {
+            // Identify refcounted VM objects before destroying any hierarchy
+            // components. They remain owned by the existing arena so externally
+            // retained VM handles and their values continue to resolve.
+            let vm_objects: std::collections::HashSet<_> = self
+                .objects
+                .iter()
+                .chain(self.invalid_objects.iter())
+                .flatten()
+                .filter(|object| {
+                    object
+                        .with(|object| {
+                            object.as_view_model_instance().is_some()
+                                || object.as_view_model_instance_value().is_some()
+                        })
+                        .unwrap_or(false)
+                })
+                .cloned()
+                .collect();
+            for object in self
+                .objects
+                .iter()
+                .skip(1)
+                .chain(self.invalid_objects.iter())
+                .flatten()
+            {
+                if !vm_objects.contains(object) {
+                    drop(self.core_arena.remove(object));
+                }
+            }
+        }
         self.data_bind_container.delete_data_binds();
         if self.is_instance {
             for object in self
@@ -4795,6 +5021,14 @@ impl Drop for Artboard {
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
             {
                 self.core_arena.retire_runtime_artboard(&root);
+            }
+        }
+        if self.dispose_source_for_replacement {
+            for animation in &self.animations {
+                crate::mechanical_port::source::animation::source_disposal::dispose_animation_source(animation);
+            }
+            for machine in &self.state_machines {
+                crate::mechanical_port::source::animation::source_disposal::dispose_state_machine_source(machine);
             }
         }
         self.objects.clear();

@@ -63,6 +63,11 @@ impl TextStyle {
             .filter(|asset| asset.is_type_of(crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY))
     }
 
+    /// The lazily-created owned graph node, if this style needed one.
+    pub fn variation_helper(&self) -> Option<&RuntimeTextVariationHelperHandle> {
+        self.variation_helper.as_ref()
+    }
+
     pub fn add_variation(&mut self, axis: CoreHandle) {
         self.variations.push(axis);
     }

@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d732510cacdd4f2af470199d7fefb5177d9c118a`
+- LAST_SYNCED_SHA: `1e979c628717de902a1f3920c9d55a18bd3955ef`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 71 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 71 require a Rust translation.
+  There are 70 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 70 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1e979c628717de902a1f3920c9d55a18bd3955ef` | Replay source dependency-order recipes when instance object/helper slots match, retaining upstream's guarded sort fallback and unsorted sentinel. Add tools-only artboard byte ranges and single-artboard replacement through the shared object reader, seeded global import state and repaired referencers. Port the complete public artboard range/replacement/order test file. Replacement retains the approved arena lifetime for externally retained view-model objects; its root keeps its host identity, but replacement-local whole-file authored IDs (and scroll snapshots requiring them) are unavailable because a partial stream cannot establish those offsets. Private editor regeneration/export changes described in the message are not present in the public delta. | — |
 | `d732510cacdd4f2af470199d7fefb5177d9c118a` | Make same-instance view-model replacement a successful no-op before reparenting, dirtying, callbacks or dependent invalidation; route the by-name API through the shared by-property sequence after its type check. Port all four public regression cases, including tools callback counts and real-swap relinking. Private Dart editor/export/RML changes described in the message are absent from the public runtime delta. | — |
 | `1af8ccbefdf906ea5c33e80845360c62b43bafb3` | **DEFERRED:** Wasm/AssemblyScript audio source/sound APIs, f64 frame clocks, paused-tools playback gating, node parent/children handles, asset-lookup sharing, binding generators and native/browser Wasm import bridges belong to the parked execution lane. No native Luau, shared audio/runtime or browser renderer implementation changes occur in the public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `83a90f226194b04a3a2d3344f35b9cb47168b55b` | Reject missing/non-Bone tendon references with InvalidObject in runtime loading, and preserve the bind position of a vertex lacking a Weight during deformation. The upstream native-editor recovery branch is not a shipped Rust runtime feature; private CLI diagnostics described by the commit message are absent from the published delta and are not claimed imported. | — |

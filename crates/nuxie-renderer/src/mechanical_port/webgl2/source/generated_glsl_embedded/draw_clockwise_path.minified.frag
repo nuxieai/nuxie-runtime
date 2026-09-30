@@ -69,9 +69,9 @@ W4+y0;
 #ifdef I
 if(I&&Y1.x!=.0){D Q0=unpackHalf2x16(a1(i0));d M5=Q0.y;d zb=M5==Y1.x?Q0.x:J0(.0);I1=min(zb,I1);}
 #endif
-I1=max(I1,.0);d e2=fa(W4,.0,I1);d H1=fa(Ge,.0,I1);
+I1=max(I1,.0);d e2=ga(W4,.0,I1);d H1=ga(Ge,.0,I1);
 #ifdef LB
-d L5;if(LB){L5=ia(d0.xy,j.F3,j.G3);}
+d L5;if(LB){L5=ja(d0.xy,j.F3,j.G3);}
 #endif
 #ifndef Q
 i O1=K0(m0);

@@ -1,5 +1,5 @@
 //! Exact owner translation of renderer/include/rive/renderer/render_canvas.hpp.
-//! Upstream 34f6df47431ec17762a5764ae3055375f09aace1.
+//! Upstream 57dddb3727306e284773ec20c653cf686c45abee.
 #![allow(
     dead_code,
     non_camel_case_types,
@@ -7,19 +7,24 @@
     non_upper_case_globals
 )]
 
+use crate::deferred::cmd::deferred_canvas::CanvasRetirer;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{
-    RefCnt, RefCntTarget, make_rcp, rcp,
+    make_rcp, rcp, RefCnt, RefCntTarget,
 };
 use crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::{
     render_target_hpp::RenderTarget, rive_render_image_hpp::RiveRenderImage, texture_hpp::Texture,
 };
 use core::mem::ManuallyDrop;
+use std::sync::Arc;
 
 /// Stable image identity exists before any replay device supplies its pixels.
-#[repr(transparent)]
+#[repr(C)]
 pub struct RenderCanvasImage {
     base: RiveRenderImage,
+    // Flattened DeferredRenderCanvasImage derived owner. Its base remains first
+    // so retained RenderImage handles invoke the complete final destructor.
+    retirer: Option<Arc<CanvasRetirer>>,
 }
 impl RenderCanvasImage {
     pub fn new(width: u32, height: u32) -> Self {
@@ -28,13 +33,33 @@ impl RenderCanvasImage {
         }
         let mut base = RiveRenderImage::new_with_dimensions(width as i32, height as i32);
         base.base.destroy_complete = destroy_complete;
-        Self { base }
+        Self {
+            base,
+            retirer: None,
+        }
+    }
+    pub(crate) fn new_deferred(retirer: Arc<CanvasRetirer>, width: u32, height: u32) -> Self {
+        let mut image = Self::new(width, height);
+        image.retirer = Some(retirer);
+        image
     }
     pub fn resetTexture(&mut self, texture: rcp<Texture>) {
         self.base.resetTexture(texture);
     }
 }
-// SAFETY: the transparent image base retains this complete owner's destructor.
+impl Drop for RenderCanvasImage {
+    fn drop(&mut self) {
+        if let Some(retirer) = &self.retirer {
+            let texture = self.base.refTexture();
+            retirer.retire(
+                (!texture.get().is_null()).then(|| Box::new(texture) as Box<dyn std::any::Any>),
+                None,
+            );
+            self.base.resetTexture(rcp::new());
+        }
+    }
+}
+// SAFETY: the offset-zero image base retains this complete owner's destructor.
 unsafe impl RefCntTarget for RenderCanvasImage {
     fn r#ref(&self) {
         self.base.r#ref();
@@ -53,6 +78,8 @@ pub struct RenderCanvas {
     m_renderTarget: ManuallyDrop<rcp<RenderTarget>>,
     m_width: u32,
     m_height: u32,
+    // Flattened DeferredRenderCanvas derived-owner state.
+    retirer: Option<Arc<CanvasRetirer>>,
 }
 // SAFETY: the intrusive base is the first field of this complete owner.
 unsafe impl RefCntTarget for RenderCanvas {
@@ -65,13 +92,30 @@ unsafe impl RefCntTarget for RenderCanvas {
 }
 impl RenderCanvas {
     pub fn new(width: u32, height: u32) -> Self {
+        Self::with_image(
+            make_rcp(|| RenderCanvasImage::new(width, height)),
+            width,
+            height,
+        )
+    }
+    fn with_image(image: rcp<RenderCanvasImage>, width: u32, height: u32) -> Self {
         Self {
             base: RefCnt::new(),
-            m_renderImage: ManuallyDrop::new(make_rcp(|| RenderCanvasImage::new(width, height))),
+            m_renderImage: ManuallyDrop::new(image),
             m_renderTarget: ManuallyDrop::new(rcp::new()),
             m_width: width,
             m_height: height,
+            retirer: None,
         }
+    }
+    pub(crate) fn new_deferred(retirer: Arc<CanvasRetirer>, width: u32, height: u32) -> Self {
+        let image = make_rcp(|| RenderCanvasImage::new_deferred(retirer.clone(), width, height));
+        let mut canvas = Self::with_image(image, width, height);
+        canvas.retirer = Some(retirer);
+        canvas
+    }
+    fn release_render_target(&mut self) -> rcp<RenderTarget> {
+        std::mem::replace(&mut *self.m_renderTarget, rcp::new())
     }
     pub fn width(&self) -> u32 {
         self.m_width
@@ -96,7 +140,7 @@ impl RenderCanvas {
         unsafe { &*self.m_renderImage.get().cast::<RiveRenderImage>() }
     }
     pub(crate) fn ref_render_image(&self) -> rcp<RiveRenderImage> {
-        // SAFETY: RenderCanvasImage's transparent base is RiveRenderImage.
+        // SAFETY: RenderCanvasImage's offset-zero base is RiveRenderImage.
         unsafe { rcp::converting_copy_ctor(&self.m_renderImage) }
     }
     pub fn renderTarget(&mut self) -> *mut RenderTarget {
@@ -109,6 +153,13 @@ impl RenderCanvas {
 }
 impl Drop for RenderCanvas {
     fn drop(&mut self) {
+        if let Some(retirer) = self.retirer.clone() {
+            let target = self.release_render_target();
+            retirer.retire(
+                None,
+                (!target.get().is_null()).then(|| Box::new(target) as Box<dyn std::any::Any>),
+            );
+        }
         // Source reverse member destruction precedes intrusive base destruction.
         unsafe {
             ManuallyDrop::drop(&mut self.m_renderTarget);

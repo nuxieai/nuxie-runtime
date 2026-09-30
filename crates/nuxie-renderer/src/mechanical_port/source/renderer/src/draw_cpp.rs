@@ -1146,6 +1146,7 @@ unsafe fn push_path(
     draw: *mut Draw,
     flush: *mut LogicalFlush,
     subpass: i32,
+    z_index: u32,
 ) -> *mut gpu::DrawBatch {
     let owner = unsafe { &mut *path_allocation(draw) };
     let flush_ref = unsafe { &mut *flush };
@@ -1154,7 +1155,7 @@ unsafe fn push_path(
         return core::ptr::null_mut();
     }
     if owner.path_id == 0 {
-        owner.path_id = unsafe { flush_ref.pushPathExecutable(&owner.draw) };
+        owner.path_id = unsafe { flush_ref.pushPathExecutable(&owner.draw, z_index) };
     }
     let interior = matches!(&owner.geometry, PreparedPathGeometry::Interior(_));
     match owner.coverage_type {
@@ -1445,27 +1446,30 @@ unsafe fn push_image_rect(
     draw: *mut Draw,
     flush: *mut LogicalFlush,
     subpass: i32,
+    z_index: u32,
 ) -> *mut gpu::DrawBatch {
     debug_assert_eq!(subpass, 0);
-    unsafe { (&mut *flush).pushImageRectDrawExecutable(draw.cast::<ImageRectDraw>()) }
+    unsafe { (&mut *flush).pushImageRectDrawExecutable(draw.cast::<ImageRectDraw>(), z_index) }
 }
 
 unsafe fn push_image_mesh(
     draw: *mut Draw,
     flush: *mut LogicalFlush,
     subpass: i32,
+    z_index: u32,
 ) -> *mut gpu::DrawBatch {
     debug_assert_eq!(subpass, 0);
-    unsafe { (&mut *flush).pushImageMeshDrawExecutable(draw.cast::<ImageMeshDraw>()) }
+    unsafe { (&mut *flush).pushImageMeshDrawExecutable(draw.cast::<ImageMeshDraw>(), z_index) }
 }
 
 unsafe fn push_clip_reset(
     draw: *mut Draw,
     flush: *mut LogicalFlush,
     subpass: i32,
+    z_index: u32,
 ) -> *mut gpu::DrawBatch {
     debug_assert_eq!(subpass, 0);
-    unsafe { (&mut *flush).pushClipResetDrawExecutable(draw.cast::<ClipReset>()) }
+    unsafe { (&mut *flush).pushClipResetDrawExecutable(draw.cast::<ClipReset>(), z_index) }
 }
 
 fn base_draw(

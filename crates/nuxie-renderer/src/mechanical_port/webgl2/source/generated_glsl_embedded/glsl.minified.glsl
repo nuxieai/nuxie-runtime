@@ -1,4 +1,4 @@
-#define Ac
+#define da
 #ifndef KC
 #define KC __VERSION__
 #endif
@@ -81,7 +81,7 @@
 #define V2 flat
 #define q2
 #define i2
-#ifdef BC
+#ifdef SB
 #define I0
 #else
 #ifdef GL_NV_shader_noperspective_interpolation
@@ -101,7 +101,7 @@
 #endif
 #define i5
 #define j5
-#ifdef BC
+#ifdef SB
 #define L4(a0,g,a) layout(set=a0,binding=g) uniform highp utexture2D a
 #define p6(a0,g,a) layout(set=a0,binding=g) uniform highp texture2D a
 #define e3(a0,g,a) layout(set=a0,binding=g) uniform mediump texture2D a
@@ -119,11 +119,11 @@
 #define e3(a0,g,a) uniform mediump sampler2D a
 #define o5(a0,g,a) uniform mediump sampler2D a
 #endif
-#ifdef BC
+#ifdef SB
 #define q6(a0,g,a) layout(set=a0,binding=g) uniform mediump sampler a;
 #ifdef OF
-#define g4(z7,a) layout(set=jg,binding=z7) uniform mediump sampler a;
-#define c4(a) q6(h5,ig,a)
+#define g4(z7,a) layout(set=mg,binding=z7) uniform mediump sampler a;
+#define c4(a) q6(h5,lg,a)
 #else
 #define g4(z7,a) layout(set=h3,binding=z7) uniform mediump sampler a;
 #define c4(a) q6(h5,a4,a)
@@ -147,11 +147,11 @@
 #define A7(n0,p,m,U1) z5(n0,p,m,U1)
 #define h6(a0,g,a) o5(a0,g,a)
 #define Y6(a,p,E,r6,R8,U0) j2(a,p,c(E,R8),U0)
-#define jh(a0,g,a) L4(a0,g,a)
+#define mh(a0,g,a) L4(a0,g,a)
 #define L3
 #define e1
 #define v1(a,m) texelFetch(a,m,0)
-#ifdef BC
+#ifdef SB
 #elif KC>=310
 #else
 #endif
@@ -161,7 +161,7 @@
 #define V3
 #ifdef PF
 #define O5(g,y1,a) L4(h3,g,a)
-#define M4(g,y1,a) jh(h3,g,a)
+#define M4(g,y1,a) mh(h3,g,a)
 #define P5(g,y1,a) p6(h3,g,a)
 #define L0(a,C0) v1(a,Y((C0)&Qc,(C0)>>Pc))
 #define R5(a,C0) v1(a,Y((C0)&Qc,(C0)>>Pc)).xy
@@ -178,7 +178,7 @@
 #define Rd(a,C0) a.g2[C0]
 #define C7(a,C0,E) atomicMax(a.g2[C0],E)
 #define Ta(a,C0,E) atomicAdd(a.g2[C0],E)
-#define kh(a,C0,E) atomicOr(a.g2[C0],E)
+#define nh(a,C0,E) atomicOr(a.g2[C0],E)
 #endif
 #ifdef ID
 #define P1(a) void main(){Y G=ivec2(floor(d0));int G0=int(L8(uvec2(G),(j.n6+(ya-1u))&~(ya-1u)));
@@ -187,7 +187,7 @@
 #define Q1 ,G0
 #ifdef BE
 #define H2(g,a) layout(std430,set=w3,binding=g) buffer a##Sd{uint g2[];}a
-#elif defined(BC)
+#elif defined(SB)
 #define H2(g,a) layout(std430,set=w3,binding=g) coherent buffer a##Sd{uint g2[];}a
 #else
 #define H2(g,a) layout(std430,binding=g) coherent buffer a##Sd{uint g2[];}a
@@ -207,7 +207,7 @@
 #define d2 }
 #define W3 ,Y G
 #define Q1 ,G
-#ifdef BC
+#ifdef SB
 #define Ua(g,a) layout(set=w3,binding=g,rgba8) uniform mediump coherent image2D a
 #define H2(g,a) layout(set=w3,binding=g,r32ui) uniform highp coherent uimage2D a
 #define Xa(g,a) layout(set=w3,binding=g,rgb10_a2) uniform mediump coherent image2D a
@@ -324,11 +324,11 @@
 #ifndef y4
 #define y4 z0
 #endif
-#ifdef BC
+#ifdef SB
 #define gl_VertexID gl_VertexIndex
 #endif
 #ifdef TE
-#ifdef BC
+#ifdef SB
 #define S8 gl_InstanceIndex
 #else
 #ifdef DE
@@ -352,10 +352,10 @@ uniform highp int DE;
 #define c0(a)
 #define q(a,Z)
 #define C1(R0) gl_Position=R0;}
-#define f3(z1,a) layout(location=0) out z1 lh;void main()
+#define f3(z1,a) layout(location=0) out z1 oh;void main()
 #define v6(z1,a) f3(z1,a)
 #define w6 gl_FrontFacing
-#define M2(C) lh=C
+#define M2(C) oh=C
 #define d0 gl_FragCoord.xy
 #define L6
 #define Y2
@@ -370,7 +370,7 @@ uniform highp int DE;
 #define v2(a) layout(location=0) out i F1;P1(a)
 #endif
 #define r3 d2
-#if defined(BC)&&!defined(BE)
+#if defined(SB)&&!defined(BE)
 #ifdef SE
 #define p5(a) layout(input_attachment_index=0,binding=G2,set=w3) uniform mediump subpassInputMS a
 #define x6(a) na(mat4(subpassLoad(a,0),subpassLoad(a,1),subpassLoad(a,2),subpassLoad(a,3)),gl_SampleMaskIn[0])
@@ -379,12 +379,12 @@ uniform highp int DE;
 #define x6(a) subpassLoad(a)
 #endif
 #else
-#define p5(a) e3(h3,hg,a)
+#define p5(a) e3(h3,kg,a)
 #define x6(a) texelFetch(a,ivec2(floor(d0.xy)),0)
 #endif
 #define P0(B,H) ((B)*(H))
 precision highp float;precision highp int;
 #if KC<310
-e i mh(uint u){R l1=R(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(l1)*(1./255.);}
-#define unpackUnorm4x8 mh
+e i ph(uint u){R l1=R(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(l1)*(1./255.);}
+#define unpackUnorm4x8 ph
 #endif

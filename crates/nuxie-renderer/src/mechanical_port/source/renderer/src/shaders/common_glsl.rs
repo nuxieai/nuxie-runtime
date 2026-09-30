@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/common.glsl.
  *
- * Upstream source revision: 5705446d6aeb0dad34a63d8ddadbb79fbe327a37
+ * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "5705446d6aeb0dad34a63d8ddadbb79fbe327a37";
+pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d687e007cf2ce52420bbec02e677e53ef27984b7c5b9ed8f05423ace31b1bf92";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 479;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 16063;
+    "890749dc58a9dc4fe18c9242dd852abe198f2b130362c20744524b9d045f201f";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 525;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17962;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -405,9 +405,55 @@ INLINE float4 find_clip_rect_coverage_distances(float2x2 clipRectInverseMatrix,
 
 #else // !@RENDER_MODE_DEPTH_STENCIL => @RENDER_MODE_DEPTH_STENCIL
 
-INLINE float normalize_z_index(uint zIndex)
+// Rive's depth buffer is a packed 23-bit integer:
+//
+//   bits [22:8] : path zIndex (larger == on top, depth-tested with GREATER)
+//   bits [7:0]  : coverage
+//
+// Coverage sits below the zIndex, so the depth test resolves zIndex first and
+// max coverage second, for free.
+//
+// Shaders output a normalized float32 depth, but we have to control the precise
+// 24-bit integer that lands in our D24_UNORM buffer.
+//
+// The hardware retires "round(z * 0xffffff)", but we can't just output
+// "z = depth / float(0xffffff)" because implementations are allowed to divide
+// via reciprocal, which could yield LSB errors on the 24-bit value retired.
+//
+// Scaling by a power of two is the only way there, with a +.5 to keep the error
+// in check.
+//
+// When we output (depth + .5) * 2^-24, what the hardware rounds is:
+//
+//     (depth + .5) * 2^-24 * 0xffffff
+//   = (depth + .5) * 2^-24 * (2^24 - 1)
+//   = (depth + .5) * (1 - 2^-24)
+//   = depth + .5 - (depth + .5) * 2^-24
+//
+// And the error is ".5 - (depth + .5) * 2^-24", which crosses beyond -.5
+// exactly between 2^24-1 and 2^24.
+//
+// So, all 24-bit values, including 0, should mathematically fall within error
+// bounds and round to the correct value. BUT, representability gets us first.
+// "depth + .5" needs a significand bit below the integer, so it isn't exact in
+// float32 after 2^23, and that is what caps the payload at 23 bits. (15 zIndex
+// + 8 coverage).
+INLINE float packNormalizedDepth(uint zIndex15, uint coverage8)
 {
-    return 1. - float(zIndex) * (2. / 32768.);
+    float depth = float((zIndex15 << DEPTH_COVERAGE_BIT_COUNT) | coverage8);
+#if defined(GLSL) && !defined(@TARGET_SPIRV)
+    // GL expects depth values normalized to -1..+1:
+    //
+    //   (depth + .5) * 2^-23 - 1
+    //
+    return depth * uintBitsToFloat(0x34000000u) + uintBitsToFloat(0xbf7fffffu);
+#else
+    // Everybody else expects depth values normalized to 0..1:
+    //
+    //   (depth + .5) * 2^-24
+    //
+    return depth * uintBitsToFloat(0x33800000u) + uintBitsToFloat(0x33000000u);
+#endif
 }
 
 #ifdef @ENABLE_CLIP_RECT
@@ -508,3 +554,19 @@ pub const SOURCE_BYTE_COUNT: usize = PINNED_SOURCE_BYTE_COUNT;
 pub const fn pinned_source() -> &'static str {
     PINNED_COMMON_GLSL_SOURCE
 }
+
+/// Mechanical host translation of `packNormalizedDepth` in the shader above.
+/// `gl_depth_convention` selects GLSL without TARGET_SPIRV (-1..1); all other
+/// backends use 0..1. This is CPU validation of the arithmetic, not GPU execution.
+pub fn packNormalizedDepth(zIndex15: u32, coverage8: u32, gl_depth_convention: bool) -> f32 {
+    let depth = ((zIndex15 << super::constants_glsl::DEPTH_COVERAGE_BIT_COUNT) | coverage8) as f32;
+    if gl_depth_convention {
+        depth * f32::from_bits(0x34000000) + f32::from_bits(0xbf7fffff)
+    } else {
+        depth * f32::from_bits(0x33800000) + f32::from_bits(0x33000000)
+    }
+}
+
+#[cfg(test)]
+#[path = "pack_normalized_depth_test.rs"]
+mod pack_normalized_depth_test;

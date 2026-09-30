@@ -96,6 +96,9 @@ impl<T: Copy> GVec<T, 2> {
     }
 }
 impl<T: Copy> GVec<T, 3> {
+    pub fn xy(self) -> GVec<T, 2> {
+        self.swizzle([0, 1])
+    }
     pub fn x(self) -> T {
         self[0]
     }

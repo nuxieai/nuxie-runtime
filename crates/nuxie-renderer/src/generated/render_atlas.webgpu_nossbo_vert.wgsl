@@ -1,4 +1,4 @@
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -8,10 +8,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,7 +19,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -44,11 +44,11 @@ var HD: texture_2d<u32>;
 @group(0) @binding(2)
 var OB: texture_2d<u32>;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
-var<private> UB_1: vec4<f32>;
 var<private> VB_1: vec4<f32>;
+var<private> WB_1: vec4<f32>;
 var<private> O: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(9)
@@ -118,8 +118,8 @@ fn main_1() {
     var phi_2604_: vec4<f32>;
 
     let _e72 = gl_InstanceIndex_1;
-    let _e73 = UB_1;
-    let _e74 = VB_1;
+    let _e73 = VB_1;
+    let _e74 = WB_1;
     let _e76 = i32(_e73.x);
     let _e80 = bitcast<i32>(_e73.w);
     let _e82 = (_e80 >> bitcast<u32>(2i));
@@ -445,7 +445,7 @@ fn main_1() {
     let _e598 = phi_2564_;
     let _e600 = phi_2558_;
     let _e602 = phi_2532_;
-    let _e608 = j.bh;
+    let _e608 = j.eh;
     let _e611 = select(_e598.xy, vec2<f32>(1f, -1f), vec2((_e608 != 0u)));
     let _e617 = vec4<f32>(_e611.x, _e598.y, _e598.z, _e598.w);
     O = vec4<f32>(_e617.x, _e611.y, _e617.z, _e617.w);
@@ -467,11 +467,11 @@ fn main_1() {
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_InstanceIndex: u32, @location(0) UB: vec4<f32>, @location(1) VB: vec4<f32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_InstanceIndex: u32, @location(0) VB: vec4<f32>, @location(1) WB: vec4<f32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     gl_InstanceIndex_1 = i32(gl_InstanceIndex);
-    UB_1 = UB;
     VB_1 = VB;
+    WB_1 = WB;
     main_1();
     let _e13 = O;
     let _e14 = unnamed.gl_Position;

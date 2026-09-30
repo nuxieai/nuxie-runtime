@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/glsl.glsl.
  *
- * Upstream source revision: 1cc2396f0d0d3f6d9c0b16809904e85265f617eb
+ * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1cc2396f0d0d3f6d9c0b16809904e85265f617eb";
+pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/glsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "e356ed3154ba06367fafcdca8f9bac18df951973aa2f5200d2450f1a1532d8d9";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 750;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 31559;
+    "4ea69005b08d721c305d9addc94de8033f58ac0b881f8a24afe023d6954c3dc5";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 751;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 31560;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
@@ -767,6 +767,7 @@ INLINE half4 polyfill_unpackUnorm4x8(uint u)
 // incorrectly declare this builtin on ES 3.0, leading to compiler errors if we
 // just declare it as a normal function.
 #define unpackUnorm4x8 polyfill_unpackUnorm4x8
+
 #endif
 "###;
 

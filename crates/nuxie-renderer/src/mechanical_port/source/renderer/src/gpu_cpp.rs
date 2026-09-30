@@ -2452,6 +2452,13 @@ use nuxie_render_api::{Aabb as AABB, BlendMode, ColorInt, Mat2D, Vec2D};
 // upstream spelling and width; the owner is wired later by the compiler queue.
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
 
+// packNormalizedDepth() only supports 23 bits of payload. (See common.glsl.)
+const _: () = assert!(
+    crate::mechanical_port::source::renderer::src::shaders::constants_glsl::DEPTH_Z_INDEX_BIT_COUNT
+        + crate::mechanical_port::source::renderer::src::shaders::constants_glsl::DEPTH_COVERAGE_BIT_COUNT
+        == 23
+);
+
 const _: [(); kMidpointFanPatchSegmentSpan as usize] =
     [(); crate::gpu::MIDPOINT_FAN_PATCH_SEGMENT_SPAN];
 const _: [(); OuterCubicPatchSegmentSpan as usize] =

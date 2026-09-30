@@ -25,11 +25,11 @@ D U4=unpackHalf2x16(a1(G7));d j9=U4.y;d r0=j9==D0?U4.x:J0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
 r0+=j1;h2(G7);
 #else
-r0=ri(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
+r0=vi(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
 #endif
 d o;
 #ifdef CLOCKWISE_FILL
-if(CLOCKWISE_FILL){o=fa(r0,J0(.0),J0(1.));}else
+if(CLOCKWISE_FILL){o=ga(r0,J0(.0),J0(1.));}else
 #endif
 {o=abs(r0);
 #ifdef ENABLE_EVEN_ODD
@@ -39,7 +39,7 @@ o=min(o,J0(1.));}
 #ifdef ENABLE_CLIPPING
 if(ENABLE_CLIPPING&&Y1.x<.0){d m1=-Y1.x;
 #ifdef ENABLE_NESTED_CLIPPING
-if(ENABLE_NESTED_CLIPPING){d J5=Y1.y;if(J5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==J5?Q0.x:.0;
+if(ENABLE_NESTED_CLIPPING){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==K5?Q0.x:.0;
 #ifndef DRAW_INTERIOR_TRIANGLES
 A0(p4,E0(w4,.0,.0,.0));
 #endif
@@ -56,7 +56,7 @@ d1(i0,packHalf2x16(D2(o,m1)));y2(m0);}else
 if(ENABLE_CLIPPING){d m1=Y1.x;if(m1!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;o=(E6==m1)?min(Q0.x,o):J0(.0);}}
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d a5=m3(f5(O0));o=clamp(a5,J0(.0),o);}
+if(ENABLE_CLIP_RECT){d c5=m3(g5(O0));o=clamp(c5,J0(.0),o);}
 #endif
 i k=L7(
 #ifdef ENABLE_MODULATED_IMAGE

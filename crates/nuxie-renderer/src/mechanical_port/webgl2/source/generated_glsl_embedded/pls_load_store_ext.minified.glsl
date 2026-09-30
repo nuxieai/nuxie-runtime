@@ -14,7 +14,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef WE
 #if __VERSION__>=310
-layout(binding=0,std140) uniform lj{uniform highp vec4 wh;}xh;
+layout(binding=0,std140) uniform qj{uniform highp vec4 zh;}Ah;
 #else
 uniform mediump vec4 XE;
 #endif
@@ -37,7 +37,7 @@ layout(location=0) out mediump vec4 cb;
 void main(){
 #ifdef WE
 #if __VERSION__>=310
-m0=xh.wh;
+m0=Ah.zh;
 #else
 m0=XE;
 #endif
@@ -60,6 +60,6 @@ cb=m0;
 #endif
 }
 #else
-layout(location=0) out mediump vec4 yh;void main(){yh=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 Bh;void main(){Bh=vec4(0,1,0,1);}
 #endif
 #endif

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 1cc2396f0d0d3f6d9c0b16809904e85265f617eb
+ * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1cc2396f0d0d3f6d9c0b16809904e85265f617eb";
+pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "177a54d495e6a9084b87ad3b2ef42366f058aedce92e09da789d3b701c6680f7";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 346;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14450;
+    "71b2fd442e85cde65c8b3a1d5c61fc13d86dcb5da70dbb45f2e242bd02b2ca9c";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 356;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14798;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -282,6 +282,16 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define BLEND_MODE_COLOR 14u
 #define BLEND_MODE_LUMINOSITY 15u
 
+// Rive's depth buffer is a packed 23-bit integer:
+//
+//   bits [22:8] : path zIndex (larger == on top, depth-tested with GREATER)
+//   bits [7:0]  : coverage
+//
+// Coverage sits below the zIndex, so the depth test resolves zIndex first and
+// max coverage second, for free.
+#define DEPTH_Z_INDEX_BIT_COUNT 15u
+#define DEPTH_COVERAGE_BIT_COUNT 8u
+
 // Fixed-point coverage values for atomic mode.
 // Atomic mode uses 6:11 fixed point, so the winding number breaks if a shape
 // has more than 32 levels of self overlap in either winding direction at any
@@ -377,3 +387,7 @@ pub const SOURCE_BYTE_COUNT: usize = PINNED_SOURCE_BYTE_COUNT;
 pub const fn pinned_source() -> &'static str {
     PINNED_CONSTANTS_GLSL_SOURCE
 }
+
+// Host counterparts of the shader constants above, shared with CPU validation.
+pub const DEPTH_Z_INDEX_BIT_COUNT: u32 = 15;
+pub const DEPTH_COVERAGE_BIT_COUNT: u32 = 8;

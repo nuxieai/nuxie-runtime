@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/stencil_draw.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/stencil_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "9df944e40e0f66f0a7f4e2114fe2644d426a44bc236eab969e3bdf75bb70c0bd";
+    "f05d05ee97d8bcb65284e92a9b102ea6fc8e494dee5575a73a0e733cb5684202";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 31;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 763;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 772;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_STENCIL_DRAW_GLSL_SOURCE: &str = r###"/*
@@ -38,7 +38,7 @@ VERTEX_MAIN(@stencilVertexMain, Attrs, attrs, _vertexID, _instanceID)
     ATTR_UNPACK(_vertexID, attrs, @a_triangleVertex, packed_float3);
     float4 pos = RENDER_TARGET_COORD_TO_CLIP_COORD(@a_triangleVertex.xy);
     uint zIndex = floatBitsToUint(@a_triangleVertex.z) & 0xffffu;
-    pos.z = normalize_z_index(zIndex);
+    pos.z = packNormalizedDepth(zIndex, 0xffu);
     EMIT_VERTEX(pos);
 }
 #endif

@@ -1,4 +1,4 @@
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -8,10 +8,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,7 +19,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -29,11 +29,11 @@ struct SB {
 var XC: texture_2d<f32>;
 @group(3) @binding(9)
 var ca: sampler;
-var<private> lh: f32;
+var<private> oh: f32;
 var<private> O_1: vec4<f32>;
 var<private> gl_FrontFacing_1: bool;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(1) @binding(11)
@@ -78,7 +78,7 @@ fn main_1() {
         phi_424_ = -(_e83);
     }
     let _e87 = phi_424_;
-    lh = _e87;
+    oh = _e87;
     return;
 }
 
@@ -87,6 +87,6 @@ fn main(@location(0) O: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) 
     O_1 = O;
     gl_FrontFacing_1 = gl_FrontFacing;
     main_1();
-    let _e5 = lh;
+    let _e5 = oh;
     return _e5;
 }

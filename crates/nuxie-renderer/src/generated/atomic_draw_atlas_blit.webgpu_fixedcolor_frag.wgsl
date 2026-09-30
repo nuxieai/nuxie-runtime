@@ -10,7 +10,7 @@ struct lf {
     g2_: array<vec4<f32>>,
 }
 
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -20,10 +20,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -31,7 +31,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -41,11 +41,11 @@ struct A4Sd {
     g2_: array<u32>,
 }
 
-@id(7) override Lh: bool = true;
-@id(4) override Ih: bool = true;
-@id(0) override Eh: bool = true;
-@id(1) override Fh: bool = true;
-@id(2) override Gh: bool = true;
+@id(7) override Oh: bool = true;
+@id(4) override Lh: bool = true;
+@id(0) override Hh: bool = true;
+@id(1) override Ih: bool = true;
+@id(2) override Jh: bool = true;
 
 @group(0) @binding(3)
 var<storage> CD: kf;
@@ -55,7 +55,7 @@ var<storage, read_write> i0_: i0Sd;
 var<storage> PB: lf;
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(3) @binding(8)
@@ -110,8 +110,8 @@ fn main_1() {
     phi_1219_ = _e118;
     if ((_e121.x & 768u) != 0u) {
         let _e125 = abs(_e118);
-        phi_840_ = Ih;
-        if Ih {
+        phi_840_ = Lh;
+        if Lh {
             phi_840_ = ((_e121.x & 512u) != 0u);
         }
         let _e129 = phi_840_;
@@ -125,7 +125,7 @@ fn main_1() {
     let _e139 = phi_1219_;
     let _e140 = clamp(_e139, 0f, 1f);
     phi_1223_ = _e140;
-    if Eh {
+    if Hh {
         let _e142 = (_e121.x >> bitcast<u32>(16u));
         phi_1224_ = _e140;
         if (_e142 != 0u) {
@@ -142,8 +142,8 @@ fn main_1() {
         phi_1223_ = _e156;
     }
     let _e158 = phi_1223_;
-    phi_877_ = Fh;
-    if Fh {
+    phi_877_ = Ih;
+    if Ih {
         phi_877_ = ((_e121.x & 1024u) != 0u);
     }
     let _e162 = phi_877_;
@@ -159,7 +159,7 @@ fn main_1() {
     let _e193 = phi_1226_;
     let _e194 = (_e121.x & 15u);
     if (_e194 <= 1u) {
-        let _e204 = (Eh && (_e194 == 0u));
+        let _e204 = (Hh && (_e194 == 0u));
         phi_1252_ = 0u;
         if _e204 {
             phi_1252_ = (_e121.y | pack2x16float(vec2<f32>(_e193, 0f)));
@@ -183,7 +183,7 @@ fn main_1() {
         let _e247 = j.ac;
         let _e250 = textureSampleLevel(DD, M9_, vec2<f32>(((clamp(_e234, 0f, 1f) * _e226.z) + _e226.w), ((floor(_e241) * _e244) + _e247)), 0f);
         phi_1250_ = _e250;
-        if !((Gh && (((_e121.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
+        if !((Jh && (((_e121.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
             let _e254 = (_e250.xyz * _e250.w);
             phi_1250_ = vec4<f32>(_e254.x, _e254.y, _e254.z, (_e250.w * (fract(_e241) * 1.0039216f)));
         }
@@ -197,7 +197,7 @@ fn main_1() {
     let _e269 = _e268.xyz;
     let _e272 = j.F3_;
     let _e274 = j.G3_;
-    if (Lh && (_e268.w != 0f)) {
+    if (Oh && (_e268.w != 0f)) {
         phi_1263_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e61.x) + (0.00583715f * _e61.y))))) * _e272) + _e274)) + _e269);
     } else {
         phi_1263_ = _e269;

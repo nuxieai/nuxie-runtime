@@ -26,7 +26,7 @@ z0(X2,i0);
 #endif
 N1
 #ifdef KB
-I3 e3(g5,a4,GC);J3 h5 c4(W5)i5 U3 V3
+I3 e3(h5,a4,GC);J3 i5 c4(W5) j5 U3 V3
 #endif
 #ifdef Q
 #ifdef KB
@@ -59,7 +59,7 @@ q(O0,f);
 q(g1,d);
 #endif
 #ifdef KB
-q(I5,c);q(K1,i);
+q(J5,c);q(K1,i);
 #ifdef T
 q(D1,N);
 #endif
@@ -75,10 +75,10 @@ g3(g1),
 X1 Y2);d o=clamp(j2(ED,R9,F2,.0).x,J0(.0),J0(1.));
 #endif
 #ifdef KB
-i k=A7(GC,W5,I5,j.Ed);d o=1.;
+i k=A7(GC,W5,J5,j.Ed);d o=1.;
 #endif
 #ifdef AB
-if(AB){d a5=max(m3(f5(O0)),J0(.0));o=min(a5,o);}
+if(AB){d c5=max(m3(g5(O0)),J0(.0));o=min(c5,o);}
 #endif
 #ifdef Bb
 z2;
@@ -111,8 +111,8 @@ k.xyz=F6(k);
 k.xyz=Y4(k.xyz,O1,p3)*k.w;}
 #endif
 k*=o;
-#ifdef AC
-if(AC){k=q3(k);}
+#ifdef BC
+if(BC){k=q3(k);}
 #endif
 k.xyz=K2(k.xyz,k.w,d0.xy,j.F3,j.G3);
 #ifndef QB

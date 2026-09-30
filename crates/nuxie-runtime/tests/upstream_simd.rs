@@ -129,6 +129,23 @@ fn swizzles() {
     assert_eq!(v2.yx().data, [-2.0, 1.0]);
     assert_eq!(v2.xyxy().data, [1.0, -2.0, 1.0, -2.0]);
     assert_eq!(v2.yxyx().data, [-2.0, 1.0, -2.0, 1.0]);
+    let mut f3 = GVec::from_array([1.0f32, -2.0, 3.0]);
+    assert_eq!(f3.x(), 1.0);
+    assert_eq!(f3.y(), -2.0);
+    assert_eq!(f3.z(), 3.0);
+    assert_eq!(f3[0], f3.x());
+    assert_eq!(f3[1], f3.y());
+    assert_eq!(f3[2], f3.z());
+    assert_eq!(f3.xy().data, [1.0, -2.0]);
+    assert_eq!(f3.xyz().data, [1.0, -2.0, 3.0]);
+    let xy: GVec<f32, 2> = f3.xy();
+    assert_eq!(xy.data, [1.0, -2.0]);
+    assert_eq!(simd::reduce_add(f3.xy()), -1.0);
+    // Rust exposes lane mutation rather than C++ proxy lvalues.
+    (f3[0], f3[1]) = (v2.yx()[0], v2.yx()[1]);
+    assert_eq!(f3.data, [-2.0, 1.0, 3.0]);
+    (f3[0], f3[1], f3[2]) = (7.0, 7.0, 7.0);
+    assert_eq!(f3.data, [7.0, 7.0, 7.0]);
     let mut v4 = GVec::from_array([1.0f32, -2.0, 3.0, -1.0]);
     assert_eq!((v4.x(), v4.y(), v4.z(), v4.w()), (1.0, -2.0, 3.0, -1.0));
     assert_eq!(v4.xy().data, [1.0, -2.0]);

@@ -104,8 +104,8 @@ k.xyz=F6(k);
 k.xyz=Y4(k.xyz,O1,p3)*k.w;}
 #endif
 k*=o;
-#ifdef AC
-if(AC){k=q3(k);}
+#ifdef BC
+if(BC){k=q3(k);}
 #endif
 k.xyz=K2(k.xyz,k.w,d0.xy,j.F3,j.G3);
 #ifndef QB

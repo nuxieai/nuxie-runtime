@@ -69,7 +69,6 @@ impl ScriptedCanvas {
             .map_err(|_| {
                 luaur_rt::Error::runtime(format!("{caller} failed to create RenderCanvas"))
             })?;
-        let canvas: RenderCanvasHandle = Rc::new(RefCell::new(canvas));
         let image = lua.create_userdata(ScriptedImage::from_render_canvas(Rc::clone(&canvas)))?;
         self.image = Some(image);
         self.canvas = Some(canvas);
@@ -116,18 +115,25 @@ impl ScriptedCanvas {
     }
 }
 
-/// `allocScriptRenderCanvas`: only GL overrides deferred backing allocation.
+/// `allocScriptRenderCanvas`: the deferred host owns canvas retirement.
 pub(crate) fn allocate_script_render_canvas(
     bindings: &RendererBindings,
     context: &mut PersistentFactoryContext,
     width: u32,
     height: u32,
-) -> std::result::Result<Box<dyn RenderCanvas>, RenderCanvasError> {
-    if bindings.deferred_canvas_host().is_some() || bindings.render_context_is_late_bound() {
+) -> std::result::Result<RenderCanvasHandle, RenderCanvasError> {
+    if let Some(host) = bindings.deferred_canvas_host() {
+        return host
+            .borrow_mut()
+            .make_content_canvas(width, height)
+            .ok_or_else(|| RenderCanvasError::new("deferred host could not create RenderCanvas"));
+    }
+    let canvas = if bindings.render_context_is_late_bound() {
         context.make_deferred_render_canvas(width, height)
     } else {
         context.make_render_canvas(width, height)
-    }
+    }?;
+    Ok(Rc::new(RefCell::new(canvas)))
 }
 
 /// Called after every protected call, including a script error.
@@ -532,6 +538,7 @@ mod tests {
         inner: RecordingFactory,
         events: Rc<RefCell<Vec<String>>>,
         ore: Option<OreContextHandle>,
+        host: Option<DeferredCanvasHostHandle>,
     }
 
     impl TestCanvasFactory {
@@ -540,11 +547,15 @@ mod tests {
                 inner: RecordingFactory::new(),
                 events,
                 ore: None,
+                host: None,
             }
         }
     }
 
     impl Factory for TestCanvasFactory {
+        fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+            self.host.clone()
+        }
         fn is_render_context(&self) -> bool {
             true
         }
@@ -630,6 +641,72 @@ mod tests {
                 events: Rc::clone(&self.events),
             }))
         }
+    }
+
+    #[test]
+    fn allocation_uses_deferred_host_before_late_bound_context_and_preserves_identity() {
+        struct Host {
+            canvas: Option<RenderCanvasHandle>,
+            calls: Rc<RefCell<Vec<(u32, u32)>>>,
+        }
+        impl nuxie_render_api::DeferredCanvasHost for Host {
+            fn make_content_canvas(
+                &mut self,
+                width: u32,
+                height: u32,
+            ) -> Option<RenderCanvasHandle> {
+                self.calls.borrow_mut().push((width, height));
+                self.canvas.clone()
+            }
+            fn content_canvas_image(
+                &mut self,
+                canvas: &RenderCanvasHandle,
+            ) -> Option<Rc<dyn RenderImage>> {
+                Some(canvas.borrow().render_image())
+            }
+            fn begin_canvas_content(
+                &mut self,
+                _: RenderCanvasHandle,
+                _: ColorInt,
+            ) -> Option<Box<dyn Renderer>> {
+                None
+            }
+            fn end_canvas_content(&mut self, _: &RenderCanvasHandle) {}
+        }
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let calls = Rc::new(RefCell::new(Vec::new()));
+        let canvas: RenderCanvasHandle = Rc::new(RefCell::new(Box::new(TestCanvas {
+            width: 4,
+            height: 3,
+            image: Rc::new(TestCanvasImage {
+                identity: Rc::new(()),
+                width: 4,
+                height: 3,
+            }),
+            events: events.clone(),
+        })));
+        let host = Rc::new(RefCell::new(Host {
+            canvas: Some(canvas.clone()),
+            calls: calls.clone(),
+        }));
+        let mut factory = PersistentFactory::new(TestCanvasFactory::new(events.clone()));
+        factory.borrow_mut().host = Some(host.clone());
+        let vm = ScriptVm::new();
+        vm.install_render_factory(&mut factory).unwrap();
+        let mut context = factory.persistent_context().unwrap();
+        assert!(vm.renderer_bindings.render_context_is_late_bound());
+        let allocated =
+            allocate_script_render_canvas(&vm.renderer_bindings, &mut context, 4, 3).unwrap();
+        assert!(Rc::ptr_eq(&allocated, &canvas));
+        assert_eq!(&*calls.borrow(), &[(4, 3)]);
+        assert!(events.borrow().is_empty());
+        host.borrow_mut().canvas = None;
+        assert!(allocate_script_render_canvas(&vm.renderer_bindings, &mut context, 9, 8).is_err());
+        assert_eq!(&*calls.borrow(), &[(4, 3), (9, 8)]);
+        assert!(
+            events.borrow().is_empty(),
+            "a host failure must not fall back to context allocation"
+        );
     }
 
     #[test]

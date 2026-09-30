@@ -7,6 +7,9 @@
 #[path = "command_queue/focus_503eab63.rs"]
 mod focus_503eab63;
 
+#[path = "command_queue/runtime_messages_407f9a35.rs"]
+mod runtime_messages_407f9a35;
+
 // Complete font-binding additions from command_queue_test.cpp at 30742b4c.
 #[cfg(feature = "test-support")]
 mod font_data_binding_30742b4c {

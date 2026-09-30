@@ -280,6 +280,13 @@ pub type BlobAssetListenerHandle = ListenerHandle<dyn BlobAssetListener>;
 pub type ArtboardListenerHandle = ListenerHandle<dyn ArtboardListener>;
 pub type ViewModelInstanceListenerHandle = ListenerHandle<dyn ViewModelInstanceListener>;
 pub type StateMachineListenerHandle = ListenerHandle<dyn StateMachineListener>;
+pub type RuntimeMessageListenerHandle = ListenerHandle<dyn RuntimeMessageListener>;
+
+/// Receives runtime-defined messages on the process_messages caller's thread,
+/// with the message mutex released. The callback owns and may retain payload.
+pub trait RuntimeMessageListener: Send {
+    fn on_runtime_message(&mut self, _tag: u32, _payload: Vec<u8>) {}
+}
 
 pub struct ListenerBase<H: Copy + Default> {
     pub handle: H,
@@ -759,6 +766,7 @@ pub(crate) enum Message {
     ArtboardVolumeReceived,
     HasFocusNodesReceived,
     FocusStateReceived,
+    RuntimeMessage,
 }
 
 impl Default for Message {
@@ -819,6 +827,7 @@ pub struct CommandQueueShared {
     message_mutex: Mutex<()>,
     message_stream: SynchronizedPodStream,
     message_names: SynchronizedObjectStream<String>,
+    message_byte_vectors: SynchronizedObjectStream<Vec<u8>>,
     message_semantics_diffs: SynchronizedObjectStream<SemanticsDiff>,
     global_file_listener: Mutex<Option<WeakListenerHandle<dyn FileListener>>>,
     global_image_listener: Mutex<Option<WeakListenerHandle<dyn RenderImageListener>>>,
@@ -828,6 +837,7 @@ pub struct CommandQueueShared {
     global_artboard_listener: Mutex<Option<WeakListenerHandle<dyn ArtboardListener>>>,
     global_view_model_listener: Mutex<Option<WeakListenerHandle<dyn ViewModelInstanceListener>>>,
     global_state_machine_listener: Mutex<Option<WeakListenerHandle<dyn StateMachineListener>>>,
+    global_runtime_message_listener: Mutex<Option<WeakListenerHandle<dyn RuntimeMessageListener>>>,
     file_listeners: Mutex<HashMap<FileHandle, WeakListenerHandle<dyn FileListener>>>,
     image_listeners: Mutex<HashMap<RenderImageHandle, WeakListenerHandle<dyn RenderImageListener>>>,
     audio_listeners: Mutex<HashMap<AudioSourceHandle, WeakListenerHandle<dyn AudioSourceListener>>>,
@@ -876,6 +886,7 @@ impl Default for CommandQueue {
             message_mutex: Mutex::new(()),
             message_stream: SynchronizedPodStream::default(),
             message_names: SynchronizedObjectStream::default(),
+            message_byte_vectors: SynchronizedObjectStream::default(),
             message_semantics_diffs: SynchronizedObjectStream::default(),
             global_file_listener: Mutex::new(None),
             global_image_listener: Mutex::new(None),
@@ -885,6 +896,7 @@ impl Default for CommandQueue {
             global_artboard_listener: Mutex::new(None),
             global_view_model_listener: Mutex::new(None),
             global_state_machine_listener: Mutex::new(None),
+            global_runtime_message_listener: Mutex::new(None),
             file_listeners: Mutex::new(HashMap::new()),
             image_listeners: Mutex::new(HashMap::new()),
             audio_listeners: Mutex::new(HashMap::new()),
@@ -967,6 +979,11 @@ impl MessageLock<'_> {
 
     pub fn write_name(&mut self, value: String) -> &mut Self {
         self.queue.message_names.write(value);
+        self
+    }
+
+    pub fn write_byte_vector(&mut self, value: Vec<u8>) -> &mut Self {
+        self.queue.message_byte_vectors.write(value);
         self
     }
 
@@ -2538,6 +2555,17 @@ impl CommandQueue {
         *self.global_blob_listener.lock().unwrap() = listener.map(ListenerHandle::downgrade);
     }
 
+    /// Non-owning registration, serialized with process_messages. Each message
+    /// uses the listener current when processed; absent listeners discard it.
+    /// Keep the handle alive until replacement/clear and any callback completes.
+    pub fn set_global_runtime_message_listener(
+        &mut self,
+        listener: Option<&RuntimeMessageListenerHandle>,
+    ) {
+        *self.global_runtime_message_listener.lock().unwrap() =
+            listener.map(ListenerHandle::downgrade);
+    }
+
     fn read_message_pod<T: Copy + Send + 'static>(&self) -> T {
         self.message_stream.read()
     }
@@ -2558,6 +2586,16 @@ impl CommandQueue {
                 Message::MessageLoopBreak => {
                     drop(lock);
                     return;
+                }
+                Message::RuntimeMessage => {
+                    let tag = self.read_message_pod::<u32>();
+                    let payload = self.message_byte_vectors.read();
+                    drop(lock);
+                    if let Some(listener) =
+                        Self::global_listener(&self.global_runtime_message_listener)
+                    {
+                        listener.borrow_mut().on_runtime_message(tag, payload);
+                    }
                 }
                 Message::ViewModelEnumsListed => {
                     let handle = self.read_message_pod::<FileHandle>();

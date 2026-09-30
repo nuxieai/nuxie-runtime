@@ -177,6 +177,7 @@ fn filter_allows(filter: ReplayFilter, command: RenderCmd) -> bool {
         | RenderCmd::DrawImage
         | RenderCmd::DrawImageMesh
         | RenderCmd::ModulateOpacity
+        | RenderCmd::ModulateColor
         | RenderCmd::CanvasContentBegin
         | RenderCmd::CanvasContentEnd => filter == ReplayFilter::Draws,
         RenderCmd::DestroyResource => filter == ReplayFilter::Destroys,
@@ -690,6 +691,12 @@ pub fn replay_render_commands(
                 let c: OpacityPod = reader.read();
                 with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
                     r.modulate_opacity(c.opacity)
+                });
+            }
+            RenderCmd::ModulateColor => {
+                let c: ModulateColorPod = reader.read();
+                with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
+                    r.modulate_color(c.color, c.replace != 0)
                 });
             }
             RenderCmd::CanvasContentBegin => {

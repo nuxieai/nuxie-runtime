@@ -1,3 +1,9 @@
+// The df0cc777 artboard draw visitor, propertyKey/drawModulated, and borrowed
+// Drawable methods execute in nuxie-scripting/src/vm/lua_artboards.rs through
+// ScriptArtboard/native_artboard. This historical raw LuaState mirror is not
+// included by lua/mod.rs; its old draw entry below is not a runtime fallback.
+// The live binding retains Lua values, uses scoped renderer reborrows, restores
+// open saves on visitor failure, defaults the remaining draws, then rethrows.
 use crate::mechanical_port::source::{
     animation::listener_invocation::ListenerInvocation, lua::rive_lua_libs::*, math::mat2d::Mat2D,
 };

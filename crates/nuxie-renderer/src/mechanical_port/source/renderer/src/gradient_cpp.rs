@@ -261,19 +261,6 @@ fn precise_mix(a: f32, b: f32, t: f32) -> f32 {
     a * (1.0 - t) + b * t
 }
 
-#[inline]
-fn color_modulate_opacity(value: ColorInt, opacity: f32) -> ColorInt {
-    // colorModulateOpacity(value, opacity) =
-    // colorWithAlpha(value, opacityToAlpha(colorOpacity(value) * opacity)).
-    // Multiply first, then apply the source min/max clamp. Rust f32::min/max
-    // match the source std::min/std::max NaN selection here (NaN becomes 1).
-    let source_opacity = ((value >> 24) & 0xff) as f32 / 255.0;
-    let product = source_opacity * opacity;
-    let clamped = product.min(1.0).max(0.0);
-    let alpha = (255.0 * clamped).round() as u32;
-    (value & 0x00ff_ffff) | (alpha << 24)
-}
-
 unsafe fn checked_inputs<'a>(
     colors: *const ColorInt,
     stops: *const f32,
@@ -475,8 +462,8 @@ impl Gradient {
         cached == gpu::TriState::yes
     }
 
-    pub fn getModulated(&self, opacity: f32) -> rcp<Gradient> {
-        if opacity == 1.0 {
+    pub fn getModulated(&self, opacity: f32, color: ColorInt) -> rcp<Gradient> {
+        if opacity == 1.0 && color == 0xffff_ffff {
             // SAFETY: source `ref_rcp(const_cast<Gradient*>(this))` retains
             // this exact intrusive owner and returns a new smart pointer.
             return unsafe { ref_rcp(self as *const Self as *mut Self) };
@@ -487,7 +474,8 @@ impl Gradient {
         // avoid manufacturing Send/Sync on the complete Gradient owner.
         let cached_gradient = unsafe { &mut *self.m_lastModulatedGradient.get() };
         let cached_opacity = unsafe { *self.m_lastModulatedOpacity.get() };
-        if cached_opacity == opacity && !cached_gradient.get().is_null() {
+        let cached_color = unsafe { *self.m_lastModulatedColor.get() };
+        if cached_opacity == opacity && cached_color == color && !cached_gradient.get().is_null() {
             return cached_gradient.clone();
         }
 
@@ -497,9 +485,9 @@ impl Gradient {
         // SAFETY: m_count is the validated Gradient array count; every write
         // below is within that allocation and fills each slot exactly once.
         for index in 0..self.m_count {
-            let color = unsafe { self.m_colors.read(index) };
+            let value = unsafe { self.m_colors.read(index) };
             unsafe {
-                new_colors.write(index, color_modulate_opacity(color, opacity));
+                new_colors.write(index, super::draw_cpp::color_modulate(value, color, opacity));
             }
         }
         let new_stops = GradDataArray::from_slice(unsafe { self.m_stops.as_slice(self.m_count) });
@@ -514,6 +502,7 @@ impl Gradient {
         *cached_gradient = gradient;
         unsafe {
             *self.m_lastModulatedOpacity.get() = opacity;
+            *self.m_lastModulatedColor.get() = color;
         }
         cached_gradient.clone()
     }

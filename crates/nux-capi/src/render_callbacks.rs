@@ -128,6 +128,7 @@ pub struct NuxRenderCallbacks {
         unsafe extern "C" fn(*mut c_void, u64, NuxImageSampler, u64, u64, u64, u32, u32, u8, f32),
     >,
     pub modulate_opacity: Option<unsafe extern "C" fn(*mut c_void, f32)>,
+    pub modulate_color: Option<unsafe extern "C" fn(*mut c_void, u32, u32)>,
 }
 
 /// ABI-v3 prefix that every callback table must provide. Future additive tail
@@ -204,6 +205,7 @@ impl NuxRenderCallbacks {
                 draw_image,
                 draw_image_mesh,
                 modulate_opacity,
+                modulate_color,
             )
     }
 }
@@ -799,6 +801,10 @@ impl Renderer for CallbackRenderer {
     fn modulate_opacity(&mut self, opacity: f32) {
         call!(self.callbacks, modulate_opacity, opacity);
     }
+
+    fn modulate_color(&mut self, color: ColorInt, replace: bool) {
+        call!(self.callbacks, modulate_color, color, u32::from(replace));
+    }
 }
 
 #[cfg(test)]
@@ -806,6 +812,35 @@ mod tests {
     use super::*;
 
     const PATH_HANDLE: u64 = 37;
+
+    unsafe extern "C" fn capture_modulation(user_data: *mut c_void, color: u32, replace: u32) {
+        // SAFETY: the test retains the capture for the callback's duration.
+        unsafe { *user_data.cast::<(u32, u32)>() = (color, replace) };
+    }
+
+    #[test]
+    fn color_modulation_forwards_and_reads_only_complete_callback_tails() {
+        let mut capture = (0u32, 0u32);
+        let mut callbacks = NuxRenderCallbacks {
+            user_data: (&mut capture as *mut (u32, u32)).cast(),
+            modulate_color: Some(capture_modulation),
+            ..NuxRenderCallbacks::default()
+        };
+        let full = unsafe { crate::read_render_callbacks(&callbacks) }.unwrap();
+        let mut renderer = CallbackRenderer::new(full);
+        renderer.modulate_color(0x80402010, true);
+        assert_eq!(capture, (0x80402010, 1));
+        renderer.modulate_color(0xffaabbcc, false);
+        assert_eq!(capture, (0xffaabbcc, 0));
+        for size in NUX_RENDER_CALLBACKS_V3_MIN_SIZE..std::mem::size_of::<NuxRenderCallbacks>() {
+            callbacks.struct_size = size as u32;
+            let prefix = unsafe { crate::read_render_callbacks(&callbacks) }.unwrap();
+            assert!(prefix.modulate_color.is_none());
+        }
+        let mut different = full;
+        different.modulate_color = None;
+        assert!(!full.same_resource_domain(&different));
+    }
 
     #[derive(Default)]
     struct AppendCapture {

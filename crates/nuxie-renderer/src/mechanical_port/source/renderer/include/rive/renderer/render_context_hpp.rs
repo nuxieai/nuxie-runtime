@@ -1373,15 +1373,15 @@ impl ImageRectDraw {
 #[repr(C)]
 pub struct ImageMeshDraw {
     pub base: Draw,
-    pub(crate) opacity: f32,
+    pub(crate) modulated_color: u32,
     pub(crate) index_count: u32,
     pub(crate) vertex_buffer: *mut RenderBuffer,
     pub(crate) uv_buffer: *mut RenderBuffer,
     pub(crate) index_buffer: *mut RenderBuffer,
 }
 impl ImageMeshDraw {
-    pub fn opacity(&self) -> f32 {
-        self.opacity
+    pub fn modulatedColor(&self) -> u32 {
+        self.modulated_color
     }
     pub fn indexCount(&self) -> u32 {
         self.index_count

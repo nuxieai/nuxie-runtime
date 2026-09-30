@@ -346,6 +346,7 @@ pub struct Gradient {
     pub(super) m_isOpaque: UnsafeCell<gpu::TriState>,
     pub(super) m_lastModulatedGradient: UnsafeCell<rcp<Gradient>>,
     pub(super) m_lastModulatedOpacity: UnsafeCell<f32>,
+    pub(super) m_lastModulatedColor: UnsafeCell<ColorInt>,
     _construction_seal: GradientConstructionSeal,
 }
 
@@ -406,6 +407,7 @@ impl Gradient {
             m_isOpaque: UnsafeCell::new(gpu::TriState::unknown),
             m_lastModulatedGradient: UnsafeCell::new(rcp::new()),
             m_lastModulatedOpacity: UnsafeCell::new(-1.0),
+            m_lastModulatedColor: UnsafeCell::new(0xffff_ffff),
             _construction_seal: GradientConstructionSeal,
         }
     }

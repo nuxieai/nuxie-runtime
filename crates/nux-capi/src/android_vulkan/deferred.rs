@@ -364,6 +364,14 @@ impl Renderer for ReplayFrameRenderer {
             .renderer()
             .modulate_opacity(opacity);
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .modulate_color(color, replace);
+    }
     fn current_transform(&self) -> Option<Mat2D> {
         // A query must never panic on a slot another call is using.
         self.0

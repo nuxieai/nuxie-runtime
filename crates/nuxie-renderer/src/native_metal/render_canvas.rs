@@ -484,6 +484,9 @@ impl Renderer for NativeMetalRenderCanvasFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         self.renderer.modulate_opacity(opacity);
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        self.renderer.modulate_color(color, replace);
+    }
 
     fn current_transform(&self) -> Option<Mat2D> {
         self.renderer.current_transform()

@@ -446,6 +446,9 @@ impl Renderer for NativeVulkanFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         self.core.modulate_opacity(opacity);
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        self.core.modulate_color(color, replace);
+    }
 
     fn current_transform(&self) -> Option<Mat2D> {
         self.core.current_transform()

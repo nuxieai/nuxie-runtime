@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-1f7efd6c629383d00ab6daf4923e37e501901f48}
+ref=${RIVE_RUNTIME_REF:-df0cc777d8211f81824943a7665884f5565aecb8}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/drawable_custom_properties.riv|7821e97a0bde90ea12113e1dda47af6f4b29dfacd770bb8b031c8cf0632d3940|df0cc777d8211f81824943a7665884f5565aecb8|drawable_custom_properties.riv"
+  "sync/drawable_custom_properties_other.riv|a7f6a5cdb97f69b43efcd6b120cf3c8570498585ee58b5ce70a8a089afcfdb61|df0cc777d8211f81824943a7665884f5565aecb8|drawable_custom_properties_other.riv"
   "sync/focus_traversal_test.riv|f42c64903b934b226a97cb222bd727f1a27522d53bd1ade80f7a5c05357dac99|9b9cd7b185398629f10ae0131e2a53322ed4a9b4|focus_traversal_test.riv"
   "sync/data_bound_keyframe_test.riv|0aa89d0861bf9b5210e46713eefed0058f92ff45b5527a5e72f70eade188d961|1371150d929cf8d282d782cb9e5b7fc7783799b1|data_bound_keyframe_test.riv"
   "sync/layout_animation_transition_test.riv|9d9912b30f621ca8ac35f47ee35aa2070749646f2b3b888bfa8402b95a52be48|621f2a2e295f79a52c5fcf8c617327803f28d3c7|layout_animation_transition_test.riv"

@@ -777,13 +777,34 @@ impl NestedArtboard {
         focus_manager.with_focus_manager_mut(|manager| manager.add_child(parent_node, scope, None));
     }
 
+    pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        let read = |callback: fn(&NestedArtboard) -> bool| {
+            owner.with(|object| callback(object.as_nested_artboard().expect("nested artboard"))).expect("live nested artboard")
+        };
+        if read(|this| this.needs_save_operation()) {
+            renderer.save();
+        }
+        let transform = owner.with(|object| *object.as_nested_artboard().expect("nested artboard").world_transform().values()).expect("live nested artboard");
+        renderer.transform(nuxie_render_api::Mat2D(transform));
+        let hosted = owner.with(|object| {
+            let this = object.as_nested_artboard().expect("nested artboard");
+            this.instance.as_ref().map(|instance| (this.artboard_handle().expect("nested artboard owner"), instance.core_handle()))
+        }).expect("live nested artboard");
+        if let Some((host, hosted)) = hosted {
+            Artboard::draw_hosted_handle(&host, &hosted, renderer);
+        }
+        if read(|this| this.needs_save_operation()) {
+            renderer.restore();
+        }
+    }
+
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.needs_save_operation() {
             renderer.save();
         }
         renderer.transform(nuxie_render_api::Mat2D(*self.world_transform().values()));
         if let Some(instance) = &self.instance {
-            instance.draw_internal(renderer);
+            Artboard::draw_hosted_handle(&self.artboard_handle().expect("nested artboard owner"), &instance.core_handle(), renderer);
         }
         if self.needs_save_operation() {
             renderer.restore();

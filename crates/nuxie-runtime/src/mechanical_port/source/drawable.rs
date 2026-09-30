@@ -19,7 +19,7 @@ pub struct Drawable {
     pub(crate) flattened_draw_rules: Option<CoreHandle>,
     pub(crate) prev: Option<RuntimeDrawableWeakOccurrence>,
     pub(crate) next: Option<RuntimeDrawableWeakOccurrence>,
-    needs_save_operation: bool,
+    runtime_flags: u8,
 }
 
 impl Default for Drawable {
@@ -30,7 +30,7 @@ impl Default for Drawable {
             flattened_draw_rules: None,
             prev: None,
             next: None,
-            needs_save_operation: true,
+            runtime_flags: 1,
         }
     }
 }
@@ -253,10 +253,53 @@ impl Drawable {
         !self.is_hidden()
     }
     pub fn set_needs_save_operation(&mut self, value: bool) {
-        self.needs_save_operation = value;
+        self.runtime_flags = if value {
+            self.runtime_flags | 1
+        } else {
+            self.runtime_flags & !1
+        };
     }
     pub fn needs_save_operation(&self) -> bool {
-        self.needs_save_operation
+        self.runtime_flags & 1 != 0
+    }
+
+    pub fn has_custom_properties(&self) -> bool {
+        self.runtime_flags & 2 != 0
+    }
+    pub fn mark_has_custom_properties(&mut self) {
+        self.runtime_flags |= 2;
+    }
+
+    pub fn custom_property(&self, name_id: u32) -> Option<CoreHandle> {
+        use crate::mechanical_port::source::{
+            custom_property::CustomProperty,
+            generated::{core_registry::CoreRegistry, custom_property_base::CustomPropertyBase},
+        };
+        self.children().iter().find_map(|child| {
+            let property = CustomProperty::tagging(child)?;
+            (CoreRegistry::get_uint_handle(
+                &property,
+                CustomPropertyBase::NAME_ID_PROPERTY_KEY.into(),
+            ) == Some(name_id))
+            .then_some(property)
+        })
+    }
+
+    pub fn custom_property_handle(owner: &CoreHandle, name_id: u32) -> Option<CoreHandle> {
+        owner
+            .with(|o| o.as_drawable().and_then(|d| d.custom_property(name_id)))
+            .flatten()
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn tagging_properties_handle(owner: &CoreHandle) -> Vec<CoreHandle> {
+        owner.with(|o| o.as_drawable().map(|d| d.children().iter().filter_map(crate::mechanical_port::source::custom_property::CustomProperty::tagging).collect())).flatten().unwrap_or_default()
+    }
+
+    pub fn draw_handle(owner: &CoreHandle, renderer: &mut Renderer) {
+        crate::mechanical_port::source::generated::core_registry::drawable_draw_handle(
+            owner, renderer,
+        );
     }
 
     pub fn is_child_of_layout(&self, layout: &CoreHandle) -> bool {

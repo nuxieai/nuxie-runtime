@@ -1141,6 +1141,7 @@ pub trait RendererContract {
     // captured by save() and restored by restore().
     // virtual void modulateOpacity(float opacity) = 0;
     fn modulateOpacity(&mut self, opacity: f32);
+    fn modulateColor(&mut self, _color: u32, _replace: bool) {}
 
     // Additive overloads fall back on the plain overloads for unsupported renderers.
     unsafe fn drawImageWithAdditiveness(

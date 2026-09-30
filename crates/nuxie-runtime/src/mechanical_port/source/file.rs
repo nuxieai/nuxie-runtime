@@ -92,6 +92,7 @@ pub struct RuntimeFileHandle(Rc<RefCell<File>>, Rc<RefCell<Vec<CoreHandle>>>);
 pub struct RuntimeFileWeakHandle(Weak<RefCell<File>>, Weak<RefCell<Vec<CoreHandle>>>);
 
 impl RuntimeFileHandle {
+    pub fn ptr_eq(&self, other: &Self) -> bool { Rc::ptr_eq(&self.0, &other.0) }
     pub fn new(file: File) -> Self {
         // The File's one canonical model table is also reachable during its
         // synchronous import callbacks, without reborrowing File::read.
@@ -1940,6 +1941,10 @@ impl File {
 
     pub fn manifest(&self) -> Option<CoreHandle> {
         self.manifest.clone()
+    }
+
+    pub fn custom_property_key(file: Option<&File>, name: &[u8]) -> u32 {
+        file.and_then(File::manifest).and_then(|m| m.with_downcast::<crate::mechanical_port::source::assets::manifest_asset::ManifestAsset, _>(|m| m.name_id(name) as u32)).unwrap_or(u32::MAX)
     }
 
     pub fn factory(&self) -> RuntimeFactoryHandle {

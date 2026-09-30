@@ -910,3 +910,12 @@ extern "C" void rive_ffi_renderer_modulate_opacity(
         renderer->context->renderer->modulateOpacity(opacity);
     }
 }
+
+extern "C" void rive_ffi_renderer_modulate_color(
+    rive_ffi_renderer* renderer, uint32_t color, uint32_t replace)
+{
+    if (renderer != nullptr && renderer->context->renderer != nullptr)
+    {
+        renderer->context->renderer->modulateColor(color, replace != 0);
+    }
+}

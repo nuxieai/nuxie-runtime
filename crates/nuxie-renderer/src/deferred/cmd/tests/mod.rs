@@ -55,6 +55,17 @@ mod modulate_opacity_test;
         feature = "renderer-metal"
     )
 ))]
+mod modulate_color_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
 mod render_context_null;
 use super::{deferred_replayer::DeferredFrameSink, render_replay::RendererOwner};
 use nuxie_render_api::*;

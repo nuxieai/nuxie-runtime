@@ -53,6 +53,7 @@ public:
                        rive::BlendMode blendMode,
                        float opacity) override;
     void modulateOpacity(float opacity) override;
+    void modulateColor(rive::ColorInt color, bool replace) override;
 
 private:
     RecordingStream* m_stream;

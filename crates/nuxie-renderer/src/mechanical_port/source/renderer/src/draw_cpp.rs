@@ -1503,6 +1503,14 @@ fn base_draw(
     draw
 }
 
+pub(crate) fn color_modulate(value: u32, color: u32, opacity: f32) -> u32 {
+    let alpha = ((value >> 24) as f32 / 255.0) * ((color >> 24) as f32 / 255.0) * opacity;
+    let upper = if alpha < 1.0 { alpha } else { 1.0 };
+    let alpha = if 0.0 < upper { upper } else { 0.0 };
+    let mul8 = |shift: u32| (((value >> shift) & 255) * ((color >> shift) & 255) + 127) / 255;
+    (((255.0 * alpha).round() as u32) << 24) | (mul8(16) << 16) | (mul8(8) << 8) | mul8(0)
+}
+
 pub(crate) fn color_modulate_opacity(value: u32, opacity: f32) -> u32 {
     let source_alpha = (value >> 24) as f32 / 255.0;
     let opacity = source_alpha * opacity;
@@ -1585,6 +1593,7 @@ pub unsafe fn make_path_draw_from_source(
     initial_fill_rule: FillRule,
     paint: &dyn RiveRenderPaintContract,
     modulated_opacity: f32,
+    modulated_color: u32,
     precomputed_pixel_bounds: Option<IAABB>,
 ) -> Option<Box<PathDrawAllocation>> {
     let render_path = unsafe { &*path_ref.get() };
@@ -1738,11 +1747,11 @@ pub unsafe fn make_path_draw_from_source(
             draw_contents |= gpu::DrawContents::activeClip;
         }
     }
-    if modulated_opacity != 1.0 {
+    if modulated_opacity != 1.0 || modulated_color != 0xffff_ffff {
         match paint_type {
             gpu::PaintType::solidColor => {
                 simple_paint_value.color =
-                    color_modulate_opacity(unsafe { simple_paint_value.color }, modulated_opacity)
+                    color_modulate(unsafe { simple_paint_value.color }, modulated_color, modulated_opacity)
             }
             gpu::PaintType::linearGradient
             | gpu::PaintType::radialGradient
@@ -1750,7 +1759,7 @@ pub unsafe fn make_path_draw_from_source(
         }
     }
     let image_texture = paint.getImageTexture();
-    let gradient = paint.getGradientWithOpacity(modulated_opacity);
+    let gradient = paint.getModulatedGradient(modulated_opacity, modulated_color);
     let mut owner = unsafe {
         make_path_draw(
             pixel_bounds,
@@ -2061,7 +2070,7 @@ pub unsafe fn make_image_mesh_draw(
     matrix: Mat2D,
     blend_mode: BlendMode,
     additiveness: f32,
-    opacity: f32,
+    modulated_color: u32,
     image_texture: rcp<gpu::Texture>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
     draw_contents: gpu::DrawContents,
@@ -2095,7 +2104,7 @@ pub unsafe fn make_image_mesh_draw(
     Box::new(ImageMeshDrawAllocation {
         draw: ImageMeshDraw {
             base,
-            opacity,
+            modulated_color,
             index_count,
             vertex_buffer: vertex_buffer_ptr,
             uv_buffer: uv_buffer_ptr,
@@ -2120,7 +2129,7 @@ pub unsafe fn make_image_mesh_draw_from_source(
     uv_buffer: rcp<MechanicalRenderBuffer>,
     index_buffer: rcp<MechanicalRenderBuffer>,
     index_count: u32,
-    opacity: f32,
+    modulated_color: u32,
 ) -> Box<ImageMeshDrawAllocation> {
     debug_assert!(!vertex_buffer.get().is_null());
     debug_assert!(!uv_buffer.get().is_null());
@@ -2131,7 +2140,7 @@ pub unsafe fn make_image_mesh_draw_from_source(
             matrix,
             blend_mode,
             additiveness,
-            opacity,
+            modulated_color,
             image_texture,
             image_sampler,
             gpu::DrawContents::none,

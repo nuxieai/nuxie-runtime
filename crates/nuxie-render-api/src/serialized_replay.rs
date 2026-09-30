@@ -247,6 +247,13 @@ pub fn replay_serialized_commands(
             MODULATE_OPACITY => active
                 .renderer(renderer, &mut dropped_content)
                 .modulate_opacity(reader.read_float32()),
+            MODULATE_COLOR => {
+                let color = reader.read_var_uint() as u32;
+                let replace = reader.read_var_uint() != 0;
+                active
+                    .renderer(renderer, &mut dropped_content)
+                    .modulate_color(color, replace);
+            }
             DRAW_PATH => {
                 let path = reader.read_var_uint();
                 let paint = reader.read_var_uint();

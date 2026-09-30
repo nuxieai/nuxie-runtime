@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 RIVE_RUNTIME_DIR="${RIVE_RUNTIME_DIR:?RIVE_RUNTIME_DIR must point at the pinned rive-runtime checkout}"
-UPSTREAM_REF="f415694b7737e03b8b1aa93f9756645c30b50a6d"
+UPSTREAM_REF="d59ea0d564d11c5eb1685b3e719a94e12a605881"
 EMSDK_REF="e5bd3d0874e302a18f13c5b41f5bacf9a40c8e59"
 EMSDK_DIR="${WEBGL2_EMSDK_DIR:-$RIVE_RUNTIME_DIR/build/dependencies/emsdk_3.1.61}"
 EMSCRIPTEN_DIR="$EMSDK_DIR/upstream/emscripten"

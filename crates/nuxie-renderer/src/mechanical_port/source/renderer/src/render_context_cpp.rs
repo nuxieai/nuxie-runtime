@@ -4887,6 +4887,7 @@ fn empty_flush_descriptor() -> gpu::FlushDescriptor {
         tessVertexSpanCount: 0,
         firstTessVertexSpan: 0,
         gradDataHeight: 0,
+        gradTextureHeight: 0,
         tessDataHeight: 0,
         clockwiseFillOverride: false,
         hasTriangleVertices: false,
@@ -6315,6 +6316,7 @@ impl LogicalFlush {
             draw.blendMode() != nuxie_render_api::BlendMode::SrcOver
                 && !(context.frameInterlockMode() == gpu::InterlockMode::depthStencil
                     && context.platformFeatures().supportsBlendAdvancedKHR),
+            draw.additiveness(),
         );
         unsafe { context.m_paint_data.emplace_back(paint) };
         let gradient_coeffs = if draw.gradient().is_null() {
@@ -6547,6 +6549,7 @@ impl LogicalFlush {
             gradient_type,
             gradient_span,
             gradient_y,
+            unsafe { (*draw).additiveness() },
         );
         unsafe { context.m_image_rect_instance_data.emplace_back(instance) };
         unsafe {
@@ -6579,6 +6582,7 @@ impl LogicalFlush {
             unsafe { (*draw).clipID() },
             unsafe { (*draw).blendMode() },
             self.m_current_z_index,
+            unsafe { (*draw).additiveness() },
         );
         unsafe { context.m_image_mesh_instance_data.emplace_back(instance) };
         let batch = unsafe {
@@ -6927,6 +6931,9 @@ impl LogicalFlush {
             .featherAtlasTextureHeight as u16;
         self.m_grad_texture_layout.inverseHeight =
             1.0 / context.m_current_resource_allocations.gradTextureHeight as f32;
+        self.m_flush_desc.gradTextureHeight =
+            u32::try_from(context.m_current_resource_allocations.gradTextureHeight)
+                .expect("gradient texture height fits u32");
         let first_tess_span = context.m_tess_span_data.elementsWritten();
         let initial_triangle_bytes = context.m_triangle_vertex_data.bytesWritten();
         let tess_alignment_padding =
@@ -7006,6 +7013,7 @@ impl LogicalFlush {
             false,
             nuxie_render_api::BlendMode::SrcOver,
             false, // solidUnmultiplied
+            0.0,   // additiveness
         );
         unsafe {
             context.m_paint_data.emplace_back(clear_paint);

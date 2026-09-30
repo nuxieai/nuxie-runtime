@@ -573,6 +573,15 @@ extern "C" void rive_ffi_render_paint_feather(rive_ffi_render_paint* paint,
     }
 }
 
+extern "C" void rive_ffi_render_paint_additiveness(rive_ffi_render_paint* paint,
+                                                float additiveness)
+{
+    if (paint != nullptr)
+    {
+        paint->paint->additiveness(additiveness);
+    }
+}
+
 extern "C" void rive_ffi_render_paint_blend_mode(rive_ffi_render_paint* paint,
                                                  uint8_t blendMode)
 {
@@ -818,6 +827,24 @@ extern "C" void rive_ffi_renderer_draw_image(
     }
 }
 
+extern "C" void rive_ffi_renderer_draw_image_with_additiveness(
+    rive_ffi_renderer* renderer,
+    const rive_ffi_render_image* image,
+    uint8_t sampler,
+    uint8_t blendMode,
+    float opacity, float additiveness)
+{
+    if (renderer != nullptr && renderer->context->renderer != nullptr)
+    {
+        renderer->context->renderer->drawImage(
+            image == nullptr ? nullptr : image->image.get(),
+            to_image_sampler(sampler),
+            static_cast<rive::BlendMode>(blendMode),
+            opacity, additiveness);
+        renderer->context->drawCount += 1;
+    }
+}
+
 extern "C" void rive_ffi_renderer_draw_image_mesh(
     rive_ffi_renderer* renderer,
     const rive_ffi_render_image* image,
@@ -842,6 +869,34 @@ extern "C" void rive_ffi_renderer_draw_image_mesh(
             indexCount,
             static_cast<rive::BlendMode>(blendMode),
             opacity);
+        renderer->context->drawCount += 1;
+    }
+}
+
+extern "C" void rive_ffi_renderer_draw_image_mesh_with_additiveness(
+    rive_ffi_renderer* renderer,
+    const rive_ffi_render_image* image,
+    uint8_t sampler,
+    const rive_ffi_render_buffer* vertices,
+    const rive_ffi_render_buffer* uvCoords,
+    const rive_ffi_render_buffer* indices,
+    uint32_t vertexCount,
+    uint32_t indexCount,
+    uint8_t blendMode,
+    float opacity, float additiveness)
+{
+    if (renderer != nullptr && renderer->context->renderer != nullptr)
+    {
+        renderer->context->renderer->drawImageMesh(
+            image == nullptr ? nullptr : image->image.get(),
+            to_image_sampler(sampler),
+            vertices == nullptr ? nullptr : vertices->buffer,
+            uvCoords == nullptr ? nullptr : uvCoords->buffer,
+            indices == nullptr ? nullptr : indices->buffer,
+            vertexCount,
+            indexCount,
+            static_cast<rive::BlendMode>(blendMode),
+            opacity, additiveness);
         renderer->context->drawCount += 1;
     }
 }

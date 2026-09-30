@@ -1,64 +1,64 @@
 #ifdef CB
-h1(l3)J(0,c,OC);i1 h1(C3)J(1,c,PC);i1 h1(o1)J(y9,f,VB);J(z9,f,RB);J(A9,f,NB);J(B9,uint,WB);J(C9,uint,XB);J(D9,uint,YB);J(E9,uint,LC);i1
+h1(n3)K(0,c,OC);i1 h1(C3)K(1,c,PC);i1 h1(p1)K(y9,f,WB);K(z9,f,RB);K(A9,f,NB);K(B9,uint,XB);K(C9,uint,YB);K(D9,uint,ZB);K(E9,uint,LC);i1
 #endif
-q2 I0 W(0,c,K5);
+q2 I0 W(0,c,L5);
 #ifdef I
 MB W(1,d,O3);
 #endif
 #if defined(AB)&&!defined(BB)
-I0 W(2,f,N0);
+I0 W(2,f,O0);
 #endif
-MB W(3,i,J1);
+MB W(3,i,K1);
 #ifdef S
-T2 W(4,L,C1);
+V2 W(4,N,D1);
 #endif
 i2
 #ifdef CB
-X3 Y3 K6(EC,l3,m3,C3,D3,o1,h0,B){K(B,m3,OC,c);K(B,D3,PC,c);K(v,h0,VB,f);K(v,h0,RB,f);K(v,h0,NB,f);K(v,h0,WB,uint);K(v,h0,XB,uint);K(v,h0,YB,uint);K(v,h0,LC,uint);U(K5,c);
+Y3 Z3 L6(EC,n3,o3,C3,D3,p1,h0,B){L(B,o3,OC,c);L(B,D3,PC,c);L(v,h0,WB,f);L(v,h0,RB,f);L(v,h0,NB,f);L(v,h0,XB,uint);L(v,h0,YB,uint);L(v,h0,ZB,uint);L(v,h0,LC,uint);U(L5,c);
 #ifdef I
 U(O3,d);
 #endif
 #if defined(AB)&&!defined(BB)
-U(N0,f);
+U(O0,f);
 #endif
-U(J1,i);
+U(K1,i);
 #ifdef S
-U(C1,L);
+U(D1,N);
 #endif
-c k0=O0(K1(VB),OC)+NB.xy;K5=PC;
+c l0=P0(L1(WB),OC)+NB.xy;L5=PC;
 #ifdef I
-if(I){O3=x8(XB,j.f6);}
+if(I){O3=x8(YB,j.g6);}
 #endif
 #ifdef AB
 if(AB){
 #ifndef BB
-N0=W7(K1(RB),NB.zw,k0 B5);
+O0=W7(L1(RB),NB.zw,l0 C5);
 #else
-Nc(K1(RB),NB.zw,k0 B5);
+Rc(L1(RB),NB.zw,l0 C5);
 #endif
 }
 #endif
-f X=Q3(k0);
+f X=Q3(l0);
 #ifdef RC
 X.y=-X.y;
 #endif
 #ifdef BB
-X.z=pa(LC);
+X.z=qa(LC);
 #endif
-J1=unpackUnorm4x8(WB);
+K1=unpackUnorm4x8(XB);
 #ifdef S
-C1=a2(YB);
+D1=a2(ZB);
 #endif
-c0(K5);
+c0(L5);
 #ifdef I
 c0(O3);
 #endif
 #if defined(AB)&&!defined(BB)
-c0(N0);
+c0(O0);
 #endif
-c0(J1);
+c0(K1);
 #ifdef S
-c0(C1);
+c0(D1);
 #endif
-B1(X);}
+C1(X);}
 #endif

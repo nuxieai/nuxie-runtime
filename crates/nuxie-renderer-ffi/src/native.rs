@@ -560,6 +560,29 @@ impl Renderer for FfiFrame {
         };
     }
 
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        unsafe {
+            ffi::rive_ffi_renderer_draw_image_with_additiveness(
+                self.renderer.as_ptr(),
+                image
+                    .map(ffi_image)
+                    .map(|image| image.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                sampler.as_key(),
+                blend_mode as u8,
+                opacity,
+                additiveness,
+            )
+        };
+    }
+
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -596,6 +619,48 @@ impl Renderer for FfiFrame {
                 index_count,
                 blend_mode as u8,
                 opacity,
+            )
+        };
+    }
+
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        unsafe {
+            ffi::rive_ffi_renderer_draw_image_mesh_with_additiveness(
+                self.renderer.as_ptr(),
+                image
+                    .map(ffi_image)
+                    .map(|image| image.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                sampler.as_key(),
+                vertices
+                    .map(ffi_buffer)
+                    .map(|buffer| buffer.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                uv_coords
+                    .map(ffi_buffer)
+                    .map(|buffer| buffer.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                indices
+                    .map(ffi_buffer)
+                    .map(|buffer| buffer.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                vertex_count,
+                index_count,
+                blend_mode as u8,
+                opacity,
+                additiveness,
             )
         };
     }
@@ -714,6 +779,9 @@ impl RenderPaint for FfiRenderPaint {
 
     fn feather(&mut self, value: f32) {
         unsafe { ffi::rive_ffi_render_paint_feather(self.handle.as_ptr(), value) };
+    }
+    fn additiveness(&mut self, value: f32) {
+        unsafe { ffi::rive_ffi_render_paint_additiveness(self.handle.as_ptr(), value) };
     }
 
     fn blend_mode(&mut self, value: BlendMode) {
@@ -1087,6 +1155,7 @@ mod ffi {
         pub fn rive_ffi_render_paint_join(paint: *mut RenderPaint, join: u32);
         pub fn rive_ffi_render_paint_cap(paint: *mut RenderPaint, cap: u32);
         pub fn rive_ffi_render_paint_feather(paint: *mut RenderPaint, feather: f32);
+        pub fn rive_ffi_render_paint_additiveness(paint: *mut RenderPaint, additiveness: f32);
         pub fn rive_ffi_render_paint_blend_mode(paint: *mut RenderPaint, blend_mode: u8);
         pub fn rive_ffi_render_paint_shader(paint: *mut RenderPaint, shader: *mut RenderShader);
         pub fn rive_ffi_render_paint_invalidate_stroke(paint: *mut RenderPaint);
@@ -1150,6 +1219,15 @@ mod ffi {
             blend_mode: u8,
             opacity: f32,
         );
+
+        pub fn rive_ffi_renderer_draw_image_with_additiveness(
+            renderer: *mut Renderer,
+            image: *mut RenderImage,
+            sampler: u8,
+            blend_mode: u8,
+            opacity: f32,
+            additiveness: f32,
+        );
         pub fn rive_ffi_renderer_draw_image_mesh(
             renderer: *mut Renderer,
             image: *mut RenderImage,
@@ -1161,6 +1239,20 @@ mod ffi {
             index_count: u32,
             blend_mode: u8,
             opacity: f32,
+        );
+
+        pub fn rive_ffi_renderer_draw_image_mesh_with_additiveness(
+            renderer: *mut Renderer,
+            image: *mut RenderImage,
+            sampler: u8,
+            vertices: *mut RenderBuffer,
+            uv_coords: *mut RenderBuffer,
+            indices: *mut RenderBuffer,
+            vertex_count: u32,
+            index_count: u32,
+            blend_mode: u8,
+            opacity: f32,
+            additiveness: f32,
         );
         pub fn rive_ffi_renderer_modulate_opacity(renderer: *mut Renderer, opacity: f32);
     }

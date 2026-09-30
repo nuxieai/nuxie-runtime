@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/metal.glsl.
  *
- * Upstream source revision: 2210ed8799c0128504dd664a7179f4f8f299e85a
+ * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2210ed8799c0128504dd664a7179f4f8f299e85a";
+pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/metal.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d9f1e0790e5df593bf91794f68f30120c39fcbbed39df1e43f086f0ac5c8aee4";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 534;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 27098;
+    "20116330a891582022b640d3c1b20e33f450dd91a31cce9871e6825966829dd5";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 536;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 27236;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
@@ -296,10 +296,11 @@ pub const PINNED_METAL_GLSL_SOURCE: &str = r###"/*
     }
 
 #define FRAGMENT_CONTEXT_DECL                                                  \
-    , float2 _fragCoord, FragmentTextures _textures,                           \
-        FragmentStorageBuffers _buffers, DynamicSamplers _dynamicSampler
+    , $constant @FlushUniforms &uniforms, float2 _fragCoord,                   \
+        FragmentTextures _textures, FragmentStorageBuffers _buffers,           \
+        DynamicSamplers _dynamicSampler
 #define FRAGMENT_CONTEXT_UNPACK                                                \
-    , _fragCoord, _textures, _buffers, _dynamicSampler
+    , uniforms, _fragCoord, _textures, _buffers, _dynamicSampler
 
 #define TEXTURE_CONTEXT_DECL , FragmentTextures _textures
 #define TEXTURE_CONTEXT_FORWARD , _textures
@@ -525,6 +526,7 @@ INLINE half2 unpackHalf2x16(uint x) { return $as_type<half2>(x); }
 INLINE uint packHalf2x16(half2 x) { return $as_type<uint>(x); }
 INLINE half4 unpackUnorm4x8(uint x) { return $unpack_unorm4x8_to_half(x); }
 INLINE uint packUnorm4x8(half4 x) { return $pack_half_to_unorm4x8(x); }
+INLINE float2 unpackUnorm2x16(uint x) { return $unpack_unorm2x16_to_float(x); }
 
 INLINE float2x2 inverse(float2x2 m)
 {

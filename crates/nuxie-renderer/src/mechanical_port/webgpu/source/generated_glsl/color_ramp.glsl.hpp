@@ -7,29 +7,29 @@ namespace gpu {
 namespace glsl {
 const char color_ramp[] = R"===(#ifdef CB
 h1(g0)
-#ifdef ba
-J(0,uint,TD);J(1,uint,UD);J(2,uint,VD);J(3,uint,WD);
+#ifdef ca
+K(0,uint,TD);K(1,uint,UD);K(2,uint,VD);K(3,uint,WD);
 #else
-J(0,Y,IC);
+K(0,Y,IC);
 #endif
 i1
 #endif
-q2 I0 W(0,i,X6);i2
+q2 I0 W(0,i,Y6);i2
 #ifdef CB
-X3 Y3 E4 F4 i Ff(uint k){return sc((Y(k,k,k,k)>>Y(16,8,0,24))&0xffu)/255.;}A1(LF,g0,F,B,v){
-#ifdef ba
-K(v,F,TD,uint);K(v,F,UD,uint);K(v,F,VD,uint);K(v,F,WD,uint);Y IC=Y(TD,UD,VD,WD);
+Y3 Z3 F4 G4 i Kf(uint k){return wc((Y(k,k,k,k)>>Y(16,8,0,24))&0xffu)/255.;}B1(LF,g0,F,B,v){
+#ifdef ca
+L(v,F,TD,uint);L(v,F,UD,uint);L(v,F,VD,uint);L(v,F,WD,uint);Y IC=Y(TD,UD,VD,WD);
 #else
-K(v,F,IC,Y);
+L(v,F,IC,Y);
 #endif
-U(X6,i);int q8=B>>1;float x=float(q8<=1?IC.x&0xffffu:IC.x>>16)/65536.;float ca=(B&1)==0?.0:1.;if(j.tc<.0){ca=1.-ca;}uint Y6=IC.y;float y=float(Y6&~Gf)+ca;if((Y6&uc)!=0u&&q8==0){if((Y6&da)!=0u)x=.0;else x-=vc;}if((Y6&wc)!=0u&&q8==3){if((Y6&da)!=0u)x=1.;else x+=vc;}X6=Ff(q8<=1?IC.z:IC.w);f X=r8(c(x,y),2.,j.tc);
+U(Y6,i);int q8=B>>1;float x=float(q8<=1?IC.x&0xffffu:IC.x>>16)/65536.;float da=(B&1)==0?.0:1.;if(j.xc<.0){da=1.-da;}uint Z6=IC.y;float y=float(Z6&~Lf)+da;if((Z6&yc)!=0u&&q8==0){if((Z6&ea)!=0u)x=.0;else x-=zc;}if((Z6&Ac)!=0u&&q8==3){if((Z6&ea)!=0u)x=1.;else x+=zc;}Y6=Kf(q8<=1?IC.z:IC.w);f X=r8(c(x,y),2.,j.xc);
 #ifdef RC
 X.y=-X.y;
 #endif
-c0(X6);B1(X);}
+c0(Y6);C1(X);}
 #endif
 #ifdef EB
-I3 J3 d3(i,MF){r(X6,i);L2(X6);}
+I3 J3 f3(i,MF){r(Y6,i);M2(Y6);}
 #endif
 )===";
 } // namespace glsl

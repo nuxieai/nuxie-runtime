@@ -1,43 +1,45 @@
-struct AC {
-    tc: f32,
-    Dd: f32,
-    Hf: f32,
-    If: f32,
-    q6_: u32,
-    Qb: u32,
-    tf: u32,
-    uf: u32,
+struct SB {
+    xc: f32,
+    Hd: f32,
+    Mf: f32,
+    Nf: f32,
+    r6_: u32,
+    Rb: u32,
+    yf: u32,
+    zf: u32,
     X7_: vec4<i32>,
-    eh: vec2<f32>,
-    Ed: vec2<f32>,
+    jh: vec2<f32>,
+    Id: vec2<f32>,
     f2_: u32,
-    ih: f32,
-    f6_: u32,
-    U2_: f32,
-    Fd: f32,
-    of_: u32,
+    nh: f32,
+    g6_: u32,
+    W2_: f32,
+    Jd: f32,
+    sf: u32,
     F3_: f32,
     G3_: f32,
-    Gd: f32,
-    bh: u32,
-    Pb: u32,
+    Kd: f32,
+    gh: u32,
+    Qb: u32,
+    dc: f32,
+    ec: f32,
 }
 
-var<private> lh: vec4<f32>;
-var<private> X6_1: vec4<f32>;
+var<private> qh: vec4<f32>;
+var<private> Y6_1: vec4<f32>;
 @group(0) @binding(0)
-var<uniform> j: AC;
+var<uniform> j: SB;
 
 fn main_1() {
-    let _e3 = X6_1;
-    lh = _e3;
+    let _e3 = Y6_1;
+    qh = _e3;
     return;
 }
 
 @fragment
-fn main(@location(0) X6_: vec4<f32>) -> @location(0) vec4<f32> {
-    X6_1 = X6_;
+fn main(@location(0) Y6_: vec4<f32>) -> @location(0) vec4<f32> {
+    Y6_1 = Y6_;
     main_1();
-    let _e3 = lh;
+    let _e3 = qh;
     return _e3;
 }

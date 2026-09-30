@@ -3321,6 +3321,7 @@ pub struct FlushDescriptor {
     pub tessVertexSpanCount: u32,
     pub firstTessVertexSpan: usize,
     pub gradDataHeight: u32,
+    pub gradTextureHeight: u32,
     pub tessDataHeight: u32,
     pub clockwiseFillOverride: bool,
     pub hasTriangleVertices: bool,
@@ -3376,7 +3377,9 @@ pub struct FlushUniforms {
     pub m_ditherConversionToRGB10: f32,
     pub m_wireframeEnabled: u32,
     pub m_renderTargetBottomUp: u32,
-    pub m_padTo256Bytes: [u8; 256 - 108],
+    pub m_gradTextureYScale: f32,
+    pub m_gradTextureYBias: f32,
+    pub m_padTo256Bytes: [u8; 256 - 116],
 }
 
 impl FlushUniforms {
@@ -3440,7 +3443,7 @@ pub const kPathBufferAlignmentInElements: usize = 256 / core::mem::size_of::<Pat
 #[derive(Clone, Copy)]
 pub union PaintDataValue {
     pub m_color: u32,
-    pub m_gradTextureY: f32,
+    pub m_gradTextureRowAndAdditiveness: f32,
     pub m_shiftedClipReplacementID: u32,
 }
 

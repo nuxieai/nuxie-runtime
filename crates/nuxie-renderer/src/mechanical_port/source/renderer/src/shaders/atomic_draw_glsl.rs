@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
+ * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
+pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "6e55d8b08cc536b5a0c74e52332367d57507b753482543ceb61c6321fdfd6bc3";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1173;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 40640;
+    "bdad4b17fa4fd600482d70d3a74df9460a608cb7fd9981e6cab1c9c461064fbd";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1183;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 41165;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -694,11 +694,21 @@ INLINE void resolve_paint(uint pathID,
                       : /*radial*/ length(paintCoord);
         t = clamp(t, .0, 1.);
         float x = t * translate.z + translate.w;
-        float y = uintBitsToFloat(paintData.y);
+        // paintData.y has (gradient Y row + 1) in the integer part,
+        // additiveness in range 0/256 to 255/256 in the fraction
+        float gradRowAndAdditiveness = uintBitsToFloat(paintData.y);
+        float gradY =
+            floor(gradRowAndAdditiveness) * uniforms.gradTextureYScale +
+            uniforms.gradTextureYBias;
         fragColorOut =
-            TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, y), .0);
+            TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, gradY), .0);
         if (!paintHasAdvancedBlend) // If not advanced blend then premultiply.
+        {
             fragColorOut.rgb *= fragColorOut.a;
+            half additiveness = cast_float_to_half(
+                fract(gradRowAndAdditiveness) * (256. / 255.));
+            fragColorOut.a *= additiveness;
+        }
     }
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT) && defined(@ENABLE_ADVANCED_BLEND)
     // NOTE: fixedFunctionColorOutput is never selected for a flush that
@@ -736,7 +746,7 @@ INLINE void resolve_paint(uint pathID,
 INLINE void blend_pls_color_src_over(half4 fragColorOut PLS_CONTEXT_DECL)
 {
 #ifndef @PLS_BLEND_SRC_OVER
-    if (fragColorOut.a == .0)
+    if (fragColorOut.r + fragColorOut.g + fragColorOut.b + fragColorOut.a == .0)
         return;
     float oneMinusSrcAlpha = 1. - fragColorOut.a;
     if (oneMinusSrcAlpha != .0)

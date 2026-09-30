@@ -2514,6 +2514,8 @@ pub trait RenderPaint: Any {
     fn join(&mut self, value: StrokeJoin);
     fn cap(&mut self, value: StrokeCap);
     fn feather(&mut self, value: f32);
+    /// Only used with srcOver. Unsupported paints retain the source no-op.
+    fn additiveness(&mut self, _value: f32) {}
     fn blend_mode(&mut self, value: BlendMode);
     fn shader(&mut self, shader: Option<&dyn RenderShader>);
     fn invalidate_stroke(&mut self);
@@ -2610,6 +2612,44 @@ pub trait Renderer {
         opacity: f32,
     );
     fn modulate_opacity(&mut self, opacity: f32);
+
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+        _additiveness: f32,
+    ) {
+        self.draw_image(image, sampler, blend_mode, opacity);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+        _additiveness: f32,
+    ) {
+        self.draw_image_mesh(
+            image,
+            sampler,
+            vertices,
+            uv_coords,
+            indices,
+            vertex_count,
+            index_count,
+            blend_mode,
+            opacity,
+        );
+    }
 
     /// Reports the renderer's current transform (CTM), if the renderer tracks
     /// one. Needed when a draw has to be re-issued through a different

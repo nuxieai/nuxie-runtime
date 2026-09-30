@@ -654,6 +654,22 @@ impl Renderer for ReplayFrameRenderer {
             .renderer()
             .draw_image(image, sampler, blend, opacity);
     }
+
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image_with_additiveness(image, sampler, blend, opacity, additiveness);
+    }
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -681,6 +697,38 @@ impl Renderer for ReplayFrameRenderer {
                 index_count,
                 blend,
                 opacity,
+            );
+    }
+
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uvs: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image_mesh_with_additiveness(
+                image,
+                sampler,
+                vertices,
+                uvs,
+                indices,
+                vertex_count,
+                index_count,
+                blend,
+                opacity,
+                additiveness,
             );
     }
     fn modulate_opacity(&mut self, opacity: f32) {

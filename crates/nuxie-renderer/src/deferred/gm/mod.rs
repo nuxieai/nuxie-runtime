@@ -1,6 +1,8 @@
 //! The eight deferred GM source owners added by upstream e949498e.
 //! These use the live Metal backend, not a command-only stand-in. The paired
 //! GMs use gmmain.cpp's non-atomic comparison (zero channel difference).
+mod additive_advanced_blend;
+mod additive_blend;
 mod bitmap_cache_pixel;
 mod clipstrokes;
 mod image_paint;

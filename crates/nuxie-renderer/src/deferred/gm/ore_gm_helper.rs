@@ -94,6 +94,22 @@ impl Renderer for FrameRenderer {
             .renderer()
             .draw_image(i, s, b, o);
     }
+
+    fn draw_image_with_additiveness(
+        &mut self,
+        i: Option<&dyn RenderImage>,
+        s: ImageSampler,
+        b: BlendMode,
+        o: f32,
+        additiveness: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image_with_additiveness(i, s, b, o, additiveness);
+    }
     fn draw_image_mesh(
         &mut self,
         i: Option<&dyn RenderImage>,
@@ -112,6 +128,27 @@ impl Renderer for FrameRenderer {
             .unwrap()
             .renderer()
             .draw_image_mesh(i, s, v, u, idx, vc, ic, b, o);
+    }
+
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        i: Option<&dyn RenderImage>,
+        s: ImageSampler,
+        v: Option<&dyn RenderBuffer>,
+        u: Option<&dyn RenderBuffer>,
+        idx: Option<&dyn RenderBuffer>,
+        vc: u32,
+        ic: u32,
+        b: BlendMode,
+        o: f32,
+        additiveness: f32,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image_mesh_with_additiveness(i, s, v, u, idx, vc, ic, b, o, additiveness);
     }
     fn modulate_opacity(&mut self, o: f32) {
         self.0

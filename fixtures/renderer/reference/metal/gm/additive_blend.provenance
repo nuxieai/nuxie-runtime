@@ -1,0 +1,37 @@
+provenance_schema=1
+renderer_implementation=cpp-native-metal-approved-fma-and-coverage-adaptations
+capture_tool=upstream-gms
+build_command=PREMAKE_PATH=<upstream>/build premake5 gmake2 --config=release --out=out/b86b-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/b86b-gms-text-canvas -j8 gms
+capture_command=MTL_DEBUG_LAYER=1 tests/out/b86b-gms-text-canvas/gms --backend metal --headless --match additive --output <capture-dir> -p1 --verbose
+backend=metal
+adapter_vendor=apple
+adapter_device=Apple M5 Max
+adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
+case_id=additive_blend
+gm_source=tests/gm/additive_blend.cpp
+gm_source_sha256=1e240b5ff060f27756adfd1314dbc327c42258baa791aaa7c31bf023f0c0f0e9
+runtime_revision=b86b7ecb0256842cc37823f63c8699d5bffe081e
+metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
+xcode_version=27.0
+xcode_build=27A266a
+capture_binary_sha256=50b0b2418ab7e9b94ec591c1fb7be6c1a7ef666be732afb7c607c96c22e314fa
+png_sha256=08e3113f510a4a4b10b9d6a1be46cfee8d6a9b6a924cc45ee6d00448cdc68ec2
+shader_regeneration_command=PYTHONHASHSEED=0 make -C renderer/src/shaders -j8 OUT=<upstream>/tests/out/b86b-gms-text-canvas/include/generated/shaders FLAGS='-p <upstream>/tests/dependencies/dabeaz_ply_3.11' rive_pls_macosx_metallib; make -C tests/out/b86b-gms-text-canvas -j8 gms
+approved_fma_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
+fma_adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
+upstream_fragment_shader_sha256=1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418
+adapted_fragment_shader_sha256=5e14624af99ec46b52bc655a87b90e78761681fd53277cb02768613a8e0f96ad
+approved_coverage_adaptation_commit=a07db8d3ec50af8eb940db4af788fbbfad74b626
+coverage_adaptation=draw_path.vert selects float4 COVERAGE_TYPE and preserves coverages before interpolation when ENABLE_FEATHER or METAL; both guards and comment match the existing Rust shader literal
+upstream_vertex_shader_sha256=c614020a453eab1e105ca0152fbccfc0cf0ac7fab5e399b16035dbc4735952f3
+adapted_vertex_shader_sha256=b3494fb2efc3dc3768cd1d5a42c63fd2a2a4b8a9362de8f485eda7f73e9736bc
+pristine_capture_file=additive_blend.pristine.png
+pristine_capture_binary_sha256=38bde6f08fe120672f67e68d84f289f1478733b9ea278525601c928973c5da12
+pristine_png_sha256=8602e2d96466a29b2ffa8ae3ef9a13a2399500ce2c57e1e7d06c93033bb1c5ad
+pristine_comparison=661 differing pixels, maximum channel delta 1; FMA alone leaves 78 stroked-circle pixels; both approved adaptations give exact equality
+frame=0
+frame_width=600
+frame_height=1800
+mode=raster-ordering
+shader_compilation_mode=always-synchronous
+sample_count=1

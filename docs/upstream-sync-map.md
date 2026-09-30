@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ead028268df05ee29a6703eeee7a0c2ed0dc245b`
+- LAST_SYNCED_SHA: `5f2c56090986c9ca8c079413ed317257bf60b3cf`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 44 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 44 require a Rust translation.
+  There are 43 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 43 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `5f2c56090986c9ca8c079413ed317257bf60b3cf` | **ALREADY EQUIVALENT:** the public delta introduces a U8 macro to reinterpret C++20 char8_t test literals as char on MSVC. Rust String/str literals in the translated command-queue tests already preserve the same UTF-8 payload and expected bytes (`héllo 日本 😀`, `é`, `hellé`); no runtime or test assertion change is needed. The only other public change is the private editor revision pointer. | — |
 | `ead028268df05ee29a6703eeee7a0c2ed0dc245b` | Expose existing state-machine keyboard and committed-text dispatch through the command queue. Preserve owned text payloads, key modifiers/press/repeat flags, request IDs, invalid/deleted-handle errors and asynchronous handled results delivered to global then per-state-machine listeners. Port all four upstream input cases, including both invalid-handle variants and real text-field editing, within the approved Rust queue/server execution boundary. | — |
 | `df0cc777d8211f81824943a7665884f5565aecb8` | Tag drawables with custom properties using generated name key 449; carry file-scoped property lookup, reentrant draw visitors and floating nested modulation levels through native runtime and Luau. Translate renderer color modulation, gradient cache identity, image/mesh packing, deferred commands and serialized opcode 35; forward through native/browser adapters and recording/replay tools. Port all three runtime cases, all three renderer cases and the complete scripting visitor case with both exact fixtures. Wasm execution bindings, borrowed drawable handles, trap-save cleanup, guarded IDL generation and web imports remain parked; private editor changes named in the message are absent from the public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `1f7efd6c629383d00ab6daf4923e37e501901f48` | Measure skinned path winding, cache only noncollapsed measurements with a consistent bone orientation, and preserve the upstream folded-without-mirroring limitation. Reset on vertex changes, not bone moves. Add opt-in nearby-origin coarse area with the same zero-origin default; correct the touched owner's scalarized cubic sample guard/reciprocal order to match the source SIMD lanes. Port the raw-path regression and all eight skinned-winding cases. WITH_RIVE_EDITOR binding-reset hooks remain outside the existing shipped runtime profile; tools is not that editor profile. | — |

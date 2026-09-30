@@ -1267,8 +1267,8 @@ impl ArtboardInstance {
         self.update_components();
         let query = build_text_query(&self.object_handle(local_id)?)?;
         let code_point = byte_to_code_point(&query.value, byte_offset)?;
-        let position = CursorPosition::at_index(code_point, &query.shape);
-        let visual = position.visual_position(&query.shape);
+        let position = CursorPosition::at_index(code_point, &query.shape.layout_view());
+        let visual = position.visual_position(&query.shape.layout_view());
         if !visual.found() {
             return None;
         }
@@ -1300,7 +1300,7 @@ impl ArtboardInstance {
         if !local.x.is_finite() || !local.y.is_finite() {
             return None;
         }
-        let position = CursorPosition::from_translation(local, &query.shape);
+        let position = CursorPosition::from_translation(local, &query.shape.layout_view());
         code_point_to_byte(&query.value, position.code_point_index())
     }
 
@@ -1326,9 +1326,9 @@ impl ArtboardInstance {
             CursorPosition::unresolved(start),
             CursorPosition::unresolved(end),
         );
-        cursor.resolve_line_positions(&query.shape);
+        cursor.resolve_line_positions(&query.shape.layout_view());
         let mut rectangles = Vec::new();
-        cursor.selection_rects(&mut rectangles, &query.shape);
+        cursor.selection_rects(&mut rectangles, &query.shape.layout_view());
         let rectangles = rectangles
             .into_iter()
             .map(|bounds| transform_bounds(bounds, query.world))

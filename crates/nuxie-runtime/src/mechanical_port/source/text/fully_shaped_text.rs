@@ -17,6 +17,15 @@ pub struct FullyShapedText {
     vertical_offset: f32,
 }
 impl FullyShapedText {
+    pub fn layout_view(&self) -> super::text_layout_view::TextLayoutView<'_> {
+        super::text_layout_view::TextLayoutView::new(
+            &self.paragraphs,
+            &self.paragraph_lines,
+            &self.ordered_lines,
+            &self.glyph_lookup,
+            self.glyph_lookup.last_code_point_index().saturating_sub(1),
+        )
+    }
     pub fn vertical_offset(&self) -> f32 {
         self.vertical_offset
     }

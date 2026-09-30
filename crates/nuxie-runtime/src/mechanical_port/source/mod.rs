@@ -107,6 +107,7 @@ pub mod script_input_string;
 pub mod script_input_trigger;
 pub mod script_input_viewmodel_property;
 pub mod scripted;
+pub mod selection_style;
 pub mod semantic;
 pub mod shape_paint_type;
 pub mod shapes;

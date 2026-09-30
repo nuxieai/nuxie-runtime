@@ -436,11 +436,11 @@ pub struct Text {
     runs: Vec<CoreHandle>,
     all_runs: Vec<TextValueRunHandle>,
     render_styles: Vec<CoreHandle>,
-    shape: Vec<Paragraph>,
+    pub(super) shape: Vec<Paragraph>,
     modifier_shape: Vec<Paragraph>,
-    lines: Vec<Vec<GlyphLine>>,
+    pub(super) lines: Vec<Vec<GlyphLine>>,
     modifier_lines: Vec<Vec<GlyphLine>>,
-    ordered_lines: Vec<OrderedLine>,
+    pub(super) ordered_lines: Vec<OrderedLine>,
     ellipsis_run: GlyphRun,
     clip_rect: RawPath,
     clip_path: ShapePaintPath,
@@ -449,7 +449,9 @@ pub struct Text {
     // helper so switching overflow modes cannot reuse a stale fitted gap.
     fitted_font_scale: f32,
     modifier_groups: Vec<CoreHandle>,
-    styled_text: StyledText,
+    pub(super) styled_text: StyledText,
+    pub(super) selection_controller:
+        std::rc::Weak<RefCell<super::text_selection_controller::SelectionState>>,
     modifier_styled_text: StyledText,
     glyph_lookup: GlyphLookup,
     text_style_paints: Vec<CoreHandle>,
@@ -485,6 +487,7 @@ impl Default for Text {
             fitted_font_scale: 1.0,
             modifier_groups: Vec::new(),
             styled_text: StyledText::default(),
+            selection_controller: std::rc::Weak::new(),
             modifier_styled_text: StyledText::default(),
             glyph_lookup: GlyphLookup::default(),
             text_style_paints: Vec::new(),
@@ -497,6 +500,16 @@ impl Default for Text {
             emoji_image_cache: Vec::new(),
             draw_commands: Vec::new(),
             value_run_listeners: Vec::new(),
+        }
+    }
+}
+
+impl Drop for Text {
+    fn drop(&mut self) {
+        if let Some(controller) = self.selection_controller.upgrade() {
+            if let Some(handle) = self.base.handle() {
+                controller.borrow_mut().remove_dropping_text(&handle);
+            }
         }
     }
 }
@@ -529,6 +542,9 @@ impl Text {
 
     pub fn shape_world_transform(&self) -> &Mat2D {
         &self.shape_world_transform
+    }
+    pub fn unichars(&self) -> &[u32] {
+        self.styled_text.unichars()
     }
 
     pub fn mark_shape_dirty(&mut self) {
@@ -1038,6 +1054,13 @@ impl Text {
             self.shape_world_transform = *self.base.world_transform() * self.internal_transform;
             self.clip_path
                 .add_path(&self.clip_rect, Some(&self.shape_world_transform));
+        }
+        if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
+            if let Some(controller) = self.selection_controller.upgrade() {
+                controller
+                    .borrow_mut()
+                    .text_updated(self, value.intersects(ComponentDirt::PATH));
+            }
         }
     }
     fn rebuild_ordered_lines(&mut self) {
@@ -1643,6 +1666,9 @@ impl Text {
                     background.draw(renderer, &world_transform, blend_mode);
                 });
             }
+        }
+        if let Some(controller) = self.selection_controller.upgrade() {
+            controller.borrow_mut().draw(self, renderer);
         }
         for index in 0..self.draw_commands.len() {
             match &self.draw_commands[index] {

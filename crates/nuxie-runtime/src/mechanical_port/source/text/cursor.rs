@@ -1,4 +1,4 @@
-use super::fully_shaped_text::FullyShapedText;
+use super::text_layout_view::TextLayoutView;
 use crate::mechanical_port::source::{
     math::{aabb::Aabb, vec2d::Vec2D},
     shapes::paint::shape_paint_path::ShapePaintPath,
@@ -112,9 +112,12 @@ impl CursorPosition {
     pub fn has_line_index(&self) -> bool {
         self.line_index != u32::MAX
     }
-    pub fn visual_position(&self, shape: &FullyShapedText) -> CursorVisualPosition {
+    pub fn visual_position(&self, shape: &TextLayoutView<'_>) -> CursorVisualPosition {
         let lookup = shape.glyph_lookup();
         let lines = shape.ordered_lines();
+        if lookup.empty() || self.code_point_index > shape.text_length() {
+            return CursorVisualPosition::missing();
+        }
         let target = lookup.get(self.code_point_index);
         let Some(line) = lines.get(self.line_index as usize) else {
             return CursorVisualPosition::missing();
@@ -170,7 +173,7 @@ impl CursorPosition {
                     .descent(run.size),
         )
     }
-    pub fn from_translation(p: Vec2D, shape: &FullyShapedText) -> Self {
+    pub fn from_translation(p: Vec2D, shape: &TextLayoutView<'_>) -> Self {
         let lines = shape.ordered_lines();
         if lines.is_empty() {
             return Self::zero();
@@ -188,7 +191,7 @@ impl CursorPosition {
         line: &crate::mechanical_port::source::text_engine::OrderedLine,
         line_index: u32,
         x_target: f32,
-        shape: &FullyShapedText,
+        shape: &TextLayoutView<'_>,
     ) -> Self {
         let lookup = shape.glyph_lookup();
         let mut x = line.glyph_line().start_x;
@@ -240,7 +243,7 @@ impl CursorPosition {
         )
         .clamped(shape)
     }
-    pub fn from_line_x(line: u32, x: f32, shape: &FullyShapedText) -> Self {
+    pub fn from_line_x(line: u32, x: f32, shape: &TextLayoutView<'_>) -> Self {
         shape
             .ordered_lines()
             .get(line as usize)
@@ -248,31 +251,19 @@ impl CursorPosition {
                 Self::from_ordered_line(ordered, line, x, shape)
             })
     }
-    pub fn clamped(&self, shape: &FullyShapedText) -> Self {
+    pub fn clamped(&self, shape: &TextLayoutView<'_>) -> Self {
         Self::new(
             self.line_index
                 .min(shape.ordered_lines().len().saturating_sub(1) as u32),
-            self.code_point_index.min(
-                shape
-                    .glyph_lookup()
-                    .last_code_point_index()
-                    .saturating_sub(1),
-            ),
+            self.code_point_index.min(shape.text_length()),
         )
     }
-    pub fn at_index(index: u32, shape: &FullyShapedText) -> Self {
-        if index
-            >= shape
-                .glyph_lookup()
-                .last_code_point_index()
-                .saturating_sub(1)
-        {
+    pub fn at_index(index: u32, shape: &TextLayoutView<'_>) -> Self {
+        // The layout owner defines its last selectable source offset.
+        if index >= shape.text_length() {
             return Self::new(
                 shape.ordered_lines().len().saturating_sub(1) as u32,
-                shape
-                    .glyph_lookup()
-                    .last_code_point_index()
-                    .saturating_sub(1),
+                shape.text_length(),
             );
         }
         let mut line_index = 0;
@@ -288,7 +279,7 @@ impl CursorPosition {
         }
         Self::new(line_index - 1, index).clamped(shape)
     }
-    pub fn resolve_line(&mut self, shape: &FullyShapedText) {
+    pub fn resolve_line(&mut self, shape: &TextLayoutView<'_>) {
         self.line_index = shape
             .ordered_lines()
             .iter()
@@ -342,7 +333,7 @@ impl Cursor {
     pub fn has_selection(&self) -> bool {
         self.start != self.end
     }
-    pub fn resolve_line_positions(&mut self, shape: &FullyShapedText) -> bool {
+    pub fn resolve_line_positions(&mut self, shape: &TextLayoutView<'_>) -> bool {
         let mut resolved = false;
         if !self.start.has_line_index() {
             self.start.resolve_line(shape);
@@ -361,13 +352,13 @@ impl Cursor {
         &self,
         _path: &mut ShapePaintPath,
         _rects: &[Aabb],
-        _shape: &FullyShapedText,
+        _shape: &TextLayoutView<'_>,
     ) {
     }
-    pub fn selection_rects(&self, rects: &mut Vec<Aabb>, shape: &FullyShapedText) {
+    pub fn selection_rects(&self, rects: &mut Vec<Aabb>, shape: &TextLayoutView<'_>) {
         // No line exists for clamped cursor positions to reference after an
         // empty shaping result. Preserve the caller's accumulated rectangles.
-        if shape.ordered_lines().is_empty() {
+        if shape.ordered_lines().is_empty() || shape.glyph_lookup().empty() {
             return;
         }
         let first = self.first().clamped(shape);

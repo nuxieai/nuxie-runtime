@@ -219,6 +219,9 @@ impl Drawable {
         &self.clipping_shapes
     }
 
+    pub fn is_selectable(&self) -> bool {
+        self.base.drawable_flags() as u16 & DrawableFlag::SELECTABLE.0 != 0
+    }
     pub fn is_hidden(&self) -> bool {
         self.base.drawable_flags() as u16 & DrawableFlag::HIDDEN.0 == DrawableFlag::HIDDEN.0
             || self

@@ -248,6 +248,7 @@ pub struct File {
     self_handle: RuntimeFileWeakHandle,
     core_arena: CoreArena,
     backboard: Option<CoreHandle>,
+    selection_styles: Vec<CoreHandle>,
     file_assets: Vec<CoreHandle>,
     data_converters: Vec<CoreHandle>,
     keyframe_interpolators: Vec<CoreHandle>,
@@ -310,6 +311,7 @@ impl File {
             self_handle: RuntimeFileWeakHandle::default(),
             core_arena: CoreArena::default(),
             backboard: None,
+            selection_styles: Vec::new(),
             file_assets: Vec::new(),
             data_converters: Vec::new(),
             keyframe_interpolators: Vec::new(),
@@ -527,6 +529,9 @@ impl File {
                     return (ImportResult::Malformed, false);
                 }
                 match object_type {
+                    crate::mechanical_port::source::generated::selection_style_base::SelectionStyleBase::TYPE_KEY => {
+                        self.selection_styles.push(object.clone());
+                    }
                     BackboardBase::TYPE_KEY => {
                         self.backboard = Some(object.clone());
                     }
@@ -1875,6 +1880,12 @@ impl File {
 
     pub fn backboard(&self) -> Option<CoreHandle> {
         self.backboard.clone()
+    }
+    pub fn selection_style_count(&self) -> usize {
+        self.selection_styles.len()
+    }
+    pub fn selection_style(&self, index: usize) -> Option<CoreHandle> {
+        self.selection_styles.get(index).cloned()
     }
 
     pub fn artboard_count(&self) -> usize {

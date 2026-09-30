@@ -1,0 +1,8 @@
+{
+  "name": "SelectionStyle",
+  "key": { "int": 153, "string": "selectionstyle" },
+  "properties": {
+    "highlightColor": { "type": "Color", "initialValue": "0x663B82F6", "key": { "int": 447, "string": "highlightcolor" } },
+    "cornerRadius": { "type": "double", "initialValue": "0.0", "key": { "int": 448, "string": "cornerradius" } }
+  }
+}

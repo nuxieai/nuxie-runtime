@@ -2,6 +2,8 @@
 pub struct DrawableFlag(pub u16);
 
 impl DrawableFlag {
+    /// Matches the shared component selectable bit. Adapters decide supported types.
+    pub const SELECTABLE: Self = Self(1 << 10);
     pub const NONE: Self = Self(0);
     pub const HIDDEN: Self = Self(1 << 0);
     pub const LOCKED: Self = Self(1 << 1);

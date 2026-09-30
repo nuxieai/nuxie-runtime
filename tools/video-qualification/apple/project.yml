@@ -17,9 +17,9 @@ targets:
     platform: iOS
     sources:
       - main.m
-      - path: ../../../crates/nuxie-video-host/tests/fixtures/red-blue-audio.mp4
+      - path: ../../../fixtures/video/red-blue-audio.mp4
         buildPhase: resources
-      - path: ../../../crates/nuxie-video-host/tests/fixtures/red-blue-720p.mp4
+      - path: ../../../fixtures/video/red-blue-720p.mp4
         buildPhase: resources
     info:
       path: generated/Info.plist

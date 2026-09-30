@@ -1463,7 +1463,7 @@ impl CommandQueue {
     ) -> ViewModelInstanceHandle {
         let handle = self.next_view_model_handle();
         if let Some(listener) = listener {
-            let listener = self.register_listener(listener, source);
+            let listener = self.register_listener(listener, handle);
             Self::insert_listener(&self.view_model_listeners, handle, listener);
         }
         let _lock = self.command_gate.acquire();

@@ -51,7 +51,7 @@ var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> OC_1: vec2<f32>;
 var<private> NB_1: vec4<f32>;
-var<private> I5_: vec2<f32>;
+var<private> J5_: vec2<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> O3_: f32;
 var<private> YB_1: u32;
@@ -72,7 +72,7 @@ fn main_1() {
     let _e42 = NB_1;
     let _e44 = ((mat2x2<f32>(vec2<f32>(_e32.x, _e32.y), vec2<f32>(_e32.z, _e32.w)) * _e40) + _e42.xy);
     let _e45 = PC_1;
-    I5_ = _e45;
+    J5_ = _e45;
     if Eh {
         let _e46 = YB_1;
         let _e48 = j.c6_;
@@ -127,7 +127,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) WB: vec4<f32>, 
     main_1();
     let _e28 = unnamed.gl_Position;
     let _e29 = unnamed.gl_ClipDistance;
-    let _e30 = I5_;
+    let _e30 = J5_;
     let _e31 = O3_;
     let _e32 = K1_;
     let _e33 = D1_;

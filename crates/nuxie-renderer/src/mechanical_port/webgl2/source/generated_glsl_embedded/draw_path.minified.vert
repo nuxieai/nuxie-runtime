@@ -144,13 +144,13 @@ if(AB){e0 e4=L1(L0(PB,o0*E3+2u));f J4=L0(PB,o0*E3+3u);
 #ifndef BB
 O0=T7(e4,J4.xy,v0);
 #else
-Mc(e4,J4.xy,v0 z5);
+Mc(e4,J4.xy,v0 A5);
 #endif
 }
 #endif
 if(X3==Vb){X1=f(unpackUnorm4x8(r1.y));}
 #if defined(I)&&!defined(FB)
-else if(I&&X3==Z7){d J5=r8(r1.x>>16,j.c6);Y1.y=J5;}
+else if(I&&X3==Z7){d K5=r8(r1.x>>16,j.c6);Y1.y=K5;}
 #endif
 else{e0 oi=L1(L0(PB,o0*E3));f we=L0(PB,o0*E3+1u);X1=Ob(v0,oi,we.xy,float(X3),we.zw,uintBitsToFloat(r1.y));X1.w=-X1.w;}
 #ifdef KD
@@ -210,13 +210,13 @@ N p3,
 #endif
 f V4 L6){
 #ifdef T
-bool c5=T&&p3!=B4;
+bool d5=T&&p3!=B4;
 #else
-const bool c5=false;
+const bool d5=false;
 #endif
-i k;if(V4.w>=.0){k=f5(V4);}else{V4.w=-V4.w;d N9=S3(fract(V4.w)*(256./255.));V4.w=floor(V4.w)*j.Zb+j.ac;c T9=fc(V4);k=j2(DD,M9,T9,.0);if(!c5){k.xyz*=k.w;k.w*=N9;}}
+i k;if(V4.w>=.0){k=g5(V4);}else{V4.w=-V4.w;d N9=S3(fract(V4.w)*(256./255.));V4.w=floor(V4.w)*j.Zb+j.ac;c T9=fc(V4);k=j2(DD,M9,T9,.0);if(!d5){k.xyz*=k.w;k.w*=N9;}}
 #if defined(IB)
-if(IB&&sb.z>0.0){d qi=sb.z-1.;i k2=U6(GC,W5,sb.xy,qi);if(c5)k2=E0(F6(k2),k2.w);k*=k2;}
+if(IB&&sb.z>0.0){d qi=sb.z-1.;i k2=U6(GC,W5,sb.xy,qi);if(d5)k2=E0(F6(k2),k2.w);k*=k2;}
 #endif
 return k;}
 #if!defined(DB)&&!defined(FB)

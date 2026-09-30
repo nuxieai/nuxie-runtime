@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
+ * Upstream source revision: 1988fdd490cc7a0b88992bd7bc9b27f7c567ba62
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1988fdd490cc7a0b88992bd7bc9b27f7c567ba62";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "bdad4b17fa4fd600482d70d3a74df9460a608cb7fd9981e6cab1c9c461064fbd";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1183;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 41165;
+    "44a730ff51d45fcfb679eca3b8de48cad4a0559e11d8d30b46de5156e4651451";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1190;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 41436;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -327,6 +327,13 @@ IMAGE_RECT_VERTEX_MAIN(@drawVertexMain,
                                       @a_imageRectPackedGradientData.w,
                                       @a_imageRectPackedGradientData.xy,
                                       @a_imageRectPackedGradientData.z);
+    }
+    else
+    {
+        // Always write this, even when there is no gradient. If we skip it,
+        // the later shader can get leftover garbage and think a gradient is
+        // present, which makes the image flicker.
+        v_gradient = float4(.0, .0, .0, .0);
     }
     VARYING_PACK(v_texCoord);
     VARYING_PACK(v_edgeCoverage);

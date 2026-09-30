@@ -51,7 +51,7 @@ g3(g1),
 #endif
 X1 Y2);I1=1.;
 #ifdef AB
-if(AB){d yb=m3(f5(O0));I1=min(yb,I1);}
+if(AB){d yb=m3(g5(O0));I1=min(yb,I1);}
 #endif
 }z2;
 #if defined(DB)&&defined(CC)
@@ -67,11 +67,11 @@ V5(O)?max(W4,y0):
 #endif
 W4+y0;
 #ifdef I
-if(I&&Y1.x!=.0){D Q0=unpackHalf2x16(a1(i0));d L5=Q0.y;d zb=L5==Y1.x?Q0.x:J0(.0);I1=min(zb,I1);}
+if(I&&Y1.x!=.0){D Q0=unpackHalf2x16(a1(i0));d M5=Q0.y;d zb=M5==Y1.x?Q0.x:J0(.0);I1=min(zb,I1);}
 #endif
 I1=max(I1,.0);d e2=fa(W4,.0,I1);d H1=fa(Ge,.0,I1);
 #ifdef LB
-d K5;if(LB){K5=ia(d0.xy,j.F3,j.G3);}
+d L5;if(LB){L5=ia(d0.xy,j.F3,j.G3);}
 #endif
 #ifndef Q
 i O1=K0(m0);
@@ -80,7 +80,7 @@ if(T&&g1!=Z5(B4)){if(H1!=.0){if(e2==.0){k0.xyz=Y4(k0.xyz,O1,g3(g1));
 #ifndef DB
 if(H1<I1){v P7=k0.xyz;
 #ifdef LB
-if(LB){P7+=K5*j.Fd;}
+if(LB){P7+=L5*j.Fd;}
 #endif
 A0(D6,E0(P7,0.0));}
 #endif
@@ -89,7 +89,7 @@ A0(D6,E0(P7,0.0));}
 #endif
 k0*=K8(e2,H1,k0.w);
 #ifdef LB
-k0.xyz=K2(k0.xyz,k0.w,K5);
+k0.xyz=K2(k0.xyz,k0.w,L5);
 #endif
 #ifndef DB
 #ifdef T

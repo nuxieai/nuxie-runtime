@@ -5,12 +5,12 @@
 #[path = "../source/renderer/src/shaders/minify_py.rs"]
 pub mod executable_translation;
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "7d59acedbf37270e538a3093ec777f5b66b7ffb9";
+pub const PINNED_UPSTREAM_COMMIT: &str = "696345630f860112d0496e0d1844e9d7087250d8";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/minify.py";
 pub const PINNED_SOURCE_SHA256: &str =
-    "1144ea77fb55558c8e51c2536888b492bf4235add068c3bf41887e5946eae897";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 565;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 24573;
+    "1fe1a51e6abea47954a6e41b9fb0b9d2e6b9b676acacc9d352915b7298613664";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 569;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 24839;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_minify_py.source");
 pub const OUTPUT_STAGES: &[&str] = &[
     "minify-export",

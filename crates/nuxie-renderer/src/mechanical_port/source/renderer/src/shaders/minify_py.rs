@@ -1,7 +1,7 @@
 /*
  * Mechanical translation of the complete pinned source
  * renderer/src/shaders/minify.py.
- * Upstream source revision: 7d59acedbf37270e538a3093ec777f5b66b7ffb9
+ * Upstream source revision: 696345630f860112d0496e0d1844e9d7087250d8
  *
  * This Phase-1 owner intentionally retains the Python tool's source-shaped
  * lexer/parser, global accounting/rename state, ordering, command-line surface,
@@ -1263,6 +1263,10 @@ impl Minifier {
             if is_directive && !is_newline && calling_token_type != Some("DEFINE") {
                 out.write_all(b"\n")?;
             } else if needs_whitespace && lasttoken_needs_whitespace {
+                out.write_all(b" ")?;
+            } else if tok.r#type == "ID" && lasttoken.r#type == "OP" && lasttoken.value == ")" {
+                // Mesa can reject minified GLSL macro calls when the next
+                // identifier is directly adjacent, e.g. OUT(float2)foo.
                 out.write_all(b" ")?;
             }
 

@@ -4,7 +4,7 @@ I3 e3(h5,a4,GC);
 #ifdef T
 p5(XD);
 #endif
-J3 i5 c4(W5)j5
+J3 i5 c4(W5) j5
 #endif
 f3(i,HB){
 #ifdef KB

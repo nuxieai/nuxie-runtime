@@ -4,7 +4,7 @@ I0 W(0,c,c2);
 #endif
 i2
 #ifdef CB
-Y3 Z3 F4 G4 h1(g0)i1 B1(KF,g0,F,A,r){c r2;r2.x=(A&1)==0?-1.:1.;r2.y=(A&2)==0?-1.:1.;
+Y3 Z3 F4 G4 h1(g0) i1 B1(KF,g0,F,A,r){c r2;r2.x=(A&1)==0?-1.:1.;r2.y=(A&2)==0?-1.:1.;
 #ifdef FD
 V(c2,c);c2.x=r2.x*.5+.5;c2.y=r2.y*-.5+.5;c0(c2);
 #endif
@@ -19,7 +19,7 @@ e3(h5,a4,HC);
 #endif
 J3
 #ifdef FD
-i5 c4(Ef)j5
+i5 c4(Ef) j5
 #endif
 f3(i,QE){i l8;
 #ifdef FD

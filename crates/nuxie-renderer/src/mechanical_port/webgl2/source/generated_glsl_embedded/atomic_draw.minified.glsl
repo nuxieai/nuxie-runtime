@@ -1,6 +1,6 @@
 #ifdef ND
 #ifdef CB
-h1(g0)K(0,f,UB);K(1,f,VB);i1
+h1(g0) K(0,f,UB);K(1,f,VB);i1
 #endif
 q2
 #ifdef GB
@@ -27,7 +27,7 @@ D0=a2(o0);X=Q3(l0);}else{X=f(j.W2,j.W2,j.W2,j.W2);}c0(O);c0(D0);C1(X);}
 #endif
 #if defined(DB)||defined(FB)
 #ifdef CB
-h1(g0)K(0,R3,JB);i1
+h1(g0) K(0,R3,JB);i1
 #endif
 q2
 #ifdef FB
@@ -60,7 +60,7 @@ c0(D0);C1(X);}
 #endif
 #ifdef ZC
 #ifdef CB
-h1(g0)K(0,f,FC);i1 h1(p1)K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);K(cf,f,OD);K(df,f,PD);K(ef,f,AD);K(Lb,f,NC);i1
+h1(g0) K(0,f,FC);i1 h1(p1) K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);K(cf,f,OD);K(df,f,PD);K(ef,f,AD);K(Lb,f,NC);i1
 #endif
 q2 I0 W(0,c,c2);I0 W(1,d,Z4);I0 W(2,f,a5);
 #ifdef AB
@@ -116,7 +116,7 @@ C1(X);}
 #endif
 #elif defined(KB)
 #ifdef CB
-h1(n3)K(0,c,OC);i1 h1(C3)K(1,c,PC);i1 h1(p1)K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);i1
+h1(n3) K(0,c,OC);i1 h1(C3) K(1,c,PC);i1 h1(p1) K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);i1
 #endif
 q2 I0 W(0,c,c2);
 #ifdef AB
@@ -169,7 +169,7 @@ C1(X);}
 #endif
 #ifdef HF
 #ifdef CB
-h1(g0)i1
+h1(g0) i1
 #endif
 q2 i2
 #ifdef CB
@@ -221,17 +221,17 @@ o0=min(o0,j.nf);
 #endif
 return o0;}
 #ifdef I
-e void Tb(uint m1,z4 Q0,K6(d)o){
+e void Tb(uint m1,z4 Q0,K6(d) o){
 #ifdef VC
-if(all(lessThan(abs(Q0.xy-unpackUnorm4x8(m1).xy),D2(.25/255.))))o=min(o,Q0.z);else o=.0;
+if(all(lessThan(abs(Q0.xy-unpackUnorm4x8(m1).xy),D2(.25/255.)))) o=min(o,Q0.z);else o=.0;
 #else
-if(m1==Q0>>16)o=min(o,unpackHalf2x16(Q0).x);else o=.0;
+if(m1==Q0>>16) o=min(o,unpackHalf2x16(Q0).x);else o=.0;
 #endif
 }
 #endif
-e void Y7(uint o0,d r0,c1(i)J
+e void Y7(uint o0,d r0,c1(i) J
 #if defined(I)&&!defined(QC)
-,K6(z4)q1
+,K6(z4) q1
 #endif
 L6 W3){N0 r1=R5(CD,o0);d o=r0;if((r1.x&(of|K9))!=0u){o=abs(o);
 #ifdef WC
@@ -274,7 +274,7 @@ J=q3(J);
 #if!defined(Q)&&!defined(BD)
 e void a8(i J W3){
 #ifndef VC
-if(J.x+J.y+J.z+J.w==.0)return;float M6=1.-J.w;if(M6!=.0)J+=K0(m0)*M6;
+if(J.x+J.y+J.z+J.w==.0) return;float M6=1.-J.w;if(M6!=.0) J+=K0(m0)*M6;
 #endif
 A0(m0,J);}
 #endif
@@ -283,7 +283,7 @@ e void O9(z4 q1 W3){
 #ifdef VC
 A0(i0,q1);
 #else
-if(q1!=0u)d1(i0,q1);
+if(q1!=0u) d1(i0,q1);
 #endif
 }
 #endif
@@ -449,7 +449,7 @@ S5(HB)
 #endif
 {uint w2=Z2(A4);d r0=W7(w2&f8);N E1=a2(w2>>U5);E1=X7(E1);i J;Y7(E1,r0,J Y2 Q1);
 #ifdef BD
-float M6=1.-J.w;if(M6!=.0)J+=K0(m0)*M6;F1=J;r3
+float M6=1.-J.w;if(M6!=.0) J+=K0(m0)*M6;F1=J;r3
 #else
 J.xyz=K2(J.xyz,J.w,d0.xy,j.F3,j.G3);
 #ifdef Q

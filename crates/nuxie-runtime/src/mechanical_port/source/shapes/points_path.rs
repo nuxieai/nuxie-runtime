@@ -56,6 +56,17 @@ impl SkinnableBehavior for PointsPath {
     }
 }
 impl PointsPath {
+    pub fn on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> crate::mechanical_port::source::status_code::StatusCode {
+        let has_skin = self.skin().is_some();
+        self.base
+            .base
+            .base
+            .base
+            .on_added_clean_with_skin(context, has_skin)
+    }
     pub fn build_dependencies(&mut self) {
         self.base.build_dependencies();
         if let (Some(this), Some(skin)) = (self.base.handle(), self.skin()) {

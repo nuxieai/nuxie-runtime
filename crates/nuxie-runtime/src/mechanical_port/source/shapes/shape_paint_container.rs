@@ -35,9 +35,27 @@ impl ShapePaintContainer {
     }
 
     pub fn path_flags(&self) -> PathFlags {
+        self.path_flags_with_active(None)
+    }
+
+    /// Read the same aggregate while one paint is already borrowed for update.
+    pub(crate) fn path_flags_with_active_paint(
+        &self,
+        active: &CoreHandle,
+        flags: PathFlags,
+    ) -> PathFlags {
+        self.path_flags_with_active(Some((active, flags)))
+    }
+
+    fn path_flags_with_active(&self, active: Option<(&CoreHandle, PathFlags)>) -> PathFlags {
         self.shape_paints
             .iter()
             .fold(self.path_flags, |flags, paint| {
+                if let Some((active, active_flags)) = active {
+                    if paint == active {
+                        return flags | active_flags;
+                    }
+                }
                 flags
                     | paint
                         .with(|paint| {

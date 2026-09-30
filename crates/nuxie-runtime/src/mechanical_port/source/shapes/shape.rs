@@ -40,6 +40,7 @@ pub struct Shape {
     local_bounds_clean: std::cell::Cell<bool>,
     world_length: f32,
     want_difference_path: bool,
+    has_layout_participant: bool,
     deformer: Option<CoreHandle>,
 }
 
@@ -58,13 +59,29 @@ impl Shape {
             local_bounds_clean: std::cell::Cell::new(false),
             world_length: -1.0,
             want_difference_path: false,
+            has_layout_participant: false,
             deformer: None,
         }
     }
 
     pub fn add_path(&mut self, path: CoreHandle) {
+        let has_skin = path
+            .with(|object| {
+                object
+                    .as_points_path()
+                    .is_some_and(|points| points.skin().is_some())
+            })
+            .unwrap_or(false);
+        self.add_path_with_skin(path, has_skin);
+    }
+    /// Registration can run while the path's arena slot is already borrowed.
+    /// The caller supplies its current skin state before entering this Shape.
+    pub(crate) fn add_path_with_skin(&mut self, path: CoreHandle, has_skin: bool) {
         assert!(!self.paths.contains(&path));
         self.paths.push(path);
+        if has_skin {
+            self.add_flags(PathFlags::NEVER_DEFER_UPDATE);
+        }
         self.invalidate_intrinsic_bounds();
     }
     pub fn paths(&self) -> Vec<CoreHandle> {
@@ -84,38 +101,14 @@ impl Shape {
     }
 
     pub fn can_defer_path_update(&self) -> bool {
-        self.can_defer_path_update_with_active_path(None)
+        self.base.render_opacity() == 0.0
+            && !self.is_flagged(PathFlags::CLIPPING | PathFlags::NEVER_DEFER_UPDATE)
     }
     pub(crate) fn can_defer_path_update_with_active_path(
         &self,
-        active_points_path: Option<(&CoreHandle, bool)>,
+        _active_points_path: Option<(&CoreHandle, bool)>,
     ) -> bool {
-        let can_defer = self.base.render_opacity() == 0.0
-            && !self.is_flagged(PathFlags::CLIPPING | PathFlags::NEVER_DEFER_UPDATE);
-        if can_defer
-            && self.base.dependents().iter().any(|d| {
-                let Some(handle) = d.authored() else {
-                    return false;
-                };
-                if !handle.is_type_of(
-                    crate::mechanical_port::source::generated::shapes::points_path_base::PointsPathBase::TYPE_KEY,
-                ) {
-                    return false;
-                }
-                if let Some((active, has_skin)) = active_points_path {
-                    if active == handle {
-                        return has_skin;
-                    }
-                }
-                handle.with(|object| {
-                    object.as_points_path().expect("PointsPath type predicate").skin().is_some()
-                })
-                    .unwrap_or(false)
-            })
-        {
-            return false;
-        }
-        can_defer
+        self.can_defer_path_update()
     }
 
     pub(crate) fn update_after_transform_super(&mut self, value: ComponentDirt) {
@@ -679,7 +672,19 @@ impl Shape {
             CoreCapabilities::world_transform_mark_dirty(self);
         }
     }
+    pub fn add_child(&mut self, child: CoreHandle) {
+        let is_participant = child.is_type_of(LayoutParticipant::TYPE_KEY);
+        self.base.add_child(child);
+        if is_participant {
+            self.has_layout_participant = true;
+        }
+    }
     pub fn layout_participant(&self) -> Option<CoreHandle> {
+        // Runtime children are fixed; WITH_RIVE_EDITOR's rescan is not a
+        // tools-build behavior.
+        if !self.has_layout_participant {
+            return None;
+        }
         self.base
             .children()
             .iter()

@@ -1160,6 +1160,7 @@
 // {
 //     disabled,
 //     activeStencilClip,
+//     clipStroke,
 //     borrowedCoverage,
 //     forwardClippedByBackward,
 //     backwardTriangleCleanup,
@@ -3146,13 +3147,14 @@ pub const DrawContentsForDepthStencilPipelineState: DrawContents = DrawContents(
 pub enum StencilType {
     disabled = 0,
     activeStencilClip = 1,
-    borrowedCoverage = 2,
-    forwardClippedByBackward = 3,
-    backwardTriangleCleanup = 4,
-    stencilNestedOrEvenOdd = 5,
-    evenOddDrawAndReset = 6,
-    nestedClipReset = 7,
-    clipReset = 8,
+    clipStroke = 2,
+    borrowedCoverage = 3,
+    forwardClippedByBackward = 4,
+    backwardTriangleCleanup = 5,
+    stencilNestedOrEvenOdd = 6,
+    evenOddDrawAndReset = 7,
+    nestedClipReset = 8,
+    clipReset = 9,
 }
 
 pub const StencilTypeBitCount: u32 = 4;

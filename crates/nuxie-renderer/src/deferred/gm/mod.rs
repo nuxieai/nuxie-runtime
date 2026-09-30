@@ -2,6 +2,7 @@
 //! These use the live Metal backend, not a command-only stand-in. The paired
 //! GMs use gmmain.cpp's non-atomic comparison (zero channel difference).
 mod bitmap_cache_pixel;
+mod clipstrokes;
 mod image_paint;
 mod ore_deferred_context;
 mod ore_deferred_multipass;

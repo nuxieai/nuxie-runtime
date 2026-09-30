@@ -785,6 +785,21 @@ extern "C" void rive_ffi_renderer_clip_path(rive_ffi_renderer* renderer,
     }
 }
 
+extern "C" void rive_ffi_renderer_clip_stroke(rive_ffi_renderer* renderer,
+                                              rive_ffi_render_path* path,
+                                              float thickness,
+                                              uint8_t join,
+                                              uint8_t cap)
+{
+    if (renderer != nullptr && renderer->context->renderer != nullptr &&
+        path != nullptr)
+    {
+        renderer->context->renderer->clipStroke(
+            path->path.get(),
+            {thickness, static_cast<rive::StrokeJoin>(join), static_cast<rive::StrokeCap>(cap)});
+    }
+}
+
 extern "C" void rive_ffi_renderer_draw_image(
     rive_ffi_renderer* renderer,
     const rive_ffi_render_image* image,

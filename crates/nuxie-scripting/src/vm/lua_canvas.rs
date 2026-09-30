@@ -183,6 +183,9 @@ impl Renderer for DeferredCanvasFrame {
     fn clip_path(&mut self, path: &dyn RenderPath) {
         self.target().clip_path(path);
     }
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        self.target().clip_stroke(path, params);
+    }
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,

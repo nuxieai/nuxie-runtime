@@ -7,7 +7,7 @@ use crate::mechanical_port::source::{
 
 pub use nuxie_render_api::{
     BlendMode, ColorInt, FillRule, ImageFilter, ImageSampler, ImageWrap, RenderBufferFlags,
-    RenderBufferType, RenderPaintStyle, StrokeCap, StrokeJoin,
+    RenderBufferType, RenderPaintStyle, StrokeCap, StrokeJoin, StrokeParams,
 };
 
 /// The renderer-facing virtual owners are the existing `nuxie_render_api`

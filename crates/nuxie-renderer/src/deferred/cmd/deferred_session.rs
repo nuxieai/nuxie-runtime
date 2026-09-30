@@ -382,6 +382,9 @@ impl Renderer for ScopedRenderer {
     fn clip_path(&mut self, p: &dyn RenderPath) {
         self.0.borrow_mut().clip_path(p);
     }
+    fn clip_stroke(&mut self, p: &dyn RenderPath, params: &StrokeParams) {
+        self.0.borrow_mut().clip_stroke(p, params);
+    }
     fn draw_image(&mut self, i: Option<&dyn RenderImage>, s: ImageSampler, b: BlendMode, o: f32) {
         self.0.borrow_mut().draw_image(i, s, b, o);
     }

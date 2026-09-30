@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `2579994c59cff57ac04d3a38401fa37ad1315425`
+- LAST_SYNCED_SHA: `51c02b50420ceb0520f0b3193116c374c9f2b9a0`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 82 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 82 require a Rust translation.
+  There are 81 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 81 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `51c02b50420ceb0520f0b3193116c374c9f2b9a0` | Translate stroked clipping: shared defaulted StrokeParams, ordered paint setters, live renderer clipping and adapter forwarding, deferred command insertion/payload/replay, and depth/stencil clip-stroke masks and color-write behavior. Translate all five upstream clip-stroke GMs. Unsupported renderer implementations retain upstream's default no-op; no new serialized SRIV opcode is invented. Shader sources are unchanged and retain their actual prior generation provenance. | — |
 | `2579994c59cff57ac04d3a38401fa37ad1315425` | Translate hybrid premultiplication: rounded packed solid colors, per-draw unmultiplied selection for advanced blends except the depth/stencil KHR path, and corresponding path/mesh/atomic fragment coverage and blending semantics. Regenerate affected supported-backend shader artifacts while retaining the approved Metal feather-precision adaptation and historical capture provenance. | — |
 | `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Reconcile the ahead-ported BitmapCache, artboard raster/composite lifecycle, renderer state queries and deferred canvas hosts against the complete reached commit. Add opt-in serialized cache capture, canvas declaration/content brackets and replay routing, with the upstream serialized-replay and silver-factory regressions. Move the reached BitmapCache definition from forward overlay to runtime reconciliation. C++ player/deploy UI harness changes are not shipped Rust product implementations. | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
 | `d97479357d83d10e0b440827c7905a6994263205` | Image paints with image assets, sampler and transform properties, deferred-command and serialized replay support. Scripted transitions select among design children and lazily instanced view-model-list artboards, with scoped Lua child wrappers and changed/draw protocol callbacks. Wire generated type/property registration, data binding, lifecycle and list index propagation. **DEFERRED:** transition execution methods in WasmScriptingVM remain part of parked Wasm execution; shared protocol and native Luau are in scope. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

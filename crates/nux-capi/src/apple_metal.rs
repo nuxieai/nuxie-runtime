@@ -632,6 +632,14 @@ impl Renderer for ReplayFrameRenderer {
             .renderer()
             .clip_path(path);
     }
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie::render_api::StrokeParams) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .clip_stroke(path, params);
+    }
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,

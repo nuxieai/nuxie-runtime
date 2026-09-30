@@ -28,15 +28,6 @@
 // class RiveRenderPath;
 // class RiveRenderPaint;
 //
-// // Common parameters to describe a path's stroke (used internally across the
-// // RiveRenderer's classes)
-// struct StrokeParams
-// {
-//     float thickness;
-//     StrokeJoin join;
-//     StrokeCap cap;
-// };
-//
 // // Renderer implementation for Rive's pixel local storage renderer.
 // class RiveRenderer : public Renderer
 // {
@@ -49,6 +40,7 @@
 //     void transform(const Mat2D& matrix) override;
 //     void drawPath(RenderPath*, RenderPaint*) override;
 //     void clipPath(RenderPath*) override;
+//     void clipStroke(RenderPath*, const StrokeParams&) override;
 //     void drawImage(const RenderImage*,
 //                    ImageSampler,
 //                    BlendMode,
@@ -178,15 +170,9 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp a
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DrawUniquePtr;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
-use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath, StrokeCap, StrokeJoin};
+use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath};
+pub use nuxie_render_api::StrokeParams;
 use std::mem::ManuallyDrop;
-
-#[derive(Clone, Copy)]
-pub struct StrokeParams {
-    pub thickness: f32,
-    pub join: StrokeJoin,
-    pub cap: StrokeCap,
-}
 
 #[repr(C)]
 #[derive(Clone, Copy)]

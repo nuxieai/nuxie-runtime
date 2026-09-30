@@ -397,6 +397,10 @@ impl Renderer for NativeMetalRenderCanvasFrame {
         self.renderer.clip_path(path);
     }
 
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        self.renderer.clip_stroke(path, params);
+    }
+
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,

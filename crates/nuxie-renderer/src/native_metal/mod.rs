@@ -46,6 +46,10 @@ mod gradient_resource;
 #[allow(dead_code)]
 mod image_texture;
 mod mechanical_render_context;
+#[cfg(test)]
+mod testing_window;
+#[cfg(test)]
+pub(crate) use testing_window::NativeMetalTestingWindow;
 #[allow(dead_code)]
 mod objc2_execution;
 #[cfg(test)]
@@ -535,6 +539,17 @@ impl NativeMetalFactory {
     /// presentation owner without transferring that policy to the renderer.
     pub fn retained_metal_device(&self) -> Retained<ProtocolObject<dyn MTLDevice>> {
         self.device.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn testing_window(&self) -> Result<NativeMetalTestingWindow, RendererError> {
+        let queue = self
+            .retained_metal_queue()
+            .ok_or_else(|| RendererError::NativeMetal("GM window requires a Metal queue".into()))?;
+        Ok(NativeMetalTestingWindow::new(
+            self.mechanical_context()?,
+            queue,
+        ))
     }
 
     /// Copies the renderer's ordered command queue for same-context Metal
@@ -2029,6 +2044,25 @@ impl NativeMetalFrame {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub(crate) fn flush_testing_window(
+        self,
+        window: &mut NativeMetalTestingWindow,
+    ) -> Result<(), RendererError> {
+        window.flush_screen()?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn finish_testing_window(
+        self,
+        window: &mut NativeMetalTestingWindow,
+    ) -> Result<Vec<u8>, RendererError> {
+        let completion = window.flush_screen()?;
+        window.end_frame();
+        Ok(self.readback_completed_frame(completion)?.pixels)
+    }
+
     // TestingWindow::flushPLSContext/beginFrame keep the same Renderer and
     // its save stack alive across the render-context frame boundary.
     #[cfg(all(test, feature = "with-rive-tools"))]
@@ -2055,11 +2089,18 @@ impl NativeMetalFrame {
     }
 
     pub fn finish_for_benchmark(self) -> Result<NativeMetalFrameOutput, RendererError> {
-        let source_mode = self.mechanical.borrow().mode();
         let completion = self
             .mechanical
             .borrow_mut()
             .finish(self.frame_number, self.frame_number)?;
+        self.readback_completed_frame(completion)
+    }
+
+    fn readback_completed_frame(
+        self,
+        completion: mechanical_render_context::MechanicalCompletionToken,
+    ) -> Result<NativeMetalFrameOutput, RendererError> {
+        let source_mode = self.mechanical.borrow().mode();
         completion.wait()?;
         let source_metrics = self.mechanical.borrow().execution_inventory();
         let (width, height, texture) = {

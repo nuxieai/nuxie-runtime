@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ed2c2dcb81d03ecfaef83962b6bdbf4572d1356c`
+- LAST_SYNCED_SHA: `36c52f14b18c20c44c45b96b6ea13218f874bf3c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 22 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 22 require a Rust translation.
+  There are 21 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 21 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `36c52f14b18c20c44c45b96b6ea13218f874bf3c` | Route GM-host canvas flushes through the host-owned Metal command buffer, preserving lazy creation before a screen frame, asynchronous per-flush commit and successor ownership across frame begins. Keep generic canvas completion and ORE frame behavior unchanged. Terminal readback retains the existing Rust shared-texture completion/getBytes adapter, not upstream's private-texture blit implementation; the host still commits and releases its successor. The private Artemis frame-number/swapchain changes described in the message are absent from the public delta and are not claimed imported. | — |
 | `ed2c2dcb81d03ecfaef83962b6bdbf4572d1356c` | **ALREADY-EQUIVALENT PARITY TESTS:** upstream applies deterministic triangulation thresholds to immediate and deferred test frames. Both Rust paths already reach the shared observing NullBackend frame descriptor with an infinite frame budget and matching default geometry guards. No production policy, assertions or fixtures change; interactive rendering keeps its own budgeting policy. | — |
 | `794f432ad65116b50d585ad4bff8a6813e3e38ee` | Add synchronized queue/server focus traversal with resulting focus state, key input and directional focus. Capture traversal and state under one retained machine lock, preserve FIFO callback dispatch and missing-target defaults, and make the existing server boolean traversal methods delegate to the result methods. Translate all nine upstream regression cases and every section/direction variant using a real server thread; keep Rust focus nodes on their owning thread. | — |
 | `f3e99df8ea3c9460ca1fd8f64e26115f1979742a` | Subtract the probe shape's vertical trim from content height when fitting into a non-fixed text box, preserving authored fixed-box sizing and the existing integer-size search. Translate the full short-run hug regression, checking actual fitted glyph-run size and both layout heights against upstream expectations. Existing Rust shaping/Taffy boundaries are unchanged; private editor changes are absent from the public delta. | — |

@@ -1556,6 +1556,67 @@ impl MechanicalRenderContext {
                 "failed to allocate mechanical Metal command buffer".into(),
             ));
         }
+        self.flush_command(
+            render_target,
+            current_frame_number,
+            safe_frame_number,
+            command_buffer,
+            |implementation, command| unsafe {
+                RenderContextImplContract::commitCommandBuffer(implementation, command);
+            },
+        )
+    }
+
+    // TestingWindowMetal{Texture,Layer}::flushPLSContext uses the window's
+    // native command, not the generic canvas make/commit command-buffer API.
+    #[cfg(test)]
+    pub(super) fn flush_window(
+        &mut self,
+        offscreen: Option<&mut RenderCanvas>,
+        command: Retained<ProtocolObject<dyn MTLCommandBuffer>>,
+    ) -> Result<MechanicalCompletionToken, RendererError> {
+        let screen = offscreen.is_none();
+        let target = if let Some(canvas) = offscreen {
+            canvas.renderTarget()
+        } else {
+            if !self.active_frame {
+                return Err(RendererError::NativeMetal(
+                    "window has no active screen frame".into(),
+                ));
+            }
+            let target = self
+                .target
+                .as_mut()
+                .ok_or_else(|| RendererError::NativeMetal("window has no screen target".into()))?;
+            core::ptr::from_mut(&mut *target.metal.base)
+        };
+        let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+        let handle = unsafe { metal_impl_mut(context) }
+            .execution
+            .insert_window_command_buffer(command.clone());
+        let opaque = Box::into_raw(Box::new(handle)).cast();
+        let completion =
+            self.flush_command(target, 0, 0, opaque, move |implementation, opaque| {
+                let handle = unsafe { *Box::from_raw(opaque.cast::<Handle>()) };
+                command.commit();
+                implementation.execution.retire_handle(handle);
+            })?;
+        if screen {
+            self.active_frame = false;
+            self.frame_queue = None;
+        }
+        Ok(completion)
+    }
+
+    fn flush_command(
+        &mut self,
+        render_target: *mut RenderTarget,
+        current_frame_number: u64,
+        safe_frame_number: u64,
+        command_buffer: *mut c_void,
+        commit: impl FnOnce(&mut MechanicalRenderContextImpl, *mut c_void),
+    ) -> Result<MechanicalCompletionToken, RendererError> {
+        let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
         let command_handle = unsafe { *command_buffer.cast::<Handle>() };
         let command_wait = unsafe { metal_impl_mut(context) }
             .execution
@@ -1600,12 +1661,7 @@ impl MechanicalRenderContext {
                     "source flush unwound before completion callback installation".into(),
                 ));
             }
-            unsafe {
-                RenderContextImplContract::commitCommandBuffer(
-                    metal_impl_mut(context),
-                    command_buffer,
-                );
-            }
+            commit(unsafe { metal_impl_mut(context) }, command_buffer);
             if !unarmed {
                 command_wait.waitUntilCompleted();
             }
@@ -1624,9 +1680,7 @@ impl MechanicalRenderContext {
         // never release the pinned context ahead of the raw ring pointer.
         let mut source_guard =
             CommittedFrameWaitGuard::with_command(completion.clone(), command_wait.clone());
-        unsafe {
-            RenderContextImplContract::commitCommandBuffer(metal_impl_mut(context), command_buffer);
-        }
+        commit(unsafe { metal_impl_mut(context) }, command_buffer);
         // Only committed commands enter the teardown fence. The existing
         // unwind guard commits/drains an armed callback before propagating a
         // flush panic, so an unsent command can never deadlock final release.

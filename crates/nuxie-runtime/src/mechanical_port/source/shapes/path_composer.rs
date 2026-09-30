@@ -168,7 +168,7 @@ impl PathComposer {
             self.local_clockwise_path.rewind();
             let inverse = transform.invert_or_identity();
             for handle in &paths {
-                handle.with(|object| {
+                handle.with_mut(|object| {
                     let path = object.as_path().expect("Shape path");
                     if path.is_hidden() || path.is_collapsed() {
                         return;
@@ -178,11 +178,10 @@ impl PathComposer {
                         .map(|points| *points.path_transform())
                         .unwrap_or_else(|| path.path_transform());
                     let local_transform = inverse * path_transform;
-                    let not_clockwise = object.as_points_path().is_some_and(|points| {
-                        local_transform.determinant()
-                            * if points.is_clockwise() { 1.0 } else { -1.0 }
-                            < 0.0
+                    let not_clockwise = object.as_points_path_mut().is_some_and(|points| {
+                        local_transform.determinant() * (points.winding() as f32) < 0.0
                     });
+                    let path = object.as_path().expect("Shape path");
                     if not_clockwise != path.is_hole() {
                         self.local_clockwise_path
                             .add_path_backwards(path.raw_path(), Some(&local_transform));

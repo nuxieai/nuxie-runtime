@@ -28,6 +28,8 @@ impl PointsPath {
 pub struct PointsPath {
     pub base: PointsPathBase,
     skinnable: Skinnable,
+    // Measured winding with the bones' mirroring divided out; zero is unknown.
+    winding_reference: i32,
 }
 
 impl Default for PointsPath {
@@ -35,6 +37,7 @@ impl Default for PointsPath {
         Self {
             base: PointsPathBase::default(),
             skinnable: Skinnable::default(),
+            winding_reference: 0,
         }
     }
 }
@@ -49,7 +52,7 @@ impl SkinnableBehavior for PointsPath {
     }
 
     fn mark_skin_dirty(&mut self) {
-        self.mark_path_dirty(true);
+        self.base.base.base.mark_path_dirty(true);
     }
 }
 impl PointsPath {
@@ -84,17 +87,52 @@ impl PointsPath {
         }
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
+        // Vertex edits invalidate the measurement; bone deformation does not.
+        self.winding_reference = 0;
         if let Some(skin) = self.skin() {
             skin.with_downcast_mut::<Skin, _>(|skin| skin.add_dirt_from_points_path(self))
                 .expect("a retained PointsPath skin remains a Skin");
         }
         self.base.base.base.mark_path_dirty(true);
     }
-    pub(crate) fn mark_skin_dirty_from_skin(&mut self, skin: &mut Skin) {
-        skin.add_dirt_from_points_path(self);
+    pub(crate) fn mark_skin_dirty_from_skin(&mut self, _skin: &mut Skin) {
         self.base.base.base.mark_path_dirty(true);
     }
     pub fn mark_skin_dirty(&mut self) {
-        self.mark_path_dirty(true);
+        self.base.base.base.mark_path_dirty(true);
+    }
+
+    /// One when the drawn path winds clockwise, minus one otherwise.
+    /// Measure once, then follow bone mirroring. Folds without mirroring keep
+    /// the measured answer, just as the authored flag did.
+    pub fn winding(&mut self) -> i32 {
+        let authored = if self.is_clockwise() { 1 } else { -1 };
+        let Some(skin) = self.skin() else {
+            return authored;
+        };
+        let sign = skin
+            .with_downcast::<Skin, _>(Skin::winding_sign)
+            .expect("a retained PointsPath skin remains a Skin");
+        if sign != 0 && self.winding_reference != 0 {
+            return self.winding_reference * sign;
+        }
+        let bounds = self.raw_path().bounds();
+        let area = self
+            .raw_path()
+            .compute_coarse_area_with_origin(bounds.center());
+        // std::max in C++ selects the first operand for unordered comparisons.
+        let extent = if bounds.width() < bounds.height() {
+            bounds.height()
+        } else {
+            bounds.width()
+        };
+        if area.abs() <= 1e-5_f32 * extent * extent {
+            return authored;
+        }
+        let measured = if area < 0.0 { -1 } else { 1 };
+        if sign != 0 {
+            self.winding_reference = measured * sign;
+        }
+        measured
     }
 }

@@ -493,6 +493,12 @@ impl RawPath {
         bounds
     }
     pub fn compute_coarse_area(&self) -> f32 {
+        self.compute_coarse_area_with_origin(Vec2D::default())
+    }
+
+    /// An origin near the path avoids cancellation in the area products.
+    /// The default remains zero so existing renderer decisions are unchanged.
+    pub fn compute_coarse_area_with_origin(&self, origin: Vec2D) -> f32 {
         let mut area = 0.0;
         let mut contour_start = Vec2D::default();
         let mut last = Vec2D::default();
@@ -500,13 +506,13 @@ impl RawPath {
             match segment.verb {
                 PathVerb::Move => {
                     area += Vec2D::cross(last, contour_start);
-                    contour_start = segment.points[0];
-                    last = segment.points[0];
+                    contour_start = segment.points[0] - origin;
+                    last = segment.points[0] - origin;
                 }
                 PathVerb::Close => {}
                 PathVerb::Line => {
-                    area += Vec2D::cross(last, segment.points[1]);
-                    last = segment.points[1];
+                    area += Vec2D::cross(last, segment.points[1] - origin);
+                    last = segment.points[1] - origin;
                 }
                 PathVerb::Quad => unreachable!(),
                 PathVerb::Cubic => {
@@ -515,15 +521,17 @@ impl RawPath {
                     if count > 1.0 {
                         count = if 64.0 < count { 64.0 } else { count };
                         let eval = EvalCubic::new(points);
-                        let mut low_t = 1.0 / count;
-                        let mut high_t = 2.0 / count;
+                        let inverse_count = 1.0 / count;
+                        let mut low_t = inverse_count;
+                        let mut high_t = 2.0 * inverse_count;
                         let delta_t = high_t;
                         while low_t < 1.0 {
-                            let point = eval.at(low_t);
+                            let point = eval.at(low_t) - origin;
                             area += Vec2D::cross(last, point);
                             last = point;
-                            if high_t < 1.0 {
-                                let point = eval.at(high_t);
+                            // Source t is [lo, lo, hi, hi], and checks t.y.
+                            if low_t < 1.0 {
+                                let point = eval.at(high_t) - origin;
                                 area += Vec2D::cross(last, point);
                                 last = point;
                             }
@@ -531,8 +539,8 @@ impl RawPath {
                             high_t += delta_t;
                         }
                     }
-                    area += Vec2D::cross(last, points[3]);
-                    last = points[3];
+                    area += Vec2D::cross(last, points[3] - origin);
+                    last = points[3] - origin;
                 }
             }
         }

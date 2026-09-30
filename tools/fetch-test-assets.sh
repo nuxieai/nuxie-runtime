@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-f0ec99212cc7bbc1d4755c22794eff81d103319b}
+ref=${RIVE_RUNTIME_REF:-7133967b25572642eb228f29254e64ed0b626469}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 

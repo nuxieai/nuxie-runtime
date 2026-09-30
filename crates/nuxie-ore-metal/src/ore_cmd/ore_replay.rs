@@ -295,7 +295,7 @@ mod tests {
         fn makeTexture(&mut self, _: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
             unreachable!()
         }
-        fn makeTextureView(&mut self, _: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        fn makeTextureViewImpl(&mut self, _: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
             unreachable!()
         }
         fn makeSampler(&mut self, _: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {

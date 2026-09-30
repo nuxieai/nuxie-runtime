@@ -107,8 +107,8 @@ impl TextureApi for TextureWGPU {
     fn isRenderTarget(&self) -> bool {
         self.base.isRenderTarget()
     }
-    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
-        super::ore_texture_wgpu_impl::upload(self, data)
+    fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+        super::ore_texture_wgpu_impl::uploadImpl(self, data)
     }
 }
 
@@ -174,7 +174,7 @@ pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 3;
 pub(crate) const SOURCE_CONSTRUCTOR_COUNT: usize = 2;
 pub(crate) const SOURCE_DESTRUCTOR_COUNT: usize = 2;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 2;
-const _: [(); 981] = [(); PINNED_SOURCE.len()];
+const _: [(); 985] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

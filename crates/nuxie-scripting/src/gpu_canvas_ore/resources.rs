@@ -91,8 +91,8 @@ impl UserData for Texture {
         methods.add_method("view", |lua, this, table: Value| {
             let mut desc = TextureViewDesc {
                 texture: Some(&this.resource),
-                mipCount: this.desc.numMipmaps,
-                layerCount: this.desc.depthOrArrayLayers,
+                mipCount: 0,
+                layerCount: 0,
                 dimension: match this.desc.r#type {
                     TextureType::texture2D => TextureViewDimension::texture2D,
                     TextureType::cube => TextureViewDimension::cube,
@@ -112,9 +112,9 @@ impl UserData for Texture {
                     };
                 }
                 desc.baseMipLevel = number(&table, "baseMipLevel", 0.0)? as u32;
-                desc.mipCount = number(&table, "mipCount", desc.mipCount as f64)? as u32;
+                desc.mipCount = number(&table, "mipCount", 0.0)? as u32;
                 desc.baseLayer = number(&table, "baseLayer", 0.0)? as u32;
-                desc.layerCount = number(&table, "layerCount", desc.layerCount as f64)? as u32;
+                desc.layerCount = number(&table, "layerCount", 0.0)? as u32;
             }
             let context = context(lua)?;
             let mut ctx = context.borrow_mut();
@@ -129,10 +129,11 @@ impl UserData for Texture {
         methods.add_method("upload", |_, this, table: Table| {
             let data: LuaBuffer = table.get("data")?;
             let bytes = data.to_vec();
-            let mut desc = TextureDataDesc {
+            let desc = TextureDataDesc {
                 data: Some(&bytes),
-                width: number(&table, "width", this.desc.width as f64)? as u32,
-                height: number(&table, "height", this.desc.height as f64)? as u32,
+                dataSize: bytes.len() as u32,
+                width: number(&table, "width", 0.0)? as u32,
+                height: number(&table, "height", 0.0)? as u32,
                 depth: number(&table, "depth", 1.0)? as u32,
                 x: number(&table, "x", 0.0)? as u32,
                 y: number(&table, "y", 0.0)? as u32,
@@ -142,60 +143,9 @@ impl UserData for Texture {
                 bytesPerRow: number(&table, "bytesPerRow", 0.0)? as u32,
                 rowsPerImage: number(&table, "rowsPerImage", 0.0)? as u32,
             };
-            if desc.mipLevel >= this.desc.numMipmaps {
-                return Err(Error::runtime(format!(
-                    "upload: mipLevel {} out of range [0, {})",
-                    desc.mipLevel, this.desc.numMipmaps
-                )));
-            }
-            if desc.layer >= this.desc.depthOrArrayLayers {
-                return Err(Error::runtime(format!(
-                    "upload: layer {} out of range [0, {})",
-                    desc.layer, this.desc.depthOrArrayLayers
-                )));
-            }
-            let width = this
-                .desc
-                .width
-                .checked_shr(desc.mipLevel)
-                .unwrap_or(0)
-                .max(1);
-            let height = this
-                .desc
-                .height
-                .checked_shr(desc.mipLevel)
-                .unwrap_or(0)
-                .max(1);
-            if desc.x > width || desc.width > width - desc.x {
-                return Err(Error::runtime("upload: x+width exceeds mip width"));
-            }
-            if desc.y > height || desc.height > height - desc.y {
-                return Err(Error::runtime("upload: y+height exceeds mip height"));
-            }
-            if desc.bytesPerRow == 0 {
-                let bpt = textureFormatBytesPerTexel(this.desc.format);
-                if bpt == 0 {
-                    return Err(Error::runtime(
-                        "upload: bytesPerRow must be provided for block-compressed formats",
-                    ));
-                }
-                desc.bytesPerRow = desc.width.wrapping_mul(bpt);
-            }
-            if desc.rowsPerImage == 0 {
-                desc.rowsPerImage = desc.height;
-            }
-            let required = u64::from(desc.bytesPerRow)
-                * u64::from(desc.rowsPerImage)
-                * u64::from(desc.depth.max(1));
-            if (bytes.len() as u64) < required {
-                return Err(Error::runtime(format!(
-                    "upload: data buffer is {} bytes but region requires {required}",
-                    bytes.len()
-                )));
-            }
             this.resource
                 .upload(&desc)
-                .map_err(|error| Error::runtime(format!("upload: {error:?}")))
+                .map_err(|error| Error::runtime(error.to_string()))
         });
     }
 }

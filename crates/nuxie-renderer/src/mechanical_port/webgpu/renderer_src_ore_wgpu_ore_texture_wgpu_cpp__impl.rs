@@ -39,19 +39,8 @@ pub(crate) fn planUpload(
     data: &TextureDataDesc<'_>,
     bytesPerTexel: u32,
 ) -> Result<UploadPlan, TextureUploadError> {
-    if bytesPerTexel == 0 && data.bytesPerRow == 0 {
-        return Err(TextureUploadError::SizeOverflow);
-    }
-    let actualBytesPerRow = if data.bytesPerRow == 0 {
-        data.width.wrapping_mul(bytesPerTexel)
-    } else {
-        data.bytesPerRow
-    };
-    let rowsPerImage = if data.rowsPerImage > 0 {
-        data.rowsPerImage
-    } else {
-        data.height
-    };
+    let actualBytesPerRow = data.bytesPerRow;
+    let rowsPerImage = data.rowsPerImage;
     let needsRowByRow = bytesPerTexel != 0
         && data.height > 1
         && data.depth == 1
@@ -73,7 +62,7 @@ pub(crate) fn planUpload(
     }
 }
 
-pub(crate) fn upload(
+pub(crate) fn uploadImpl(
     texture: &TextureWGPU,
     data: &TextureDataDesc<'_>,
 ) -> Result<(), TextureUploadError> {
@@ -162,10 +151,10 @@ pub(crate) fn upload(
     Ok(())
 }
 
-pub(crate) const SOURCE_ASSERT_COUNT: usize = 3;
+pub(crate) const SOURCE_ASSERT_COUNT: usize = 2;
 pub(crate) const SOURCE_WRITE_TEXTURE_CALL_SITE_COUNT: usize = 2;
 pub(crate) const SOURCE_EARLY_RETURN_COUNT: usize = 1;
-const _: [(); 3655] = [(); PINNED_SOURCE.len()];
+const _: [(); 3204] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -173,14 +162,14 @@ mod tests {
     use nuxie_ore_metal::types::TextureDataDesc;
 
     fn data(width: u32, height: u32, depth: u32) -> TextureDataDesc<'static> {
-        TextureDataDesc { width, height, depth, ..Default::default() }
+        TextureDataDesc { width, height, depth, bytesPerRow: width * 4, rowsPerImage: height, ..Default::default() }
     }
 
     #[test]
     fn complete_implementation_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 94);
+        assert_eq!(PINNED_SOURCE.lines().count(), 85);
         assert_eq!(LEGACY_DAWN_TYPE_ALIASES.len(), 4);
-        assert_eq!(SOURCE_ASSERT_COUNT, 3);
+        assert_eq!(SOURCE_ASSERT_COUNT, 2);
         assert_eq!(SOURCE_WRITE_TEXTURE_CALL_SITE_COUNT, 2);
         assert_eq!(SOURCE_EARLY_RETURN_COUNT, 1);
     }
@@ -215,8 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn compressed_formats_require_an_authored_stride() {
-        assert_eq!(planUpload(&data(8, 8, 1), 0), Err(TextureUploadError::SizeOverflow));
+    fn compressed_formats_use_the_validated_stride() {
         let authored = TextureDataDesc {
             bytesPerRow: 256,
             ..data(8, 8, 1)

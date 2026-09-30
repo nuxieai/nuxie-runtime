@@ -10,7 +10,7 @@ use crate::mechanical_port::source::{
     },
 };
 
-use std::{cmp::max, collections::BTreeSet};
+use std::collections::BTreeSet;
 use nuxie_ore_metal::{script_guards::*, types::kMaxVertexBufferSlots};
 
 fn buffer_usage_from_string(state: &mut LuaState, value: &str) -> BufferUsage {
@@ -715,8 +715,8 @@ fn gpu_texture_view(state: &mut LuaState) -> i32 {
     let texture = state.to_rive::<ScriptedGPUTexture>(1).texture.clone();
     let mut desc = TextureViewDesc {
         texture: texture.clone(),
-        mip_count: texture.num_mipmaps(),
-        layer_count: texture.depth_or_array_layers(),
+        mip_count: 0,
+        layer_count: 0,
         dimension: match texture.texture_type() {
             TextureType::Texture2D => TextureViewDimension::Texture2D,
             TextureType::Cube => TextureViewDimension::Cube,
@@ -767,10 +767,11 @@ fn gpu_texture_upload(state: &mut LuaState) -> i32 {
         unreachable!()
     };
     state.pop(1);
-    let mut desc = TextureDataDesc {
+    let desc = TextureDataDesc {
+        data_size: data.len() as u32,
         data,
-        width: optional_number_field(state, 2, "width", texture.width() as f64) as u32,
-        height: optional_number_field(state, 2, "height", texture.height() as f64) as u32,
+        width: optional_number_field(state, 2, "width", 0.0) as u32,
+        height: optional_number_field(state, 2, "height", 0.0) as u32,
         depth: optional_number_field(state, 2, "depth", 1.0) as u32,
         x: optional_number_field(state, 2, "x", 0.0) as u32,
         y: optional_number_field(state, 2, "y", 0.0) as u32,
@@ -780,53 +781,9 @@ fn gpu_texture_upload(state: &mut LuaState) -> i32 {
         bytes_per_row: optional_number_field(state, 2, "bytesPerRow", 0.0) as u32,
         rows_per_image: optional_number_field(state, 2, "rowsPerImage", 0.0) as u32,
     };
-    if desc.mip_level >= texture.num_mipmaps() {
-        state.error::<()>(format!(
-            "upload: mipLevel {} out of range [0, {})",
-            desc.mip_level,
-            texture.num_mipmaps()
-        ));
+    if let Err(error) = texture.upload(desc) {
+        state.error::<()>(error.to_string());
     }
-    if desc.layer >= texture.depth_or_array_layers() {
-        state.error::<()>(format!(
-            "upload: layer {} out of range [0, {})",
-            desc.layer,
-            texture.depth_or_array_layers()
-        ));
-    }
-    let mip_width = max(1, texture.width() >> desc.mip_level);
-    let mip_height = max(1, texture.height() >> desc.mip_level);
-    if desc.x > mip_width || desc.width > mip_width - desc.x {
-        state.error::<()>(format!(
-            "upload: x+width ({}+{}) exceeds mip {} width {mip_width}",
-            desc.x, desc.width, desc.mip_level
-        ));
-    }
-    if desc.y > mip_height || desc.height > mip_height - desc.y {
-        state.error::<()>(format!(
-            "upload: y+height ({}+{}) exceeds mip {} height {mip_height}",
-            desc.y, desc.height, desc.mip_level
-        ));
-    }
-    if desc.bytes_per_row == 0 {
-        let bytes_per_texel = texture_format_bytes_per_texel(texture.format());
-        if bytes_per_texel == 0 {
-            state.error::<()>("upload: bytesPerRow must be provided for block-compressed formats");
-        }
-        desc.bytes_per_row = desc.width * bytes_per_texel;
-    }
-    if desc.rows_per_image == 0 {
-        desc.rows_per_image = desc.height;
-    }
-    let required =
-        desc.bytes_per_row as u64 * desc.rows_per_image as u64 * max(1, desc.depth) as u64;
-    if (desc.data.len() as u64) < required {
-        state.error::<()>(format!(
-            "upload: data buffer is {} bytes but region requires {required} (bytesPerRow={} * rowsPerImage={} * depth={})",
-            desc.data.len(), desc.bytes_per_row, desc.rows_per_image, max(1, desc.depth)
-        ));
-    }
-    texture.upload(desc);
     0
 }
 

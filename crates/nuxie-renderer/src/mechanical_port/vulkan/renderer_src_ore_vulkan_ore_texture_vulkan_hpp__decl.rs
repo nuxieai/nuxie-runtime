@@ -113,15 +113,15 @@ impl TextureApi for TextureVulkan {
     fn isRenderTarget(&self) -> bool {
         self.base.isRenderTarget()
     }
-    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
-        super::ore_texture_vulkan_impl::upload(self, data, None)
+    fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+        super::ore_texture_vulkan_impl::uploadImpl(self, data, None)
     }
-    fn uploadWithOwner(
+    fn uploadImplWithOwner(
         &self,
         data: &TextureDataDesc<'_>,
         owner: AnyResourceHandle,
     ) -> Result<(), TextureUploadError> {
-        super::ore_texture_vulkan_impl::upload(self, data, Some(owner))
+        super::ore_texture_vulkan_impl::uploadImpl(self, data, Some(owner))
     }
 }
 
@@ -135,6 +135,17 @@ pub(crate) struct TextureViewVulkan {
 }
 
 impl TextureViewVulkan {
+    // The level and layers a pass over this view renders into.
+    pub(crate) fn vkAttachmentRange(&self, aspect: vk::ImageAspectFlags) -> vk::ImageSubresourceRange {
+        vk::ImageSubresourceRange {
+            aspect_mask: aspect,
+            base_mip_level: self.baseMipLevel(),
+            level_count: 1,
+            base_array_layer: self.baseLayer(),
+            layer_count: self.layerCount(),
+        }
+    }
+
     pub(crate) fn new(
         manager: GPUResourceManager,
         texture: AnyResourceHandle,

@@ -128,8 +128,8 @@ impl ContextApi for ObservedContext {
     fn makeTexture(&mut self, desc: &TextureDesc<'_>) -> Option<AnyResourceHandle> {
         self.inner.makeTexture(desc)
     }
-    fn makeTextureView(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
-        self.inner.makeTextureView(desc)
+    fn makeTextureViewImpl(&mut self, desc: &TextureViewDesc<'_>) -> Option<AnyResourceHandle> {
+        self.inner.makeTextureViewImpl(desc)
     }
     fn makeSampler(&mut self, desc: &SamplerDesc<'_>) -> Option<AnyResourceHandle> {
         self.inner.makeSampler(desc)

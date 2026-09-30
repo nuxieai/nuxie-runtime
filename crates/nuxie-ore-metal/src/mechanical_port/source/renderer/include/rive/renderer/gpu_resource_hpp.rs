@@ -1891,7 +1891,7 @@ mod tests {
                 true
             }
 
-            fn upload(&self, _data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+            fn uploadImpl(&self, _data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
                 self.uploads.fetch_add(1, Ordering::Relaxed);
                 Ok(())
             }
@@ -1936,7 +1936,18 @@ mod tests {
         assert_eq!(resource.height(), Some(23));
         assert_eq!(resource.format(), Some(TextureFormat::rgba8unorm));
         assert_eq!(resource.isRenderTarget(), Some(true));
-        assert_eq!(resource.upload(&TextureDataDesc::default()), Ok(()));
+        let pixels = [0u8; 4];
+        assert_eq!(
+            resource.upload(&TextureDataDesc {
+                data: Some(&pixels),
+                dataSize: pixels.len() as u32,
+                width: 1,
+                height: 1,
+                depth: 1,
+                ..Default::default()
+            }),
+            Ok(())
+        );
         assert_eq!(uploads.load(Ordering::Relaxed), 1);
 
         drop(resource);

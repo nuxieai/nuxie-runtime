@@ -23,6 +23,15 @@ use enums::*;
 use resources::*;
 use shader::*;
 
+// The direct-host plan collector shares the live Lua enum mapping and ORE
+// descriptor validation without manufacturing a backend resource.
+pub(super) fn texture_format_for_host(value: &str) -> Result<TextureFormat> {
+    texture_format(value)
+}
+pub(super) fn texture_type_for_host(value: &str) -> Result<TextureType> {
+    texture_type(value)
+}
+
 fn context(lua: &Lua) -> Result<OreContextHandle> {
     RendererBindings::for_lua(lua)
         .and_then(|bindings| bindings.ore_context())
@@ -186,10 +195,7 @@ pub(crate) fn image_view(
     })
 }
 
-pub(super) fn close_orphan_render_pass(
-    bindings: &RendererBindings,
-    token: u64,
-) -> Result<bool> {
+pub(super) fn close_orphan_render_pass(bindings: &RendererBindings, token: u64) -> Result<bool> {
     let Some(context) = bindings.ore_context() else {
         return Ok(false);
     };

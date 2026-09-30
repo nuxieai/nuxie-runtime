@@ -28,8 +28,12 @@ use objc2_metal::{MTLOrigin, MTLRegion, MTLSize, MTLTexture};
 // namespace rive::ore
 
 impl TextureMetal {
-    // void TextureMetal::upload(const TextureDataDesc& data)
     pub fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+        <Self as TextureApi>::upload(self, data)
+    }
+
+    // void TextureMetal::uploadImpl(const TextureDataDesc& data)
+    pub fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
         debug_assert!(self.m_mtlTexture.is_some());
         debug_assert!(data.data.is_some());
 
@@ -138,8 +142,8 @@ impl TextureApi for TextureMetal {
         self.base.isRenderTarget()
     }
 
-    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
-        TextureMetal::upload(self, data)
+    fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+        TextureMetal::uploadImpl(self, data)
     }
 }
 

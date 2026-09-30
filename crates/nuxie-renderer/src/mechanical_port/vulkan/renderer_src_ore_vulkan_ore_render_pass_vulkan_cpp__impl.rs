@@ -13,7 +13,7 @@ use ash::vk;
 use nuxie_ore_metal::context::ActiveRenderPass;
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::render_pass::RenderPassApi;
-use nuxie_ore_metal::types::{IndexFormat, TextureFormat};
+use nuxie_ore_metal::types::IndexFormat;
 use std::any::Any;
 use std::mem::ManuallyDrop;
 use std::rc::Weak as RcWeak;
@@ -270,9 +270,7 @@ pub(crate) fn drawIndexed(
 fn transitionColorImage(
     pass: &RenderPassVulkanState,
     image: vk::Image,
-    baseMip: u32,
-    baseLayer: u32,
-    layerCount: u32,
+    range: vk::ImageSubresourceRange,
 ) {
     let barrier = vk::ImageMemoryBarrier::default()
         .old_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
@@ -280,13 +278,7 @@ fn transitionColorImage(
         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .image(image)
-        .subresource_range(vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: baseMip,
-            level_count: 1,
-            base_array_layer: baseLayer,
-            layer_count: layerCount,
-        })
+        .subresource_range(range)
         .src_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE)
         .dst_access_mask(vk::AccessFlags::empty());
     unsafe {
@@ -328,9 +320,7 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
         transitionColorImage(
             pass,
             image,
-            0,
-            pass.m_vkColorBaseLayer[index],
-            pass.m_vkColorLayerCount[index],
+            pass.m_vkColorRanges[index],
         );
         if let Some(target) = pass.m_vkColorRenderTargets[index].as_mut() {
             target.updateLastAccess(colorAttachmentWriteAccess);
@@ -346,19 +336,17 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
     }
 
     for index in 0..pass.m_vkResolveTargets.len() {
-        let (image, baseMip, baseLayer, layerCount) = {
+        let (image, range) = {
             let resolve = &pass.m_vkResolveTargets[index];
             (
                 resolve.image,
-                resolve.baseMip,
-                resolve.baseLayer,
-                resolve.layerCount,
+                resolve.range,
             )
         };
         if image == vk::Image::null() {
             continue;
         }
-        transitionColorImage(pass, image, baseMip, baseLayer, layerCount);
+        transitionColorImage(pass, image, range);
         let resolve = &mut pass.m_vkResolveTargets[index];
         if let Some(target) = resolve.renderTarget.as_mut() {
             target.updateLastAccess(colorAttachmentWriteAccess);
@@ -375,26 +363,13 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
     }
 
     if pass.m_vkDepthImage != vk::Image::null() {
-        let mut depthAspect = vk::ImageAspectFlags::DEPTH;
-        if matches!(
-            nuxie_ore_metal::render_pass_depth_format(&pass.base),
-            TextureFormat::depth24plusStencil8 | TextureFormat::depth32floatStencil8
-        ) {
-            depthAspect |= vk::ImageAspectFlags::STENCIL;
-        }
         let barrier = vk::ImageMemoryBarrier::default()
             .old_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
             .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
             .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
             .image(pass.m_vkDepthImage)
-            .subresource_range(vk::ImageSubresourceRange {
-                aspect_mask: depthAspect,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: pass.m_vkDepthBaseLayer,
-                layer_count: pass.m_vkDepthLayerCount,
-            })
+            .subresource_range(pass.m_vkDepthRange)
             .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
             .dst_access_mask(vk::AccessFlags::empty());
         unsafe {

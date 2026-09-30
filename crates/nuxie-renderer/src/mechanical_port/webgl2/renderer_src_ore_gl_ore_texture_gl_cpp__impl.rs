@@ -136,7 +136,7 @@ fn sourceBytes<'a>(data: &TextureDataDesc<'a>) -> Result<&'a [u8], TextureUpload
     data.data.ok_or(TextureUploadError::NullData)
 }
 
-pub(crate) fn upload(
+pub(crate) fn uploadImpl(
     texture: &TextureGL,
     data: &TextureDataDesc<'_>,
 ) -> Result<(), TextureUploadError> {
@@ -159,12 +159,8 @@ fn uploadCurrent(
     let compressedImage = if isCompressedFormat(texture.base.format()) {
         let imageSize = data
             .bytesPerRow
-            .wrapping_mul(if data.rowsPerImage > 0 {
-                data.rowsPerImage
-            } else {
-                data.height
-            })
-            .wrapping_mul(if data.depth > 0 { data.depth } else { 1 });
+            .wrapping_mul(data.rowsPerImage)
+            .wrapping_mul(data.depth);
         let image = bytes
             .get(..imageSize as usize)
             .ok_or(TextureUploadError::DataTooShort {
@@ -318,7 +314,7 @@ mod tests {
     use super::*;
     #[test]
     fn complete_implementation_denominator_is_frozen() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 349);
+        assert_eq!(PINNED_SOURCE.lines().count(), 347);
     }
 
     #[test]

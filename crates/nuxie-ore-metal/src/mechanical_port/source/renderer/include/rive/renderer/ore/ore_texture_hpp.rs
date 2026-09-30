@@ -21,7 +21,7 @@ use core::ops::{Deref, DerefMut};
 use super::super::gpu_resource_hpp::{AnyResourceHandle, GPUResource, GpuResourcePayload};
 use super::ore_types_hpp::{
     TextureAspect, TextureDataDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
-    TextureViewDimension,
+    TextureViewDimension, textureFormatBytesPerTexel,
 };
 
 // namespace rive::ore
@@ -36,7 +36,18 @@ pub trait TextureApi {
     fn numMipmaps(&self) -> u32;
     fn sampleCount(&self) -> u32;
     fn isRenderTarget(&self) -> bool;
-    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError>;
+    fn arrayLayers(&self) -> u32 {
+        match self.r#type() {
+            TextureType::cube => 6,
+            TextureType::array2D => self.depthOrArrayLayers(),
+            _ => 1,
+        }
+    }
+    fn upload(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError> {
+        let data = normalizeTextureUpload(self, data)?;
+        self.uploadImpl(&data)
+    }
+    fn uploadImpl(&self, data: &TextureDataDesc<'_>) -> Result<(), TextureUploadError>;
 
     /// Concrete-backend ownership adaptation for source implementations that
     /// call `ref_rcp(this)` during upload. The type-erased call site supplies
@@ -45,14 +56,23 @@ pub trait TextureApi {
     fn uploadWithOwner(
         &self,
         data: &TextureDataDesc<'_>,
+        owner: AnyResourceHandle,
+    ) -> Result<(), TextureUploadError> {
+        let data = normalizeTextureUpload(self, data)?;
+        self.uploadImplWithOwner(&data, owner)
+    }
+    fn uploadImplWithOwner(
+        &self,
+        data: &TextureDataDesc<'_>,
         _owner: AnyResourceHandle,
     ) -> Result<(), TextureUploadError> {
-        self.upload(data)
+        self.uploadImpl(data)
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TextureUploadError {
+    Validation(String),
     WrongResourceKind,
     WrongExecutionDomain,
     MissingNativeTexture,
@@ -60,6 +80,137 @@ pub enum TextureUploadError {
     EmptyData,
     SizeOverflow,
     DataTooShort { required: usize, actual: usize },
+}
+
+impl std::fmt::Display for TextureUploadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Validation(message) => f.write_str(message),
+            _ => write!(f, "{self:?}"),
+        }
+    }
+}
+
+/// Shared source Texture::upload checks. The slice remains borrowed; dataSize
+/// is the source's optional bound, independently of Rust's actual safe span.
+pub fn normalizeTextureUpload<'a, T: TextureApi + ?Sized>(
+    texture: &T,
+    data: &TextureDataDesc<'a>,
+) -> Result<TextureDataDesc<'a>, TextureUploadError> {
+    normalizeTextureUploadForDesc(
+        &TextureDesc {
+            width: texture.width(),
+            height: texture.height(),
+            depthOrArrayLayers: texture.depthOrArrayLayers(),
+            format: texture.format(),
+            r#type: texture.r#type(),
+            numMipmaps: texture.numMipmaps(),
+            sampleCount: texture.sampleCount(),
+            renderTarget: texture.isRenderTarget(),
+            label: None,
+        },
+        data,
+    )
+}
+
+pub fn normalizeTextureUploadForDesc<'a>(
+    texture: &TextureDesc<'_>,
+    data: &TextureDataDesc<'a>,
+) -> Result<TextureDataDesc<'a>, TextureUploadError> {
+    let mut data = *data;
+    let fail = |message| TextureUploadError::Validation(message);
+    if data.data.is_none() {
+        return Err(fail("upload: data is null".into()));
+    }
+    let mips = texture.numMipmaps;
+    if data.mipLevel >= mips {
+        return Err(fail(format!(
+            "upload: mipLevel {} exceeds {} levels",
+            data.mipLevel, mips
+        )));
+    }
+    let layers = match texture.r#type {
+        TextureType::cube => 6,
+        TextureType::array2D => texture.depthOrArrayLayers,
+        _ => 1,
+    };
+    if data.layer >= layers {
+        return Err(fail(format!(
+            "upload: layer {} exceeds {} layers",
+            data.layer, layers
+        )));
+    }
+    let w = texture.width.checked_shr(data.mipLevel).unwrap_or(0).max(1);
+    let h = texture
+        .height
+        .checked_shr(data.mipLevel)
+        .unwrap_or(0)
+        .max(1);
+    let d = if texture.r#type == TextureType::texture3D {
+        texture
+            .depthOrArrayLayers
+            .checked_shr(data.mipLevel)
+            .unwrap_or(0)
+            .max(1)
+    } else {
+        1
+    };
+    if data.x >= w || data.y >= h || data.z >= d {
+        return Err(fail(format!(
+            "upload: origin ({}, {}, {}) outside mip {} ({}x{}x{})",
+            data.x, data.y, data.z, data.mipLevel, w, h, d
+        )));
+    }
+    if data.width == 0 {
+        data.width = w - data.x;
+    }
+    if data.height == 0 {
+        data.height = h - data.y;
+    }
+    if data.depth == 0 {
+        data.depth = d - data.z;
+    }
+    if data.width > w - data.x || data.height > h - data.y || data.depth > d - data.z {
+        return Err(fail(format!(
+            "upload: region {}x{}x{} at ({}, {}, {}) exceeds mip {} ({}x{}x{})",
+            data.width, data.height, data.depth, data.x, data.y, data.z, data.mipLevel, w, h, d
+        )));
+    }
+    let bpt = textureFormatBytesPerTexel(texture.format);
+    if data.bytesPerRow == 0 {
+        if bpt == 0 {
+            return Err(fail(
+                "upload: bytesPerRow is required for block compressed formats".into(),
+            ));
+        }
+        data.bytesPerRow = data.width.wrapping_mul(bpt);
+    } else if bpt != 0
+        && (data.bytesPerRow % bpt != 0
+            || u64::from(data.bytesPerRow) < u64::from(data.width) * u64::from(bpt))
+    {
+        return Err(fail(format!(
+            "upload: bytesPerRow {} does not cover {} texels of {} bytes",
+            data.bytesPerRow, data.width, bpt
+        )));
+    }
+    if data.rowsPerImage == 0 {
+        data.rowsPerImage = data.height;
+    } else if data.rowsPerImage < data.height {
+        return Err(fail(format!(
+            "upload: rowsPerImage {} is less than height {}",
+            data.rowsPerImage, data.height
+        )));
+    }
+    let required = u64::from(data.bytesPerRow)
+        .wrapping_mul(u64::from(data.rowsPerImage))
+        .wrapping_mul(u64::from(data.depth));
+    if data.dataSize != 0 && u64::from(data.dataSize) < required {
+        return Err(fail(format!(
+            "upload: data is {} bytes but the region needs {}",
+            data.dataSize, required
+        )));
+    }
+    Ok(data)
 }
 
 // class Context;
@@ -165,6 +316,14 @@ impl Texture {
     // uint32_t numMipmaps() const { return m_numMipmaps; }
     pub fn numMipmaps(&self) -> u32 {
         self.m_numMipmaps
+    }
+
+    pub fn arrayLayers(&self) -> u32 {
+        match self.r#type() {
+            TextureType::cube => 6,
+            TextureType::array2D => self.depthOrArrayLayers(),
+            _ => 1,
+        }
     }
 
     // uint32_t sampleCount() const { return m_sampleCount; }
@@ -362,6 +521,23 @@ impl TextureView {
     // uint32_t layerCount() const { return m_layerCount; }
     pub fn layerCount(&self) -> u32 {
         self.m_layerCount
+    }
+
+    pub fn width(&self) -> u32 {
+        self.texture()
+            .width()
+            .expect("texture view source")
+            .checked_shr(self.baseMipLevel())
+            .unwrap_or(0)
+            .max(1)
+    }
+    pub fn height(&self) -> u32 {
+        self.texture()
+            .height()
+            .expect("texture view source")
+            .checked_shr(self.baseMipLevel())
+            .unwrap_or(0)
+            .max(1)
     }
 
     // virtual ~TextureView() = default;

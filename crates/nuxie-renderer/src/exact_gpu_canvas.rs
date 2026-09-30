@@ -466,6 +466,7 @@ impl RetainedTexture {
             texture
                 .upload(&TextureDataDesc {
                     data: Some(&upload.bytes),
+                    dataSize: upload.bytes.len() as u32,
                     bytesPerRow: upload.bytes_per_row,
                     rowsPerImage: upload.rows_per_image,
                     mipLevel: upload.mip_level,

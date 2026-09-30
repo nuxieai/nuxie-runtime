@@ -11,7 +11,7 @@ use nuxie_ore_metal::buffer::BufferApi;
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, GpuResourcePayload, ResourceHandle};
 use nuxie_ore_metal::texture::TextureUploadError;
 use nuxie_ore_metal::types::{
-    textureFormatBytesPerTexel, BufferUsage, TextureDataDesc, TextureFormat, TextureType,
+    textureFormatBytesPerTexel, BufferUsage, TextureDataDesc, TextureFormat,
 };
 use std::mem::ManuallyDrop;
 use vk_mem::{Alloc, AllocationCreateFlags, AllocationCreateInfo, MemoryUsage};
@@ -68,7 +68,7 @@ impl TextureVulkan {
     }
 }
 
-pub(crate) fn upload(
+pub(crate) fn uploadImpl(
     texture: &TextureVulkan,
     data: &TextureDataDesc<'_>,
     owner: Option<AnyResourceHandle>,
@@ -81,13 +81,7 @@ pub(crate) fn upload(
             TextureUploadError::MissingNativeTexture,
         );
     }
-    let Some(bytes) = data.data else {
-        return fail(
-            texture,
-            "upload: data is null".into(),
-            TextureUploadError::NullData,
-        );
-    };
+    let bytes = data.data.expect("shared upload validation requires data");
     let Some(owner) = owner else {
         return fail(
             texture,
@@ -97,132 +91,23 @@ pub(crate) fn upload(
     };
 
     let bytes_per_texel = textureFormatBytesPerTexel(texture.format());
-    if data.mipLevel >= texture.numMipmaps() {
-        return fail(
-            texture,
-            format!(
-                "upload: mipLevel ({}) >= numMipmaps ({})",
-                data.mipLevel,
-                texture.numMipmaps()
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
-    if data.layer >= texture.depthOrArrayLayers() {
-        return fail(
-            texture,
-            format!(
-                "upload: layer ({}) >= depthOrArrayLayers ({})",
-                data.layer,
-                texture.depthOrArrayLayers()
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
-    let mip_width = (texture.width() >> data.mipLevel).max(1);
-    let mip_height = (texture.height() >> data.mipLevel).max(1);
-    let width = if data.width > 0 {
-        data.width
-    } else {
-        mip_width
-    };
-    let height = if data.height > 0 {
-        data.height
-    } else {
-        mip_height
-    };
-    let max_depth = if texture.r#type() == TextureType::texture3D {
-        texture.depthOrArrayLayers()
-    } else {
-        1
-    };
-    let depth = if data.depth > 0 {
-        data.depth
-    } else {
-        max_depth
-    };
-    if u64::from(data.x) + u64::from(width) > u64::from(mip_width)
-        || u64::from(data.y) + u64::from(height) > u64::from(mip_height)
-    {
-        return fail(
-            texture,
-            format!(
-                "upload: region (x={} y={} w={} h={}) out of bounds for mip {} ({}x{})",
-                data.x, data.y, width, height, data.mipLevel, mip_width, mip_height
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
-    if u64::from(data.z) + u64::from(depth) > u64::from(max_depth) {
-        return fail(
-            texture,
-            format!(
-                "upload: z-region (z={} depth={}) out of bounds (maxDepth={})",
-                data.z, depth, max_depth
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
     if bytes_per_texel == 0 {
-        return fail(
-            texture,
-            "upload: block-compressed formats not yet supported".into(),
-            TextureUploadError::SizeOverflow,
-        );
+        texture
+            .oreContextMut()
+            .setLastError("upload: block-compressed formats not yet supported");
+        // Upstream uploadImpl is void: backend diagnostics do not turn the
+        // shared Texture::upload validation result into a failure.
+        return Ok(());
     }
-    if data.bytesPerRow != 0 && data.bytesPerRow % bytes_per_texel != 0 {
-        return fail(
-            texture,
-            format!(
-                "upload: bytesPerRow ({}) must be a whole number of texels (bytesPerTexel={})",
-                data.bytesPerRow, bytes_per_texel
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
-    if data.bytesPerRow != 0
-        && u64::from(data.bytesPerRow) < u64::from(width) * u64::from(bytes_per_texel)
-    {
-        return fail(
-            texture,
-            format!(
-                "upload: bytesPerRow ({}) < width * bytesPerTexel ({})",
-                data.bytesPerRow,
-                u64::from(width) * u64::from(bytes_per_texel)
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
-    if data.rowsPerImage > 0 && data.rowsPerImage < height {
-        return fail(
-            texture,
-            format!(
-                "upload: rowsPerImage ({}) < height ({})",
-                data.rowsPerImage, height
-            ),
-            TextureUploadError::SizeOverflow,
-        );
-    }
-    let bytes_per_row = if data.bytesPerRow != 0 {
-        u64::from(data.bytesPerRow)
-    } else {
-        u64::from(width) * u64::from(bytes_per_texel)
-    };
-    let rows_per_image = if data.rowsPerImage > 0 {
-        data.rowsPerImage
-    } else {
-        height
-    };
-    let upload_size = bytes_per_row
-        .checked_mul(u64::from(rows_per_image))
-        .and_then(|value| value.checked_mul(u64::from(depth)))
+    let upload_size = u64::from(data.bytesPerRow)
+        .checked_mul(u64::from(data.rowsPerImage))
+        .and_then(|value| value.checked_mul(u64::from(data.depth)))
         .unwrap_or(u64::MAX);
     if upload_size > u64::from(u32::MAX) {
-        return fail(
-            texture,
-            format!("upload: size ({upload_size}) exceeds uint32_t staging buffer max"),
-            TextureUploadError::SizeOverflow,
-        );
+        texture.oreContextMut().setLastError(format!(
+            "upload: size ({upload_size}) exceeds uint32_t staging buffer max"
+        ));
+        return Ok(());
     }
     let required = upload_size as usize;
     if bytes.len() < required {
@@ -274,15 +159,12 @@ pub(crate) fn upload(
     } {
         Ok(value) => value,
         Err(error) => {
-            return fail(
-                texture,
-                format!(
-                    "upload: staging buffer allocation failed (size={}, vk={})",
-                    upload_size,
-                    error.as_raw()
-                ),
-                TextureUploadError::SizeOverflow,
-            );
+            texture.oreContextMut().setLastError(format!(
+                "upload: staging buffer allocation failed (size={}, vk={})",
+                upload_size,
+                error.as_raw()
+            ));
+            return Ok(());
         }
     };
     let mapped = vk_context
@@ -297,15 +179,12 @@ pub(crate) fn upload(
                 .allocator()
                 .destroy_buffer(buffer, &mut allocation)
         };
-        return fail(
-            texture,
-            format!(
-                "upload: staging buffer allocation failed (size={}, vk={})",
-                upload_size,
-                vk::Result::ERROR_MEMORY_MAP_FAILED.as_raw()
-            ),
-            TextureUploadError::SizeOverflow,
-        );
+        texture.oreContextMut().setLastError(format!(
+            "upload: staging buffer allocation failed (size={}, vk={})",
+            upload_size,
+            vk::Result::SUCCESS.as_raw()
+        ));
+        return Ok(());
     }
     unsafe {
         // The native buffer, allocation, and mapped range are the tuple just
@@ -320,11 +199,7 @@ pub(crate) fn upload(
         ResourceHandle::new_buffer_with_installed_manager_in_domain(domain, staging).erase();
     let region = vk::BufferImageCopy {
         buffer_offset: 0,
-        buffer_row_length: if data.bytesPerRow != 0 {
-            data.bytesPerRow / bytes_per_texel
-        } else {
-            0
-        },
+        buffer_row_length: data.bytesPerRow / bytes_per_texel,
         buffer_image_height: data.rowsPerImage,
         image_subresource: vk::ImageSubresourceLayers {
             aspect_mask: aspectMask(texture.format()),
@@ -338,9 +213,9 @@ pub(crate) fn upload(
             z: data.z as i32,
         },
         image_extent: vk::Extent3D {
-            width,
-            height,
-            depth,
+            width: data.width,
+            height: data.height,
+            depth: data.depth,
         },
     };
     texture.vkMarkWritten(data.mipLevel, data.layer);

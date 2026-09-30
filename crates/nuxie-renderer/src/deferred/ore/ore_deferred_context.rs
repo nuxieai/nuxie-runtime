@@ -1,8 +1,6 @@
 //! renderer/ore/cmd/ore_deferred_context.hpp at e3c5dec2.
 #![allow(non_snake_case)]
-use crate::deferred::cmd::{
-    foreign_image_registry::ForeignImageRegistry, render_handle::CANVAS_HANDLE_MASK,
-};
+use crate::deferred::cmd::foreign_image_registry::ForeignImageRegistry;
 use nuxie_ore_metal::cmd::{
     id_allocator::{Allocation, IdAllocator},
     live_recorder_registry::{register_recorder, unregister_recorder},
@@ -550,7 +548,29 @@ impl ContextApi for DeferredOreContext {
         );
         Some(self.makeReservedCanvasView(a.id, a.generation, info.width, info.height))
     }
-    fn recordWrapCanvasImage(&mut self, info: CanvasImageInfo) -> Option<AnyResourceHandle> {
+    fn recordWrapCanvasImage(&mut self, info: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        let Some(provider) = &mut self.canvasIdProvider else {
+            let real = self
+                .real()
+                .expect("sessionless recorder needs real context");
+            // The retained canvas owner keeps the projected host fields alive.
+            return unsafe { real.borrow_mut().wrapCanvasSampleView(info) };
+        };
+        // Register the canvas this frame even when no content range opened it.
+        let canvas =
+            nuxie_render_api::canvas_texture_owner(&info).expect("recording canvas host owner");
+        let id = provider(canvas);
+        let a = self.alloc();
+        recordWrapCanvasView(
+            &mut self.render.borrow_mut(),
+            a.id,
+            a.generation,
+            id,
+            WrapCanvasViewMode::sampleView,
+        );
+        Some(self.makeReservedCanvasView(a.id, a.generation, info.width, info.height))
+    }
+    fn recordWrapForeignImageView(&mut self, info: CanvasImageInfo) -> Option<AnyResourceHandle> {
         let image = info
             .owner
             .downcast_ref::<Rc<dyn RenderImage>>()
@@ -560,15 +580,14 @@ impl ContextApi for DeferredOreContext {
             .as_ref()
             .expect("canvas registry")
             .borrow_mut()
-            .image_draw_id(image.as_ref())
-            & CANVAS_HANDLE_MASK;
+            .image_draw_id(image.as_ref());
         let a = self.alloc();
         recordWrapCanvasView(
             &mut self.render.borrow_mut(),
             a.id,
             a.generation,
             id,
-            WrapCanvasViewMode::sampleView,
+            WrapCanvasViewMode::imageView,
         );
         Some(self.makeReservedCanvasView(a.id, a.generation, info.width, info.height))
     }

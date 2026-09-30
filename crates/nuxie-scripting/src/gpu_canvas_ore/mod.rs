@@ -160,10 +160,15 @@ pub(crate) fn image_view(
     if cached.borrow().is_none() {
         let mut ctx = context.borrow_mut();
         let view = if ctx.isRecording() {
-            let view = if let Some(id) = image.deferred_image_id() {
+            // Canvas provenance is authoritative: canvas backings can share
+            // the same renderer type as decoded images. Recording must not
+            // touch the driver; foreign images resolve through the registry.
+            let view = if let Some(source_canvas) = source_canvas {
+                ctx.recordWrapCanvasImage(nuxie_render_api::canvas_texture_info(source_canvas))
+            } else if let Some(id) = image.deferred_image_id() {
                 ctx.recordWrapImageView(id, image.width(), image.height())
             } else {
-                ctx.recordWrapCanvasImage(nuxie_ore_metal::context::CanvasImageInfo {
+                ctx.recordWrapForeignImageView(nuxie_ore_metal::context::CanvasImageInfo {
                     identity: image.image_identity(),
                     width: image.width(),
                     height: image.height(),

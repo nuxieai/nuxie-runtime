@@ -62,10 +62,16 @@ pub trait ShapePaintMutator {
         &mut self,
         component: CoreHandle,
         parent: Option<CoreHandle>,
-        factory: &RuntimeFactoryHandle,
+        factory: Option<&RuntimeFactoryHandle>,
     ) -> StatusCode {
         self.mutator_state_mut().flags = MutatorFlags::TRANSLUCENT | MutatorFlags::VISIBLE;
         self.mutator_state_mut().component = Some(component.clone());
+        // The caller projects the component's artboard factory while it owns
+        // the component borrow. Missing artboards and missing factories both
+        // cull this mutator before the parent initializes its render paint.
+        let Some(factory) = factory else {
+            return StatusCode::MissingObject;
+        };
         let Some(parent) = parent else {
             return StatusCode::MissingObject;
         };

@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "d7d5fdd8419b5e5932f56e8a51a62eb83c5a2d71"
+upstream_ref = "576282493a805993d4ca6379e425f105fe0d03d5"
 expected_entries = 275
 expected_runtime = 227
 expected_scripted = 45
@@ -1306,7 +1306,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/file_test.cpp"
 provenance_test = "Test deterministic mode for randomization and elastic scroll physics"
-producer_line = 320
+producer_line = 333
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

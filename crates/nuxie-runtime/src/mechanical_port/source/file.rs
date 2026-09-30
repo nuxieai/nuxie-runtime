@@ -337,11 +337,18 @@ impl File {
 
     pub fn import(
         bytes: &[u8],
-        factory: RuntimeFactoryHandle,
+        factory: impl Into<Option<RuntimeFactoryHandle>>,
         result: Option<&mut ImportResult>,
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
     ) -> Option<RuntimeFileHandle> {
+        let Some(factory) = factory.into() else {
+            eprintln!("File::import requires a non-null Factory.");
+            if let Some(result) = result {
+                *result = ImportResult::Malformed;
+            }
+            return None;
+        };
         Self::import_internal(bytes, factory, result, asset_loader, scripting_vm, None)
     }
 
@@ -1248,7 +1255,7 @@ impl File {
     fn complete_view_model_instance_with_map(
         &self,
         instance: &CoreHandle,
-        instances: &mut HashMap<CoreHandle, CoreHandle>,
+        instances: &mut HashMap<CoreHandle, Option<CoreHandle>>,
     ) {
         let Some((view_model_id, values)) = instance
             .with(|instance| {
@@ -1276,41 +1283,30 @@ impl File {
                 .flatten();
             if let Some(nested_index) = nested_index {
                 let property = Self::view_model_property_for(&view_model, &value);
-                let reference_id = property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id());
+                let reference_id = property.and_then(|property| property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id()));
                 if let Some(reference_id) = reference_id {
-                    let source = self
-                        .view_model_handle(reference_id as usize)
-                        .and_then(|model| {
-                            model
-                                .with_downcast::<ViewModel, _>(|model| {
-                                    model.instance_at(nested_index as usize)
-                                })
-                                .flatten()
-                        });
+                    let referenced_model = self.view_model_handle(reference_id as usize);
                     value.with_mut(|value| {
                         value
                             .as_view_model_instance_view_model_mut()
                             .expect("nested VMI value")
                             .set_parent_view_model_instance(Some(instance.clone()));
                     });
+                    let source = referenced_model.and_then(|model| {
+                        model
+                            .with_downcast::<ViewModel, _>(|model| {
+                                model.instance_at(nested_index as usize)
+                            })
+                            .flatten()
+                    });
                     if let Some(source) = source {
-                        let copied = if let Some(copied) = instances.get(&source) {
-                            Some(copied.clone())
-                        } else {
-                            let copied = self.copy_view_model_instance(&source, instances);
-                            if let Some(copied) = &copied {
-                                instances.insert(source, copied.clone());
-                            }
-                            copied
-                        };
-                        if let Some(copied) = copied {
-                            value.with_mut(|value| {
-                                value
-                                    .as_view_model_instance_view_model_mut()
-                                    .expect("nested VMI value")
-                                    .set_reference_view_model_instance(Some(copied));
-                            });
-                        }
+                        let copied = self.copy_view_model_instance_with_map(&source, instances);
+                        value.with_mut(|value| {
+                            value
+                                .as_view_model_instance_view_model_mut()
+                                .expect("nested VMI value")
+                                .set_reference_view_model_instance(copied);
+                        });
                     }
                 }
             } else {
@@ -1346,22 +1342,12 @@ impl File {
                     let Some(source) = source else {
                         continue;
                     };
-                    let copied = if let Some(copied) = instances.get(&source) {
-                        Some(copied.clone())
-                    } else {
-                        let copied = self.copy_view_model_instance(&source, instances);
-                        if let Some(copied) = &copied {
-                            instances.insert(source, copied.clone());
+                    let copied = self.copy_view_model_instance_with_map(&source, instances);
+                    item.with_mut(|item| {
+                        if let Some(item) = item.as_view_model_instance_list_item_mut() {
+                            item.set_view_model_instance(copied);
                         }
-                        copied
-                    };
-                    if let Some(copied) = copied {
-                        item.with_mut(|item| {
-                            if let Some(item) = item.as_view_model_instance_list_item_mut() {
-                                item.set_view_model_instance(Some(copied));
-                            }
-                        });
-                    }
+                    });
                 }
             }
             let property = Self::view_model_property_for(&view_model, &value);
@@ -1374,7 +1360,7 @@ impl File {
         }
     }
 
-    fn view_model_property_for(model: &CoreHandle, value: &CoreHandle) -> CoreHandle {
+    fn view_model_property_for(model: &CoreHandle, value: &CoreHandle) -> Option<CoreHandle> {
         let property_id = value
             .with(|value| {
                 value
@@ -1387,7 +1373,6 @@ impl File {
         model
             .with_downcast::<ViewModel, _>(|model| model.property_at(property_id))
             .flatten()
-            .expect("valid ViewModel property index")
     }
 
     pub fn complete_view_model_properties(&self, instance: &CoreHandle) {
@@ -1398,15 +1383,31 @@ impl File {
         models: &Rc<RefCell<Vec<CoreHandle>>>,
         instance: &CoreHandle,
     ) {
-        let (model_id, values) = instance
+        Self::complete_view_model_properties_visited(models, instance, &mut HashSet::new());
+    }
+
+    fn complete_view_model_properties_visited(
+        models: &Rc<RefCell<Vec<CoreHandle>>>,
+        instance: &CoreHandle,
+        visited: &mut HashSet<CoreHandle>,
+    ) {
+        // Visit each authored instance once, including diamonds and cycles.
+        if !visited.insert(instance.clone()) {
+            return;
+        }
+        let Some((model_id, values)) = instance
             .with_downcast::<ViewModelInstance, _>(|instance| {
                 (
                     instance.base.view_model_id() as usize,
                     instance.property_values().to_vec(),
                 )
             })
-            .expect("completeViewModelProperties requires a live ViewModelInstance");
-        let model = models.borrow()[model_id].clone();
+        else {
+            return;
+        };
+        let Some(model) = models.borrow().get(model_id).cloned() else {
+            return;
+        };
         for value in values {
             let nested_index = value
                 .with(|value| {
@@ -1417,13 +1418,13 @@ impl File {
                 .flatten();
             if let Some(nested_index) = nested_index {
                 let property = Self::view_model_property_for(&model, &value);
-                if let Some(reference_id) = property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id()) {
-                    let referenced_model = models.borrow()[reference_id as usize].clone();
-                    let referenced = referenced_model.with_downcast::<ViewModel, _>(|model| {
+                if let Some(reference_id) = property.and_then(|property| property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id())) {
+                    let referenced_model = models.borrow().get(reference_id as usize).cloned();
+                    let referenced = referenced_model.and_then(|model| model.with_downcast::<ViewModel, _>(|model| {
                         model.instance_at(nested_index as usize)
-                    }).flatten();
+                    }).flatten());
                     if let Some(referenced) = referenced {
-                        Self::complete_view_model_properties_in(models, &referenced);
+                        Self::complete_view_model_properties_visited(models, &referenced, visited);
                     }
                 }
             } else if let Some(items) = value
@@ -1446,12 +1447,14 @@ impl File {
                             )
                         })
                         .expect("live VMI list item");
-                    let model = models.borrow()[model_id].clone();
+                    let Some(model) = models.borrow().get(model_id).cloned() else {
+                        continue;
+                    };
                     let referenced = model
                         .with_downcast::<ViewModel, _>(|model| model.instance_at(instance_id))
                         .flatten();
                     if let Some(referenced) = referenced {
-                        Self::complete_view_model_properties_in(models, &referenced);
+                        Self::complete_view_model_properties_visited(models, &referenced, visited);
                     }
                 }
             }
@@ -1467,15 +1470,28 @@ impl File {
         }
     }
 
-    fn copy_view_model_instance(
+    /// Copy and complete a graph with the root registered in the same memo as
+    /// its descendants. Active back-edges become null; completed copies share.
+    pub fn copy_view_model_instance(&self, instance: Option<&CoreHandle>) -> Option<CoreHandle> {
+        self.copy_view_model_instance_with_map(instance?, &mut HashMap::new())
+    }
+
+    fn copy_view_model_instance_with_map(
         &self,
         instance: &CoreHandle,
-        instances: &mut HashMap<CoreHandle, CoreHandle>,
+        instances: &mut HashMap<CoreHandle, Option<CoreHandle>>,
     ) -> Option<CoreHandle> {
+        if let Some(copied) = instances.get(instance) {
+            return copied.clone();
+        }
         let copied = ViewModelInstance::clone_instance(instance)?;
-        self.complete_view_model_instance_with_map(&copied, instances);
+        // Do not install the copy itself until completion: even though arena
+        // handles are weak, upstream intentionally drops an active back-edge.
+        instances.insert(instance.clone(), None);
         #[cfg(feature = "tools")]
         self.register_view_model_instance(copied.clone());
+        self.complete_view_model_instance_with_map(&copied, instances);
+        instances.insert(instance.clone(), Some(copied.clone()));
         Some(copied)
     }
 
@@ -1496,7 +1512,7 @@ impl File {
                     .and_then(|model| model.instance_named(instance_name))
             })
             .flatten()?;
-        self.copy_view_model_instance(&source, &mut HashMap::new())
+        self.copy_view_model_instance(Some(&source))
     }
 
     pub fn create_view_model_instance_at(
@@ -1512,7 +1528,7 @@ impl File {
                     .and_then(|model| model.instance_at(instance_index))
             })
             .flatten()?;
-        self.copy_view_model_instance(&source, &mut HashMap::new())
+        self.copy_view_model_instance(Some(&source))
     }
 
     fn find_view_model_id(&self, search: &CoreHandle) -> u32 {
@@ -1654,7 +1670,7 @@ impl File {
     pub fn create_default_view_model_instance(&self, view_model: CoreHandle) -> Option<CoreHandle> {
         let source = view_model.with_downcast::<ViewModel, _>(ViewModel::default_instance)?;
         if let Some(source) = source {
-            return self.copy_view_model_instance(&source, &mut HashMap::new());
+            return self.copy_view_model_instance(Some(&source));
         }
         self.create_view_model_instance(view_model)
     }

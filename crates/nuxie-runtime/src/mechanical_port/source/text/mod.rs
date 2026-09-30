@@ -2,6 +2,8 @@ pub mod cursor;
 pub mod font_hb;
 pub mod fully_shaped_text;
 pub mod glyph_lookup;
+pub mod line_break;
+pub mod line_break_data;
 pub mod line_breaker;
 pub mod raw_text;
 pub mod raw_text_input;

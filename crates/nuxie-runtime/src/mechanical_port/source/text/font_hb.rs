@@ -647,19 +647,35 @@ impl HbFont {
         }
         byte_offsets.push(utf8.len());
         let bidi = unicode_bidi::BidiInfo::new(&utf8, default_level);
-        for paragraph in &bidi.paragraphs {
+        let mut bidi_paragraphs = bidi.paragraphs.iter();
+        while let Some(paragraph) = bidi_paragraphs.next() {
             let start = byte_offsets
                 .binary_search(&paragraph.range.start)
                 .expect("paragraph scalar boundary");
-            let end = byte_offsets
+            let mut end = byte_offsets
                 .binary_search(&paragraph.range.end)
                 .expect("paragraph scalar boundary");
-            let paragraph_length = end - start;
-            let bidi_levels: Vec<u8> = byte_offsets[start..end]
+            let mut bidi_levels: Vec<u8> = byte_offsets[start..end]
                 .iter()
                 .map(|&offset| bidi.levels[offset].number())
                 .collect();
             let paragraph_level = paragraph.level.number();
+            // SheenBidi's SBAlgorithmGetSeparatorLength includes LF after CR
+            // in the same paragraph. unicode-bidi splits at every B instead.
+            // X8 assigns both separators this paragraph's base level, not the
+            // automatic LTR level of unicode-bidi's standalone LF paragraph.
+            if end > start
+                && text[end - 1] == u32::from(b'\r')
+                && end < text.len()
+                && text[end] == u32::from(b'\n')
+            {
+                let lf = bidi_paragraphs.next().expect("CRLF suffix paragraph");
+                assert_eq!(lf.range.start, paragraph.range.end);
+                assert_eq!(lf.range.end, byte_offsets[end + 1]);
+                bidi_levels.push(paragraph_level);
+                end += 1;
+            }
+            let paragraph_length = end - start;
             let mut paragraph_text_index = 0usize;
             let mut bidi_runs = Vec::with_capacity(text_runs.len());
 

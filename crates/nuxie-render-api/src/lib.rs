@@ -17,6 +17,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod aabb;
 pub mod authored_ore_shader;
 mod factory;
+pub mod line_break;
+pub mod line_break_data;
 mod routing;
 pub mod serialize_ops;
 pub mod serialized_replay;
@@ -527,14 +529,12 @@ pub fn compute_alignment_from_origin_size(
     )
 }
 
-/// Rive's intentionally narrow whitespace classification.
-///
-/// Direct port of pinned `isWhiteSpace` (`src/renderer.cpp:142-147`). In
-/// particular, U+200B is whitespace while most Unicode space characters are
-/// not part of this renderer contract.
+/// `src/text/text_engine.cpp` whitespace, excluding no-break spaces.
 pub fn is_white_space(character: char) -> bool {
     let character = character as u32;
-    character <= u32::from(b' ') || matches!(character, 0x2028 | 0x200b)
+    character <= u32::from(b' ')
+        || matches!(character, 0x0085 | 0x1680 | 0x2028 | 0x2029 | 0x205F | 0x3000)
+        || (0x2000..=0x200B).contains(&character) && character != 0x2007
 }
 
 /// Renderer annotations attached to one shaped glyph run.
@@ -558,35 +558,77 @@ impl std::error::Error for GlyphRunAnnotationError {}
 /// Attach pinned line-break and word-joiner annotations to shaped runs.
 ///
 /// Direct port of the post-shape loop in `Font::shapeText`
-/// (`src/renderer.cpp:149-229`). Each text index addresses `text`; run order
+/// (`src/text/text_engine.cpp`). Each text index addresses `text`; run order
 /// and glyph order remain exactly as supplied by the shaping adapter.
 pub fn annotate_glyph_runs(
     text: &[char],
     run_text_indices: &[&[u32]],
 ) -> Result<Vec<GlyphRunAnnotations>, GlyphRunAnnotationError> {
-    let mut want_white_space = false;
+    use line_break::{compute_line_breaks, line_break_props, LineBreak, LineBreakClass};
+    // Adapt the public char slice without allocating for typical UI strings.
+    let mut inline_unichars = [0u32; 256];
+    let mut heap_unichars = Vec::new();
+    let unichars = if text.len() <= inline_unichars.len() {
+        for (out, character) in inline_unichars.iter_mut().zip(text) {
+            *out = u32::from(*character);
+        }
+        &inline_unichars[..text.len()]
+    } else {
+        heap_unichars.extend(text.iter().copied().map(u32::from));
+        heap_unichars.as_slice()
+    };
+    let mut inline_breaks = [LineBreak::None; 257];
+    let mut heap_breaks = Vec::new();
+    let break_count = text.len() + 1;
+    if break_count > inline_breaks.len() {
+        heap_breaks.resize(break_count, LineBreak::None);
+    }
+    let line_breaks = if heap_breaks.is_empty() {
+        &mut inline_breaks[..break_count]
+    } else {
+        heap_breaks.as_mut_slice()
+    };
+    compute_line_breaks(unichars, line_breaks);
+    let mut in_word = false;
     let mut annotations = Vec::with_capacity(run_text_indices.len());
 
     for text_indices in run_text_indices {
         let mut breaks = Vec::with_capacity(text.len() / 4);
         let mut joiners = Vec::with_capacity(text.len() / 4);
+        let mut last_offset = u32::MAX;
         for (glyph_index, offset) in text_indices.iter().copied().enumerate() {
             let character = usize::try_from(offset)
                 .ok()
                 .and_then(|offset| text.get(offset))
                 .copied()
                 .ok_or(GlyphRunAnnotationError)?;
+            if offset == last_offset {
+                continue;
+            }
+            last_offset = offset;
             let glyph_index = u32::try_from(glyph_index).map_err(|_| GlyphRunAnnotationError)?;
-            if matches!(character, '\n' | '\u{2028}') {
+            if line_breaks[offset as usize + 1] == LineBreak::Mandatory {
                 breaks.push(glyph_index);
                 breaks.push(glyph_index);
             }
-            if character == '\u{2060}' {
+            if character as u32 >= 0x2060
+                && line_break_props(character as u32).cls == LineBreakClass::WJ
+            {
                 joiners.push(offset);
             }
-            if want_white_space == is_white_space(character) {
+            if in_word {
+                if is_white_space(character) {
+                    breaks.push(glyph_index);
+                    in_word = false;
+                } else if line_breaks[offset as usize] == LineBreak::Allowed
+                    && text[offset as usize - 1] != '\u{00AD}'
+                {
+                    breaks.push(glyph_index);
+                    breaks.push(glyph_index);
+                }
+            } else if !is_white_space(character) {
                 breaks.push(glyph_index);
-                want_white_space = !want_white_space;
+                in_word = true;
             }
         }
         annotations.push(GlyphRunAnnotations { breaks, joiners });
@@ -594,7 +636,7 @@ pub fn annotate_glyph_runs(
 
     if let Some((annotation, text_indices)) = annotations.last_mut().zip(run_text_indices.last()) {
         let glyph_count = u32::try_from(text_indices.len()).map_err(|_| GlyphRunAnnotationError)?;
-        if want_white_space {
+        if in_word {
             annotation.breaks.push(glyph_count);
         } else {
             annotation

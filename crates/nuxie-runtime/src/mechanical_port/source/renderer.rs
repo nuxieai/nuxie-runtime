@@ -141,6 +141,4 @@ pub fn compute_alignment(
     translation * Mat2D::from_scale(scale_x, scale_y) * Mat2D::from_translate(x, y)
 }
 
-pub fn is_white_space(character: u32) -> bool {
-    character <= u32::from(b' ') || character == 0x2028 || character == 0x200b
-}
+pub use super::text::text_engine::is_white_space;

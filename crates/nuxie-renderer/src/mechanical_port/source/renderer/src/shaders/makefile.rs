@@ -6,7 +6,7 @@
  * recovery, and C-array generation rules are executable below. All remaining
  * source branches (including SPIR-V, WGSL, and D3D) remain represented.
  *
- * Upstream source revision: 1cc2396f0d0d3f6d9c0b16809904e85265f617eb
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -23,11 +23,11 @@ use std::process::{Command, Output};
 
 use super::minify_py;
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1cc2396f0d0d3f6d9c0b16809904e85265f617eb";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/Makefile";
 pub const PINNED_SOURCE_SHA256: &str =
-    "14756892cfe57c9d64fd2c69a678d0a639d136ecfc46ba4ba4c36d4ab8586620";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 515;
+    "85dca2a94cc9fbeab7dfac7539b8ca2da8371dacdcc3d2e0e1e8f095387cca21";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 527;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AppleFamily {
@@ -641,12 +641,18 @@ SPIRV_DRAW_MSAA_DST_READ_INPUTS := \
     spirv/draw_depthstencil_image_mesh.main \
     spirv/draw_depthstencil_path.main \
 
+# depthStencil fills don't take vertex attributes and aren't instanced, so they
+# get their own vertex shader.
+SPIRV_DEPTHSTENCIL_FILL_INPUTS := \
+    spirv/draw_depthstencil_fill.vert \
+
 # WebGPU (compatibility mode) doesn't always support storage buffers in the
 # vertex shader. These files specifically need WebGPU "nossbo" build variants
 # that polyfill the buffers via textures.
 WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS := \
     spirv/draw_depthstencil_path.main \
-    spirv/draw_depthstencil_atlas_blit.main
+    spirv/draw_depthstencil_atlas_blit.main \
+    $(SPIRV_DEPTHSTENCIL_FILL_INPUTS)
 WEBGPU_NOSSBO_INPUTS := \
     $(WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS) \
     spirv/tessellate.main \
@@ -810,6 +816,10 @@ SPIRV_COMMON_WEBGPU_PARAMS = -DTARGET_WGSL -DUSE_WEBGPU_SAMPLERS
 ## Each of the specialized SPIRV lists have their own associated rules
 $(eval $(call make_spirv_rules, $(SPIRV_DRAW_MSAA_INPUTS), noclipdistance_vert, -DDISABLE_CLIP_DISTANCE_FOR_UBERSHADERS))
 $(eval $(call make_spirv_rules, \
+    $(SPIRV_DEPTHSTENCIL_FILL_INPUTS), \
+    noclipdistance_vert, \
+    -DDISABLE_CLIP_DISTANCE_FOR_UBERSHADERS))
+$(eval $(call make_spirv_rules, \
     $(SPIRV_CLOCKWISE_INPUTS) \
     $(SPIRV_DRAW_ATOMIC_INPUTS) \
     $(SPIRV_DRAW_MSAA_INPUTS), \
@@ -822,11 +832,13 @@ $(eval $(call make_spirv_rules, \
 $(eval $(call make_spirv_rules, \
     $(SPIRV_WEBGPU_INPUTS) \
     $(SPIRV_DRAW_ATOMIC_INPUTS) \
-    $(SPIRV_DRAW_MSAA_INPUTS), \
+    $(SPIRV_DRAW_MSAA_INPUTS) \
+    $(SPIRV_DEPTHSTENCIL_FILL_INPUTS), \
     webgpu_vert, \
     $(SPIRV_COMMON_WEBGPU_PARAMS)))
 $(eval $(call make_spirv_rules, \
-    $(SPIRV_DRAW_MSAA_INPUTS), \
+    $(SPIRV_DRAW_MSAA_INPUTS) \
+    $(SPIRV_DEPTHSTENCIL_FILL_INPUTS), \
     webgpu_noclipdistance_vert, \
     $(SPIRV_COMMON_WEBGPU_PARAMS) -DDISABLE_CLIP_DISTANCE_FOR_UBERSHADERS))
 $(eval $(call make_spirv_rules, \
@@ -1070,115 +1082,121 @@ pub const MAKE_VARIABLES: &[MakeVariable] = &[
         source: "SPIRV_DRAW_MSAA_DST_READ_INPUTS := \\\n    spirv/draw_depthstencil_atlas_blit.main \\\n    spirv/draw_depthstencil_image_mesh.main \\\n    spirv/draw_depthstencil_path.main \\\n",
     },
     MakeVariable {
-        source_line: 218,
-        name: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS",
+        source_line: 217,
+        name: "SPIRV_DEPTHSTENCIL_FILL_INPUTS",
         operator: ":=",
-        source: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS := \\\n    spirv/draw_depthstencil_path.main \\\n    spirv/draw_depthstencil_atlas_blit.main",
+        source: "SPIRV_DEPTHSTENCIL_FILL_INPUTS := \\\n    spirv/draw_depthstencil_fill.vert \\\n",
     },
     MakeVariable {
-        source_line: 221,
+        source_line: 223,
+        name: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS",
+        operator: ":=",
+        source: "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS := \\\n    spirv/draw_depthstencil_path.main \\\n    spirv/draw_depthstencil_atlas_blit.main \\\n    $(SPIRV_DEPTHSTENCIL_FILL_INPUTS)",
+    },
+    MakeVariable {
+        source_line: 227,
         name: "WEBGPU_NOSSBO_INPUTS",
         operator: ":=",
         source: "WEBGPU_NOSSBO_INPUTS := \\\n    $(WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS) \\\n    spirv/tessellate.main \\\n    spirv/render_atlas.vert",
     },
     MakeVariable {
-        source_line: 227,
+        source_line: 233,
         name: "spirv_typed_filename",
         operator: "=",
         source: "spirv_typed_filename = $(basename $1).$2",
     },
     MakeVariable {
-        source_line: 228,
+        source_line: 234,
         name: "spirv_out_filename_no_ext",
         operator: "=",
         source: "spirv_out_filename_no_ext = $(OUT)/$(call spirv_typed_filename,$1,$2)",
     },
     MakeVariable {
-        source_line: 229,
+        source_line: 235,
         name: "spirv_type",
         operator: "=",
         source: "spirv_type = $(lastword $(subst _, ,$2))",
     },
     MakeVariable {
-        source_line: 230,
+        source_line: 236,
         name: "spirv_is_vert",
         operator: "=",
         source: "spirv_is_vert = $(findstring vert,$(spirv_type))",
     },
     MakeVariable {
-        source_line: 231,
+        source_line: 237,
         name: "spirv_is_webgpu",
         operator: "=",
         source: "spirv_is_webgpu = $(findstring webgpu,$2)",
     },
     MakeVariable {
-        source_line: 232,
+        source_line: 238,
         name: "spirv_is_atomic_or_clockwise_atomic",
         operator: "=",
         source: "spirv_is_atomic_or_clockwise_atomic = $(findstring atomic,$1)",
     },
     MakeVariable {
-        source_line: 233,
+        source_line: 239,
         name: "spirv_is_not_clockwise_atomic",
         operator: "=",
         source: "spirv_is_not_clockwise_atomic = $(if $(findstring clockwise_atomic,$1),,1)",
     },
     MakeVariable {
-        source_line: 234,
+        source_line: 240,
         name: "spirv_is_clockwise",
         operator: "=",
         source: "spirv_is_clockwise = $(and $(findstring clockwise,$1), $(call spirv_is_not_clockwise_atomic,$1))",
     },
     MakeVariable {
-        source_line: 247,
+        source_line: 253,
         name: "SPIRV_STANDARD_VERT_OPT_PARAMS",
         operator: "=",
         source: "SPIRV_STANDARD_VERT_OPT_PARAMS = -O",
     },
     MakeVariable {
-        source_line: 264,
+        source_line: 270,
         name: "spirv_frag_opt_params",
         operator: "=",
         source: "spirv_frag_opt_params = \\\n\t$(if $(spirv_is_webgpu),-O, \\\n\t\t$(if $(spirv_is_atomic_or_clockwise_atomic), \\\n\t\t\t--preserve-bindings \\\n\t\t\t--preserve-interface \\\n\t\t\t--wrap-opkill \\\n\t\t\t--simplify-instructions \\\n\t\t\t--eliminate-dead-branches \\\n\t\t\t--merge-return \\\n\t\t\t--inline-entry-points-exhaustive \\\n\t\t\t--eliminate-dead-inserts \\\n\t\t\t--eliminate-dead-members \\\n\t\t\t--merge-blocks \\\n\t\t\t--redundancy-elimination \\\n\t\t\t--cfg-cleanup \\\n\t\t\t--eliminate-dead-const \\\n\t\t\t--eliminate-dead-variables \\\n\t\t\t--eliminate-dead-functions \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t, \\\n\t\t\t--wrap-opkill \\\n\t\t\t--eliminate-dead-branches \\\n\t\t\t--merge-return \\\n\t\t\t--inline-entry-points-exhaustive \\\n\t\t\t--eliminate-dead-functions \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--private-to-local \\\n\t\t\t--eliminate-local-single-block \\\n\t\t\t--eliminate-local-single-store \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--scalar-replacement=100 \\\n\t\t\t--convert-local-access-chains \\\n\t\t\t--eliminate-local-single-block \\\n\t\t\t--eliminate-local-single-store \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--ssa-rewrite \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--ccp \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--loop-unroll \\\n\t\t\t--eliminate-dead-branches \\\n\t\t\t--redundancy-elimination \\\n\t\t\t--combine-access-chains \\\n\t\t\t--scalar-replacement=100 \\\n\t\t\t--convert-local-access-chains \\\n\t\t\t--eliminate-local-single-block \\\n\t\t\t--eliminate-local-single-store \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--ssa-rewrite \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--vector-dce \\\n\t\t\t--eliminate-dead-inserts \\\n\t\t\t--eliminate-dead-branches \\\n\t\t\t--if-conversion \\\n\t\t\t--copy-propagate-arrays \\\n\t\t\t--reduce-load-size \\\n\t\t\t--eliminate-dead-code-aggressive \\\n\t\t\t--merge-blocks \\\n\t\t\t--redundancy-elimination \\\n\t\t\t--eliminate-dead-branches \\\n\t\t\t--merge-blocks \\\n\t\t) \\\n\t)",
     },
     MakeVariable {
-        source_line: 329,
+        source_line: 335,
         name: "spirv_frag_params",
         operator: "=",
         source: "spirv_frag_params = $(if $(spirv_is_webgpu), \\\n                        -DPLS_IMPL_STORAGE_BUFFER, \\\n\t\t\t\t\t$(if $(spirv_is_clockwise), \\\n\t\t\t\t\t\t-DPLS_IMPL_STORAGE_TEXTURE, \\\n\t\t\t\t\t\t-DPLS_IMPL_SUBPASS_LOAD))",
     },
     MakeVariable {
-        source_line: 338,
+        source_line: 344,
         name: "spirv_opt_params",
         operator: "=",
         source: "spirv_opt_params = \\\n\t$(if $(spirv_is_vert), \\\n\t\t$(SPIRV_STANDARD_VERT_OPT_PARAMS), \\\n\t\t$(spirv_frag_opt_params) \\\n\t) \\\n",
     },
     MakeVariable {
-        source_line: 379,
+        source_line: 385,
         name: "SPIRV_COMMON_WEBGPU_PARAMS",
         operator: "=",
         source: "SPIRV_COMMON_WEBGPU_PARAMS = -DTARGET_WGSL -DUSE_WEBGPU_SAMPLERS",
     },
     MakeVariable {
-        source_line: 434,
+        source_line: 446,
         name: "WGSL_OUTPUTS",
         operator: ":=",
         source: "WGSL_OUTPUTS := \\\n    $(patsubst $(OUT)/spirv/%.spv,$(OUT)/wgsl/%.wgsl, \\\n        $(filter %.webgpu_vert.spv \\\n                 %.webgpu_noclipdistance_vert.spv \\\n                 %.webgpu_nossbo_vert.spv \\\n                 %.webgpu_nossbo_noclipdistance_vert.spv \\\n                 %.webgpu_frag.spv \\\n                 %.webgpu_fixedcolor_frag.spv, \\\n                 $(SPIRV_OUTPUTS_BINARY))) \\\n    $(OUT)/wgsl/draw_depthstencil_triangles_nocolor.vert.wgsl \\\n    $(OUT)/wgsl/draw_depthstencil_triangles_nocolor.frag.wgsl \\\n    $(OUT)/wgsl/color_ramp.vert.wgsl \\\n    $(OUT)/wgsl/color_ramp.frag.wgsl",
     },
     MakeVariable {
-        source_line: 473,
+        source_line: 485,
         name: "WGSL_HEADER_OUTPUTS",
         operator: ":=",
         source: "WGSL_HEADER_OUTPUTS := $(patsubst %.wgsl,%.hpp,$(WGSL_OUTPUTS))",
     },
     MakeVariable {
-        source_line: 487,
+        source_line: 499,
         name: "FXC_DEBUG_FLAG",
         operator: ":=",
         source: "FXC_DEBUG_FLAG := $(if $(filter --human-readable,$(FLAGS)),/Zi,)",
     },
     MakeVariable {
-        source_line: 489,
+        source_line: 501,
         name: "D3D_OUTPUTS",
         operator: ":=",
         source: "D3D_OUTPUTS := \\\n\t $(OUT)/d3d/root.sig.h \\\n\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.vert.h, $(wildcard d3d/*.hlsl))) \\\n\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.frag.h, $(wildcard d3d/*.hlsl))) \\\n\t $(OUT)/d3d/render_atlas_stroke.frag.h\\\n\t $(OUT)/d3d/render_atlas_fill.frag.h\\\n",
@@ -1228,14 +1246,14 @@ pub const MAKE_RULES: &[MakeRule] = &[
     },
     MakeRule {
         source_line: 37,
-        family: "minify",
+        family: "metal",
         target: "$(OUT)/ios/.",
         dependencies: "| $(OUT)/.",
         declaration: "$(OUT)/ios/.: | $(OUT)/.",
     },
     MakeRule {
         source_line: 40,
-        family: "minify",
+        family: "metal",
         target: "$(OUT)/macosx/.",
         dependencies: "| $(OUT)/.",
         declaration: "$(OUT)/macosx/.: | $(OUT)/.",
@@ -1402,119 +1420,119 @@ pub const MAKE_RULES: &[MakeRule] = &[
         declaration: "$(OUT)/spirv/.: | $(OUT)/.",
     },
     MakeRule {
-        source_line: 349,
+        source_line: 355,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         dependencies: "$1 $(MINIFY_STAMP) | $(OUT)/spirv/.",
         declaration: "  $(spirv_out_filename_no_ext).spv: $1 $(MINIFY_STAMP) | $(OUT)/spirv/.",
     },
     MakeRule {
-        source_line: 357,
+        source_line: 363,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).h",
         dependencies: "$(spirv_out_filename_no_ext).spv",
         declaration: "  $(spirv_out_filename_no_ext).h: $(spirv_out_filename_no_ext).spv",
     },
     MakeRule {
-        source_line: 424,
-        family: "wgsl",
+        source_line: 436,
+        family: "spirv",
         target: "spirv",
         dependencies: "$(SPIRV_OUTPUTS_HEADERS)",
         declaration: "spirv: $(SPIRV_OUTPUTS_HEADERS)",
     },
     MakeRule {
-        source_line: 425,
-        family: "wgsl",
+        source_line: 437,
+        family: "spirv",
         target: "spirv-binary",
         dependencies: "$(SPIRV_OUTPUTS_BINARY)",
         declaration: "spirv-binary: $(SPIRV_OUTPUTS_BINARY)",
     },
     MakeRule {
-        source_line: 431,
+        source_line: 443,
         family: "wgsl",
         target: "$(OUT)/wgsl/.",
         dependencies: "| $(OUT)/.",
         declaration: "$(OUT)/wgsl/.: | $(OUT)/.",
     },
     MakeRule {
-        source_line: 464,
+        source_line: 476,
         family: "wgsl",
         target: "$(OUT)/wgsl/%.wgsl",
         dependencies: "$(OUT)/spirv/%.spv | $(OUT)/wgsl/.",
         declaration: "$(OUT)/wgsl/%.wgsl: $(OUT)/spirv/%.spv | $(OUT)/wgsl/.",
     },
     MakeRule {
-        source_line: 475,
+        source_line: 487,
         family: "wgsl",
         target: "$(OUT)/wgsl/%.hpp",
         dependencies: "$(OUT)/wgsl/%.wgsl wgsl_to_header.py | $(OUT)/wgsl/.",
         declaration: "$(OUT)/wgsl/%.hpp: $(OUT)/wgsl/%.wgsl wgsl_to_header.py | $(OUT)/wgsl/.",
     },
     MakeRule {
-        source_line: 478,
+        source_line: 490,
         family: "wgsl",
         target: "wgsl",
         dependencies: "$(WGSL_HEADER_OUTPUTS)",
         declaration: "wgsl: $(WGSL_HEADER_OUTPUTS)",
     },
     MakeRule {
-        source_line: 481,
-        family: "wgsl",
+        source_line: 493,
+        family: "d3d",
         target: ".PHONY",
         dependencies: "$(OUT)/d3d/render_atlas.frag.h",
         declaration: ".PHONY: $(OUT)/d3d/render_atlas.frag.h",
     },
     MakeRule {
-        source_line: 483,
-        family: "wgsl",
+        source_line: 495,
+        family: "d3d",
         target: "$(OUT)/d3d/.",
         dependencies: "| $(OUT)/.",
         declaration: "$(OUT)/d3d/.: | $(OUT)/.",
     },
     MakeRule {
-        source_line: 496,
+        source_line: 508,
         family: "d3d",
         target: "$(OUT)/d3d/%.vert.h",
         dependencies: "d3d/%.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
         declaration: "$(OUT)/d3d/%.vert.h: d3d/%.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
     },
     MakeRule {
-        source_line: 499,
+        source_line: 511,
         family: "d3d",
         target: "$(OUT)/d3d/%.frag.h",
         dependencies: "d3d/%.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
         declaration: "$(OUT)/d3d/%.frag.h: d3d/%.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
     },
     MakeRule {
-        source_line: 502,
+        source_line: 514,
         family: "d3d",
         target: "$(OUT)/d3d/render_atlas_stroke.frag.h",
         dependencies: "d3d/render_atlas.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
         declaration: "$(OUT)/d3d/render_atlas_stroke.frag.h: d3d/render_atlas.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
     },
     MakeRule {
-        source_line: 505,
+        source_line: 517,
         family: "d3d",
         target: "$(OUT)/d3d/render_atlas_fill.frag.h",
         dependencies: "d3d/render_atlas.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
         declaration: "$(OUT)/d3d/render_atlas_fill.frag.h: d3d/render_atlas.hlsl $(MINIFY_STAMP) | $(OUT)/d3d/.",
     },
     MakeRule {
-        source_line: 508,
+        source_line: 520,
         family: "d3d",
         target: "$(OUT)/d3d/root.sig.h",
         dependencies: "d3d/root.sig | $(OUT)/d3d/.",
         declaration: "$(OUT)/d3d/root.sig.h: d3d/root.sig | $(OUT)/d3d/.",
     },
     MakeRule {
-        source_line: 511,
+        source_line: 523,
         family: "d3d",
         target: "d3d",
         dependencies: "$(D3D_OUTPUTS)",
         declaration: "d3d: $(D3D_OUTPUTS)",
     },
     MakeRule {
-        source_line: 514,
+        source_line: 526,
         family: "d3d",
         target: "clean",
         dependencies: "",
@@ -1565,13 +1583,13 @@ pub const MAKE_RECIPES: &[MakeRecipe] = &[
     },
     MakeRecipe {
         source_line: 38,
-        family: "minify",
+        family: "metal",
         target: "$(OUT)/ios/.",
         command: "@mkdir -p $@",
     },
     MakeRecipe {
         source_line: 41,
-        family: "minify",
+        family: "metal",
         target: "$(OUT)/macosx/.",
         command: "@mkdir -p $@",
     },
@@ -1936,109 +1954,109 @@ pub const MAKE_RECIPES: &[MakeRecipe] = &[
         command: "@mkdir -p $@",
     },
     MakeRecipe {
-        source_line: 350,
+        source_line: 356,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         command: "@glslangValidator -S $(spirv_type) -DTARGET_SPIRV \\",
     },
     MakeRecipe {
-        source_line: 351,
+        source_line: 357,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         command: "\t$(if $(spirv_is_vert), -DVERTEX, -DFRAGMENT $(spirv_frag_params)) \\",
     },
     MakeRecipe {
-        source_line: 352,
+        source_line: 358,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         command: "\t-I$(OUT)  -V $3 -o $(spirv_out_filename_no_ext).spv.unoptimized $1",
     },
     MakeRecipe {
-        source_line: 353,
+        source_line: 359,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         command: "@spirv-opt --preserve-bindings --preserve-interface $(spirv_opt_params) \\",
     },
     MakeRecipe {
-        source_line: 354,
+        source_line: 360,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         command: "\t$(spirv_out_filename_no_ext).spv.unoptimized -o $(spirv_out_filename_no_ext).spv",
     },
     MakeRecipe {
-        source_line: 355,
+        source_line: 361,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).spv",
         command: "@rm $(spirv_out_filename_no_ext).spv.unoptimized",
     },
     MakeRecipe {
-        source_line: 358,
+        source_line: 364,
         family: "spirv",
         target: "$(spirv_out_filename_no_ext).h",
         command: "@python3 spirv_binary_to_header.py $(spirv_out_filename_no_ext).spv $(spirv_out_filename_no_ext).h $(subst $(suffix $1),_$2,$(notdir $1))",
     },
     MakeRecipe {
-        source_line: 432,
+        source_line: 444,
         family: "wgsl",
         target: "$(OUT)/wgsl/.",
         command: "@mkdir -p $@",
     },
     MakeRecipe {
-        source_line: 465,
+        source_line: 477,
         family: "wgsl",
         target: "$(OUT)/wgsl/%.wgsl",
         command: "@echo \"wgsl/$*.wgsl\"",
     },
     MakeRecipe {
-        source_line: 466,
+        source_line: 478,
         family: "wgsl",
         target: "$(OUT)/wgsl/%.wgsl",
         command: "@TERM=dumb bash -o pipefail -c 'naga --keep-coordinate-space \"$<\" \"$@\" 2>&1 | { grep -v \"Unknown decoration RelaxedPrecision\" || [ $$? = 1 ]; }'",
     },
     MakeRecipe {
-        source_line: 476,
+        source_line: 488,
         family: "wgsl",
         target: "$(OUT)/wgsl/%.hpp",
         command: "@python3 wgsl_to_header.py $(WGSL_FLAGS) $< $@ $(subst .,_,$(basename $(notdir $<)))",
     },
     MakeRecipe {
-        source_line: 484,
-        family: "wgsl",
+        source_line: 496,
+        family: "d3d",
         target: "$(OUT)/d3d/.",
         command: "@mkdir -p $@",
     },
     MakeRecipe {
-        source_line: 497,
+        source_line: 509,
         family: "d3d",
         target: "$(OUT)/d3d/%.vert.h",
         command: "@fxc /D VERTEX /I $(OUT) $(FXC_DEBUG_FLAG) /T vs_5_0 /Fh $@ $<",
     },
     MakeRecipe {
-        source_line: 500,
+        source_line: 512,
         family: "d3d",
         target: "$(OUT)/d3d/%.frag.h",
         command: "@fxc /D FRAGMENT /I $(OUT) $(FXC_DEBUG_FLAG) /T ps_5_0 /Fh  $@ $<",
     },
     MakeRecipe {
-        source_line: 503,
+        source_line: 515,
         family: "d3d",
         target: "$(OUT)/d3d/render_atlas_stroke.frag.h",
         command: "@fxc /D FRAGMENT /D ATLAS_FEATHERED_STROKE $(FXC_DEBUG_FLAG)  /I $(OUT) /T ps_5_0 /Fh  $@ $<",
     },
     MakeRecipe {
-        source_line: 506,
+        source_line: 518,
         family: "d3d",
         target: "$(OUT)/d3d/render_atlas_fill.frag.h",
         command: "@fxc /D FRAGMENT /D ATLAS_FEATHERED_FILL $(FXC_DEBUG_FLAG)  /I $(OUT) /T ps_5_0 /Fh  $@ $<",
     },
     MakeRecipe {
-        source_line: 509,
+        source_line: 521,
         family: "d3d",
         target: "$(OUT)/d3d/root.sig.h",
         command: "@fxc /I $(OUT) /T rootsig_1_1 /E ROOT_SIG /Fh   $@ $<",
     },
     MakeRecipe {
-        source_line: 515,
+        source_line: 527,
         family: "d3d",
         target: "clean",
         command: "@rm -fr out",
@@ -2080,16 +2098,14 @@ pub const MAKE_WILDCARD_EXPRESSIONS: &[MakeExpression] = &[
         expression: "\t\t\t\t $(wildcard spirv/*.frag)",
     },
     MakeExpression {
-        source_line: 491,
-        family: "wgsl",
-        expression:
-            "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.vert.h, $(wildcard d3d/*.hlsl))) \\",
+        source_line: 503,
+        family: "d3d",
+        expression: "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.vert.h, $(wildcard d3d/*.hlsl))) \\",
     },
     MakeExpression {
-        source_line: 492,
-        family: "wgsl",
-        expression:
-            "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.frag.h, $(wildcard d3d/*.hlsl))) \\",
+        source_line: 504,
+        family: "d3d",
+        expression: "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.frag.h, $(wildcard d3d/*.hlsl))) \\",
     },
 ];
 
@@ -2207,119 +2223,114 @@ pub const MAKE_CONDITIONAL_EXPRESSIONS: &[MakeExpression] = &[
         expression: "\t\t-o $(patsubst metal/%.metal, $(OUT)/ios/%.air, $(FILE));)",
     },
     MakeExpression {
-        source_line: 227,
+        source_line: 233,
         family: "spirv",
         expression: "spirv_typed_filename = $(basename $1).$2",
     },
     MakeExpression {
-        source_line: 228,
+        source_line: 234,
         family: "spirv",
         expression: "spirv_out_filename_no_ext = $(OUT)/$(call spirv_typed_filename,$1,$2)",
     },
     MakeExpression {
-        source_line: 229,
+        source_line: 235,
         family: "spirv",
         expression: "spirv_type = $(lastword $(subst _, ,$2))",
     },
     MakeExpression {
-        source_line: 230,
+        source_line: 236,
         family: "spirv",
         expression: "spirv_is_vert = $(findstring vert,$(spirv_type))",
     },
     MakeExpression {
-        source_line: 231,
+        source_line: 237,
         family: "spirv",
         expression: "spirv_is_webgpu = $(findstring webgpu,$2)",
     },
     MakeExpression {
-        source_line: 232,
+        source_line: 238,
         family: "spirv",
         expression: "spirv_is_atomic_or_clockwise_atomic = $(findstring atomic,$1)",
     },
     MakeExpression {
-        source_line: 233,
+        source_line: 239,
         family: "spirv",
         expression: "spirv_is_not_clockwise_atomic = $(if $(findstring clockwise_atomic,$1),,1)",
     },
     MakeExpression {
-        source_line: 234,
+        source_line: 240,
         family: "spirv",
         expression: "spirv_is_clockwise = $(and $(findstring clockwise,$1), $(call spirv_is_not_clockwise_atomic,$1))",
     },
     MakeExpression {
-        source_line: 265,
+        source_line: 271,
         family: "spirv",
         expression: "\t$(if $(spirv_is_webgpu),-O, \\",
     },
     MakeExpression {
-        source_line: 266,
+        source_line: 272,
         family: "spirv",
         expression: "\t\t$(if $(spirv_is_atomic_or_clockwise_atomic), \\",
     },
     MakeExpression {
-        source_line: 329,
+        source_line: 335,
         family: "spirv",
         expression: "spirv_frag_params = $(if $(spirv_is_webgpu), \\",
     },
     MakeExpression {
-        source_line: 331,
+        source_line: 337,
         family: "spirv",
         expression: "\t\t\t\t\t$(if $(spirv_is_clockwise), \\",
     },
     MakeExpression {
-        source_line: 339,
+        source_line: 345,
         family: "spirv",
         expression: "\t$(if $(spirv_is_vert), \\",
     },
     MakeExpression {
-        source_line: 346,
+        source_line: 352,
         family: "spirv",
         expression: "## Usage: $(eval $(call spirv_list_rule, INPUT_FILENAME, OUTPUT_TYPE [, ADDITIONAL_COMPILE_OPTIONS]))",
     },
     MakeExpression {
-        source_line: 351,
+        source_line: 357,
         family: "spirv",
         expression: "\t\t$(if $(spirv_is_vert), -DVERTEX, -DFRAGMENT $(spirv_frag_params)) \\",
     },
     MakeExpression {
-        source_line: 358,
+        source_line: 364,
         family: "spirv",
         expression: "\t@python3 spirv_binary_to_header.py $(spirv_out_filename_no_ext).spv $(spirv_out_filename_no_ext).h $(subst $(suffix $1),_$2,$(notdir $1))",
     },
     MakeExpression {
-        source_line: 365,
+        source_line: 371,
         family: "spirv",
         expression: "## Usage: $(eval $(call make_spirv_rules, LIST_OF_INPUT_FILES, LIST_OF_OUTPUT_TYPES [, ADDITIONAL_COMPILE_OPTIONS]))",
     },
     MakeExpression {
-        source_line: 369,
+        source_line: 375,
         family: "spirv",
         expression: "    $(foreach type,$2,\\",
     },
     MakeExpression {
-        source_line: 370,
+        source_line: 376,
         family: "spirv",
         expression: "        $(foreach file,$(filter-out %.$(if $(findstring vert, $(type)),frag,vert),$1),\\",
     },
     MakeExpression {
-        source_line: 371,
+        source_line: 377,
         family: "spirv",
         expression: "            $(eval $(call spirv_list_rule,$(file),$(type),$3))\\",
     },
     MakeExpression {
-        source_line: 377,
+        source_line: 383,
         family: "spirv",
         expression: "$(eval $(call make_spirv_rules, $(SPIRV_STANDARD_INPUTS), vert frag))",
     },
     MakeExpression {
-        source_line: 382,
+        source_line: 388,
         family: "spirv",
         expression: "$(eval $(call make_spirv_rules, $(SPIRV_DRAW_MSAA_INPUTS), noclipdistance_vert, -DDISABLE_CLIP_DISTANCE_FOR_UBERSHADERS))",
-    },
-    MakeExpression {
-        source_line: 383,
-        family: "spirv",
-        expression: "$(eval $(call make_spirv_rules, \\",
     },
     MakeExpression {
         source_line: 389,
@@ -2342,53 +2353,63 @@ pub const MAKE_CONDITIONAL_EXPRESSIONS: &[MakeExpression] = &[
         expression: "$(eval $(call make_spirv_rules, \\",
     },
     MakeExpression {
-        source_line: 407,
+        source_line: 410,
         family: "spirv",
         expression: "$(eval $(call make_spirv_rules, \\",
     },
     MakeExpression {
-        source_line: 411,
+        source_line: 415,
         family: "spirv",
         expression: "$(eval $(call make_spirv_rules, \\",
     },
     MakeExpression {
-        source_line: 417,
+        source_line: 419,
         family: "spirv",
         expression: "$(eval $(call make_spirv_rules, \\",
     },
     MakeExpression {
-        source_line: 435,
+        source_line: 423,
+        family: "spirv",
+        expression: "$(eval $(call make_spirv_rules, \\",
+    },
+    MakeExpression {
+        source_line: 429,
+        family: "spirv",
+        expression: "$(eval $(call make_spirv_rules, \\",
+    },
+    MakeExpression {
+        source_line: 447,
         family: "wgsl",
         expression: "    $(patsubst $(OUT)/spirv/%.spv,$(OUT)/wgsl/%.wgsl, \\",
     },
     MakeExpression {
-        source_line: 436,
+        source_line: 448,
         family: "wgsl",
         expression: "        $(filter %.webgpu_vert.spv \\",
     },
     MakeExpression {
-        source_line: 473,
+        source_line: 485,
         family: "wgsl",
         expression: "WGSL_HEADER_OUTPUTS := $(patsubst %.wgsl,%.hpp,$(WGSL_OUTPUTS))",
     },
     MakeExpression {
-        source_line: 476,
+        source_line: 488,
         family: "wgsl",
         expression: "\t@python3 wgsl_to_header.py $(WGSL_FLAGS) $< $@ $(subst .,_,$(basename $(notdir $<)))",
     },
     MakeExpression {
-        source_line: 487,
-        family: "wgsl",
+        source_line: 499,
+        family: "d3d",
         expression: "FXC_DEBUG_FLAG := $(if $(filter --human-readable,$(FLAGS)),/Zi,)",
     },
     MakeExpression {
-        source_line: 491,
-        family: "wgsl",
+        source_line: 503,
+        family: "d3d",
         expression: "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.vert.h, $(wildcard d3d/*.hlsl))) \\",
     },
     MakeExpression {
-        source_line: 492,
-        family: "wgsl",
+        source_line: 504,
+        family: "d3d",
         expression: "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.frag.h, $(wildcard d3d/*.hlsl))) \\",
     },
 ];
@@ -2402,12 +2423,12 @@ pub struct MakeFunction {
 
 pub const MAKE_FUNCTIONS: &[MakeFunction] = &[
     MakeFunction {
-        source_line: 348,
+        source_line: 354,
         name: "spirv_list_rule",
         source: "define spirv_list_rule\n  $(spirv_out_filename_no_ext).spv: $1 $(MINIFY_STAMP) | $(OUT)/spirv/.\n\t@glslangValidator -S $(spirv_type) -DTARGET_SPIRV \\\n\t\t$(if $(spirv_is_vert), -DVERTEX, -DFRAGMENT $(spirv_frag_params)) \\\n\t\t-I$(OUT)  -V $3 -o $(spirv_out_filename_no_ext).spv.unoptimized $1\n\t@spirv-opt --preserve-bindings --preserve-interface $(spirv_opt_params) \\\n\t\t$(spirv_out_filename_no_ext).spv.unoptimized -o $(spirv_out_filename_no_ext).spv\n\t@rm $(spirv_out_filename_no_ext).spv.unoptimized\n\n  $(spirv_out_filename_no_ext).h: $(spirv_out_filename_no_ext).spv\n\t@python3 spirv_binary_to_header.py $(spirv_out_filename_no_ext).spv $(spirv_out_filename_no_ext).h $(subst $(suffix $1),_$2,$(notdir $1))\n\n  SPIRV_OUTPUTS_BINARY += $(spirv_out_filename_no_ext).spv\n  SPIRV_OUTPUTS_HEADERS += $(spirv_out_filename_no_ext).h\nendef",
     },
     MakeFunction {
-        source_line: 367,
+        source_line: 373,
         name: "make_spirv_rules",
         source: "define make_spirv_rules\n    ## Note that the inner foreach will filter out \".frag\" files from the list for any vert targets, and vice versa.\n    $(foreach type,$2,\\\n        $(foreach file,$(filter-out %.$(if $(findstring vert, $(type)),frag,vert),$1),\\\n            $(eval $(call spirv_list_rule,$(file),$(type),$3))\\\n        )\\\n    )\nendef",
     },
@@ -2427,31 +2448,31 @@ pub const TARGET_FAMILIES: &[TargetFamily] = &[
     TargetFamily {
         name: "minify",
         source_start: 1,
-        source_end: 43,
+        source_end: 34,
         description: "Batch-expand *.glsl, *.vert, and *.frag inputs; minify once with a stamp and emit exports, minified sources, and headers.",
     },
     TargetFamily {
         name: "metal",
-        source_start: 44,
+        source_start: 35,
         source_end: 148,
         description: "Generate draw combinations and compile the seven Apple Metal artifact families with platform SDK, language standard, and minimum-version choices.",
     },
     TargetFamily {
         name: "spirv",
         source_start: 149,
-        source_end: 423,
+        source_end: 438,
         description: "Preserve all Vulkan/SPIR-V source lists, specialization variants, glslangValidator and spirv-opt recipes, and binary/header targets.",
     },
     TargetFamily {
         name: "wgsl",
-        source_start: 424,
-        source_end: 495,
+        source_start: 439,
+        source_end: 491,
         description: "Translate selected SPIR-V outputs with naga, retaining coordinate-space, TERM, warning-filter, and WGSL-header behavior.",
     },
     TargetFamily {
         name: "d3d",
-        source_start: 496,
-        source_end: 515,
+        source_start: 492,
+        source_end: 527,
         description: "Preserve FXC vertex, fragment, atlas specialization, root-signature, and clean targets.",
     },
 ];
@@ -2529,10 +2550,15 @@ pub const SPIRV_SOURCE_ORDER: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        "SPIRV_DEPTHSTENCIL_FILL_INPUTS",
+        &["spirv/draw_depthstencil_fill.vert"],
+    ),
+    (
         "WEBGPU_NOSSBO_NOCLIPDISTANCE_INPUTS",
         &[
             "spirv/draw_depthstencil_path.main",
             "spirv/draw_depthstencil_atlas_blit.main",
+            "$(SPIRV_DEPTHSTENCIL_FILL_INPUTS)",
         ],
     ),
     (
@@ -2639,19 +2665,19 @@ pub const NON_METAL_FAMILIES: &[NonMetalFamily] = &[
         name: "spirv",
         target: "spirv / spirv-binary",
         toolchain: "glslangValidator + spirv-opt + spirv_binary_to_header.py",
-        source_lines: "149-410",
+        source_lines: "149-438",
     },
     NonMetalFamily {
         name: "wgsl",
         target: "wgsl",
         toolchain: "naga --keep-coordinate-space + wgsl_to_header.py",
-        source_lines: "411-482",
+        source_lines: "439-491",
     },
     NonMetalFamily {
         name: "d3d",
         target: "d3d",
         toolchain: "fxc vs_5_0 + ps_5_0 + rootsig_1_1",
-        source_lines: "483-502",
+        source_lines: "492-527",
     },
 ];
 
@@ -2659,11 +2685,11 @@ pub const NON_METAL_FAMILIES: &[NonMetalFamily] = &[
 /// without executing the Makefile.
 pub fn target_family(source_line: u16) -> &'static str {
     match source_line {
-        1..=43 => "minify",
-        44..=148 => "metal",
-        149..=423 => "spirv",
-        424..=495 => "wgsl",
-        496..=515 => "d3d",
+        1..=34 => "minify",
+        35..=148 => "metal",
+        149..=438 => "spirv",
+        439..=491 => "wgsl",
+        492..=527 => "d3d",
         _ => "outside-pinned-makefile",
     }
 }

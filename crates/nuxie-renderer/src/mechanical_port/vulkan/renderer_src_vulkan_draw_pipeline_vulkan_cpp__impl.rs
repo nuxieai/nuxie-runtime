@@ -1,26 +1,26 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_vulkan.cpp`.
-//! Updated through upstream `675703b9fd71e982eaf97c034b313eba9bde63f4`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_snake_case)]
 
 use super::common_layouts_decl as layout;
 use super::draw_pipeline_layout_vulkan_decl::DrawPipelineLayoutVulkan;
 use super::draw_pipeline_vulkan_decl::{
-    DrawPipelineVulkan, PipelineProps, DRAW_PIPELINE_OPTION_COUNT,
+    DRAW_PIPELINE_OPTION_COUNT, DrawPipelineVulkan, PipelineProps,
 };
 use super::draw_shader_vulkan_decl::DrawShaderVulkan;
 use super::render_pass_vulkan_decl::{
-    RenderPassOptionsVulkan, RenderPassVulkan, KEY_NO_INTERLOCK_MODE_BIT_COUNT,
+    KEY_NO_INTERLOCK_MODE_BIT_COUNT, RenderPassOptionsVulkan, RenderPassVulkan,
 };
 use super::vkutil_decl;
 use super::vulkan_context_decl::VulkanContext;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    BlendEquation, DrawType, InterlockMode, LoadAction, PlatformFeatures, ShaderFeatures,
-    ShaderMiscFlags, DEPTH_MAX, DEPTH_MIN,
+    BlendEquation, DEPTH_MAX, DEPTH_MIN, DrawType, InterlockMode, LoadAction, PlatformFeatures,
+    ShaderFeatures, ShaderMiscFlags,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp::{
-    getPipelineUniqueKey, get_pipeline_state,
+    get_pipeline_state, getPipelineUniqueKey,
 };
 use ash::vk;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ use std::sync::Arc;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const PLS_PLANE_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 16;
+const SPECIALIZATION_COUNT: usize = 15;
 
 fn shaderPermutationFlags(
     shaderFeatures: ShaderFeatures,
@@ -48,7 +48,6 @@ fn shaderPermutationFlags(
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::clockwiseFill)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::nestedClipUpdateOnly)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::borrowedCoveragePass)),
-        u32::from(shaderMiscFlags.has(ShaderMiscFlags::emulateDynamicColorWriteDisable)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::storeColorClear)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::loadColorFromDstTexture)),
         u32::from(vendorID == vkutil_decl::ARM),
@@ -346,9 +345,11 @@ impl DrawPipelineVulkan {
                 blendStates[COLOR_PLANE_IDX].color_write_mask = vkutil_decl::kColorWriteMaskNone;
             } else if props.drawType != DrawType::renderPassInitialize {
                 assert_ne!(props.drawType, DrawType::clipReset);
-                assert!(!props
-                    .shaderMiscFlags
-                    .has(ShaderMiscFlags::nestedClipUpdateOnly));
+                assert!(
+                    !props
+                        .shaderMiscFlags
+                        .has(ShaderMiscFlags::nestedClipUpdateOnly)
+                );
                 blendStates[CLIP_PLANE_IDX].color_write_mask = vkutil_decl::kColorWriteMaskNone;
             }
         }
@@ -415,12 +416,15 @@ impl DrawPipelineVulkan {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
             | DrawType::outerCurvePatches
-            | DrawType::stencilOuterCubicBorrowedCoverage
+            | DrawType::depthStrokes => (
+                &*layout::PATH_VERTEX_INPUT_STATE,
+                &*layout::INPUT_ASSEMBLY_TRIANGLE_LIST,
+            ),
+            DrawType::stencilOuterCubicBorrowedCoverage
             | DrawType::stencilOuterCubicReset
             | DrawType::stencilOuterCubicWinding
             | DrawType::stencilOuterCubicCover
             | DrawType::stencilOuterCubics
-            | DrawType::depthStrokes
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -428,7 +432,7 @@ impl DrawPipelineVulkan {
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
             | DrawType::stencilMidpointFanCover => (
-                &*layout::PATH_VERTEX_INPUT_STATE,
+                &*layout::EMPTY_VERTEX_INPUT_STATE,
                 &*layout::INPUT_ASSEMBLY_TRIANGLE_LIST,
             ),
             DrawType::clipReset | DrawType::interiorTriangulation | DrawType::featherAtlasBlit => (
@@ -556,9 +560,8 @@ mod tests {
             (ShaderMiscFlags::clockwiseFill, 9),
             (ShaderMiscFlags::nestedClipUpdateOnly, 10),
             (ShaderMiscFlags::borrowedCoveragePass, 11),
-            (ShaderMiscFlags::emulateDynamicColorWriteDisable, 12),
-            (ShaderMiscFlags::storeColorClear, 13),
-            (ShaderMiscFlags::loadColorFromDstTexture, 14),
+            (ShaderMiscFlags::storeColorClear, 12),
+            (ShaderMiscFlags::loadColorFromDstTexture, 13),
         ] {
             let values = shaderPermutationFlags(ShaderFeatures::NONE, flag, 0);
             assert_eq!(values[expectedIndex], 1);
@@ -569,7 +572,7 @@ mod tests {
             ShaderMiscFlags::none,
             vkutil_decl::ARM,
         );
-        assert_eq!(values[15], 1);
+        assert_eq!(values[14], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
     }
 

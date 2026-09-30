@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 
-PINNED_UPSTREAM = "0d504972edf5253a9bd6e172facc9483719496f1"
+PINNED_UPSTREAM = "c14cb2510071bd4cfa08d52ba5cd44d98c362237"
 GENERATED_INPUTS = (
     "advanced_blend.minified.glsl",
     "atomic_draw.minified.glsl",
@@ -23,6 +23,7 @@ GENERATED_INPUTS = (
     "draw_image_mesh.minified.vert",
     "draw_mesh.minified.frag",
     "draw_depthstencil_object.minified.frag",
+    "draw_depthstencil_fill.minified.vert",
     "draw_path.minified.vert",
     "draw_path_common.minified.glsl",
     "draw_raster_order_path.minified.frag",

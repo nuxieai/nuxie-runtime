@@ -697,7 +697,11 @@ fn clamped_divide(a: f32, b: f32) -> f32 {
     let a = if b < 0.0 { -a } else { a };
     let b = b.abs();
     if a > 0.0 {
-        if a < b { a / b } else { 1.0 }
+        if a < b {
+            a / b
+        } else {
+            1.0
+        }
     } else {
         0.0
     }

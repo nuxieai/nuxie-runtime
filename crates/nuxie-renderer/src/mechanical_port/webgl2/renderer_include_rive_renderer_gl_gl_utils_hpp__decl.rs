@@ -10,6 +10,7 @@ pub(crate) const PINNED_SOURCE: &str =
 
 // The leading underscore is source-significant: generated minification never
 // collides with this fallback uniform name.
+pub(crate) const BASE_VERTEX_UNIFORM_NAME: &str = "_baseVertex";
 pub(crate) const BASE_INSTANCE_UNIFORM_NAME: &str = "_baseInstance";
 
 #[derive(Clone, Copy, Debug)]

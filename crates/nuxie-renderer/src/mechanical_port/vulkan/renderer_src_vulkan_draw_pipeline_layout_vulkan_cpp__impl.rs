@@ -1,6 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/draw_pipeline_layout_vulkan.cpp`.
-//! Updated through upstream `2b2203f45a67f813cb662272962192ecfdfd923e`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_snake_case)]
 
@@ -132,12 +132,8 @@ impl DrawPipelineLayoutVulkan {
         } else {
             VULKAN_BINDINGS_SET_COUNT
         };
-        let pushConstantRanges = [super::vkutil_decl::ColorWriteEnablePushConstant];
-        let mut info =
+        let info =
             vk::PipelineLayoutCreateInfo::default().set_layouts(&descriptorSetLayouts[..setCount]);
-        if interlockMode == InterlockMode::depthStencil {
-            info = info.push_constant_ranges(&pushConstantRanges);
-        }
         let pipelineLayout =
             vk_check(unsafe { vk.m_ashDevice.create_pipeline_layout(&info, None) });
 
@@ -180,11 +176,7 @@ fn colorAttachmentCountForMode(
     match interlockMode {
         InterlockMode::rasterOrdering => {
             assert!(subpassIndex == 0 || subpassIndex == 1);
-            if subpassIndex == 0 {
-                4
-            } else {
-                1
-            }
+            if subpassIndex == 0 { 4 } else { 1 }
         }
         InterlockMode::atomics => {
             assert!(subpassIndex <= 1);

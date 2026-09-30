@@ -208,6 +208,9 @@
 //     //  |                                |                   |
 //     //  v height                         v +1                v height
 //     //
+//     // A target can keep its rows the other way round from the framebuffer
+//     // through RenderTarget::bottomUp(). GL canvases do, so their textures
+//     // match every other backend.
 //     bool clipSpaceBottomUp = false;
 //     bool framebufferBottomUp = false;
 //     // Backend cannot initialize PLS with typical clear/load APIs in atomic
@@ -594,17 +597,14 @@
 //
 // // # of tessellation segments spanned by the outer cubic patch, NOT counting the
 // // additional bowtie-join segment (zero length, no fan triangle) that is just
-// // part of the AA border. Use OuterCubicPatchSegmentSpanPlusJoin where the join
-// // segment is included.
+// // part of the AA border. Use OuterCubicPatchSegmentSpanPlusBowtie where the
+// // join segment is included.
 // constexpr static uint32_t OuterCubicPatchSegmentSpan = 16;
 //
-// // The final segment in an outer cubic patch is a zero-length bowtie join.
-// constexpr static uint32_t OuterCubicPatchJoinSegmentCount = 1;
-//
 // // Full tessellation stride of an outer cubic patch: the curve segments plus the
-// // trailing bowtie-join segment.
-// constexpr static uint32_t OuterCubicPatchSegmentSpanPlusJoin =
-//     OuterCubicPatchSegmentSpan + OuterCubicPatchJoinSegmentCount;
+// // trailing zero-length bowtie-join segment.
+// constexpr static uint32_t OuterCubicPatchSegmentSpanPlusBowtie =
+//     OuterCubicPatchSegmentSpan + 1;
 //
 // // Define vertex and index buffers that contain all the triangles in every
 // // PatchType.
@@ -636,10 +636,10 @@
 // static_assert((kMidpointFanCenterAAPatchBaseIndex * sizeof(uint16_t)) % 4 == 0);
 //
 // constexpr static uint32_t kOuterCurvePatchVertexCount =
-//     OuterCubicPatchSegmentSpanPlusJoin * 8 /*AA center ramp with bowtie*/ +
-//     OuterCubicPatchSegmentSpanPlusJoin /*Curve fan*/;
+//     OuterCubicPatchSegmentSpanPlusBowtie * 8 /*AA center ramp with bowtie*/ +
+//     OuterCubicPatchSegmentSpanPlusBowtie /*Curve fan*/;
 // constexpr static uint32_t kOuterCurvePatchBorderIndexCount =
-//     OuterCubicPatchSegmentSpanPlusJoin * 12 /*AA center ramp with bowtie*/;
+//     OuterCubicPatchSegmentSpanPlusBowtie * 12 /*AA center ramp with bowtie*/;
 // constexpr static uint32_t kOuterCurvePatchIndexCount =
 //     kOuterCurvePatchBorderIndexCount /*AA center ramp with bowtie*/ +
 //     (OuterCubicPatchSegmentSpan - 1) * 3 /*Curve fan*/;
@@ -647,12 +647,81 @@
 //     kMidpointFanCenterAAPatchBaseIndex + kMidpointFanCenterAAPatchIndexCount;
 // static_assert((kOuterCurvePatchBaseIndex * sizeof(uint16_t)) % 4 == 0);
 //
+// // depthStencil fills use repeating index patterns instead of instancing. They
+// // otherwise draw the same basic patch geometry as other modes, but without the
+// // AA border. (And rather than input attribs, the shader derives its vertex
+// // attributes from gl_VertexID.)
+// constexpr static uint32_t DSMidpointFanFillPatchIndexCount =
+//     kMidpointFanPatchIndexCount - kMidpointFanPatchBorderIndexCount;
+// // A single midpointFan patch is repeated multiple times in the index buffer,
+// // with increasing vertex IDs.
+// constexpr static uint32_t DSMidpointFanFillPatchMaxReps = 4096;
+// // depthStencil draws may bind the index buffer at an offset rather than using
+// // baseIndex, and Metal's indexBufferOffset has to be a multiple of 4 bytes.
+// constexpr static uint32_t DSMidpointFanFillBaseIndex =
+//     math::round_up_to_multiple_of<4 / sizeof(uint16_t)>(
+//         kOuterCurvePatchBaseIndex + kOuterCurvePatchIndexCount);
+// // Metal's indexBufferOffset has to be a multiple of 4 bytes.
+// static_assert((DSMidpointFanFillBaseIndex * sizeof(uint16_t)) % 4 == 0);
+//
+// constexpr static uint32_t DSOuterCubicFillPatchIndexCount =
+//     kOuterCurvePatchIndexCount - kOuterCurvePatchBorderIndexCount;
+// // A single outerCubic patch is repeated multiple times in the index buffer,
+// // with increasing vertex IDs.
+// constexpr static uint32_t DSOuterCubicFillPatchMaxReps = 2048;
+// // depthStencil draws may bind the index buffer at an offset rather than using
+// // baseIndex, and Metal's indexBufferOffset has to be a multiple of 4 bytes.
+// constexpr static uint32_t DSOuterCubicFillBaseIndex =
+//     math::round_up_to_multiple_of<4 / sizeof(uint16_t)>(
+//         DSMidpointFanFillBaseIndex +
+//         DSMidpointFanFillPatchMaxReps * DSMidpointFanFillPatchIndexCount);
+// // Metal's indexBufferOffset has to be a multiple of 4 bytes.
+// static_assert((DSOuterCubicFillBaseIndex * sizeof(uint16_t)) % 4 == 0);
+//
+// constexpr static uint32_t dsFillPatchIndexCount(bool outerCubic)
+// {
+//     return outerCubic ? DSOuterCubicFillPatchIndexCount
+//                       : DSMidpointFanFillPatchIndexCount;
+// }
+// constexpr static uint32_t dsFillPatchMaxReps(bool outerCubic)
+// {
+//     return outerCubic ? DSOuterCubicFillPatchMaxReps
+//                       : DSMidpointFanFillPatchMaxReps;
+// }
+// constexpr static uint32_t dsFillBaseIndex(bool outerCubic)
+// {
+//     return outerCubic ? DSOuterCubicFillBaseIndex : DSMidpointFanFillBaseIndex;
+// }
+//
+// // depthStencil vertex IDs are spaced on pow2 strides per patch so the shader
+// // can decode them with shifts instead of divides. (DS_PATCH_STRIDE_LOG2 in
+// // constants.glsl.)
+// constexpr static uint32_t DSMidpointFanFillPatchStrideLog2 = 4;
+// constexpr static uint32_t DSOuterCubicFillPatchStrideLog2 = 5;
+//
+// // depthStencil fills encode some attributes as flags on gl_VertexID, in order
+// // to avoid input attribs. (DS_PATCH_STRIDE_LOG2 in constants.glsl.)
+// constexpr static int32_t DSFillVertexFlagsShift = 29;
+// constexpr static int32_t DSFillVertexFlagDisableColorWrite =
+//     1 << DSFillVertexFlagsShift;
+// constexpr static int32_t DSFillVertexFlagOuterCubic =
+//     1 << (DSFillVertexFlagsShift + 1);
+//
+// // Byte offset to bind the index buffer for a depthStencil fill. Every backend
+// // that may see Adreno should use this rather than baseIndex. Using baseIndex on
+// // Adreno drops the total framerate by 26%.
+// constexpr static uint32_t dsFillIndexOffset(bool outerCubic)
+// {
+//     return static_cast<uint32_t>(dsFillBaseIndex(outerCubic) *
+//                                  sizeof(uint16_t));
+// }
+//
 // constexpr static uint32_t kPatchVertexBufferCount =
 //     kMidpointFanPatchVertexCount + kMidpointFanCenterAAPatchVertexCount +
 //     kOuterCurvePatchVertexCount;
 // constexpr static uint32_t kPatchIndexBufferCount =
-//     kMidpointFanPatchIndexCount + kMidpointFanCenterAAPatchIndexCount +
-//     kOuterCurvePatchIndexCount;
+//     DSOuterCubicFillBaseIndex +
+//     DSOuterCubicFillPatchIndexCount * DSOuterCubicFillPatchMaxReps;
 // void GeneratePatchBufferData(PatchVertex[kPatchVertexBufferCount],
 //                              uint16_t indices[kPatchIndexBufferCount]);
 //
@@ -724,7 +793,6 @@
 //     // atomic mode, or copying an offscreen attachment to the final
 //     // renderTarget).
 //     renderPassResolve,
-//
 // };
 //
 // // True for drawTypes that switch dynamic state on a single pipeline and issue
@@ -754,6 +822,39 @@
 //         case DrawType::stencilOuterCubicReset:
 //         case DrawType::stencilOuterCubicWinding:
 //         case DrawType::stencilOuterCubicCover:
+//         case DrawType::clipReset:
+//         case DrawType::renderPassInitialize:
+//         case DrawType::renderPassResolve:
+//             return false;
+//     }
+//     RIVE_UNREACHABLE();
+// }
+//
+// constexpr static bool drawTypeSubmitsOuterCubicPatches(DrawType drawType)
+// {
+//     switch (drawType)
+//     {
+//         case DrawType::outerCurvePatches:
+//         case DrawType::stencilDynamicOuterCubics:
+//         case DrawType::stencilOuterCubicBorrowedCoverage:
+//         case DrawType::stencilOuterCubics:
+//         case DrawType::stencilOuterCubicReset:
+//         case DrawType::stencilOuterCubicWinding:
+//         case DrawType::stencilOuterCubicCover:
+//             return true;
+//         case DrawType::midpointFanPatches:
+//         case DrawType::midpointFanCenterAAPatches:
+//         case DrawType::interiorTriangulation:
+//         case DrawType::featherAtlasBlit:
+//         case DrawType::imageRect:
+//         case DrawType::imageMesh:
+//         case DrawType::depthStrokes:
+//         case DrawType::stencilDynamicMidpointFans:
+//         case DrawType::stencilMidpointFanBorrowedCoverage:
+//         case DrawType::stencilMidpointFans:
+//         case DrawType::stencilMidpointFanReset:
+//         case DrawType::stencilMidpointFanWinding:
+//         case DrawType::stencilMidpointFanCover:
 //         case DrawType::clipReset:
 //         case DrawType::renderPassInitialize:
 //         case DrawType::renderPassResolve:
@@ -822,9 +923,9 @@
 // };
 // constexpr static size_t INTERLOCK_MODE_COUNT = 5;
 // // # of bits required to contain an InterlockMode.
-// constexpr static size_t INTERLOCK_MODE_BIT_COUNT = 3;
-// static_assert(INTERLOCK_MODE_COUNT <= (1 << INTERLOCK_MODE_BIT_COUNT));
-// static_assert(INTERLOCK_MODE_COUNT > (1 << (INTERLOCK_MODE_BIT_COUNT - 1)));
+// constexpr static size_t InterlockModeBitCount = 3;
+// static_assert(INTERLOCK_MODE_COUNT <= (1 << InterlockModeBitCount));
+// static_assert(INTERLOCK_MODE_COUNT > (1 << (InterlockModeBitCount - 1)));
 //
 // // Low-level batch of scissored geometry for rendering to the offscreen atlas.
 // struct AtlasDrawBatch
@@ -857,9 +958,9 @@
 //     ENABLE_MODULATED_IMAGE = 1 << 8,
 // };
 //
-// constexpr static size_t kShaderFeatureCount = 9;
+// constexpr static size_t ShaderFeatureCount = 9;
 // constexpr static ShaderFeatures kAllShaderFeatures =
-//     static_cast<gpu::ShaderFeatures>((1 << kShaderFeatureCount) - 1);
+//     static_cast<gpu::ShaderFeatures>((1 << ShaderFeatureCount) - 1);
 // constexpr static ShaderFeatures kVertexShaderFeaturesMask =
 //     ShaderFeatures::ENABLE_CLIPPING | ShaderFeatures::ENABLE_CLIP_RECT |
 //     ShaderFeatures::ENABLE_ADVANCED_BLEND | ShaderFeatures::ENABLE_FEATHER |
@@ -903,17 +1004,17 @@
 //
 // // Miscellaneous switches that *do* affect the behavior of the shaders. The
 // // renderContext may add some of these, and a backend may also add them to a
-// // shader key if it wants to implement the behavior.
-// // Most only reach the fragment shader. emulateDynamicColorWriteDisable also
-// // reaches the vertex shader, so a backend that sets it must key its vertex
-// // shaders on it as well.
+// // shader key if it wants to implement the behavior. So far these only affect
+// // the fragment shader.
 // enum class ShaderMiscFlags : uint32_t
 // {
 //     none = 0,
 //
-//     // InterlockMode::atomics only (without advanced blend). Render color to a
-//     // standard attachment instead of PLS. The backend implementation is
-//     // responsible to turn on src-over blending.
+//     // Render to a standard color attachment with pure hardware blending (no dst
+//     // reads or in-shader blending). The draw pipeline sets the appropriate
+//     // fixed-function hardware blend state.
+//     // NOTE: This can be a whole-flush decision (atomics, clockwise), or
+//     // decided per draw (clockwiseAtomic, depthStencil).
 //     fixedFunctionColorOutput = 1 << 0,
 //
 //     // Override all paths' fill rules (winding or even/odd) with an experimental
@@ -938,37 +1039,46 @@
 //     // reading the buffer and subtracting.
 //     borrowedCoveragePass = 1 << 4,
 //
-//     // The backend can't turn color writes off via dynamic state
-//     // (e.g., VK_EXT_color_write_enable), so the vertex shader emulates it by
-//     // zeroing its paint, which the fragment shader reads as color == 0.
-//     // NOTE: "color == 0" doesn't work with blending disabled (opaquePaint), so
-//     // this flag also forces blend on for opaque content.
-//     emulateDynamicColorWriteDisable = 1 << 5,
+//     // InterlockMode::depthStencil only. The shader determines dstColor for
+//     // advanced blend by fetching every sample the fragment covers and
+//     // averaging them.
+//     msaaDstRead = 1 << 5,
 //
-//     // DrawType::renderPassInitialize only. Also store the color clear value to
-//     // PLS when drawing a clear, in addition to clearing the other PLS planes.
+//     // InterlockMode::atomics, DrawType::renderPassInitialize only. Also store
+//     // the color clear value to PLS when drawing a clear, in addition to
+//     // clearing the other PLS planes.
 //     storeColorClear = 1 << 6,
 //
-//     // DrawType::renderPassInitialize only. Seed the color PLS plane by
-//     // sampling the framebuffer contents (previously copied into a dst color
-//     // texture bound at IMAGE_TEXTURE_IDX). Used for
+//     // InterlockMode::atomics, DrawType::renderPassInitialize only. Seed the
+//     // color PLS plane by sampling the framebuffer contents (previously copied
+//     // into a dst color texture bound at IMAGE_TEXTURE_IDX). Used for
 //     // LoadAction::preserveRenderTarget on backends that can't directly copy
 //     // a texture into a storage buffer (e.g. WebGPU).
 //     loadColorFromDstTexture = 1 << 7,
 //
-//     // DrawType::renderPassInitialize only. Swizzle the existing framebuffer
-//     // contents from BGRA to RGBA. (For when this data had to get copied from a
-//     // BGRA target.)
+//     // InterlockMode::atomics, DrawType::renderPassInitialize only. Swizzle the
+//     // existing framebuffer contents from BGRA to RGBA. (For when this data had
+//     // to get copied from a BGRA target.)
 //     swizzleColorBGRAToRGBA = 1 << 8,
 //
-//     // DrawType::renderPassResolve only. Optimization for when rendering to an
-//     // offscreen texture.
+//     // InterlockMode::atomics, DrawType::renderPassResolve only. Optimization
+//     // for when rendering to an offscreen texture.
 //     //
 //     // It renders the final "resolve" operation directly to the renderTarget in
 //     // a single pass, instead of (1) resolving the offscreen texture, and then
 //     // (2) copying the offscreen texture to back the renderTarget.
 //     coalescedResolveAndTransfer = 1 << 9,
 // };
+//
+// constexpr static size_t ShaderMiscFlagCount = 10;
+// static_assert(
+//     static_cast<uint32_t>(ShaderMiscFlags::coalescedResolveAndTransfer) ==
+//     1 << (ShaderMiscFlagCount - 1));
+//
+// // Since shader keys also pack the interlockMode and drawType, they don't have
+// // to pack the entire ShaderMiscFlags mask -- only the bits that are relevant to
+// // the interlockMode. This is a much smaller set than the entire enum.
+// constexpr static size_t ShaderMiscFlagKeyBitCount = 5;
 //
 // constexpr static ShaderFeatures ShaderFeaturesMaskFor(
 //     DrawType drawType,
@@ -1117,6 +1227,15 @@
 //                          InterlockMode,
 //                          ShaderMiscFlags);
 //
+// // ShaderUniqueKey() is currently 21 bits. Be careful when adding to it because
+// // some backends pack their own private state into keys, and still need to fit
+// // in 64 bits.
+// constexpr static uint32_t DrawTypeKeyBitCount = 4;
+// constexpr static uint32_t ShaderUniqueKeyBitCount =
+//     ShaderMiscFlagKeyBitCount + InterlockModeBitCount + ShaderFeatureCount +
+//     DrawTypeKeyBitCount;
+// static_assert(ShaderUniqueKeyBitCount == 21);
+//
 // extern const char* GetShaderFeatureGLSLName(ShaderFeatures feature);
 //
 // void ForEachUbershaderPermutation(
@@ -1146,7 +1265,6 @@
 //     // Put clip updates last because they use an entirely different shader in
 //     // clockwise mode.
 //     clipUpdate = 1 << 8,
-//
 // };
 //
 // // These are the only draw contents flags that apply to the pipeline state (and
@@ -1170,7 +1288,7 @@
 //     clipReset,
 // };
 //
-// constexpr uint32_t STENCIL_TYPE_BIT_COUNT = 4;
+// constexpr uint32_t StencilTypeBitCount = 4;
 //
 // struct StencilInfo
 // {
@@ -1328,7 +1446,7 @@
 //     RenderTarget* renderTarget = nullptr;
 //     ShaderFeatures combinedShaderFeatures = ShaderFeatures::NONE;
 //     InterlockMode interlockMode = InterlockMode::rasterOrdering;
-//     int msaaSampleCount = 0; // (0 unless interlockMode is depthStencil.)
+//     uint32_t msaaSampleCount = 0; // (0 unless interlockMode is depthStencil.)
 //
 //     LoadAction colorLoadAction = LoadAction::clear;
 //     ColorInt colorClearValue = 0; // When loadAction == LoadAction::clear.
@@ -1400,6 +1518,7 @@
 //     uint32_t tessVertexSpanCount = 0;
 //     size_t firstTessVertexSpan = 0;
 //     uint32_t gradDataHeight = 0;
+//     uint32_t gradTextureHeight = 0;
 //     uint32_t tessDataHeight = 0;
 //     // Override path fill rules with "clockwise".
 //     bool clockwiseFillOverride = false;
@@ -1537,8 +1656,13 @@
 //     // RGB10 (as opposed to writing it out to the framebuffer).
 //     WRITEONLY float m_ditherConversionToRGB10;
 //     WRITEONLY uint32_t m_wireframeEnabled; // Forces coverage to solid.
+//     // Whether _fragCoord.y counts from the visual bottom of the target.
+//     WRITEONLY uint32_t m_renderTargetBottomUp;
+//     // Scale and bias to get V coord of gradient from integral row value
+//     WRITEONLY float m_gradTextureYScale;
+//     WRITEONLY float m_gradTextureYBias;
 //     // Uniform blocks must be multiples of 256 bytes in size.
-//     WRITEONLY uint8_t m_padTo256Bytes[256 - 104];
+//     WRITEONLY uint8_t m_padTo256Bytes[256 - 116];
 // };
 // static_assert(sizeof(FlushUniforms) == 256);
 //
@@ -1644,15 +1768,20 @@
 //              bool hasClipRect,
 //              bool hasImage,
 //              BlendMode,
-//              bool solidUnmultiplied);
+//              bool solidUnmultiplied,
+//              float additiveness);
 //
 // private:
 //     WRITEONLY uint32_t m_params; // [clipID, flags, paintType]
 //     union
 //     {
-//         WRITEONLY uint32_t m_color;     // PaintType::solidColor
-//         WRITEONLY float m_gradTextureY; // Paintype::linearGradient,
-//                                         // Paintype::radialGradient
+//         WRITEONLY uint32_t m_color; // PaintType::solidColor
+//         WRITEONLY float
+//             m_gradTextureRowAndAdditiveness; // Paintype::linearGradient,
+//                                              // Paintype::radialGradient
+//                                              // Int part: gradient texture row
+//                                              // Fraction: additiveness,
+//                                              // pre-quantized to 0/256..255/256
 //         WRITEONLY uint32_t m_shiftedClipReplacementID; // PaintType::clipUpdate
 //     };
 // };
@@ -1806,7 +1935,8 @@
 //                           const ClipRectInverseMatrix*,
 //                           uint32_t clipID,
 //                           BlendMode,
-//                           uint32_t zIndex);
+//                           uint32_t zIndex,
+//                           float additiveness);
 //
 // private:
 //     WRITEONLY float m_viewMatrix[4];
@@ -1843,7 +1973,8 @@
 //                       const Mat2D& gradientMatrix,
 //                       uint32_t gradientType,
 //                       const float (&gradTextureHorizontalSpan)[2],
-//                       float gradTextureY);
+//                       float gradTextureY,
+//                       float additiveness);
 //
 // private:
 //     ImageDrawInstanceBase m_commons;
@@ -1861,7 +1992,7 @@
 // public:
 //     constexpr static size_t FirstAttribIdx =
 //         ImageDrawInstanceBase::FirstAttribIdx;
-//     static constexpr size_t AttributeCount = 7;
+//     static constexpr size_t AttributeCount = 8;
 //     static constexpr size_t LastAttribIdx = FirstAttribIdx + AttributeCount - 1;
 //
 //     static const std::array<VertexAttribute, AttributeCount>& getAttributes();
@@ -1869,16 +2000,20 @@
 //     ImageMeshInstance() = default;
 //
 //     ImageMeshInstance(const Mat2D&,
-//                       float opacity,
+//                       ColorInt modulatedColor,
 //                       const ClipRectInverseMatrix*,
 //                       uint32_t clipID,
 //                       BlendMode,
-//                       uint32_t zIndex);
+//                       uint32_t zIndex,
+//                       float additiveness,
+//                       Vec2D uvTranslate,
+//                       Vec2D uvScale);
 //
 // private:
 //     ImageDrawInstanceBase m_commons;
 //
-//     // Nothing additional yet
+//     // Packed: uvTranslate (x,y), uvScale (x,y)
+//     WRITEONLY float m_uvTransform[4];
 // };
 //
 // #undef WRITEONLY
@@ -2071,7 +2206,7 @@
 //     counterclockwise,
 // };
 //
-// constexpr uint32_t CULL_FACE_BIT_COUNT = 2;
+// constexpr uint32_t CullFaceBitCount = 2;
 //
 // // Blend equation to select for the fixed-function GPU pipeline (not our own
 // // in-shader blending). For now, the backend is free to decide whether it will
@@ -2145,14 +2280,24 @@
 // };
 //
 // // Returns a unique value that can be used to key a whole pipeline.
-// uint64_t pipeline_unique_key(DrawType,
-//                              ShaderFeatures,
-//                              InterlockMode,
-//                              ShaderMiscFlags,
-//                              DrawContents,
-//                              bool fixedFunctionColorOutput,
-//                              rive::BlendMode,
-//                              const PlatformFeatures&);
+// uint64_t getPipelineUniqueKey(DrawType,
+//                               ShaderFeatures,
+//                               InterlockMode,
+//                               ShaderMiscFlags,
+//                               DrawContents,
+//                               bool fixedFunctionColorOutput,
+//                               rive::BlendMode,
+//                               const PlatformFeatures&);
+//
+// // getPipelineUniqueKey() is currently 40 bits. Be careful when adding to it
+// // because some backends pack their own private state into keys, and still need
+// // to fit in 64 bits.
+// constexpr static uint32_t PipelineUniqueKeyBitCount =
+//     ShaderUniqueKeyBitCount +
+//     math::count_set_bits(uint32_t(DrawContentsForDepthStencilPipelineState)) +
+//     BLEND_MODE_BIT_COUNT + StencilTypeBitCount +
+//     3 /*colorWrite, depthTest, depthWrite*/ + CullFaceBitCount;
+// static_assert(PipelineUniqueKeyBitCount == 40);
 //
 // PipelineState get_pipeline_state(DrawType,
 //                                  InterlockMode,
@@ -2212,6 +2357,9 @@
 // void generate_inverse_gausian_integral_table(float (&)[GAUSSIAN_TABLE_SIZE]);
 // #endif
 //
+// // Get the integer row in the gradient texture.
+// uint32_t getGradientRow(ColorRampLocation, GradTextureLayout);
+//
 // // Get the Y coordinate in the gradient texture.
 // float getGradientY(ColorRampLocation, GradTextureLayout);
 //
@@ -2220,18 +2368,17 @@
 // void getGradientMatrixAndSpan(const Gradient*,
 //                               ColorRampLocation,
 //                               const Mat2D& inverseViewMatrix,
+//                               const RenderTarget*,
 //                               const PlatformFeatures&,
-//                               uint32_t renderTargetHeight,
 //                               Mat2D& paintMatrixOut,
 //                               float (&gradTextureHorizontalSpanOut)[2]);
 //
 // float featherRadiusFromFeather(float feather);
 //
 // } // namespace rive::gpu
-
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/gpu.hpp.
-// Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
+// Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
 // Ownership unit: generic-gpu-contract.
 // Include/dependency authority: the pinned header and source-shaped modules.
 
@@ -2717,9 +2864,7 @@ impl PatchVertex {
 
 pub const kMidpointFanPatchSegmentSpan: u32 = 8;
 pub const OuterCubicPatchSegmentSpan: u32 = 16;
-pub const OuterCubicPatchJoinSegmentCount: u32 = 1;
-pub const OuterCubicPatchSegmentSpanPlusJoin: u32 =
-    OuterCubicPatchSegmentSpan + OuterCubicPatchJoinSegmentCount;
+pub const OuterCubicPatchSegmentSpanPlusBowtie: u32 = OuterCubicPatchSegmentSpan + 1;
 pub const kMidpointFanPatchVertexCount: u32 =
     kMidpointFanPatchSegmentSpan * 4 + (kMidpointFanPatchSegmentSpan + 1) + 1;
 pub const kMidpointFanPatchBorderIndexCount: u32 = kMidpointFanPatchSegmentSpan * 6;
@@ -2734,8 +2879,8 @@ pub const kMidpointFanCenterAAPatchIndexCount: u32 =
 pub const kMidpointFanCenterAAPatchBaseIndex: u32 =
     kMidpointFanPatchBaseIndex + kMidpointFanPatchIndexCount;
 pub const kOuterCurvePatchVertexCount: u32 =
-    OuterCubicPatchSegmentSpanPlusJoin * 8 + OuterCubicPatchSegmentSpanPlusJoin;
-pub const kOuterCurvePatchBorderIndexCount: u32 = OuterCubicPatchSegmentSpanPlusJoin * 12;
+    OuterCubicPatchSegmentSpanPlusBowtie * 8 + OuterCubicPatchSegmentSpanPlusBowtie;
+pub const kOuterCurvePatchBorderIndexCount: u32 = OuterCubicPatchSegmentSpanPlusBowtie * 12;
 pub const kOuterCurvePatchIndexCount: u32 =
     kOuterCurvePatchBorderIndexCount + (OuterCubicPatchSegmentSpan - 1) * 3;
 pub const kOuterCurvePatchBaseIndex: u32 =
@@ -2743,8 +2888,51 @@ pub const kOuterCurvePatchBaseIndex: u32 =
 pub const kPatchVertexBufferCount: u32 = kMidpointFanPatchVertexCount
     + kMidpointFanCenterAAPatchVertexCount
     + kOuterCurvePatchVertexCount;
+pub const DSMidpointFanFillPatchIndexCount: u32 =
+    kMidpointFanPatchIndexCount - kMidpointFanPatchBorderIndexCount;
+pub const DSMidpointFanFillPatchMaxReps: u32 = 4096;
+pub const DSMidpointFanFillBaseIndex: u32 =
+    (kOuterCurvePatchBaseIndex + kOuterCurvePatchIndexCount + 1) & !1;
+pub const DSOuterCubicFillPatchIndexCount: u32 =
+    kOuterCurvePatchIndexCount - kOuterCurvePatchBorderIndexCount;
+pub const DSOuterCubicFillPatchMaxReps: u32 = 2048;
+pub const DSOuterCubicFillBaseIndex: u32 = (DSMidpointFanFillBaseIndex
+    + DSMidpointFanFillPatchMaxReps * DSMidpointFanFillPatchIndexCount
+    + 1)
+    & !1;
+const _: () = assert!(DSMidpointFanFillBaseIndex * 2 % 4 == 0);
+const _: () = assert!(DSOuterCubicFillBaseIndex * 2 % 4 == 0);
+pub const fn dsFillPatchIndexCount(outerCubic: bool) -> u32 {
+    if outerCubic {
+        DSOuterCubicFillPatchIndexCount
+    } else {
+        DSMidpointFanFillPatchIndexCount
+    }
+}
+pub const fn dsFillPatchMaxReps(outerCubic: bool) -> u32 {
+    if outerCubic {
+        DSOuterCubicFillPatchMaxReps
+    } else {
+        DSMidpointFanFillPatchMaxReps
+    }
+}
+pub const fn dsFillBaseIndex(outerCubic: bool) -> u32 {
+    if outerCubic {
+        DSOuterCubicFillBaseIndex
+    } else {
+        DSMidpointFanFillBaseIndex
+    }
+}
+pub const DSMidpointFanFillPatchStrideLog2: u32 = 4;
+pub const DSOuterCubicFillPatchStrideLog2: u32 = 5;
+pub const DSFillVertexFlagsShift: i32 = 29;
+pub const DSFillVertexFlagDisableColorWrite: i32 = 1 << DSFillVertexFlagsShift;
+pub const DSFillVertexFlagOuterCubic: i32 = 1 << (DSFillVertexFlagsShift + 1);
+pub const fn dsFillIndexOffset(outerCubic: bool) -> u32 {
+    dsFillBaseIndex(outerCubic) * 2
+}
 pub const kPatchIndexBufferCount: u32 =
-    kMidpointFanPatchIndexCount + kMidpointFanCenterAAPatchIndexCount + kOuterCurvePatchIndexCount;
+    DSOuterCubicFillBaseIndex + DSOuterCubicFillPatchIndexCount * DSOuterCubicFillPatchMaxReps;
 
 extern "C" {
     pub fn GeneratePatchBufferData(vertices: *mut PatchVertex, indices: *mut u16);
@@ -2799,6 +2987,34 @@ pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
         | DrawType::stencilOuterCubicReset
         | DrawType::stencilOuterCubicWinding
         | DrawType::stencilOuterCubicCover
+        | DrawType::clipReset
+        | DrawType::renderPassInitialize
+        | DrawType::renderPassResolve => false,
+    }
+}
+
+pub const fn drawTypeSubmitsOuterCubicPatches(draw_type: DrawType) -> bool {
+    match draw_type {
+        DrawType::outerCurvePatches
+        | DrawType::stencilDynamicOuterCubics
+        | DrawType::stencilOuterCubicBorrowedCoverage
+        | DrawType::stencilOuterCubics
+        | DrawType::stencilOuterCubicReset
+        | DrawType::stencilOuterCubicWinding
+        | DrawType::stencilOuterCubicCover => true,
+        DrawType::midpointFanPatches
+        | DrawType::midpointFanCenterAAPatches
+        | DrawType::interiorTriangulation
+        | DrawType::featherAtlasBlit
+        | DrawType::imageRect
+        | DrawType::imageMesh
+        | DrawType::depthStrokes
+        | DrawType::stencilDynamicMidpointFans
+        | DrawType::stencilMidpointFanBorrowedCoverage
+        | DrawType::stencilMidpointFans
+        | DrawType::stencilMidpointFanReset
+        | DrawType::stencilMidpointFanWinding
+        | DrawType::stencilMidpointFanCover
         | DrawType::clipReset
         | DrawType::renderPassInitialize
         | DrawType::renderPassResolve => false,
@@ -2962,20 +3178,19 @@ define_flag_type!(
     clipUpdateOnly = 1 << 2,
     nestedClipUpdateOnly = 1 << 3,
     borrowedCoveragePass = 1 << 4,
-    emulateDynamicColorWriteDisable = 1 << 5,
-    msaaDstRead = 1 << 6,
-    storeColorClear = 1 << 7,
-    loadColorFromDstTexture = 1 << 8,
-    swizzleColorBGRAToRGBA = 1 << 9,
-    coalescedResolveAndTransfer = 1 << 10,
+    msaaDstRead = 1 << 5,
+    storeColorClear = 1 << 6,
+    loadColorFromDstTexture = 1 << 7,
+    swizzleColorBGRAToRGBA = 1 << 8,
+    coalescedResolveAndTransfer = 1 << 9,
 );
 
-pub const ShaderMiscFlagCount: usize = 11;
+pub const ShaderMiscFlagCount: usize = 10;
 pub const ShaderMiscFlagKeyBitCount: usize = 5;
-pub const DrawTypeKeyBitCount: usize = 3;
+pub const DrawTypeKeyBitCount: usize = 4;
 pub const ShaderUniqueKeyBitCount: usize =
     ShaderMiscFlagKeyBitCount + InterlockModeBitCount + ShaderFeatureCount + DrawTypeKeyBitCount;
-const _: () = assert!(ShaderUniqueKeyBitCount == 20);
+const _: () = assert!(ShaderUniqueKeyBitCount == 21);
 const _: () =
     assert!(ShaderMiscFlags::coalescedResolveAndTransfer.0 == 1 << (ShaderMiscFlagCount - 1));
 
@@ -3858,7 +4073,7 @@ pub const PipelineUniqueKeyBitCount: usize = ShaderUniqueKeyBitCount
     + StencilTypeBitCount as usize
     + 3 /* colorWrite, depthTest, depthWrite */
     + CullFaceBitCount as usize;
-const _: () = assert!(PipelineUniqueKeyBitCount == 39);
+const _: () = assert!(PipelineUniqueKeyBitCount == 40);
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

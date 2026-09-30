@@ -1,64 +1,64 @@
-#ifdef CB
-g1(n3) I(0,c,PC);h1 g1(C3) I(1,c,QC);h1 g1(p1) I(v9,f,XB);I(w9,f,RB);I(x9,f,NB);I(y9,uint,YB);I(z9,uint,ZB);I(A9,uint,AC);I(B9,uint,LC);I(G9,f,GC);h1
+#ifdef BB
+c1(w3) K(0,c,QC);d1 c1(K3) K(1,c,RC);d1 c1(z1) K(L9,e,YB);K(M9,e,SB);K(N9,e,PB);K(O9,uint,ZB);K(P9,uint,AC);K(Q9,uint,BC);K(R9,uint,MC);K(Z9,e,HC);d1
 #endif
-r2 I0 W(0,c,J5);
-#ifdef K
-MB W(1,d,N3);
+l2 E0 W(0,c,T5);
+#ifdef A
+KB W(1,d,Z3);
 #endif
-#if defined(AB)&&!defined(BB)
-I0 W(2,f,P0);
+#if defined(AB)&&!defined(CB)
+E0 W(2,e,R0);
 #endif
-MB W(3,i,K1);
-#ifdef T
-W2 W(4,N,C1);
+KB W(3,i,P1);
+#ifdef O
+a3 W(4,R,H1);
 #endif
-i2
-#ifdef CB
-Y3 Z3 J6(EC,n3,o3,C3,D3,p1,g0,A){J(A,o3,PC,c);J(A,D3,QC,c);J(q,g0,XB,f);J(q,g0,RB,f);J(q,g0,NB,f);J(q,g0,YB,uint);J(q,g0,ZB,uint);J(q,g0,AC,uint);J(q,g0,LC,uint);J(q,g0,GC,f);V(J5,c);
-#ifdef K
-V(N3,d);
+d2
+#ifdef BB
+j4 k4 S6(RB,w3,x3,K3,L3,z1,h0,G){L(G,x3,QC,c);L(G,L3,RC,c);L(r,h0,YB,e);L(r,h0,SB,e);L(r,h0,PB,e);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,BC,uint);L(r,h0,MC,uint);L(r,h0,HC,e);T(T5,c);
+#ifdef A
+T(Z3,d);
 #endif
-#if defined(AB)&&!defined(BB)
-V(P0,f);
+#if defined(AB)&&!defined(CB)
+T(R0,e);
 #endif
-V(K1,i);
-#ifdef T
-V(C1,N);
+T(P1,i);
+#ifdef O
+T(H1,R);
 #endif
-c k0=N0(L1(XB),PC)+NB.xy;J5=QC*GC.zw+GC.xy;
-#ifdef K
-if(K){N3=r8(ZB,j.c6);}
+c k0=K0(n1(YB),QC)+PB.xy;T5=RC*HC.zw+HC.xy;
+#ifdef A
+if(A){Z3=k6(AC,j.T4);}
 #endif
 #ifdef AB
 if(AB){
-#ifndef BB
-P0=S7(L1(RB),NB.zw,k0 A5);
+#ifndef CB
+R0=h8(n1(SB),PB.zw,k0 Y4);
 #else
-Mc(L1(RB),NB.zw,k0 A5);
+Ga(n1(SB),PB.zw,k0 Y4);
 #endif
 }
 #endif
-f X=P3(k0);
-#ifdef SC
-X.y=-X.y;
+e I=I3(k0);
+#ifdef NC
+I.y=-I.y;
 #endif
-#ifdef BB
-X.z=ma(LC,0xffu);
+#ifdef CB
+I.z=H8(MC,0xffu);
 #endif
-K1=unpackUnorm4x8(YB);
-#ifdef T
-C1=a2(AC);
+P1=unpackUnorm4x8(ZB);
+#ifdef O
+H1=O1(BC);
 #endif
-c0(J5);
-#ifdef K
-c0(N3);
+Z(T5);
+#ifdef A
+Z(Z3);
 #endif
-#if defined(AB)&&!defined(BB)
-c0(P0);
+#if defined(AB)&&!defined(CB)
+Z(R0);
 #endif
-c0(K1);
-#ifdef T
-c0(C1);
+Z(P1);
+#ifdef O
+Z(H1);
 #endif
-B1(X);}
+v1(I);}
 #endif

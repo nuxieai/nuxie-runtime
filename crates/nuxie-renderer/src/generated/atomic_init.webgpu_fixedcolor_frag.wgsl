@@ -1,82 +1,82 @@
-struct TB {
-    tc: f32,
-    Bd: f32,
-    Hf: f32,
-    If: f32,
-    o6_: u32,
-    Nb: u32,
-    tf: u32,
-    uf: u32,
-    T7_: vec4<i32>,
-    hh: vec2<f32>,
-    Cd: vec2<f32>,
-    f2_: u32,
-    lh: f32,
-    c6_: u32,
-    X2_: f32,
-    Dd: f32,
-    nf: u32,
-    F3_: f32,
-    G3_: f32,
-    Ed: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
-    ac: f32,
+struct UB {
+    Qc: f32,
+    Td: f32,
+    Yf: f32,
+    Zf: f32,
+    z6_: u32,
+    X9_: u32,
+    Kf: u32,
+    Lf: u32,
+    i8_: vec4<i32>,
+    Ch: vec2<f32>,
+    Ud: vec2<f32>,
+    i2_: u32,
+    Gh: f32,
+    T4_: u32,
+    c3_: f32,
+    Vd: f32,
+    Ef: u32,
+    M3_: f32,
+    N3_: f32,
+    Wd: f32,
+    zh: u32,
+    W9_: u32,
+    wc: f32,
+    xc: f32,
 }
 
-struct B4Rd {
-    g2_: array<u32>,
+struct K4ge {
+    j2_: array<u32>,
 }
 
-struct i0Rd {
-    g2_: array<u32>,
+struct m0ge {
+    j2_: array<u32>,
 }
 
-struct kf {
-    g2_: array<vec2<u32>>,
+struct Bf {
+    j2_: array<vec2<u32>>,
 }
 
-struct lf {
-    g2_: array<vec4<f32>>,
+struct Cf {
+    j2_: array<vec4<f32>>,
 }
 
-@id(0) override Hh: bool = true;
+@id(0) override bi: bool = true;
 
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
-var<uniform> j: TB;
+var<uniform> j: UB;
 @group(2) @binding(3)
-var<storage, read_write> B4_: B4Rd;
+var<storage, read_write> K4_: K4ge;
 @group(2) @binding(1)
-var<storage, read_write> i0_: i0Rd;
+var<storage, read_write> m0_: m0ge;
 @group(3) @binding(9)
-var ca: sampler;
+var wa: sampler;
 @group(0) @binding(8)
-var ED: texture_2d<f32>;
+var FD: texture_2d<f32>;
 @group(0) @binding(9)
-var YC: texture_2d<f32>;
+var ZC: texture_2d<f32>;
 @group(1) @binding(11)
-var HC: texture_2d<f32>;
+var IC: texture_2d<f32>;
 @group(3) @binding(8)
-var N9_: sampler;
+var ha: sampler;
 @group(1) @binding(13)
-var W5_: sampler;
+var f6_: sampler;
 @group(0) @binding(3)
-var<storage> DD: kf;
+var<storage> XC: Bf;
 @group(0) @binding(4)
-var<storage> PB: lf;
-var<private> E1_: vec4<f32>;
+var<storage> JB: Cf;
+var<private> J1_: vec4<f32>;
 
 fn main_1() {
     let _e25 = gl_FragCoord_1;
     let _e29 = bitcast<vec2<u32>>(vec2<i32>(floor(_e25.xy)));
-    let _e31 = j.o6_;
+    let _e31 = j.z6_;
     let _e60 = bitcast<i32>((((((_e29.y >> bitcast<u32>(5u)) * (((_e31 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e29.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e29.x & 28u) << bitcast<u32>(5u)) + ((_e29.y & 28u) << bitcast<u32>(2i)))) + (((_e29.y & 3u) << bitcast<u32>(2i)) + (_e29.x & 3u))));
-    let _e62 = j.uf;
-    B4_.g2_[_e60] = _e62;
-    if Hh {
-        i0_.g2_[_e60] = 0u;
+    let _e62 = j.Lf;
+    K4_.j2_[_e60] = _e62;
+    if bi {
+        m0_.j2_[_e60] = 0u;
     }
     discard;
 }
@@ -85,6 +85,6 @@ fn main_1() {
 fn main(@builtin(position) gl_FragCoord: vec4<f32>) -> @location(0) vec4<f32> {
     gl_FragCoord_1 = gl_FragCoord;
     main_1();
-    let _e3 = E1_;
+    let _e3 = J1_;
     return _e3;
 }

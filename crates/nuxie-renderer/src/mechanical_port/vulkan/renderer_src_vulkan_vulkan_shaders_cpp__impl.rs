@@ -1,5 +1,6 @@
 //! Complete mechanical implementation translation of
 //! `renderer/src/vulkan/vulkan_shaders.cpp`.
+//! Updated through upstream `c14cb2510071bd4cfa08d52ba5cd44d98c362237`.
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
@@ -109,6 +110,8 @@ embedded_shaders!(
     draw_depthstencil_path_frag,
     draw_depthstencil_path_fixedcolor_frag,
     draw_depthstencil_path_msaa_frag,
+    draw_depthstencil_fill_vert,
+    draw_depthstencil_fill_noclipdistance_vert,
     draw_depthstencil_path_noclipdistance_vert,
     draw_depthstencil_triangles_nocolor_vert,
     draw_depthstencil_triangles_nocolor_frag,
@@ -248,6 +251,8 @@ fn visit_hotload_shaders(
     read!(draw_depthstencil_path_frag);
     read!(draw_depthstencil_path_fixedcolor_frag);
     read!(draw_depthstencil_path_msaa_frag);
+    read!(draw_depthstencil_fill_vert);
+    read!(draw_depthstencil_fill_noclipdistance_vert);
     read!(draw_depthstencil_triangles_nocolor_vert);
     read!(draw_depthstencil_triangles_nocolor_frag);
     read!(draw_depthstencil_triangles_nocolor_fixedcolor_frag);
@@ -275,19 +280,19 @@ pub(crate) fn hotload_shaders(spirvData: &'static [u32]) {
 #[cfg(test)]
 mod tests {
     use super::super::vulkan_shaders_decl::{
-        ShaderUnavailable, DECLARED_SHADER_SYMBOL_COUNT, TARGET_SHADER_SYMBOL_COUNT,
+        DECLARED_SHADER_SYMBOL_COUNT, ShaderUnavailable, TARGET_SHADER_SYMBOL_COUNT,
     };
     use super::*;
 
     #[test]
     fn embedded_and_declared_shader_denominators_are_exact() {
-        assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 97);
+        assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 99);
         #[cfg(not(target_os = "android"))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 97);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 99);
         #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 81);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 83);
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 37);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 39);
         let color_ramp = color_ramp_vert.read().expect("embedded shader");
         assert_eq!(color_ramp.first(), Some(&0x0723_0203));
         assert!(color_ramp.len() > 4);
@@ -343,10 +348,10 @@ mod tests {
             &draw_msaa_resolve_frag,
         ));
         #[cfg(not(target_os = "android"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x105f]);
+        assert_eq!(assignments.last().unwrap().1, &[0x1061]);
         #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x104f]);
+        assert_eq!(assignments.last().unwrap().1, &[0x1051]);
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        assert_eq!(assignments.last().unwrap().1, &[0x1024]);
+        assert_eq!(assignments.last().unwrap().1, &[0x1026]);
     }
 }

@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "eb68ec1e79af90d098b6595101bdba833d4b8cd33a965c3fa02ea5563c8babeb";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 496;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 16763;
+    "c6acd8f1c6ec8216c8f03d966b50ed3b8884d849ddeeb53d3aa78ad2b6782f8b";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 476;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 15921;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -84,17 +84,6 @@ NO_PERSPECTIVE VARYING(9, float3, v_image);
 VARYING_BLOCK_END
 
 #ifdef @VERTEX
-
-#ifdef @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
-// Emulation for VK_EXT_color_write_enable.
-// 1 writes color normally; 0 suppresses it by outputting v_paint == 0 (which
-// then gets discarded at the blend step).
-// NOTE: This is intentionally declared inside "#ifdef @VERTEX" so it doesn't
-// get needlessly added to fragment shaders.
-PUSH_CONSTANT_BLOCK_BEGIN(PushConstants)
-PUSH_CONSTANT(float, colorWriteEnable)
-PUSH_CONSTANT_BLOCK_END(pushConstants)
-#endif
 
 VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 {
@@ -298,15 +287,6 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         // gradient
         v_paint.a = -v_paint.a;
     }
-#ifdef @EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
-    if (@EMULATE_DYNAMIC_COLOR_WRITE_DISABLE)
-    {
-        // Zeroing v_paint is all we need to disable color write; float4(0) gets
-        // interpreted by the fragment shader as a fully transparent
-        // SOLID_COLOR_PAINT_TYPE, and then discarded at the blend step.
-        v_paint *= pushConstants.colorWriteEnable;
-    }
-#endif
 
 #if defined(@ENABLE_MODULATED_IMAGE)
     if (@ENABLE_MODULATED_IMAGE && (paintData.x & PAINT_FLAG_HAS_IMAGE) != 0u)

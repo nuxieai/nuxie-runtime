@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_fullscreen_quad.vert.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_fullscreen_quad.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "6a9842803e8472ab8f756a191c6a6d60a7c28db5587ee22c5e9bddb000c49cc2";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 15;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 335;
+    "44e538fa18b814c1643e046b3d3c2a0e2e54bb74521667f989bdbe7a0978253e";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 21;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 492;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_FULLSCREEN_QUAD_VERT_SOURCE: &str = r###"/*
@@ -23,14 +23,20 @@ pub const PINNED_DRAW_FULLSCREEN_QUAD_VERT_SOURCE: &str = r###"/*
  */
 
 #ifdef @VERTEX
-void main()
+ATTR_BLOCK_BEGIN(Attrs)
+// No attributes: the quad comes from the vertex index.
+ATTR_BLOCK_END
+
+VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexIdx, _instanceIdx)
 {
     // Fill the entire screen. The caller will use a scissor test to control the
     // bounds being drawn.
-    gl_Position.x = (gl_VertexID & 1) == 0 ? -1. : 1.;
-    gl_Position.y = (gl_VertexID & 2) == 0 ? -1. : 1.;
-    gl_Position.z = 0.;
-    gl_Position.w = 1.;
+    float4 pos;
+    pos.x = (_vertexIdx & 1) == 0 ? -1. : 1.;
+    pos.y = (_vertexIdx & 2) == 0 ? -1. : 1.;
+    pos.z = 0.;
+    pos.w = 1.;
+    EMIT_VERTEX(pos);
 }
 #endif
 "###;

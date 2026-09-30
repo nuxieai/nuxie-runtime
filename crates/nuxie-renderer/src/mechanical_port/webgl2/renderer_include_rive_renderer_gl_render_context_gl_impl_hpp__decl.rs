@@ -254,6 +254,7 @@ pub(crate) struct DrawProgram {
     pub(crate) m_vertexShader: *const DrawShader,
     pub(crate) m_pipelineStatus: PipelineStatus,
     pub(crate) m_id: GLuint,
+    pub(crate) m_baseVertexUniformLocation: GLint,
     pub(crate) m_baseInstanceUniformLocation: GLint,
     pub(crate) m_state: ManuallyDrop<GLStateOwner>,
     #[cfg(feature = "with-rive-tools")]
@@ -264,6 +265,9 @@ pub(crate) struct DrawProgram {
 impl DrawProgram {
     pub(crate) fn id(&self) -> GLuint {
         self.m_id
+    }
+    pub(crate) fn baseVertexUniformLocation(&self) -> GLint {
+        self.m_baseVertexUniformLocation
     }
     pub(crate) fn baseInstanceUniformLocation(&self) -> GLint {
         self.m_baseInstanceUniformLocation
@@ -546,13 +550,13 @@ pub(crate) const SOURCE_CONTEXT_OPTION_FIELD_COUNT: usize = 3;
 pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 39;
 pub(crate) const SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_DRAW_SHADER_FIELD_COUNT: usize = 1;
-pub(crate) const SOURCE_DRAW_PROGRAM_FIELD_COUNT: usize = 7;
+pub(crate) const SOURCE_DRAW_PROGRAM_FIELD_COUNT: usize = 8;
 pub(crate) const SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_PLS_IMPL_FIELD_COUNT: usize = 1;
-pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 56;
+pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 57;
 pub(crate) const RUST_RENDER_CONTEXT_SIDECAR_COUNT: usize = 2;
-const _: [(); 18446] = [(); PINNED_SOURCE.len()];
+const _: [(); 18180] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -589,16 +593,16 @@ mod tests {
 
     #[test]
     fn frozen_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 516);
+        assert_eq!(PINNED_SOURCE.lines().count(), 514);
         assert_eq!(SOURCE_CONTEXT_OPTION_FIELD_COUNT, 3);
         assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 39);
         assert_eq!(SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT, 2);
         assert_eq!(SOURCE_DRAW_SHADER_FIELD_COUNT, 1);
-        assert_eq!(SOURCE_DRAW_PROGRAM_FIELD_COUNT, 7);
+        assert_eq!(SOURCE_DRAW_PROGRAM_FIELD_COUNT, 8);
         assert_eq!(SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT, 2);
         assert_eq!(SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT, 1);
         assert_eq!(SOURCE_PLS_IMPL_FIELD_COUNT, 1);
-        assert_eq!(SOURCE_FIELD_DENOMINATOR, 56);
+        assert_eq!(SOURCE_FIELD_DENOMINATOR, 57);
         assert_eq!(std::mem::offset_of!(RenderContextGLImpl, base), 0);
         assert!(
             std::mem::offset_of!(RenderContextGLImpl, rust_execution)

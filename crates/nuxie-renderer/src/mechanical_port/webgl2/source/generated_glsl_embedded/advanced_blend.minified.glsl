@@ -1,21 +1,21 @@
 #ifdef EB
 #ifdef ME
 layout(
-#ifdef DC
+#ifdef FC
 blend_support_all_equations
 #else
 blend_support_multiply,blend_support_screen,blend_support_overlay,blend_support_darken,blend_support_lighten,blend_support_colordodge,blend_support_colorburn,blend_support_hardlight,blend_support_softlight,blend_support_difference,blend_support_exclusion
 #endif
 ) out;
 #endif
-#ifdef T
-#ifdef DC
-d Cb(v J1){return dot(J1,T0(.30,.59,.11));}v l9(v Db,v m9){d n9=Cb(m9);v o9=Db-Cb(Db);D Eb=E2(n9,1.0-n9)/max(E2(p9),E2(-m3(o9),N5(o9)));d Ie=min(J0(1.0),min(Eb.x,Eb.y));return o9*Ie+n9;}v Fb(v P7,v Gb,v m9){float Je=N5(Gb)-m3(Gb);P7-=m3(P7);float Ke=N5(P7);float F2=Je/max(p9,Ke);return l9(P7*F2,m9);}
+#ifdef O
+#ifdef FC
+d dc(v N1){return dot(N1,W0(.30,.59,.11));}v E9(v ec,v F9){d G9=dc(F9);v H9=ec-dc(ec);C fc=I2(G9,1.0-G9)/max(I2(I9),I2(-v3(H9),W5(H9)));d Ze=min(M0(1.0),min(fc.x,fc.y));return H9*Ze+G9;}v gc(v e8,v hc,v F9){float af=W5(hc)-v3(hc);e8-=v3(e8);float bf=W5(e8);float J2=af/max(I9,bf);return E9(e8*J2,F9);}
 #endif
-v Le(v p0,i z1,N q9){v w0=G6(z1);v Z0;switch(q9){case Me:Z0=p0.xyz*w0.xyz;break;case Ne:Z0=p0.xyz+w0.xyz-p0.xyz*w0.xyz;break;case Oe:{v H6=p0*w0;Z0=2.0*mix(H6,p0+w0-H6-0.5,greaterThan(w0,T0(0.5)));break;}case Pe:Z0=min(p0.xyz,w0.xyz);break;case Qe:Z0=max(p0.xyz,w0.xyz);break;case Re:{z1.xyz=clamp(z1.xyz,T0(.0),z1.www);v Hb=clamp(1.-p0,T0(.0),T0(1.))*z1.w;Z0=mix(min(T0(1.),z1.xyz/Hb),sign(z1.xyz),equal(Hb,T0(.0)));break;}case Te:{p0=clamp(p0,T0(.0),T0(1.));z1.xyz=clamp(z1.xyz,T0(.0),z1.www);if(z1.w==.0) z1.w=1.;v Ib=z1.w-z1.xyz;Z0=1.-mix(min(T0(1.),Ib/(p0*z1.w)),sign(Ib),equal(p0,T0(.0)));break;}case Ue:{v H6=p0*w0;Z0=2.0*mix(H6,p0+w0-H6-0.5,greaterThan(p0,T0(0.5)));break;}case Ve:{for(int H0=0;H0<3;++H0){if(p0[H0]<=0.5) Z0[H0]=(1.0-w0[H0]);else if(w0[H0]<=0.25) Z0[H0]=((16.0*w0[H0]-12.0)*w0[H0]+3.0);else Z0[H0]=(inversesqrt(w0[H0])-1.0);}Z0=w0+w0*(2.0*p0-1.0)*Z0;break;}case We:Z0=abs(w0.xyz-p0.xyz);break;case Xe:Z0=p0.xyz+w0.xyz-2.*p0.xyz*w0.xyz;break;
-#ifdef DC
-case Ye:if(DC){p0.xyz=clamp(p0.xyz,T0(.0),T0(1.));Z0=Fb(p0.xyz,w0.xyz,w0.xyz);}break;case Ze:if(DC){p0.xyz=clamp(p0.xyz,T0(.0),T0(1.));Z0=Fb(w0.xyz,p0.xyz,w0.xyz);}break;case af:if(DC){p0.xyz=clamp(p0.xyz,T0(.0),T0(1.));Z0=l9(p0.xyz,w0.xyz);}break;case bf:if(DC){p0.xyz=clamp(p0.xyz,T0(.0),T0(1.));Z0=l9(w0.xyz,p0.xyz);}break;
+v cf(v r0,i G1,R J9){v x0=P6(G1);v g1;switch(J9){case df:g1=r0.xyz*x0.xyz;break;case ef:g1=r0.xyz+x0.xyz-r0.xyz*x0.xyz;break;case ff:{v Q6=r0*x0;g1=2.0*mix(Q6,r0+x0-Q6-0.5,greaterThan(x0,W0(0.5)));break;}case gf:g1=min(r0.xyz,x0.xyz);break;case hf:g1=max(r0.xyz,x0.xyz);break;case jf:{G1.xyz=clamp(G1.xyz,W0(.0),G1.www);v ic=clamp(1.-r0,W0(.0),W0(1.))*G1.w;g1=mix(min(W0(1.),G1.xyz/ic),sign(G1.xyz),equal(ic,W0(.0)));break;}case lf:{r0=clamp(r0,W0(.0),W0(1.));G1.xyz=clamp(G1.xyz,W0(.0),G1.www);if(G1.w==.0) G1.w=1.;v jc=G1.w-G1.xyz;g1=1.-mix(min(W0(1.),jc/(r0*G1.w)),sign(jc),equal(r0,W0(.0)));break;}case mf:{v Q6=r0*x0;g1=2.0*mix(Q6,r0+x0-Q6-0.5,greaterThan(r0,W0(0.5)));break;}case nf:{for(int J0=0;J0<3;++J0){if(r0[J0]<=0.5) g1[J0]=(1.0-x0[J0]);else if(x0[J0]<=0.25) g1[J0]=((16.0*x0[J0]-12.0)*x0[J0]+3.0);else g1[J0]=(inversesqrt(x0[J0])-1.0);}g1=x0+x0*(2.0*r0-1.0)*g1;break;}case of:g1=abs(x0.xyz-r0.xyz);break;case pf:g1=r0.xyz+x0.xyz-2.*r0.xyz*x0.xyz;break;
+#ifdef FC
+case qf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=gc(r0.xyz,x0.xyz,x0.xyz);}break;case rf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=gc(x0.xyz,r0.xyz,x0.xyz);}break;case sf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=E9(r0.xyz,x0.xyz);}break;case tf:if(FC){r0.xyz=clamp(r0.xyz,W0(.0),W0(1.));g1=E9(x0.xyz,r0.xyz);}break;
 #endif
-}return Z0;}e v Z4(v p0,i z1,N q9){v Z0=Le(p0,z1,q9);return mix(p0,Z0,T0(z1.w));}
+}return g1;}f v h5(v r0,i G1,R J9){v g1=cf(r0,G1,J9);return mix(r0,g1,W0(G1.w));}
 #endif
 #endif

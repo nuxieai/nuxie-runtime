@@ -26,6 +26,9 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::buffer_ri
     BufferRing, BufferRingContract,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
+use crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::{
+    DSIndexRangeChunker, RangeChunker,
+};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_helper_impl_hpp::{
     RenderContextHelperBackendContract, RenderContextHelperBufferFactoryContract,
@@ -52,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 150989] = [(); PINNED_SOURCE.len()];
+const _: [(); 153408] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -75,48 +78,51 @@ const IMAGE_RECT_LAST_ATTRIB_IDX: GLuint = gpu::ImageRectInstance::LastAttribIdx
 const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = gpu::ImageMeshInstance::LastAttribIdx as GLuint;
 
 // Exact export substitutions emitted by the frozen shader minifier.
-const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "OC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
 const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "BE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "ZD";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
 const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "AE";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "AF";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "CC";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "BF";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
 const GLSL_CLEAR_COVERAGE: &str = "GE";
 const GLSL_CLOCKWISE_FILL: &str = "HE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "CD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
-const GLSL_DRAW_IMAGE: &str = "OE";
-const GLSL_DRAW_IMAGE_MESH: &str = "KB";
-const GLSL_DRAW_IMAGE_RECT: &str = "AD";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ED";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
+const GLSL_DRAW_IMAGE: &str = "NE";
+const GLSL_DRAW_IMAGE_MESH: &str = "NB";
+const GLSL_DRAW_IMAGE_RECT: &str = "CD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
-const GLSL_DRAW_PATH: &str = "OD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "IF";
-const GLSL_ENABLE_FEATHER: &str = "GB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "UE";
+const GLSL_DRAW_PATH: &str = "ND";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "JF";
+const GLSL_ENABLE_FEATHER: &str = "HB";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "DE";
+const GLSL_ENABLE_BASE_VERTEX: &str = "UE";
+const GLSL_DRAW_DEPTHSTENCIL_FILL_VERT: &str =
+    include_str!("source/generated_glsl_embedded/draw_depthstencil_fill.minified.vert");
 const GLSL_ENABLE_KHR_BLEND: &str = "ME";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "NE";
-const GLSL_OPTIONALLY_FLAT: &str = "MB";
-const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "BB";
-const GLSL_RESOLVE_PLS: &str = "RC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "RF";
-const GLSL_FlushUniforms: &str = "TB";
-const GLSL_atlasRenderTexture: &str = "DF";
-const GLSL_contourBuffer: &str = "ID";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "V";
+const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "QD";
+const GLSL_OPTIONALLY_FLAT: &str = "KB";
+const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
+const GLSL_RESOLVE_PLS: &str = "SC";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "SF";
+const GLSL_FlushUniforms: &str = "UB";
+const GLSL_atlasRenderTexture: &str = "EF";
+const GLSL_contourBuffer: &str = "AD";
 const GLSL_dstColorTexture: &str = "YD";
-const GLSL_featherAtlasTexture: &str = "FD";
-const GLSL_gaussianIntegralTexture: &str = "YC";
-const GLSL_gradTexture: &str = "ED";
-const GLSL_imageTexture: &str = "HC";
-const GLSL_paintAuxBuffer: &str = "PB";
-const GLSL_paintBuffer: &str = "DD";
-const GLSL_pathBuffer: &str = "OB";
-const GLSL_sourceTexture: &str = "IC";
-const GLSL_tessVertexTexture: &str = "MC";
+const GLSL_featherAtlasTexture: &str = "GD";
+const GLSL_gaussianIntegralTexture: &str = "ZC";
+const GLSL_gradTexture: &str = "FD";
+const GLSL_imageTexture: &str = "IC";
+const GLSL_paintAuxBuffer: &str = "JB";
+const GLSL_paintBuffer: &str = "XC";
+const GLSL_pathBuffer: &str = "LB";
+const GLSL_sourceTexture: &str = "JC";
+const GLSL_tessVertexTexture: &str = "TB";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");
@@ -1620,15 +1626,15 @@ pub(crate) fn resizeAtomicCoverageBacking(
 
 fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
     match feature {
-        gpu::ShaderFeatures::ENABLE_CLIPPING => "I",
+        gpu::ShaderFeatures::ENABLE_CLIPPING => "A",
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "AB",
-        gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "T",
-        gpu::ShaderFeatures::ENABLE_FEATHER => "GB",
-        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "WC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "YC",
-        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "DC",
-        gpu::ShaderFeatures::ENABLE_DITHER => "LB",
-        gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "IB",
+        gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "O",
+        gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
+        gpu::ShaderFeatures::ENABLE_EVEN_ODD => "YC",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "BD",
+        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "FC",
+        gpu::ShaderFeatures::ENABLE_DITHER => "OB",
+        gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
         _ => panic!("combined or empty shader feature"),
     }
 }
@@ -1703,8 +1709,13 @@ fn newDrawShader(
         gpu::DrawType::midpointFanPatches
         | gpu::DrawType::midpointFanCenterAAPatches
         | gpu::DrawType::outerCurvePatches
-        | gpu::DrawType::depthStrokes
-        | gpu::DrawType::stencilMidpointFanBorrowedCoverage
+        | gpu::DrawType::depthStrokes => {
+            if shaderType == GL_VERTEX_SHADER {
+                defines.push(GLSL_ENABLE_INSTANCE_INDEX);
+            }
+            defines.push(GLSL_DRAW_PATH);
+        }
+        gpu::DrawType::stencilMidpointFanBorrowedCoverage
         | gpu::DrawType::stencilDynamicMidpointFans
         | gpu::DrawType::stencilDynamicOuterCubics
         | gpu::DrawType::stencilMidpointFans
@@ -1717,7 +1728,7 @@ fn newDrawShader(
         | gpu::DrawType::stencilOuterCubicCover
         | gpu::DrawType::stencilOuterCubics => {
             if shaderType == GL_VERTEX_SHADER {
-                defines.push(GLSL_ENABLE_INSTANCE_INDEX);
+                defines.push(GLSL_ENABLE_BASE_VERTEX);
             }
             defines.push(GLSL_DRAW_PATH);
         }
@@ -1796,8 +1807,7 @@ fn newDrawShader(
         },
         gpu::InterlockMode::atomics => unreachable!("PLS atomics are compiled out"),
         gpu::InterlockMode::depthStencil => match drawType {
-            gpu::DrawType::depthStrokes
-            | gpu::DrawType::stencilMidpointFanBorrowedCoverage
+            gpu::DrawType::stencilMidpointFanBorrowedCoverage
             | gpu::DrawType::stencilDynamicMidpointFans
             | gpu::DrawType::stencilDynamicOuterCubics
             | gpu::DrawType::stencilMidpointFans
@@ -1808,7 +1818,19 @@ fn newDrawShader(
             | gpu::DrawType::stencilOuterCubicReset
             | gpu::DrawType::stencilOuterCubicWinding
             | gpu::DrawType::stencilOuterCubicCover
-            | gpu::DrawType::stencilOuterCubics
+            | gpu::DrawType::stencilOuterCubics => {
+                sources.extend([
+                    GLSL_DRAW_PATH_COMMON,
+                    GLSL_GRADIENT_PACKING_COMMON,
+                    if shaderType == GL_VERTEX_SHADER {
+                        GLSL_DRAW_DEPTHSTENCIL_FILL_VERT
+                    } else {
+                        GLSL_DRAW_PATH_VERT
+                    },
+                    GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG,
+                ]);
+            }
+            gpu::DrawType::depthStrokes
             | gpu::DrawType::interiorTriangulation
             | gpu::DrawType::featherAtlasBlit => {
                 sources.extend([
@@ -1960,6 +1982,7 @@ fn newDrawProgram(
         m_vertexShader: std::ptr::null(),
         m_pipelineStatus: PipelineStatus::notReady,
         m_id: 0,
+        m_baseVertexUniformLocation: -1,
         m_baseInstanceUniformLocation: -1,
         m_state: ManuallyDrop::new((&*context.m_state).clone()),
         #[cfg(feature = "with-rive-tools")]
@@ -2132,6 +2155,9 @@ fn advanceDrawProgram(
             DST_COLOR_TEXTURE_IDX as GLint,
         );
     }
+    program.m_baseVertexUniformLocation = execution
+        .domain()
+        .uniformLocation(program.m_id, glutils::BASE_VERTEX_UNIFORM_NAME.as_bytes());
     if !context
         .m_capabilities
         .ANGLE_base_vertex_base_instance_shader_builtin()
@@ -2302,25 +2328,6 @@ fn clearPipelineCache(context: &mut RenderContextGLImpl) {
     manager.m_vertexShaderMap.clear();
 }
 
-fn instanceChunks(
-    instanceCount: u32,
-    baseInstance: u32,
-    maxInstancesPerChunk: u32,
-) -> impl Iterator<Item = (u32, u32)> {
-    assert_ne!(maxInstancesPerChunk, 0);
-    let mut remaining = instanceCount;
-    let mut base = baseInstance;
-    std::iter::from_fn(move || {
-        if remaining == 0 {
-            return None;
-        }
-        let count = remaining.min(maxInstancesPerChunk);
-        let result = (count, base);
-        remaining -= count;
-        base = base.wrapping_add(count);
-        Some(result)
-    })
-}
 
 unsafe fn glBufferId(bufferRing: *mut BufferRing) -> GLuint {
     assert!(!bufferRing.is_null());
@@ -2538,11 +2545,12 @@ fn drawIndexedInstancedNoInstancedAttribs(
     let indexOffset = baseIndex
         .checked_mul(std::mem::size_of::<u16>() as u32)
         .expect("index byte offset fits u32");
-    for (chunkInstanceCount, chunkBaseInstance) in instanceChunks(
+    for chunk in RangeChunker::new(
         instanceCount,
         baseInstance,
         context.m_capabilities.maxSupportedInstancesPerFlush,
     ) {
+        let (chunkInstanceCount, chunkBaseInstance) = (chunk.count, chunk.first);
         flushInjector.flushBeforeInstancedDrawIfNeeded(chunkInstanceCount);
         // The admitted RIVE_WEBGL branch deliberately excludes the native
         // EXT base-instance draw and supplies gl_BaseInstance by uniform.
@@ -2898,11 +2906,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 target: GL_FRAMEBUFFER,
                 attachments: vec![GL_COLOR_ATTACHMENT0],
             });
-            for (chunkCount, chunkBase) in instanceChunks(
+            for chunk in RangeChunker::new(
                 desc.gradSpanCount,
                 u32::try_from(desc.firstGradSpan).expect("gradient span base fits u32"),
                 context.m_capabilities.maxSupportedInstancesPerFlush,
             ) {
+                let (chunkCount, chunkBase) = (chunk.count, chunk.first);
                 recordGLCommand(GLCommand::VertexAttribIPointer {
                     index: 0,
                     size: 4,
@@ -2943,11 +2952,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 target: GL_FRAMEBUFFER,
                 attachments: vec![GL_COLOR_ATTACHMENT0],
             });
-            for (chunkCount, chunkBase) in instanceChunks(
+            for chunk in RangeChunker::new(
                 desc.tessVertexSpanCount,
                 u32::try_from(desc.firstTessVertexSpan).expect("tess span base fits u32"),
                 context.m_capabilities.maxSupportedInstancesPerFlush,
             ) {
+                let (chunkCount, chunkBase) = (chunk.count, chunk.first);
                 let spanOffset = chunkBase as usize * std::mem::size_of::<gpu::TessVertexSpan>();
                 for index in 0..3 {
                     recordGLCommand(GLCommand::VertexAttribPointer {
@@ -3438,17 +3448,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 gpu::DrawType::midpointFanPatches
                 | gpu::DrawType::midpointFanCenterAAPatches
                 | gpu::DrawType::outerCurvePatches
-                | gpu::DrawType::depthStrokes
-                | gpu::DrawType::stencilMidpointFanBorrowedCoverage
-                | gpu::DrawType::stencilMidpointFans
-                | gpu::DrawType::stencilMidpointFanReset
-                | gpu::DrawType::stencilMidpointFanWinding
-                | gpu::DrawType::stencilMidpointFanCover
-                | gpu::DrawType::stencilOuterCubicBorrowedCoverage
-                | gpu::DrawType::stencilOuterCubicReset
-                | gpu::DrawType::stencilOuterCubicWinding
-                | gpu::DrawType::stencilOuterCubicCover
-                | gpu::DrawType::stencilOuterCubics => {
+                | gpu::DrawType::depthStrokes => {
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering {
                         withDetachedPixelLocalStorage(
@@ -3469,6 +3469,32 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         drawProgram.baseInstanceUniformLocation(),
                         &mut flushInjector,
                     );
+                }
+                gpu::DrawType::stencilMidpointFanBorrowedCoverage
+                | gpu::DrawType::stencilMidpointFans
+                | gpu::DrawType::stencilMidpointFanReset
+                | gpu::DrawType::stencilMidpointFanWinding
+                | gpu::DrawType::stencilMidpointFanCover
+                | gpu::DrawType::stencilOuterCubicBorrowedCoverage
+                | gpu::DrawType::stencilOuterCubicReset
+                | gpu::DrawType::stencilOuterCubicWinding
+                | gpu::DrawType::stencilOuterCubicCover
+                | gpu::DrawType::stencilOuterCubics => {
+                    assert_eq!(desc.interlockMode, gpu::InterlockMode::depthStencil);
+                    context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
+                    for draw in DSIndexRangeChunker::new(drawType, batch.elementCount, batch.baseElement, 0) {
+                        let indexOffset = gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(drawType));
+                        recordGLCommand(GLCommand::Uniform1iLocation {
+                            location: drawProgram.baseVertexUniformLocation(),
+                            value: draw.baseVertex,
+                        });
+                        recordGLCommand(GLCommand::DrawElements {
+                            mode: GL_TRIANGLES,
+                            count: draw.indexCount,
+                            type_: GL_UNSIGNED_SHORT,
+                            offset: indexOffset as u32,
+                        });
+                    }
                 }
                 gpu::DrawType::stencilDynamicMidpointFans
                 | gpu::DrawType::stencilDynamicOuterCubics => {
@@ -3495,16 +3521,19 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                             &passState,
                             ScissorAction::ignore,
                         );
-                        drawIndexedInstancedNoInstancedAttribs(
-                            context,
-                            GL_TRIANGLES,
-                            batch.indexCountPerInstance,
-                            batch.baseIndex,
-                            batch.elementCount,
-                            batch.baseElement,
-                            drawProgram.baseInstanceUniformLocation(),
-                            &mut flushInjector,
-                        );
+                        for draw in DSIndexRangeChunker::new(drawType, batch.elementCount, batch.baseElement, 0) {
+                            let indexOffset = gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(drawType));
+                            recordGLCommand(GLCommand::Uniform1iLocation {
+                                location: drawProgram.baseVertexUniformLocation(),
+                                value: draw.baseVertex,
+                            });
+                            recordGLCommand(GLCommand::DrawElements {
+                                mode: GL_TRIANGLES,
+                                count: draw.indexCount,
+                                type_: GL_UNSIGNED_SHORT,
+                                offset: indexOffset as u32,
+                            });
+                        }
                     }
                 }
                 gpu::DrawType::clipReset => {
@@ -4318,6 +4347,7 @@ mod tests {
                 m_vertexShader: std::ptr::null(),
                 m_pipelineStatus: PipelineStatus::ready,
                 m_id: id,
+                m_baseVertexUniformLocation: 24,
                 m_baseInstanceUniformLocation: 23,
                 m_state: ManuallyDrop::new((&*context.m_state).clone()),
                 m_synthesizedFailureType: gpu::SynthesizedFailureType::none,
@@ -4451,8 +4481,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3866);
-        assert_eq!(PINNED_SOURCE.len(), 150989);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3914);
+        assert_eq!(PINNED_SOURCE.len(), 153408);
     }
 
     #[test]
@@ -4503,6 +4533,7 @@ mod tests {
             ),
             ("ENABLE_FEATHER", GLSL_ENABLE_FEATHER),
             ("ENABLE_INSTANCE_INDEX", GLSL_ENABLE_INSTANCE_INDEX),
+            ("ENABLE_BASE_VERTEX", GLSL_ENABLE_BASE_VERTEX),
             ("ENABLE_KHR_BLEND", GLSL_ENABLE_KHR_BLEND),
             ("FEATHER_ATLAS_BLIT", GLSL_FEATHER_ATLAS_BLIT),
             (
@@ -4542,7 +4573,7 @@ mod tests {
     fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
         let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
         let features = [
-            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "I"),
+            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "A"),
             (
                 "ENABLE_CLIP_RECT",
                 gpu::ShaderFeatures::ENABLE_CLIP_RECT,
@@ -4551,29 +4582,29 @@ mod tests {
             (
                 "ENABLE_ADVANCED_BLEND",
                 gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND,
-                "T",
+                "O",
             ),
-            ("ENABLE_FEATHER", gpu::ShaderFeatures::ENABLE_FEATHER, "GB"),
+            ("ENABLE_FEATHER", gpu::ShaderFeatures::ENABLE_FEATHER, "HB"),
             (
                 "ENABLE_EVEN_ODD",
                 gpu::ShaderFeatures::ENABLE_EVEN_ODD,
-                "WC",
+                "YC",
             ),
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "YC",
+                "BD",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",
                 gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES,
-                "DC",
+                "FC",
             ),
-            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "LB"),
+            ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "OB"),
             (
                 "ENABLE_MODULATED_IMAGE",
                 gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE,
-                "IB",
+                "GB",
             ),
         ];
         assert_eq!(features.len(), gpu::ShaderFeatureCount);

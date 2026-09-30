@@ -53,6 +53,7 @@ use crate::mechanical_port::source::renderer::src::shaders::draw_clockwise_atomi
 use crate::mechanical_port::source::renderer::src::shaders::draw_clockwise_clip_frag as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_clockwise_path_frag as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_fullscreen_quad_vert as _;
+use crate::mechanical_port::source::renderer::src::shaders::draw_depthstencil_fill_vert as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_image_mesh_vert as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_input_attachment_frag as _;
 use crate::mechanical_port::source::renderer::src::shaders::draw_mesh_frag as _;

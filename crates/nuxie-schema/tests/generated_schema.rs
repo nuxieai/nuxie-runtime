@@ -34,7 +34,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 635);
+    assert_eq!(runtime_property_count, 638);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -618,6 +618,38 @@ fn cpp_generated_value_setter_metadata_matches_generator_shapes() {
         is_expandable.cpp_bitmask_passthrough_field_mask_constant(),
         None
     );
+}
+
+#[test]
+fn fitted_text_7_4_metadata_matches_upstream_storage() {
+    let text = definition_by_name("Text").expect("Text exists");
+    let resize = text.property_by_key(315).expect("fitFontSizeResizesBox");
+    assert_eq!(resize.name, "fitFontSizeResizesBox");
+    assert_eq!(resize.runtime_type, FieldKind::Bool);
+    assert_eq!(resize.initial_value, Some("true"));
+    for name in [
+        "alignValue",
+        "sizingValue",
+        "overflowValue",
+        "originValue",
+        "wrapValue",
+        "verticalAlignValue",
+        "verticalTrimTopValue",
+        "verticalTrimBottomValue",
+    ] {
+        let property = text
+            .properties
+            .iter()
+            .find(|property| property.name == name)
+            .unwrap();
+        assert_eq!(property.uint_storage(), Some(UintStorage::Uint8), "{name}");
+    }
+    let trim = text
+        .properties
+        .iter()
+        .find(|property| property.name == "verticalTrimValue")
+        .unwrap();
+    assert_eq!(trim.uint_storage(), Some(UintStorage::Uint16));
 }
 
 #[test]

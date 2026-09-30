@@ -8,3 +8,7 @@ pub(super) fn deserialize(reader: &mut BinaryReader<'_>, label: &str) -> Result<
 pub(super) fn deserialize_uint8(reader: &mut BinaryReader<'_>, label: &str) -> Result<u64> {
     deserialize(reader, label).map(|value| u64::from(value as u8))
 }
+
+pub(super) fn deserialize_uint16(reader: &mut BinaryReader<'_>, label: &str) -> Result<u64> {
+    deserialize(reader, label).map(|value| u64::from(value as u16))
+}

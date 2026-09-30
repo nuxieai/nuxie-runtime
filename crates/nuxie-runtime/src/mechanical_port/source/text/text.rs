@@ -422,6 +422,12 @@ impl Text {
     pub const TYPE_KEY: u16 = TextBase::TYPE_KEY;
 }
 
+// File-version opt-ins travel through import and clone. In-memory text is current.
+const FILE_FEATURE_LAYOUT_SIZES_BOX: u8 = 1 << 0;
+const FILE_FEATURE_FIT_FONT_SIZE_RESIZES_BOX: u8 = 1 << 1;
+const FILE_FEATURES_ALL: u8 =
+    FILE_FEATURE_LAYOUT_SIZES_BOX | FILE_FEATURE_FIT_FONT_SIZE_RESIZES_BOX;
+
 pub struct Text {
     pub base: TextBase,
     pub internal_transform: Mat2D,
@@ -451,7 +457,7 @@ pub struct Text {
     layout_width_scale_type: u8,
     layout_height_scale_type: u8,
     layout_direction: LayoutDirection,
-    layout_sizes_box: bool,
+    file_features: u8,
     emoji_image_cache: Vec<(FontRef, u16, Option<Rc<dyn nuxie_render_api::RenderImage>>)>,
     draw_commands: Vec<TextDrawCommand>,
     value_run_listeners: Vec<Box<TextValueRunListener>>,
@@ -486,7 +492,7 @@ impl Default for Text {
             layout_width_scale_type: u8::MAX,
             layout_height_scale_type: u8::MAX,
             layout_direction: LayoutDirection::Inherit,
-            layout_sizes_box: true,
+            file_features: FILE_FEATURES_ALL,
             emoji_image_cache: Vec::new(),
             draw_commands: Vec::new(),
             value_run_listeners: Vec::new(),
@@ -498,14 +504,21 @@ impl Text {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let major = import_stack.major_version();
         let minor = import_stack.minor_version();
-        self.layout_sizes_box = major > 7 || (major == 7 && minor >= 3);
+        let at_least = |want_minor| major > 7 || (major == 7 && minor >= want_minor);
+        self.file_features = 0;
+        if at_least(3) {
+            self.file_features |= FILE_FEATURE_LAYOUT_SIZES_BOX;
+        }
+        if at_least(4) {
+            self.file_features |= FILE_FEATURE_FIT_FONT_SIZE_RESIZES_BOX;
+        }
         self.base.import(import_stack)
     }
 
     pub fn clone(&self) -> Self {
         let mut callbacks = Self::default();
         let mut twin = self.base.clone_into(&mut callbacks);
-        twin.layout_sizes_box = self.layout_sizes_box;
+        twin.file_features = self.file_features;
         twin
     }
 
@@ -572,16 +585,24 @@ impl Text {
         match self.base.sizing_value() {
             1 => TextSizing::AutoHeight,
             2 => TextSizing::Fixed,
-            value @ 3.. => TextSizing::Unknown(value),
+            value @ 3.. => TextSizing::Unknown(value.into()),
             0 => TextSizing::AutoWidth,
         }
     }
     pub fn effective_sizing(&self) -> TextSizing {
-        if self.is_participating_in_layout() {
-            let width_is_box = self.layout_width_scale_type == LayoutScaleType::Fixed as u8
-                || self.layout_width_scale_type == LayoutScaleType::Fill as u8;
-            let height_is_box = self.layout_height_scale_type == LayoutScaleType::Fixed as u8
-                || self.layout_height_scale_type == LayoutScaleType::Fill as u8;
+        if let Some(participant) = self.layout_participant() {
+            let (width_scale, height_scale) = participant
+                .with_downcast::<LayoutParticipant, _>(|participant| {
+                    (
+                        participant.layout_width_scale_type(),
+                        participant.layout_height_scale_type(),
+                    )
+                })
+                .expect("live layout participant");
+            let width_is_box = width_scale == LayoutScaleType::Fixed as u8
+                || width_scale == LayoutScaleType::Fill as u8;
+            let height_is_box = height_scale == LayoutScaleType::Fixed as u8
+                || height_scale == LayoutScaleType::Fill as u8;
             if !width_is_box && !height_is_box {
                 return self.sizing();
             }
@@ -607,7 +628,7 @@ impl Text {
             3 => TextOverflow::Ellipsis,
             4 => TextOverflow::Fit,
             5 => TextOverflow::FitFontSize,
-            value @ 6.. => TextOverflow::Unknown(value),
+            value @ 6.. => TextOverflow::Unknown(value.into()),
             0 => TextOverflow::Visible,
         }
     }
@@ -617,22 +638,24 @@ impl Text {
     pub fn text_origin(&self) -> TextOrigin {
         match self.base.origin_value() {
             1 => TextOrigin::Baseline,
-            value @ 2.. => TextOrigin::Unknown(value),
+            value @ 2.. => TextOrigin::Unknown(value.into()),
             0 => TextOrigin::Top,
         }
     }
     pub fn vertical_trim_top(&self) -> TextTrimTop {
-        crate::mechanical_port::source::text_engine::text_trim_top(self.base.vertical_trim_value())
+        crate::mechanical_port::source::text_engine::text_trim_top(
+            self.base.vertical_trim_value().into(),
+        )
     }
     pub fn vertical_trim_bottom(&self) -> TextTrimBottom {
         crate::mechanical_port::source::text_engine::text_trim_bottom(
-            self.base.vertical_trim_value(),
+            self.base.vertical_trim_value().into(),
         )
     }
     pub fn wrap(&self) -> TextWrap {
         match self.base.wrap_value() {
             1 => TextWrap::NoWrap,
-            value @ 2.. => TextWrap::Unknown(value),
+            value @ 2.. => TextWrap::Unknown(value.into()),
             0 => TextWrap::Wrap,
         }
     }
@@ -640,7 +663,7 @@ impl Text {
         match self.base.vertical_align_value() {
             1 => VerticalTextAlign::Bottom,
             2 => VerticalTextAlign::Middle,
-            value @ 3.. => VerticalTextAlign::Unknown(value),
+            value @ 3.. => VerticalTextAlign::Unknown(value.into()),
             0 => VerticalTextAlign::Top,
         }
     }
@@ -648,7 +671,7 @@ impl Text {
         let value = match self.base.align_value() {
             1 => TextAlign::Right,
             2 => TextAlign::Center,
-            value @ 3.. => TextAlign::Unknown(value),
+            value @ 3.. => TextAlign::Unknown(value.into()),
             0 => TextAlign::Left,
         };
         if self.layout_direction == LayoutDirection::Inherit || value == TextAlign::Center {
@@ -677,15 +700,32 @@ impl Text {
     pub fn overflow_as_fixed(&self) -> bool {
         self.effective_sizing() == TextSizing::Fixed || !self.layout_box_width().is_nan()
     }
+    fn has_file_feature(&self, feature: u8) -> bool {
+        self.file_features & feature == feature
+    }
+    pub fn fit_font_size_resizes_box_active(&self) -> bool {
+        self.base.fit_font_size_resizes_box()
+            && self.has_file_feature(FILE_FEATURE_FIT_FONT_SIZE_RESIZES_BOX)
+    }
+    pub fn layout_owns_width(&self) -> bool {
+        self.layout_participant().is_some_and(|participant| {
+            participant
+                .with_downcast::<LayoutParticipant, _>(|participant| {
+                    let scale = participant.layout_width_scale_type();
+                    scale == LayoutScaleType::Fixed as u8 || scale == LayoutScaleType::Fill as u8
+                })
+                .expect("live layout participant")
+        })
+    }
     pub fn layout_box_width(&self) -> f32 {
-        if self.layout_sizes_box {
+        if self.has_file_feature(FILE_FEATURE_LAYOUT_SIZES_BOX) {
             self.layout_width
         } else {
             f32::NAN
         }
     }
     pub fn layout_box_height(&self) -> f32 {
-        if self.layout_sizes_box {
+        if self.has_file_feature(FILE_FEATURE_LAYOUT_SIZES_BOX) {
             self.layout_height
         } else {
             f32::NAN
@@ -1130,6 +1170,20 @@ impl Text {
     }
 
     fn fit_font_scale(&mut self) -> f32 {
+        if self.effective_sizing() == TextSizing::AutoWidth && !self.overflow_as_fixed() {
+            return 1.0;
+        }
+        self.fit_font_scale_in_box(
+            self.effective_width(),
+            if self.overflow_as_fixed() {
+                self.effective_height()
+            } else {
+                f32::MAX
+            },
+        )
+    }
+
+    fn fit_font_scale_in_box(&mut self, box_width: f32, box_height: f32) -> f32 {
         let mut max_size = 0.0f32;
         for value_run in &self.all_runs {
             let Some((style, has_text)) =
@@ -1154,13 +1208,10 @@ impl Text {
                 max_size = max_size.max(font_size);
             }
         }
-        let sizing = self.effective_sizing();
-        if max_size <= 1.0 || (sizing == TextSizing::AutoWidth && !self.overflow_as_fixed()) {
+        if max_size <= 1.0 {
             return 1.0;
         }
 
-        let box_width = self.effective_width();
-        let box_height = self.effective_height();
         let mut styled = StyledText::default();
         let mut fits = |this: &mut Text, top_size: i32| -> bool {
             let scale = top_size as f32 / max_size;
@@ -1190,7 +1241,7 @@ impl Text {
                 }
                 y += this.base.paragraph_spacing() * scale;
             }
-            measured_width <= box_width && (!this.overflow_as_fixed() || y <= box_height)
+            measured_width <= box_width && y <= box_height
         };
         let mut low = 1i32;
         let mut high = (max_size as i32).max(1);
@@ -1826,38 +1877,47 @@ impl Text {
         }
     }
     fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {
+        // During the solve, the participant's authored axis types are already
+        // available, but control_size has not supplied the resolved slot yet.
+        let measuring_width = match self.effective_sizing() {
+            TextSizing::AutoHeight | TextSizing::Fixed => {
+                if self.layout_owns_width() {
+                    f32::MAX
+                } else {
+                    self.base.width()
+                }
+            }
+            _ => f32::MAX,
+        };
+        let fit_width = max.x.min(measuring_width);
+        let font_scale = if self.overflow() == TextOverflow::FitFontSize
+            && self.fit_font_size_resizes_box_active()
+            && self.has_file_feature(FILE_FEATURE_LAYOUT_SIZES_BOX)
+            && fit_width != f32::MAX
+        {
+            self.fit_font_scale_in_box(fit_width, max.y)
+        } else {
+            1.0
+        };
         let mut styled = std::mem::take(&mut self.styled_text);
-        if !self.make_styled(&mut styled, true, 1.0) {
+        if !self.make_styled(&mut styled, true, font_scale) {
             self.styled_text = styled;
             return Vec2D::default();
         }
-        let paragraph_space = self.base.paragraph_spacing();
+        let paragraph_space = self.base.paragraph_spacing() * font_scale;
         let runs = styled.runs();
         let shape = runs[0]
             .font
             .as_ref()
             .expect("shaped text retains its font")
             .shape_text(styled.unichars(), runs, 0);
-        // Layout can stretch a text child beyond its authored fallback width.
-        // Measure at that exact width, just as control_size will later draw it;
-        // capping it at base.width reserves height for lines that never render.
-        let measuring_width = exact_width.unwrap_or_else(|| match self.effective_sizing() {
-            TextSizing::AutoHeight | TextSizing::Fixed => self.base.width(),
-            TextSizing::AutoWidth => f32::MAX,
-            TextSizing::Unknown(_) => f32::MAX,
-        });
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
                 TextWrap::NoWrap
             } else {
                 self.wrap()
             };
-        let lines = Self::break_lines(
-            &shape,
-            max.x.min(measuring_width),
-            self.align(),
-            measuring_wrap,
-        );
+        let lines = Self::break_lines(&shape, fit_width, self.align(), measuring_wrap);
         let mut y = 0.0f32;
         let mut computed_height = 0.0f32;
         let mut min_y = 0.0f32;
@@ -1903,6 +1963,8 @@ impl Text {
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::AutoHeight => Vec2D::new(
+                // Taffy's known-width boundary reports its exact slot width;
+                // shaping above still follows upstream participant ownership.
                 exact_width.unwrap_or(self.base.width()),
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
@@ -1917,6 +1979,11 @@ impl Text {
     }
     pub fn sizing_value_changed(&mut self) {
         self.mark_shape_dirty();
+    }
+    pub fn fit_font_size_resizes_box_changed(&mut self) {
+        if self.overflow() == TextOverflow::FitFontSize {
+            self.mark_shape_dirty();
+        }
     }
     pub fn overflow_value_changed(&mut self) {
         if self.effective_sizing() != TextSizing::AutoWidth || self.overflow_as_fixed() {
@@ -2061,15 +2128,25 @@ mod settled_text_value_tests {
             text.measure_layout(width, mode, f32::NAN, LayoutMeasureMode::Undefined)
         };
         let narrow = measure(&mut text, 354.0, LayoutMeasureMode::AtMost);
-        let stretched = measure(&mut text, 354.0, LayoutMeasureMode::Exactly);
         text.base.set_width_value(354.0);
         let authored = measure(&mut text, 354.0, LayoutMeasureMode::AtMost);
         assert!(narrow.y > authored.y, "fixture must wrap more at 120px");
+        text.base.set_width_value(120.0);
+        // Width ownership belongs to the participant before the first solve,
+        // not to measure mode or the slot control_size supplies afterward.
+        let mut participant = LayoutParticipant::default();
+        participant
+            .base
+            .set_layout_width_scale_type_value(LayoutScaleType::Fill as u8);
+        participant
+            .base
+            .set_layout_height_scale_type_value(LayoutScaleType::Hug as u8);
+        text.base.add_child(arena.insert(participant));
+        let stretched = measure(&mut text, 354.0, LayoutMeasureMode::Exactly);
         assert_eq!(
             stretched, authored,
             "exact layout and authored widths must agree"
         );
-        text.base.set_width_value(120.0);
         text.control_size(
             stretched,
             LayoutScaleType::Fill,

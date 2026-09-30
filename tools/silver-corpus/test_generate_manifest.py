@@ -7,6 +7,35 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_fitted_text_helpers_do_not_leak_into_prior_producer(self):
+        source = '''
+TEST_CASE("prior", "[silver]")
+{
+    auto file = ReadRiveFile("assets/prior.riv", &silver);
+    sm->advanceAndApply(0.032f);
+    CHECK(silver.matches("prior"));
+}
+static rive::rcp<rive::File> importTextWithMinorVersion(uint8_t minor)
+{
+    auto bytes = ReadFile("assets/fit_font_size_hug_test.riv");
+}
+static std::pair<float, float> solveTitleLayout(rive::File* file,
+                                              bool resizesBox)
+{
+    stateMachine->advanceAndApply(0.0f);
+}
+'''
+        with tempfile.TemporaryDirectory() as root:
+            runtime = Path(root)
+            tests = runtime / "tests/unit_tests/runtime"
+            tests.mkdir(parents=True)
+            (tests / "text_test.cpp").write_text(source)
+            producers = generate_manifest.literal_producers(runtime)
+        self.assertEqual(len(producers), 1)
+        self.assertEqual(producers[0].source, "prior.riv")
+        self.assertEqual(producers[0].dependencies, ())
+        self.assertEqual(producers[0].sample_times, (0.032,))
+
     def test_cpp_comment_stripping_ignores_dead_matches_and_preserves_lines(self):
         source = '''
 TEST_CASE("live", "[silver]")

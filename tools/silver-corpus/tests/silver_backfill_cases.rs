@@ -93,6 +93,14 @@ fn text_background_color_with_active_feather() {
 }
 
 #[test]
+fn text_with_fit_font_size_correctly_resizes_its_text_box() {
+    let Some(runtime) = runtime_root("upstream 45d4d01d fitted text hug Silver") else {
+        return;
+    };
+    compare_case("fit_font_size_hug_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
 fn data_binding_keyframes_animated_by_joysticks() {
     let Some(runtime) = runtime_root("upstream joystick keyframe binding Silver") else {
         return;
@@ -225,7 +233,8 @@ fn upstream_layout_occluded_by_rectangle_pointer_test() {
 #[test]
 fn upstream_layout_animation_interrupted_mid_animation() {
     // layout_test.cpp at 621f2a2e: zero, .016, and 124 further .016 frames.
-    let Some(runtime) = runtime_root("upstream interrupted layout animation Silver assertion") else {
+    let Some(runtime) = runtime_root("upstream interrupted layout animation Silver assertion")
+    else {
         return;
     };
     compare_case("layout_animation_transition_test", &runtime)

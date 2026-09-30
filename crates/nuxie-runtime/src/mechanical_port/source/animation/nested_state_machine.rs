@@ -18,6 +18,7 @@ use crate::mechanical_port::source::{
     hit_result::HitResult,
     math::vec2d::Vec2D,
     nested_artboard::NestedArtboard,
+    scroll_event::ScrollEvent,
 };
 #[derive(Default)]
 pub struct NestedStateMachine {
@@ -140,6 +141,50 @@ impl NestedStateMachine {
         self.instance.as_ref().map_or(HitResult::None, |instance| {
             instance.with_instance_mut(|instance| instance.pointer_exit(position, pointer_id))
         })
+    }
+
+    pub fn pointer_scroll(
+        &mut self,
+        position: Vec2D,
+        event: &ScrollEvent,
+        timestamp: f32,
+        pointer_id: i32,
+    ) -> HitResult {
+        self.instance.as_ref().map_or(HitResult::None, |instance| {
+            instance.with_instance_mut(|instance| {
+                instance.pointer_scroll(position, event, timestamp, pointer_id)
+            })
+        })
+    }
+
+    pub fn wants_scroll(&mut self, position: Vec2D, event: &ScrollEvent) -> bool {
+        self.instance.as_ref().is_some_and(|instance| {
+            instance.with_instance_mut(|instance| instance.wants_scroll(position, event))
+        })
+    }
+
+    pub fn has_scroll_target_at(&mut self, position: Vec2D) -> bool {
+        self.instance.as_ref().is_some_and(|instance| {
+            instance.with_instance_mut(|instance| instance.has_scroll_target_at(position))
+        })
+    }
+
+    pub fn scroll_occluded_at(&mut self, position: Vec2D) -> bool {
+        self.instance.as_ref().is_some_and(|instance| {
+            instance.with_instance_mut(|instance| instance.scroll_occluded_at(position))
+        })
+    }
+
+    pub fn has_scroll_latch(&mut self) -> bool {
+        self.instance.as_ref().is_some_and(|instance| {
+            instance.with_instance_mut(|instance| instance.has_scroll_latch())
+        })
+    }
+
+    pub fn cancel_scroll(&mut self) {
+        if let Some(instance) = &self.instance {
+            instance.with_instance_mut(StateMachineInstance::cancel_scroll);
+        }
     }
 
     pub fn drag_start(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32) -> HitResult {

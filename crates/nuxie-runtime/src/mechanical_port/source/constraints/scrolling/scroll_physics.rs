@@ -191,6 +191,9 @@ pub trait ScrollPhysicsRuntime {
     fn is_running(&self) -> bool {
         self.physics().is_running
     }
+    fn is_primed(&self) -> bool {
+        true
+    }
 
     fn prepare(&mut self, direction: DraggableConstraintDirection) {
         self.reset();

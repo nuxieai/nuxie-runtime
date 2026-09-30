@@ -340,6 +340,9 @@ impl HitTarget {
 }
 
 pub trait ListenerGroupBehavior {
+    fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn crate::mechanical_port::source::constraints::draggable_constraint::DraggableProxy>>>>{
+        None
+    }
     fn tracked_pointer_ids(&self) -> Vec<i32>;
     fn cancel_pointer(&self, pointer_id: i32, position: Vec2D, timestamp: f32) -> bool;
     fn cancel_pointers(&self, position: Vec2D, timestamp: f32, drag_ended: &mut Vec<i32>) {
@@ -448,6 +451,7 @@ impl ListenerGroupBehavior for ListenerGroup {
 impl ListenerGroupBehavior
     for crate::mechanical_port::source::constraints::draggable_constraint::DraggableConstraintListenerGroup
 {
+    fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn crate::mechanical_port::source::constraints::draggable_constraint::DraggableProxy>>>> { Self::scroll_proxy(self) }
     fn tracked_pointer_ids(&self) -> Vec<i32> { Self::tracked_pointer_ids(self) }
     fn cancel_pointer(&self, id: i32, position: Vec2D, timestamp: f32) -> bool {
         Self::cancel_pointer(self, id, position, timestamp)

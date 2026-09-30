@@ -871,6 +871,43 @@ impl StateMachineInstance {
         self.native
             .with_instance_mut(|machine| machine.pointer_exit(Vec2D::new(x, y), pointer_id))
     }
+    pub fn pointer_scroll(
+        &mut self,
+        x: f32,
+        y: f32,
+        event: &crate::source::scroll_event::ScrollEvent,
+        timestamp_seconds: f32,
+        pointer_id: i32,
+    ) -> RuntimeHitResult {
+        self.native.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(x, y), event, timestamp_seconds, pointer_id)
+        })
+    }
+    pub fn wants_scroll(
+        &mut self,
+        x: f32,
+        y: f32,
+        event: &crate::source::scroll_event::ScrollEvent,
+    ) -> bool {
+        self.native
+            .with_instance_mut(|machine| machine.wants_scroll(Vec2D::new(x, y), event))
+    }
+    pub fn has_scroll_latch(&mut self) -> bool {
+        self.native
+            .with_instance_mut(|machine| machine.has_scroll_latch())
+    }
+    pub fn has_scroll_target_at(&mut self, x: f32, y: f32) -> bool {
+        self.native
+            .with_instance_mut(|machine| machine.has_scroll_target_at(Vec2D::new(x, y)))
+    }
+    pub fn scroll_occluded_at(&mut self, x: f32, y: f32) -> bool {
+        self.native
+            .with_instance_mut(|machine| machine.scroll_occluded_at(Vec2D::new(x, y)))
+    }
+    pub fn cancel_scroll(&mut self) {
+        self.native
+            .with_instance_mut(|machine| machine.cancel_scroll());
+    }
     pub fn bind_native_view_model(&mut self, instance: Option<CoreHandle>) {
         self.native
             .with_instance_mut(|machine| machine.bind_view_model_instance(instance));

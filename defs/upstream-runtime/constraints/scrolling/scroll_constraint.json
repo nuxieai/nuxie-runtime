@@ -6,6 +6,23 @@
   },
   "extends": "constraints/draggable_constraint.json",
   "properties": {
+    "scrollFlags": {
+      "type": "uint8",
+      "initialValue": "1",
+      "key": {
+        "int": 466,
+        "string": "scrollflags"
+      }
+    },
+    "wheelInteractive": {
+      "type": "bool",
+      "key": {
+        "int": 467,
+        "string": "wheelinteractive"
+      },
+      "passthroughForBitmask": "scrollFlags",
+      "passthroughBit": 0
+    },
     "scrollOffsetX": {
       "type": "double",
       "initialValue": "0",

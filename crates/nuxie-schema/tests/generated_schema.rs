@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    // d974 adds ScriptedTransition and PaintImage; forward overlays remain.
-    assert_eq!(DEFINITIONS.len(), 355);
+    // Reconciled upstream through 7e450bdc; forward overlays remain.
+    assert_eq!(DEFINITIONS.len(), 357);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -34,14 +34,14 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 650);
+    assert_eq!(runtime_property_count, 672);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 231);
+    assert_eq!(animatable_property_count, 233);
 
     let grouped_property_count = DEFINITIONS
         .iter()

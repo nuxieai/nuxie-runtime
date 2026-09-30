@@ -93,6 +93,8 @@ pub struct ScrollConstraint {
     is_dragging: bool,
     is_scroll_bar_dragging: bool,
     has_list_children: bool,
+    is_scrolling: bool,
+    scroll_idle_seconds: f32,
     intent_x: ScrollAxisIntent,
     intent_y: ScrollAxisIntent,
 }
@@ -129,6 +131,8 @@ impl Default for ScrollConstraint {
             is_dragging: false,
             is_scroll_bar_dragging: false,
             has_list_children: false,
+            is_scrolling: false,
+            scroll_idle_seconds: 0.0,
             intent_x: ScrollAxisIntent::default(),
             intent_y: ScrollAxisIntent::default(),
         }
@@ -568,14 +572,16 @@ impl ScrollConstraint {
         self.layout_children.as_slice()
     }
 
-    pub fn drag_view(&mut self, delta: Vec2D, time_stamp: f32) {
+    pub fn drag_view(&mut self, delta: Vec2D, time_stamp: f32, track_velocity: bool) {
         let scaled = Vec2D::new(
             delta.x * self.base.drag_multiplier(),
             delta.y * self.base.drag_multiplier(),
         );
         if self.physics.is_some() {
-            self.with_physics_mut(|physics| physics.accumulate(scaled, time_stamp))
-                .expect("ScrollConstraint physics remains ScrollPhysics-derived");
+            if track_velocity {
+                self.with_physics_mut(|physics| physics.accumulate(scaled, time_stamp))
+                    .expect("ScrollConstraint physics remains ScrollPhysics-derived");
+            }
             self.set_authored_scroll_offset_x(self.offset_x() + scaled.x);
             self.set_authored_scroll_offset_y(self.offset_y() + scaled.y);
             return;
@@ -598,6 +604,108 @@ impl ScrollConstraint {
         self.set_authored_scroll_offset_y(y);
     }
 
+    pub fn wheel_enabled(&self) -> bool {
+        self.interactive() && self.wheel_interactive()
+    }
+    pub fn is_scrolling(&self) -> bool {
+        self.is_scrolling
+    }
+    pub fn is_dragging(&self) -> bool {
+        self.is_dragging
+    }
+    pub fn scaled_delta(&self, delta: Vec2D) -> Vec2D {
+        Vec2D::new(
+            delta.x * self.drag_multiplier(),
+            delta.y * self.drag_multiplier(),
+        )
+    }
+    pub fn is_overscrolled(&self) -> bool {
+        if self.infinite() {
+            return false;
+        }
+        (self.constrains_horizontal()
+            && self.offset_x() != self.clamp_resolved_offset(self.offset_x(), true))
+            || (self.constrains_vertical()
+                && self.offset_y() != self.clamp_resolved_offset(self.offset_y(), false))
+    }
+    pub fn can_stretch(&self, raw_delta: Vec2D) -> bool {
+        let delta = self.scaled_delta(raw_delta);
+        if !self.wheel_enabled()
+            || !self.has_layout_parent()
+            || !self.viewport_handle().is_some_and(|p| {
+                p.with(|p| p.as_layout_component().is_some())
+                    .unwrap_or(false)
+            })
+            || self.physics.is_none()
+            || self.physics_type() != ScrollPhysicsType::Elastic
+        {
+            return false;
+        }
+        let wants_x = self.constrains_horizontal() && delta.x != 0.0;
+        let wants_y = self.constrains_vertical() && delta.y != 0.0;
+        if self.infinite() {
+            return wants_x || wants_y;
+        }
+        (wants_x && self.max_offset_x() < 0.0) || (wants_y && self.max_offset_y() < 0.0)
+    }
+    pub fn can_consume(&self, raw_delta: Vec2D) -> bool {
+        let delta = self.scaled_delta(raw_delta);
+        if !self.wheel_enabled()
+            || !self.has_layout_parent()
+            || !self.viewport_handle().is_some_and(|p| {
+                p.with(|p| p.as_layout_component().is_some())
+                    .unwrap_or(false)
+            })
+        {
+            return false;
+        }
+        let wants_x = self.constrains_horizontal() && delta.x != 0.0;
+        let wants_y = self.constrains_vertical() && delta.y != 0.0;
+        if self.infinite() {
+            return wants_x || wants_y;
+        }
+        if wants_x
+            && self.clamp_resolved_offset(self.offset_x() + delta.x, true)
+                != self.clamp_resolved_offset(self.offset_x(), true)
+        {
+            return true;
+        }
+        wants_y
+            && self.clamp_resolved_offset(self.offset_y() + delta.y, false)
+                != self.clamp_resolved_offset(self.offset_y(), false)
+    }
+    pub fn scroll_by(&mut self, delta: Vec2D) {
+        let scaled = self.scaled_delta(delta);
+        if self.constrains_horizontal() {
+            self.set_authored_scroll_offset_x(
+                self.clamp_resolved_offset(self.offset_x() + scaled.x, true),
+            );
+        }
+        if self.constrains_vertical() {
+            self.set_authored_scroll_offset_y(
+                self.clamp_resolved_offset(self.offset_y() + scaled.y, false),
+            );
+        }
+    }
+    pub fn mark_scroll_activity(&mut self) {
+        self.scroll_idle_seconds = 0.0;
+    }
+    pub fn begin_scroll_gesture(&mut self) -> bool {
+        self.mark_scroll_activity();
+        if self.is_scrolling {
+            return false;
+        }
+        self.is_scrolling = true;
+        self.clear_scroll_intents();
+        self.last_frame_offset_x = self.authored_scroll_offset_x();
+        self.last_frame_offset_y = self.authored_scroll_offset_y();
+        true
+    }
+    pub fn end_scroll_gesture(&mut self) {
+        self.is_scrolling = false;
+        self.scroll_idle_seconds = 0.0;
+    }
+
     fn collect_snap_points(&self) -> Vec<Vec2D> {
         let mut points = Vec::new();
         for child in self.layout_children.iter() {
@@ -615,11 +723,17 @@ impl ScrollConstraint {
 
     pub fn run_physics(&mut self) {
         self.is_dragging = false;
+        self.start_physics();
+    }
+    pub fn start_physics(&mut self) {
         let points = if self.base.snap() {
             self.collect_snap_points()
         } else {
             Vec::new()
         };
+        if self.physics.is_none() {
+            return;
+        }
         let column = self.main_axis_is_column();
         let args = (
             Vec2D::new(self.max_offset_x(), self.max_offset_y()),
@@ -642,11 +756,29 @@ impl ScrollConstraint {
     }
 
     pub fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
-        if !flags.contains(AdvanceFlags::ADVANCE_NESTED) || self.base.is_collapsed() {
+        if self.base.is_collapsed() {
+            if self.is_scrolling {
+                self.stop_physics();
+                self.clear_velocity();
+                self.end_scroll_gesture();
+            }
             return false;
         }
-        if self.physics.is_none() {
+        if !flags.contains(AdvanceFlags::ADVANCE_NESTED) {
             return false;
+        }
+        if self.is_scrolling && flags.contains(AdvanceFlags::NEW_FRAME) {
+            self.scroll_idle_seconds += elapsed_seconds;
+            if self.scroll_idle_seconds >= 0.1 {
+                if self.snap() || self.is_overscrolled() {
+                    self.prime_physics();
+                    self.start_physics();
+                }
+                self.end_scroll_gesture();
+            }
+        }
+        if self.physics.is_none() {
+            return self.is_scrolling;
         }
         let offset = self.with_physics_mut(|physics| {
             physics
@@ -660,7 +792,7 @@ impl ScrollConstraint {
         if flags.contains(AdvanceFlags::NEW_FRAME) {
             let moved = self.authored_scroll_offset_x() != self.last_frame_offset_x
                 || self.authored_scroll_offset_y() != self.last_frame_offset_y;
-            if (self.is_scroll_bar_dragging || self.is_dragging) && !moved {
+            if (self.is_scroll_bar_dragging || self.is_dragging || self.is_scrolling) && !moved {
                 self.clear_velocity();
             }
             self.last_frame_offset_x = self.authored_scroll_offset_x();
@@ -670,6 +802,7 @@ impl ScrollConstraint {
             .expect("ScrollConstraint physics remains ScrollPhysics-derived")
             || self.is_scroll_bar_dragging
             || self.is_dragging
+            || self.is_scrolling
     }
 
     pub fn draggables(&mut self) -> Vec<Box<dyn DraggableProxy>> {
@@ -746,6 +879,19 @@ impl ScrollConstraint {
 
     pub fn init_physics(&mut self) {
         self.is_dragging = true;
+        self.prime_physics();
+    }
+    pub fn ensure_physics_primed(&mut self) -> bool {
+        if self
+            .with_physics(|physics| !physics.is_primed())
+            .unwrap_or(false)
+        {
+            self.prime_physics();
+            return true;
+        }
+        false
+    }
+    pub fn prime_physics(&mut self) {
         self.clear_scroll_intents();
         self.last_frame_offset_x = self.authored_scroll_offset_x();
         self.last_frame_offset_y = self.authored_scroll_offset_y();
@@ -785,6 +931,7 @@ impl ScrollConstraint {
     pub fn scroll_active(&self) -> bool {
         self.is_dragging
             || self.is_scroll_bar_dragging
+            || self.is_scrolling
             || self
                 .with_physics(|physics| physics.is_running())
                 .unwrap_or(false)
@@ -1238,11 +1385,7 @@ impl ScrollConstraint {
                 found = true;
             }
         }
-        if found {
-            best
-        } else {
-            target
-        }
+        if found { best } else { target }
     }
 
     pub fn nearest_snap_offset_in_direction(&self, current: Vec2D, target: Vec2D) -> Vec2D {

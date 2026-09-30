@@ -24,6 +24,7 @@ pub trait ScrollConstraintBaseCallbacks: crate::mechanical_port::source::generat
     fn drag_multiplier_changed(&mut self) {}
     fn computed_content_width_changed(&mut self) {}
     fn computed_content_height_changed(&mut self) {}
+    fn scroll_flags_changed(&mut self) {}
     fn set_scroll_percent_x(&mut self, value: f32);
     fn scroll_percent_x(&mut self) -> f32;
     fn set_scroll_percent_y(&mut self, value: f32);
@@ -55,6 +56,7 @@ pub struct ScrollConstraintBase {
     interactive: bool,
     threshold: f32,
     drag_multiplier: f32,
+    scroll_flags: u8,
 }
 
 impl Default for ScrollConstraintBase {
@@ -72,6 +74,7 @@ impl Default for ScrollConstraintBase {
             interactive: true,
             threshold: 0.0,
             drag_multiplier: 1.0,
+            scroll_flags: 1,
         }
     }
 }
@@ -97,6 +100,9 @@ impl ScrollConstraintBase {
     pub const DRAG_MULTIPLIER_PROPERTY_KEY: u16 = 1029;
     pub const COMPUTED_CONTENT_WIDTH_PROPERTY_KEY: u16 = 1069;
     pub const COMPUTED_CONTENT_HEIGHT_PROPERTY_KEY: u16 = 1070;
+    pub const SCROLL_FLAGS_PROPERTY_KEY: u16 = 466;
+    pub const WHEEL_INTERACTIVE_PROPERTY_KEY: u16 = 467;
+    pub const WHEEL_INTERACTIVE_BITMASK: u8 = 1;
 
     pub fn is_type_of(type_key: u16) -> bool {
         matches!(type_key, Self::TYPE_KEY | 520 | 79 | 10)
@@ -375,6 +381,56 @@ impl ScrollConstraintBase {
         self.drag_multiplier = value;
         true
     }
+    pub fn scroll_flags(&self) -> u8 {
+        self.scroll_flags
+    }
+    pub(crate) fn set_scroll_flags_value(&mut self, value: u8) -> bool {
+        if self.scroll_flags == value {
+            return false;
+        }
+        self.scroll_flags = value;
+        true
+    }
+    pub fn set_scroll_flags(
+        &mut self,
+        value: u8,
+        callbacks: &mut impl ScrollConstraintBaseCallbacks,
+    ) {
+        if self.set_scroll_flags_value(value) {
+            callbacks.scroll_flags_changed();
+            ScrollConstraintBaseCallbacks::notify_property_changed(
+                callbacks,
+                Self::SCROLL_FLAGS_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn wheel_interactive(&self) -> bool {
+        self.scroll_flags & Self::WHEEL_INTERACTIVE_BITMASK != 0
+    }
+    pub(crate) fn set_wheel_interactive_value(&mut self, value: bool) -> bool {
+        if self.wheel_interactive() == value {
+            return false;
+        }
+        self.scroll_flags = if value {
+            self.scroll_flags | Self::WHEEL_INTERACTIVE_BITMASK
+        } else {
+            self.scroll_flags & !Self::WHEEL_INTERACTIVE_BITMASK
+        };
+        true
+    }
+    pub fn set_wheel_interactive(
+        &mut self,
+        value: bool,
+        callbacks: &mut impl ScrollConstraintBaseCallbacks,
+    ) {
+        if self.set_wheel_interactive_value(value) {
+            callbacks.scroll_flags_changed();
+            ScrollConstraintBaseCallbacks::notify_property_changed(
+                callbacks,
+                Self::SCROLL_FLAGS_PROPERTY_KEY,
+            );
+        }
+    }
     pub fn clone_into(
         &self,
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
@@ -395,6 +451,7 @@ impl ScrollConstraintBase {
         self.interactive = object.interactive;
         self.threshold = object.threshold;
         self.drag_multiplier = object.drag_multiplier;
+        self.scroll_flags = object.scroll_flags;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -446,6 +503,10 @@ impl ScrollConstraintBase {
             }
             Self::DRAG_MULTIPLIER_PROPERTY_KEY => {
                 self.drag_multiplier = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                true
+            }
+            Self::SCROLL_FLAGS_PROPERTY_KEY => {
+                self.scroll_flags = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

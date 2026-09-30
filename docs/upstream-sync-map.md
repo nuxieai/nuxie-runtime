@@ -7,17 +7,17 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `35e4193429a1eb6340ff9081e7e260b75523f6b1`
+- LAST_SYNCED_SHA: `7e450bdcb03addcfc144c4f46a393f6a9b11f7d6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` (refreshed 2026-09-30 after PR #872 merged).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 2 upstream commits after the checkpoint at this fetched target.
-  All 166 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (188 after `5892bb05`); this
+  There is 1 upstream commit after the checkpoint at this fetched target.
+  All 167 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (189 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
-  is green. Continue oldest-first with `7e450bdc`, then refresh again at catch-up.
+  is green. Continue oldest-first with `6a2e3ab7`, then refresh again at catch-up.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -43,6 +43,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `7e450bdcb03addcfc144c4f46a393f6a9b11f7d6` | Translate wheel/trackpad ScrollEvent dispatch, nested/list hit routing and occlusion, stable gesture latches, content-space delta mapping, wheel/precise/momentum physics and velocity priming, idle/cancel/overlapping-drag behavior, and scrollFlags/wheelInteractive properties 466/467. Add narrow forwarding through the existing Rust host state-machine boundary. Port all 25 upstream cases. Parallel translation was globally frozen before independent source reviews, followed by separate Rust-integration reviews; all clean after re-reviewed test-only Approx and replacement-physics lifecycle corrections. All 33 scroll/physics tests and 20 schema/CPP-ID checks pass; 15 scroll Silver cases pass (ten byte-exact, five existing-epsilon); wasm32 WebGPU/WebGL2/scripting compilation and 26 manifest tests pass. Structural correspondence is 1,055 mirrored/ten adapted. Stale schema inventory counts were corrected against independent HEAD/current/reconciled-def inventories without weakening assertions. Two pre-existing owner observations are tracked separately in UNIV-3806, not treated as wheel regressions. Full Golden/Silver and hardware suites were not rerun for this delta. | [UNIV-3806](https://universe.basis.dev/issue/UNIV-3806) |
 | `35e4193429a1eb6340ff9081e7e260b75523f6b1` | Add explicit alpha fallback for unknown layer-mask modes and mask GPU mode bits to prevent clip-ID corruption. Artboard already forwards the sanitized mode; generated two-bit storage remains source-equivalent. Port runtime mode assertions and GPU clip-ID regression, exercising raw value 8 through the production private packing helper without constructing an invalid Rust enum. Independent source and separate Rust-integration reviews are clean. All 36 layer-mask tests pass with renderer-metal, including both regressions and ten Metal pixel comparisons; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; corpus classifications unchanged. Private editor enum changes are absent from the public delta and not claimed imported. Full Golden/Silver and other hardware suites were not rerun. | — |
 | `02989e8f70ffebff16977de5ce281327debbb45b` | Preserve eligible infinite font sizes, retain source NaN selection behavior, and cap the integer fitting search at 2^24 to prevent overflow/nontermination. Port all three regressions including nonfinite shaped-run results, capped huge fitting, and sequential infinity/NaN/huge layout measurement. Independent source and separate Rust-integration reviews are clean. All 11 text-fitting tests pass; five fitting/vertical-trim/path-trim Silver cases compare operation-exact within existing epsilon; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted. Corpus changes only pin/source-line metadata. Full Golden/Silver and GPU/hardware suites were not rerun for this delta. | — |
 | `9aea75996f4d199e97a1bdbb33bcbcec6d4ded6f` | Add StateMachineInstance::selected_text through the active focus manager, returning empty without a manager. Port the full unfocused/empty/full/partial/obscured/cleared-selection regression. Independent source and separate Rust-integration reviews are clean. All 71 text-input/raw-input/focus-lifetime/semantic-focus tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; corpus classifications unchanged. The JS overlay/proxy implementation described in the commit message is absent from the public C++ delta and is not claimed imported. Full Golden/Silver and GPU/hardware suites were not rerun for this accessor delta. | — |

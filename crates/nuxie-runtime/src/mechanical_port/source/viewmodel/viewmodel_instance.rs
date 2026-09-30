@@ -275,10 +275,7 @@ impl ViewModelInstance {
             {
                 break;
             }
-            if Self::replace_view_model_property_occurrence(owner, property_value, Some(value)) {
-                return true;
-            }
-            break;
+            return Self::replace_view_model_property_occurrence(owner, property_value, Some(value));
         }
         false
     }
@@ -298,6 +295,9 @@ impl ViewModelInstance {
                     .and_then(|property| property.reference_view_model_instance())
             })
             .flatten();
+        if previous.as_ref() == Some(&value) {
+            return true;
+        }
         property.with_mut(|property| {
             if let Some(property) = property.as_view_model_instance_view_model_mut() {
                 property.set_reference_view_model_instance(Some(value));
@@ -341,6 +341,11 @@ impl ViewModelInstance {
                     .reference_view_model_instance()
             })
             .flatten();
+        // CoreHandle equality is instance identity. No swap means no mutation,
+        // callback, or dependent invalidation, including the None/None case.
+        if previous == value {
+            return true;
+        }
         let notifications = crate::view_model_cell::RuntimeHostMutationNotifications::begin();
         property.with_mut(|property| {
             property

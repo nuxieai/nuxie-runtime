@@ -1,4 +1,7 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
 
 use crate::mechanical_port::source::{
     animation::{
@@ -19,6 +22,7 @@ use crate::mechanical_port::source::{
     input::{
         focus_node::{FocusNode, FocusNodeRef, FocusableRef},
         focusable::{Focusable, Key, KeyModifiers},
+        keyboard_listener::KeyboardListener,
     },
     layout_component::LayoutComponent,
     math::{aabb::Aabb, vec2d::Vec2D},
@@ -62,20 +66,46 @@ impl RuntimeFocusListenerHandle {
 
 #[derive(Clone)]
 pub struct RuntimeKeyboardListenerHandle {
-    group: RuntimeKeyboardListenerGroupWeakHandle,
+    target: RuntimeKeyboardListenerTarget,
+}
+
+#[derive(Clone)]
+enum RuntimeKeyboardListenerTarget {
+    Group(RuntimeKeyboardListenerGroupWeakHandle),
+    Listener(Weak<RefCell<dyn KeyboardListener<Key, KeyModifiers>>>),
 }
 
 impl RuntimeKeyboardListenerHandle {
     pub fn new(group: RuntimeKeyboardListenerGroupWeakHandle) -> Self {
-        Self { group }
+        Self {
+            target: RuntimeKeyboardListenerTarget::Group(group),
+        }
+    }
+
+    pub fn from_listener(listener: &Rc<RefCell<dyn KeyboardListener<Key, KeyModifiers>>>) -> Self {
+        Self {
+            target: RuntimeKeyboardListenerTarget::Listener(Rc::downgrade(listener)),
+        }
     }
 
     fn is_alive(&self) -> bool {
-        self.group.upgrade().is_some()
+        match &self.target {
+            RuntimeKeyboardListenerTarget::Group(group) => group.upgrade().is_some(),
+            RuntimeKeyboardListenerTarget::Listener(listener) => listener.upgrade().is_some(),
+        }
     }
 
     fn ptr_eq(&self, other: &Self) -> bool {
-        self.group.ptr_eq(&other.group)
+        match (&self.target, &other.target) {
+            (RuntimeKeyboardListenerTarget::Group(a), RuntimeKeyboardListenerTarget::Group(b)) => {
+                a.ptr_eq(b)
+            }
+            (
+                RuntimeKeyboardListenerTarget::Listener(a),
+                RuntimeKeyboardListenerTarget::Listener(b),
+            ) => Weak::ptr_eq(a, b),
+            _ => false,
+        }
     }
 
     fn key_input(
@@ -85,19 +115,37 @@ impl RuntimeKeyboardListenerHandle {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        self.group
-            .upgrade()
-            .map(|group| {
-                group.with_group_mut(|group| group.key_input(key, modifiers, is_pressed, is_repeat))
-            })
-            .unwrap_or(false)
+        match &self.target {
+            RuntimeKeyboardListenerTarget::Group(group) => group
+                .upgrade()
+                .map(|group| {
+                    group.with_group_mut(|group| {
+                        group.key_input(key, modifiers, is_pressed, is_repeat)
+                    })
+                })
+                .unwrap_or(false),
+            RuntimeKeyboardListenerTarget::Listener(listener) => listener
+                .upgrade()
+                .map(|listener| {
+                    listener
+                        .borrow_mut()
+                        .key_input(key, modifiers, is_pressed, is_repeat)
+                })
+                .unwrap_or(false),
+        }
     }
 
     fn text_input(&self, text: &str) -> bool {
-        self.group
-            .upgrade()
-            .map(|group| group.with_group_mut(|group| group.text_input(text)))
-            .unwrap_or(false)
+        match &self.target {
+            RuntimeKeyboardListenerTarget::Group(group) => group
+                .upgrade()
+                .map(|group| group.with_group_mut(|group| group.text_input(text)))
+                .unwrap_or(false),
+            RuntimeKeyboardListenerTarget::Listener(listener) => listener
+                .upgrade()
+                .map(|listener| listener.borrow_mut().text_input(text))
+                .unwrap_or(false),
+        }
     }
 }
 
@@ -619,12 +667,14 @@ impl FocusData {
                 owner.keyboard_listeners.clone()
             })
             .expect("live FocusData");
+        // A claim stops ancestor bubbling, not dispatch to peers on this node.
+        let mut claimed = false;
         for listener in listeners {
             if listener.key_input(value, modifiers, is_pressed, is_repeat) {
-                return true;
+                claimed = true;
             }
         }
-        false
+        claimed
     }
 
     pub fn selected_text(&self) -> Option<String> {

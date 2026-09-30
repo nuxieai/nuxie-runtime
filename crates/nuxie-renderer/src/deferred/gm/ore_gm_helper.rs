@@ -78,6 +78,14 @@ impl Renderer for FrameRenderer {
             .renderer()
             .clip_path(p);
     }
+    fn clip_stroke(&mut self, p: &dyn RenderPath, params: &StrokeParams) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .clip_stroke(p, params);
+    }
     fn draw_image(&mut self, i: Option<&dyn RenderImage>, s: ImageSampler, b: BlendMode, o: f32) {
         self.0
             .borrow_mut()
@@ -146,9 +154,12 @@ impl GmHost {
         Self::with_screen(clear, true)
     }
     pub fn with_screen(clear: u32, open: bool) -> Self {
+        Self::with_size(clear, open, SIZE, SIZE)
+    }
+    pub fn with_size(clear: u32, open: bool, width: u32, height: u32) -> Self {
         let mut native_factory = NativeMetalFactory::new_with_mode_and_context_options(
-            SIZE,
-            SIZE,
+            width,
+            height,
             RenderMode::RasterOrdering,
             NativeMetalContextOptions {
                 // gmmain.cpp and goldens.cpp choose this before the Metal

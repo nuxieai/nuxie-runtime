@@ -1397,10 +1397,21 @@
 //
 //     switch (drawType)
 //     {
+//         case DrawType::depthStrokes:
+//             // depthStrokes could be a clip, so handle that.
+//             if (enums::is_flag_set(drawContents, DrawContents::clipUpdate))
+//             {
+//                 return {
+//                     StencilType::clipStroke,
+//                     DrawContents::activeClip | DrawContents::clipUpdate,
+//                     areDrawContentsValid,
+//                 };
+//             }
+//
+//             [[fallthrough]];
 //         case DrawType::imageRect:
 //         case DrawType::imageMesh:
 //         case DrawType::featherAtlasBlit:
-//         case DrawType::depthStrokes:
 //             if (enums::is_flag_set(drawContents, DrawContents::activeClip))
 //             {
 //                 return {
@@ -1546,6 +1557,23 @@
 //                 .compareOp = StencilCompareOp::equal,
 //             };
 //
+//             pipelineState->stencilDoubleSided = false;
+//             break;
+//
+//         case StencilType::clipStroke:
+//             // If nested, we want to set the low bit of the stencil buffer when
+//             // we're inside of the parent clip, otherwise we want to always
+//             // write 0x80.
+//             pipelineState->stencilCompareMask = 0xff;
+//             pipelineState->stencilWriteMask = hasActiveClip ? 0x01 : 0xff;
+//             pipelineState->stencilReference = hasActiveClip ? 0x01 : 0x80;
+//             pipelineState->stencilFrontOps = {
+//                 .stencilFailOp = StencilOp::keep,
+//                 .depthFailOp = StencilOp::keep,
+//                 .depthStencilPassOp = StencilOp::replace,
+//                 .compareOp = hasActiveClip ? StencilCompareOp::lessOrEqual
+//                                            : StencilCompareOp::always,
+//             };
 //             pipelineState->stencilDoubleSided = false;
 //             break;
 //
@@ -1881,7 +1909,7 @@
 //             return fixedFunctionColorOutput ||
 //                    interlockMode == InterlockMode::depthStencil;
 //         case DrawType::depthStrokes:
-//             return true;
+//             return enums::no_flags_set(drawContents, DrawContents::clipUpdate);
 //         case DrawType::stencilMidpointFanBorrowedCoverage:
 //         case DrawType::stencilMidpointFanWinding:
 //         case DrawType::stencilOuterCubicBorrowedCoverage:
@@ -3856,6 +3884,15 @@ pub fn get_stencil_info(
     }
     let valid = true;
     match drawType {
+        DrawType::depthStrokes if has_u32(drawContents.0, DrawContents::clipUpdate.0) => {
+            StencilInfo {
+                stencilType: StencilType::clipStroke,
+                drawContentsMask: DrawContents(
+                    DrawContents::activeClip.0 | DrawContents::clipUpdate.0,
+                ),
+                areDrawContentsValid: valid,
+            }
+        }
         DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::featherAtlasBlit
@@ -3966,6 +4003,22 @@ pub fn get_stencil_settings(
                 depthFailOp: StencilOp::keep,
                 depthStencilPassOp: StencilOp::keep,
                 compareOp: StencilCompareOp::equal,
+            };
+            pipelineState.stencilDoubleSided = false;
+        }
+        StencilType::clipStroke => {
+            pipelineState.stencilCompareMask = 0xff;
+            pipelineState.stencilWriteMask = if active_clip { 0x01 } else { 0xff };
+            pipelineState.stencilReference = if active_clip { 0x01 } else { 0x80 };
+            pipelineState.stencilFrontOps = StencilFaceOps {
+                stencilFailOp: StencilOp::keep,
+                depthFailOp: StencilOp::keep,
+                depthStencilPassOp: StencilOp::replace,
+                compareOp: if active_clip {
+                    StencilCompareOp::lessOrEqual
+                } else {
+                    StencilCompareOp::always
+                },
             };
             pipelineState.stencilDoubleSided = false;
         }
@@ -4199,6 +4252,95 @@ mod dynamic_color_write_tests {
     use super::*;
 
     #[test]
+    fn clip_stroke_stencil_state_and_color_write() {
+        for active in [false, true] {
+            let contents = DrawContents(
+                DrawContents::clipUpdate.0
+                    | if active {
+                        DrawContents::activeClip.0
+                    } else {
+                        0
+                    },
+            );
+            let info = get_stencil_info(
+                InterlockMode::depthStencil,
+                DrawType::depthStrokes,
+                contents,
+            );
+            assert_eq!(info.stencilType, StencilType::clipStroke);
+            assert_eq!(
+                info.drawContentsMask.0,
+                DrawContents::activeClip.0 | DrawContents::clipUpdate.0
+            );
+            assert!(info.areDrawContentsValid);
+            let mut state = PipelineState::new();
+            get_stencil_settings(
+                InterlockMode::depthStencil,
+                DrawType::depthStrokes,
+                contents,
+                &mut state,
+            );
+            assert!(state.stencilTestEnabled);
+            assert_eq!(state.stencilCompareMask, 0xff);
+            assert_eq!(state.stencilWriteMask, if active { 1 } else { 0xff });
+            assert_eq!(state.stencilReference, if active { 1 } else { 0x80 });
+            assert_eq!(state.stencilFrontOps.stencilFailOp, StencilOp::keep);
+            assert_eq!(state.stencilFrontOps.depthFailOp, StencilOp::keep);
+            assert_eq!(state.stencilFrontOps.depthStencilPassOp, StencilOp::replace);
+            assert_eq!(
+                state.stencilFrontOps.compareOp,
+                if active {
+                    StencilCompareOp::lessOrEqual
+                } else {
+                    StencilCompareOp::always
+                }
+            );
+            assert!(!state.stencilDoubleSided);
+            assert!(!get_color_write_enable(
+                DrawType::depthStrokes,
+                InterlockMode::depthStencil,
+                ShaderMiscFlags::none,
+                true,
+                contents
+            ));
+            let ordinary = DrawContents(if active {
+                DrawContents::activeClip.0
+            } else {
+                0
+            });
+            assert_eq!(
+                get_stencil_info(
+                    InterlockMode::depthStencil,
+                    DrawType::depthStrokes,
+                    ordinary
+                )
+                .stencilType,
+                if active {
+                    StencilType::activeStencilClip
+                } else {
+                    StencilType::disabled
+                }
+            );
+            assert!(get_color_write_enable(
+                DrawType::depthStrokes,
+                InterlockMode::depthStencil,
+                ShaderMiscFlags::none,
+                true,
+                ordinary
+            ));
+            assert_eq!(
+                get_stencil_info(
+                    InterlockMode::rasterOrdering,
+                    DrawType::depthStrokes,
+                    contents
+                )
+                .stencilType,
+                StencilType::disabled
+            );
+        }
+    }
+
+    #[test]
     fn upstream_shader_unique_keys_do_not_collide() {
         let platform = PlatformFeatures {
             supportsPipelineDynamicState: true,
@@ -4397,7 +4539,7 @@ pub fn get_color_write_enable(
                 fixedFunctionColorOutput || interlockMode == InterlockMode::depthStencil
             }
         }
-        DrawType::depthStrokes => true,
+        DrawType::depthStrokes => !has_u32(drawContents.0, DrawContents::clipUpdate.0),
         DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilMidpointFanWinding
         | DrawType::stencilOuterCubicBorrowedCoverage

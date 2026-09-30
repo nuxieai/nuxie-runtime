@@ -320,6 +320,23 @@
 //     }
 // }
 //
+// void RiveRenderer::clipStroke(RenderPath* renderPath,
+//                               const StrokeParams& params)
+// {
+//     RIVE_PROF_SCOPE_L(2)
+//     LITE_RTTI_CAST_OR_RETURN(path, RiveRenderPath*, renderPath);
+//     if (m_renderStateStack.back().overallClipPixelBounds.empty())
+//     {
+//         return;
+//     }
+//     if (path->getRawPath().empty())
+//     {
+//         m_renderStateStack.back().overallClipPixelBounds = {};
+//         return;
+//     }
+//     clipPathImpl(path, params);
+// }
+//
 // // Finds a new rect, if such a rect exists, such that:
 // //
 // //     currentMatrix * rect == newMatrix * newRect
@@ -1791,6 +1808,22 @@ impl RendererContract for RiveRenderer {
         } else {
             unsafe { self.clipPathImplSource(p, None, 0.0) }
         }
+    }
+    unsafe fn clipStroke(&mut self, path: *mut RenderPath, params: &StrokeParams) {
+        // The public adapter performs the source lite-RTTI check before
+        // supplying this concrete path pointer.
+        if path.is_null() {
+            return;
+        }
+        let path = unsafe { &*(path.cast::<RiveRenderPath>()) };
+        if self.current_state().overallClipPixelBounds.empty() {
+            return;
+        }
+        if path.getRawPath().points().is_empty() {
+            self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
+            return;
+        }
+        unsafe { self.clipPathImplSource(path, Some(*params), 0.0) };
     }
     unsafe fn drawImage(
         &mut self,

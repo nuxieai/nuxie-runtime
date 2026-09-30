@@ -490,6 +490,24 @@ impl Renderer for DeferredRenderer {
             },
         );
     }
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &StrokeParams) {
+        DeferredRenderPath::flush_scratch_of(path);
+        let deferred = path.as_any().downcast_ref::<DeferredRenderPath>();
+        if let Some(path) = deferred {
+            path.resource.mark_drawn();
+        }
+        self.route();
+        self.buffer.lock().unwrap().append(
+            RenderCmd::ClipStroke,
+            &ClipStrokePod {
+                path: DeferredRenderPath::id_of_path(path),
+                version: deferred.map_or(0, |p| p.resource.version()),
+                thickness: params.thickness,
+                join: params.join as u8,
+                cap: params.cap as u8,
+            },
+        );
+    }
     fn modulate_opacity(&mut self, opacity: f32) {
         self.route();
         self.buffer

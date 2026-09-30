@@ -527,6 +527,18 @@ impl Renderer for FfiFrame {
         };
     }
 
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        unsafe {
+            ffi::rive_ffi_renderer_clip_stroke(
+                self.renderer.as_ptr(),
+                ffi_path(path).handle.as_ptr(),
+                params.thickness,
+                params.join as u8,
+                params.cap as u8,
+            )
+        };
+    }
+
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -1124,6 +1136,13 @@ mod ffi {
             paint: *mut RenderPaint,
         );
         pub fn rive_ffi_renderer_clip_path(renderer: *mut Renderer, path: *mut RenderPath);
+        pub fn rive_ffi_renderer_clip_stroke(
+            renderer: *mut Renderer,
+            path: *mut RenderPath,
+            thickness: f32,
+            join: u8,
+            cap: u8,
+        );
         pub fn rive_ffi_renderer_draw_image(
             renderer: *mut Renderer,
             image: *mut RenderImage,

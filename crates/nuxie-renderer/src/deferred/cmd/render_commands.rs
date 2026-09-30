@@ -32,6 +32,7 @@ pub enum RenderCmd {
     Transform,
     DrawPath,
     ClipPath,
+    ClipStroke,
     DrawImage,
     DrawImageMesh,
     ModulateOpacity,
@@ -41,7 +42,7 @@ pub enum RenderCmd {
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 34] = [
+        const COMMANDS: [RenderCmd; 35] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -70,6 +71,7 @@ impl RenderCmd {
             RenderCmd::Transform,
             RenderCmd::DrawPath,
             RenderCmd::ClipPath,
+            RenderCmd::ClipStroke,
             RenderCmd::DrawImage,
             RenderCmd::DrawImageMesh,
             RenderCmd::ModulateOpacity,
@@ -206,6 +208,13 @@ wire_pod!(ClipPathPod {
     path: u32,
     version: u32
 });
+wire_pod!(ClipStrokePod {
+    path: u32,
+    version: u32,
+    thickness: f32,
+    join: u8,
+    cap: u8
+});
 wire_pod!(DecodeImagePod {
     id: u32,
     generation: u32,
@@ -285,6 +294,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::Transform => TransformPod::SIZE,
         RenderCmd::DrawPath => DrawPathPod::SIZE,
         RenderCmd::ClipPath => ClipPathPod::SIZE,
+        RenderCmd::ClipStroke => ClipStrokePod::SIZE,
         RenderCmd::DrawImage => DrawImagePod::SIZE,
         RenderCmd::DrawImageMesh => DrawImageMeshPod::SIZE,
         RenderCmd::ModulateOpacity => OpacityPod::SIZE,
@@ -299,4 +309,5 @@ const _: () = assert!(
         && PathRawPod::SIZE == 32
         && DecodeImagePod::SIZE == 32
         && BufferDataPod::SIZE == 16
+        && ClipStrokePod::SIZE == 16
 );

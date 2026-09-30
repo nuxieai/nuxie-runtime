@@ -258,6 +258,10 @@ impl Renderer for NativeWebGpuFrame {
         self.core.clip_path(path);
     }
 
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        self.core.clip_stroke(path, params);
+    }
+
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,

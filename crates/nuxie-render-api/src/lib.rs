@@ -1338,6 +1338,24 @@ pub enum StrokeCap {
     Square = 2,
 }
 
+/// Common parameters describing a path's stroke.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StrokeParams {
+    pub thickness: f32,
+    pub join: StrokeJoin,
+    pub cap: StrokeCap,
+}
+
+impl Default for StrokeParams {
+    fn default() -> Self {
+        Self {
+            thickness: 1.0,
+            join: StrokeJoin::Miter,
+            cap: StrokeCap::Butt,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RenderPaintStyle {
     Stroke,
@@ -2457,6 +2475,12 @@ pub trait RenderPaint: Any {
     fn blend_mode(&mut self, value: BlendMode);
     fn shader(&mut self, shader: Option<&dyn RenderShader>);
     fn invalidate_stroke(&mut self);
+    fn stroke(&mut self, params: &StrokeParams) {
+        self.style(RenderPaintStyle::Stroke);
+        self.thickness(params.thickness);
+        self.join(params.join);
+        self.cap(params.cap);
+    }
     fn modulated_image(
         &mut self,
         _image: Option<&dyn RenderImage>,
@@ -2521,6 +2545,8 @@ pub trait Renderer {
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint);
     fn clip_path(&mut self, path: &dyn RenderPath);
+    // Not implementable on every backend; source defaults to doing nothing.
+    fn clip_stroke(&mut self, _path: &dyn RenderPath, _params: &StrokeParams) {}
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,

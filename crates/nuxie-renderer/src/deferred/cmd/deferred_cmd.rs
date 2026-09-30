@@ -165,6 +165,7 @@ fn filter_allows(filter: ReplayFilter, command: RenderCmd) -> bool {
         | RenderCmd::Transform
         | RenderCmd::DrawPath
         | RenderCmd::ClipPath
+        | RenderCmd::ClipStroke
         | RenderCmd::DrawImage
         | RenderCmd::DrawImageMesh
         | RenderCmd::ModulateOpacity
@@ -592,6 +593,21 @@ pub fn replay_render_commands(
                 with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
                     if let Some(path) = table.paths.get_version(c.path, c.version) {
                         r.clip_path(path.borrow().as_ref());
+                    }
+                });
+            }
+            RenderCmd::ClipStroke => {
+                let c: ClipStrokePod = reader.read();
+                with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
+                    if let Some(path) = table.paths.get_version(c.path, c.version) {
+                        r.clip_stroke(
+                            path.borrow().as_ref(),
+                            &StrokeParams {
+                                thickness: c.thickness,
+                                join: join(c.join),
+                                cap: cap(c.cap),
+                            },
+                        );
                     }
                 });
             }

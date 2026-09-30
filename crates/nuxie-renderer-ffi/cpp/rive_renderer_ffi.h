@@ -188,6 +188,11 @@ void rive_ffi_renderer_draw_path(rive_ffi_renderer*,
                                  rive_ffi_render_path*,
                                  rive_ffi_render_paint*);
 void rive_ffi_renderer_clip_path(rive_ffi_renderer*, rive_ffi_render_path*);
+void rive_ffi_renderer_clip_stroke(rive_ffi_renderer*,
+                                   rive_ffi_render_path*,
+                                   float thickness,
+                                   uint8_t join,
+                                   uint8_t cap);
 void rive_ffi_renderer_draw_image(rive_ffi_renderer*,
                                   const rive_ffi_render_image*,
                                   uint8_t sampler,

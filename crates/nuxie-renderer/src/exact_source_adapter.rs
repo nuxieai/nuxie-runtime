@@ -118,6 +118,19 @@ impl Renderer for ExactSourceRendererAdapter {
         }
     }
 
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::clipStroke(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+                params,
+            );
+        }
+    }
+
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -994,6 +1007,19 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceRenderCanvasFrame<B> {
         }
     }
 
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::clipStroke(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+                params,
+            );
+        }
+    }
+
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -1177,6 +1203,19 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceFrameCore<B> {
             <RiveRenderer as RendererContract>::clipPath(
                 &mut self.renderer,
                 path.source_base() as *const _ as *mut _,
+            );
+        }
+    }
+
+    fn clip_stroke(&mut self, path: &dyn RenderPath, params: &nuxie_render_api::StrokeParams) {
+        let Some(path) = path.as_any().downcast_ref::<RiveRenderPathHandle>() else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::clipStroke(
+                &mut self.renderer,
+                path.source_base() as *const _ as *mut _,
+                params,
             );
         }
     }

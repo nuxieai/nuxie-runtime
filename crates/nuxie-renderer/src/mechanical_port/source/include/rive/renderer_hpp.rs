@@ -47,6 +47,13 @@
 //                        const AABB& content,
 //                        const float scaleFactor = 1.0f);
 //
+// struct StrokeParams
+// {
+//     float thickness = 1.0f;
+//     StrokeJoin join = StrokeJoin::miter;
+//     StrokeCap cap = StrokeCap::butt;
+// };
+//
 // enum class RenderBufferType
 // {
 //     index,
@@ -139,6 +146,13 @@
 //     virtual void blendMode(BlendMode value) = 0;
 //     virtual void shader(rcp<RenderShader>) = 0;
 //     virtual void invalidateStroke() = 0;
+//     void stroke(const StrokeParams& params)
+//     {
+//         style(RenderPaintStyle::stroke);
+//         thickness(params.thickness);
+//         join(params.join);
+//         cap(params.cap);
+//     }
 // };
 //
 // #if defined(__EMSCRIPTEN__)
@@ -220,6 +234,7 @@
 //     virtual void transform(const Mat2D& transform) = 0;
 //     virtual void drawPath(RenderPath* path, RenderPaint* paint) = 0;
 //     virtual void clipPath(RenderPath* path) = 0;
+//     virtual void clipStroke(RenderPath*, const StrokeParams&) {}
 //     virtual void drawImage(const RenderImage*,
 //                            ImageSampler,
 //                            BlendMode,
@@ -281,6 +296,7 @@ use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalRel
 use nuxie_render_api::{
     Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D,
 };
+pub use nuxie_render_api::StrokeParams;
 
 pub type Alignment = Vec2D;
 
@@ -623,6 +639,12 @@ pub trait RenderPaintContract {
     // rcp<RenderShader> is an intrusive owning transfer, not a borrowed link.
     unsafe fn shader(&mut self, shader: rcp<RenderShader>);
     fn invalidateStroke(&mut self);
+    fn stroke(&mut self, params: &StrokeParams) {
+        self.style(RenderPaintStyle::stroke);
+        self.thickness(params.thickness);
+        self.join(params.join);
+        self.cap(params.cap);
+    }
     fn modulatedImage(
         &mut self,
         _image: *const RenderImage,
@@ -1057,6 +1079,7 @@ pub trait RendererContract {
     unsafe fn drawPath(&mut self, path: *mut RenderPath, paint: *mut RenderPaint);
     // virtual void clipPath(RenderPath* path) = 0;
     unsafe fn clipPath(&mut self, path: *mut RenderPath);
+    unsafe fn clipStroke(&mut self, _path: *mut RenderPath, _params: &StrokeParams) {}
     // virtual void drawImage(const RenderImage*,
     //                        ImageSampler,
     //                        BlendMode,

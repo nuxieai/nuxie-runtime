@@ -118,6 +118,15 @@
       "description": "One of wrap, noWrap",
       "bindable": true
     },
+    "wordBreakValue": {
+      "type": "uint8",
+      "initialValue": "0",
+      "key": {
+        "int": 446,
+        "string": "wordbreakvalue"
+      },
+      "bindable": true
+    },
     "verticalAlignValue": {
       "type": "uint8",
       "initialValue": "0",

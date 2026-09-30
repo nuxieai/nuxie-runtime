@@ -16,6 +16,7 @@ pub trait TextBaseCallbacks:
     fn paragraph_spacing_changed(&mut self) {}
     fn origin_value_changed(&mut self) {}
     fn wrap_value_changed(&mut self) {}
+    fn word_break_value_changed(&mut self) {}
     fn vertical_align_value_changed(&mut self) {}
     fn fit_from_baseline_changed(&mut self) {}
     fn fit_font_size_resizes_box_changed(&mut self) {}
@@ -35,6 +36,7 @@ pub struct TextBase {
     paragraph_spacing: f32,
     origin_value: u8,
     wrap_value: u8,
+    word_break_value: u8,
     vertical_align_value: u8,
     fit_from_baseline: bool,
     fit_font_size_resizes_box: bool,
@@ -56,6 +58,7 @@ impl Default for TextBase {
             paragraph_spacing: 0.0,
             origin_value: 0,
             wrap_value: 0,
+            word_break_value: 0,
             vertical_align_value: 0,
             fit_from_baseline: true,
             fit_font_size_resizes_box: true,
@@ -77,6 +80,7 @@ impl TextBase {
     pub const PARAGRAPH_SPACING_PROPERTY_KEY: u16 = 371;
     pub const ORIGIN_VALUE_PROPERTY_KEY: u16 = 377;
     pub const WRAP_VALUE_PROPERTY_KEY: u16 = 683;
+    pub const WORD_BREAK_VALUE_PROPERTY_KEY: u16 = 446;
     pub const VERTICAL_ALIGN_VALUE_PROPERTY_KEY: u16 = 685;
     pub const FIT_FROM_BASELINE_PROPERTY_KEY: u16 = 703;
     pub const FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY: u16 = 315;
@@ -275,6 +279,24 @@ impl TextBase {
         self.wrap_value = value;
         true
     }
+    pub fn word_break_value(&self) -> u8 {
+        self.word_break_value
+    }
+    pub fn set_word_break_value(&mut self, value: u8, callbacks: &mut impl TextBaseCallbacks) {
+        if !self.set_word_break_value_value(value) {
+            return;
+        }
+        callbacks.word_break_value_changed();
+        TextBaseCallbacks::notify_property_changed(callbacks, Self::WORD_BREAK_VALUE_PROPERTY_KEY);
+    }
+
+    pub(crate) fn set_word_break_value_value(&mut self, value: u8) -> bool {
+        if self.word_break_value == value {
+            return false;
+        }
+        self.word_break_value = value;
+        true
+    }
     pub fn vertical_align_value(&self) -> u8 {
         self.vertical_align_value
     }
@@ -419,6 +441,7 @@ impl TextBase {
         self.paragraph_spacing = object.paragraph_spacing;
         self.origin_value = object.origin_value;
         self.wrap_value = object.wrap_value;
+        self.word_break_value = object.word_break_value;
         self.vertical_align_value = object.vertical_align_value;
         self.fit_from_baseline = object.fit_from_baseline;
         self.fit_font_size_resizes_box = object.fit_font_size_resizes_box;
@@ -471,6 +494,10 @@ impl TextBase {
             }
             Self::WRAP_VALUE_PROPERTY_KEY => {
                 self.wrap_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                true
+            }
+            Self::WORD_BREAK_VALUE_PROPERTY_KEY => {
+                self.word_break_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY => {

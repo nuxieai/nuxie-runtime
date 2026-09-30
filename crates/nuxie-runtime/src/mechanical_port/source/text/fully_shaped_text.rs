@@ -3,7 +3,7 @@ use crate::mechanical_port::source::{
     math::aabb::Aabb,
     text_engine::{
         GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow, TextRun,
-        TextSizing, TextWrap, VerticalTextAlign,
+        TextSizing, TextWordBreak, TextWrap, VerticalTextAlign,
     },
 };
 #[derive(Default)]
@@ -104,6 +104,7 @@ impl FullyShapedText {
             },
             alignment,
             wrap,
+            TextWordBreak::BreakWord,
             align_width,
         );
         self.ordered_lines.clear();

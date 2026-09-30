@@ -32,7 +32,8 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
     text_engine::{
         FontRef, GlyphLine, GlyphRun, OrderedLine, Paragraph, TextAlign, TextOrigin, TextOverflow,
-        TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWrap, VerticalTextAlign,
+        TextRun, TextSizing, TextTrimBottom, TextTrimTop, TextWordBreak, TextWrap,
+        VerticalTextAlign,
     },
     viewmodel::{
         symbol_type::SymbolType,
@@ -659,6 +660,14 @@ impl Text {
             0 => TextWrap::Wrap,
         }
     }
+    pub fn word_break(&self) -> TextWordBreak {
+        match self.base.word_break_value() {
+            0 => TextWordBreak::BreakWord,
+            1 => TextWordBreak::Normal,
+            2 => TextWordBreak::BreakAll,
+            value => TextWordBreak::Unknown(value.into()),
+        }
+    }
     pub fn vertical_align(&self) -> VerticalTextAlign {
         match self.base.vertical_align_value() {
             1 => VerticalTextAlign::Bottom,
@@ -839,27 +848,30 @@ impl Text {
         width: f32,
         align: TextAlign,
         wrap: TextWrap,
+        word_break: TextWordBreak,
     ) -> Vec<Vec<GlyphLine>> {
-        Self::break_lines_aligned(paragraphs, width, align, wrap, 0.0)
+        Self::break_lines_aligned(paragraphs, width, align, wrap, word_break, 0.0)
     }
     pub fn break_lines_aligned(
         paragraphs: &[Paragraph],
         width: f32,
         align: TextAlign,
         wrap: TextWrap,
+        word_break: TextWordBreak,
         min_align_width: f32,
     ) -> Vec<Vec<GlyphLine>> {
         let auto_width = width == -1.0;
         let mut paragraph_width = width;
         let mut lines = Vec::with_capacity(paragraphs.len());
         for paragraph in paragraphs {
-            let paragraph_lines = GlyphLine::break_lines(
+            let paragraph_lines = GlyphLine::break_lines_with_word_break(
                 &paragraph.runs,
                 if auto_width || wrap == TextWrap::NoWrap {
                     -1.0
                 } else {
                     width
                 },
+                word_break,
             );
             if auto_width {
                 paragraph_width = paragraph_width.max(GlyphLine::compute_max_width(
@@ -927,6 +939,7 @@ impl Text {
                         },
                         self.align(),
                         self.wrap(),
+                        self.word_break(),
                     );
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
@@ -968,6 +981,7 @@ impl Text {
                     },
                     self.align(),
                     self.wrap(),
+                    self.word_break(),
                 );
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
@@ -1224,7 +1238,13 @@ impl Text {
                 .as_ref()
                 .expect("shaped text retains its font")
                 .shape_text(styled.unichars(), runs, 0);
-            let lines = Text::break_lines(&shape, box_width, this.align(), this.wrap());
+            let lines = Text::break_lines(
+                &shape,
+                box_width,
+                this.align(),
+                this.wrap(),
+                this.word_break(),
+            );
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
             for (paragraph, paragraph_lines) in shape.iter().zip(&lines) {
@@ -1917,7 +1937,13 @@ impl Text {
             } else {
                 self.wrap()
             };
-        let lines = Self::break_lines(&shape, fit_width, self.align(), measuring_wrap);
+        let lines = Self::break_lines(
+            &shape,
+            fit_width,
+            self.align(),
+            measuring_wrap,
+            self.word_break(),
+        );
         let mut y = 0.0f32;
         let mut computed_height = 0.0f32;
         let mut min_y = 0.0f32;
@@ -1975,6 +2001,9 @@ impl Text {
         Vec2D::new(max.x.min(bounds.x), max.y.min(bounds.y))
     }
     pub fn align_value_changed(&mut self) {
+        self.mark_shape_dirty();
+    }
+    pub fn word_break_value_changed(&mut self) {
         self.mark_shape_dirty();
     }
     pub fn sizing_value_changed(&mut self) {

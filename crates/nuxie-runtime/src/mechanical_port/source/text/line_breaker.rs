@@ -1,4 +1,4 @@
-use super::super::text_engine::{GlyphLine, GlyphRun, LineMetrics, TextAlign};
+use super::super::text_engine::{GlyphLine, GlyphRun, LineMetrics, TextAlign, TextWordBreak};
 
 fn auto_width(width: f32) -> bool {
     width < 0.0
@@ -95,7 +95,16 @@ impl GlyphLine {
         }
     }
 
+    /// Source default argument: TextWordBreak::breakWord.
     pub fn break_lines(runs: &[GlyphRun], width: f32) -> Vec<GlyphLine> {
+        Self::break_lines_with_word_break(runs, width, TextWordBreak::BreakWord)
+    }
+
+    pub fn break_lines_with_word_break(
+        runs: &[GlyphRun],
+        width: f32,
+        word_break: TextWordBreak,
+    ) -> Vec<GlyphLine> {
         let max_line_width = if auto_width(width) { f32::MAX } else { width };
         let mut lines = Vec::new();
         if runs.is_empty() {
@@ -142,11 +151,24 @@ impl GlyphLine {
             }
 
             let is_forced_break = break_run == start_break_run && break_index == start_break_index;
-            if !is_forced_break && x > limit {
-                let start_run_index = start.run as u32;
-                if line.start_run_index == start_run_index
-                    && line.start_glyph_index == start_break_index
-                {
+            let start_run_index = start.run as u32;
+            // A word already alone on its line cannot be knocked further down.
+            let word_starts_line = line.start_glyph_index == start_break_index
+                && line.start_run_index == start_run_index;
+            // Normal treats an overflowing lone word as fitting, allowing the
+            // word iterator to advance instead of rebuilding an empty line.
+            let overflows = !is_forced_break
+                && x > limit
+                && !(word_break == TextWordBreak::Normal && word_starts_line);
+            if overflows {
+                let mut split_inside_word = word_starts_line;
+                if !split_inside_word && word_break == TextWordBreak::BreakAll {
+                    // At least one cluster must fit; otherwise the unbounded
+                    // walk-back could cut inside the whitespace before this word.
+                    let mut first_cluster = RunIterator::new(runs, start.run, start_break_index);
+                    split_inside_word = first_cluster.forward() && first_cluster.x() <= limit;
+                }
+                if split_inside_word {
                     let mut can_break_more = true;
                     while can_break_more && x > limit {
                         let line_start = RunIterator::new(

@@ -1,4 +1,5 @@
 //! tests/unit_tests/runtime/text_test.cpp additions from upstream 73f94edc.
+//! Also contains the 7db8b61f Text word-break case, sharing the ellipsis harness.
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
@@ -8,7 +9,7 @@ use nuxie_runtime::source::{
         text::{text_base::TextBase, text_style_base::TextStyleBase},
     },
     text::{text::Text, text_style::TextStyle},
-    text_engine::TextOverflow,
+    text_engine::{TextOverflow, TextWordBreak},
 };
 use nuxie_runtime::{Artboard, File, RuntimeFactoryHandle, RuntimeFileHandle};
 
@@ -51,6 +52,35 @@ fn advance(artboard: &CoreHandle) {
         0.0,
         AdvanceFlags::ADVANCE_NESTED | AdvanceFlags::ANIMATE | AdvanceFlags::NEW_FRAME,
     );
+}
+
+#[test]
+fn word_break_reaches_the_line_breaker_from_the_text_object() {
+    let (_file, artboard, text) = fixture("ellipsis.riv");
+    overflow(&text, TextOverflow::Visible);
+    integer(&text, TextBase::SIZING_VALUE_PROPERTY_KEY, 2); // TextSizing::fixed
+    scalar(&text, TextBase::WIDTH_PROPERTY_KEY, 30.0);
+    assert_eq!(
+        text.with_downcast::<Text, _>(Text::word_break).unwrap(),
+        TextWordBreak::BreakWord
+    );
+    let line_count = || {
+        text.with_downcast::<Text, _>(|text| text.ordered_lines().len())
+            .unwrap()
+    };
+    advance(&artboard);
+    let break_word_lines = line_count();
+    integer(&text, TextBase::WORD_BREAK_VALUE_PROPERTY_KEY, 1); // normal
+    advance(&artboard);
+    let normal_lines = line_count();
+    integer(&text, TextBase::WORD_BREAK_VALUE_PROPERTY_KEY, 2); // breakAll
+    advance(&artboard);
+    let break_all_lines = line_count();
+    assert!(normal_lines < break_all_lines);
+    assert!(break_all_lines < break_word_lines);
+    integer(&text, TextBase::WORD_BREAK_VALUE_PROPERTY_KEY, 0); // breakWord
+    advance(&artboard);
+    assert_eq!(line_count(), break_word_lines);
 }
 fn first_run(text: &CoreHandle) -> (f32, f32, f32) {
     text.with_downcast::<Text, _>(|text| {

@@ -106,6 +106,18 @@ pub enum TextWrap {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextWordBreak {
+    /// Move an overflowing word to its own line, then split if necessary.
+    BreakWord,
+    /// A word that cannot fit on its own line overflows without splitting.
+    Normal,
+    /// Pack lines by splitting words at cluster boundaries.
+    BreakAll,
+    /// Unrecognized authored values keep the historical break-word behavior.
+    Unknown(u32),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerticalTextAlign {
     Top,
     Bottom,

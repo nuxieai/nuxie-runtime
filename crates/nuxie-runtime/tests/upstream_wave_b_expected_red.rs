@@ -6068,6 +6068,111 @@ fn wave_b_font_test_005_direct_port_expected_red() {
     assert!(feature_strings.iter().any(|tag| tag == "liga"));
 }
 
+#[test]
+fn wave_b_font_test_006_mapped_font_decodes_equivalently_to_a_copied_one() {
+    let path = binding_path("assets/fonts/Inter_18pt-Regular.ttf");
+    // SAFETY: the pinned fixture remains unchanged for every font/shape owner.
+    let mapped = unsafe { HbFont::decode_file(Some(&path)) };
+    if !cfg!(any(target_vendor = "apple", target_os = "linux", target_os = "android")) {
+        assert!(mapped.is_none());
+        return;
+    }
+    let copied = binding_load_font("assets/fonts/Inter_18pt-Regular.ttf");
+    let mapped = mapped.expect("mapped pinned font");
+    assert_eq!(mapped.get_weight(), copied.get_weight());
+    assert_eq!(mapped.is_italic(), copied.is_italic());
+    assert_eq!(mapped.get_axis_count(), copied.get_axis_count());
+    let shape = |font: &FontRef| {
+        let text = "Shaping parity".chars().map(u32::from).collect::<Vec<_>>();
+        let runs = [TextRun {
+            font: Some(font.clone()),
+            size: 32.0,
+            line_height: -1.0,
+            letter_spacing: 0.0,
+            unichar_count: text.len() as u32,
+            script: 0,
+            style_id: 0,
+            level: 0,
+        }];
+        font.shape_text(&text, &runs, -1)
+    };
+    let copied_shape = shape(&copied);
+    let mapped_shape = shape(&mapped);
+    assert_eq!(mapped_shape.len(), copied_shape.len());
+    for (a, b) in copied_shape.iter().zip(&mapped_shape) {
+        assert_eq!(b.runs.len(), a.runs.len());
+        for (a, b) in a.runs.iter().zip(&b.runs) {
+            assert_eq!(b.glyphs.len(), a.glyphs.len());
+            for g in 0..a.glyphs.len() {
+                assert_eq!(b.glyphs[g], a.glyphs[g]);
+                assert_eq!(b.advances[g], a.advances[g]);
+            }
+        }
+    }
+}
+
+#[test]
+fn wave_b_font_test_007_mapped_font_outlives_the_call_that_created_it() {
+    let font = {
+        let path = binding_path("assets/fonts/Inter_18pt-Regular.ttf");
+        // SAFETY: dropping this local path does not mutate the pinned file;
+        // the file stays unchanged until the mapped font and shaping drop.
+        unsafe { HbFont::decode_file(Some(&path)) }
+    };
+    if !cfg!(any(target_vendor = "apple", target_os = "linux", target_os = "android")) {
+        assert!(font.is_none());
+        return;
+    }
+    let font = font.expect("mapped font survives decode scope");
+    assert!(font.has_glyph(u32::from('A')));
+    let text = [u32::from('A')];
+    let runs = [TextRun {
+        font: Some(font.clone()),
+        size: 32.0,
+        line_height: -1.0,
+        letter_spacing: 0.0,
+        unichar_count: 1,
+        script: 0,
+        style_id: 0,
+        level: 0,
+    }];
+    let shape = font.shape_text(&text, &runs, -1);
+    assert_eq!(shape.len(), 1);
+    assert_eq!(shape[0].runs.len(), 1);
+    assert_eq!(shape[0].runs[0].glyphs.len(), 1);
+    assert!(!font.get_path(shape[0].runs[0].glyphs[0]).verbs().is_empty());
+}
+
+#[test]
+fn wave_b_font_test_008_decode_file_returns_null_rather_than_failing_hard() {
+    // SAFETY: no file exists for the null path.
+    assert!(unsafe { HbFont::decode_file(None) }.is_none());
+    // Own a unique directory rather than racing on upstream's fixed temp name.
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let dir = loop {
+        let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "nuxie-font-map-test-{}-{id}", std::process::id()
+        ));
+        match std::fs::create_dir(&path) {
+            Ok(()) => break path,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => panic!("create font test directory: {error}"),
+        }
+    };
+    let missing = dir.join("does_not_exist.ttf");
+    // SAFETY: this test exclusively owns the directory and never creates this file.
+    assert!(unsafe { HbFont::decode_file(Some(&missing)) }.is_none());
+    let empty = dir.join("empty_font_test_file.tmp");
+    drop(std::fs::OpenOptions::new().write(true).create_new(true).open(&empty)
+        .expect("create exclusively owned empty font"));
+    // SAFETY: the empty file remains unchanged through decode and its returned
+    // owner drops before cleanup. Upstream rejects its zero size before mapping.
+    assert!(unsafe { HbFont::decode_file(Some(&empty)) }.is_none());
+    std::fs::remove_file(&empty).expect("remove owned empty font");
+    std::fs::remove_dir(&dir).expect("remove owned empty test directory");
+}
+
 fn binding_gamepad_ready() -> BindingSilver {
     // Pinned `ReadRiveFile` registers a scripting VM whenever the file owns
     // ScriptAssets. The Rust host supplies that approved adapter explicitly.

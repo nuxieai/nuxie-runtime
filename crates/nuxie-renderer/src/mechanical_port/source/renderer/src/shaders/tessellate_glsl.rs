@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/tessellate.glsl.
  *
- * Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+ * Upstream source revision: 5705446d6aeb0dad34a63d8ddadbb79fbe327a37
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "675703b9fd71e982eaf97c034b313eba9bde63f4";
+pub const PINNED_UPSTREAM_COMMIT: &str = "5705446d6aeb0dad34a63d8ddadbb79fbe327a37";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "393b17b7c9370463b614a710a70f8681b7c4bcb2c9e848db3aa43f9949ff1f62";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 568;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 24851;
+    "88708289263a011612a54effd01533cf6593bf93b016315d240de7b4bbfa48c2";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 567;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 24765;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_TESSELLATE_GLSL_SOURCE: &str = r###"/*
@@ -311,7 +311,7 @@ VERTEX_MAIN(@tessellateVertexMain, Attrs, attrs, _vertexID, _instanceID)
 FRAG_TEXTURE_BLOCK_BEGIN
 FRAG_TEXTURE_BLOCK_END
 
-FRAG_DATA_MAIN(TESSDATA4, @tessellateFragmentMain)
+FRAG_DATA_MAIN(uint4, @tessellateFragmentMain)
 {
     VARYING_UNPACK(v_p0p1, float4);
     VARYING_UNPACK(v_p2p3, float4);
@@ -566,8 +566,8 @@ FRAG_DATA_MAIN(TESSDATA4, @tessellateFragmentMain)
             theta = atan2(bcd - abc);
     }
 
-    TESSDATA4 tessData;
-    tessData.xy = FLOAT_AS_TESSDATA(tessCoord);
+    uint4 tessData;
+    tessData.xy = floatBitsToUint(tessCoord);
     if ((contourIDWithFlags & JOIN_TYPE_MASK) == FEATHER_JOIN_CONTOUR_FLAG)
     {
         // Feather joins work out their stepping in the vertex shader, so we
@@ -575,14 +575,13 @@ FRAG_DATA_MAIN(TESSDATA4, @tessellateFragmentMain)
         // angle and let the vertex shader work it all out.
         // Pack these as integers instead of using packHalf2x16() because the
         // latter does not work on ARM Mali.
-        tessData.z = UINT_AS_TESSDATA((uint(mergedSegmentCount) << 16) |
-                                      uint(mergedVertexID));
+        tessData.z = (uint(mergedSegmentCount) << 16) | uint(mergedVertexID);
     }
     else
     {
-        tessData.z = FLOAT_AS_TESSDATA(mod(theta, _2PI));
+        tessData.z = floatBitsToUint(mod(theta, _2PI));
     }
-    tessData.w = UINT_AS_TESSDATA(contourIDWithFlags);
+    tessData.w = contourIDWithFlags;
     EMIT_FRAG_DATA(tessData);
 }
 #endif

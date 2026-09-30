@@ -247,6 +247,7 @@ pub(crate) fn setPipeline(pass: &mut RenderPassGLState, pipelineOwner: Option<&A
     let desc = pipeline.desc();
 
     recordGLCommand(GLCommand::UseProgram(glPipeline.m_glProgram));
+    pass.base.m_vertexBuffers.markAllDirty();
 
     if desc.cullMode == nuxie_ore_metal::types::CullMode::none {
         recordGLCommand(GLCommand::Disable(GL_CULL_FACE));
@@ -374,7 +375,36 @@ pub(crate) fn setVertexBuffer(
     offset: u32,
 ) {
     validate(pass);
-    debug_assert!(pass.m_currentPipeline.is_some());
+    pass.base.m_vertexBuffers.set(slot, bufferOwner, offset);
+}
+
+fn disableGLAttribs(mut mask: u32) {
+    let mut location = 0;
+    while mask != 0 {
+        if mask & 1 != 0 {
+            recordGLCommand(GLCommand::DisableVertexAttribArray(location));
+        }
+        location += 1;
+        mask >>= 1;
+    }
+}
+
+fn flushVertexBuffers(pass: &mut RenderPassGLState) {
+    let previous = pass.m_enabledAttribs;
+    if pass.base.m_vertexBuffers.allDirty() {
+        pass.m_enabledAttribs = 0;
+    }
+    while let Some((slot, state)) = pass.base.m_vertexBuffers.takeNextDirty() {
+        applyVertexBuffer(pass, slot, state);
+    }
+    disableGLAttribs(previous & !pass.m_enabledAttribs);
+}
+
+fn applyVertexBuffer(
+    pass: &mut RenderPassGLState,
+    slot: u32,
+    state: nuxie_ore_metal::render_pass::VertexBufferSlot,
+) {
     let pipelineOwner = pass
         .m_currentPipeline
         .as_ref()
@@ -383,9 +413,12 @@ pub(crate) fn setVertexBuffer(
         pipelineOwner,
         "RenderPassGL current pipeline must be PipelineGL",
     );
-    debug_assert!((slot as usize) < pipeline.base.desc().vertexBuffers.len());
+    if state.buffer.is_none() || slot as usize >= pipeline.base.desc().vertexBuffers.len() {
+        return;
+    }
     let layout = &pipeline.base.desc().vertexBuffers[slot as usize];
-    let bufferOwner = requiredOwner(bufferOwner, "RenderPassGL source vertex buffer");
+    let offset = state.offset;
+    let bufferOwner = state.buffer.as_ref().unwrap();
     let glBuffer = bufferOwner
         .downcast_ref::<BufferGL>()
         .expect("RenderPassGL vertex buffer must be BufferGL");
@@ -435,10 +468,8 @@ pub(crate) fn setVertexBuffer(
             },
         ));
 
-        if !pass.m_usedAttribs || attribute.shaderSlot > pass.m_maxAttribSlot {
-            pass.m_maxAttribSlot = attribute.shaderSlot;
-        }
-        pass.m_usedAttribs = true;
+        assert!(attribute.shaderSlot < 32);
+        pass.m_enabledAttribs |= 1 << attribute.shaderSlot;
     }
 }
 
@@ -463,8 +494,8 @@ pub(crate) fn setIndexBuffer(
         glBuffer.m_glBuffer,
     ));
     pass.m_glIndexFormat = format;
-    // Authored GL behavior ignores the setIndexBuffer byte offset.
-    let _ = offset;
+    // Retain the authored byte offset for subsequent indexed draws.
+    pass.m_glIndexOffset = offset;
 }
 
 pub(crate) fn setBindGroup(
@@ -670,6 +701,7 @@ pub(crate) fn draw(
 ) {
     validate(pass);
     applySamplerBindings(pass);
+    flushVertexBuffers(pass);
     let pipeline = currentPipeline(pass);
     let mode = oreTopologyToGL(pipeline.base.desc().topology);
 
@@ -703,6 +735,7 @@ pub(crate) fn drawIndexed(
 ) {
     validate(pass);
     applySamplerBindings(pass);
+    flushVertexBuffers(pass);
     let pipeline = currentPipeline(pass);
     let mode = oreTopologyToGL(pipeline.base.desc().topology);
     let indexType = if pass.m_glIndexFormat == IndexFormat::uint32 {
@@ -711,7 +744,9 @@ pub(crate) fn drawIndexed(
         GL_UNSIGNED_SHORT
     };
     let indexSize = if indexType == GL_UNSIGNED_INT { 4 } else { 2 };
-    let offset = firstIndex.wrapping_mul(indexSize);
+    let offset = pass
+        .m_glIndexOffset
+        .wrapping_add(firstIndex.wrapping_mul(indexSize));
 
     // The source GL capability contract rejects these before dispatch and the
     // implementation deliberately discards both values.
@@ -745,7 +780,7 @@ pub(crate) fn finish(pass: &mut RenderPassGLState) {
     // Preserve the authored release sequence: current pipeline, then every
     // retained base bind group, before any GL unbinding or native deletion.
     *pass.m_currentPipeline = None;
-    nuxie_ore_metal::render_pass_clear_bound_groups(&mut pass.base);
+    pass.base.releaseBoundResources();
 
     recordGLCommand(GLCommand::Disable(GL_SCISSOR_TEST));
     recordGLCommand(GLCommand::Disable(GL_BLEND));
@@ -766,11 +801,8 @@ pub(crate) fn finish(pass: &mut RenderPassGLState) {
         recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
     }
 
-    if pass.m_usedAttribs {
-        for slot in 0..=pass.m_maxAttribSlot {
-            recordGLCommand(GLCommand::DisableVertexAttribArray(slot));
-        }
-    }
+    disableGLAttribs(pass.m_enabledAttribs);
+    pass.m_enabledAttribs = 0;
 
     recordGLCommand(GLCommand::BindBuffer(GL_ARRAY_BUFFER, 0));
 
@@ -868,7 +900,7 @@ pub(crate) fn abandonAfterContextLoss(pass: &mut RenderPassGLState) {
     }
     nuxie_ore_metal::render_pass_set_finished(&mut pass.base, true);
     *pass.m_currentPipeline = None;
-    nuxie_ore_metal::render_pass_clear_bound_groups(&mut pass.base);
+    pass.base.releaseBoundResources();
     if let Some(scratch) = &pass.rust_scratch {
         if !pass.m_ownsVAO && pass.m_glVAO != 0 {
             scratch.releaseScratchVAO();
@@ -891,12 +923,12 @@ pub(crate) fn abandonAfterContextLoss(pass: &mut RenderPassGLState) {
 
 pub(crate) const SOURCE_STATIC_MAPPING_COUNT: usize = 6;
 pub(crate) const SOURCE_MAPPING_CASE_COUNT: usize = 57;
-pub(crate) const SOURCE_METHOD_DEFINITION_COUNT: usize = 14;
+pub(crate) const SOURCE_METHOD_DEFINITION_COUNT: usize = 16;
 pub(crate) const SOURCE_GL_CALL_SITE_COUNT: usize = 75;
 pub(crate) const SOURCE_ASSERT_COUNT: usize = 11;
-pub(crate) const SOURCE_IF_COUNT: usize = 34;
-pub(crate) const SOURCE_LOOP_COUNT: usize = 11;
-const _: [(); 23566] = [(); PINNED_SOURCE.len()];
+pub(crate) const SOURCE_IF_COUNT: usize = 35;
+pub(crate) const SOURCE_LOOP_COUNT: usize = 10;
+const _: [(); 24563] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {

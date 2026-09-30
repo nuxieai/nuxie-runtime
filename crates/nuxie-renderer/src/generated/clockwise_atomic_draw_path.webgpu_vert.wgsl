@@ -1,43 +1,43 @@
-struct Lg {
+struct Fg {
     g2_: array<vec4<u32>>,
 }
 
-struct Kg {
+struct Eg {
     g2_: array<vec4<u32>>,
 }
 
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
-struct qf {
+struct kf {
     g2_: array<vec2<u32>>,
 }
 
-struct rf {
+struct lf {
     g2_: array<vec4<f32>>,
 }
 
@@ -61,17 +61,17 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Kh: bool = true;
-@id(2) override Mh: bool = true;
-@id(1) override Lh: bool = true;
-@id(8) override Sh: bool = true;
+@id(0) override Eh: bool = true;
+@id(2) override Gh: bool = true;
+@id(1) override Fh: bool = true;
+@id(8) override Mh: bool = true;
 
 @group(0) @binding(7)
 var JC: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> HD: Lg;
+var<storage> HD: Fg;
 @group(0) @binding(2)
-var<storage> OB: Kg;
+var<storage> OB: Eg;
 @group(0) @binding(0)
 var<uniform> j: SB;
 var<private> gl_VertexIndex_1: i32;
@@ -80,12 +80,12 @@ var<private> UB_1: vec4<f32>;
 var<private> VB_1: vec4<f32>;
 var<private> O: vec4<f32>;
 @group(0) @binding(3)
-var<storage> CD: qf;
+var<storage> CD: kf;
 var<private> D0_: f32;
 var<private> Y1_: vec2<f32>;
 var<private> g1_: f32;
 @group(0) @binding(4)
-var<storage> PB: rf;
+var<storage> PB: lf;
 var<private> O0_: vec4<f32>;
 var<private> X1_: vec4<f32>;
 var<private> C2_: vec3<f32>;
@@ -95,7 +95,7 @@ var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f,
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 
 fn main_1() {
     var phi_2865_: f32;
@@ -492,12 +492,12 @@ fn main_1() {
     let _e611 = phi_3098_;
     let _e613 = phi_3072_;
     let _e616 = (((_e139 * _e613) + _e611) + bitcast<vec2<f32>>(_e143.xy));
-    let _e619 = j.hh;
+    let _e619 = j.bh;
     let _e622 = select(_e609.xy, vec2<f32>(1f, -1f), vec2((_e619 != 0u)));
     let _e628 = vec4<f32>(_e622.x, _e609.y, _e609.z, _e609.w);
     O = vec4<f32>(_e628.x, _e622.y, _e628.z, _e628.w);
     let _e637 = CD.g2_[_e126];
-    let _e639 = j.g6_;
+    let _e639 = j.c6_;
     if (_e126 == 0u) {
         phi_3144_ = 0f;
     } else {
@@ -510,7 +510,7 @@ fn main_1() {
         D0_ = -(_e650);
     }
     let _e652 = (_e637.x & 15u);
-    if Kh {
+    if Eh {
         let _e653 = (_e652 == 0u);
         if _e653 {
             phi_3145_ = _e637.y;
@@ -532,10 +532,10 @@ fn main_1() {
         let _e668 = phi_3147_;
         Y1_[0u] = _e668;
     }
-    if Mh {
+    if Gh {
         g1_ = f32(((_e637.x >> bitcast<u32>(4i)) & 15u));
     }
-    if Lh {
+    if Fh {
         let _e674 = (_e126 * 8u);
         let _e678 = PB.g2_[(_e674 + 2u)];
         let _e683 = vec2<f32>(_e678.x, _e678.y);
@@ -568,7 +568,7 @@ fn main_1() {
     if (_e652 == 1u) {
         X1_ = unpack4x8unorm(_e637.y);
     } else {
-        if (Kh && (_e652 == 0u)) {
+        if (Eh && (_e652 == 0u)) {
             let _e798 = (_e637.x >> bitcast<u32>(16i));
             if (_e798 == 0u) {
                 phi_3200_ = 0f;
@@ -603,8 +603,8 @@ fn main_1() {
             X1_[3u] = -(_e795);
         }
     }
-    phi_1391_ = Sh;
-    if Sh {
+    phi_1391_ = Mh;
+    if Mh {
         phi_1391_ = ((_e637.x & 2048u) != 0u);
     }
     let _e812 = phi_1391_;
@@ -618,8 +618,8 @@ fn main_1() {
         C2_ = vec3<f32>(0f, 0f, 0f);
     }
     if !(_e607) {
-        let _e842 = j.Nf;
-        let _e844 = j.Of;
+        let _e842 = j.Hf;
+        let _e844 = j.If;
         let _e856 = OB.g2_[(_e128 + 3u)];
         k3_ = _e856.xy;
         v4_ = (_e616 + bitcast<vec2<f32>>(_e856.zw));

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/common.glsl.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: 5705446d6aeb0dad34a63d8ddadbb79fbe327a37
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "5705446d6aeb0dad34a63d8ddadbb79fbe327a37";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "7a6fff449a340673add5a68490524bb4682bf4a2583637dc462573aa80c07c6a";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 495;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 16623;
+    "d687e007cf2ce52420bbec02e677e53ef27984b7c5b9ed8f05423ace31b1bf92";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 479;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 16063;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -40,22 +40,6 @@ pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
     pixel_coord_to_clip_coord(COORD,                                           \
                               uniforms.renderTargetInverseViewportX,           \
                               uniforms.renderTargetInverseViewportY)
-
-#ifdef @TESS_TEXTURE_FLOATING_POINT
-#define TEXTURE_TESSDATA4(SET, IDX, NAME) TEXTURE_RGBA32F(SET, IDX, NAME)
-#define TESSDATA4 float4
-#define FLOAT_AS_TESSDATA(X) X
-#define TESSDATA_AS_FLOAT(X) X
-#define UINT_AS_TESSDATA(X) uintBitsToFloat(X)
-#define TESSDATA_AS_UINT(X) floatBitsToUint(X)
-#else
-#define TEXTURE_TESSDATA4(SET, IDX, NAME) TEXTURE_RGBA32UI(SET, IDX, NAME)
-#define TESSDATA4 uint4
-#define FLOAT_AS_TESSDATA(X) floatBitsToUint(X)
-#define TESSDATA_AS_FLOAT(X) uintBitsToFloat(X)
-#define UINT_AS_TESSDATA(X) X
-#define TESSDATA_AS_UINT(X) X
-#endif
 
 // Gathers a 4xN matrix of texels, in the same order as the textureGather() API.
 // clang-format off

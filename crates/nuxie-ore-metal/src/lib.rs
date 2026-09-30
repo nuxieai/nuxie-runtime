@@ -68,6 +68,9 @@ pub mod sampler {
 pub mod shader_module {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_shader_module_hpp::*;
 }
+pub mod script_guards {
+    pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_script_guards_hpp::*;
+}
 pub mod texture {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_texture_hpp::*;
 }

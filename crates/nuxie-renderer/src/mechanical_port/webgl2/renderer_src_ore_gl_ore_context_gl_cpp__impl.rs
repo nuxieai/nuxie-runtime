@@ -15,7 +15,7 @@ use super::ore_sampler_gl_decl::SamplerGL;
 use super::ore_shader_module_gl_decl::ShaderModuleGL;
 use super::ore_texture_gl_decl::{TextureGL, TextureViewGL};
 use super::render_target_gl_decl::{
-    RenderTargetGL, TextureRenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
+    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -29,10 +29,10 @@ use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::shader_module::GLFixupKind;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, PipelineDesc,
-    RenderPassDesc, SamplerDesc, ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc,
-    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
+    CompareFunction, Features, Filter, LoadOp, PipelineDesc, RenderPassDesc, SamplerDesc,
+    ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc, TextureFormat, TextureType,
+    TextureViewDesc, TextureViewDimension, WrapMode, kMaxBindGroups,
 };
 use std::ffi::c_void;
 
@@ -231,14 +231,9 @@ fn queriedFeatures(executionDomain: &GLExecutionDomain) -> Features {
     features
 }
 
-pub(crate) fn Make(
-    executionStamp: GLExecutionStamp,
-) -> Option<Box<ContextGL>> {
+pub(crate) fn Make(executionStamp: GLExecutionStamp) -> Option<Box<ContextGL>> {
     let features = executionStamp.withCurrent(|| queriedFeatures(executionStamp.domain()));
-    Some(Box::new(ContextGL::newBase(
-        features,
-        executionStamp,
-    )))
+    Some(Box::new(ContextGL::newBase(features, executionStamp)))
 }
 
 /// Release the context's scratch ownership. Unfinished Rust passes retain the
@@ -1047,7 +1042,7 @@ fn makePipelineCurrent(
         None => None,
     };
 
-    use nuxie_ore_metal::bind_group_layout::{validatePipelineDesc, NativeSlotScope};
+    use nuxie_ore_metal::bind_group_layout::{NativeSlotScope, validatePipelineDesc};
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;
     let layoutHandles = desc
         .bindGroupLayouts
@@ -1668,12 +1663,18 @@ fn beginRenderPassCurrent(
         }
     }
 
-    #[cfg(debug_assertions)]
-    {
-        let status = context
-            .executionDomain()
-            .checkFramebufferStatus(GL_FRAMEBUFFER);
-        debug_assert_eq!(status, GL_FRAMEBUFFER_COMPLETE, "Ore GL FBO incomplete");
+    let status = context
+        .executionDomain()
+        .checkFramebufferStatus(GL_FRAMEBUFFER);
+    if status != GL_FRAMEBUFFER_COMPLETE {
+        context.base.setLastError(format!(
+            "beginRenderPass: GL framebuffer incomplete (0x{status:x}); color/depth attachments must share size and sampleCount"
+        ));
+        let error = context.base.lastError();
+        if error != context.m_lastReportedError {
+            context.m_lastReportedError = error;
+            eprintln!("rive ore: {}", context.m_lastReportedError);
+        }
     }
 
     for index in 0..desc.colorCount as usize {
@@ -2094,7 +2095,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 50793] = [(); PINNED_SOURCE.len()];
+const _: [(); 51369] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2501,7 +2502,7 @@ mod tests {
     #[test]
     fn deferred_replay_reaches_the_webgl2_state_scrub() {
         use crate::deferred::cmd::{
-            deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
+            deferred_replayer::{DeferredFrameSink, DeferredReplayer, snapshot_frame},
             deferred_session::DeferredSession,
             render_replay::RendererOwner,
         };
@@ -2582,7 +2583,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1407);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1419);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 22);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);

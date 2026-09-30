@@ -1,35 +1,35 @@
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
-struct Lg {
+struct Fg {
     g2_: array<vec4<u32>>,
 }
 
-struct Kg {
+struct Eg {
     g2_: array<vec4<u32>>,
 }
 
@@ -57,18 +57,18 @@ var<private> TB_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: SB;
 @group(0) @binding(5)
-var<storage> HD: Lg;
+var<storage> HD: Fg;
 @group(0) @binding(2)
-var<storage> OB: Kg;
+var<storage> OB: Eg;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(3) @binding(9)
-var ha: sampler;
-var<private> D6_: vec4<f32>;
-var<private> E6_: vec4<f32>;
-var<private> S4_: vec4<f32>;
-var<private> T4_: vec3<f32>;
-var<private> K7_: u32;
+var ca: sampler;
+var<private> A6_: vec4<f32>;
+var<private> B6_: vec4<f32>;
+var<private> R4_: vec4<f32>;
+var<private> S4_: vec3<f32>;
+var<private> H7_: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -161,7 +161,7 @@ fn main_1() {
     }
     let _e101 = phi_1773_;
     let _e102 = vec2<f32>(select(_e93, _e90, ((_e59 & 1i) == 0i)), _e101);
-    let _e105 = j.Id;
+    let _e105 = j.Cd;
     phi_1970_ = _e102;
     if (((_e93 - _e90) * _e105) < 0f) {
         phi_1970_ = vec2<f32>(_e102.x, (((2f * _e72) + 1f) - _e101));
@@ -352,7 +352,7 @@ fn main_1() {
         let _e339 = phi_1839_;
         let _e343 = local_4;
         let _e345 = local_5;
-        let _e355 = textureSampleLevel(XC, ha, vec2<f32>((0.5f * min(min((1f - (_e339 * 0.31830987f)), (((dot(_e343, _e345) / (_e208 * _e208)) - 1f) * 0.5f)), 0.99f)), 1f), 0f);
+        let _e355 = textureSampleLevel(XC, ca, vec2<f32>((0.5f * min(min((1f - (_e339 * 0.31830987f)), (((dot(_e343, _e345) / (_e208 * _e208)) - 1f) * 0.5f)), 0.99f)), 1f), 0f);
         let _e359 = (((_e355.x * -2f) + 1f) * _e145);
         if (_e207 < 0f) {
             phi_1840_ = -(_e359);
@@ -424,13 +424,13 @@ fn main_1() {
         phi_1994_ = -(_e452);
     }
     let _e464 = phi_1994_;
-    D6_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
-    E6_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
+    A6_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
+    B6_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
     let _e475 = f32((((_e417 + _e119) + _e121) - 1u));
-    S4_ = vec4<f32>((_e475 - abs((_e93 - _e115.x))), _e475, f32(((_e121 << bitcast<u32>(10i)) | _e417)), _e464);
+    R4_ = vec4<f32>((_e475 - abs((_e93 - _e115.x))), _e475, f32(((_e121 << bitcast<u32>(10i)) | _e417)), _e464);
     let _e485 = UC_1;
-    T4_[0u] = _e485.x;
-    T4_[1u] = _e485.y;
+    S4_[0u] = _e485.x;
+    S4_[1u] = _e485.y;
     if (_e121 > 1u) {
         let _e491 = vec2<f32>(_e485.x, _e485.y);
         let _e495 = (_e442 * dot(_e491, _e491));
@@ -452,14 +452,14 @@ fn main_1() {
             phi_2004_ = -(_e509);
         }
         let _e514 = phi_2004_;
-        T4_[2u] = _e514;
+        S4_[2u] = _e514;
     }
     phi_2008_ = _e123;
     if (_e93 < _e90) {
         phi_2008_ = (_e123 | 8388608u);
     }
     let _e519 = phi_2008_;
-    K7_ = _e519;
+    H7_ = _e519;
     unnamed.gl_Position = vec4<f32>(((_e115.x * 0.0009765625f) - 1f), ((_e115.y * _e105) - sign(_e105)), 0f, 1f);
     return;
 }
@@ -472,11 +472,11 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LD: vec4<f32>, 
     UC_1 = UC;
     TB_1 = TB;
     main_1();
-    let _e18 = D6_;
-    let _e19 = E6_;
-    let _e20 = S4_;
-    let _e21 = T4_;
-    let _e22 = K7_;
+    let _e18 = A6_;
+    let _e19 = B6_;
+    let _e20 = R4_;
+    let _e21 = S4_;
+    let _e22 = H7_;
     let _e23 = unnamed.gl_Position;
     return VertexOutput(_e18, _e19, _e20, _e21, _e22, _e23);
 }

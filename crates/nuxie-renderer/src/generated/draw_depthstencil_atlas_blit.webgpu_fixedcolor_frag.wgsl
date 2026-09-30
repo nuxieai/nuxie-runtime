@@ -1,56 +1,56 @@
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
-@id(7) override Rh: bool = true;
-@id(2) override Mh: bool = true;
-@id(8) override Sh: bool = true;
+@id(7) override Lh: bool = true;
+@id(2) override Gh: bool = true;
+@id(8) override Mh: bool = true;
 
 @group(0) @binding(0)
 var<uniform> j: SB;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(3) @binding(8)
-var P9_: sampler;
+var M9_: sampler;
 @group(1) @binding(11)
 var GC: texture_2d<f32>;
 @group(1) @binding(13)
-var Z5_: sampler;
+var W5_: sampler;
 @group(0) @binding(10)
 var ED: texture_2d<f32>;
 @group(3) @binding(10)
-var U9_: sampler;
+var R9_: sampler;
 var<private> F2_1: vec2<f32>;
 var<private> C2_1: vec3<f32>;
 var<private> g1_1: f32;
 var<private> X1_1: vec4<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
-var<private> rh: vec4<f32>;
+var<private> lh: vec4<f32>;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 var<private> O3_1: f32;
@@ -67,17 +67,17 @@ fn main_1() {
     var phi_705_: vec3<f32>;
 
     let _e33 = F2_1;
-    let _e34 = textureSampleLevel(ED, U9_, _e33, 0f);
+    let _e34 = textureSampleLevel(ED, R9_, _e33, 0f);
     let _e37 = g1_1;
     let _e39 = C2_1;
     let _e40 = X1_1;
-    let _e42 = (Mh && (u32(_e37) != 0u));
+    let _e42 = (Gh && (u32(_e37) != 0u));
     if (_e40.w >= 0f) {
         phi_701_ = _e40;
     } else {
         let _e45 = -(_e40.w);
-        let _e50 = j.ec;
-        let _e53 = j.fc;
+        let _e50 = j.Zb;
+        let _e53 = j.ac;
         if (_e40.z > 0f) {
             phi_687_ = _e40.x;
         } else {
@@ -92,7 +92,7 @@ fn main_1() {
             phi_688_ = ((0.001953125f * _e62) + _e63);
         }
         let _e70 = phi_688_;
-        let _e72 = textureSampleLevel(DD, P9_, vec2<f32>(_e70, ((floor(_e45) * _e50) + _e53)), 0f);
+        let _e72 = textureSampleLevel(DD, M9_, vec2<f32>(_e70, ((floor(_e45) * _e50) + _e53)), 0f);
         phi_702_ = _e72;
         if !(_e42) {
             let _e76 = (_e72.xyz * _e72.w);
@@ -102,14 +102,14 @@ fn main_1() {
         phi_701_ = _e83;
     }
     let _e85 = phi_701_;
-    phi_495_ = Sh;
-    if Sh {
+    phi_495_ = Mh;
+    if Mh {
         phi_495_ = (_e39.z > 0f);
     }
     let _e89 = phi_495_;
     phi_704_ = _e85;
     if _e89 {
-        let _e93 = textureSampleLevel(GC, Z5_, _e39.xy, (_e39.z - 1f));
+        let _e93 = textureSampleLevel(GC, W5_, _e39.xy, (_e39.z - 1f));
         phi_698_ = _e93;
         if _e42 {
             if (_e93.w != 0f) {
@@ -130,7 +130,7 @@ fn main_1() {
     let _e113 = gl_FragCoord_1;
     let _e115 = j.F3_;
     let _e117 = j.G3_;
-    if (Rh && (_e110.w != 0f)) {
+    if (Lh && (_e110.w != 0f)) {
         phi_705_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e113.x) + (0.00583715f * _e113.y))))) * _e115) + _e117)) + _e111);
     } else {
         phi_705_ = _e111;
@@ -138,7 +138,7 @@ fn main_1() {
     let _e133 = phi_705_;
     let _e139 = vec4<f32>(_e133.x, _e110.y, _e110.z, _e110.w);
     let _e145 = vec4<f32>(_e139.x, _e133.y, _e139.z, _e139.w);
-    rh = vec4<f32>(_e145.x, _e145.y, _e133.z, _e145.w);
+    lh = vec4<f32>(_e145.x, _e145.y, _e133.z, _e145.w);
     return;
 }
 
@@ -151,6 +151,6 @@ fn main(@location(1) F2_: vec2<f32>, @location(9) C2_: vec3<f32>, @location(6) @
     gl_FragCoord_1 = gl_FragCoord;
     O3_1 = O3_;
     main_1();
-    let _e13 = rh;
+    let _e13 = lh;
     return _e13;
 }

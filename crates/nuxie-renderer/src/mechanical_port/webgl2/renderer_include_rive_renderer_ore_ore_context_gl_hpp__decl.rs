@@ -55,14 +55,12 @@ pub(crate) struct ContextGL {
     pub(super) base: ManuallyDrop<Context>,
     pub(super) m_savedState: GLSavedState,
     pub(super) m_executionStamp: ManuallyDrop<GLExecutionStamp>,
+    pub(super) m_lastReportedError: String,
     pub(super) rust_scratch: Option<Rc<ScratchPassObjects>>,
 }
 
 impl ContextGL {
-    pub(crate) fn newBase(
-        features: Features,
-        executionStamp: GLExecutionStamp,
-    ) -> Self {
+    pub(crate) fn newBase(features: Features, executionStamp: GLExecutionStamp) -> Self {
         let base = nuxie_ore_metal::new_context_backend_base_with_final_release_drain(
             features,
             None,
@@ -71,6 +69,7 @@ impl ContextGL {
         Self {
             base: ManuallyDrop::new(base),
             m_savedState: GLSavedState::default(),
+            m_lastReportedError: String::new(),
             rust_scratch: Some(Rc::new(ScratchPassObjects {
                 state: RefCell::new(ScratchPassState::default()),
                 execution: executionStamp.clone(),
@@ -80,9 +79,7 @@ impl ContextGL {
     }
 
     /// Source `Make()` plus the shared current-context execution authority.
-    pub(crate) fn Make(
-        executionStamp: GLExecutionStamp,
-    ) -> Option<Box<Self>> {
+    pub(crate) fn Make(executionStamp: GLExecutionStamp) -> Option<Box<Self>> {
         super::ore_context_gl_impl::Make(executionStamp)
     }
 
@@ -142,10 +139,10 @@ impl DerefMut for ContextGL {
 
 pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 20;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
-pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 14;
+pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 15;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
 pub(crate) const RUST_EXECUTION_SIDECAR_COUNT: usize = 1;
-const _: [(); 4637] = [(); PINNED_SOURCE.len()];
+const _: [(); 4754] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -154,10 +151,10 @@ mod tests {
 
     #[test]
     fn complete_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 121);
+        assert_eq!(PINNED_SOURCE.lines().count(), 124);
         assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 20);
         assert_eq!(SOURCE_FRIEND_COUNT, 3);
-        assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 14);
+        assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 15);
         assert_eq!(SOURCE_DELETED_COPY_OPERATION_COUNT, 2);
         assert_eq!(RUST_EXECUTION_SIDECAR_COUNT, 1);
         assert_eq!(std::mem::size_of::<GLSavedState>(), 20);

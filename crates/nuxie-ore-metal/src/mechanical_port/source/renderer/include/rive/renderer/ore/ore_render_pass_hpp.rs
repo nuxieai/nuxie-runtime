@@ -25,7 +25,62 @@ use std::sync::Weak;
 use super::super::gpu_resource_hpp::AnyResourceHandle;
 #[cfg(test)]
 use super::ore_types_hpp::RenderPassDesc;
-use super::ore_types_hpp::{IndexFormat, TextureFormat, kMaxBindGroups};
+use super::ore_types_hpp::{IndexFormat, TextureFormat, kMaxBindGroups, kMaxVertexBufferSlots};
+
+#[derive(Clone, Default)]
+pub struct VertexBufferSlot {
+    pub buffer: Option<AnyResourceHandle>,
+    pub offset: u32,
+}
+
+/// Retained source vertex slots and their one-byte dirty mask.
+pub struct BoundVertexBuffers {
+    slots: [VertexBufferSlot; kMaxVertexBufferSlots as usize],
+    dirty: u8,
+}
+impl Default for BoundVertexBuffers {
+    fn default() -> Self {
+        Self {
+            slots: std::array::from_fn(|_| VertexBufferSlot::default()),
+            dirty: 0,
+        }
+    }
+}
+impl BoundVertexBuffers {
+    pub const ALL_DIRTY: u8 = 0xff;
+    pub fn set(&mut self, slot: u32, buffer: Option<&AnyResourceHandle>, offset: u32) {
+        if slot >= kMaxVertexBufferSlots {
+            return;
+        }
+        self.slots[slot as usize] = VertexBufferSlot {
+            buffer: buffer.cloned(),
+            offset,
+        };
+        self.dirty |= 1 << slot;
+    }
+    pub fn markAllDirty(&mut self) {
+        self.dirty = Self::ALL_DIRTY;
+    }
+    pub fn allDirty(&self) -> bool {
+        self.dirty == Self::ALL_DIRTY
+    }
+    /// Clear the bit before applying the slot, as in the source callback loop.
+    pub fn takeNextDirty(&mut self) -> Option<(u32, VertexBufferSlot)> {
+        if self.dirty == 0 {
+            return None;
+        }
+        let slot = self.dirty.trailing_zeros();
+        self.dirty &= !(1 << slot);
+        Some((slot, self.slots[slot as usize].clone()))
+    }
+    fn release(&mut self) {
+        for slot in &mut self.slots {
+            slot.buffer = None;
+        }
+        self.dirty = 0;
+    }
+}
+const _: () = assert!(kMaxVertexBufferSlots <= 8);
 
 // namespace rive::ore
 
@@ -118,8 +173,9 @@ pub struct RenderPassMembers {
     // Rust represents the nullable raw pointer as `Weak<ContextState>`; it is
     // non-owning and cannot dereference a destroyed Context.
     pub(crate) m_context: Weak<ContextState>,
-    // Last-authored C++ member, therefore first explicit drop.
+    // Explicit destruction releases vertex slots before bound groups.
     pub(crate) m_boundGroups: [Option<AnyResourceHandle>; kMaxBindGroups as usize],
+    pub m_vertexBuffers: BoundVertexBuffers,
 }
 
 #[repr(C)]
@@ -146,6 +202,7 @@ impl Drop for RenderPass {
         unsafe {
             #[cfg(test)]
             crate::gpu_resource::record_resource_drop_stage("RenderPass.boundGroups");
+            core::ptr::drop_in_place(&mut self.m_vertexBuffers);
             core::ptr::drop_in_place(&mut self.m_boundGroups);
             #[cfg(test)]
             crate::gpu_resource::record_resource_drop_stage("RenderPass.context");
@@ -155,6 +212,13 @@ impl Drop for RenderPass {
 }
 
 impl RenderPass {
+    pub fn releaseBoundResources(&mut self) {
+        for group in &mut self.m_boundGroups {
+            *group = None;
+        }
+        self.m_vertexBuffers.release();
+    }
+
     pub(crate) fn ownsResource(&self, resource: &AnyResourceHandle) -> bool {
         self.m_context
             .upgrade()
@@ -258,6 +322,7 @@ impl RenderPass {
                 m_sampleCount: 1,
                 m_context: context,
                 m_boundGroups: std::array::from_fn(|_| None),
+                m_vertexBuffers: BoundVertexBuffers::default(),
             }),
         }
     }

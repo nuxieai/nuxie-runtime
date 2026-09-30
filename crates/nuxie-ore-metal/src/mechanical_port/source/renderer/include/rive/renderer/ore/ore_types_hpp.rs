@@ -31,6 +31,7 @@ use super::super::gpu_resource_hpp::AnyResourceHandle;
 // range, and Lua-side validation in `gpubindgroup_construct` /
 // `setBindGroup`.
 pub const kMaxBindGroups: u32 = 4;
+pub const kMaxVertexBufferSlots: u32 = 8;
 
 // ============================================================================
 // Enums

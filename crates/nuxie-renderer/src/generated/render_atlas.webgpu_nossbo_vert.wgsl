@@ -1,28 +1,28 @@
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
 struct gl_PerVertex {
@@ -58,7 +58,7 @@ var CD: texture_2d<u32>;
 @group(0) @binding(4)
 var PB: texture_2d<f32>;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 
 fn main_1() {
     var phi_2325_: f32;
@@ -445,7 +445,7 @@ fn main_1() {
     let _e598 = phi_2564_;
     let _e600 = phi_2558_;
     let _e602 = phi_2532_;
-    let _e608 = j.hh;
+    let _e608 = j.bh;
     let _e611 = select(_e598.xy, vec2<f32>(1f, -1f), vec2((_e608 != 0u)));
     let _e617 = vec4<f32>(_e611.x, _e598.y, _e598.z, _e598.w);
     O = vec4<f32>(_e617.x, _e611.y, _e617.z, _e617.w);
@@ -454,8 +454,8 @@ fn main_1() {
         let _e632 = textureLoad(OB, vec2<i32>(bitcast<i32>((_e625 & 255u)), bitcast<i32>((_e625 >> bitcast<u32>(8i)))), 0i);
         let _e634 = bitcast<vec3<f32>>(_e632.yzw);
         let _e638 = (((((_e124 * _e602) + _e600) + bitcast<vec2<f32>>(_e132.xy)) * _e634.x) + _e634.yz);
-        let _e641 = j.Jd[0u];
-        let _e644 = j.Jd[1u];
+        let _e641 = j.Dd[0u];
+        let _e644 = j.Dd[1u];
         phi_2604_ = vec4<f32>(((_e638.x * _e641) - 1f), ((_e638.y * _e644) - sign(_e644)), 0f, 1f);
     } else {
         let _e654 = j.W2_;

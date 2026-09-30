@@ -307,6 +307,7 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
         return;
     }
     nuxie_ore_metal::render_pass_set_finished(&mut pass.base, true);
+    pass.base.releaseBoundResources();
     unsafe {
         pass.context()
             .m_vk

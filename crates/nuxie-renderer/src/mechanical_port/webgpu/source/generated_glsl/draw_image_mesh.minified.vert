@@ -1,7 +1,7 @@
 #ifdef VERTEX
-h1(n3)K(0,c,OC);i1 h1(C3)K(1,c,PC);i1 h1(p1)K(y9,f,WB);K(z9,f,RB);K(A9,f,NB);K(B9,uint,XB);K(C9,uint,YB);K(D9,uint,ZB);K(E9,uint,LC);i1
+h1(n3)K(0,c,OC);i1 h1(C3)K(1,c,PC);i1 h1(p1)K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);i1
 #endif
-q2 I0 W(0,c,L5);
+q2 I0 W(0,c,I5);
 #ifdef ENABLE_CLIPPING
 OPTIONALLY_FLAT W(1,d,O3);
 #endif
@@ -14,27 +14,27 @@ V2 W(4,N,D1);
 #endif
 i2
 #ifdef VERTEX
-Y3 Z3 L6(EC,n3,o3,C3,D3,p1,h0,B){L(B,o3,OC,c);L(B,D3,PC,c);L(v,h0,WB,f);L(v,h0,RB,f);L(v,h0,NB,f);L(v,h0,XB,uint);L(v,h0,YB,uint);L(v,h0,ZB,uint);L(v,h0,LC,uint);U(L5,c);
+Y3 Z3 I6(EC,n3,o3,C3,D3,p1,h0,A){L(A,o3,OC,c);L(A,D3,PC,c);L(r,h0,WB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,XB,uint);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,LC,uint);V(I5,c);
 #ifdef ENABLE_CLIPPING
-U(O3,d);
+V(O3,d);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-U(O0,f);
+V(O0,f);
 #endif
-U(K1,i);
+V(K1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-U(D1,N);
+V(D1,N);
 #endif
-c l0=P0(L1(WB),OC)+NB.xy;L5=PC;
+c l0=P0(L1(WB),OC)+NB.xy;I5=PC;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){O3=x8(YB,j.g6);}
+if(ENABLE_CLIPPING){O3=r8(YB,j.c6);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-O0=W7(L1(RB),NB.zw,l0 C5);
+O0=T7(L1(RB),NB.zw,l0 z5);
 #else
-Sc(L1(RB),NB.zw,l0 C5);
+Mc(L1(RB),NB.zw,l0 z5);
 #endif
 }
 #endif
@@ -43,13 +43,13 @@ f X=Q3(l0);
 X.y=-X.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-X.z=qa(LC);
+X.z=la(LC);
 #endif
 K1=unpackUnorm4x8(XB);
 #ifdef ENABLE_ADVANCED_BLEND
 D1=a2(ZB);
 #endif
-c0(L5);
+c0(I5);
 #ifdef ENABLE_CLIPPING
 c0(O3);
 #endif

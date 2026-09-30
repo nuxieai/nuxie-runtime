@@ -1,8 +1,8 @@
 #ifdef FRAGMENT
 #if(defined(FIXED_FUNCTION_COLOR_OUTPUT)&&!defined(ENABLE_CLIPPING))||defined(RENDER_MODE_CLOCKWISE_ATOMIC)
-#undef Gb
+#undef Bb
 #else
-#define Gb
+#define Bb
 #endif
 M1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
@@ -11,15 +11,15 @@ z0(G2,m0);
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
 k1(X2,i0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-z0(j6,p4);
+z0(f6,p4);
 #endif
-k1(M6,S0);
+k1(J6,S0);
 #else
 z0(X2,i0);
 #endif
 N1
 #ifdef DRAW_IMAGE_MESH
-I3 e3(h5,a4,GC);J3 i5 c4(Z5)j5 U3 V3
+I3 e3(g5,a4,GC);J3 h5 c4(W5)i5 U3 V3
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
 #ifdef DRAW_IMAGE_MESH
@@ -36,50 +36,50 @@ P1(HB)
 #endif
 {
 #ifdef FEATHER_ATLAS_BLIT
-r(X1,f);
+q(X1,f);
 #if defined(ENABLE_MODULATED_IMAGE)
-r(C2,R);
+q(C2,S);
 #endif
-r(F2,c);
+q(F2,c);
 #endif
 #ifdef ENABLE_CLIPPING
-r(O3,d);
+q(O3,d);
 #endif
 #ifdef ENABLE_CLIP_RECT
-r(O0,f);
+q(O0,f);
 #endif
 #if defined(FEATHER_ATLAS_BLIT)&&defined(ENABLE_ADVANCED_BLEND)
-r(g1,d);
+q(g1,d);
 #endif
 #ifdef DRAW_IMAGE_MESH
-r(L5,c);r(K1,i);
+q(I5,c);q(K1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-r(D1,N);
+q(D1,N);
 #endif
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-i k=O7(
+i k=L7(
 #ifdef ENABLE_MODULATED_IMAGE
 C2,
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
 g3(g1),
 #endif
-X1 Y2);d o=clamp(j2(ED,U9,F2,.0).x,J0(.0),J0(1.));
+X1 Y2);d o=clamp(j2(ED,R9,F2,.0).x,J0(.0),J0(1.));
 #endif
 #ifdef DRAW_IMAGE_MESH
-i k=D7(GC,Z5,L5,j.Kd);d o=1.;
+i k=A7(GC,W5,I5,j.Ed);d o=1.;
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d c5=max(m3(g5(O0)),J0(.0));o=min(c5,o);}
+if(ENABLE_CLIP_RECT){d a5=max(m3(f5(O0)),J0(.0));o=min(a5,o);}
 #endif
-#ifdef Gb
+#ifdef Bb
 z2;
 #endif
 #if defined(ENABLE_CLIPPING)
 if(ENABLE_CLIPPING&&O3!=.0){d z3;
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
-E Q0=unpackHalf2x16(a1(i0));d H6=Q0.y;z3=max(H6==O3?Q0.x:J0(.0),J0(.0));
+D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;z3=max(E6==O3?Q0.x:J0(.0),J0(.0));
 #else
 z3=K0(i0).x;
 #endif
@@ -99,9 +99,9 @@ N p3=D1;
 #endif
 if(ENABLE_ADVANCED_BLEND&&p3!=B4){
 #ifdef DRAW_IMAGE_MESH
-k.xyz=I6(k);
+k.xyz=F6(k);
 #endif
-k.xyz=Z4(k.xyz,O1,p3)*k.w;}
+k.xyz=Y4(k.xyz,O1,p3)*k.w;}
 #endif
 k*=o;
 #ifdef NEEDS_GAMMA_CORRECTION
@@ -118,7 +118,7 @@ h2(i0);h2(S0);
 #else
 A0(i0,E0(.0));
 #endif
-#ifdef Gb
+#ifdef Bb
 A2;
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT

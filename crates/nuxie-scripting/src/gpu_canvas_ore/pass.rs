@@ -1,7 +1,9 @@
 //! ScriptedGPURenderPass command dispatch from lua_gpu.cpp.
 use super::pipeline::{BindGroup, Pipeline};
 use super::*;
+use luaur_rt::FromLua;
 use nuxie_ore_metal::render_pass::RenderPassApi;
+use nuxie_ore_metal::script_guards::*;
 
 pub(super) struct Pass {
     pub pass: Option<Box<dyn RenderPassApi>>,
@@ -27,9 +29,7 @@ impl Pass {
     }
     fn require_pipeline(&self) -> Result<()> {
         if !self.pipeline_set {
-            return Err(Error::runtime(
-                "setPipeline must be called before draw/setVertexBuffer/setBindGroup",
-            ));
+            return Err(Error::runtime(kGuardSetPipelineBeforeDraw));
         }
         Ok(())
     }
@@ -49,13 +49,16 @@ impl UserData for Pass {
         });
         methods.add_method_mut(
             "setVertexBuffer",
-            |_, this, (slot, data): (u32, AnyUserData)| {
+            |lua, this, (slot, data): (Value, Value)| {
                 this.validate()?;
-                if slot > 7 {
-                    return Err(Error::runtime(format!(
-                        "setVertexBuffer: slot must be 0-7 (got {slot})"
+                let slot = u32::from_lua(slot, lua)?;
+                if slot >= kMaxVertexBufferSlots {
+                    return Err(Error::runtime(vertex_slot_range_message(
+                        kMaxVertexBufferSlots - 1,
+                        slot,
                     )));
                 }
+                let data = AnyUserData::from_lua(data, lua)?;
                 let buffer = data.borrow::<Buffer>()?;
                 this.pass().setVertexBuffer(slot, Some(&buffer.resource), 0);
                 Ok(())
@@ -119,21 +122,67 @@ impl UserData for Pass {
                 Ok(())
             },
         );
-        methods.add_method_mut("draw",|lua,this,(count,instances,first,first_instance):(u32,Value,Value,Value)| {
-            this.validate()?;this.require_pipeline()?;let first_instance=number_value(lua,first_instance,0.0)? as u32;
-            let context=context(lua)?;let ctx=context.borrow();
-            if first_instance>0 && ctx.featuresKnown() && !ctx.features().drawBaseInstance {return Err(Error::runtime(format!("draw: firstInstance={first_instance} requires the drawBaseInstance feature, which the active backend does not support")));}
-            drop(ctx);this.pass().draw(count,number_value(lua,instances,1.0)? as u32,number_value(lua,first,0.0)? as u32,first_instance);this.draw_call_count=this.draw_call_count.wrapping_add(1);Ok(())
-        });
-        methods.add_method_mut("drawIndexed",|lua,this,(count,instances,first,base,first_instance):(u32,Value,Value,Value,Value)| {
-            this.validate()?;this.require_pipeline()?;let base=number_value(lua,base,0.0)? as i32;let first_instance=number_value(lua,first_instance,0.0)? as u32;
-            let context=context(lua)?;let ctx=context.borrow();
-            if ctx.featuresKnown() && !ctx.features().drawBaseInstance {
-                if base!=0 {return Err(Error::runtime(format!("drawIndexed: baseVertex={base} requires the drawBaseInstance feature, which the active backend does not support")));}
-                if first_instance>0 {return Err(Error::runtime(format!("drawIndexed: firstInstance={first_instance} requires the drawBaseInstance feature, which the active backend does not support")));}
-            }
-            drop(ctx);this.pass().drawIndexed(count,number_value(lua,instances,1.0)? as u32,number_value(lua,first,0.0)? as u32,base,first_instance);this.draw_call_count=this.draw_call_count.wrapping_add(1);Ok(())
-        });
+        methods.add_method_mut(
+            "draw",
+            |lua, this, (count, instances, first, first_instance): (Value, Value, Value, Value)| {
+                this.validate()?;
+                this.require_pipeline()?;
+                let count = u32::from_lua(count, lua)?;
+                let instances = number_value(lua, instances, 1.0)? as u32;
+                let first = number_value(lua, first, 0.0)? as u32;
+                let first_instance = number_value(lua, first_instance, 0.0)? as u32;
+                let context = context(lua)?;
+                let ctx = context.borrow();
+                if first_instance > 0 && ctx.featuresKnown() && !ctx.features().drawBaseInstance {
+                    return Err(Error::runtime(first_instance_message(
+                        "draw",
+                        first_instance,
+                    )));
+                }
+                drop(ctx);
+                this.pass().draw(count, instances, first, first_instance);
+                this.draw_call_count = this.draw_call_count.wrapping_add(1);
+                Ok(())
+            },
+        );
+        methods.add_method_mut(
+            "drawIndexed",
+            |lua,
+             this,
+             (count, instances, first, base, first_instance): (
+                Value,
+                Value,
+                Value,
+                Value,
+                Value,
+            )| {
+                this.validate()?;
+                this.require_pipeline()?;
+                let count = u32::from_lua(count, lua)?;
+                let instances = number_value(lua, instances, 1.0)? as u32;
+                let first = number_value(lua, first, 0.0)? as u32;
+                let base = number_value(lua, base, 0.0)? as i32;
+                let first_instance = number_value(lua, first_instance, 0.0)? as u32;
+                let context = context(lua)?;
+                let ctx = context.borrow();
+                if ctx.featuresKnown() && !ctx.features().drawBaseInstance {
+                    if base != 0 {
+                        return Err(Error::runtime(base_vertex_message("drawIndexed", base)));
+                    }
+                    if first_instance > 0 {
+                        return Err(Error::runtime(first_instance_message(
+                            "drawIndexed",
+                            first_instance,
+                        )));
+                    }
+                }
+                drop(ctx);
+                this.pass()
+                    .drawIndexed(count, instances, first, base, first_instance);
+                this.draw_call_count = this.draw_call_count.wrapping_add(1);
+                Ok(())
+            },
+        );
         methods.add_method_mut("finish", |_, this, ()| {
             this.validate()?;
             this.pass().finish();

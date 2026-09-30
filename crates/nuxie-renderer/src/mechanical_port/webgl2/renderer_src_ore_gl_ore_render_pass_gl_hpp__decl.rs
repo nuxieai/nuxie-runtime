@@ -46,10 +46,10 @@ pub(crate) struct RenderPassGLState {
     pub(crate) m_viewportHeight: u32,
     pub(crate) m_maxSamplerSlot: u32,
     pub(crate) m_samplerBindingsDirty: bool,
-    pub(crate) m_maxAttribSlot: u32,
     pub(crate) m_usedSamplers: bool,
-    pub(crate) m_usedAttribs: bool,
+    pub(crate) m_enabledAttribs: u32,
     pub(crate) m_glIndexFormat: IndexFormat,
+    pub(crate) m_glIndexOffset: u32,
     pub(crate) m_glStencilRef: u32,
     pub(crate) m_glResolveCount: u32,
     pub(crate) m_glResolves: [GLResolveEntry; 4],
@@ -76,10 +76,10 @@ impl RenderPassGLState {
             m_viewportHeight: 0,
             m_maxSamplerSlot: 0,
             m_samplerBindingsDirty: false,
-            m_maxAttribSlot: 0,
             m_usedSamplers: false,
-            m_usedAttribs: false,
+            m_enabledAttribs: 0,
             m_glIndexFormat: IndexFormat::uint16,
+            m_glIndexOffset: 0,
             m_glStencilRef: 0,
             m_glResolveCount: 0,
             m_glResolves: [GLResolveEntry::default(); 4],
@@ -338,4 +338,4 @@ pub(crate) const SOURCE_PUBLIC_CALLABLE_COUNT: usize = 17;
 pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 19;
 pub(crate) const SOURCE_RESOLVE_FIELD_COUNT: usize = 5;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 1;
-const _: [(); 3699] = [(); PINNED_SOURCE.len()];
+const _: [(); 3832] = [(); PINNED_SOURCE.len()];

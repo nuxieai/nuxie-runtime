@@ -16,11 +16,18 @@ pub struct ScriptedInterpolator {
 
 impl Drop for ScriptedInterpolator {
     fn drop(&mut self) {
-        ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
+        self.dispose_script_inputs();
     }
 }
 
 impl ScriptedInterpolator {
+    /// This non-Component owns its ScriptInputs: they are not Artboard objects.
+    /// The existing flattened-owner adapter snapshots inputs, clears their
+    /// backlinks and the property collection, then retires only ScriptInputs.
+    pub fn dispose_script_inputs(&mut self) {
+        ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
+    }
+
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()
     }

@@ -10,7 +10,7 @@ use nuxie_runtime::source::{
     file::{File, RuntimeFileHandle},
     generated::{
         constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
-        core_registry::CoreRegistry,
+        core_registry::CoreRegistry, viewmodel::viewmodel_instance_base::ViewModelInstanceBase,
     },
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     text::{
@@ -19,6 +19,8 @@ use nuxie_runtime::source::{
     },
     viewmodel::{
         symbol_type::SymbolType, viewmodel_instance::ViewModelInstance,
+        viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_instance_list_item::ViewModelInstanceListItem,
         viewmodel_instance_number::ViewModelInstanceNumber,
         viewmodel_instance_string::ViewModelInstanceString,
         viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex,
@@ -136,6 +138,75 @@ fn component_list_case_01_direct_port_expected_red() {
     assert!(read::<ArtboardComponentList, _>(&f.list, |list| list.layout_node(9)).is_none());
     assert!(f.item_artboard(9).is_none());
     assert!(f.machine(9).is_none());
+}
+
+// tests/unit_tests/runtime/component_list_test.cpp at 836a74261a9e843f37ccb4a29a9d8567915d4598:
+// "Component List rows without an artboard".
+#[test]
+fn component_list_rows_without_an_artboard() {
+    let f = Fixture::new("component_list_1.riv");
+    assert!(!read::<ArtboardComponentList, _>(
+        &f.list,
+        ArtboardComponentList::virtualization_enabled
+    ));
+    let scrolls = f
+        .artboard
+        .with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>());
+    assert_eq!(scrolls.len(), 1);
+    let scroll = &scrolls[0];
+    f.advance();
+
+    // Keep the rows but replace their view models with fresh instances that
+    // have no bound artboard and no map rule pointing at a real artboard.
+    let buttons = property(&f.instance, "Buttons");
+    while read::<ViewModelInstanceList, _>(&buttons, |buttons| !buttons.list_items().is_empty()) {
+        write::<ViewModelInstanceList, _>(&buttons, |buttons| buttons.remove_item_at(0));
+    }
+    let orphan_view_model_id = f._file.with_file(File::view_model_count) as u32;
+    for _ in 0..3 {
+        let orphan = buttons
+            .insert_sibling(ViewModelInstance::default())
+            .expect("fresh orphan view model instance");
+        assert!(CoreRegistry::set_uint_handle(
+            &orphan,
+            ViewModelInstanceBase::VIEW_MODEL_ID_PROPERTY_KEY as i32,
+            orphan_view_model_id,
+        ));
+        let mut item = ViewModelInstanceListItem::default();
+        item.set_view_model_instance(Some(orphan));
+        let item = buttons.insert_sibling(item).expect("fresh list item");
+        write::<ViewModelInstanceList, _>(&buttons, |buttons| buttons.add_item(item));
+    }
+    f.advance();
+
+    assert_eq!(
+        read::<ArtboardComponentList, _>(&f.list, ArtboardComponentList::num_layout_nodes),
+        3
+    );
+    assert_eq!(
+        read::<ScrollConstraint, _>(scroll, ScrollConstraint::scroll_item_count),
+        3
+    );
+    for i in 0..3 {
+        assert!(f.item_artboard(i).is_none());
+        let bounds =
+            read::<ArtboardComponentList, _>(&f.list, |list| list.layout_bounds_for_node(i));
+        assert_eq!(bounds.width(), 0.0);
+        assert_eq!(bounds.height(), 0.0);
+    }
+
+    // Resolving a scroll index walks every row's layout bounds. No row is
+    // visible, so the intent stays pending and the offset does not move.
+    write::<ScrollConstraint, _>(scroll, |scroll| scroll.set_scroll_index(1.0));
+    f.advance();
+    assert_eq!(
+        read::<ScrollConstraint, _>(scroll, ScrollConstraint::offset_x),
+        0.0
+    );
+    assert_eq!(
+        read::<ScrollConstraint, _>(scroll, ScrollConstraint::offset_y),
+        0.0
+    );
 }
 #[test]
 fn component_list_case_02_direct_port_expected_red() {

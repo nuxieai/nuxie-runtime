@@ -87,12 +87,11 @@ pub trait VertexBehavior {
         self.mark_geometry_dirty();
     }
     fn deform(&mut self, world: &Mat2D, bone_transforms: &[f32]) {
-        let weight = self
-            .vertex()
-            .state
-            .weight
-            .clone()
-            .expect("a skin-deformed vertex has a Weight");
+        // Imported skinned vertices can lack a Weight too. Preserve their
+        // bind-space position instead of attempting to deform a missing weight.
+        let Some(weight) = self.vertex().state.weight.clone() else {
+            return;
+        };
         let position = Vec2D::new(self.vertex().base.x(), self.vertex().base.y());
         weight
             .with_mut(|object| {

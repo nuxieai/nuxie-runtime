@@ -247,7 +247,11 @@ impl RenderCanvas for EnsureOrderCanvas {
     fn is_backed(&self) -> bool {
         self.backed.get()
     }
-    fn begin_frame(&mut self, _: u32) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+    fn begin_frame_with_mode(
+        &mut self,
+        _: u32,
+        _mode: nuxie_render_api::RenderCanvasFrameMode,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         Err(RenderCanvasError::unsupported())
     }
 }

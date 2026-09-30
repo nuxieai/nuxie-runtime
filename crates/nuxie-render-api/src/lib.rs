@@ -2710,6 +2710,14 @@ pub trait RenderCanvasFrame: Renderer {
     fn finish(self: Box<Self>) -> Result<(), RenderCanvasError>;
 }
 
+/// Requested canvas-frame policy, mirroring `HostFrameSink::FrameMode`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RenderCanvasFrameMode {
+    pub msaa_sample_count: u32,
+    pub disable_raster_ordering: bool,
+    pub clockwise_fill_override: bool,
+}
+
 /// A texture-backed 2D canvas that is also exposed as a normal render image.
 ///
 /// Direct public-seam counterpart of pinned `gpu::RenderCanvas`: the image and
@@ -2728,6 +2736,14 @@ pub trait RenderCanvas: std::any::Any {
     fn begin_frame(
         &mut self,
         clear_color: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+        self.begin_frame_with_mode(clear_color, RenderCanvasFrameMode::default())
+    }
+    /// HostFrameSink::FrameMode, selected before any screen frame is begun.
+    fn begin_frame_with_mode(
+        &mut self,
+        clear_color: ColorInt,
+        mode: RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError>;
 }
 

@@ -348,9 +348,10 @@ impl RenderCanvas for Canvas {
     fn render_image(&self) -> Rc<dyn RenderImage> {
         self.image.clone()
     }
-    fn begin_frame(
+    fn begin_frame_with_mode(
         &mut self,
         _: nuxie_render_api::ColorInt,
+        _mode: nuxie_render_api::RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         Err(RenderCanvasError::new(
             "GPU recorder must not open an immediate canvas frame",

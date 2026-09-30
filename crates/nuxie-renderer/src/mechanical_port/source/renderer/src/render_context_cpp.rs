@@ -43,6 +43,10 @@
 // #include <limits>
 // #include <string_view>
 //
+// #if defined(__ANDROID__)
+// #include <android/log.h>
+// #endif
+//
 // #ifdef RIVE_DECODERS
 // #include "rive/decoders/bitmap_decoder.hpp"
 // #endif
@@ -447,7 +451,19 @@
 //     if (m_frameInterlockMode == gpu::InterlockMode::depthStencil &&
 //         m_frameDescriptor.msaaSampleCount == 0)
 //     {
-//         // Use 4x MSAA if msaaSampleCount wasn't already specified.
+//         // No other mode was supported. Say so once, since MSAA costs
+//         // differently and a host that wants it should ask for it.
+//         [[maybe_unused]] static const bool warned = [] {
+//             const char* msg = "rive: no interlock mode supports this frame, "
+//                               "drawing it in depthStencil with 4x MSAA\n";
+// #if defined(__ANDROID__)
+//             // stderr goes nowhere on Android.
+//             __android_log_print(ANDROID_LOG_WARN, "Rive", "%s", msg);
+// #else
+//             fprintf(stderr, "%s", msg);
+// #endif
+//             return true;
+//         }();
 //         m_frameDescriptor.msaaSampleCount = 4;
 //     }
 //     m_frameShaderFeaturesMask =
@@ -5259,6 +5275,40 @@ impl RenderContext {
         if self.m_frame_interlock_mode == gpu::InterlockMode::depthStencil
             && self.m_frame_descriptor.msaaSampleCount == 0
         {
+            // No other mode was supported. Say so once, since MSAA costs
+            // differently and a host that wants it should ask for it.
+            static WARNED: std::sync::Once = std::sync::Once::new();
+            WARNED.call_once(|| {
+                const MESSAGE: &str = concat!(
+                    "rive: no interlock mode supports this frame, ",
+                    "drawing it in depthStencil with 4x MSAA\n"
+                );
+                #[cfg(target_os = "android")]
+                {
+                    #[link(name = "log")]
+                    unsafe extern "C" {
+                        fn __android_log_print(
+                            priority: core::ffi::c_int,
+                            tag: *const core::ffi::c_char,
+                            format: *const core::ffi::c_char,
+                            ...
+                        ) -> core::ffi::c_int;
+                    }
+                    let message =
+                        std::ffi::CString::new(MESSAGE).expect("static interlock diagnostic");
+                    // SAFETY: all strings are NUL-terminated and live through
+                    // the call; the sole variadic argument matches %s.
+                    unsafe {
+                        __android_log_print(5, c"Rive".as_ptr(), c"%s".as_ptr(), message.as_ptr());
+                    }
+                }
+                #[cfg(not(target_os = "android"))]
+                {
+                    use std::io::Write;
+                    // Like fprintf, a failed diagnostic must not stop fallback.
+                    let _ = std::io::stderr().write_all(MESSAGE.as_bytes());
+                }
+            });
             self.m_frame_descriptor.msaaSampleCount = 4;
         }
         self.m_frame_shader_features_mask = gpu::ShaderFeaturesMaskFor(self.m_frame_interlock_mode);

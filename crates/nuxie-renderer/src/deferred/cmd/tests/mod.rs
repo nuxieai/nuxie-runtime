@@ -22,6 +22,17 @@ mod deferred_canvas_import_test;
         feature = "renderer-metal"
     )
 ))]
+mod deferred_canvas_mode_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
 mod deferred_flush_parity_test;
 mod deferred_measure_test;
 mod deferred_path_geometry_test;
@@ -167,9 +178,10 @@ impl RenderCanvas for FakeCanvas {
     fn render_image(&self) -> Rc<dyn RenderImage> {
         self.image.clone()
     }
-    fn begin_frame(
+    fn begin_frame_with_mode(
         &mut self,
         _clear: u32,
+        _mode: nuxie_render_api::RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         Err(RenderCanvasError::unsupported())
     }

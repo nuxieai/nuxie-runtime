@@ -315,9 +315,10 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
         Rc::from(NativeMetalRenderCanvas::render_image(self))
     }
 
-    fn begin_frame(
+    fn begin_frame_with_mode(
         &mut self,
         clear_color: ColorInt,
+        mode: nuxie_render_api::RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         let (width, height) = (self.width(), self.height());
         let (source, execution_guard) = match &self.inner {
@@ -345,6 +346,9 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
                 renderTargetWidth: width,
                 renderTargetHeight: height,
                 clearColor: clear_color,
+                msaaSampleCount: mode.msaa_sample_count,
+                disableRasterOrdering: mode.disable_raster_ordering,
+                clockwiseFillOverride: mode.clockwise_fill_override,
                 ..FrameDescriptor::default()
             };
             #[cfg(test)]

@@ -70,6 +70,29 @@ pub enum RenderMode {
     ClockwiseAtomic,
 }
 
+impl RenderMode {
+    pub fn canvas_frame_mode(self) -> nuxie_render_api::RenderCanvasFrameMode {
+        use nuxie_render_api::RenderCanvasFrameMode;
+        match self {
+            Self::RasterOrdering => RenderCanvasFrameMode::default(),
+            Self::Msaa => RenderCanvasFrameMode {
+                msaa_sample_count: 4,
+                ..Default::default()
+            },
+            Self::ClockwiseMsaa1 => RenderCanvasFrameMode {
+                msaa_sample_count: 1,
+                clockwise_fill_override: true,
+                ..Default::default()
+            },
+            Self::ClockwiseAtomic => RenderCanvasFrameMode {
+                disable_raster_ordering: true,
+                clockwise_fill_override: true,
+                ..Default::default()
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct BackendWorkMetrics {
     pub command_encoders: u64,

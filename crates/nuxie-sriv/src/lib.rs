@@ -63,6 +63,9 @@ pub enum OpKind {
     Additiveness = 36,
     DrawImageAdditive = 37,
     DrawImageMeshAdditive = 38,
+    MakeImageMeshInstances = 39,
+    SetImageMeshInstancesData = 40,
+    DrawImageMeshInstanced = 41,
 }
 
 impl OpKind {
@@ -105,6 +108,9 @@ impl OpKind {
             36 => Self::Additiveness,
             37 => Self::DrawImageAdditive,
             38 => Self::DrawImageMeshAdditive,
+            39 => Self::MakeImageMeshInstances,
+            40 => Self::SetImageMeshInstancesData,
+            41 => Self::DrawImageMeshInstanced,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -155,6 +161,9 @@ impl Display for OpKind {
             Self::Additiveness => "additiveness",
             Self::DrawImageAdditive => "drawImageAdditive",
             Self::DrawImageMeshAdditive => "drawImageMeshAdditive",
+            Self::MakeImageMeshInstances => "makeImageMeshInstances",
+            Self::SetImageMeshInstancesData => "setImageMeshInstancesData",
+            Self::DrawImageMeshInstanced => "drawImageMeshInstanced",
         })
     }
 }
@@ -502,6 +511,27 @@ fn parse_fields(
                 push_float(reader, fields, "additiveness")?;
             }
         }
+        OpKind::MakeImageMeshInstances => {
+            push_uint(reader, fields, "id")?;
+            push_uint(reader, fields, "count")?;
+        }
+        OpKind::SetImageMeshInstancesData => {
+            push_uint(reader, fields, "id")?;
+            let count = push_uint(reader, fields, "count")?;
+            for _ in 0..count {
+                // Match advancedMatch's twelve independent float comparisons.
+                for name in ["xx", "yx", "xy", "yy", "tx", "ty",
+                    "uv_translate_x", "uv_translate_y", "uv_scale_x", "uv_scale_y",
+                    "opacity", "additiveness"] {
+                    push_float(reader, fields, name)?;
+                }
+            }
+        }
+        OpKind::DrawImageMeshInstanced => {
+            for name in ["image_id", "positions_id", "uvs_id", "indices_id", "instances_id"] {
+                push_uint(reader, fields, name)?;
+            }
+        }
         OpKind::SetVertexBufferData | OpKind::SetIndexBufferData => {
             let id = push_uint(reader, fields, "id")?;
             let info = buffers.get(&id).copied().ok_or_else(|| {
@@ -759,6 +789,22 @@ mod tests {
 
     fn float(value: f32) -> [u8; 4] {
         value.to_bits().to_le_bytes()
+    }
+
+    #[test]
+    fn parses_and_compares_instanced_mesh_operations() {
+        let mut bytes = header();
+        bytes.extend([39, 7, 1, 40, 7, 1]);
+        for value in 0..12 { bytes.extend(float(value as f32)); }
+        bytes.extend([41, 1, 2, 3, 4, 7]);
+        let parsed = parse_sriv(&bytes).unwrap();
+        assert_eq!(parsed.operations.len(), 3);
+        assert_eq!(parsed.operations[1].fields.len(), 14);
+        assert_eq!(parsed.operations[2].kind, OpKind::DrawImageMeshInstanced);
+        assert!(compare_sriv(&parsed, &parsed).is_ok());
+        let mut changed = parsed.clone();
+        changed.operations[1].fields[13].value = Value::Float(0.0f32.to_bits());
+        assert_eq!(compare_sriv(&parsed, &changed).unwrap_err().field, Some("additiveness"));
     }
 
     #[test]

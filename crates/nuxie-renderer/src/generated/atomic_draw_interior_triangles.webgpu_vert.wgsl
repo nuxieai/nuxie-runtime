@@ -1,21 +1,21 @@
-struct Hg {
+struct Ig {
     g2_: array<vec4<u32>>,
 }
 
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -23,10 +23,10 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct gl_PerVertex {
@@ -44,7 +44,7 @@ struct lf {
     g2_: array<vec4<f32>>,
 }
 
-struct Ig {
+struct Jg {
     g2_: array<vec4<u32>>,
 }
 
@@ -55,7 +55,7 @@ struct VertexOutput {
 }
 
 @group(0) @binding(2)
-var<storage> OB: Hg;
+var<storage> OB: Ig;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> JB_1: vec3<f32>;
@@ -65,17 +65,17 @@ var<private> D0_: u32;
 var<uniform> j: TB;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
-var JC: texture_2d<u32>;
+var KC: texture_2d<u32>;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(0) @binding(3)
-var<storage> CD: kf;
+var<storage> DD: kf;
 @group(0) @binding(4)
 var<storage> PB: lf;
 @group(0) @binding(5)
-var<storage> HD: Ig;
+var<storage> ID: Jg;
 @group(3) @binding(9)
-var ca: sampler;
+var da: sampler;
 
 fn main_1() {
     let _e23 = JB_1;

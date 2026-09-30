@@ -603,6 +603,67 @@ impl RenderImage for DeferredRenderImage {
     }
 }
 
+pub struct DeferredImageMeshInstances {
+    pub resource: VersionedDeferredResource,
+    storage: ImageMeshInstancesStorage,
+}
+impl DeferredImageMeshInstances {
+    pub fn new(base: DeferredResourceBase, count: usize) -> Self {
+        Self {
+            resource: VersionedDeferredResource::new(base),
+            storage: ImageMeshInstancesStorage::new(count),
+        }
+    }
+}
+impl ImageMeshInstances for DeferredImageMeshInstances {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn instance_data(&self) -> &[ImageMeshInstanceData] {
+        self.storage.instance_data()
+    }
+    fn edit(&mut self, count: Option<usize>) -> &mut [ImageMeshInstanceData] {
+        self.storage.edit(count)
+    }
+    fn edit_count(&self) -> usize {
+        self.storage.edit_count()
+    }
+    fn is_editing(&self) -> bool {
+        self.storage.is_editing()
+    }
+    fn end_edit(&mut self) {
+        self.storage.end_edit();
+        self.resource.bump();
+        let data = self.storage.instance_data();
+        // Field-wise native float encoding preserves the C++ POD bytes without
+        // borrowing potentially unaligned blob memory as Rust structs.
+        let mut bytes = Vec::with_capacity(data.len() * 48);
+        for instance in data {
+            for value in instance
+                .transform
+                .0
+                .into_iter()
+                .chain(instance.uv_translate)
+                .chain(instance.uv_scale)
+                .chain([instance.opacity, instance.additiveness])
+            {
+                value.encode(&mut bytes);
+            }
+        }
+        let commands = self.resource.base.commands();
+        let mut commands = commands.lock().unwrap();
+        let blob_offset = commands.append_blob(&bytes);
+        commands.append(
+            RenderCmd::ImageMeshInstancesData,
+            &ImageMeshInstancesDataPod {
+                blob_offset,
+                id: self.resource.base.id,
+                count: data.len() as u32,
+            },
+        );
+    }
+}
+
 pub struct DeferredRenderBuffer {
     pub resource: VersionedDeferredResource,
     pub buffer_type: RenderBufferType,

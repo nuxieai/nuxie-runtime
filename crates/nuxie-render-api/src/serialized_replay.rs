@@ -60,6 +60,7 @@ pub fn replay_serialized_commands(
     let mut shaders: HashMap<u64, Box<dyn RenderShader>> = HashMap::new();
     let mut images: HashMap<u64, Option<Rc<dyn RenderImage>>> = HashMap::new();
     let mut buffers: HashMap<u64, Box<dyn RenderBuffer>> = HashMap::new();
+    let mut mesh_instances: HashMap<u64, ImageMeshInstancesHandle> = HashMap::new();
     let mut canvas_sizes = HashMap::new();
     let mut dropped_content = NullFactory::new().make_renderer();
     let mut active = ReplayTarget::Screen;
@@ -310,17 +311,17 @@ pub fn replay_serialized_commands(
                     let pos = buffers.get(&pos).map(|value| value.as_ref());
                     let uv = buffers.get(&uv).map(|value| value.as_ref());
                     let idx = buffers.get(&idx).map(|value| value.as_ref());
-                    let vertices = pos.map_or(0, |value| (value.size_in_bytes() / 8) as u32);
-                    let indices = idx.map_or(0, |value| (value.size_in_bytes() / 2) as u32);
-                    if let Some(image) = image {
+                    if let (Some(image), Some(pos), Some(uv), Some(idx)) = (image, pos, uv, idx) {
+                        let vertices = (pos.size_in_bytes() / 8) as u32;
+                        let indices = (idx.size_in_bytes() / 2) as u32;
                         active
                             .renderer(renderer, &mut dropped_content)
                             .draw_image_mesh_with_additiveness(
                                 Some(image),
                                 ImageSampler::LINEAR_CLAMP,
-                                pos,
-                                uv,
-                                idx,
+                                Some(pos),
+                                Some(uv),
+                                Some(idx),
                                 vertices,
                                 indices,
                                 mode,
@@ -328,6 +329,48 @@ pub fn replay_serialized_commands(
                                 additiveness,
                             );
                     }
+                }
+            }
+            MAKE_IMAGE_MESH_INSTANCES => {
+                let id = reader.read_var_uint();
+                let count = reader.read_var_uint() as usize;
+                mesh_instances.insert(id, factory.make_image_mesh_instances(count));
+            }
+            SET_IMAGE_MESH_INSTANCES_DATA => {
+                let id = reader.read_var_uint();
+                let count = reader.read_var_uint() as usize;
+                let mut instances = mesh_instances.get(&id).map(|value| value.borrow_mut());
+                let dst = instances.as_mut().map(|value| value.edit(Some(count)));
+                let mut dst = dst;
+                for i in 0..count {
+                    let instance = ImageMeshInstanceData {
+                        transform: Mat2D(std::array::from_fn(|_| reader.read_float32())),
+                        uv_translate: std::array::from_fn(|_| reader.read_float32()),
+                        uv_scale: std::array::from_fn(|_| reader.read_float32()),
+                        opacity: reader.read_float32(),
+                        additiveness: reader.read_float32(),
+                    };
+                    if let Some(slot) = dst.as_mut().and_then(|dst| dst.get_mut(i)) {
+                        *slot = instance;
+                    }
+                }
+                if let Some(instances) = instances.as_mut() { instances.end_edit(); }
+            }
+            DRAW_IMAGE_MESH_INSTANCED => {
+                let image = images.get(&reader.read_var_uint()).and_then(|value| value.as_deref());
+                let pos = buffers.get(&reader.read_var_uint());
+                let uv = buffers.get(&reader.read_var_uint());
+                let idx = buffers.get(&reader.read_var_uint());
+                let instances = mesh_instances.get(&reader.read_var_uint());
+                if let (Some(image), Some(pos), Some(uv), Some(idx), Some(instances)) =
+                    (image, pos, uv, idx, instances)
+                {
+                    active.renderer(renderer, &mut dropped_content).draw_image_mesh_instanced(
+                        Some(image), ImageSampler::LINEAR_CLAMP,
+                        Some(pos.as_ref()), Some(uv.as_ref()), Some(idx.as_ref()),
+                        (pos.size_in_bytes() / 8) as u32,
+                        (idx.size_in_bytes() / 2) as u32, Some(instances),
+                    );
                 }
             }
             MAKE_RENDER_CANVAS => {

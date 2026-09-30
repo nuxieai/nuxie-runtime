@@ -311,7 +311,10 @@ use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalRel
 use nuxie_render_api::{
     Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D,
 };
-pub use nuxie_render_api::{StrokeParams, StrokePosition};
+pub use nuxie_render_api::{
+    ImageMeshInstanceData, ImageMeshInstances, ImageMeshInstancesHandle,
+    ImageMeshInstancesStorage, StrokeParams, StrokePosition,
+};
 
 pub type Alignment = Vec2D;
 
@@ -1090,6 +1093,39 @@ pub unsafe trait RenderPathContract: Sized {
 pub struct Renderer;
 
 pub trait RendererContract {
+    unsafe fn drawImageMeshInstanced(
+        &mut self,
+        image: *const RenderImage,
+        sampler: ImageSampler,
+        vertices: rcp<RenderBuffer>,
+        uv: rcp<RenderBuffer>,
+        indices: rcp<RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        let Some(instances) = instances else { return };
+        let instances = instances.borrow();
+        for instance in instances.instance_data() {
+            self.save();
+            self.transform(&Mat2D(instance.transform.0));
+            unsafe {
+                self.drawImageMeshWithAdditiveness(
+                    image,
+                    sampler,
+                    rcp::copy_ctor(&vertices),
+                    rcp::copy_ctor(&uv),
+                    rcp::copy_ctor(&indices),
+                    vertex_count,
+                    index_count,
+                    BlendMode::SrcOver,
+                    instance.opacity,
+                    instance.additiveness,
+                )
+            };
+            self.restore();
+        }
+    }
     // virtual ~Renderer() {}
     // virtual void save() = 0;
     fn save(&mut self);

@@ -12,6 +12,8 @@ pub enum RenderCmd {
     DecodeImage,
     MakeBuffer,
     BufferData,
+    MakeImageMeshInstances,
+    ImageMeshInstancesData,
     DestroyResource,
     PathRewind,
     PathFillRule,
@@ -37,6 +39,7 @@ pub enum RenderCmd {
     ClipStroke,
     DrawImage,
     DrawImageMesh,
+    DrawImageMeshInstanced,
     ModulateOpacity,
     ModulateColor,
     CanvasContentBegin,
@@ -45,7 +48,7 @@ pub enum RenderCmd {
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 38] = [
+        const COMMANDS: [RenderCmd; 41] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -54,6 +57,8 @@ impl RenderCmd {
             RenderCmd::DecodeImage,
             RenderCmd::MakeBuffer,
             RenderCmd::BufferData,
+            RenderCmd::MakeImageMeshInstances,
+            RenderCmd::ImageMeshInstancesData,
             RenderCmd::DestroyResource,
             RenderCmd::PathRewind,
             RenderCmd::PathFillRule,
@@ -79,6 +84,7 @@ impl RenderCmd {
             RenderCmd::ClipStroke,
             RenderCmd::DrawImage,
             RenderCmd::DrawImageMesh,
+            RenderCmd::DrawImageMeshInstanced,
             RenderCmd::ModulateOpacity,
             RenderCmd::ModulateColor,
             RenderCmd::CanvasContentBegin,
@@ -96,6 +102,7 @@ pub enum ResourceKind {
     Shader,
     Image,
     Buffer,
+    ImageMeshInstances,
 }
 
 wire_pod!(ResIdPod { id: u32 });
@@ -269,6 +276,32 @@ wire_pod!(DrawImageMeshPod {
     opacity: f32,
     additiveness: f32
 });
+wire_pod!(DrawImageMeshInstancedPod {
+    image: u32,
+    vertices: u32,
+    uv_coords: u32,
+    indices: u32,
+    vertex_version: u32,
+    uv_version: u32,
+    index_version: u32,
+    vertex_count: u32,
+    index_count: u32,
+    instances: u32,
+    instances_version: u32,
+    wrap_x: u8,
+    wrap_y: u8,
+    filter: u8
+});
+wire_pod!(MakeImageMeshInstancesPod {
+    id: u32,
+    generation: u32,
+    count: u32
+});
+wire_pod!(ImageMeshInstancesDataPod {
+    blob_offset: u64,
+    id: u32,
+    count: u32
+});
 wire_pod!(OpacityPod { opacity: f32 });
 wire_pod!(ModulateColorPod {
     color: u32,
@@ -288,6 +321,8 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::DecodeImage => DecodeImagePod::SIZE,
         RenderCmd::MakeBuffer => MakeBufferPod::SIZE,
         RenderCmd::BufferData => BufferDataPod::SIZE,
+        RenderCmd::MakeImageMeshInstances => MakeImageMeshInstancesPod::SIZE,
+        RenderCmd::ImageMeshInstancesData => ImageMeshInstancesDataPod::SIZE,
         RenderCmd::DestroyResource => DestroyResourcePod::SIZE,
         RenderCmd::PathRewind | RenderCmd::PaintInvalidateStroke | RenderCmd::CanvasContentEnd => {
             ResIdPod::SIZE
@@ -313,6 +348,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::ClipStroke => ClipStrokePod::SIZE,
         RenderCmd::DrawImage => DrawImagePod::SIZE,
         RenderCmd::DrawImageMesh => DrawImageMeshPod::SIZE,
+        RenderCmd::DrawImageMeshInstanced => DrawImageMeshInstancedPod::SIZE,
         RenderCmd::ModulateOpacity => OpacityPod::SIZE,
         RenderCmd::ModulateColor => ModulateColorPod::SIZE,
         RenderCmd::CanvasContentBegin => CanvasContentPod::SIZE,

@@ -2199,6 +2199,7 @@ impl GpuCanvasBytecodeProgram {
             "drawPath",
             "drawImage",
             "drawImageMesh",
+            "drawImageMeshInstanced",
         ] {
             renderer.set(method, vm.lua().create_function(|_, _: MultiValue| Ok(()))?)?;
         }

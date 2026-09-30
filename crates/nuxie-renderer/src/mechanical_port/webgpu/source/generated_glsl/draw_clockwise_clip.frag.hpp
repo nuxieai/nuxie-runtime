@@ -12,21 +12,21 @@ z0(G2,m0);
 #endif
 k1(X2,i0);
 #ifndef Q
-Ya(f6,p4);
+Za(f6,p4);
 #endif
-k1(J6,S0);N1 P1(HB){q(Y1,D);d m1=-Y1.x;
+k1(J6,S0);N1 P1(HB){r(Y1,D);d m1=-Y1.x;
 #ifdef DB
-q(j1,d);d y0=j1;
+r(j1,d);d y0=j1;
 #else
-q(O,B2);d y0=O.x;
+r(O,B2);d y0=O.x;
 #endif
 z2;D Q0;d M5,z3;
 #if defined(DB)&&defined(CC)
 if(CC){z3=y0;}else
 #endif
 {Q0=unpackHalf2x16(a1(i0));M5=Q0.y;d W4=M5==m1?Q0.x:J0(.0);z3=W4+y0;}
-#ifdef YC
-d K5=Y1.y;if(YC&&K5!=.0){d w4=.0;
+#ifdef ZC
+d K5=Y1.y;if(ZC&&K5!=.0){d w4=.0;
 #if defined(DB)&&defined(CC)
 if(CC){Q0=unpackHalf2x16(a1(i0));M5=Q0.y;}
 #endif

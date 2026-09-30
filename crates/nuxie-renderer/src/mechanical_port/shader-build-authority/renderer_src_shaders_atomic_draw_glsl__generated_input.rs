@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1988fdd490cc7a0b88992bd7bc9b27f7c567ba62";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "44a730ff51d45fcfb679eca3b8de48cad4a0559e11d8d30b46de5156e4651451";
+pub const PINNED_SOURCE_SHA256: &str = "52c0304be74b8776c20f73d94d7925b547182712ae0f7a0fbef468905c55d275";
 pub const OWNERSHIP_UNIT: &str = "shader:source:atomic_draw";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1190;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 41436;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1193;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 41656;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_atomic_draw_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

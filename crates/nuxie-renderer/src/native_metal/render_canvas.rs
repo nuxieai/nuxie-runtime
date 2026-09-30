@@ -466,6 +466,29 @@ impl Renderer for NativeMetalRenderCanvasFrame {
         );
     }
 
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        self.renderer.draw_image_mesh_instanced(
+            image,
+            sampler,
+            vertices,
+            uv_coords,
+            indices,
+            vertex_count,
+            index_count,
+            instances,
+        );
+    }
+
     fn draw_image_mesh_with_additiveness(
         &mut self,
         image: Option<&dyn RenderImage>,

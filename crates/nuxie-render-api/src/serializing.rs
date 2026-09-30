@@ -6,6 +6,7 @@ use super::{
 };
 use crate::{
     DeferredCanvasHost, DeferredCanvasHostHandle, PersistentFactoryContext, RenderCanvasHandle,
+    ImageMeshInstanceData, ImageMeshInstances, ImageMeshInstancesHandle, ImageMeshInstancesStorage,
 };
 use std::any::Any;
 use std::cell::RefCell;
@@ -56,6 +57,7 @@ pub struct SerializingFactory {
     next_path_id: u64,
     next_buffer_id: u64,
     next_shader_id: u64,
+    next_image_mesh_instances_id: u64,
 }
 
 #[derive(Default)]
@@ -140,6 +142,7 @@ impl SerializingFactory {
             next_path_id: 0,
             next_buffer_id: 0,
             next_shader_id: 0,
+            next_image_mesh_instances_id: 0,
         }
     }
 
@@ -230,6 +233,21 @@ impl DeferredCanvasHost for SerializingFactory {
 }
 
 impl Factory for SerializingFactory {
+    fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
+        let id = self.next_image_mesh_instances_id;
+        self.next_image_mesh_instances_id += 1;
+        {
+            let mut writer = self.writer.borrow_mut();
+            writer.varuint(MAKE_IMAGE_MESH_INSTANCES);
+            writer.varuint(id);
+            writer.varuint(count as u64);
+        }
+        Rc::new(RefCell::new(SerializingImageMeshInstances {
+            storage: ImageMeshInstancesStorage::new(count),
+            writer: self.writer.clone(),
+            id,
+        }))
+    }
     fn render_context(&mut self) -> Option<PersistentFactoryContext> {
         self.canvases.borrow().bitmap_cache_context.clone()
     }
@@ -693,6 +711,37 @@ impl RenderPath for SerializingRenderPath {
     }
 }
 
+struct SerializingImageMeshInstances {
+    storage: ImageMeshInstancesStorage,
+    writer: Rc<RefCell<Writer>>,
+    id: u64,
+}
+
+impl ImageMeshInstances for SerializingImageMeshInstances {
+    fn as_any(&self) -> &dyn Any { self }
+    fn instance_data(&self) -> &[ImageMeshInstanceData] { self.storage.instance_data() }
+    fn edit(&mut self, count: Option<usize>) -> &mut [ImageMeshInstanceData] {
+        self.storage.edit(count)
+    }
+    fn end_edit(&mut self) {
+        self.storage.end_edit();
+        let data = self.storage.instance_data();
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(SET_IMAGE_MESH_INSTANCES_DATA);
+        writer.varuint(self.id);
+        writer.varuint(data.len() as u64);
+        for instance in data {
+            for value in instance.transform.0 { writer.float(value); }
+            for value in instance.uv_translate { writer.float(value); }
+            for value in instance.uv_scale { writer.float(value); }
+            writer.float(instance.opacity);
+            writer.float(instance.additiveness);
+        }
+    }
+    fn edit_count(&self) -> usize { self.storage.edit_count() }
+    fn is_editing(&self) -> bool { self.storage.is_editing() }
+}
+
 struct SerializingRenderBuffer {
     writer: Rc<RefCell<Writer>>,
     id: u64,
@@ -754,6 +803,29 @@ pub struct SerializingRenderer {
 }
 
 impl Renderer for SerializingRenderer {
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        _vertex_count: u32,
+        _index_count: u32,
+        instances: Option<&ImageMeshInstancesHandle>,
+    ) {
+        let id = image_id(&self.canvases.borrow(), image.expect("non-null serialized image"));
+        let instances = instances.expect("non-null serialized instances").borrow();
+        let instances = instances.as_any().downcast_ref::<SerializingImageMeshInstances>()
+            .expect("SerializingFactory requires SerializingImageMeshInstances");
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(DRAW_IMAGE_MESH_INSTANCED);
+        writer.varuint(id);
+        for buffer in [vertices, uv_coords, indices] {
+            writer.varuint(serializing_buffer(buffer).id);
+        }
+        writer.varuint(instances.id);
+    }
     fn save(&mut self) {
         self.writer.borrow_mut().varuint(SAVE);
     }

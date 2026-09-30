@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_image_mesh.vert.
  *
- * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
+ * Upstream source revision: 4921ab8169d2d8bfc4d2d25761b99689bc85a72d
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_image_mesh.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "4f11d1133504ee14f7bb75830f491223d874aedc2ca3d539395a85386d0d3019";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 132;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 4185;
+    "a657670a0b00b3dded6c4250eb501da2c51739b3cada654cbde90d56d037cee2";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 135;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 4405;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_IMAGE_MESH_VERT_SOURCE: &str = r###"/*
@@ -41,6 +41,7 @@ ATTR(IMAGE_MODULATED_COLOR_ATTRIB_IDX, uint, @a_imageDrawModulatedColor);
 ATTR(IMAGE_CLIP_ID_ATTRIB_IDX, uint, @a_imageDrawClipID);
 ATTR(IMAGE_BLEND_MODE_ATTRIB_IDX, uint, @a_imageDrawBlendMode);
 ATTR(IMAGE_ZINDEX_ATTRIB_IDX, uint, @a_imageDrawZIndex);
+ATTR(IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX, float4, @a_imageMeshUVTransform);
 ATTR_BLOCK_END
 #endif
 
@@ -83,6 +84,7 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawClipID, uint);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawBlendMode, uint);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawZIndex, uint);
+    ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageMeshUVTransform, float4);
 
     VARYING_INIT(v_imageTexCoord, float2);
 #ifdef @ENABLE_CLIPPING
@@ -99,7 +101,8 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
     float2 vertexPosition =
         MUL(make_float2x2(@a_imageDrawViewMatrix), @a_position) +
         @a_imageDrawTranslates.xy;
-    v_imageTexCoord = @a_texCoord;
+    v_imageTexCoord =
+        @a_texCoord * @a_imageMeshUVTransform.zw + @a_imageMeshUVTransform.xy;
 #ifdef @ENABLE_CLIPPING
     if (@ENABLE_CLIPPING)
     {

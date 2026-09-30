@@ -5,13 +5,13 @@ z0(G2,m0);
 #endif
 k1(X2,i0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-Ya(f6,p4);
+Za(f6,p4);
 #endif
-k1(J6,S0);N1 P1(HB){q(Y1,D);d m1=-Y1.x;
+k1(J6,S0);N1 P1(HB){r(Y1,D);d m1=-Y1.x;
 #ifdef DRAW_INTERIOR_TRIANGLES
-q(j1,d);d y0=j1;
+r(j1,d);d y0=j1;
 #else
-q(O,B2);d y0=O.x;
+r(O,B2);d y0=O.x;
 #endif
 z2;D Q0;d M5,z3;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)

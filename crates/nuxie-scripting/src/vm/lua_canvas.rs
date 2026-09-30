@@ -174,6 +174,15 @@ impl DeferredCanvasFrame {
 }
 
 impl Renderer for DeferredCanvasFrame {
+    fn draw_image_mesh_instanced(
+        &mut self, image: Option<&dyn RenderImage>, sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>, uv: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>, vertex_count: u32, index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        self.target().draw_image_mesh_instanced(image, sampler, vertices, uv, indices,
+            vertex_count, index_count, instances);
+    }
     fn save(&mut self) {
         self.target().save();
     }

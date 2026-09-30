@@ -1494,6 +1494,101 @@ pub trait RenderBuffer: Any {
     fn unmap(&mut self);
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ImageMeshInstanceData {
+    pub transform: Mat2D,
+    pub uv_translate: [f32; 2],
+    pub uv_scale: [f32; 2],
+    pub opacity: f32,
+    pub additiveness: f32,
+}
+impl Default for ImageMeshInstanceData {
+    fn default() -> Self {
+        Self {
+            transform: Mat2D::IDENTITY,
+            uv_translate: [0.0; 2],
+            uv_scale: [1.0; 2],
+            opacity: 1.0,
+            additiveness: 0.0,
+        }
+    }
+}
+
+pub type ImageMeshInstancesHandle = Rc<RefCell<dyn ImageMeshInstances>>;
+
+pub trait ImageMeshInstances: Any {
+    fn as_any(&self) -> &dyn Any;
+    fn instance_data(&self) -> &[ImageMeshInstanceData];
+    fn count(&self) -> usize {
+        self.instance_data().len()
+    }
+    fn edit(&mut self, count: Option<usize>) -> &mut [ImageMeshInstanceData];
+    fn end_edit(&mut self);
+    fn edit_count(&self) -> usize;
+    fn is_editing(&self) -> bool;
+}
+
+/// Storage shared by the ordinary, deferred and serializing source owners.
+pub struct ImageMeshInstancesStorage {
+    data: Vec<ImageMeshInstanceData>,
+    edit_count: usize,
+    end_edit_count: usize,
+}
+impl ImageMeshInstancesStorage {
+    pub fn new(count: usize) -> Self {
+        Self {
+            data: vec![ImageMeshInstanceData::default(); count],
+            edit_count: 0,
+            end_edit_count: 0,
+        }
+    }
+    pub fn instance_data(&self) -> &[ImageMeshInstanceData] {
+        &self.data
+    }
+    pub fn count(&self) -> usize {
+        self.data.len()
+    }
+    pub fn edit_count(&self) -> usize {
+        self.edit_count
+    }
+    pub fn is_editing(&self) -> bool {
+        self.edit_count != self.end_edit_count
+    }
+    pub fn edit(&mut self, count: Option<usize>) -> &mut [ImageMeshInstanceData] {
+        if let Some(count) = count {
+            self.data.resize(count, ImageMeshInstanceData::default());
+        }
+        debug_assert_eq!(self.edit_count, self.end_edit_count);
+        self.edit_count = self.edit_count.wrapping_add(1);
+        &mut self.data
+    }
+    pub fn end_edit(&mut self) {
+        debug_assert_eq!(self.end_edit_count.wrapping_add(1), self.edit_count);
+        self.end_edit_count = self.end_edit_count.wrapping_add(1);
+    }
+}
+impl ImageMeshInstances for ImageMeshInstancesStorage {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn instance_data(&self) -> &[ImageMeshInstanceData] {
+        self.instance_data()
+    }
+    fn edit(&mut self, count: Option<usize>) -> &mut [ImageMeshInstanceData] {
+        self.edit(count)
+    }
+    fn end_edit(&mut self) {
+        self.end_edit()
+    }
+    fn edit_count(&self) -> usize {
+        self.edit_count()
+    }
+    fn is_editing(&self) -> bool {
+        self.is_editing()
+    }
+}
+
 pub trait RenderShader: Any {
     fn as_any(&self) -> &dyn Any;
     /// Retain this shader occurrence, as upstream `ref_rcp` does.
@@ -2595,6 +2690,24 @@ pub trait RenderPath: Any {
 }
 
 pub trait Renderer {
+    /// Source default for non-Rive renderers; UV transforms are intentionally
+    /// unsupported here, exactly as in upstream's default implementation.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_image_mesh_instanced(
+        &mut self, image: Option<&dyn RenderImage>, sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>, uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>, vertex_count: u32, index_count: u32,
+        instances: Option<&ImageMeshInstancesHandle>,
+    ) {
+        let Some(instances) = instances else { return };
+        let instances = instances.borrow();
+        for instance in instances.instance_data() {
+            self.save();
+            self.transform(instance.transform);
+            self.draw_image_mesh_with_additiveness(image, sampler, vertices, uv_coords, indices, vertex_count, index_count, BlendMode::SrcOver, instance.opacity, instance.additiveness);
+            self.restore();
+        }
+    }
     fn save(&mut self);
     fn restore(&mut self);
     fn transform(&mut self, transform: Mat2D);
@@ -2851,6 +2964,9 @@ impl PersistentFactoryContext {
 }
 
 pub trait Factory {
+    fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
+        Rc::new(RefCell::new(ImageMeshInstancesStorage::new(count)))
+    }
     /// Return the stable owned context used by scripting VMs, when this
     /// factory is a [`PersistentFactory`] proxy.
     fn persistent_context(&self) -> Option<PersistentFactoryContext> {
@@ -3082,6 +3198,9 @@ pub trait Factory {
 // the surrounding script callback. That callback can enter an artboard which
 // retains this same factory identity without manufacturing an aliasing &mut.
 impl Factory for PersistentFactoryContext {
+    fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
+        self.with_factory(|factory| factory.make_image_mesh_instances(count))
+    }
     fn persistent_context(&self) -> Option<PersistentFactoryContext> {
         Some(self.clone())
     }
@@ -3225,6 +3344,9 @@ impl Factory for PersistentFactoryContext {
 }
 
 impl<F: Factory + 'static> Factory for PersistentFactory<F> {
+    fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
+        self.borrow_mut().make_image_mesh_instances(count)
+    }
     fn persistent_context(&self) -> Option<PersistentFactoryContext> {
         let identity = Rc::as_ptr(&self.access).cast::<()>();
         let access: Rc<dyn PersistentFactoryAccess> = self.access.clone();
@@ -3420,6 +3542,16 @@ impl RecordingStream {
 
 #[derive(Debug, Clone)]
 enum SemanticRecordingCommand {
+    DrawImageMeshInstanced {
+        image: Option<RecordingImageSnapshot>,
+        sampler: ImageSampler,
+        vertices: Option<RecordingBufferSnapshot>,
+        uv_coords: Option<RecordingBufferSnapshot>,
+        indices: Option<RecordingBufferSnapshot>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Vec<ImageMeshInstanceData>,
+    },
     Line(String),
     DrawPath {
         path: RecordingPathSnapshot,
@@ -4320,6 +4452,11 @@ impl RenderBuffer for NullRenderBuffer {
 }
 
 impl Renderer for NullRenderer {
+    fn draw_image_mesh_instanced(
+        &mut self, _: Option<&dyn RenderImage>, _: ImageSampler,
+        _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>,
+        _: u32, _: u32, _: Option<&ImageMeshInstancesHandle>,
+    ) {}
     fn save(&mut self) {}
 
     fn restore(&mut self) {}
@@ -4663,6 +4800,32 @@ impl RenderBuffer for RecordingRenderBuffer {
 }
 
 impl Renderer for RecordingRenderer {
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&ImageMeshInstancesHandle>,
+    ) {
+        let instances = instances.map(|value| value.borrow().instance_data().to_vec())
+            .unwrap_or_default();
+        let mut stream = self.stream.borrow_mut();
+        stream.line(format!(
+            "drawImageMeshInstanced image={} sampler={} vertices={} uvs={} indices={} vertexCount={} indexCount={} instances={}",
+            image_id(image), sampler_to_string(sampler), buffer_id(vertices),
+            buffer_id(uv_coords), buffer_id(indices), vertex_count, index_count,
+            mesh_instances_to_string(&instances),
+        ));
+        stream.semantic(SemanticRecordingCommand::DrawImageMeshInstanced {
+            image: image_snapshot(image), sampler,
+            vertices: buffer_snapshot(vertices), uv_coords: buffer_snapshot(uv_coords),
+            indices: buffer_snapshot(indices), vertex_count, index_count, instances,
+        });
+    }
     fn save(&mut self) {
         self.stream.borrow_mut().semantic_line("save");
     }
@@ -4853,6 +5016,22 @@ fn canonicalize_recording_commands(commands: &[SemanticRecordingCommand]) -> Str
 
     for command in commands {
         match command {
+            SemanticRecordingCommand::DrawImageMeshInstanced {
+                image, sampler, vertices, uv_coords, indices, vertex_count, index_count, instances,
+            } => {
+                canonical.push_str("drawImageMeshInstanced image=");
+                write_canonical_image(&mut canonical, image.as_ref(), &mut ids.images);
+                canonical.push_str(" sampler=");
+                canonical.push_str(&sampler_to_string(*sampler));
+                canonical.push_str(" vertices=");
+                write_canonical_buffer(&mut canonical, vertices.as_ref(), &mut ids.buffers);
+                canonical.push_str(" uvs=");
+                write_canonical_buffer(&mut canonical, uv_coords.as_ref(), &mut ids.buffers);
+                canonical.push_str(" indices=");
+                write_canonical_buffer(&mut canonical, indices.as_ref(), &mut ids.buffers);
+                write!(canonical, " vertexCount={vertex_count} indexCount={index_count} instances={}",
+                    mesh_instances_to_string(instances)).expect("writing to String");
+            }
             SemanticRecordingCommand::Line(line) => canonical.push_str(line),
             SemanticRecordingCommand::DrawPath { path, paint } => {
                 canonical.push_str("drawPath path=");
@@ -5095,6 +5274,17 @@ fn write_raw_path(out: &mut String, path: &RawPath) {
         out.push(')');
     }
     out.push_str("]}");
+}
+
+fn mesh_instances_to_string(instances: &[ImageMeshInstanceData]) -> String {
+    let values = instances.iter().map(|instance| format!(
+        "{{transform={},uvTranslate=[{},{}],uvScale=[{},{}],opacity={},additiveness={}}}",
+        mat_to_string(instance.transform),
+        float_to_string(instance.uv_translate[0]), float_to_string(instance.uv_translate[1]),
+        float_to_string(instance.uv_scale[0]), float_to_string(instance.uv_scale[1]),
+        float_to_string(instance.opacity), float_to_string(instance.additiveness),
+    )).collect::<Vec<_>>();
+    format!("[{}]", values.join(","))
 }
 
 fn sampler_to_string(sampler: ImageSampler) -> String {

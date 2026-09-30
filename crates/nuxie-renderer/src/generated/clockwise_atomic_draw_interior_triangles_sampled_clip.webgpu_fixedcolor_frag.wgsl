@@ -1,17 +1,17 @@
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,10 +19,10 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct Ae {
@@ -33,20 +33,20 @@ struct Ae_1 {
     g2_: array<atomic<u32>>,
 }
 
-@id(7) override Oh: bool = true;
-@id(2) override Jh: bool = true;
-@id(8) override Ph: bool = true;
-@id(1) override Ih: bool = true;
-@id(0) override Hh: bool = true;
+@id(7) override Ph: bool = true;
+@id(2) override Kh: bool = true;
+@id(8) override Qh: bool = true;
+@id(1) override Jh: bool = true;
+@id(0) override Ih: bool = true;
 
 @group(0) @binding(0)
 var<uniform> j: TB;
 @group(0) @binding(8)
-var DD: texture_2d<f32>;
+var ED: texture_2d<f32>;
 @group(3) @binding(8)
-var M9_: sampler;
+var N9_: sampler;
 @group(1) @binding(11)
-var GC: texture_2d<f32>;
+var HC: texture_2d<f32>;
 @group(1) @binding(13)
 var W5_: sampler;
 @group(0) @binding(6)
@@ -64,9 +64,9 @@ var i0_: texture_2d<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
 var<private> F1_: vec4<f32>;
 @group(3) @binding(9)
-var ca: sampler;
+var da: sampler;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 var<private> D0_1: f32;
 
 fn main_1() {
@@ -101,13 +101,13 @@ fn main_1() {
     let _e53 = g1_1;
     let _e55 = C2_1;
     let _e56 = X1_1;
-    let _e58 = (Jh && (u32(_e53) != 0u));
+    let _e58 = (Kh && (u32(_e53) != 0u));
     if (_e56.w >= 0f) {
         phi_1300_ = _e56;
     } else {
         let _e61 = -(_e56.w);
-        let _e66 = j.Zb;
-        let _e69 = j.ac;
+        let _e66 = j.ac;
+        let _e69 = j.bc;
         if (_e56.z > 0f) {
             phi_1286_ = _e56.x;
         } else {
@@ -122,7 +122,7 @@ fn main_1() {
             phi_1287_ = ((0.001953125f * _e78) + _e79);
         }
         let _e86 = phi_1287_;
-        let _e88 = textureSampleLevel(DD, M9_, vec2<f32>(_e86, ((floor(_e61) * _e66) + _e69)), 0f);
+        let _e88 = textureSampleLevel(ED, N9_, vec2<f32>(_e86, ((floor(_e61) * _e66) + _e69)), 0f);
         phi_1301_ = _e88;
         if !(_e58) {
             let _e92 = (_e88.xyz * _e88.w);
@@ -132,14 +132,14 @@ fn main_1() {
         phi_1300_ = _e99;
     }
     let _e101 = phi_1300_;
-    phi_842_ = Ph;
-    if Ph {
+    phi_842_ = Qh;
+    if Qh {
         phi_842_ = (_e55.z > 0f);
     }
     let _e105 = phi_842_;
     phi_1303_ = _e101;
     if _e105 {
-        let _e109 = textureSampleLevel(GC, W5_, _e55.xy, (_e55.z - 1f));
+        let _e109 = textureSampleLevel(HC, W5_, _e55.xy, (_e55.z - 1f));
         phi_1297_ = _e109;
         if _e58 {
             if (_e109.w != 0f) {
@@ -161,14 +161,14 @@ fn main_1() {
     let _e132 = k3_1[0u];
     let _e133 = vec2<u32>(floor(_e127));
     phi_1305_ = 1f;
-    if Ih {
+    if Jh {
         let _e161 = O0_1;
         let _e164 = min(_e161.xy, _e161.zw);
         phi_1305_ = min(min(_e164.x, _e164.y), 1f);
     }
     let _e170 = phi_1305_;
-    phi_668_ = Hh;
-    if Hh {
+    phi_668_ = Ih;
+    if Ih {
         let _e172 = Y1_1[0u];
         phi_668_ = (_e172 != 0f);
     }
@@ -255,11 +255,11 @@ fn main_1() {
     }
     let _e267 = phi_1329_;
     phi_1340_ = f32();
-    if Oh {
+    if Ph {
         let _e268 = gl_FragCoord_1;
         let _e270 = j.F3_;
         let _e272 = j.G3_;
-        if Oh {
+        if Ph {
             phi_1330_ = ((fract((52.982918f * fract(((0.06711056f * _e268.x) + (0.00583715f * _e268.y))))) * _e270) + _e272);
         } else {
             phi_1330_ = 0f;
@@ -270,7 +270,7 @@ fn main_1() {
     let _e286 = phi_1340_;
     let _e287 = (_e125 * _e267);
     let _e288 = _e287.xyz;
-    if (Oh && (_e287.w != 0f)) {
+    if (Ph && (_e287.w != 0f)) {
         phi_1360_ = (vec3(_e286) + _e288);
     } else {
         phi_1360_ = _e288;

@@ -1,17 +1,17 @@
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,10 +19,10 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct gl_PerVertex {
@@ -42,20 +42,20 @@ struct VertexOutput {
 }
 
 var<private> gl_VertexIndex_1: i32;
-var<private> LD_1: vec4<f32>;
 var<private> MD_1: vec4<f32>;
-var<private> UC_1: vec4<f32>;
+var<private> ND_1: vec4<f32>;
+var<private> VC_1: vec4<f32>;
 var<private> UB_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: TB;
 @group(0) @binding(5)
-var HD: texture_2d<u32>;
+var ID: texture_2d<u32>;
 @group(0) @binding(2)
 var OB: texture_2d<u32>;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(3) @binding(9)
-var ca: sampler;
+var da: sampler;
 var<private> A6_: vec4<f32>;
 var<private> B6_: vec4<f32>;
 var<private> R4_: vec4<f32>;
@@ -113,18 +113,18 @@ fn main_1() {
     var local_7: f32;
 
     let _e61 = gl_VertexIndex_1;
-    let _e62 = LD_1;
+    let _e62 = MD_1;
     let _e63 = _e62.xy;
     let _e64 = _e62.zw;
-    let _e65 = MD_1;
+    let _e65 = ND_1;
     let _e66 = _e65.xy;
     let _e67 = _e65.zw;
     let _e68 = (_e61 < 4i);
     if _e68 {
-        let _e70 = UC_1[2u];
+        let _e70 = VC_1[2u];
         phi_1791_ = _e70;
     } else {
-        let _e72 = UC_1[3u];
+        let _e72 = VC_1[3u];
         phi_1791_ = _e72;
     }
     let _e74 = phi_1791_;
@@ -166,7 +166,7 @@ fn main_1() {
     let _e126 = (_e125 & 65535u);
     if (_e126 > 0u) {
         let _e129 = (max(_e126, 1u) - 1u);
-        let _e136 = textureLoad(HD, vec2<i32>(bitcast<i32>((_e129 & 255u)), bitcast<i32>((_e129 >> bitcast<u32>(8i)))), 0i);
+        let _e136 = textureLoad(ID, vec2<i32>(bitcast<i32>((_e129 & 255u)), bitcast<i32>((_e129 >> bitcast<u32>(8i)))), 0i);
         phi_1795_ = _e136.z;
     } else {
         phi_1795_ = 0u;
@@ -346,7 +346,7 @@ fn main_1() {
         let _e349 = phi_1860_;
         let _e353 = local_4;
         let _e355 = local_5;
-        let _e365 = textureSampleLevel(XC, ca, vec2<f32>((0.5f * min(min((1f - (_e349 * 0.31830987f)), (((dot(_e353, _e355) / (_e218 * _e218)) - 1f) * 0.5f)), 0.99f)), 1f), 0f);
+        let _e365 = textureSampleLevel(YC, da, vec2<f32>((0.5f * min(min((1f - (_e349 * 0.31830987f)), (((dot(_e353, _e355) / (_e218 * _e218)) - 1f) * 0.5f)), 0.99f)), 1f), 0f);
         let _e369 = (((_e365.x * -2f) + 1f) * _e155);
         if (_e217 < 0f) {
             phi_1861_ = -(_e369);
@@ -423,7 +423,7 @@ fn main_1() {
     B6_ = vec4<f32>(_e391.x, _e391.y, _e65.z, _e65.w);
     let _e489 = f32((((_e431 + _e121) + _e123) - 1u));
     R4_ = vec4<f32>((_e489 - abs((_e95 - _e117.x))), _e489, f32(((_e123 << bitcast<u32>(10i)) | _e431)), _e478);
-    let _e499 = UC_1;
+    let _e499 = VC_1;
     S4_[0u] = _e499.x;
     S4_[1u] = _e499.y;
     if (_e123 > 1u) {
@@ -460,11 +460,11 @@ fn main_1() {
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LD: vec4<f32>, @location(1) MD: vec4<f32>, @location(2) UC: vec4<f32>, @location(3) UB: vec4<u32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) MD: vec4<f32>, @location(1) ND: vec4<f32>, @location(2) VC: vec4<f32>, @location(3) UB: vec4<u32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
-    LD_1 = LD;
     MD_1 = MD;
-    UC_1 = UC;
+    ND_1 = ND;
+    VC_1 = VC;
     UB_1 = UB;
     main_1();
     let _e18 = A6_;

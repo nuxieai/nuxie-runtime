@@ -6623,29 +6623,45 @@ impl LogicalFlush {
         z_index: u32,
     ) -> *mut gpu::DrawBatch {
         let context = unsafe { self.m_ctx.as_mut() };
-        let base = context.m_image_mesh_instance_data.elementsWritten() as u32;
+        let base = u32::try_from(context.m_image_mesh_instance_data.elementsWritten())
+            .expect("source lossless image mesh base instance");
         let clip = if unsafe { (*draw).clipRectInverseMatrix().is_null() } {
             None
         } else {
             Some(*unsafe { (*(*draw).clipRectInverseMatrix()).inverseMatrix() })
         };
-        let instance = gpu::ImageMeshInstance::new(
-            *unsafe { (*draw).imageMatrix() },
-            unsafe { (*draw).modulatedColor() },
-            clip,
-            unsafe { (*draw).clipID() },
-            unsafe { (*draw).blendMode() },
-            z_index,
-            unsafe { (*draw).additiveness() },
-        );
-        unsafe { context.m_image_mesh_instance_data.emplace_back(instance) };
+        let owner = unsafe { &*draw };
+        let count = if let Some(instances) = &owner.instances {
+            debug_assert!(self.m_has_done_layout);
+            let instances = instances.borrow();
+            debug_assert_eq!(owner.instances_edit_count, instances.edit_count());
+            debug_assert!(instances.count() > 0);
+            for instance in instances.instance_data() {
+                let packed = gpu::ImageMeshInstance::new(
+                    super::rive_renderer_cpp::mul(*owner.imageMatrix(), instance.transform),
+                    super::draw_cpp::color_modulate(0xffffffff, owner.modulated_color, instance.opacity * owner.modulated_opacity),
+                    clip, owner.clipID(), nuxie_render_api::BlendMode::SrcOver, z_index,
+                    instance.additiveness.max(0.0).min(1.0), instance.uv_translate, instance.uv_scale,
+                );
+                unsafe { context.m_image_mesh_instance_data.emplace_back(packed) };
+            }
+            u32::try_from(instances.count()).expect("source lossless instance count")
+        } else {
+            let instance = gpu::ImageMeshInstance::new(
+                *owner.imageMatrix(), owner.modulatedColor(), clip,
+                owner.clipID(), owner.blendMode(), z_index, owner.additiveness(),
+                owner.uv_translate, owner.uv_scale,
+            );
+            unsafe { context.m_image_mesh_instance_data.emplace_back(instance) };
+            1
+        };
         let batch = unsafe {
             self.pushDrawExecutable(
                 &(*draw).base,
                 gpu::DrawType::imageMesh,
                 self.m_baseline_shader_misc_flags,
                 gpu::PaintType::solidColor,
-                1,
+                count,
                 base,
             )
         };

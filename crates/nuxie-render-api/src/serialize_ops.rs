@@ -49,6 +49,9 @@ operations! {
     ADDITIVENESS = additiveness = 36,
     DRAW_IMAGE_ADDITIVE = drawImageAdditive = 37,
     DRAW_IMAGE_MESH_ADDITIVE = drawImageMeshAdditive = 38,
+    MAKE_IMAGE_MESH_INSTANCES = makeImageMeshInstances = 39,
+    SET_IMAGE_MESH_INSTANCES_DATA = setImageMeshInstancesData = 40,
+    DRAW_IMAGE_MESH_INSTANCED = drawImageMeshInstanced = 41,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {

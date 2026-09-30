@@ -314,6 +314,16 @@ impl Drop for ContextHandle {
 }
 
 impl Factory for FfiFactory {
+    fn make_image_mesh_instances(
+        &mut self,
+        count: usize,
+    ) -> nuxie_render_api::ImageMeshInstancesHandle {
+        let handle = unsafe { ffi::rive_ffi_mesh_instances_make(self.context.as_ptr(), count) };
+        Rc::new(std::cell::RefCell::new(FfiMeshInstances {
+            handle: non_null(handle, "rive_ffi_mesh_instances_make"),
+            storage: nuxie_render_api::ImageMeshInstancesStorage::new(count),
+        }))
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -579,6 +589,56 @@ impl Renderer for FfiFrame {
                 blend_mode as u8,
                 opacity,
                 additiveness,
+            )
+        };
+    }
+
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        let instances = instances.map(|instances| instances.borrow());
+        let instance_ptr = instances
+            .as_ref()
+            .map(|instances| {
+                instances
+                    .as_any()
+                    .downcast_ref::<FfiMeshInstances>()
+                    .expect("FFI renderer requires instances from its factory")
+                    .handle
+                    .as_ptr() as *const _
+            })
+            .unwrap_or(std::ptr::null());
+        unsafe {
+            ffi::rive_ffi_renderer_draw_image_mesh_instanced(
+                self.renderer.as_ptr(),
+                image
+                    .map(ffi_image)
+                    .map(|image| image.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                sampler.as_key(),
+                vertices
+                    .map(ffi_buffer)
+                    .map(|buffer| buffer.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                uv_coords
+                    .map(ffi_buffer)
+                    .map(|buffer| buffer.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                indices
+                    .map(ffi_buffer)
+                    .map(|buffer| buffer.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                vertex_count,
+                index_count,
+                instance_ptr,
             )
         };
     }
@@ -900,6 +960,54 @@ struct FfiRenderBuffer {
     bytes: Vec<u8>,
 }
 
+/// One persistent upstream resource. Draws retain its C++ rcp; edits keep its
+/// source edit counter live across recording and flush, not a per-draw copy.
+struct FfiMeshInstances {
+    handle: NonNull<ffi::MeshInstances>,
+    storage: nuxie_render_api::ImageMeshInstancesStorage,
+}
+impl Drop for FfiMeshInstances {
+    fn drop(&mut self) {
+        unsafe { ffi::rive_ffi_mesh_instances_delete(self.handle.as_ptr()) };
+    }
+}
+impl nuxie_render_api::ImageMeshInstances for FfiMeshInstances {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn instance_data(&self) -> &[nuxie_render_api::ImageMeshInstanceData] {
+        self.storage.instance_data()
+    }
+    fn edit(&mut self, count: Option<usize>) -> &mut [nuxie_render_api::ImageMeshInstanceData] {
+        unsafe {
+            ffi::rive_ffi_mesh_instances_edit(
+                self.handle.as_ptr(),
+                i32::from(count.is_some()),
+                count.unwrap_or(0),
+            )
+        };
+        self.storage.edit(count)
+    }
+    fn end_edit(&mut self) {
+        // Explicit scalar ABI avoids imposing C++ Mat2D layout on Rust.
+        let mut data = Vec::with_capacity(self.storage.count() * 12);
+        for instance in self.storage.instance_data() {
+            data.extend(instance.transform.0);
+            data.extend(instance.uv_translate);
+            data.extend(instance.uv_scale);
+            data.extend([instance.opacity, instance.additiveness]);
+        }
+        unsafe { ffi::rive_ffi_mesh_instances_end_edit(self.handle.as_ptr(), data.as_ptr()) };
+        self.storage.end_edit();
+    }
+    fn edit_count(&self) -> usize {
+        self.storage.edit_count()
+    }
+    fn is_editing(&self) -> bool {
+        self.storage.is_editing()
+    }
+}
+
 impl Drop for FfiRenderBuffer {
     fn drop(&mut self) {
         unsafe { ffi::rive_ffi_render_buffer_delete(self.handle.as_ptr()) };
@@ -1047,8 +1155,31 @@ mod ffi {
     #[cfg(feature = "decode-oracle")]
     pub type DecodedBitmap = c_void;
     pub type RenderBuffer = c_void;
+    pub type MeshInstances = c_void;
 
     unsafe extern "C" {
+        pub fn rive_ffi_mesh_instances_make(
+            context: *mut Context,
+            count: usize,
+        ) -> *mut MeshInstances;
+        pub fn rive_ffi_mesh_instances_delete(instances: *mut MeshInstances);
+        pub fn rive_ffi_mesh_instances_edit(
+            instances: *mut MeshInstances,
+            resize: i32,
+            count: usize,
+        );
+        pub fn rive_ffi_mesh_instances_end_edit(instances: *mut MeshInstances, data: *const f32);
+        pub fn rive_ffi_renderer_draw_image_mesh_instanced(
+            renderer: *mut Renderer,
+            image: *const RenderImage,
+            sampler: u8,
+            vertices: *const RenderBuffer,
+            uv_coords: *const RenderBuffer,
+            indices: *const RenderBuffer,
+            vertex_count: u32,
+            index_count: u32,
+            instances: *const MeshInstances,
+        );
         pub fn rive_ffi_context_make_null(width: u32, height: u32) -> *mut Context;
         pub fn rive_ffi_context_make_metal(width: u32, height: u32) -> *mut Context;
         #[cfg(all(feature = "dawn", any(target_os = "macos", target_os = "emscripten")))]

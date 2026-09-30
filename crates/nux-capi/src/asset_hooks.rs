@@ -233,6 +233,12 @@ impl<F> DerefMut for AssetFactory<F> {
 }
 
 impl<F: AssetUploadFactory> Factory for AssetFactory<F> {
+    fn make_image_mesh_instances(
+        &mut self,
+        count: usize,
+    ) -> nuxie::render_api::ImageMeshInstancesHandle {
+        self.inner.make_image_mesh_instances(count)
+    }
     fn is_render_context(&self) -> bool {
         self.inner.is_render_context()
     }

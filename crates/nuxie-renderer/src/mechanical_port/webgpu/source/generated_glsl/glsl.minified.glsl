@@ -1,4 +1,4 @@
-#define da
+#define ea
 #ifndef GLSL_VERSION
 #define GLSL_VERSION __VERSION__
 #endif
@@ -62,9 +62,9 @@
 #define Md(Z,a) Z a;
 #define Nd(a) }a;
 #define h1(a)
-#define K(g,Z,a) layout(location=g) in Z a
+#define I(g,Z,a) layout(location=g) in Z a
 #define i1
-#define L(P8,F,a,Z)
+#define J(P8,F,a,Z)
 #ifdef VERTEX
 #if GLSL_VERSION>=310
 #define W(g,Z,a) layout(location=g) out Z a
@@ -147,7 +147,7 @@
 #define A7(n0,p,m,U1) z5(n0,p,m,U1)
 #define h6(a0,g,a) o5(a0,g,a)
 #define Y6(a,p,E,r6,R8,U0) j2(a,p,c(E,R8),U0)
-#define mh(a0,g,a) L4(a0,g,a)
+#define nh(a0,g,a) L4(a0,g,a)
 #define L3
 #define e1
 #define v1(a,m) texelFetch(a,m,0)
@@ -161,10 +161,10 @@
 #define V3
 #ifdef DISABLE_SHADER_STORAGE_BUFFERS
 #define O5(g,y1,a) L4(h3,g,a)
-#define M4(g,y1,a) mh(h3,g,a)
+#define M4(g,y1,a) nh(h3,g,a)
 #define P5(g,y1,a) p6(h3,g,a)
-#define L0(a,C0) v1(a,Y((C0)&Qc,(C0)>>Pc))
-#define R5(a,C0) v1(a,Y((C0)&Qc,(C0)>>Pc)).xy
+#define L0(a,C0) v1(a,Y((C0)&Rc,(C0)>>Qc))
+#define R5(a,C0) v1(a,Y((C0)&Rc,(C0)>>Qc)).xy
 #else
 #ifdef GL_ARB_shader_storage_buffer_object
 #extension GL_ARB_shader_storage_buffer_object:require
@@ -172,16 +172,16 @@
 #define O5(g,y1,a) layout(std430,binding=g) readonly buffer y1{N0 g2[];}a
 #define M4(g,y1,a) layout(std430,binding=g) readonly buffer y1{R g2[];}a
 #define P5(g,y1,a) layout(std430,binding=g) readonly buffer y1{f g2[];}a
-#define Sa(g,y1,a) layout(std430,binding=g) buffer y1{uint g2[];}a
+#define Ta(g,y1,a) layout(std430,binding=g) buffer y1{uint g2[];}a
 #define L0(a,C0) a.g2[C0]
 #define R5(a,C0) a.g2[C0]
 #define Rd(a,C0) a.g2[C0]
 #define C7(a,C0,E) atomicMax(a.g2[C0],E)
-#define Ta(a,C0,E) atomicAdd(a.g2[C0],E)
-#define nh(a,C0,E) atomicOr(a.g2[C0],E)
+#define Ua(a,C0,E) atomicAdd(a.g2[C0],E)
+#define oh(a,C0,E) atomicOr(a.g2[C0],E)
 #endif
 #ifdef PLS_IMPL_STORAGE_BUFFER
-#define P1(a) void main(){Y G=ivec2(floor(d0));int G0=int(L8(uvec2(G),(j.n6+(ya-1u))&~(ya-1u)));
+#define P1(a) void main(){Y G=ivec2(floor(d0));int G0=int(L8(uvec2(G),(j.n6+(za-1u))&~(za-1u)));
 #define d2 }
 #define W3 ,int G0
 #define Q1 ,G0
@@ -192,11 +192,11 @@
 #else
 #define H2(g,a) layout(std430,binding=g) coherent buffer a##Sd{uint g2[];}a
 #endif
-#define Ua H2
+#define Va H2
 #define Z2(h) h.g2[G0]
 #define a3(h,C) h.g2[G0]=C
-#define Va(h) unpackUnorm4x8(Z2(h))
-#define Wa(h,C) a3(h,packUnorm4x8(C))
+#define Wa(h) unpackUnorm4x8(Z2(h))
+#define Xa(h,C) a3(h,packUnorm4x8(C))
 #define e5(h,E) atomicMax(h.g2[G0],E)
 #define f5(h,E) atomicAdd(h.g2[G0],E)
 #elif defined(PLS_IMPL_STORAGE_TEXTURE)||defined(USING_PLS_STORAGE_TEXTURES)
@@ -208,18 +208,18 @@
 #define W3 ,Y G
 #define Q1 ,G
 #ifdef TARGET_SPIRV
-#define Ua(g,a) layout(set=w3,binding=g,rgba8) uniform mediump coherent image2D a
+#define Va(g,a) layout(set=w3,binding=g,rgba8) uniform mediump coherent image2D a
 #define H2(g,a) layout(set=w3,binding=g,r32ui) uniform highp coherent uimage2D a
-#define Xa(g,a) layout(set=w3,binding=g,rgb10_a2) uniform mediump coherent image2D a
+#define Ya(g,a) layout(set=w3,binding=g,rgb10_a2) uniform mediump coherent image2D a
 #else
-#define Ua(g,a) layout(binding=g,rgba8) uniform mediump coherent image2D a
+#define Va(g,a) layout(binding=g,rgba8) uniform mediump coherent image2D a
 #define H2(g,a) layout(binding=g,r32ui) uniform highp coherent uimage2D a
-#define Xa(g,a) layout(binding=g,rgb10_a2) uniform mediump coherent image2D a;
+#define Ya(g,a) layout(binding=g,rgb10_a2) uniform mediump coherent image2D a;
 #endif
 #define Z2(h) imageLoad(h,G).x
 #define a3(h,C) imageStore(h,G,uvec4(C))
-#define Va(h) imageLoad(h,G)
-#define Wa(h,C) imageStore(h,G,C)
+#define Wa(h) imageLoad(h,G)
+#define Xa(h,C) imageStore(h,G,C)
 #define e5(h,E) imageAtomicMax(h,G,E)
 #define f5(h,E) imageAtomicAdd(h,G,E)
 #else
@@ -251,7 +251,7 @@
 #endif
 #define M1 __pixel_localEXT V1{
 #define z0(g,a) layout(rgba8) mediump vec4 a
-#define Ya(g,a) layout(rgb10_a2) mediump vec4 a
+#define Za(g,a) layout(rgb10_a2) mediump vec4 a
 #define k1(g,a) layout(r32ui) highp uint a
 #define N1 };
 #define K0(h) h
@@ -269,11 +269,11 @@
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
 #define M1
 #define N1
-#define z0 Ua
+#define z0 Va
 #define k1 H2
-#define Ya Xa
-#define K0 Va
-#define A0 Wa
+#define Za Ya
+#define K0 Wa
+#define A0 Xa
 #define a1 Z2
 #define d1 a3
 #define y2(h)
@@ -345,17 +345,17 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define A3
 #define f7
 #define A5
-#define B1(a,g0,F,A,r) void main(){int A=gl_VertexID;int r=S8;
-#define S7(a,g0,F,p1,h0,A,r) B1(a,g0,F,A,r)
-#define I6(a,n3,o3,C3,D3,p1,h0,A) B1(a,n3,o3,A,r)
+#define B1(a,h0,F,A,q) void main(){int A=gl_VertexID;int q=S8;
+#define S7(a,h0,F,p1,g0,A,q) B1(a,h0,F,A,q)
+#define I6(a,n3,o3,C3,D3,p1,g0,A) B1(a,n3,o3,A,q)
 #define V(a,Z)
 #define c0(a)
-#define q(a,Z)
+#define r(a,Z)
 #define C1(R0) gl_Position=R0;}
-#define f3(z1,a) layout(location=0) out z1 oh;void main()
+#define f3(z1,a) layout(location=0) out z1 ph;void main()
 #define v6(z1,a) f3(z1,a)
 #define w6 gl_FrontFacing
-#define M2(C) oh=C
+#define M2(C) ph=C
 #define d0 gl_FragCoord.xy
 #define L6
 #define Y2
@@ -373,7 +373,7 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #if defined(TARGET_SPIRV)&&!defined(TARGET_WGSL)
 #ifdef MSAA_DST_COLOR
 #define p5(a) layout(input_attachment_index=0,binding=G2,set=w3) uniform mediump subpassInputMS a
-#define x6(a) na(mat4(subpassLoad(a,0),subpassLoad(a,1),subpassLoad(a,2),subpassLoad(a,3)),gl_SampleMaskIn[0])
+#define x6(a) oa(mat4(subpassLoad(a,0),subpassLoad(a,1),subpassLoad(a,2),subpassLoad(a,3)),gl_SampleMaskIn[0])
 #else
 #define p5(a) layout(input_attachment_index=0,binding=G2,set=w3) uniform mediump subpassInput a
 #define x6(a) subpassLoad(a)
@@ -385,6 +385,6 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define P0(B,H) ((B)*(H))
 precision highp float;precision highp int;
 #if GLSL_VERSION<310
-e i ph(uint u){R l1=R(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(l1)*(1./255.);}
-#define unpackUnorm4x8 ph
+e i qh(uint u){R l1=R(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(l1)*(1./255.);}
+#define unpackUnorm4x8 qh
 #endif

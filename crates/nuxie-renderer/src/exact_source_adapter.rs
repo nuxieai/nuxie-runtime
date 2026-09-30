@@ -242,6 +242,61 @@ impl Renderer for ExactSourceRendererAdapter {
         }
     }
 
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(vertices) =
+            vertices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(uv_coords) =
+            uv_coords.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(indices) =
+            indices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        if !vertices.belongs_to(&self.resource_domain)
+            || !uv_coords.belongs_to(&self.resource_domain)
+            || !indices.belongs_to(&self.resource_domain)
+        {
+            return;
+        }
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImageMeshInstanced(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                vertices.source_owner_unchecked(),
+                uv_coords.source_owner_unchecked(),
+                indices.source_owner_unchecked(),
+                vertex_count,
+                index_count,
+                instances,
+            );
+        }
+    }
+
     fn draw_image_mesh_with_additiveness(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -1235,6 +1290,61 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceRenderCanvasFrame<B> {
         }
     }
 
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(vertices) =
+            vertices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(uv_coords) =
+            uv_coords.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(indices) =
+            indices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        if !vertices.belongs_to(&self.resource_domain)
+            || !uv_coords.belongs_to(&self.resource_domain)
+            || !indices.belongs_to(&self.resource_domain)
+        {
+            return;
+        }
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImageMeshInstanced(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                vertices.source_owner_unchecked(),
+                uv_coords.source_owner_unchecked(),
+                indices.source_owner_unchecked(),
+                vertex_count,
+                index_count,
+                instances,
+            );
+        }
+    }
+
     fn draw_image_mesh_with_additiveness(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -1521,6 +1631,61 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceFrameCore<B> {
                 index_count,
                 blend_mode,
                 opacity,
+            );
+        }
+    }
+
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        let Some(image) =
+            image.and_then(|value| value.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(vertices) =
+            vertices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(uv_coords) =
+            uv_coords.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(indices) =
+            indices.and_then(|value| value.as_any().downcast_ref::<RiveRenderBufferHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        if !vertices.belongs_to(&self.resource_domain)
+            || !uv_coords.belongs_to(&self.resource_domain)
+            || !indices.belongs_to(&self.resource_domain)
+        {
+            return;
+        }
+        unsafe {
+            <RiveRenderer as RendererContract>::drawImageMeshInstanced(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                vertices.source_owner_unchecked(),
+                uv_coords.source_owner_unchecked(),
+                indices.source_owner_unchecked(),
+                vertex_count,
+                index_count,
+                instances,
             );
         }
     }

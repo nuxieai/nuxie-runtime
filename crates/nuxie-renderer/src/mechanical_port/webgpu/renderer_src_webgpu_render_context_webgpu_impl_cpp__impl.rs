@@ -150,38 +150,38 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "CB";
 const GLSL_FRAGMENT: &str = "EB";
-const GLSL_POST_INVERT_Y: &str = "RC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "PF";
-const GLSL_DRAW_PATH: &str = "ND";
+const GLSL_POST_INVERT_Y: &str = "SC";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
+const GLSL_DRAW_PATH: &str = "OD";
 const GLSL_ENABLE_FEATHER: &str = "GB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "TE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "DE";
-const GLSL_ATLAS_FEATHERED_FILL: &str = "MC";
-const GLSL_ATLAS_FEATHERED_STROKE: &str = "TC";
-const GLSL_CLEAR_COLOR: &str = "WE";
-const GLSL_LOAD_COLOR: &str = "YE";
-const GLSL_STORE_COLOR: &str = "EE";
-const GLSL_CLEAR_COVERAGE: &str = "FE";
-const GLSL_CLEAR_CLIP: &str = "WF";
-const GLSL_ENABLE_CLIPPING: &str = "I";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "UE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
+const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
+const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
+const GLSL_CLEAR_COLOR: &str = "XE";
+const GLSL_LOAD_COLOR: &str = "ZE";
+const GLSL_STORE_COLOR: &str = "FE";
+const GLSL_CLEAR_COVERAGE: &str = "GE";
+const GLSL_CLEAR_CLIP: &str = "XF";
+const GLSL_ENABLE_CLIPPING: &str = "K";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "T";
-const GLSL_ENABLE_EVEN_ODD: &str = "WC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "YC";
+const GLSL_ENABLE_EVEN_ODD: &str = "XC";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "ZC";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "DC";
 const GLSL_ENABLE_DITHER: &str = "LB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "IB";
 const GLSL_TARGET_SPIRV: &str = "SB";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "RF";
-const GLSL_PLS_IMPL_NONE: &str = "TF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "SF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "SF";
+const GLSL_PLS_IMPL_NONE: &str = "UF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "TF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "NE";
-const GLSL_DRAW_IMAGE_RECT: &str = "ZC";
+const GLSL_DRAW_IMAGE: &str = "OE";
+const GLSL_DRAW_IMAGE_RECT: &str = "AD";
 const GLSL_DRAW_IMAGE_MESH: &str = "KB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_CLOCKWISE_FILL: &str = "GE";
+const GLSL_CLOCKWISE_FILL: &str = "HE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "CC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
@@ -231,7 +231,7 @@ fn loadStoreEXTPipelineKey(actions: LoadStoreActionsEXT, format: TextureFormat) 
 const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const PLS_PLANE_COUNT: usize = 4;
 const IMAGE_RECT_ATTRIB_COUNT: usize = 11;
-const IMAGE_MESH_ATTRIB_COUNT: usize = 7;
+const IMAGE_MESH_ATTRIB_COUNT: usize = 8;
 const SPECIALIZATION_COUNT: usize = 16;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
     "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
@@ -4835,7 +4835,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            52_597
+            52_646
         );
     }
 

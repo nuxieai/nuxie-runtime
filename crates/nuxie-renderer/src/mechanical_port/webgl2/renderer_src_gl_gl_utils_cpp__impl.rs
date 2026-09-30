@@ -71,11 +71,11 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
     RECLAIMED_COUNT.load(Ordering::Relaxed)
 }
 
-const GLSL_GLSL_VERSION: &str = "KC";
+const GLSL_GLSL_VERSION: &str = "LC";
 const GLSL_VERTEX: &str = "CB";
 const GLSL_FRAGMENT: &str = "EB";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "DE";
-const GLSL_GL_RENDERER_MALI: &str = "NF";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
+const GLSL_GL_RENDERER_MALI: &str = "OF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {

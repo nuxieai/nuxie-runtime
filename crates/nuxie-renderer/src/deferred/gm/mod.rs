@@ -6,6 +6,7 @@ mod additive_blend;
 mod bitmap_cache_pixel;
 mod clipstrokes;
 mod image_paint;
+mod mesh_instanced;
 mod ore_deferred_context;
 mod ore_deferred_multipass;
 mod ore_deferred_replay;

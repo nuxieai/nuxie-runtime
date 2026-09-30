@@ -167,8 +167,10 @@ pub(crate) static ImageMeshInputBindings: [vk::VertexInputBindingDescription; 3]
         input_rate: vk::VertexInputRate::INSTANCE,
     },
 ];
-pub(crate) static ImageMeshVertexAttribs: [vk::VertexInputAttributeDescription; 9] =
-    appendImageDrawInstanceAttribs::<2, 9>(
+pub(crate) static ImageMeshVertexAttribs: [
+    vk::VertexInputAttributeDescription;
+    2 + ImageMeshInstance::AttributeCount
+] = appendImageDrawInstanceAttribs::<2, { 2 + ImageMeshInstance::AttributeCount }>(
         ImageMeshImageAttribBufferBinding,
         [
             vk::VertexInputAttributeDescription {
@@ -318,14 +320,14 @@ mod tests {
             attribute.format == vk::Format::R32G32B32A32_SFLOAT
         }));
         assert_eq!(ImageMeshInputBindings.len(), 3);
-        assert_eq!(ImageMeshVertexAttribs.len(), 9);
+        assert_eq!(ImageMeshVertexAttribs.len(), 10);
         assert_eq!(
             ImageMeshVertexAttribs.map(|attribute| attribute.location),
-            [0, 1, 2, 3, 4, 5, 6, 7, 8]
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         );
         assert_eq!(
             ImageMeshVertexAttribs.map(|attribute| attribute.offset),
-            [0, 0, 0, 16, 32, 48, 52, 56, 60]
+            [0, 0, 0, 16, 32, 48, 52, 56, 60, 64]
         );
         assert_eq!(PATH_VERTEX_INPUT_STATE.vertex_binding_description_count, 1);
         assert_eq!(PATH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 2);
@@ -340,7 +342,7 @@ mod tests {
         assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_binding_description_count, 2);
         assert_eq!(IMAGE_RECT_VERTEX_INPUT_STATE.vertex_attribute_description_count, 12);
         assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_binding_description_count, 3);
-        assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 9);
+        assert_eq!(IMAGE_MESH_VERTEX_INPUT_STATE.vertex_attribute_description_count, 10);
         assert_eq!(
             IMAGE_MESH_VERTEX_INPUT_STATE.p_vertex_binding_descriptions,
             ImageMeshInputBindings.as_ptr()

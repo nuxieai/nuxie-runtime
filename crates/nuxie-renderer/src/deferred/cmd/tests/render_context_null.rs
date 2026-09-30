@@ -17,7 +17,7 @@ use crate::mechanical_port::source::{
     },
     renderer::include::rive::renderer::{
         buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
-        gpu_hpp::{FlushDescriptor, StorageBufferStructure},
+        gpu_hpp::{DrawType, FlushDescriptor, StorageBufferStructure},
         render_canvas_hpp::RenderCanvas,
         render_context_helper_impl_hpp::{
             RenderContextHelperBackendContract, RenderContextHelperBufferFactoryContract,
@@ -45,6 +45,8 @@ pub struct FlushStats {
     pub atlas_content_area: u64,
     // Summed render-target area across flushes (a4dbc3ff WorkObservingNULL).
     pub target_pixels: u64,
+    pub mesh_batches: usize,
+    pub mesh_elements: u32,
 }
 impl std::ops::Sub for FlushStats {
     type Output = Self;
@@ -61,6 +63,8 @@ impl std::ops::Sub for FlushStats {
             atlas_stroke_batches: self.atlas_stroke_batches - b.atlas_stroke_batches,
             atlas_content_area: self.atlas_content_area - b.atlas_content_area,
             target_pixels: self.target_pixels - b.target_pixels,
+            mesh_batches: self.mesh_batches - b.mesh_batches,
+            mesh_elements: self.mesh_elements - b.mesh_elements,
         }
     }
 }
@@ -167,6 +171,15 @@ impl RenderContextHelperBackendContract for RenderContextNull {
         self.features
             .set(self.features.get() | d.combinedShaderFeatures.0);
         let mut s = self.stats.borrow_mut();
+        if let Some(draw_list) = d.drawList {
+            // SAFETY: the source flush owns this list throughout this callback.
+            for batch in unsafe { draw_list.as_ref() }.iter() {
+                if batch.drawType == DrawType::imageMesh {
+                    s.mesh_batches += 1;
+                    s.mesh_elements += batch.elementCount;
+                }
+            }
+        }
         s.flushes += 1;
         s.path_count += u64::from(d.pathCount);
         s.contour_count += u64::from(d.contourCount);
@@ -212,7 +225,8 @@ impl NullBackend {
 
     pub fn frame_interlock_mode(
         &self,
-    ) -> crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockMode {
+    ) -> crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockMode
+    {
         self.context.frameInterlockMode()
     }
 

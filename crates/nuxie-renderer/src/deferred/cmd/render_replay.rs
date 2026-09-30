@@ -151,6 +151,7 @@ pub struct ResourceTable {
     pub shaders: Resident<Rc<dyn RenderShader>>,
     pub images: Resident<Rc<dyn RenderImage>>,
     pub buffers: Resident<BufferOwner>,
+    pub image_mesh_instances: Resident<ImageMeshInstancesHandle>,
     pub paint_shadows: Vec<PaintShadow>,
     pub path_fill_rules: Vec<u8>,
     pub buffer_shadows: Vec<BufferShadow>,
@@ -163,6 +164,7 @@ impl ResourceTable {
             ResourceKind::Shader => self.shaders.destroy(id, generation),
             ResourceKind::Image => self.images.destroy(id, generation),
             ResourceKind::Buffer => self.buffers.destroy(id, generation),
+            ResourceKind::ImageMeshInstances => self.image_mesh_instances.destroy(id, generation),
         }
     }
     pub fn clear_version_aliases(&mut self) {

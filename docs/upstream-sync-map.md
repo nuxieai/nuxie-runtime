@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9e6a97ff93dff788d8e78d0d1b82da377e8c9377`
+- LAST_SYNCED_SHA: `7f4354cd0775aaabc59bfcb9892d974fd53f9f0c`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 51 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 51 require a Rust translation.
+  There are 50 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 50 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `7f4354cd0775aaabc59bfcb9892d974fd53f9f0c` | Add trusted, stable local font-file mapping on Apple/Linux/Android, retaining mapped bytes through the font and derived font lifetimes without changing ordinary byte decoding. Keep the approved Rust shaping/outline backends and their parser validation; expose the mapped-file lifetime requirement as an unsafe Rust API contract. Port all three upstream font-file tests. Private Dart/FFI editor callers described in the message are absent from the public delta. | — |
 | `9e6a97ff93dff788d8e78d0d1b82da377e8c9377` | Add non-owning deferred-session attachments, idempotent registration, detach and destruction notification from a moved-out list, preserving the shared Rust session lifetime. Check the recording thread before returning a stable screen renderer. Port all four upstream host/session lifetime tests. Private native/Windows host-export changes named in the message are absent from the public delta. | — |
 | `50ba2f5a581089e93592393d00b61da4ba46473e` | Preserve complete compiler diagnostics and labeled replay failure notes, clearing notes on resource reuse/destruction. Carry depth-only non-filtering sampler flags through reflected layouts, per-binding intern IDs, native Lua and WebGPU. Existing live Rust hosts already carry full frame descriptors; upstream's HostFrameSink convenience class is unshipped. Import the regenerated upstream GM shader fixture and port the complete depth-sampling scene and both new layout scenarios. D3D-only implementations and the upstream-only golden CLI's optional allow-new flag are outside the shipped profile; Wasm trap-detail and layout-POD changes remain deferred. Private shader compiler and Unreal CI changes named in the message are absent from the public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `6a717fa59880458141ac955bc00f86e80da54189` | Re-sync borrowed Rive Vulkan textures each frame, retaining their source texture and unregistering/detaching weak context links at destruction. Advertise only host-enabled Vulkan capabilities; enable supported anisotropy and depth-bias clamp in the Rust device owner. Save both valid-sized images on GM parity failure. Wasm image views, console time-zone handling, WAMR AOT extraction and Windows WAMR links remain deferred. Private Artemis window/host changes described in the message are absent from the public delta and are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

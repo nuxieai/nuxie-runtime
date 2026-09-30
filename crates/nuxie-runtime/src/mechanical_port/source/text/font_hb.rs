@@ -27,6 +27,50 @@ const STANDARD_SCALE: i32 = 2048;
 const INVERSE_SCALE: f32 = 1.0 / STANDARD_SCALE as f32;
 const KERN_TAG: u32 = u32::from_be_bytes(*b"kern");
 
+#[derive(Clone)]
+enum FontBytes {
+    Owned(Arc<[u8]>),
+    #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+    Mapped(Arc<FontFileMapping>),
+}
+
+impl std::ops::Deref for FontBytes {
+    type Target = [u8];
+    fn deref(&self) -> &[u8] {
+        match self {
+            Self::Owned(bytes) => bytes,
+            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+            Self::Mapped(mapping) => {
+                // decode_file's caller guarantees immutable, live file pages;
+                // the Arc retains the mapping for this entire borrow.
+                unsafe { std::slice::from_raw_parts(mapping.data.cast(), mapping.size) }
+            }
+        }
+    }
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+struct FontFileMapping {
+    data: *mut libc::c_void,
+    size: usize,
+}
+
+// The mapping is read-only and decode_file requires its backing bytes to stay
+// unchanged. Shared ownership prevents unmapping while another thread reads.
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+unsafe impl Send for FontFileMapping {}
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+unsafe impl Sync for FontFileMapping {}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+impl Drop for FontFileMapping {
+    fn drop(&mut self) {
+        unsafe {
+            libc::munmap(self.data, self.size);
+        }
+    }
+}
+
 fn suppress_legacy_kern(font: &OutlineFont<'_>) -> bool {
     font.kern().is_ok() && font.gpos().is_err() && font.kerx().is_err()
 }
@@ -56,7 +100,7 @@ fn shaping_features(
 /// in this owner, and no legacy packed text implementation is consulted.
 pub struct HbFont {
     base: FontBase,
-    bytes: Arc<[u8]>,
+    bytes: FontBytes,
     face_index: u32,
     shaper_data: ShaperData,
     shaper_instance: ShaperInstance,
@@ -72,7 +116,11 @@ pub struct HbFont {
 
 impl HbFont {
     pub fn source_bytes(&self) -> Arc<[u8]> {
-        self.bytes.clone()
+        match &self.bytes {
+            FontBytes::Owned(bytes) => bytes.clone(),
+            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+            FontBytes::Mapped(_) => Arc::from(&*self.bytes),
+        }
     }
     pub fn face_index(&self) -> u32 {
         self.face_index
@@ -86,11 +134,70 @@ impl HbFont {
         let outline = OutlineFont::from_index(bytes, face_index).ok()?;
         let _ = (shaping, outline);
         Some(Arc::new(Self::with_stored_options(
-            Arc::from(bytes),
+            FontBytes::Owned(Arc::from(bytes)),
             face_index,
             HashMap::new(),
             HashMap::new(),
         )))
+    }
+
+    /// Maps a trusted, stable local font file without copying its font bytes.
+    /// Unsupported platforms and failures detected during this call return
+    /// `None`; callers may separately choose the ordinary byte decode path.
+    ///
+    /// # Safety
+    /// The file's bytes must remain unchanged and its backing storage available
+    /// for the entire lifetime of this font and every font derived from it
+    /// (including through `with_options`). Truncation or vanished storage can
+    /// cause SIGBUS on later access. Do not use untrusted paths, removable media,
+    /// or network volumes. Mapping ownership alone cannot enforce this contract.
+    pub unsafe fn decode_file(path: Option<&std::path::Path>) -> Option<FontRef> {
+        #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+        {
+            use std::os::fd::AsRawFd;
+            let file = std::fs::File::open(path?).ok()?;
+            let size = file.metadata().ok()?.len();
+            if size == 0 || size >= (1u64 << 31) {
+                return None;
+            }
+            let size = size as usize;
+            let data = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    size,
+                    libc::PROT_READ,
+                    libc::MAP_PRIVATE,
+                    file.as_raw_fd(),
+                    0,
+                )
+            };
+            // The mapping, not the descriptor, now owns the file reference.
+            drop(file);
+            if data == libc::MAP_FAILED {
+                return None;
+            }
+            let mapping = Arc::new(FontFileMapping { data, size });
+            // Rust slices cannot represent an address-zero mapping.
+            if data.is_null() {
+                return None;
+            }
+            let bytes = FontBytes::Mapped(mapping);
+            // Preserve the approved harfrust/skrifa validation boundary rather
+            // than introducing a HarfBuzz face or a different shaping backend.
+            ShapingFont::from_index(&bytes, 0).ok()?;
+            OutlineFont::from_index(&bytes, 0).ok()?;
+            Some(Arc::new(Self::with_stored_options(
+                bytes,
+                0,
+                HashMap::new(),
+                HashMap::new(),
+            )))
+        }
+        #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
+        {
+            let _ = path;
+            None
+        }
     }
 
     /// The public host font retains this exact native occurrence.
@@ -118,7 +225,7 @@ impl HbFont {
     }
 
     fn with_stored_options(
-        bytes: Arc<[u8]>,
+        bytes: FontBytes,
         face_index: u32,
         axis_values: HashMap<u32, f32>,
         feature_values: HashMap<u32, u32>,
@@ -302,7 +409,7 @@ impl Font for HbFont {
             values.insert(feature.tag, feature.value);
         }
         Arc::new(Self::with_stored_options(
-            Arc::clone(&self.bytes),
+            self.bytes.clone(),
             self.face_index,
             axes,
             values,

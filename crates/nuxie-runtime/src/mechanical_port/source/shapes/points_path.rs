@@ -5,7 +5,8 @@ use crate::mechanical_port::source::{
     },
     component::{ComponentDirt, has_dirt},
     generated::shapes::points_path_base::PointsPathBase,
-    math::mat2d::Mat2D,
+    math::{mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
+    shapes::{cubic_vertex::CubicVertexBehavior, path::PathVertexOccurrence},
 };
 static IDENTITY: Mat2D = Mat2D::identity();
 impl std::ops::Deref for PointsPath {
@@ -28,7 +29,7 @@ impl PointsPath {
 pub struct PointsPath {
     pub base: PointsPathBase,
     skinnable: Skinnable,
-    // Measured winding with the bones' mirroring divided out; zero is unknown.
+    // Winding with the bones' mirroring divided out; zero is unknown.
     winding_reference: i32,
 }
 
@@ -119,37 +120,123 @@ impl PointsPath {
         self.base.base.base.mark_path_dirty(true);
     }
 
-    /// One when the drawn path winds clockwise, minus one otherwise.
-    /// Measure once, then follow bone mirroring. Folds without mirroring keep
-    /// the measured answer, just as the authored flag did.
+    fn bind_winding(&self) -> i32 {
+        let points = self.base.vertices();
+        let count = points.len();
+        if count < 2 {
+            return 0;
+        }
+        let world = self
+            .skin()
+            .expect("bound PointsPath skin")
+            .with_downcast::<Skin, _>(|skin| *skin.world_transform())
+            .expect("live PointsPath skin");
+        let mut bound = RawPath::default();
+        bound.move_to_point(world * bind_point(&points[0], None).0);
+        let segments = if self.is_path_closed() {
+            count
+        } else {
+            count - 1
+        };
+        for i in 0..segments {
+            let from = &points[i];
+            let to = &points[(i + 1) % count];
+            let (to_point, to_cubic) = bind_point(to, None);
+            let (from_point, from_cubic) = bind_point(from, None);
+            let end = world * to_point;
+            if from_cubic || to_cubic {
+                let out = if from_cubic {
+                    bind_point(from, Some(false)).0
+                } else {
+                    from_point
+                };
+                let incoming = if to_cubic {
+                    bind_point(to, Some(true)).0
+                } else {
+                    to_point
+                };
+                bound.cubic_to_points(world * out, world * incoming, end);
+            } else {
+                bound.line_to_point(end);
+            }
+        }
+        bound.close();
+        measure_winding(&bound)
+    }
+
+    /// Taken from the bind pose, then follows bone mirroring. A fold without
+    /// mirroring keeps the reference regardless of the initial animated pose.
     pub fn winding(&mut self) -> i32 {
         let authored = if self.is_clockwise() { 1 } else { -1 };
         let Some(skin) = self.skin() else {
             return authored;
         };
+        if self.winding_reference == 0 {
+            self.winding_reference = self.bind_winding();
+        }
         let sign = skin
             .with_downcast::<Skin, _>(Skin::winding_sign)
             .expect("a retained PointsPath skin remains a Skin");
         if sign != 0 && self.winding_reference != 0 {
             return self.winding_reference * sign;
         }
-        let bounds = self.raw_path().bounds();
-        let area = self
-            .raw_path()
-            .compute_coarse_area_with_origin(bounds.center());
-        // std::max in C++ selects the first operand for unordered comparisons.
-        let extent = if bounds.width() < bounds.height() {
-            bounds.height()
-        } else {
-            bounds.width()
-        };
-        if area.abs() <= 1e-5_f32 * extent * extent {
+        let measured = measure_winding(self.raw_path());
+        if measured == 0 {
             return authored;
         }
-        let measured = if area < 0.0 { -1 } else { 1 };
         if sign != 0 {
             self.winding_reference = measured * sign;
         }
         measured
+    }
+}
+
+fn measure_winding(path: &RawPath) -> i32 {
+    let bounds = path.bounds();
+    let area = path.compute_coarse_area_with_origin(bounds.center());
+    // Match std::max's first-operand behavior for unordered comparisons.
+    let extent = if bounds.width() < bounds.height() {
+        bounds.height()
+    } else {
+        bounds.width()
+    };
+    if area.abs() <= 1e-5_f32 * extent * extent {
+        return 0;
+    }
+    if area < 0.0 { -1 } else { 1 }
+}
+
+// Read authored positions, never render translations or deformed tangents.
+// A requested cubic control point may lazily populate its source cache.
+fn bind_point(vertex: &PathVertexOccurrence, incoming: Option<bool>) -> (Vec2D, bool) {
+    match vertex {
+        PathVertexOccurrence::Authored(vertex) => vertex
+            .with_mut(|vertex| {
+                if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
+                    let point = match incoming {
+                        Some(true) => cubic.in_point(),
+                        Some(false) => cubic.out_point(),
+                        None => Vec2D::new(cubic.vertex().base.x(), cubic.vertex().base.y()),
+                    };
+                    (point, true)
+                } else {
+                    let vertex = vertex.as_vertex_behavior().expect("path vertex").vertex();
+                    (Vec2D::new(vertex.base.x(), vertex.base.y()), false)
+                }
+            })
+            .expect("live path vertex"),
+        PathVertexOccurrence::RuntimeStraight(vertex) => {
+            let vertex = vertex.borrow();
+            (Vec2D::new(vertex.x(), vertex.y()), false)
+        }
+        PathVertexOccurrence::RuntimeCubicDetached(vertex) => {
+            let mut vertex = vertex.borrow_mut();
+            let point = match incoming {
+                Some(true) => vertex.in_point(),
+                Some(false) => vertex.out_point(),
+                None => Vec2D::new(vertex.x(), vertex.y()),
+            };
+            (point, true)
+        }
     }
 }

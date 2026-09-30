@@ -39,6 +39,11 @@ impl Default for Skin {
 }
 
 impl Skin {
+    /// The skinnable's world transform at bind time.
+    pub fn world_transform(&self) -> &Mat2D {
+        &self.world_transform
+    }
+
     fn component(&self) -> &Component {
         &self.base.base.base
     }

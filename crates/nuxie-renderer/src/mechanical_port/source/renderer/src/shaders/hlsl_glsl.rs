@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/hlsl.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/hlsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ccdbdadea1add6c67088c2b36e4a25975d01150412f7d0554a8933bd91cb337d";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 458;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18857;
+    "39534fd45bfb3aec17e664ceb56827521c92a4970185be007cd3afcf5d4aa521";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 465;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 19077;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_HLSL_GLSL_SOURCE: &str = r###"/*
@@ -387,9 +387,16 @@ INLINE half4 unpackUnorm4x8(uint u)
     return half4(vals) * (1. / 255.);
 }
 
+INLINE float2 unpackUnorm2x16(uint u)
+{
+    uint2 vals = uint2(u & 0xffffu, u >> 16);
+    return float2(vals) * (1. / 65535.);
+}
+
 INLINE uint packUnorm4x8(half4 color)
 {
-    uint4 vals = (uint4(color * 255.) & 0xff) << uint4(0, 8, 16, 24);
+    // Clamp before quantizing: additive blending produces channel values > 1,
+    uint4 vals = (uint4($saturate(color) * 255.) & 0xff) << uint4(0, 8, 16, 24);
     vals.rg |= vals.ba;
     vals.r |= vals.g;
     return vals.r;

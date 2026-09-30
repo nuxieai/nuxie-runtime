@@ -1166,6 +1166,7 @@ pub struct Draw {
     pub(crate) paint_matrix: nuxie_render_api::Mat2D,
     pub(crate) image_matrix: nuxie_render_api::Mat2D,
     pub(crate) blend_mode: nuxie_render_api::BlendMode,
+    pub(crate) additiveness: f32,
     pub(crate) draw_type: DrawObjectType,
     pub(crate) clipped_pixel_bounds: IAABB,
     pub(crate) clipping_pixel_bounds: Option<IAABB>,
@@ -1202,6 +1203,7 @@ impl Draw {
             paint_matrix: nuxie_render_api::Mat2D::IDENTITY,
             image_matrix: nuxie_render_api::Mat2D::IDENTITY,
             blend_mode: nuxie_render_api::BlendMode::SrcOver,
+            additiveness: 0.0,
             draw_type: DrawObjectType::path,
             clipped_pixel_bounds: IAABB::default(),
             clipping_pixel_bounds: None,
@@ -1264,6 +1266,9 @@ impl Draw {
     }
     pub fn isClipUpdate(&self) -> bool {
         (self.draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
+    }
+    pub fn additiveness(&self) -> f32 {
+        self.additiveness
     }
     pub fn blendMode(&self) -> nuxie_render_api::BlendMode {
         self.blend_mode

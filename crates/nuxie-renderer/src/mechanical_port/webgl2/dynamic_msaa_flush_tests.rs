@@ -44,6 +44,7 @@ fn dynamic_msaa_descriptor(
         tessVertexSpanCount: 0,
         firstTessVertexSpan: 0,
         gradDataHeight: 0,
+        gradTextureHeight: 0,
         tessDataHeight: 0,
         clockwiseFillOverride: false,
         hasTriangleVertices: false,

@@ -455,7 +455,9 @@ pub(crate) struct FlushUniforms {
     pub dither_conversion_to_rgb10: f32,
     pub wireframe_enabled: u32,
     pub render_target_bottom_up: u32,
-    pub padding: [u8; 148],
+    pub grad_texture_y_scale: f32,
+    pub grad_texture_y_bias: f32,
+    pub padding: [u8; 140],
 }
 
 #[repr(C)]
@@ -513,6 +515,31 @@ pub(crate) struct PaintData {
     pub value: u32,
 }
 
+fn swizzle_rive_color_to_rgba_premul_additive(
+    color: ColorInt,
+    blend_mode: BlendMode,
+    additiveness: f32,
+) -> u32 {
+    assert!(additiveness >= 0.0 && additiveness <= 1.0);
+    let complement = if blend_mode == BlendMode::SrcOver {
+        1.0 - additiveness
+    } else {
+        1.0
+    };
+    let rgba = swizzle_rive_color_to_rgba_premul(color);
+    (rgba & 0x00ff_ffff) | ((((color >> 24) as f32 * complement + 0.5) as u32) << 24)
+}
+
+fn packed_gradient_row(row: u32, blend_mode: BlendMode, additiveness: f32) -> f32 {
+    assert!(row <= 0xffff && additiveness >= 0.0 && additiveness <= 1.0);
+    let complement = if blend_mode == BlendMode::SrcOver {
+        1.0 - additiveness
+    } else {
+        1.0
+    };
+    (row + 1) as f32 + (complement * 255.0 + 0.5) as u32 as f32 * (1.0 / 256.0)
+}
+
 impl PaintData {
     fn fill_flag(fill_rule: FillRule) -> u32 {
         match fill_rule {
@@ -526,7 +553,9 @@ impl PaintData {
         fill_rule: FillRule,
         blend_mode: BlendMode,
         solid_unmultiplied: bool,
+        additiveness: f32,
     ) -> Self {
+        assert!(additiveness >= 0.0 && additiveness <= 1.0);
         Self {
             params: PaintType::SolidColor as u32
                 | Self::fill_flag(fill_rule)
@@ -534,7 +563,7 @@ impl PaintData {
             value: if solid_unmultiplied {
                 swizzle_rive_color_to_rgba(color)
             } else {
-                swizzle_rive_color_to_rgba_premul(color)
+                swizzle_rive_color_to_rgba_premul_additive(color, blend_mode, additiveness)
             },
         }
     }
@@ -543,22 +572,25 @@ impl PaintData {
         color: ColorInt,
         blend_mode: BlendMode,
         solid_unmultiplied: bool,
+        additiveness: f32,
     ) -> Self {
+        assert!(additiveness >= 0.0 && additiveness <= 1.0);
         Self {
             params: PaintType::SolidColor as u32 | blend_mode_id(blend_mode) << 4,
             value: if solid_unmultiplied {
                 swizzle_rive_color_to_rgba(color)
             } else {
-                swizzle_rive_color_to_rgba_premul(color)
+                swizzle_rive_color_to_rgba_premul_additive(color, blend_mode, additiveness)
             },
         }
     }
 
     pub(crate) fn gradient(
         paint_type: PaintType,
-        texture_y: f32,
+        texture_row: u32,
         fill_rule: FillRule,
         blend_mode: BlendMode,
+        additiveness: f32,
     ) -> Self {
         debug_assert!(matches!(
             paint_type,
@@ -566,14 +598,15 @@ impl PaintData {
         ));
         Self {
             params: paint_type as u32 | Self::fill_flag(fill_rule) | blend_mode_id(blend_mode) << 4,
-            value: texture_y.to_bits(),
+            value: packed_gradient_row(texture_row, blend_mode, additiveness).to_bits(),
         }
     }
 
     pub(crate) fn gradient_stroke(
         paint_type: PaintType,
-        texture_y: f32,
+        texture_row: u32,
         blend_mode: BlendMode,
+        additiveness: f32,
     ) -> Self {
         debug_assert!(matches!(
             paint_type,
@@ -581,7 +614,7 @@ impl PaintData {
         ));
         Self {
             params: paint_type as u32 | blend_mode_id(blend_mode) << 4,
-            value: texture_y.to_bits(),
+            value: packed_gradient_row(texture_row, blend_mode, additiveness).to_bits(),
         }
     }
 
@@ -909,16 +942,36 @@ mod tests {
         assert_eq!(patch.mirrored_outset, -2.0);
         assert_eq!(patch.mirrored_fill_coverage, -0.5);
 
-        let paint = PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply, true);
+        let paint = PaintData::solid(
+            0x8040_2010,
+            FillRule::EvenOdd,
+            BlendMode::Multiply,
+            true,
+            0.0,
+        );
         assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
         assert_eq!(paint.value, 0x8010_2040);
         assert_eq!(
-            PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::SrcOver, false).value,
+            PaintData::solid(
+                0x8040_2010,
+                FillRule::EvenOdd,
+                BlendMode::SrcOver,
+                false,
+                0.0
+            )
+            .value,
             0x8008_1020
         );
         // The KHR advanced-blend path also explicitly requests premultiplied solids.
         assert_eq!(
-            PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply, false).value,
+            PaintData::solid(
+                0x8040_2010,
+                FillRule::EvenOdd,
+                BlendMode::Multiply,
+                false,
+                0.0
+            )
+            .value,
             0x8008_1020
         );
         assert_eq!(paint.with_clip_rect().params, 1 | 0x200 | 0x400 | 11 << 4);
@@ -932,14 +985,20 @@ mod tests {
             7 << 16
         );
         assert_eq!(
-            PaintData::solid(0x8040_2010, FillRule::Clockwise, BlendMode::Multiply, true)
-                .with_generic_clockwise_fill()
-                .params,
+            PaintData::solid(
+                0x8040_2010,
+                FillRule::Clockwise,
+                BlendMode::Multiply,
+                true,
+                0.0
+            )
+            .with_generic_clockwise_fill()
+            .params,
             1 | 11 << 4
         );
         for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
             assert_eq!(
-                PaintData::solid(0x8040_2010, fill_rule, BlendMode::Multiply, true)
+                PaintData::solid(0x8040_2010, fill_rule, BlendMode::Multiply, true, 0.0)
                     .with_generic_clockwise_fill()
                     .params
                     & 0x300,
@@ -948,9 +1007,10 @@ mod tests {
             assert_eq!(
                 PaintData::gradient(
                     PaintType::LinearGradient,
-                    0.5,
+                    0,
                     fill_rule,
                     BlendMode::Multiply,
+                    0.0,
                 )
                 .with_generic_clockwise_fill()
                 .params
@@ -965,7 +1025,7 @@ mod tests {
                 0
             );
         }
-        let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply, true);
+        let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply, true, 0.0);
         assert_eq!(stroke.params, 1 | 11 << 4);
 
         let image_paint = PaintData::image(0.5, FillRule::NonZero, BlendMode::Screen);

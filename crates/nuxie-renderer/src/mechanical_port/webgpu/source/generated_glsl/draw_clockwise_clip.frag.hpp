@@ -6,35 +6,35 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_clockwise_clip_frag[] = R"===(#ifdef EB
-L1
-#ifndef O
-z0(G2,l0);
+M1
+#ifndef Q
+z0(G2,m0);
 #endif
-k1(V2,i0);
-#ifndef O
-bb(i6,o4);
+k1(X2,i0);
+#ifndef Q
+cb(j6,p4);
 #endif
-k1(L6,R0);M1 O1(HB){r(Y1,E);d l1=-Y1.x;
+k1(M6,S0);N1 P1(HB){r(Y1,E);d m1=-Y1.x;
 #ifdef DB
 r(j1,d);d y0=j1;
 #else
-r(M,B2);d y0=M.x;
+r(O,B2);d y0=O.x;
 #endif
-z2;E P0;d N5,z3;
+z2;E Q0;d O5,z3;
 #if defined(DB)&&defined(CC)
 if(CC){z3=y0;}else
 #endif
-{P0=unpackHalf2x16(Z0(i0));N5=P0.y;d V4=N5==l1?P0.x:J0(.0);z3=V4+y0;}
+{Q0=unpackHalf2x16(a1(i0));O5=Q0.y;d X4=O5==m1?Q0.x:J0(.0);z3=X4+y0;}
 #ifdef YC
-d L5=Y1.y;if(YC&&L5!=.0){d v4=.0;
+d M5=Y1.y;if(YC&&M5!=.0){d w4=.0;
 #if defined(DB)&&defined(CC)
-if(CC){P0=unpackHalf2x16(Z0(i0));N5=P0.y;}
+if(CC){Q0=unpackHalf2x16(a1(i0));O5=Q0.y;}
 #endif
-if(N5!=l1){v4=N5==L5?P0.x:.0;d1(R0,packHalf2x16(D2(v4,eg)));}else{v4=unpackHalf2x16(Z0(R0)).x;h2(R0);}z3=min(z3,v4);}else
+if(O5!=m1){w4=O5==M5?Q0.x:.0;d1(S0,packHalf2x16(D2(w4,jg)));}else{w4=unpackHalf2x16(a1(S0)).x;h2(S0);}z3=min(z3,w4);}else
 #endif
-{h2(R0);}d1(i0,packHalf2x16(D2(z3,l1)));
-#ifndef O
-y2(l0);
+{h2(S0);}d1(i0,packHalf2x16(D2(z3,m1)));
+#ifndef Q
+y2(m0);
 #endif
 A2;d2;}
 #endif

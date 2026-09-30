@@ -148,6 +148,7 @@ void rive_ffi_render_paint_thickness(rive_ffi_render_paint*, float thickness);
 void rive_ffi_render_paint_join(rive_ffi_render_paint*, uint32_t join);
 void rive_ffi_render_paint_cap(rive_ffi_render_paint*, uint32_t cap);
 void rive_ffi_render_paint_feather(rive_ffi_render_paint*, float feather);
+void rive_ffi_render_paint_additiveness(rive_ffi_render_paint*, float additiveness);
 void rive_ffi_render_paint_blend_mode(rive_ffi_render_paint*,
                                       uint8_t blend_mode);
 void rive_ffi_render_paint_shader(rive_ffi_render_paint*,
@@ -198,6 +199,12 @@ void rive_ffi_renderer_draw_image(rive_ffi_renderer*,
                                   uint8_t sampler,
                                   uint8_t blend_mode,
                                   float opacity);
+
+void rive_ffi_renderer_draw_image_with_additiveness(rive_ffi_renderer*,
+                                  const rive_ffi_render_image*,
+                                  uint8_t sampler,
+                                  uint8_t blend_mode,
+                                  float opacity, float additiveness);
 void rive_ffi_renderer_draw_image_mesh(rive_ffi_renderer*,
                                        const rive_ffi_render_image*,
                                        uint8_t sampler,
@@ -208,6 +215,17 @@ void rive_ffi_renderer_draw_image_mesh(rive_ffi_renderer*,
                                        uint32_t index_count,
                                        uint8_t blend_mode,
                                        float opacity);
+
+void rive_ffi_renderer_draw_image_mesh_with_additiveness(rive_ffi_renderer*,
+                                       const rive_ffi_render_image*,
+                                       uint8_t sampler,
+                                       const rive_ffi_render_buffer* vertices,
+                                       const rive_ffi_render_buffer* uv_coords,
+                                       const rive_ffi_render_buffer* indices,
+                                       uint32_t vertex_count,
+                                       uint32_t index_count,
+                                       uint8_t blend_mode,
+                                       float opacity, float additiveness);
 void rive_ffi_renderer_modulate_opacity(rive_ffi_renderer*, float opacity);
 
 #ifdef __cplusplus

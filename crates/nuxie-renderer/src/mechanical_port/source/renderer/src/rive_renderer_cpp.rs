@@ -237,6 +237,7 @@
 //                     m.mapBoundingBox(AABB{0, 0, 1, 1}).roundOut(),
 //                     m,
 //                     paint->getBlendMode(),
+//                     paint->getAdditiveness(),
 //                     ref_rcp(paint->getImageTexture()),
 //                     ref_rcp(paint->getGradient()),
 //                     paint->getImageSampler(),
@@ -498,6 +499,15 @@
 //                              BlendMode blendMode,
 //                              float opacity)
 // {
+//     drawImage(renderImage, imageSampler, blendMode, opacity, 0);
+// }
+//
+// void RiveRenderer::drawImage(const RenderImage* renderImage,
+//                              ImageSampler imageSampler,
+//                              BlendMode blendMode,
+//                              float opacity,
+//                              float additiveness)
+// {
 //     RIVE_PROF_SCOPE_L(2)
 //     LITE_RTTI_CAST_OR_RETURN(image, const RiveRenderImage*, renderImage);
 //
@@ -531,6 +541,7 @@
 //                     m.mapBoundingBox(AABB{0, 0, 1, 1}).roundOut(),
 //                     m,
 //                     blendMode,
+//                     additiveness,
 //                     std::move(imageTexture),
 //                     nullptr, // gradient
 //                     imageSampler,
@@ -554,6 +565,7 @@
 //         RiveRenderPaint paint;
 //         paint.image(std::move(imageTexture), finalOpacity);
 //         paint.blendMode(blendMode);
+//         paint.additiveness(additiveness);
 //         paint.imageSampler(imageSampler);
 //         drawPath(m_unitRectPath.get(), &paint);
 //     }
@@ -570,6 +582,29 @@
 //                                  uint32_t indexCount,
 //                                  BlendMode blendMode,
 //                                  float opacity)
+// {
+//     drawImageMesh(renderImage,
+//                   imageSampler,
+//                   std::move(vertices_f32),
+//                   std::move(uvCoords_f32),
+//                   std::move(indices_u16),
+//                   vertexCount,
+//                   indexCount,
+//                   blendMode,
+//                   opacity,
+//                   0);
+// }
+//
+// void RiveRenderer::drawImageMesh(const RenderImage* renderImage,
+//                                  ImageSampler imageSampler,
+//                                  rcp<RenderBuffer> vertices_f32,
+//                                  rcp<RenderBuffer> uvCoords_f32,
+//                                  rcp<RenderBuffer> indices_u16,
+//                                  uint32_t vertexCount,
+//                                  uint32_t indexCount,
+//                                  BlendMode blendMode,
+//                                  float opacity,
+//                                  float additiveness)
 // {
 //     RIVE_PROF_SCOPE_L(2)
 //     LITE_RTTI_CAST_OR_RETURN(image, const RiveRenderImage*, renderImage);
@@ -600,6 +635,7 @@
 //         m_context->make<gpu::ImageMeshDraw>(gpu::Draw::FULLSCREEN_PIXEL_BOUNDS,
 //                                             m_renderStateStack.back().matrix,
 //                                             blendMode,
+//                                             additiveness,
 //                                             std::move(imageTexture),
 //                                             imageSampler,
 //                                             std::move(vertices_f32),
@@ -1727,6 +1763,7 @@ impl RendererContract for RiveRenderer {
                     matrix.map_bounds(Aabb::new(0.0, 0.0, 1.0, 1.0)).round_out(),
                     matrix,
                     q.getBlendMode(),
+                    q.getAdditiveness(),
                     super::draw_cpp::color_modulate_opacity(
                         color,
                         self.current_state().modulatedOpacity,
@@ -1832,6 +1869,18 @@ impl RendererContract for RiveRenderer {
         blend: BlendMode,
         opacity: f32,
     ) {
+        unsafe {
+            self.drawImageWithAdditiveness(image, sampler, blend, opacity, 0.0);
+        }
+    }
+    unsafe fn drawImageWithAdditiveness(
+        &mut self,
+        image: *const crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage,
+        sampler: ImageSampler,
+        blend: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
         if image.is_null() {
             return;
         }
@@ -1866,6 +1915,7 @@ impl RendererContract for RiveRenderer {
                     b,
                     self.current_state().matrix,
                     blend,
+                    additiveness,
                     super::draw_cpp::color_modulate_opacity(0xffffffff, final_opacity),
                     texture,
                     rcp::new(),
@@ -1889,6 +1939,7 @@ impl RendererContract for RiveRenderer {
             let mut paint = RiveRenderPaint::new();
             paint.image(texture, final_opacity);
             paint.blendMode(blend);
+            paint.additiveness(additiveness);
             paint.imageSampler(sampler);
             unsafe {
                 <Self as RendererContract>::drawPath(
@@ -1907,10 +1958,38 @@ impl RendererContract for RiveRenderer {
         vertices: rcp<RenderBuffer>,
         uv: rcp<RenderBuffer>,
         indices: rcp<RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend: BlendMode,
+        opacity: f32,
+    ) {
+        unsafe {
+            self.drawImageMeshWithAdditiveness(
+                image,
+                sampler,
+                vertices,
+                uv,
+                indices,
+                vertex_count,
+                index_count,
+                blend,
+                opacity,
+                0.0,
+            );
+        }
+    }
+    unsafe fn drawImageMeshWithAdditiveness(
+        &mut self,
+        image: *const crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage,
+        sampler: ImageSampler,
+        vertices: rcp<RenderBuffer>,
+        uv: rcp<RenderBuffer>,
+        indices: rcp<RenderBuffer>,
         _vertex_count: u32,
         index_count: u32,
         blend: BlendMode,
         opacity: f32,
+        additiveness: f32,
     ) {
         if image.is_null()
             || vertices.get().is_null()
@@ -1931,6 +2010,7 @@ impl RendererContract for RiveRenderer {
                 FULLSCREEN_PIXEL_BOUNDS,
                 self.current_state().matrix,
                 blend,
+                additiveness,
                 final_opacity,
                 texture,
                 sampler,

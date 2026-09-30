@@ -3076,7 +3076,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3241,6 +3241,60 @@ impl PathData {
     }
 }
 
+#[cfg(test)]
+mod additive_packing_tests {
+    use super::*;
+
+    #[test]
+    fn additive_solid_preserves_premultiplied_rgb_and_scales_only_alpha() {
+        assert_eq!(
+            swizzleRiveColorToRGBAPremulAdditive(0x8040_2010, 1.0),
+            0x8008_1020
+        );
+        assert_eq!(
+            swizzleRiveColorToRGBAPremulAdditive(0x8040_2010, 0.5),
+            0x4008_1020
+        );
+        assert_eq!(
+            swizzleRiveColorToRGBAPremulAdditive(0x8040_2010, 0.0),
+            0x0008_1020
+        );
+    }
+
+    #[test]
+    fn gradient_row_packs_complement_and_advanced_blends_ignore_additiveness() {
+        for (blend, additive, expected) in [
+            (BlendMode::SrcOver, 0.0, 8.0 + 255.0 / 256.0),
+            (BlendMode::SrcOver, 0.5, 8.5),
+            (BlendMode::SrcOver, 1.0, 8.0),
+            (BlendMode::Multiply, 1.0, 8.0 + 255.0 / 256.0),
+        ] {
+            let mut paint: PaintData = unsafe { core::mem::zeroed() };
+            paint.set(
+                DrawContents::none,
+                PaintType::linearGradient,
+                SimplePaintValue {
+                    colorRampLocation: ColorRampLocation {
+                        row: 7,
+                        ..Default::default()
+                    },
+                },
+                GradTextureLayout::default(),
+                0,
+                false,
+                false,
+                blend,
+                false,
+                additive,
+            );
+            assert_eq!(
+                unsafe { paint.value.m_gradTextureRowAndAdditiveness },
+                expected
+            );
+        }
+    }
+}
+
 impl PaintData {
     pub fn set(
         &mut self,
@@ -3253,23 +3307,36 @@ impl PaintData {
         hasImage: bool,
         blendMode: BlendMode,
         solidUnmultiplied: bool,
+        additiveness: f32,
     ) {
         let shiftedClipID = clipID << 16;
         let shiftedBlendMode = ConvertBlendModeToPLSBlendMode(blendMode) << 4;
         let mut localParams = paint_type_to_glsl_id(paintType);
+        assert!(additiveness >= 0.0 && additiveness <= 1.0);
+        let complementAdditiveness = if blendMode != BlendMode::SrcOver {
+            1.0
+        } else {
+            1.0 - additiveness
+        };
         unsafe {
             match paintType {
                 PaintType::solidColor => {
                     self.value.m_color = if solidUnmultiplied {
                         SwizzleRiveColorToRGBA(simplePaintValue.color)
                     } else {
-                        SwizzleRiveColorToRGBAPremul(simplePaintValue.color)
+                        swizzleRiveColorToRGBAPremulAdditive(
+                            simplePaintValue.color,
+                            complementAdditiveness,
+                        )
                     };
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::linearGradient | PaintType::radialGradient => {
                     let loc = simplePaintValue.colorRampLocation;
-                    self.value.m_gradTextureY = getGradientY(loc, gradTextureLayout);
+                    let row = getGradientRow(loc, gradTextureLayout);
+                    assert!(row <= 0xffff);
+                    self.value.m_gradTextureRowAndAdditiveness = (row + 1) as f32
+                        + (complementAdditiveness * 255.0 + 0.5) as u32 as f32 * (1.0 / 256.0);
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::clipUpdate => {
@@ -3293,14 +3360,26 @@ impl PaintData {
     }
 }
 
-pub fn getGradientY(location: ColorRampLocation, layout: GradTextureLayout) -> f32 {
+fn swizzleRiveColorToRGBAPremulAdditive(color: ColorInt, complement: f32) -> u32 {
+    let alpha = color >> 24;
+    let red = (((color >> 16) & 255) * alpha + 127) / 255;
+    let green = (((color >> 8) & 255) * alpha + 127) / 255;
+    let blue = ((color & 255) * alpha + 127) / 255;
+    red | (green << 8) | (blue << 16) | (((alpha as f32 * complement + 0.5) as u32) << 24)
+}
+
+pub fn getGradientRow(location: ColorRampLocation, layout: GradTextureLayout) -> u32 {
     let row = location.row as u32
         + if location.isComplex() {
             layout.complexOffsetY
         } else {
             0
         };
-    (row as f32 + 0.5) * layout.inverseHeight
+    row
+}
+
+pub fn getGradientY(location: ColorRampLocation, layout: GradTextureLayout) -> f32 {
+    (getGradientRow(location, layout) as f32 + 0.5) * layout.inverseHeight
 }
 
 pub fn getGradientMatrixAndSpan(
@@ -3444,14 +3523,21 @@ pub fn image_draw_instance_base(
     clipID: u32,
     blendMode: BlendMode,
     zIndex: u32,
+    additiveness: f32,
 ) -> ImageDrawInstanceBase {
+    assert!(additiveness >= 0.0 && additiveness <= 1.0);
+    let complementAdditiveness = if blendMode != BlendMode::SrcOver {
+        1.0
+    } else {
+        1.0 - additiveness
+    };
     let clip = clipRectInverseMatrix.unwrap_or(Mat2D([0.0, 0.0, 0.0, 0.0, 1.0, 1.0]));
     let mut out = ImageDrawInstanceBase {
         m_viewMatrix: [0.0; 4],
         m_clipRectInverseMatrix: [0.0; 4],
         m_translate: [0.0; 2],
         m_clipRectInverseTranslate: [0.0; 2],
-        m_modulatedColor: SwizzleRiveColorToRGBAPremul(color),
+        m_modulatedColor: swizzleRiveColorToRGBAPremulAdditive(color, complementAdditiveness),
         m_clipID: clipID,
         m_blendMode: ConvertBlendModeToPLSBlendMode(blendMode),
         m_zIndex: zIndex,
@@ -3556,7 +3642,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{find_transformed_area, Mat2D, AABB};
+    use super::{AABB, Mat2D, find_transformed_area};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -3735,7 +3821,9 @@ impl FlushUniforms {
             },
             m_wireframeEnabled: flushDesc.wireframe as u32,
             m_renderTargetBottomUp: renderTarget.bottomUp(platformFeatures) as u32,
-            m_padTo256Bytes: [0; 256 - 108],
+            m_gradTextureYScale: 1.0 / flushDesc.gradTextureHeight as f32,
+            m_gradTextureYBias: -0.5 / flushDesc.gradTextureHeight as f32,
+            m_padTo256Bytes: [0; 256 - 116],
         }
     }
 }
@@ -3748,6 +3836,7 @@ impl ImageDrawInstanceBase {
         clipID: u32,
         blendMode: BlendMode,
         zIndex: u32,
+        additiveness: f32,
     ) -> Self {
         image_draw_instance_base(
             matrix,
@@ -3756,6 +3845,7 @@ impl ImageDrawInstanceBase {
             clipID,
             blendMode,
             zIndex,
+            additiveness,
         )
     }
 }
@@ -3773,6 +3863,7 @@ impl ImageRectInstance {
         gradientType: u32,
         gradTextureHorizontalSpan: [f32; 2],
         gradTextureY: f32,
+        additiveness: f32,
     ) -> Self {
         Self {
             m_commons: image_draw_instance_base(
@@ -3782,6 +3873,7 @@ impl ImageRectInstance {
                 clipID,
                 blendMode,
                 zIndex,
+                additiveness,
             ),
             m_imageMatrix: imageMatrix.0[..4].try_into().unwrap(),
             m_gradientMatrix: gradientMatrix.0[..4].try_into().unwrap(),
@@ -3802,6 +3894,7 @@ impl ImageMeshInstance {
         clipID: u32,
         blendMode: BlendMode,
         zIndex: u32,
+        additiveness: f32,
     ) -> Self {
         Self {
             m_commons: image_draw_instance_base(
@@ -3811,6 +3904,7 @@ impl ImageMeshInstance {
                 clipID,
                 blendMode,
                 zIndex,
+                additiveness,
             ),
         }
     }

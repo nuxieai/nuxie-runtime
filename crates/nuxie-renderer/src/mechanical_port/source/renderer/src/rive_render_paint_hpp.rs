@@ -135,6 +135,7 @@ pub struct RiveRenderPaint {
     pub m_join: StrokeJoin,
     pub m_cap: StrokeCap,
     pub m_feather: f32,
+    pub m_additiveness: f32,
     pub m_blendMode: BlendMode,
     pub m_stroked: bool,
     pub m_imageTransform: Mat2D,
@@ -152,6 +153,7 @@ impl Default for RiveRenderPaint {
             m_join: StrokeJoin::Miter,
             m_cap: StrokeCap::Butt,
             m_feather: 0.0,
+            m_additiveness: 0.0,
             m_blendMode: BlendMode::SrcOver,
             m_stroked: false,
             m_imageTransform: Mat2D::IDENTITY,
@@ -195,6 +197,12 @@ impl RiveRenderPaint {
     }
     pub fn feather(&mut self, v: f32) {
         self.m_feather = v.abs();
+    }
+    pub fn additiveness(&mut self, v: f32) {
+        self.m_additiveness = v;
+    }
+    pub fn getAdditiveness(&self) -> f32 {
+        self.m_additiveness
     }
     pub fn blendMode(&mut self, v: BlendMode) {
         self.m_blendMode = v;
@@ -303,7 +311,10 @@ impl RiveRenderPaint {
         self.m_simpleValue
     }
     pub fn getIsOpaque(&self) -> bool {
-        if self.m_feather != 0.0 || self.m_blendMode != BlendMode::SrcOver {
+        if self.m_feather != 0.0
+            || self.m_blendMode != BlendMode::SrcOver
+            || self.m_additiveness != 0.0
+        {
             return false;
         }
         if !self.m_imageTexture.get().is_null() {
@@ -433,6 +444,9 @@ impl RenderPaintContract for RiveRenderPaint {
     fn feather(&mut self, value: f32) {
         self.feather(value);
     }
+    fn additiveness(&mut self, value: f32) {
+        self.additiveness(value);
+    }
     fn blendMode(&mut self, value: BlendMode) {
         self.blendMode(value);
     }
@@ -475,6 +489,9 @@ impl RenderPaint for RiveRenderPaint {
     }
     fn feather(&mut self, v: f32) {
         self.feather(v)
+    }
+    fn additiveness(&mut self, v: f32) {
+        self.additiveness(v);
     }
     fn blend_mode(&mut self, v: BlendMode) {
         self.blendMode(v)
@@ -603,6 +620,9 @@ impl RenderPaint for RiveRenderPaintHandle {
     }
     fn feather(&mut self, value: f32) {
         self.source_mut().feather(value);
+    }
+    fn additiveness(&mut self, value: f32) {
+        self.source_mut().additiveness(value);
     }
     fn blend_mode(&mut self, value: BlendMode) {
         self.source_mut().blendMode(value);

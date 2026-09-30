@@ -1,6 +1,6 @@
 #ifdef VERTEX
-e f Rb(c v0,e0 W8,c I2,float nh,c Xd,float y){f p2;p2.w=y;c Yd=O0(W8,v0)+I2;float oh=Xd.x;if(oh>0.9){p2.z=2.0;}else{p2.z=Xd.y;}if(nh==float(ac)){p2.x=Yd.x;p2.y=0.0;}else{p2.z=-p2.z;p2.xy=Yd;}return p2;}
+e f Sb(c v0,e0 W8,c I2,float sh,c be,float y){f p2;p2.w=y;c ce=P0(W8,v0)+I2;float th=be.x;if(th>0.9){p2.z=2.0;}else{p2.z=be.y;}if(sh==float(bc)){p2.x=ce.x;p2.y=0.0;}else{p2.z=-p2.z;p2.xy=ce;}return p2;}
 #endif
 #ifdef FRAGMENT
-e c fc(f p2){float t=p2.z>0.0?p2.x:length(p2.xy);t=clamp(t,0.0,1.0);float Zd=abs(p2.z);float x=Zd>1.0?(1.0-1.0/ta)*t+(0.5/ta):(1.0/ta)*t+Zd;float ph=p2.w;return c(x,ph);}
+e c jc(f p2){float t=p2.z>0.0?p2.x:length(p2.xy);t=clamp(t,0.0,1.0);float de=abs(p2.z);float x=de>1.0?(1.0-1.0/ua)*t+(0.5/ua):(1.0/ua)*t+de;float uh=p2.w;return c(x,uh);}
 #endif

@@ -62,6 +62,7 @@ pub const FULLSCREEN_PIXEL_BOUNDS:
 /// modulated gradient owner returned by `getGradientWithOpacity()`.
 pub trait RiveRenderPaintContract {
     fn getBlendMode(&self) -> BlendMode;
+    fn getAdditiveness(&self) -> f32;
     fn getImageTexture(
         &self,
     ) -> crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<
@@ -89,6 +90,7 @@ pub trait RiveRenderPaintContract {
 /// have a more-derived authored `RiveRenderPaint` vtable owner.
 pub struct RiveRenderPaintData {
     pub blend_mode: BlendMode,
+    pub additiveness: f32,
     pub image_texture: crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<
         crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::Texture,
     >,
@@ -108,6 +110,9 @@ pub struct RiveRenderPaintData {
 }
 
 impl RiveRenderPaintContract for RiveRenderPaintData {
+    fn getAdditiveness(&self) -> f32 {
+        self.additiveness
+    }
     fn getBlendMode(&self) -> BlendMode {
         self.blend_mode
     }

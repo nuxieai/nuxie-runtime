@@ -272,6 +272,18 @@ impl Renderer for NativeWebGpuFrame {
         self.core.draw_image(image, sampler, blend_mode, opacity);
     }
 
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        self.core
+            .draw_image_with_additiveness(image, sampler, blend_mode, opacity, additiveness);
+    }
+
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -294,6 +306,33 @@ impl Renderer for NativeWebGpuFrame {
             index_count,
             blend_mode,
             opacity,
+        );
+    }
+
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend_mode: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        self.core.draw_image_mesh_with_additiveness(
+            image,
+            sampler,
+            vertices,
+            uv_coords,
+            indices,
+            vertex_count,
+            index_count,
+            blend_mode,
+            opacity,
+            additiveness,
         );
     }
 

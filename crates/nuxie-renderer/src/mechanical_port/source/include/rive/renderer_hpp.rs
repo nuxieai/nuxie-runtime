@@ -623,7 +623,8 @@ impl RenderPaint {
 // virtual void thickness(float value) = 0;
 // virtual void join(StrokeJoin value) = 0;
 // virtual void cap(StrokeCap value) = 0;
-// virtual void feather(float value) {} // Not supported on all renderers.
+// virtual void feather(float value) {}      // Not supported on all renderers.
+// virtual void additiveness(float value) {} // Only used for srcOver
 // virtual void blendMode(BlendMode value) = 0;
 // virtual void shader(rcp<RenderShader>) = 0;
 // virtual void invalidateStroke() = 0;
@@ -635,6 +636,7 @@ pub trait RenderPaintContract {
     fn join(&mut self, value: StrokeJoin);
     fn cap(&mut self, value: StrokeCap);
     fn feather(&mut self, value: f32) {}
+    fn additiveness(&mut self, _value: f32) {}
     fn blendMode(&mut self, value: BlendMode);
     // rcp<RenderShader> is an intrusive owning transfer, not a borrowed link.
     unsafe fn shader(&mut self, shader: rcp<RenderShader>);
@@ -1119,6 +1121,48 @@ pub trait RendererContract {
     // captured by save() and restored by restore().
     // virtual void modulateOpacity(float opacity) = 0;
     fn modulateOpacity(&mut self, opacity: f32);
+
+    // Additive overloads fall back on the plain overloads for unsupported renderers.
+    unsafe fn drawImageWithAdditiveness(
+        &mut self,
+        image: *const RenderImage,
+        sampler: ImageSampler,
+        blendMode: BlendMode,
+        opacity: f32,
+        _additiveness: f32,
+    ) {
+        unsafe {
+            self.drawImage(image, sampler, blendMode, opacity);
+        }
+    }
+
+    unsafe fn drawImageMeshWithAdditiveness(
+        &mut self,
+        image: *const RenderImage,
+        sampler: ImageSampler,
+        vertices_f32: rcp<RenderBuffer>,
+        uvCoords_f32: rcp<RenderBuffer>,
+        indices_u16: rcp<RenderBuffer>,
+        vertexCount: u32,
+        indexCount: u32,
+        blendMode: BlendMode,
+        opacity: f32,
+        _additiveness: f32,
+    ) {
+        unsafe {
+            self.drawImageMesh(
+                image,
+                sampler,
+                vertices_f32,
+                uvCoords_f32,
+                indices_u16,
+                vertexCount,
+                indexCount,
+                blendMode,
+                opacity,
+            );
+        }
+    }
 
     // Reports the renderer's current transform (CTM) into *out, if the
     // renderer tracks one. Returns false and leaves *out untouched otherwise.

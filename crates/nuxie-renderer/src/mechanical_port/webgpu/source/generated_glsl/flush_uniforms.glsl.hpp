@@ -5,25 +5,25 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char flush_uniforms[] = R"===(#ifndef w3
-#define w3(k4) float k4;
+const char flush_uniforms[] = R"===(#ifndef P2
+#define P2(l4) float l4;
 #endif
 #ifndef M3
-#define M3(k4) uint k4;
+#define M3(l4) uint l4;
 #endif
-#ifndef Bd
-#define Bd(k4) g6 k4;
+#ifndef Fd
+#define Fd(l4) h6 l4;
 #endif
-#ifndef Sa
-#define Sa(k4) c k4;
+#ifndef Ta
+#define Ta(l4) c l4;
 #endif
-#ifndef hh
-#define hh(k4) f k4;
+#ifndef mh
+#define mh(l4) f l4;
 #endif
-#ifndef Cd
-#define Cd AC
+#ifndef Gd
+#define Gd SB
 #endif
-z7(L4,Cd)w3(tc)w3(Dd)w3(Hf)w3(If)M3(q6)M3(Qb)M3(tf)M3(uf)Bd(X7)Sa(eh)Sa(Ed)M3(f2)w3(ih)M3(f6)w3(U2)w3(Fd)M3(of)w3(F3)w3(G3)w3(Gd)M3(bh)M3(Pb)P8(j)
+A7(M4,Gd)P2(xc)P2(Hd)P2(Mf)P2(Nf)M3(r6)M3(Rb)M3(yf)M3(zf)Fd(X7)Ta(jh)Ta(Id)M3(f2)P2(nh)M3(g6)P2(W2)P2(Jd)M3(sf)P2(F3)P2(G3)P2(Kd)M3(gh)M3(Qb)P2(dc)P2(ec)P8(j)
 )===";
 } // namespace glsl
 } // namespace gpu

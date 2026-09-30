@@ -195,6 +195,18 @@ impl Renderer for DeferredCanvasFrame {
     ) {
         self.target().draw_image(image, sampler, blend, opacity);
     }
+
+    fn draw_image_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        blend: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        self.target()
+            .draw_image_with_additiveness(image, sampler, blend, opacity, additiveness);
+    }
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -217,6 +229,33 @@ impl Renderer for DeferredCanvasFrame {
             index_count,
             blend,
             opacity,
+        );
+    }
+
+    fn draw_image_mesh_with_additiveness(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        blend: BlendMode,
+        opacity: f32,
+        additiveness: f32,
+    ) {
+        self.target().draw_image_mesh_with_additiveness(
+            image,
+            sampler,
+            vertices,
+            uv,
+            indices,
+            vertex_count,
+            index_count,
+            blend,
+            opacity,
+            additiveness,
         );
     }
     fn modulate_opacity(&mut self, opacity: f32) {

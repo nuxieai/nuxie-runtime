@@ -131,6 +131,7 @@ impl RiveRenderPaint {
 }
 
 impl crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::RiveRenderPaintContract for RiveRenderPaint {
+    fn getAdditiveness(&self)->f32 { self.getAdditiveness() }
     fn getBlendMode(&self)->nuxie_render_api::BlendMode { self.getBlendMode() }
     fn getImageTexture(&self)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::Texture> { unsafe { crate::mechanical_port::source::include::rive::refcnt_hpp::ref_rcp(self.m_imageTexture.get()) } }
     fn getImageSampler(&self)->crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler { self.getImageSampler() }

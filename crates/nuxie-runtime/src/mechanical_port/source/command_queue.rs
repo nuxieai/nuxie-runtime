@@ -14,7 +14,10 @@ use crate::mechanical_port::source::{
     audio::audio_source::AudioSourceRef,
     command_server::CommandServer,
     factory::RuntimeFactoryHandle,
-    input::focusable::{Key, KeyModifiers},
+    input::{
+        focus_manager::Direction,
+        focusable::{Key, KeyModifiers},
+    },
     layout::{Alignment, Fit},
     lua::scripting_vm::RuntimeScriptingVmHandle,
     math::vec2d::Vec2D,
@@ -561,6 +564,15 @@ pub trait ViewModelInstanceListener: Send {
 pub struct FocusState {
     pub has_focus: bool,
     pub expects_keyboard_input: bool,
+}
+
+/// Traversal and its resulting state, observed under the same lock.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FocusTraversalResult {
+    /// Whether traversal moved focus, including entry into the focus tree.
+    pub moved: bool,
+    /// The state immediately after traversal, even when it did not move.
+    pub focus_state: FocusState,
 }
 
 pub trait StateMachineListener: Send {
@@ -2331,6 +2343,71 @@ impl CommandQueue {
         self.run_once(Box::new(move |server| {
             result
                 .send(server.focus_previous_synchronized(handle))
+                .unwrap();
+        }));
+        future.recv().unwrap()
+    }
+
+    /// Requires an active server processing this queue on another thread.
+    /// Calling after disconnect, or without a processing server, blocks indefinitely.
+    pub fn focus_next_with_result_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+    ) -> FocusTraversalResult {
+        let (result, future) = std::sync::mpsc::channel();
+        self.run_once(Box::new(move |server| {
+            result
+                .send(server.focus_next_with_result_synchronized(handle))
+                .unwrap();
+        }));
+        future.recv().unwrap()
+    }
+
+    /// Requires an active server processing this queue on another thread.
+    /// Calling after disconnect, or without a processing server, blocks indefinitely.
+    pub fn focus_previous_with_result_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+    ) -> FocusTraversalResult {
+        let (result, future) = std::sync::mpsc::channel();
+        self.run_once(Box::new(move |server| {
+            result
+                .send(server.focus_previous_with_result_synchronized(handle))
+                .unwrap();
+        }));
+        future.recv().unwrap()
+    }
+
+    /// Requires an active server processing this queue on another thread.
+    /// Calling after disconnect, or without a processing server, blocks indefinitely.
+    pub fn key_input_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        let (result, future) = std::sync::mpsc::channel();
+        self.run_once(Box::new(move |server| {
+            result
+                .send(server.key_input_synchronized(handle, key, modifiers, is_pressed, is_repeat))
+                .unwrap();
+        }));
+        future.recv().unwrap()
+    }
+
+    /// Requires an active server processing this queue on another thread.
+    /// Calling after disconnect, or without a processing server, blocks indefinitely.
+    pub fn focus_in_direction_synchronized(
+        &mut self,
+        handle: StateMachineHandle,
+        direction: Direction,
+    ) -> bool {
+        let (result, future) = std::sync::mpsc::channel();
+        self.run_once(Box::new(move |server| {
+            result
+                .send(server.focus_in_direction_synchronized(handle, direction))
                 .unwrap();
         }));
         future.recv().unwrap()

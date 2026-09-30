@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-2b570b9e4f519c8105fce3d3fe69558926b1aa7d}
+ref=${RIVE_RUNTIME_REF:-cb8aa75d06b0341deaf5a55171844f37bf1ac882}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/ik_stacked_constraints.riv|ee6894232d6e40963998123053a8b46a8876fddc5741dffb3e189ca62a94040e|cb8aa75d06b0341deaf5a55171844f37bf1ac882|ik_stacked_constraints.riv"
+  "sync/ik_over_rotation_constraint.riv|7b3dc32441aa9d013f01f0218d1e2a64c7d8631e90238bc3ba5c3fe6e015e37c|cb8aa75d06b0341deaf5a55171844f37bf1ac882|ik_over_rotation_constraint.riv"
   "sync/drawable_custom_properties.riv|7821e97a0bde90ea12113e1dda47af6f4b29dfacd770bb8b031c8cf0632d3940|df0cc777d8211f81824943a7665884f5565aecb8|drawable_custom_properties.riv"
   "sync/drawable_custom_properties_other.riv|a7f6a5cdb97f69b43efcd6b120cf3c8570498585ee58b5ce70a8a089afcfdb61|df0cc777d8211f81824943a7665884f5565aecb8|drawable_custom_properties_other.riv"
   "sync/focus_traversal_test.riv|f42c64903b934b226a97cb222bd727f1a27522d53bd1ade80f7a5c05357dac99|9b9cd7b185398629f10ae0131e2a53322ed4a9b4|focus_traversal_test.riv"

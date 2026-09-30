@@ -217,6 +217,11 @@
 //             break;
 //     }
 //
+//     if (drawTypeHasPipelineDynamicState(drawType))
+//     {
+//         outFlags |= ShaderMiscFlags::emulateDynamicColorWriteDisable;
+//     }
+//
 //     return outFlags;
 // }
 //
@@ -2589,6 +2594,9 @@ fn get_valid_shader_misc_flags(draw_type: DrawType, mode: InterlockMode) -> u32 
     } else {
         flags |= ShaderMiscFlags::clockwiseFill.0;
     }
+    if drawTypeHasPipelineDynamicState(draw_type) {
+        flags |= ShaderMiscFlags::emulateDynamicColorWriteDisable.0;
+    }
     flags
 }
 
@@ -2950,7 +2958,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3425,7 +3433,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{find_transformed_area, Mat2D, AABB};
+    use super::{AABB, Mat2D, find_transformed_area};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -4121,6 +4129,45 @@ mod dynamic_color_write_tests {
         ] {
             assert!(with_dynamic_state.contains(&(draw_type as u8)));
             assert!(without_dynamic_state.contains(&(draw_type as u8)));
+        }
+    }
+
+    #[test]
+    fn dynamic_state_permutations_include_color_write_emulation() {
+        let platform = PlatformFeatures {
+            supportsPipelineDynamicState: true,
+            ..PlatformFeatures::default()
+        };
+        let mut observed = std::collections::BTreeMap::<u8, std::collections::BTreeSet<u32>>::new();
+        ForEachUbershaderPermutation(
+            InterlockMode::depthStencil,
+            &platform,
+            |draw_type, _, misc| {
+                if drawTypeHasPipelineDynamicState(draw_type) {
+                    observed.entry(draw_type as u8).or_default().insert(misc.0);
+                } else {
+                    assert_eq!(
+                        misc.0 & ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
+                        0
+                    );
+                }
+                true
+            },
+        );
+        for draw_type in [
+            DrawType::stencilDynamicMidpointFans,
+            DrawType::stencilDynamicOuterCubics,
+        ] {
+            assert_eq!(
+                observed[&(draw_type as u8)],
+                std::collections::BTreeSet::from([
+                    0,
+                    ShaderMiscFlags::fixedFunctionColorOutput.0,
+                    ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
+                    ShaderMiscFlags::fixedFunctionColorOutput.0
+                        | ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
+                ])
+            );
         }
     }
 

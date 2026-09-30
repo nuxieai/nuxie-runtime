@@ -1,4 +1,4 @@
-//! All five tests from tests/unit_tests/runtime/frame_probe_test.cpp at 73d678e2.
+//! All six tests from tests/unit_tests/runtime/frame_probe_test.cpp at 955d6a05.
 //! Kept in the unit-test target so upstream TESTING instrumentation stays absent
 //! from shipping builds. Hidden report-only sweeps map to ignored Rust tests.
 
@@ -216,4 +216,78 @@ fn participant_whose_path_rebuilds_in_place_does_not_resolve() {
         artboard.advance_default(FRAME_SECONDS);
     }
     assert_eq!(Artboard::layout_pass_count(), settled);
+}
+
+#[test]
+fn a_layout_tween_runs_without_resolving_the_layout() {
+    use crate::source::{
+        core::CoreType,
+        generated::{
+            layout::layout_component_style_base::LayoutComponentStyleBase,
+            layout_component_base::LayoutComponentBase,
+        },
+        layout::layout_enums::{LayoutAnimationStyle, LayoutStyleInterpolation},
+        layout_component::LayoutComponent,
+    };
+    let file = read_file("assets/layout/layout_anim_bound.riv");
+    let artboard = default_artboard(&file);
+    let mut container = None;
+    let mut layout = None;
+    for candidate in artboard.with_artboard(|a| a.find_all_handles::<LayoutComponent>()) {
+        if candidate.is_type_of(Artboard::TYPE_KEY) {
+            continue;
+        }
+        let style = candidate
+            .with(|object| {
+                let candidate = object.as_layout_component().unwrap();
+                candidate
+                    .style_handle()
+                    .map(|_| candidate.animation_style())
+            })
+            .flatten();
+        if container.is_none() && style == Some(LayoutAnimationStyle::Custom) {
+            container = Some(candidate.clone());
+        }
+        if layout.is_none() && style == Some(LayoutAnimationStyle::Inherit) {
+            layout = Some(candidate);
+        }
+    }
+    let container = container.expect("custom animation container");
+    let layout = layout.expect("inheriting layout");
+    let style = container
+        .with(|object| object.as_layout_component().unwrap().style_handle())
+        .flatten()
+        .unwrap();
+    assert!(CoreRegistry::set_uint_handle(
+        &style,
+        i32::from(LayoutComponentStyleBase::INTERPOLATION_TYPE_PROPERTY_KEY),
+        LayoutStyleInterpolation::Linear as u32
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &style,
+        i32::from(LayoutComponentStyleBase::INTERPOLATION_TIME_PROPERTY_KEY),
+        1.0
+    ));
+    artboard.advance_default(0.0);
+    let width = || {
+        layout
+            .with(|object| object.as_layout_component().unwrap().layout_width())
+            .unwrap()
+    };
+    assert_eq!(width(), 100.0);
+    assert!(CoreRegistry::set_double_handle(
+        &layout,
+        i32::from(LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        50.0
+    ));
+    artboard.advance_default(FRAME_SECONDS);
+    let retargeted = Artboard::layout_pass_count();
+    let mut frames = 0;
+    while width() > 50.0 && frames < 2 * PROBE_FRAMES {
+        artboard.advance_default(FRAME_SECONDS);
+        frames += 1;
+    }
+    assert_eq!(width(), 50.0);
+    assert!(frames > 1);
+    assert_eq!(Artboard::layout_pass_count(), retargeted);
 }

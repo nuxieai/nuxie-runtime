@@ -486,6 +486,16 @@ impl LayoutComponentStyle {
             LayoutComponent::scale_type_changed_from_style(&parent, self);
         }
     }
+    pub fn mark_render_path_dirty(&mut self) {
+        if let Some(parent) = self.layout_owner() {
+            parent.with_mut(|parent| {
+                parent.component_add_dirt(
+                    crate::mechanical_port::source::component_dirt::ComponentDirt::PATH,
+                    false,
+                )
+            });
+        }
+    }
     pub fn display_changed(&mut self) {
         if let Some(parent) = self.layout_owner() {
             LayoutComponent::display_changed_from_style(&parent, self);
@@ -706,18 +716,18 @@ impl LayoutComponentStyle {
         self.mark_layout_node_dirty();
     }
     pub fn link_corner_radius_changed(&mut self) {
-        self.mark_layout_style_dirty();
+        self.mark_render_path_dirty();
     }
     pub fn corner_radius_tl_changed(&mut self) {
-        self.mark_layout_style_dirty();
+        self.mark_render_path_dirty();
     }
     pub fn corner_radius_tr_changed(&mut self) {
-        self.mark_layout_style_dirty();
+        self.mark_render_path_dirty();
     }
     pub fn corner_radius_bl_changed(&mut self) {
-        self.mark_layout_style_dirty();
+        self.mark_render_path_dirty();
     }
     pub fn corner_radius_br_changed(&mut self) {
-        self.mark_layout_style_dirty();
+        self.mark_render_path_dirty();
     }
 }

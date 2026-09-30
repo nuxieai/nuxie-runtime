@@ -159,12 +159,11 @@ impl ComponentOccurrenceHandle {
                 // Constraint::onDirty dirties its parent, whose dependents can
                 // include this same constraint. Publish dirt first, then end
                 // the slot borrow before the inherited callback recurses.
-                if self
+                if let Some(dirt) = self
                     .with_component_mut(|component| component.add_dirt_state(value))
                     .flatten()
-                    .is_some()
                 {
-                    crate::mechanical_port::source::constraints::constraint::Constraint::mark_constraint_dirty_occurrence(handle);
+                    crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence(handle, dirt);
                     self.notify_artboard();
                     true
                 } else {
@@ -374,7 +373,7 @@ impl ComponentOccurrenceHandle {
                 // Constraint subclasses inherit Constraint::onDirty. Their parent
                 // transform's dependents include this same constraint, so
                 // invoke that callback after releasing the constraint slot.
-                crate::mechanical_port::source::constraints::constraint::Constraint::mark_constraint_dirty_occurrence(handle);
+                crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence(handle, dirt);
             } else {
                 handle.with_mut(|object| object.component_on_dirty(dirt));
             }

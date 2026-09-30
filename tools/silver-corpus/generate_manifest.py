@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "8398db3199cea4cd3eba53747aac562b5c0df3da"
+UPSTREAM_REF = "955d6a05f960be0b6003d6856656231973eafa94"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -138,11 +138,6 @@ DYNAMIC_GRID_STACK = (
         72,
     ),
 )
-
-GRID_STACK_FFP_CONTRACT_DIVERGENCES = {
-    "layout_grid_stack_grid_with_layouts",
-    "layout_grid_stack_stack_with_layouts",
-}
 
 SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
     "car_widgets_v01",
@@ -323,6 +318,8 @@ EXACT = (
     "hittest_collapsed_layouts",
     "hittest_nested",
     "image_fit_alignment_2",
+    "layout_grid_stack_grid_with_layouts",
+    "layout_grid_stack_stack_with_layouts",
     "layout_grid_stack_grid_with_layouts_size_changing",
     "layout_hug_artboard",
     "image_fit_alignment_3",
@@ -2355,8 +2352,6 @@ hittest_ab1_parent|frame 1, op 192 (color): expected color, got save
 hittest_nested|frame 1, op 155 (save): expected save, got color
 hunter_x_demo|frame 0, op 5055 (addRawPath): expected 20 fields, got 22
 layout_aspect_ratio|frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)
-layout_grid_stack_grid_with_layouts|frame 76, op 4246 (rewind): expected rewind, got drawPath
-layout_grid_stack_stack_with_layouts|frame 76, op 4246 (rewind): expected rewind, got drawPath
 nested_events|frame 1, op 166 (makeRenderPath): expected makeRenderPath, got rewind
 rewards_demo|frame 0, op 1461 (addRawPath): expected 44 fields, got 46
 """.strip().splitlines()
@@ -3265,18 +3260,10 @@ def dynamic_producers() -> list[Producer]:
                 raise ValueError(f"{silver_id} has no Rust result classification")
             status = "diverges"
             actions = grid_actions
-            if silver_id in GRID_STACK_FFP_CONTRACT_DIVERGENCES:
-                note = (
-                    "Narrow producer-build-mode divergence: the pinned upstream unit-test "
-                    "silvers are built with --no_ffp_contract, while upstream production "
-                    "defaults to -ffp-contract=on; first difference: "
-                    f"{difference}."
-                )
-            else:
-                note = (
-                    "Genuine Rust-vs-C++ divergence after replaying the pinned "
-                    f"gridStackSilver helper actions; first difference: {difference}."
-                )
+            note = (
+                "Genuine Rust-vs-C++ divergence after replaying the pinned "
+                f"gridStackSilver helper actions; first difference: {difference}."
+            )
         grid_stack.append(
             Producer(
                 id=silver_id,

@@ -114,29 +114,14 @@ fn replay(id: &str, participant_actions: bool) {
     result.unwrap_or_else(|difference| panic!("{id}: {difference}"));
 }
 
-fn replay_build_mode_divergence(id: &str) {
-    let (status, result) = replay_result(id, false);
-    assert_eq!(
-        status,
-        Status::Diverges,
-        "{id} must retain its signed producer-build-mode classification",
-    );
-    assert_eq!(
-        result
-            .expect_err("the --no_ffp_contract silver must differ from default FMA")
-            .to_string(),
-        "frame 76, op 4246 (rewind): expected rewind, got drawPath",
-    );
-}
-
 #[test]
 fn wave_c1_layout_grid_stack_001_grid_with_layouts() {
-    replay_build_mode_divergence("layout_grid_stack_grid_with_layouts");
+    replay("layout_grid_stack_grid_with_layouts", false);
 }
 
 #[test]
 fn wave_c1_layout_grid_stack_002_stack_with_layouts() {
-    replay_build_mode_divergence("layout_grid_stack_stack_with_layouts");
+    replay("layout_grid_stack_stack_with_layouts", false);
 }
 
 #[test]

@@ -7,7 +7,6 @@ use crate::mechanical_port::source::{
     core_context::CoreContext,
     drawable::{DrawableProxy, ProxyDrawing, RuntimeDrawableOccurrence},
     generated::shapes::clipping_shape_base::ClippingShapeBase,
-    math::mat2d::Mat2D,
     shapes::{
         paint::{
             effects_container::EffectsContainer, fill::Fill, shape_paint::ShapePaintPathKind,
@@ -346,12 +345,10 @@ impl ClippingShape {
             };
             let effected = effected.borrow();
             if !effected.empty() {
-                let transform = if effected.is_local() {
-                    world
-                } else {
-                    Mat2D::identity()
-                };
-                self.path.add_shape_paint_path(&effected, Some(&transform));
+                self.path.add_shape_paint_path(
+                    &effected,
+                    if effected.is_local() { Some(&world) } else { None },
+                );
             }
             // An existing empty effect still contributes an empty clip; never
             // replace it with the unaffected shape unless another fill needs it.
@@ -366,8 +363,7 @@ impl ClippingShape {
                     return added_effected;
                 };
                 shape.with_path_mut(ShapePaintPathKind::World, |path| {
-                    self.path
-                        .add_shape_paint_path(path, Some(&Mat2D::identity()));
+                    self.path.add_shape_paint_path(path, None);
                 });
                 true
             })

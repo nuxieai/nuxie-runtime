@@ -360,6 +360,11 @@ pub struct CoreHandle {
 }
 
 impl CoreHandle {
+    /// Stable allocation identity for source tables that hash object addresses.
+    /// This does not dereference the slot; equality still checks its generation.
+    pub(crate) fn slot_address(&self) -> usize {
+        self.slot.as_ptr() as usize
+    }
     pub fn identity_key(&self) -> (usize, usize, u64) {
         (self.arena.as_ptr() as usize, self.index, self.generation)
     }

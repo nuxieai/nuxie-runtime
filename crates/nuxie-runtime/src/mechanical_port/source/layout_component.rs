@@ -21,7 +21,7 @@ use crate::mechanical_port::source::{
         },
         layout_measure_mode::LayoutMeasureMode,
         layout_node_provider::{
-            LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState, layout_node_owner_for,
+            layout_node_owner_for, LayoutNodeKey, LayoutNodeProvider, LayoutNodeProviderState,
         },
         layout_style_applier::{
             LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDimension, YGDirection, YGDisplay,
@@ -324,8 +324,16 @@ impl ProxyDrawing for LayoutProxy {
 }
 
 impl LayoutComponent {
-    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
-        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&self.local_bounds(),self.base.world_transform(),Some(&self.paints),out)
+    pub fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+            &self.local_bounds(),
+            self.base.world_transform(),
+            Some(&self.paints),
+            out,
+        )
     }
     pub(crate) fn has_layout_flag(&self, flag: LayoutComponentFlags) -> bool {
         self.layout_flags & flag as u16 != 0
@@ -1307,19 +1315,10 @@ impl LayoutComponent {
         &mut self,
         value: ComponentDirt,
         child_opacity: f32,
-    ) -> bool {
+    ) {
         if value.contains(ComponentDirt::RENDER_OPACITY) {
             self.paints.propagate_opacity(child_opacity);
         }
-        let needs_layout_constraints = self.base.base.base.base.base.parent_handle().is_some()
-            && value.contains(ComponentDirt::WORLD_TRANSFORM);
-        if needs_layout_constraints {
-            // Not left to Super's Transform-dirt pass: the pivot scales by the
-            // solved size, so a re-solve alone can stale it.
-            self.update_transform();
-            self.compose_world_transform();
-        }
-        needs_layout_constraints
     }
 
     /// Called after the most-derived render-path update, preserving the pinned
@@ -1610,8 +1609,11 @@ impl LayoutComponent {
             let paths = self.mutable_render_paths();
             paths.background.rewind();
             Path::add_rounded_rect(&mut paths.background, bounds, radii);
-            paths.local.rewind();
-            paths.local.add_path(&paths.background, None);
+            paths.background.prune_empty_segments();
+            if paths.local.raw_path() != &paths.background {
+                paths.local.rewind();
+                paths.local.add_path(&paths.background, None);
+            }
             paths
                 .world
                 .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
@@ -2917,7 +2919,11 @@ impl LayoutComponent {
                 .elapsed_seconds += elapsed
         });
         if f != 1.0 {
-            Self::mark_layout_node_dirty_occurrence(owner, false);
+            if owner.is_type_of(
+                crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY,
+            ) {
+                Self::mark_layout_node_dirty_occurrence(owner, false);
+            }
             true
         } else {
             false
@@ -3084,7 +3090,9 @@ impl LayoutComponent {
         }
         self.current_animation_data().unwrap().elapsed_seconds += elapsed;
         if factor != 1.0 {
-            self.mark_layout_node_dirty(false);
+            if self.is_artboard() {
+                self.mark_layout_node_dirty(false);
+            }
             true
         } else {
             false

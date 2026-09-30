@@ -1390,15 +1390,13 @@ impl Artboard {
         let mut next_drawable = None::<RuntimeDrawableOccurrence>;
         let mut clipping_stack = Vec::<CoreHandle>::new();
         while let Some(current) = current_drawable {
-            let drawable_clipping_shapes = current
-                .with_mut(|current| {
-                    current.set_needs_save_operation(true);
-                    current.clipping_shapes().to_vec()
-                })
-                .unwrap_or_default();
+            current.with_mut(|current| current.set_needs_save_operation(true));
             let mut removing_index = clipping_stack.len();
             for (i, clipping) in clipping_stack.iter().enumerate() {
-                if !drawable_clipping_shapes.contains(clipping) {
+                if !current
+                    .with(|current| current.clipping_shapes().contains(clipping))
+                    .unwrap_or(false)
+                {
                     removing_index = i;
                     break;
                 }
@@ -1434,7 +1432,15 @@ impl Artboard {
                 }
                 clipping_stack.truncate(removing_index);
             }
-            for clipping_shape in drawable_clipping_shapes {
+            // Borrow the source collection instead of copying it. Release each
+            // borrow before mutating drawable links through the same arena slot.
+            let clipping_count = current
+                .with(|current| current.clipping_shapes().len())
+                .unwrap_or(0);
+            for index in 0..clipping_count {
+                let clipping_shape = current
+                    .with(|current| current.clipping_shapes()[index].clone())
+                    .expect("live drawable");
                 if !clipping_stack.contains(&clipping_shape) {
                     let Some(proxy) = create_clipping_proxy(&clipping_shape, true) else {
                         continue;

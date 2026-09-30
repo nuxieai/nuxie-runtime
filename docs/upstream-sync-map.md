@@ -7,17 +7,17 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8398db3199cea4cd3eba53747aac562b5c0df3da`
+- LAST_SYNCED_SHA: `955d6a05f960be0b6003d6856656231973eafa94`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
+- Current target: `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` (refreshed 2026-09-30 after PR #872 merged).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 0 upstream commits after the checkpoint at this fetched target.
-  All 152 commits after the continuous goal's starting checkpoint `503eab63`
-  are accounted for (174 after `5892bb05`); this excludes deferred execution
-  and is not a claim that every validation harness is green. Refresh upstream
-  after merging this checkpoint before declaring catch-up complete.
+  There are 15 upstream commits after the checkpoint at this fetched target.
+  All 153 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (175 after `5892bb05`); this
+  excludes deferred execution and is not a claim that every validation harness
+  is green. Continue oldest-first with `db31ea87`, then refresh again at catch-up.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -28,9 +28,12 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 - Runtime Silver validation at `8e8492f8` also found `animated_clipping-layout`
   failing at frame 6, operation 114 (expected `drawPath`, got `rewind`). A clean
   `c22b630257` baseline reproduces the same failure; this is not an 8e regression.
-  Nine targeted layout Silver cases pass. Full-runtime Silver remains red:
-  [UNIV-3734](https://universe.basis.dev/issue/UNIV-3734). No assertion or
-  manifest classification was relaxed.
+  Nine targeted layout Silver cases passed then. At `955d6a05`, this clipping
+  case now compares byte-exact; two grid/stack cases also become exact and their
+  checks are strengthened accordingly. The full 231-case runtime Silver sweep
+  retains one failure, `stateful_multi_property`
+  ([UNIV-3751](https://universe.basis.dev/issue/UNIV-3751)); its first differing
+  command changes with the new upstream baseline. No tolerance was relaxed.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
   anchor, constraint, scroll virtualization-buffer, and Luau 0.733 update, was ported
@@ -40,6 +43,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `955d6a05f960be0b6003d6856656231973eafa94` | Translate single-pass layout transforms/constraints, radius-only path invalidation, unchanged local-path retention, Artboard-only tween solve invalidation, opacity-only geometry gates, shared scroll children and clipping-list/path copy removal. Text already borrows all four changed run slices. Translate the flat bindable-clone table using stable arena-slot addresses with generation-aware equality. Port all nine new regression cases; both independent review passes and correction re-reviews are clean. All nine cases, 79 related regressions and the feature-gated layout matrix pass. Runtime library: 90 pass, two ignored, prior hydration failure UNIV-3788 remains. Renderer: 816 pass/11 ignored; required-live Metal: 211 pass/three ignored. Native/default and wasm32 WebGPU/WebGL2 checks pass. Final Silver sweep: 95 byte-exact, 108 operation-exact within unchanged epsilon, seven recorded divergences, 20 unsupported, one failure. Promote both newly exact grid/stack cases with stricter Rust/Python assertions; generator tests pass 26, grid tests pass five/one existing ignored. `animated_clipping-layout` is now byte-exact. `stateful_multi_property` still fails on the first clipping frame (16), now at operation 1061, expected drawPath/got makeRenderPath; focused review finds no new source mismatch but identical root cause is not proven. Ordinary/scripted Golden each process 364 entries, retaining the same three focus/semantic failures (UNIV-3793), plus the scripted converter teardown abort (UNIV-3795). Correct the structural check's missing mapping to the existing shared layer-mask enum; 1,054 mirrored owners and bounded exceptions pass. Upstream-only ArtboardFrame benchmark extensions remain in the oracle; no upstream timing gains are claimed measured here. Private editor revision metadata is not imported. No new browser pixel or Vulkan/Android hardware result is claimed. | [UNIV-3751](https://universe.basis.dev/issue/UNIV-3751) |
 | `8398db3199cea4cd3eba53747aac562b5c0df3da` | Translate alpha/inverted-alpha/luminance/inverted-luminance layer masks, source suppression and nested/stacked brackets, invalidation, measured/custom painted bounds, shared offscreen sizing/composition and allocation hysteresis. Add type 154 and properties 455–465, shared renderer capability/paint packing, nested deferred canvas routing, image dependencies, SRIV operation 42 and native/oracle forwarding. Preserve upstream raster-ordering-only support and unmasked degradation in unsupported modes. Regenerate supported shaders, retaining existing Metal precision adaptations. Both independent review passes and correction re-reviews are clean. Validation: 816 renderer tests pass (11 ignored), including all 24 mask runtime cases and ten pixel cases; required-live Metal passes 211 tests (3 ignored); all 29 new bounds/raster cases pass; default, wasm32 WebGPU/WebGL2 and host C API checks pass; shader regeneration is exact (70 WGSL/60 headers); schema metadata and ID-dispatch checks pass. All 231 runtime Silver case invocations match the clean parent's outcome, with the same two failures (UNIV-3734/3751). Ordinary Golden processes 364 entries with three parent-reproduced focus/semantic failures (UNIV-3793); scripted Golden adds a converter teardown panic also reproduced in parent Rust (UNIV-3795). Runtime unit tests retain the prior hydration failure (UNIV-3788); broad schema-header checks retain the same 19 parent failures (UNIV-3729). No assertion or corpus classification was relaxed. Browser pixels and Vulkan/Android hardware were not run. The upstream-only Golden redundancy analyzer remains in the source oracle; the Rust generic command decoder understands the new payload. Private editor changes are not claimed imported. | [UNIV-3793](https://universe.basis.dev/issue/UNIV-3793), [UNIV-3795](https://universe.basis.dev/issue/UNIV-3795) |
 | `c14cb2510071bd4cfa08d52ba5cd44d98c362237` | Replace depth/stencil fill instancing with repeated uint16 index patterns and vertex-ID-derived attributes in Vulkan, WebGPU and WebGL2. Mirror shared range chunking, signed base-vertex flags, cached Vulkan buffer bindings, attribute-free fill pipelines and the 15-slot shader specialization layout; preserve instancing for strokes and existing Metal precision adaptations. Translate all twelve range-chunker cases and StackVector empty coverage. Regenerate supported shader artifacts from the pinned source. Propagate the new flag/key layout and generated entry-point names through the native Metal adapter. Both independent review passes and correction re-reviews are clean. Validation: 782 renderer tests pass (11 ignored), all twelve range cases pass, required live Metal passes 177 tests including 39 GMs (3 ignored), default and wasm32 WebGPU/WebGL2 checks pass, and shader regeneration reproduces all 70 WGSL modules and 60 upstream headers exactly. Vulkan/Android hardware and browser pixel parity were not run for this commit. D3D11/D3D12, Unreal and the standalone shader-hotload host do not ship here; supported Vulkan hotload ordering is translated. The retrofitcubictristrips GM symbol rename remains in the upstream oracle because no corresponding Rust GM host exists. | — |
 | `0d504972edf5253a9bd6e172facc9483719496f1` | **DEFERRED WASM EXECUTION:** Wasm host-string/name caches, missing-data initialization retry, zero-backed guest canvases, matrix natives, WAMR direct/leaf calls and interpreter fusion, bounded-module watchdog/trap handling and AOT interrupt capability/cache updates. All public changes are in guest execution, its ABI or engine tooling; shared runtime, Luau and browser renderer owners are unchanged. Private rasc compiler/tests mentioned in the message are absent from the public delta and are not claimed imported. | UNIV-3728 |

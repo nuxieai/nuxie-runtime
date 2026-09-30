@@ -217,6 +217,10 @@ impl DeferredOreContext {
         real.ids.clear();
         real.objects.clear();
     }
+    // Drain queued destroys into the stream without ending the frame.
+    pub fn drain_pending_destroys(&mut self) {
+        self.render.borrow_mut().drainDestroys();
+    }
     pub fn replayFrame(
         &self,
         realCtx: &mut dyn ContextApi,

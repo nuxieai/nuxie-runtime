@@ -28,6 +28,17 @@ pub struct DeferredSegment {
     pub end: u32,
 }
 
+pub struct PendingDestroyBytes {
+    pub commands: Vec<u8>,
+    pub ore_commands: Vec<u8>,
+}
+
+impl PendingDestroyBytes {
+    pub fn empty(&self) -> bool {
+        self.commands.is_empty() && self.ore_commands.is_empty()
+    }
+}
+
 /// A non-owning host attachment notified when its session dies.
 pub trait DeferredSessionAttachment {
     fn deferred_session_destroyed(&self);
@@ -360,6 +371,22 @@ impl DeferredSession {
         // above and start at identity already.
         for shadow in self.screen_transforms.borrow().values() {
             reset_transform_shadow(shadow);
+        }
+    }
+    // Drain idle-session destroys without ending the frame. Return only the
+    // newly appended tails; keep them in both streams for generation-safe replay.
+    pub fn take_pending_destroys(&mut self) -> PendingDestroyBytes {
+        let buffer = self.command_buffer();
+        let ore_stream = self.ore_context.borrow().stream();
+        let begin = buffer.lock().unwrap().command_bytes().len();
+        let ore_begin = ore_stream.borrow().command_bytes().len();
+        buffer.lock().unwrap().drain_destroys();
+        self.ore_context.borrow_mut().drain_pending_destroys();
+        let commands = buffer.lock().unwrap().command_bytes()[begin..].to_vec();
+        let ore_commands = ore_stream.borrow().command_bytes()[ore_begin..].to_vec();
+        PendingDestroyBytes {
+            commands,
+            ore_commands,
         }
     }
     pub fn stream_bytes(&self) -> u64 {

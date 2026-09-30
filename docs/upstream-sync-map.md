@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `330e78b69a7b5b68e7235aa9da2e932433fff492`
+- LAST_SYNCED_SHA: `a7efbbe733cf9975fec6e614818ea80e02f7e234`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 17 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 17 require a Rust translation.
+  There are 16 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 16 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `a7efbbe733cf9975fec6e614818ea80e02f7e234` | **INAPPLICABLE TEST-PLAYER HOST:** introduces a one-frame render-thread slot, draining/joining and gated --threaded option in upstream's interactive Player, plus a default-false TestingWindow capability. Rust render-only GM/window adapters do not ship that Player or input/presentation scheduler. The complete public delta changes no shared deferred replay/runtime algorithm, fixture or assertion. Do not impose this test-host scheduling policy on application-owned renderers or claim new threaded player functionality. | — |
 | `330e78b69a7b5b68e7235aa9da2e932433fff492` | Extract the public GL fixup parser and encoder, preserving append-on-partial-failure, raw name/kind bytes, little-endian u16 casts and complete encoded payloads. Descriptor application delegates to the parser with checked Rust slice bounds. The public delta contains no editor stage-aggregation callers or row-count rejection implementation; those private changes are not claimed imported. | — |
 | `3d0d3f56ba21caa2ae13ef64451526639d793aee` | Add authored additive blend mode 12 and byte strengths on Drawable/ShapePaint (source keys 450/452), preserving inheritance, property callbacks, animation/binding and GPU srcOver resolution. Carry additive paint/image state through deferred rendering, Luau, SRIV operations 36–38 and replay; retain plain-operation bytes at zero strength. Port the runtime/GPU/scripted paint cases, serialized replay additions and the complete 64-draw Silver producer. Private editor/native/Unity changes described in the message are absent from the public delta; unshipped CoreGraphics/Skia renderers are not imported. | — |
 | `1a360ac87346e89cff18335a140bc8c686a54896` | **INAPPLICABLE TEST-PLAYER HOST:** the public delta adds gamepad event payloads and dispatch/encoding to upstream's interactive TestingWindow/Player. The Rust GM/window adapters are render-only and have no matching input loop. Keep the existing runtime wire receiver and Silver encoder unchanged; this is not a claim of new device polling or product gamepad integration. The private Artemis polling implementation named in the message is absent from the public delta. | — |

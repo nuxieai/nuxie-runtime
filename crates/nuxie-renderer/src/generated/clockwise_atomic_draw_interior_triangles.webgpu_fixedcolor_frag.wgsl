@@ -1,35 +1,35 @@
 struct TB {
-    uc: f32,
-    Cd: f32,
+    tc: f32,
+    Bd: f32,
     Hf: f32,
     If: f32,
-    n6_: u32,
-    Ob: u32,
+    o6_: u32,
+    Nb: u32,
     tf: u32,
     uf: u32,
-    U7_: vec4<i32>,
-    ih: vec2<f32>,
-    Dd: vec2<f32>,
+    T7_: vec4<i32>,
+    hh: vec2<f32>,
+    Cd: vec2<f32>,
     f2_: u32,
-    mh: f32,
+    lh: f32,
     c6_: u32,
-    W2_: f32,
-    Ed: f32,
+    X2_: f32,
+    Dd: f32,
     nf: u32,
     F3_: f32,
     G3_: f32,
-    Fd: f32,
-    fh: u32,
-    Nb: u32,
+    Ed: f32,
+    eh: u32,
+    Mb: u32,
+    Zb: f32,
     ac: f32,
-    bc: f32,
 }
 
 struct Ae {
     g2_: array<u32>,
 }
 
-struct i0Sd {
+struct i0Rd {
     g2_: array<u32>,
 }
 
@@ -37,11 +37,11 @@ struct Ae_1 {
     g2_: array<atomic<u32>>,
 }
 
-@id(7) override Ph: bool = true;
-@id(2) override Kh: bool = true;
-@id(8) override Qh: bool = true;
-@id(1) override Jh: bool = true;
-@id(0) override Ih: bool = true;
+@id(7) override Oh: bool = true;
+@id(2) override Jh: bool = true;
+@id(8) override Ph: bool = true;
+@id(1) override Ih: bool = true;
+@id(0) override Hh: bool = true;
 
 @group(0) @binding(0)
 var<uniform> j: TB;
@@ -56,19 +56,19 @@ var W5_: sampler;
 @group(0) @binding(6)
 var<storage, read_write> S0_: Ae_1;
 var<private> gl_FragCoord_1: vec4<f32>;
-var<private> C2_1: vec3<f32>;
-var<private> g1_1: f32;
+var<private> D2_1: vec3<f32>;
+var<private> f1_1: f32;
 var<private> X1_1: vec4<f32>;
-var<private> j1_1: f32;
-var<private> v4_1: vec2<f32>;
+var<private> i1_1: f32;
+var<private> w4_1: vec2<f32>;
 var<private> k3_1: vec2<u32>;
-var<private> O0_1: vec4<f32>;
+var<private> P0_1: vec4<f32>;
 var<private> Y1_1: vec2<f32>;
 @group(2) @binding(1)
-var<storage, read_write> i0_: i0Sd;
-var<private> F1_: vec4<f32>;
+var<storage, read_write> i0_: i0Rd;
+var<private> E1_: vec4<f32>;
 @group(3) @binding(9)
-var da: sampler;
+var ca: sampler;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 var<private> D0_1: f32;
@@ -104,18 +104,18 @@ fn main_1() {
 
     let _e57 = gl_FragCoord_1;
     let _e61 = bitcast<vec2<u32>>(vec2<i32>(floor(_e57.xy)));
-    let _e63 = j.n6_;
+    let _e63 = j.o6_;
     let _e92 = bitcast<i32>((((((_e61.y >> bitcast<u32>(5u)) * (((_e63 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e61.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e61.x & 28u) << bitcast<u32>(5u)) + ((_e61.y & 28u) << bitcast<u32>(2i)))) + (((_e61.y & 3u) << bitcast<u32>(2i)) + (_e61.x & 3u))));
-    let _e93 = g1_1;
-    let _e95 = C2_1;
+    let _e93 = f1_1;
+    let _e95 = D2_1;
     let _e96 = X1_1;
-    let _e98 = (Kh && (u32(_e93) != 0u));
+    let _e98 = (Jh && (u32(_e93) != 0u));
     if (_e96.w >= 0f) {
         phi_1404_ = _e96;
     } else {
         let _e101 = -(_e96.w);
-        let _e106 = j.ac;
-        let _e109 = j.bc;
+        let _e106 = j.Zb;
+        let _e109 = j.ac;
         if (_e96.z > 0f) {
             phi_1390_ = _e96.x;
         } else {
@@ -140,8 +140,8 @@ fn main_1() {
         phi_1404_ = _e139;
     }
     let _e141 = phi_1404_;
-    phi_920_ = Qh;
-    if Qh {
+    phi_920_ = Ph;
+    if Ph {
         phi_920_ = (_e95.z > 0f);
     }
     let _e145 = phi_920_;
@@ -163,20 +163,20 @@ fn main_1() {
         phi_1407_ = (_e141 * _e162);
     }
     let _e165 = phi_1407_;
-    let _e166 = j1_1;
-    let _e167 = v4_1;
+    let _e166 = i1_1;
+    let _e167 = w4_1;
     let _e170 = k3_1[1u];
     let _e172 = k3_1[0u];
     let _e173 = vec2<u32>(floor(_e167));
     phi_1409_ = 1f;
-    if Jh {
-        let _e201 = O0_1;
+    if Ih {
+        let _e201 = P0_1;
         let _e204 = min(_e201.xy, _e201.zw);
         phi_1409_ = min(min(_e204.x, _e204.y), 1f);
     }
     let _e210 = phi_1409_;
-    phi_706_ = Ih;
-    if Ih {
+    phi_706_ = Hh;
+    if Hh {
         let _e212 = Y1_1[0u];
         phi_706_ = (_e212 != 0f);
     }
@@ -262,10 +262,10 @@ fn main_1() {
     }
     let _e306 = phi_1433_;
     phi_1444_ = f32();
-    if Ph {
+    if Oh {
         let _e308 = j.F3_;
         let _e310 = j.G3_;
-        if Ph {
+        if Oh {
             phi_1434_ = ((fract((52.982918f * fract(((0.06711056f * _e57.x) + (0.00583715f * _e57.y))))) * _e308) + _e310);
         } else {
             phi_1434_ = 0f;
@@ -276,7 +276,7 @@ fn main_1() {
     let _e324 = phi_1444_;
     let _e325 = (_e165 * _e306);
     let _e326 = _e325.xyz;
-    if (Ph && (_e325.w != 0f)) {
+    if (Oh && (_e325.w != 0f)) {
         phi_1464_ = (vec3(_e324) + _e326);
     } else {
         phi_1464_ = _e326;
@@ -285,23 +285,23 @@ fn main_1() {
     let _e339 = vec4<f32>(_e333.x, _e325.y, _e325.z, _e325.w);
     let _e345 = vec4<f32>(_e339.x, _e333.y, _e339.z, _e339.w);
     i0_.g2_[_e92] = pack4x8unorm(vec4<f32>(0f, 0f, 0f, 0f));
-    F1_ = vec4<f32>(_e345.x, _e345.y, _e333.z, _e345.w);
+    E1_ = vec4<f32>(_e345.x, _e345.y, _e333.z, _e345.w);
     return;
 }
 
 @fragment
-fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(9) C2_: vec3<f32>, @location(6) @interpolate(flat, either) g1_: f32, @location(0) X1_: vec4<f32>, @location(1) @interpolate(flat, either) j1_: f32, @location(8) v4_: vec2<f32>, @location(7) @interpolate(flat, either) k3_: vec2<u32>, @location(5) O0_: vec4<f32>, @location(4) @interpolate(flat, either) Y1_: vec2<f32>, @location(3) @interpolate(flat, either) D0_: f32) -> @location(0) vec4<f32> {
+fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(9) D2_: vec3<f32>, @location(6) @interpolate(flat, either) f1_: f32, @location(0) X1_: vec4<f32>, @location(1) @interpolate(flat, either) i1_: f32, @location(8) w4_: vec2<f32>, @location(7) @interpolate(flat, either) k3_: vec2<u32>, @location(5) P0_: vec4<f32>, @location(4) @interpolate(flat, either) Y1_: vec2<f32>, @location(3) @interpolate(flat, either) D0_: f32) -> @location(0) vec4<f32> {
     gl_FragCoord_1 = gl_FragCoord;
-    C2_1 = C2_;
-    g1_1 = g1_;
+    D2_1 = D2_;
+    f1_1 = f1_;
     X1_1 = X1_;
-    j1_1 = j1_;
-    v4_1 = v4_;
+    i1_1 = i1_;
+    w4_1 = w4_;
     k3_1 = k3_;
-    O0_1 = O0_;
+    P0_1 = P0_;
     Y1_1 = Y1_;
     D0_1 = D0_;
     main_1();
-    let _e21 = F1_;
+    let _e21 = E1_;
     return _e21;
 }

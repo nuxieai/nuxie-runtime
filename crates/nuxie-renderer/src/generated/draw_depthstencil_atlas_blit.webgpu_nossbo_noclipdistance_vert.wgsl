@@ -1,28 +1,28 @@
 struct TB {
-    uc: f32,
-    Cd: f32,
+    tc: f32,
+    Bd: f32,
     Hf: f32,
     If: f32,
-    n6_: u32,
-    Ob: u32,
+    o6_: u32,
+    Nb: u32,
     tf: u32,
     uf: u32,
-    U7_: vec4<i32>,
-    ih: vec2<f32>,
-    Dd: vec2<f32>,
+    T7_: vec4<i32>,
+    hh: vec2<f32>,
+    Cd: vec2<f32>,
     f2_: u32,
-    mh: f32,
+    lh: f32,
     c6_: u32,
-    W2_: f32,
-    Ed: f32,
+    X2_: f32,
+    Dd: f32,
     nf: u32,
     F3_: f32,
     G3_: f32,
-    Fd: f32,
-    fh: u32,
-    Nb: u32,
+    Ed: f32,
+    eh: u32,
+    Mb: u32,
+    Zb: f32,
     ac: f32,
-    bc: f32,
 }
 
 struct gl_PerVertex {
@@ -41,9 +41,9 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Ih: bool = true;
-@id(2) override Kh: bool = true;
-@id(8) override Qh: bool = true;
+@id(0) override Hh: bool = true;
+@id(2) override Jh: bool = true;
+@id(8) override Ph: bool = true;
 
 @group(0) @binding(2)
 var OB: texture_2d<u32>;
@@ -51,24 +51,24 @@ var OB: texture_2d<u32>;
 var<uniform> j: TB;
 var<private> gl_VertexIndex_1: i32;
 var<private> JB_1: vec3<f32>;
-var<private> F2_: vec2<f32>;
+var<private> G2_: vec2<f32>;
 @group(0) @binding(3)
 var DD: texture_2d<u32>;
-var<private> O3_: f32;
-var<private> g1_: f32;
+var<private> N3_: f32;
+var<private> f1_: f32;
 @group(0) @binding(4)
 var PB: texture_2d<f32>;
 var<private> X1_: vec4<f32>;
-var<private> C2_: vec3<f32>;
+var<private> D2_: vec3<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
-var KC: texture_2d<u32>;
+var MC: texture_2d<u32>;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(0) @binding(5)
 var ID: texture_2d<u32>;
 @group(3) @binding(9)
-var da: sampler;
+var ca: sampler;
 
 fn main_1() {
     var phi_766_: u32;
@@ -85,11 +85,11 @@ fn main_1() {
     let _e59 = textureLoad(OB, vec2<i32>(bitcast<i32>((_e52 & 255u)), bitcast<i32>((_e52 >> bitcast<u32>(8i)))), 0i);
     let _e61 = _e47.xy;
     let _e63 = bitcast<vec3<f32>>(_e59.yzw);
-    let _e69 = j.ih;
-    F2_ = (((_e61 * _e63.x) + _e63.yz) * _e69);
+    let _e69 = j.hh;
+    G2_ = (((_e61 * _e63.x) + _e63.yz) * _e69);
     let _e77 = textureLoad(DD, vec2<i32>(bitcast<i32>((_e49 & 255u)), bitcast<i32>((_e50 >> bitcast<u32>(8i)))), 0i);
     let _e79 = (_e77.x & 15u);
-    if Ih {
+    if Hh {
         let _e80 = (_e79 == 0u);
         if _e80 {
             phi_766_ = _e77.y;
@@ -110,10 +110,10 @@ fn main_1() {
             phi_768_ = -(_e94);
         }
         let _e97 = phi_768_;
-        O3_ = _e97;
+        N3_ = _e97;
     }
-    if Kh {
-        g1_ = f32(((_e77.x >> bitcast<u32>(4i)) & 15u));
+    if Jh {
+        f1_ = f32(((_e77.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e79 == 1u) {
         X1_ = unpack4x8unorm(_e77.y);
@@ -143,8 +143,8 @@ fn main_1() {
         let _e186 = X1_[3u];
         X1_[3u] = -(_e186);
     }
-    phi_445_ = Qh;
-    if Qh {
+    phi_445_ = Ph;
+    if Ph {
         phi_445_ = ((_e77.x & 2048u) != 0u);
     }
     let _e193 = phi_445_;
@@ -155,9 +155,9 @@ fn main_1() {
         let _e210 = (_e194 + 5u);
         let _e217 = textureLoad(PB, vec2<i32>(bitcast<i32>((_e210 & 255u)), bitcast<i32>((_e210 >> bitcast<u32>(8i)))), 0i);
         let _e220 = ((mat2x2<f32>(vec2<f32>(_e202.x, _e202.y), vec2<f32>(_e202.z, _e202.w)) * _e61) + _e217.xy);
-        C2_ = vec3<f32>(_e220.x, _e220.y, (1f + _e217.z));
+        D2_ = vec3<f32>(_e220.x, _e220.y, (1f + _e217.z));
     } else {
-        C2_ = vec3<f32>(0f, 0f, 0f);
+        D2_ = vec3<f32>(0f, 0f, 0f);
     }
     let _e227 = j.Hf;
     let _e229 = j.If;
@@ -171,11 +171,11 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) JB: vec3<f32>) 
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     JB_1 = JB;
     main_1();
-    let _e12 = F2_;
-    let _e13 = O3_;
-    let _e14 = g1_;
+    let _e12 = G2_;
+    let _e13 = N3_;
+    let _e14 = f1_;
     let _e15 = X1_;
-    let _e16 = C2_;
+    let _e16 = D2_;
     let _e17 = unnamed.gl_Position;
     return VertexOutput(_e12, _e13, _e14, _e15, _e16, _e17);
 }

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/tessellate.glsl.
  *
- * Upstream source revision: 5705446d6aeb0dad34a63d8ddadbb79fbe327a37
+ * Upstream source revision: 3b615b829a58b67379f9304a161b3e87119bbf04
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "5705446d6aeb0dad34a63d8ddadbb79fbe327a37";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3b615b829a58b67379f9304a161b3e87119bbf04";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "88708289263a011612a54effd01533cf6593bf93b016315d240de7b4bbfa48c2";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 567;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 24765;
+    "3edcd4077a7fcc5d3f619c1ad280d05bb2b7c9bc418e06ba860e52874e9c5a24";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 587;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 25857;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_TESSELLATE_GLSL_SOURCE: &str = r###"/*
@@ -579,7 +579,27 @@ FRAG_DATA_MAIN(uint4, @tessellateFragmentMain)
     }
     else
     {
-        tessData.z = floatBitsToUint(mod(theta, _2PI));
+        // Otherwise, provide the vertex shader with "tangentAngle:miterRatio"
+        // in z, both 16-bit unorm.
+        // NOTE: multiply theta by 65536 (NOT 65535) because this is a cyclic
+        // function, and 0xffff is the final discrete step before wrapping back
+        // to 0. This also makes "& 0xffffu" the natural modular reduction of
+        // the angle without having to mod().
+        uint theta16 = uint(int(round(theta * (65536. / _2PI)))) & 0xffffu;
+        uint miterRatio16 = 0u;
+        if ((contourIDWithFlags & JOIN_TYPE_MASK) > ROUND_JOIN_CONTOUR_FLAG)
+        {
+            // This spoke belongs to a miter or bevel join, which need the
+            // miterRatio.
+            float cosJoinAngle =
+                clamp(cosine_between_vectors(tangents[0], tangents[1]),
+                      -1.,
+                      1.);
+            // miterRatio is cos(joinAngle/2). Use a trig identity to find it.
+            // NOTE: multiply by 65535 here because miterRatio is 0..1.
+            miterRatio16 = uint(round(sqrt((1. + cosJoinAngle) * .5) * 65535.));
+        }
+        tessData.z = (theta16 << 16) | miterRatio16;
     }
     tessData.w = contourIDWithFlags;
     EMIT_FRAG_DATA(tessData);

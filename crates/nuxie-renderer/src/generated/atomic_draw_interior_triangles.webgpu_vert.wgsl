@@ -3,30 +3,30 @@ struct Ig {
 }
 
 struct TB {
-    uc: f32,
-    Cd: f32,
+    tc: f32,
+    Bd: f32,
     Hf: f32,
     If: f32,
-    n6_: u32,
-    Ob: u32,
+    o6_: u32,
+    Nb: u32,
     tf: u32,
     uf: u32,
-    U7_: vec4<i32>,
-    ih: vec2<f32>,
-    Dd: vec2<f32>,
+    T7_: vec4<i32>,
+    hh: vec2<f32>,
+    Cd: vec2<f32>,
     f2_: u32,
-    mh: f32,
+    lh: f32,
     c6_: u32,
-    W2_: f32,
-    Ed: f32,
+    X2_: f32,
+    Dd: f32,
     nf: u32,
     F3_: f32,
     G3_: f32,
-    Fd: f32,
-    fh: u32,
-    Nb: u32,
+    Ed: f32,
+    eh: u32,
+    Mb: u32,
+    Zb: f32,
     ac: f32,
-    bc: f32,
 }
 
 struct gl_PerVertex {
@@ -59,13 +59,13 @@ var<storage> OB: Ig;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> JB_1: vec3<f32>;
-var<private> j1_: f32;
+var<private> i1_: f32;
 var<private> D0_: u32;
 @group(0) @binding(0)
 var<uniform> j: TB;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
-var KC: texture_2d<u32>;
+var MC: texture_2d<u32>;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(0) @binding(3)
@@ -75,7 +75,7 @@ var<storage> PB: lf;
 @group(0) @binding(5)
 var<storage> ID: Jg;
 @group(3) @binding(9)
-var da: sampler;
+var ca: sampler;
 
 fn main_1() {
     let _e23 = JB_1;
@@ -85,7 +85,7 @@ fn main_1() {
     let _e36 = bitcast<vec4<f32>>(_e35);
     let _e47 = OB.g2_[(_e32 + 1u)];
     let _e51 = ((mat2x2<f32>(vec2<f32>(_e36.x, _e36.y), vec2<f32>(_e36.z, _e36.w)) * _e23.xy) + bitcast<vec2<f32>>(_e47.xy));
-    j1_ = f32((bitcast<i32>(_e23.z) >> bitcast<u32>(16i)));
+    i1_ = f32((bitcast<i32>(_e23.z) >> bitcast<u32>(16i)));
     D0_ = _e26;
     let _e53 = j.Hf;
     let _e55 = j.If;
@@ -99,7 +99,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_
     gl_InstanceIndex_1 = i32(gl_InstanceIndex);
     JB_1 = JB;
     main_1();
-    let _e12 = j1_;
+    let _e12 = i1_;
     let _e13 = D0_;
     let _e14 = unnamed.gl_Position;
     return VertexOutput(_e12, _e13, _e14);

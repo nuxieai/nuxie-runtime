@@ -46,7 +46,7 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         format: VertexElementFormat::uint32,
         attributeIndex: 8,
         byteOffset: 60,
-        semanticName: "MC",
+        semanticName: "LC",
     },
 ];
 pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [

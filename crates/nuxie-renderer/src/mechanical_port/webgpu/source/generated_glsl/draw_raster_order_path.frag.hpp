@@ -6,37 +6,37 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_raster_order_path_frag[] = R"===(#ifdef EB
-M1 z0(G2,m0);k1(X2,i0);z0(f6,p4);k1(J6,G7);N1 P1(HB){r(X1,f);
+M1 z0(H2,l0);j1(Y2,i0);z0(f6,q4);j1(K6,F7);N1 P1(HB){r(X1,f);
 #ifdef IB
-r(C2,S);
+r(D2,S);
 #endif
 #ifdef DB
-r(j1,d);
+r(i1,d);
 #else
-r(O,B2);
+r(O,C2);
 #endif
 r(D0,d);
 #ifdef K
 r(Y1,D);
 #endif
 #ifdef AB
-r(O0,f);
+r(P0,f);
 #endif
 #ifdef T
-r(g1,d);
+r(f1,d);
 #endif
 #if!defined(DB)
-z2;
+A2;
 #endif
-D U4=unpackHalf2x16(a1(G7));d j9=U4.y;d r0=j9==D0?U4.x:J0(.0);
+D V4=unpackHalf2x16(a1(F7));d j9=V4.y;d r0=j9==D0?V4.x:J0(.0);
 #ifdef DB
-r0+=j1;h2(G7);
+r0+=i1;h2(F7);
 #else
-r0=wi(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
+r0=xi(r0,O e1);d1(F7,packHalf2x16(E2(r0,D0)));
 #endif
 d o;
 #ifdef HE
-if(HE){o=ha(r0,J0(.0),J0(1.));}else
+if(HE){o=ga(r0,J0(.0),J0(1.));}else
 #endif
 {o=abs(r0);
 #ifdef XC
@@ -44,53 +44,53 @@ if(XC&&D0<.0){o=1.-J0(abs(fract(o*.5)*2.+-1.));}
 #endif
 o=min(o,J0(1.));}
 #ifdef K
-if(K&&Y1.x<.0){d m1=-Y1.x;
+if(K&&Y1.x<.0){d l1=-Y1.x;
 #ifdef ZC
-if(ZC){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==K5?Q0.x:.0;
+if(ZC){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d F6=Q0.y;d x4;if(F6!=l1){x4=F6==K5?Q0.x:.0;
 #ifndef DB
-A0(p4,E0(w4,.0,.0,.0));
+A0(q4,E0(x4,.0,.0,.0));
 #endif
-}else{w4=K0(p4).x;
+}else{x4=K0(q4).x;
 #ifndef DB
-y2(p4);
+z2(q4);
 #endif
-}o=min(o,w4);}}
+}o=min(o,x4);}}
 #endif
-d1(i0,packHalf2x16(D2(o,m1)));y2(m0);}else
+d1(i0,packHalf2x16(E2(o,l1)));z2(l0);}else
 #endif
 {
 #ifdef K
-if(K){d m1=Y1.x;if(m1!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;o=(E6==m1)?min(Q0.x,o):J0(.0);}}
+if(K){d l1=Y1.x;if(l1!=.0){D Q0=unpackHalf2x16(a1(i0));d F6=Q0.y;o=(F6==l1)?min(Q0.x,o):J0(.0);}}
 #endif
 #ifdef AB
-if(AB){d c5=m3(g5(O0));o=clamp(c5,J0(.0),o);}
+if(AB){d d5=m3(h5(P0));o=clamp(d5,J0(.0),o);}
 #endif
-i k=L7(
+i k=K7(
 #ifdef IB
-C2,
+D2,
 #endif
 #ifdef T
-g3(g1),
+g3(f1),
 #endif
-X1 Y2);i O1;if(j9!=D0){O1=K0(m0);
+X1 Z2);i O1;if(j9!=D0){O1=K0(l0);
 #ifndef DB
-A0(p4,O1);
+A0(q4,O1);
 #endif
-}else{O1=K0(p4);
+}else{O1=K0(q4);
 #ifndef DB
-y2(p4);
+z2(q4);
 #endif
 }
 #ifdef T
-if(T&&g1!=Z5(B4)){k.xyz=Y4(k.xyz,O1,g3(g1))*k.w;}
+if(T&&f1!=Z5(C4)){k.xyz=Z4(k.xyz,O1,g3(f1))*k.w;}
 #endif
 k*=o;
 #ifdef BC
 if(BC){k=q3(k);}
 #endif
-d j3=k.w;k+=O1*(1.-j3);k.xyz=K2(k.xyz,j3,d0.xy,j.F3,j.G3);A0(m0,k);h2(i0);}
+d j3=k.w;k+=O1*(1.-j3);k.xyz=L2(k.xyz,j3,e0.xy,j.F3,j.G3);A0(l0,k);h2(i0);}
 #if!defined(DB)
-A2;
+B2;
 #endif
 d2;}
 #endif

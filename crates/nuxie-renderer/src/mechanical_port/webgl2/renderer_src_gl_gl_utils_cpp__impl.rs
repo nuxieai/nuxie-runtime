@@ -71,7 +71,7 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
     RECLAIMED_COUNT.load(Ordering::Relaxed)
 }
 
-const GLSL_GLSL_VERSION: &str = "LC";
+const GLSL_GLSL_VERSION: &str = "KC";
 const GLSL_VERTEX: &str = "CB";
 const GLSL_FRAGMENT: &str = "EB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
@@ -539,7 +539,7 @@ mod tests {
             290
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 498);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10641);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10646);
     }
 
     #[test]

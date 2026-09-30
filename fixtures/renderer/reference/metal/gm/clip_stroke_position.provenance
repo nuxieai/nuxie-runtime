@@ -1,8 +1,8 @@
 provenance_schema=1
 renderer_implementation=cpp-native-metal-approved-fma-and-coverage-adaptations
 capture_tool=upstream-gms
-build_command=PREMAKE_PATH=<upstream>/build premake5 gmake2 --config=release --out=out/ee60-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/ee60-gms-text-canvas -j8 gms
-capture_command=MTL_DEBUG_LAYER=1 tests/out/ee60-gms-text-canvas/gms --backend metal --headless --match stroke_position --output <capture-dir> -p1 --verbose
+build_command=PREMAKE_PATH=<upstream>/build premake5 gmake2 --config=release --out=out/3b-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/3b-gms-text-canvas -j8 gms
+capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-adapted --backend metal --headless --match clip_stroke_position --output <evidence>/adapted -p1 --verbose
 backend=metal
 adapter_vendor=apple
 adapter_device=Apple M5 Max
@@ -10,26 +10,26 @@ adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
 case_id=clip_stroke_position
 gm_source=tests/gm/clipstrokes.cpp
 gm_source_sha256=23abf54bc429cf0b08f627a283073758e6f71c3e213ec83a44732fce0528f2c5
-runtime_revision=ee60b7014f1a28fa6bb5f2588cb274c273080f32
+runtime_revision=3b615b829a58b67379f9304a161b3e87119bbf04
 metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
 xcode_version=27.0
 xcode_build=27A266a
-capture_binary_sha256=127e82b6f9c905cc071f672fd1bef7cc7aebfce04c0c540c62aac67427e24221
-png_sha256=2e6b6868f7af629e0b9d4944c5a197a6fad435e570249fb752e52a9d52f2d5cf
-shader_regeneration_command=PYTHONHASHSEED=0 make -C renderer/src/shaders -j8 OUT=<upstream>/tests/out/ee60-gms-text-canvas/include/generated/shaders FLAGS='-p <upstream>/tests/dependencies/dabeaz_ply_3.11' rive_pls_macosx_metallib; make -C tests/out/ee60-gms-text-canvas -j8 gms
+capture_binary_sha256=673f674a2b7f1dc6759f93955d46f0b2224e21dcd8c17f06811253efc917601e
+png_sha256=1e21d4728a0b81e1eaa542cf1ffc4ccc242737f2ae53d84ff06393a9f2712f2f
+shader_regeneration_command=PYTHONHASHSEED=0 make -C <isolated-shader-copy> -j8 OUT=<upstream>/tests/out/3b-gms-text-canvas/include/generated/shaders FLAGS="-p <upstream>/tests/dependencies/dabeaz_ply_3.11" rive_pls_macosx_metallib; make -C <upstream>/tests/out/3b-gms-text-canvas -j8 gms
 approved_fma_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
 fma_adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
 upstream_fragment_shader_sha256=1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418
 adapted_fragment_shader_sha256=edd72b123bcefde6859a1537a7f8f0c6f924b26c4e9c901cf5401094056cef79
 approved_coverage_adaptation_commit=a07db8d3ec50af8eb940db4af788fbbfad74b626
 coverage_adaptation=draw_path.vert selects float4 COVERAGE_TYPE and preserves coverages before interpolation when ENABLE_FEATHER or METAL; both guards and comment match the existing Rust shader literal
-upstream_vertex_shader_sha256=c614020a453eab1e105ca0152fbccfc0cf0ac7fab5e399b16035dbc4735952f3
-adapted_vertex_shader_sha256=b3494fb2efc3dc3768cd1d5a42c63fd2a2a4b8a9362de8f485eda7f73e9736bc
+upstream_vertex_shader_sha256=eb68ec1e79af90d098b6595101bdba833d4b8cd33a965c3fa02ea5563c8babeb
+adapted_vertex_shader_sha256=489280827d15dbcdcc5ce939de5ea30a3f9d948863cad7382a66912874a14785
 pristine_capture_file=clip_stroke_position.pristine.png
-pristine_capture_binary_sha256=bf93a6f273e8c1d791f4049d4bf9eb78645f7bfea457db8ac60994cfe6884467
-pristine_png_sha256=d6a0d064df9b7a7f2227a11acd40ea4c4c1b4e6a92cb1dd40ca1c61a779a7ea6
-pristine_comparison=4324 differing pixels, maximum channel delta 1; FMA alone leaves 73 pixels at maximum delta 1; both approved adaptations give exact equality
-fma_only_capture_binary_sha256=8a8a072742f8101fa0360d83eaf154a8c7acfab3a1f116f5018f1b25abf0cfdc
+pristine_capture_binary_sha256=f88eb08ff0bd57bb45418ba24160329e88a6681cccb9a3893c6a5e997cf66f68
+pristine_png_sha256=0410db50599a233ffe43a8337ba649347fd11960a4c0cca19db2c594a1bf771e
+pristine_comparison=4331 differing pixels, maximum channel delta 1; both approved adaptations give exact equality to current Rust diagnostic
+evidence_directory=/tmp/nuxie-3b-gm-oracle.A1uigO
 frame=0
 frame_width=768
 frame_height=768

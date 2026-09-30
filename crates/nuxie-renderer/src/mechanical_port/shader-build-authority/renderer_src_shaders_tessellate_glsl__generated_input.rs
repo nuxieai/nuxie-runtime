@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "5705446d6aeb0dad34a63d8ddadbb79fbe327a37";
+pub const PINNED_UPSTREAM_COMMIT: &str = "3b615b829a58b67379f9304a161b3e87119bbf04";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/tessellate.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "88708289263a011612a54effd01533cf6593bf93b016315d240de7b4bbfa48c2";
+pub const PINNED_SOURCE_SHA256: &str = "3edcd4077a7fcc5d3f619c1ad280d05bb2b7c9bc418e06ba860e52874e9c5a24";
 pub const OWNERSHIP_UNIT: &str = "shader:source:tessellate";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 567;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 24765;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 587;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 25857;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_tessellate_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

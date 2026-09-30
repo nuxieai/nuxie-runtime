@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_clockwise_atomic_path.frag";
-pub const PINNED_SOURCE_SHA256: &str = "2559c79422c61f0ab83655c2a11c8f61d5d3d47e1b10c29170d608e70cd49701";
+pub const PINNED_SOURCE_SHA256: &str = "3e3c1563d680fb4287ed03672d1277ca7f8e763318100d07109ddd69565cf396";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_clockwise_atomic_path";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 384;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14527;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 387;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14839;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_draw_clockwise_atomic_path_frag__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

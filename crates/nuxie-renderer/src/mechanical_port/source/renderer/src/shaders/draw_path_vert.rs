@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: 7732f41ef93e4cb74286934ee596e1041d0a0ba7
+ * Upstream source revision: 5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "7732f41ef93e4cb74286934ee596e1041d0a0ba7";
+pub const PINNED_UPSTREAM_COMMIT: &str = "5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "270d5179d5d80e556587e63414c6c290cc1d3dd660106a719683f318462b0839";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 519;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 17662;
+    "2d9be965fbfbfdc5a57313509af4d38a00328194054a6974ed8b8226fdf8659e";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 515;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17447;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -26,11 +26,7 @@ pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
 // included multiple times with different defines in the Metal library.
 #undef GENERATE_UNMULTIPLIED_PAINT_COLORS
 
-#ifdef @NEVER_GENERATE_PREMULTIPLIED_PAINT_COLORS
-// The specific fragment shader we're being compiled for expects un-multiplied
-// paint colors all the time.
-#define GENERATE_UNMULTIPLIED_PAINT_COLORS true
-#elif defined(@ENABLE_ADVANCED_BLEND)
+#ifdef @ENABLE_ADVANCED_BLEND
 // If advanced blend is enabled, we generate unmultiplied paint colors in the
 // shader. Otherwise we would have to just turn around and unmultiply them in
 // order to run the blend equation.

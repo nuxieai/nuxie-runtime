@@ -303,17 +303,14 @@ use super::super::utils::lite_rtti_hpp::{LiteRttiBase, LiteRttiCastFrom, LiteRtt
 use super::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
 use super::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::src::renderer_cpp::computeAlignment;
-#[cfg(any(
-    feature = "native-webgpu-experimental",
-    feature = "ore-gl"
-))]
+#[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
 use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
 use nuxie_render_api::{
     Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D,
 };
 pub use nuxie_render_api::{
-    ImageMeshInstanceData, ImageMeshInstances, ImageMeshInstancesHandle,
-    ImageMeshInstancesStorage, StrokeParams, StrokePosition,
+    ImageMeshInstanceData, ImageMeshInstances, ImageMeshInstancesHandle, ImageMeshInstancesStorage,
+    StrokeParams, StrokePosition,
 };
 
 pub type Alignment = Vec2D;
@@ -393,10 +390,7 @@ pub struct RenderBuffer {
     // RenderBuffer is erased behind `rcp<RenderBuffer>`, whose atomic last
     // release may occur on a worker. This weak route returns complete-object
     // destruction to the GL owner thread without retaining the context.
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     pub(crate) rust_final_release_route: Option<OwnerThreadFinalReleaseRoute>,
 }
 
@@ -420,10 +414,7 @@ unsafe impl RefCntTarget for RenderBuffer {
     }
     unsafe fn onRefCntReachedZero(ptr: *const Self) {
         let ptr = ptr.cast_mut();
-        #[cfg(any(
-            feature = "native-webgpu-experimental",
-            feature = "ore-gl"
-        ))]
+        #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
         if let Some(route) = unsafe { &*ptr }.rust_final_release_route.as_ref() {
             unsafe fn destroy_on_owner_thread(payload: usize) {
                 let ptr = payload as *mut RenderBuffer;
@@ -464,10 +455,7 @@ impl RenderBuffer {
         self.m_sizeInBytes
     }
 
-    #[cfg(any(
-        feature = "native-webgpu-experimental",
-        feature = "ore-gl"
-    ))]
+    #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
     pub(crate) fn install_owner_thread_final_release_route(
         &mut self,
         route: OwnerThreadFinalReleaseRoute,
@@ -1093,6 +1081,13 @@ pub unsafe trait RenderPathContract: Sized {
 pub struct Renderer;
 
 pub trait RendererContract {
+    unsafe fn applyLayerMask(
+        &mut self,
+        _mask: *const RenderImage,
+        _sampler: ImageSampler,
+        _mode: nuxie_render_api::LayerMaskMode,
+    ) {
+    }
     unsafe fn drawImageMeshInstanced(
         &mut self,
         image: *const RenderImage,

@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
+pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_raster_order_path.frag";
-pub const PINNED_SOURCE_SHA256: &str = "1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418";
+pub const PINNED_SOURCE_SHA256: &str = "bf0da3019985a1ebfd0faf8f9db544f5c59d24aecd6456955cef8198fb38c4e3";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_raster_order_path";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 238;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 8258;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 268;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 9648;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_draw_raster_order_path_frag__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

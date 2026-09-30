@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+testing = [] # Upstream TESTING observations; test harnesses only.
 tools = []
 threading = []
 # Mirrors upstream WITH_RIVE_TEST_SIGNATURE, independently of WITH_RIVE_TOOLS.
@@ -43,6 +44,10 @@ nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-sriv = { path = "../nuxie-sriv" }
 png = "0.18"
 sha2 = "0.10"
+
+[[test]]
+name = "upstream_painted_bounds"
+required-features = ["testing"]
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 libc = "0.2"

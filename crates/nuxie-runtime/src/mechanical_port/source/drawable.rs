@@ -13,9 +13,18 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoundsFidelity {
+    None,
+    Approximate,
+    Exact,
+}
+
 pub struct Drawable {
     pub base: DrawableBase,
     clipping_shapes: Vec<CoreHandle>,
+    layer_masks: Vec<CoreHandle>,
+    source_of_layer_masks: Vec<CoreHandle>,
     pub(crate) flattened_draw_rules: Option<CoreHandle>,
     pub(crate) prev: Option<RuntimeDrawableWeakOccurrence>,
     pub(crate) next: Option<RuntimeDrawableWeakOccurrence>,
@@ -27,6 +36,8 @@ impl Default for Drawable {
         Self {
             base: DrawableBase::default(),
             clipping_shapes: Vec::new(),
+            layer_masks: Vec::new(),
+            source_of_layer_masks: Vec::new(),
             flattened_draw_rules: None,
             prev: None,
             next: None,
@@ -226,6 +237,51 @@ impl Drawable {
         &self.clipping_shapes
     }
 
+    pub fn add_layer_mask(&mut self, mask: CoreHandle) {
+        self.layer_masks.push(mask);
+    }
+    pub fn add_source_of_layer_mask(&mut self, mask: CoreHandle) {
+        self.source_of_layer_masks.push(mask);
+    }
+    pub fn layer_masks(&self) -> &[CoreHandle] {
+        &self.layer_masks
+    }
+    pub fn source_of_layer_masks(&self) -> &[CoreHandle] {
+        &self.source_of_layer_masks
+    }
+    pub fn painted_bounds_from_local(
+        local: &crate::mechanical_port::source::math::aabb::Aabb,
+        world: &Mat2D,
+        paints: Option<
+            &crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer,
+        >,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> BoundsFidelity {
+        use crate::mechanical_port::source::math::aabb::Aabb;
+        if local.is_empty_or_nan() {
+            return BoundsFidelity::None;
+        }
+        let mut bounds = world.map_bounding_box(*local);
+        if bounds.is_empty_or_nan() {
+            *out = Aabb::default();
+            return BoundsFidelity::Exact;
+        }
+        let mut trustworthy = true;
+        if paints.is_some() {
+            let reach = crate::mechanical_port::source::shapes::paint::paint_outset::shape_paints_world_reach(paints, world);
+            if reach.world_outset > 0.0 {
+                bounds = bounds.outset(reach.world_outset, reach.world_outset);
+            }
+            trustworthy = reach.trustworthy;
+        }
+        *out = bounds;
+        if trustworthy {
+            BoundsFidelity::Exact
+        } else {
+            BoundsFidelity::Approximate
+        }
+    }
+
     pub fn is_selectable(&self) -> bool {
         self.base.drawable_flags() as u16 & DrawableFlag::SELECTABLE.0 != 0
     }
@@ -357,6 +413,12 @@ impl Drawable {
 }
 
 pub trait ProxyDrawing {
+    fn layer_mask_marker(
+        &self,
+    ) -> Option<Rc<RefCell<crate::mechanical_port::source::layer_mask::LayerMaskProxyDrawable>>>
+    {
+        None
+    }
     fn draw_proxy(&mut self, renderer: &mut Renderer, needs_save_operation: bool);
     fn is_proxy_hidden(&self) -> bool;
     fn owner_handle(&self) -> CoreHandle;
@@ -387,6 +449,74 @@ pub enum RuntimeDrawableWeakOccurrence {
 }
 
 impl RuntimeDrawableOccurrence {
+    pub fn layer_mask_marker(
+        &self,
+    ) -> Option<Rc<RefCell<crate::mechanical_port::source::layer_mask::LayerMaskProxyDrawable>>>
+    {
+        self.with_proxy(|proxy| proxy.proxy_drawing.layer_mask_marker())
+            .flatten()
+    }
+    pub fn is_mask_start(&self) -> bool {
+        self.layer_mask_marker().is_some_and(|m| {
+            m.borrow().op == crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskStart
+        })
+    }
+    pub fn is_mask_end(&self) -> bool {
+        self.layer_mask_marker().is_some_and(|m| {
+            m.borrow().op == crate::mechanical_port::source::layer_mask::LayerMaskOp::MaskEnd
+        })
+    }
+    pub fn layer_masks(&self) -> Vec<CoreHandle> {
+        if self.layer_mask_marker().is_some() {
+            return Vec::new();
+        }
+        match self {
+            Self::Authored(h) => h
+                .with(|o| o.as_drawable().map(|d| d.layer_masks().to_vec()))
+                .flatten()
+                .unwrap_or_default(),
+            Self::RuntimeProxy(p) => p
+                .borrow()
+                .hittable_component()
+                .and_then(|h| h.with(|o| o.as_drawable().map(|d| d.layer_masks().to_vec())))
+                .flatten()
+                .unwrap_or_default(),
+        }
+    }
+    pub fn source_of_layer_masks(&self) -> Vec<CoreHandle> {
+        if self.layer_mask_marker().is_some() {
+            return Vec::new();
+        }
+        match self {
+            Self::Authored(h) => h
+                .with(|o| o.as_drawable().map(|d| d.source_of_layer_masks().to_vec()))
+                .flatten()
+                .unwrap_or_default(),
+            Self::RuntimeProxy(p) => p
+                .borrow()
+                .hittable_component()
+                .and_then(|h| {
+                    h.with(|o| o.as_drawable().map(|d| d.source_of_layer_masks().to_vec()))
+                })
+                .flatten()
+                .unwrap_or_default(),
+        }
+    }
+    pub fn painted_world_bounds(
+        &self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> BoundsFidelity {
+        if self.layer_mask_marker().is_some() {
+            return BoundsFidelity::None;
+        }
+        let target = match self {
+            Self::Authored(h) => Some(h.clone()),
+            Self::RuntimeProxy(p) => p.borrow().hittable_component(),
+        };
+        target
+            .and_then(|h| h.with_mut(|o| o.painted_world_bounds(out)))
+            .unwrap_or(BoundsFidelity::None)
+    }
     pub fn with_component<R>(
         &self,
         use_component: impl FnOnce(&crate::mechanical_port::source::component::Component) -> R,
@@ -417,6 +547,9 @@ impl RuntimeDrawableOccurrence {
         skip_on_unclipped: bool,
         is_primary_hit: bool,
     ) -> bool {
+        if self.layer_mask_marker().is_some() {
+            return false;
+        }
         match self {
             Self::Authored(handle) => handle
                 .with_mut(|object| {
@@ -427,8 +560,14 @@ impl RuntimeDrawableOccurrence {
             Self::RuntimeProxy(proxy) => {
                 let owner = proxy.borrow().hittable_component();
                 owner
-                    .with_mut(|owner| {
-                        owner.component_hit_test_point(position, skip_on_unclipped, is_primary_hit)
+                    .and_then(|owner| {
+                        owner.with_mut(|owner| {
+                            owner.component_hit_test_point(
+                                position,
+                                skip_on_unclipped,
+                                is_primary_hit,
+                            )
+                        })
                     })
                     .flatten()
                     .unwrap_or(false)
@@ -437,6 +576,9 @@ impl RuntimeDrawableOccurrence {
     }
 
     pub fn is_target_opaque(&self) -> bool {
+        if self.layer_mask_marker().is_some() {
+            return false;
+        }
         match self {
             Self::Authored(handle) => handle
                 .with(|object| object.as_drawable().map(Drawable::is_target_opaque))
@@ -669,15 +811,21 @@ impl DrawableProxy {
     pub fn is_hidden(&self) -> bool {
         self.proxy_drawing.is_proxy_hidden()
     }
-    pub fn hittable_component(&self) -> CoreHandle {
-        self.proxy_drawing.owner_handle()
+    pub fn hittable_component(&self) -> Option<CoreHandle> {
+        if self.proxy_drawing.layer_mask_marker().is_some() {
+            None
+        } else {
+            Some(self.proxy_drawing.owner_handle())
+        }
     }
     pub fn is_target_opaque(&mut self) -> bool {
         self.hittable_component()
-            .with(|hittable| {
-                hittable
-                    .as_drawable()
-                    .is_some_and(Drawable::is_target_opaque)
+            .and_then(|h| {
+                h.with(|hittable| {
+                    hittable
+                        .as_drawable()
+                        .is_some_and(Drawable::is_target_opaque)
+                })
             })
             .unwrap_or(false)
     }

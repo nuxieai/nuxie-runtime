@@ -18,8 +18,8 @@
 #define GLSL_BASE_INSTANCE_UNIFORM_NAME_raw EE
 #define GLSL_BASE_VERTEX_UNIFORM_NAME "VE"
 #define GLSL_BASE_VERTEX_UNIFORM_NAME_raw VE
-#define GLSL_BORROWED_COVERAGE_PASS "EC"
-#define GLSL_BORROWED_COVERAGE_PASS_raw EC
+#define GLSL_BORROWED_COVERAGE_PASS "FC"
+#define GLSL_BORROWED_COVERAGE_PASS_raw FC
 #define GLSL_CLEAR_CLIP "YF"
 #define GLSL_CLEAR_CLIP_raw YF
 #define GLSL_CLEAR_COLOR "YE"
@@ -64,8 +64,8 @@
 #define GLSL_ENABLE_EVEN_ODD_raw YC
 #define GLSL_ENABLE_FEATHER "HB"
 #define GLSL_ENABLE_FEATHER_raw HB
-#define GLSL_ENABLE_HSL_BLEND_MODES "FC"
-#define GLSL_ENABLE_HSL_BLEND_MODES_raw FC
+#define GLSL_ENABLE_HSL_BLEND_MODES "GC"
+#define GLSL_ENABLE_HSL_BLEND_MODES_raw GC
 #define GLSL_ENABLE_INSTANCE_INDEX "DE"
 #define GLSL_ENABLE_INSTANCE_INDEX_raw DE
 #define GLSL_ENABLE_KHR_BLEND "ME"
@@ -160,8 +160,8 @@
 #define GLSL_SV_VERTEX_ID_INCLUDES_BASE_raw EG
 #define GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA "LF"
 #define GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA_raw LF
-#define GLSL_TARGET_SPIRV "DC"
-#define GLSL_TARGET_SPIRV_raw DC
+#define GLSL_TARGET_SPIRV "EC"
+#define GLSL_TARGET_SPIRV_raw EC
 #define GLSL_TARGET_WGSL "TE"
 #define GLSL_TARGET_WGSL_raw TE
 #define GLSL_USE_FILTERING "HD"
@@ -196,8 +196,8 @@
 #define GLSL_a_imageDrawViewMatrix_raw YB
 #define GLSL_a_imageDrawZIndex "MC"
 #define GLSL_a_imageDrawZIndex_raw MC
-#define GLSL_a_imageMeshUVTransform "HC"
-#define GLSL_a_imageMeshUVTransform_raw HC
+#define GLSL_a_imageMeshUVTransform "IC"
+#define GLSL_a_imageMeshUVTransform_raw IC
 #define GLSL_a_imageRectGradientMatrix "PD"
 #define GLSL_a_imageRectGradientMatrix_raw PD
 #define GLSL_a_imageRectImageAndGradientTranslates "DD"
@@ -206,8 +206,8 @@
 #define GLSL_a_imageRectImageMatrix_raw OD
 #define GLSL_a_imageRectPackedGradientData "PC"
 #define GLSL_a_imageRectPackedGradientData_raw PC
-#define GLSL_a_imageRectVertex "GC"
-#define GLSL_a_imageRectVertex_raw GC
+#define GLSL_a_imageRectVertex "HC"
+#define GLSL_a_imageRectVertex_raw HC
 #define GLSL_a_joinTan_and_ys "VC"
 #define GLSL_a_joinTan_and_ys_raw VC
 #define GLSL_a_mirroredVertexData "XB"
@@ -270,8 +270,8 @@
 #define GLSL_gaussianIntegralTexture_raw ZC
 #define GLSL_gradTexture "FD"
 #define GLSL_gradTexture_raw FD
-#define GLSL_imageTexture "IC"
-#define GLSL_imageTexture_raw IC
+#define GLSL_imageTexture "DC"
+#define GLSL_imageTexture_raw DC
 #define GLSL_paintAuxBuffer "JB"
 #define GLSL_paintAuxBuffer_raw JB
 #define GLSL_paintBuffer "XC"

@@ -143,6 +143,7 @@ pub enum ObjectKind {
     Solo,
     Joystick,
     SelectionStyle,
+    LayerMask,
     TextModifierRange,
     TextModifierGroup,
     TextModifier,
@@ -504,226 +505,227 @@ impl ObjectKind {
             Self::Solo => &DEFINITIONS[133],
             Self::Joystick => &DEFINITIONS[134],
             Self::SelectionStyle => &DEFINITIONS[135],
-            Self::TextModifierRange => &DEFINITIONS[136],
-            Self::TextModifierGroup => &DEFINITIONS[137],
-            Self::TextModifier => &DEFINITIONS[138],
-            Self::TextShapeModifier => &DEFINITIONS[139],
-            Self::TextVariationModifier => &DEFINITIONS[140],
-            Self::CubicInterpolatorComponent => &DEFINITIONS[141],
-            Self::TextStyleFeature => &DEFINITIONS[142],
-            Self::FollowPathConstraint => &DEFINITIONS[143],
-            Self::CustomProperty => &DEFINITIONS[144],
-            Self::ListenerFireEvent => &DEFINITIONS[145],
-            Self::StateMachineFireEvent => &DEFINITIONS[146],
-            Self::InterpolatingKeyFrame => &DEFINITIONS[147],
-            Self::KeyFrameCallback => &DEFINITIONS[148],
-            Self::ElasticInterpolator => &DEFINITIONS[149],
-            Self::KeyFrameInterpolator => &DEFINITIONS[150],
-            Self::AudioAsset => &DEFINITIONS[151],
-            Self::AudioEvent => &DEFINITIONS[152],
-            Self::LayoutComponent => &DEFINITIONS[153],
-            Self::LayoutComponentStyle => &DEFINITIONS[154],
-            Self::ExportAudio => &DEFINITIONS[155],
-            Self::ViewModelInstanceColor => &DEFINITIONS[156],
-            Self::ViewModelInstanceListItem => &DEFINITIONS[157],
-            Self::ViewModelInstanceValue => &DEFINITIONS[158],
-            Self::ViewModelComponent => &DEFINITIONS[159],
-            Self::ViewModelProperty => &DEFINITIONS[160],
-            Self::ViewModelPropertyNumber => &DEFINITIONS[161],
-            Self::ViewModelInstanceEnum => &DEFINITIONS[162],
-            Self::ViewModelInstanceString => &DEFINITIONS[163],
-            Self::ViewModelPropertyList => &DEFINITIONS[164],
-            Self::ViewModel => &DEFINITIONS[165],
-            Self::ViewModelPropertyViewModel => &DEFINITIONS[166],
-            Self::ViewModelInstance => &DEFINITIONS[167],
-            Self::DataEnumCustom => &DEFINITIONS[168],
-            Self::ViewModelPropertyEnumCustom => &DEFINITIONS[169],
-            Self::ViewModelPropertyColor => &DEFINITIONS[170],
-            Self::ViewModelInstanceList => &DEFINITIONS[171],
-            Self::ViewModelInstanceNumber => &DEFINITIONS[172],
-            Self::ViewModelPropertyString => &DEFINITIONS[173],
-            Self::ViewModelInstanceViewModel => &DEFINITIONS[174],
-            Self::DataEnumValue => &DEFINITIONS[175],
-            Self::DataBind => &DEFINITIONS[176],
-            Self::DataBindContext => &DEFINITIONS[177],
-            Self::ViewModelPropertyBoolean => &DEFINITIONS[178],
-            Self::ViewModelInstanceBoolean => &DEFINITIONS[179],
-            Self::KeyFrameUint => &DEFINITIONS[180],
-            Self::NestedArtboardLeaf => &DEFINITIONS[181],
-            Self::NestedArtboardLayout => &DEFINITIONS[182],
-            Self::BindablePropertyString => &DEFINITIONS[183],
-            Self::BindablePropertyBoolean => &DEFINITIONS[184],
-            Self::BindablePropertyNumber => &DEFINITIONS[185],
-            Self::BindablePropertyEnum => &DEFINITIONS[186],
-            Self::BindablePropertyColor => &DEFINITIONS[187],
-            Self::TransitionCondition => &DEFINITIONS[188],
-            Self::TransitionComparator => &DEFINITIONS[189],
-            Self::TransitionPropertyComparator => &DEFINITIONS[190],
-            Self::TransitionPropertyViewModelComparator => &DEFINITIONS[191],
-            Self::TransitionValueComparator => &DEFINITIONS[192],
-            Self::TransitionValueBooleanComparator => &DEFINITIONS[193],
-            Self::TransitionViewModelCondition => &DEFINITIONS[194],
-            Self::TransitionValueColorComparator => &DEFINITIONS[195],
-            Self::TransitionValueNumberComparator => &DEFINITIONS[196],
-            Self::TransitionValueEnumComparator => &DEFINITIONS[197],
-            Self::TransitionValueStringComparator => &DEFINITIONS[198],
-            Self::ListenerViewModelChange => &DEFINITIONS[199],
-            Self::DataConverter => &DEFINITIONS[200],
-            Self::DataConverterRounder => &DEFINITIONS[201],
-            Self::DataConverterToString => &DEFINITIONS[202],
-            Self::NSlicerTileMode => &DEFINITIONS[203],
-            Self::Axis => &DEFINITIONS[204],
-            Self::NSlicer => &DEFINITIONS[205],
-            Self::AxisY => &DEFINITIONS[206],
-            Self::AxisX => &DEFINITIONS[207],
-            Self::TransitionPropertyArtboardComparator => &DEFINITIONS[208],
-            Self::TransitionArtboardCondition => &DEFINITIONS[209],
-            Self::DataConverterGroupItem => &DEFINITIONS[210],
-            Self::DataConverterGroup => &DEFINITIONS[211],
-            Self::DataConverterOperationValue => &DEFINITIONS[212],
-            Self::ViewModelInstanceTrigger => &DEFINITIONS[213],
-            Self::ViewModelPropertyTrigger => &DEFINITIONS[214],
-            Self::BindablePropertyTrigger => &DEFINITIONS[215],
-            Self::DataConverterTrigger => &DEFINITIONS[216],
-            Self::TransitionValueTriggerComparator => &DEFINITIONS[217],
-            Self::DashPath => &DEFINITIONS[218],
-            Self::Dash => &DEFINITIONS[219],
-            Self::NSlicedNode => &DEFINITIONS[220],
-            Self::ViewModelPropertyEnum => &DEFINITIONS[221],
-            Self::DataEnum => &DEFINITIONS[222],
-            Self::ViewModelPropertyEnumSystem => &DEFINITIONS[223],
-            Self::DataEnumSystem => &DEFINITIONS[224],
-            Self::ForegroundLayoutDrawable => &DEFINITIONS[225],
-            Self::DataConverterSystemDegsToRads => &DEFINITIONS[226],
-            Self::DataConverterSystemNormalizer => &DEFINITIONS[227],
-            Self::DataConverterOperation => &DEFINITIONS[228],
-            Self::DataConverterOperationViewModel => &DEFINITIONS[229],
-            Self::DataConverterRangeMapper => &DEFINITIONS[230],
-            Self::DraggableConstraint => &DEFINITIONS[231],
-            Self::ScrollConstraint => &DEFINITIONS[232],
-            Self::ScrollBarConstraint => &DEFINITIONS[233],
-            Self::ScrollPhysics => &DEFINITIONS[234],
-            Self::ClampedScrollPhysics => &DEFINITIONS[235],
-            Self::ElasticScrollPhysics => &DEFINITIONS[236],
-            Self::BlendState1D => &DEFINITIONS[237],
-            Self::BlendState1DViewModel => &DEFINITIONS[238],
-            Self::ScriptAsset => &DEFINITIONS[239],
-            Self::DataConverterStringPad => &DEFINITIONS[240],
-            Self::DataConverterStringRemoveZeros => &DEFINITIONS[241],
-            Self::DataConverterStringTrim => &DEFINITIONS[242],
-            Self::Feather => &DEFINITIONS[243],
-            Self::DataConverterInterpolator => &DEFINITIONS[244],
-            Self::DataConverterBooleanNegate => &DEFINITIONS[245],
-            Self::DataConverterFormula => &DEFINITIONS[246],
-            Self::FormulaToken => &DEFINITIONS[247],
-            Self::FormulaTokenArgumentSeparator => &DEFINITIONS[248],
-            Self::FormulaTokenParenthesis => &DEFINITIONS[249],
-            Self::FormulaTokenParenthesisClose => &DEFINITIONS[250],
-            Self::FormulaTokenOperation => &DEFINITIONS[251],
-            Self::FormulaTokenFunction => &DEFINITIONS[252],
-            Self::FormulaTokenValue => &DEFINITIONS[253],
-            Self::FormulaTokenParenthesisOpen => &DEFINITIONS[254],
-            Self::FormulaTokenInput => &DEFINITIONS[255],
-            Self::TextTargetModifier => &DEFINITIONS[256],
-            Self::TextFollowPathModifier => &DEFINITIONS[257],
-            Self::CustomPropertyGroup => &DEFINITIONS[258],
-            Self::ArtboardComponentList => &DEFINITIONS[259],
-            Self::ViewModelPropertySymbol => &DEFINITIONS[260],
-            Self::ViewModelPropertySymbolListIndex => &DEFINITIONS[261],
-            Self::ViewModelInstanceSymbol => &DEFINITIONS[262],
-            Self::ViewModelInstanceSymbolListIndex => &DEFINITIONS[263],
-            Self::BindablePropertyInteger => &DEFINITIONS[264],
-            Self::DataConverterNumberToList => &DEFINITIONS[265],
-            Self::TextInput => &DEFINITIONS[266],
-            Self::TextInputDrawable => &DEFINITIONS[267],
-            Self::TextInputCursor => &DEFINITIONS[268],
-            Self::TextInputText => &DEFINITIONS[269],
-            Self::TextStyle => &DEFINITIONS[270],
-            Self::TextInputSelection => &DEFINITIONS[271],
-            Self::TextInputSelectedText => &DEFINITIONS[272],
-            Self::ViewModelPropertyAsset => &DEFINITIONS[273],
-            Self::ViewModelPropertyAssetImage => &DEFINITIONS[274],
-            Self::ViewModelInstanceAsset => &DEFINITIONS[275],
-            Self::ViewModelInstanceAssetImage => &DEFINITIONS[276],
-            Self::BindablePropertyAsset => &DEFINITIONS[277],
-            Self::BindablePropertyList => &DEFINITIONS[278],
-            Self::DataConverterListToLength => &DEFINITIONS[279],
-            Self::CustomPropertyColor => &DEFINITIONS[280],
-            Self::TransitionSelfComparator => &DEFINITIONS[281],
-            Self::BindablePropertyId => &DEFINITIONS[282],
-            Self::BindablePropertyArtboard => &DEFINITIONS[283],
-            Self::ViewModelPropertyArtboard => &DEFINITIONS[284],
-            Self::ViewModelInstanceArtboard => &DEFINITIONS[285],
-            Self::TransitionValueIdComparator => &DEFINITIONS[286],
-            Self::TransitionValueAssetComparator => &DEFINITIONS[287],
-            Self::ScriptedDrawable => &DEFINITIONS[288],
-            Self::ArtboardComponentListOverride => &DEFINITIONS[289],
-            Self::ScriptInputNumber => &DEFINITIONS[290],
-            Self::ScriptInputViewModelProperty => &DEFINITIONS[291],
-            Self::CustomPropertyTrigger => &DEFINITIONS[292],
-            Self::StateMachineFireTrigger => &DEFINITIONS[293],
-            Self::StateMachineFireAction => &DEFINITIONS[294],
-            Self::CustomPropertyEnum => &DEFINITIONS[295],
-            Self::DataConverterToNumber => &DEFINITIONS[296],
-            Self::ScriptInputTrigger => &DEFINITIONS[297],
-            Self::ListPath => &DEFINITIONS[298],
-            Self::PointsCommonPath => &DEFINITIONS[299],
-            Self::ScriptInputArtboard => &DEFINITIONS[300],
-            Self::ListFollowPathConstraint => &DEFINITIONS[301],
-            Self::ScriptInputColor => &DEFINITIONS[302],
-            Self::ScriptInputString => &DEFINITIONS[303],
-            Self::ScriptedDataConverter => &DEFINITIONS[304],
-            Self::TransitionValueArtboardComparator => &DEFINITIONS[305],
-            Self::ScriptInputBoolean => &DEFINITIONS[306],
-            Self::ScriptedLayout => &DEFINITIONS[307],
-            Self::ScriptedPathEffect => &DEFINITIONS[308],
-            Self::ManifestAsset => &DEFINITIONS[309],
-            Self::DataBindPath => &DEFINITIONS[310],
-            Self::TargetEffect => &DEFINITIONS[311],
-            Self::GroupEffect => &DEFINITIONS[312],
-            Self::ScriptedListenerAction => &DEFINITIONS[313],
-            Self::ScriptedTransitionCondition => &DEFINITIONS[314],
-            Self::ArtboardListMapRule => &DEFINITIONS[315],
-            Self::BlobAsset => &DEFINITIONS[316],
-            Self::FocusActionTarget => &DEFINITIONS[317],
-            Self::FocusData => &DEFINITIONS[318],
-            Self::StateMachineListener => &DEFINITIONS[319],
-            Self::ListenerInputType => &DEFINITIONS[320],
-            Self::ListenerInputTypeEvent => &DEFINITIONS[321],
-            Self::ListenerInputTypeViewModel => &DEFINITIONS[322],
-            Self::BindablePropertyViewModel => &DEFINITIONS[323],
-            Self::UserInput => &DEFINITIONS[324],
-            Self::KeyboardInput => &DEFINITIONS[325],
-            Self::ListenerInputTypeKeyboard => &DEFINITIONS[326],
-            Self::ListenerInputTypeText => &DEFINITIONS[327],
-            Self::TransitionPropertyComponentComparator => &DEFINITIONS[328],
-            Self::SemanticData => &DEFINITIONS[329],
-            Self::ListenerInputTypeSemantic => &DEFINITIONS[330],
-            Self::SemanticInput => &DEFINITIONS[331],
-            Self::FocusAction => &DEFINITIONS[332],
-            Self::FocusActionTraversal => &DEFINITIONS[333],
-            Self::ShaderAsset => &DEFINITIONS[334],
-            Self::TextAsset => &DEFINITIONS[335],
-            Self::ScriptedInterpolator => &DEFINITIONS[336],
-            Self::ListenerInputTypeGamepad => &DEFINITIONS[337],
-            Self::GamepadInput => &DEFINITIONS[338],
-            Self::ViewModelPropertyAssetFont => &DEFINITIONS[339],
-            Self::ViewModelInstanceAssetFont => &DEFINITIONS[340],
-            Self::FocusActionClear => &DEFINITIONS[341],
-            Self::TransitionFocusCondition => &DEFINITIONS[342],
-            Self::ComponentOrigin => &DEFINITIONS[343],
-            Self::ViewModelPropertyAssetBlob => &DEFINITIONS[344],
-            Self::ViewModelInstanceAssetBlob => &DEFINITIONS[345],
-            Self::LayoutSizingStyle => &DEFINITIONS[346],
-            Self::LayoutNodeStyle => &DEFINITIONS[347],
-            Self::GridTrack => &DEFINITIONS[348],
-            Self::LayoutParticipant => &DEFINITIONS[349],
-            Self::KeyFrameInt => &DEFINITIONS[350],
-            Self::GridItemPlacement => &DEFINITIONS[351],
-            Self::TextStyleBackground => &DEFINITIONS[352],
-            Self::ScriptModuleAsset => &DEFINITIONS[353],
-            Self::VideoAsset => &DEFINITIONS[354],
-            Self::Video => &DEFINITIONS[355],
+            Self::LayerMask => &DEFINITIONS[136],
+            Self::TextModifierRange => &DEFINITIONS[137],
+            Self::TextModifierGroup => &DEFINITIONS[138],
+            Self::TextModifier => &DEFINITIONS[139],
+            Self::TextShapeModifier => &DEFINITIONS[140],
+            Self::TextVariationModifier => &DEFINITIONS[141],
+            Self::CubicInterpolatorComponent => &DEFINITIONS[142],
+            Self::TextStyleFeature => &DEFINITIONS[143],
+            Self::FollowPathConstraint => &DEFINITIONS[144],
+            Self::CustomProperty => &DEFINITIONS[145],
+            Self::ListenerFireEvent => &DEFINITIONS[146],
+            Self::StateMachineFireEvent => &DEFINITIONS[147],
+            Self::InterpolatingKeyFrame => &DEFINITIONS[148],
+            Self::KeyFrameCallback => &DEFINITIONS[149],
+            Self::ElasticInterpolator => &DEFINITIONS[150],
+            Self::KeyFrameInterpolator => &DEFINITIONS[151],
+            Self::AudioAsset => &DEFINITIONS[152],
+            Self::AudioEvent => &DEFINITIONS[153],
+            Self::LayoutComponent => &DEFINITIONS[154],
+            Self::LayoutComponentStyle => &DEFINITIONS[155],
+            Self::ExportAudio => &DEFINITIONS[156],
+            Self::ViewModelInstanceColor => &DEFINITIONS[157],
+            Self::ViewModelInstanceListItem => &DEFINITIONS[158],
+            Self::ViewModelInstanceValue => &DEFINITIONS[159],
+            Self::ViewModelComponent => &DEFINITIONS[160],
+            Self::ViewModelProperty => &DEFINITIONS[161],
+            Self::ViewModelPropertyNumber => &DEFINITIONS[162],
+            Self::ViewModelInstanceEnum => &DEFINITIONS[163],
+            Self::ViewModelInstanceString => &DEFINITIONS[164],
+            Self::ViewModelPropertyList => &DEFINITIONS[165],
+            Self::ViewModel => &DEFINITIONS[166],
+            Self::ViewModelPropertyViewModel => &DEFINITIONS[167],
+            Self::ViewModelInstance => &DEFINITIONS[168],
+            Self::DataEnumCustom => &DEFINITIONS[169],
+            Self::ViewModelPropertyEnumCustom => &DEFINITIONS[170],
+            Self::ViewModelPropertyColor => &DEFINITIONS[171],
+            Self::ViewModelInstanceList => &DEFINITIONS[172],
+            Self::ViewModelInstanceNumber => &DEFINITIONS[173],
+            Self::ViewModelPropertyString => &DEFINITIONS[174],
+            Self::ViewModelInstanceViewModel => &DEFINITIONS[175],
+            Self::DataEnumValue => &DEFINITIONS[176],
+            Self::DataBind => &DEFINITIONS[177],
+            Self::DataBindContext => &DEFINITIONS[178],
+            Self::ViewModelPropertyBoolean => &DEFINITIONS[179],
+            Self::ViewModelInstanceBoolean => &DEFINITIONS[180],
+            Self::KeyFrameUint => &DEFINITIONS[181],
+            Self::NestedArtboardLeaf => &DEFINITIONS[182],
+            Self::NestedArtboardLayout => &DEFINITIONS[183],
+            Self::BindablePropertyString => &DEFINITIONS[184],
+            Self::BindablePropertyBoolean => &DEFINITIONS[185],
+            Self::BindablePropertyNumber => &DEFINITIONS[186],
+            Self::BindablePropertyEnum => &DEFINITIONS[187],
+            Self::BindablePropertyColor => &DEFINITIONS[188],
+            Self::TransitionCondition => &DEFINITIONS[189],
+            Self::TransitionComparator => &DEFINITIONS[190],
+            Self::TransitionPropertyComparator => &DEFINITIONS[191],
+            Self::TransitionPropertyViewModelComparator => &DEFINITIONS[192],
+            Self::TransitionValueComparator => &DEFINITIONS[193],
+            Self::TransitionValueBooleanComparator => &DEFINITIONS[194],
+            Self::TransitionViewModelCondition => &DEFINITIONS[195],
+            Self::TransitionValueColorComparator => &DEFINITIONS[196],
+            Self::TransitionValueNumberComparator => &DEFINITIONS[197],
+            Self::TransitionValueEnumComparator => &DEFINITIONS[198],
+            Self::TransitionValueStringComparator => &DEFINITIONS[199],
+            Self::ListenerViewModelChange => &DEFINITIONS[200],
+            Self::DataConverter => &DEFINITIONS[201],
+            Self::DataConverterRounder => &DEFINITIONS[202],
+            Self::DataConverterToString => &DEFINITIONS[203],
+            Self::NSlicerTileMode => &DEFINITIONS[204],
+            Self::Axis => &DEFINITIONS[205],
+            Self::NSlicer => &DEFINITIONS[206],
+            Self::AxisY => &DEFINITIONS[207],
+            Self::AxisX => &DEFINITIONS[208],
+            Self::TransitionPropertyArtboardComparator => &DEFINITIONS[209],
+            Self::TransitionArtboardCondition => &DEFINITIONS[210],
+            Self::DataConverterGroupItem => &DEFINITIONS[211],
+            Self::DataConverterGroup => &DEFINITIONS[212],
+            Self::DataConverterOperationValue => &DEFINITIONS[213],
+            Self::ViewModelInstanceTrigger => &DEFINITIONS[214],
+            Self::ViewModelPropertyTrigger => &DEFINITIONS[215],
+            Self::BindablePropertyTrigger => &DEFINITIONS[216],
+            Self::DataConverterTrigger => &DEFINITIONS[217],
+            Self::TransitionValueTriggerComparator => &DEFINITIONS[218],
+            Self::DashPath => &DEFINITIONS[219],
+            Self::Dash => &DEFINITIONS[220],
+            Self::NSlicedNode => &DEFINITIONS[221],
+            Self::ViewModelPropertyEnum => &DEFINITIONS[222],
+            Self::DataEnum => &DEFINITIONS[223],
+            Self::ViewModelPropertyEnumSystem => &DEFINITIONS[224],
+            Self::DataEnumSystem => &DEFINITIONS[225],
+            Self::ForegroundLayoutDrawable => &DEFINITIONS[226],
+            Self::DataConverterSystemDegsToRads => &DEFINITIONS[227],
+            Self::DataConverterSystemNormalizer => &DEFINITIONS[228],
+            Self::DataConverterOperation => &DEFINITIONS[229],
+            Self::DataConverterOperationViewModel => &DEFINITIONS[230],
+            Self::DataConverterRangeMapper => &DEFINITIONS[231],
+            Self::DraggableConstraint => &DEFINITIONS[232],
+            Self::ScrollConstraint => &DEFINITIONS[233],
+            Self::ScrollBarConstraint => &DEFINITIONS[234],
+            Self::ScrollPhysics => &DEFINITIONS[235],
+            Self::ClampedScrollPhysics => &DEFINITIONS[236],
+            Self::ElasticScrollPhysics => &DEFINITIONS[237],
+            Self::BlendState1D => &DEFINITIONS[238],
+            Self::BlendState1DViewModel => &DEFINITIONS[239],
+            Self::ScriptAsset => &DEFINITIONS[240],
+            Self::DataConverterStringPad => &DEFINITIONS[241],
+            Self::DataConverterStringRemoveZeros => &DEFINITIONS[242],
+            Self::DataConverterStringTrim => &DEFINITIONS[243],
+            Self::Feather => &DEFINITIONS[244],
+            Self::DataConverterInterpolator => &DEFINITIONS[245],
+            Self::DataConverterBooleanNegate => &DEFINITIONS[246],
+            Self::DataConverterFormula => &DEFINITIONS[247],
+            Self::FormulaToken => &DEFINITIONS[248],
+            Self::FormulaTokenArgumentSeparator => &DEFINITIONS[249],
+            Self::FormulaTokenParenthesis => &DEFINITIONS[250],
+            Self::FormulaTokenParenthesisClose => &DEFINITIONS[251],
+            Self::FormulaTokenOperation => &DEFINITIONS[252],
+            Self::FormulaTokenFunction => &DEFINITIONS[253],
+            Self::FormulaTokenValue => &DEFINITIONS[254],
+            Self::FormulaTokenParenthesisOpen => &DEFINITIONS[255],
+            Self::FormulaTokenInput => &DEFINITIONS[256],
+            Self::TextTargetModifier => &DEFINITIONS[257],
+            Self::TextFollowPathModifier => &DEFINITIONS[258],
+            Self::CustomPropertyGroup => &DEFINITIONS[259],
+            Self::ArtboardComponentList => &DEFINITIONS[260],
+            Self::ViewModelPropertySymbol => &DEFINITIONS[261],
+            Self::ViewModelPropertySymbolListIndex => &DEFINITIONS[262],
+            Self::ViewModelInstanceSymbol => &DEFINITIONS[263],
+            Self::ViewModelInstanceSymbolListIndex => &DEFINITIONS[264],
+            Self::BindablePropertyInteger => &DEFINITIONS[265],
+            Self::DataConverterNumberToList => &DEFINITIONS[266],
+            Self::TextInput => &DEFINITIONS[267],
+            Self::TextInputDrawable => &DEFINITIONS[268],
+            Self::TextInputCursor => &DEFINITIONS[269],
+            Self::TextInputText => &DEFINITIONS[270],
+            Self::TextStyle => &DEFINITIONS[271],
+            Self::TextInputSelection => &DEFINITIONS[272],
+            Self::TextInputSelectedText => &DEFINITIONS[273],
+            Self::ViewModelPropertyAsset => &DEFINITIONS[274],
+            Self::ViewModelPropertyAssetImage => &DEFINITIONS[275],
+            Self::ViewModelInstanceAsset => &DEFINITIONS[276],
+            Self::ViewModelInstanceAssetImage => &DEFINITIONS[277],
+            Self::BindablePropertyAsset => &DEFINITIONS[278],
+            Self::BindablePropertyList => &DEFINITIONS[279],
+            Self::DataConverterListToLength => &DEFINITIONS[280],
+            Self::CustomPropertyColor => &DEFINITIONS[281],
+            Self::TransitionSelfComparator => &DEFINITIONS[282],
+            Self::BindablePropertyId => &DEFINITIONS[283],
+            Self::BindablePropertyArtboard => &DEFINITIONS[284],
+            Self::ViewModelPropertyArtboard => &DEFINITIONS[285],
+            Self::ViewModelInstanceArtboard => &DEFINITIONS[286],
+            Self::TransitionValueIdComparator => &DEFINITIONS[287],
+            Self::TransitionValueAssetComparator => &DEFINITIONS[288],
+            Self::ScriptedDrawable => &DEFINITIONS[289],
+            Self::ArtboardComponentListOverride => &DEFINITIONS[290],
+            Self::ScriptInputNumber => &DEFINITIONS[291],
+            Self::ScriptInputViewModelProperty => &DEFINITIONS[292],
+            Self::CustomPropertyTrigger => &DEFINITIONS[293],
+            Self::StateMachineFireTrigger => &DEFINITIONS[294],
+            Self::StateMachineFireAction => &DEFINITIONS[295],
+            Self::CustomPropertyEnum => &DEFINITIONS[296],
+            Self::DataConverterToNumber => &DEFINITIONS[297],
+            Self::ScriptInputTrigger => &DEFINITIONS[298],
+            Self::ListPath => &DEFINITIONS[299],
+            Self::PointsCommonPath => &DEFINITIONS[300],
+            Self::ScriptInputArtboard => &DEFINITIONS[301],
+            Self::ListFollowPathConstraint => &DEFINITIONS[302],
+            Self::ScriptInputColor => &DEFINITIONS[303],
+            Self::ScriptInputString => &DEFINITIONS[304],
+            Self::ScriptedDataConverter => &DEFINITIONS[305],
+            Self::TransitionValueArtboardComparator => &DEFINITIONS[306],
+            Self::ScriptInputBoolean => &DEFINITIONS[307],
+            Self::ScriptedLayout => &DEFINITIONS[308],
+            Self::ScriptedPathEffect => &DEFINITIONS[309],
+            Self::ManifestAsset => &DEFINITIONS[310],
+            Self::DataBindPath => &DEFINITIONS[311],
+            Self::TargetEffect => &DEFINITIONS[312],
+            Self::GroupEffect => &DEFINITIONS[313],
+            Self::ScriptedListenerAction => &DEFINITIONS[314],
+            Self::ScriptedTransitionCondition => &DEFINITIONS[315],
+            Self::ArtboardListMapRule => &DEFINITIONS[316],
+            Self::BlobAsset => &DEFINITIONS[317],
+            Self::FocusActionTarget => &DEFINITIONS[318],
+            Self::FocusData => &DEFINITIONS[319],
+            Self::StateMachineListener => &DEFINITIONS[320],
+            Self::ListenerInputType => &DEFINITIONS[321],
+            Self::ListenerInputTypeEvent => &DEFINITIONS[322],
+            Self::ListenerInputTypeViewModel => &DEFINITIONS[323],
+            Self::BindablePropertyViewModel => &DEFINITIONS[324],
+            Self::UserInput => &DEFINITIONS[325],
+            Self::KeyboardInput => &DEFINITIONS[326],
+            Self::ListenerInputTypeKeyboard => &DEFINITIONS[327],
+            Self::ListenerInputTypeText => &DEFINITIONS[328],
+            Self::TransitionPropertyComponentComparator => &DEFINITIONS[329],
+            Self::SemanticData => &DEFINITIONS[330],
+            Self::ListenerInputTypeSemantic => &DEFINITIONS[331],
+            Self::SemanticInput => &DEFINITIONS[332],
+            Self::FocusAction => &DEFINITIONS[333],
+            Self::FocusActionTraversal => &DEFINITIONS[334],
+            Self::ShaderAsset => &DEFINITIONS[335],
+            Self::TextAsset => &DEFINITIONS[336],
+            Self::ScriptedInterpolator => &DEFINITIONS[337],
+            Self::ListenerInputTypeGamepad => &DEFINITIONS[338],
+            Self::GamepadInput => &DEFINITIONS[339],
+            Self::ViewModelPropertyAssetFont => &DEFINITIONS[340],
+            Self::ViewModelInstanceAssetFont => &DEFINITIONS[341],
+            Self::FocusActionClear => &DEFINITIONS[342],
+            Self::TransitionFocusCondition => &DEFINITIONS[343],
+            Self::ComponentOrigin => &DEFINITIONS[344],
+            Self::ViewModelPropertyAssetBlob => &DEFINITIONS[345],
+            Self::ViewModelInstanceAssetBlob => &DEFINITIONS[346],
+            Self::LayoutSizingStyle => &DEFINITIONS[347],
+            Self::LayoutNodeStyle => &DEFINITIONS[348],
+            Self::GridTrack => &DEFINITIONS[349],
+            Self::LayoutParticipant => &DEFINITIONS[350],
+            Self::KeyFrameInt => &DEFINITIONS[351],
+            Self::GridItemPlacement => &DEFINITIONS[352],
+            Self::TextStyleBackground => &DEFINITIONS[353],
+            Self::ScriptModuleAsset => &DEFINITIONS[354],
+            Self::VideoAsset => &DEFINITIONS[355],
+            Self::Video => &DEFINITIONS[356],
         }
     }
 
@@ -874,6 +876,7 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         147 => Some(ObjectKind::Solo),
         148 => Some(ObjectKind::Joystick),
         153 => Some(ObjectKind::SelectionStyle),
+        154 => Some(ObjectKind::LayerMask),
         158 => Some(ObjectKind::TextModifierRange),
         159 => Some(ObjectKind::TextModifierGroup),
         160 => Some(ObjectKind::TextModifier),
@@ -1240,226 +1243,227 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "Solo" => Some(&DEFINITIONS[133]),
         "Joystick" => Some(&DEFINITIONS[134]),
         "SelectionStyle" => Some(&DEFINITIONS[135]),
-        "TextModifierRange" => Some(&DEFINITIONS[136]),
-        "TextModifierGroup" => Some(&DEFINITIONS[137]),
-        "TextModifier" => Some(&DEFINITIONS[138]),
-        "TextShapeModifier" => Some(&DEFINITIONS[139]),
-        "TextVariationModifier" => Some(&DEFINITIONS[140]),
-        "CubicInterpolatorComponent" => Some(&DEFINITIONS[141]),
-        "TextStyleFeature" => Some(&DEFINITIONS[142]),
-        "FollowPathConstraint" => Some(&DEFINITIONS[143]),
-        "CustomProperty" => Some(&DEFINITIONS[144]),
-        "ListenerFireEvent" => Some(&DEFINITIONS[145]),
-        "StateMachineFireEvent" => Some(&DEFINITIONS[146]),
-        "InterpolatingKeyFrame" => Some(&DEFINITIONS[147]),
-        "KeyFrameCallback" => Some(&DEFINITIONS[148]),
-        "ElasticInterpolator" => Some(&DEFINITIONS[149]),
-        "KeyFrameInterpolator" => Some(&DEFINITIONS[150]),
-        "AudioAsset" => Some(&DEFINITIONS[151]),
-        "AudioEvent" => Some(&DEFINITIONS[152]),
-        "LayoutComponent" => Some(&DEFINITIONS[153]),
-        "LayoutComponentStyle" => Some(&DEFINITIONS[154]),
-        "ExportAudio" => Some(&DEFINITIONS[155]),
-        "ViewModelInstanceColor" => Some(&DEFINITIONS[156]),
-        "ViewModelInstanceListItem" => Some(&DEFINITIONS[157]),
-        "ViewModelInstanceValue" => Some(&DEFINITIONS[158]),
-        "ViewModelComponent" => Some(&DEFINITIONS[159]),
-        "ViewModelProperty" => Some(&DEFINITIONS[160]),
-        "ViewModelPropertyNumber" => Some(&DEFINITIONS[161]),
-        "ViewModelInstanceEnum" => Some(&DEFINITIONS[162]),
-        "ViewModelInstanceString" => Some(&DEFINITIONS[163]),
-        "ViewModelPropertyList" => Some(&DEFINITIONS[164]),
-        "ViewModel" => Some(&DEFINITIONS[165]),
-        "ViewModelPropertyViewModel" => Some(&DEFINITIONS[166]),
-        "ViewModelInstance" => Some(&DEFINITIONS[167]),
-        "DataEnumCustom" => Some(&DEFINITIONS[168]),
-        "ViewModelPropertyEnumCustom" => Some(&DEFINITIONS[169]),
-        "ViewModelPropertyColor" => Some(&DEFINITIONS[170]),
-        "ViewModelInstanceList" => Some(&DEFINITIONS[171]),
-        "ViewModelInstanceNumber" => Some(&DEFINITIONS[172]),
-        "ViewModelPropertyString" => Some(&DEFINITIONS[173]),
-        "ViewModelInstanceViewModel" => Some(&DEFINITIONS[174]),
-        "DataEnumValue" => Some(&DEFINITIONS[175]),
-        "DataBind" => Some(&DEFINITIONS[176]),
-        "DataBindContext" => Some(&DEFINITIONS[177]),
-        "ViewModelPropertyBoolean" => Some(&DEFINITIONS[178]),
-        "ViewModelInstanceBoolean" => Some(&DEFINITIONS[179]),
-        "KeyFrameUint" => Some(&DEFINITIONS[180]),
-        "NestedArtboardLeaf" => Some(&DEFINITIONS[181]),
-        "NestedArtboardLayout" => Some(&DEFINITIONS[182]),
-        "BindablePropertyString" => Some(&DEFINITIONS[183]),
-        "BindablePropertyBoolean" => Some(&DEFINITIONS[184]),
-        "BindablePropertyNumber" => Some(&DEFINITIONS[185]),
-        "BindablePropertyEnum" => Some(&DEFINITIONS[186]),
-        "BindablePropertyColor" => Some(&DEFINITIONS[187]),
-        "TransitionCondition" => Some(&DEFINITIONS[188]),
-        "TransitionComparator" => Some(&DEFINITIONS[189]),
-        "TransitionPropertyComparator" => Some(&DEFINITIONS[190]),
-        "TransitionPropertyViewModelComparator" => Some(&DEFINITIONS[191]),
-        "TransitionValueComparator" => Some(&DEFINITIONS[192]),
-        "TransitionValueBooleanComparator" => Some(&DEFINITIONS[193]),
-        "TransitionViewModelCondition" => Some(&DEFINITIONS[194]),
-        "TransitionValueColorComparator" => Some(&DEFINITIONS[195]),
-        "TransitionValueNumberComparator" => Some(&DEFINITIONS[196]),
-        "TransitionValueEnumComparator" => Some(&DEFINITIONS[197]),
-        "TransitionValueStringComparator" => Some(&DEFINITIONS[198]),
-        "ListenerViewModelChange" => Some(&DEFINITIONS[199]),
-        "DataConverter" => Some(&DEFINITIONS[200]),
-        "DataConverterRounder" => Some(&DEFINITIONS[201]),
-        "DataConverterToString" => Some(&DEFINITIONS[202]),
-        "NSlicerTileMode" => Some(&DEFINITIONS[203]),
-        "Axis" => Some(&DEFINITIONS[204]),
-        "NSlicer" => Some(&DEFINITIONS[205]),
-        "AxisY" => Some(&DEFINITIONS[206]),
-        "AxisX" => Some(&DEFINITIONS[207]),
-        "TransitionPropertyArtboardComparator" => Some(&DEFINITIONS[208]),
-        "TransitionArtboardCondition" => Some(&DEFINITIONS[209]),
-        "DataConverterGroupItem" => Some(&DEFINITIONS[210]),
-        "DataConverterGroup" => Some(&DEFINITIONS[211]),
-        "DataConverterOperationValue" => Some(&DEFINITIONS[212]),
-        "ViewModelInstanceTrigger" => Some(&DEFINITIONS[213]),
-        "ViewModelPropertyTrigger" => Some(&DEFINITIONS[214]),
-        "BindablePropertyTrigger" => Some(&DEFINITIONS[215]),
-        "DataConverterTrigger" => Some(&DEFINITIONS[216]),
-        "TransitionValueTriggerComparator" => Some(&DEFINITIONS[217]),
-        "DashPath" => Some(&DEFINITIONS[218]),
-        "Dash" => Some(&DEFINITIONS[219]),
-        "NSlicedNode" => Some(&DEFINITIONS[220]),
-        "ViewModelPropertyEnum" => Some(&DEFINITIONS[221]),
-        "DataEnum" => Some(&DEFINITIONS[222]),
-        "ViewModelPropertyEnumSystem" => Some(&DEFINITIONS[223]),
-        "DataEnumSystem" => Some(&DEFINITIONS[224]),
-        "ForegroundLayoutDrawable" => Some(&DEFINITIONS[225]),
-        "DataConverterSystemDegsToRads" => Some(&DEFINITIONS[226]),
-        "DataConverterSystemNormalizer" => Some(&DEFINITIONS[227]),
-        "DataConverterOperation" => Some(&DEFINITIONS[228]),
-        "DataConverterOperationViewModel" => Some(&DEFINITIONS[229]),
-        "DataConverterRangeMapper" => Some(&DEFINITIONS[230]),
-        "DraggableConstraint" => Some(&DEFINITIONS[231]),
-        "ScrollConstraint" => Some(&DEFINITIONS[232]),
-        "ScrollBarConstraint" => Some(&DEFINITIONS[233]),
-        "ScrollPhysics" => Some(&DEFINITIONS[234]),
-        "ClampedScrollPhysics" => Some(&DEFINITIONS[235]),
-        "ElasticScrollPhysics" => Some(&DEFINITIONS[236]),
-        "BlendState1D" => Some(&DEFINITIONS[237]),
-        "BlendState1DViewModel" => Some(&DEFINITIONS[238]),
-        "ScriptAsset" => Some(&DEFINITIONS[239]),
-        "DataConverterStringPad" => Some(&DEFINITIONS[240]),
-        "DataConverterStringRemoveZeros" => Some(&DEFINITIONS[241]),
-        "DataConverterStringTrim" => Some(&DEFINITIONS[242]),
-        "Feather" => Some(&DEFINITIONS[243]),
-        "DataConverterInterpolator" => Some(&DEFINITIONS[244]),
-        "DataConverterBooleanNegate" => Some(&DEFINITIONS[245]),
-        "DataConverterFormula" => Some(&DEFINITIONS[246]),
-        "FormulaToken" => Some(&DEFINITIONS[247]),
-        "FormulaTokenArgumentSeparator" => Some(&DEFINITIONS[248]),
-        "FormulaTokenParenthesis" => Some(&DEFINITIONS[249]),
-        "FormulaTokenParenthesisClose" => Some(&DEFINITIONS[250]),
-        "FormulaTokenOperation" => Some(&DEFINITIONS[251]),
-        "FormulaTokenFunction" => Some(&DEFINITIONS[252]),
-        "FormulaTokenValue" => Some(&DEFINITIONS[253]),
-        "FormulaTokenParenthesisOpen" => Some(&DEFINITIONS[254]),
-        "FormulaTokenInput" => Some(&DEFINITIONS[255]),
-        "TextTargetModifier" => Some(&DEFINITIONS[256]),
-        "TextFollowPathModifier" => Some(&DEFINITIONS[257]),
-        "CustomPropertyGroup" => Some(&DEFINITIONS[258]),
-        "ArtboardComponentList" => Some(&DEFINITIONS[259]),
-        "ViewModelPropertySymbol" => Some(&DEFINITIONS[260]),
-        "ViewModelPropertySymbolListIndex" => Some(&DEFINITIONS[261]),
-        "ViewModelInstanceSymbol" => Some(&DEFINITIONS[262]),
-        "ViewModelInstanceSymbolListIndex" => Some(&DEFINITIONS[263]),
-        "BindablePropertyInteger" => Some(&DEFINITIONS[264]),
-        "DataConverterNumberToList" => Some(&DEFINITIONS[265]),
-        "TextInput" => Some(&DEFINITIONS[266]),
-        "TextInputDrawable" => Some(&DEFINITIONS[267]),
-        "TextInputCursor" => Some(&DEFINITIONS[268]),
-        "TextInputText" => Some(&DEFINITIONS[269]),
-        "TextStyle" => Some(&DEFINITIONS[270]),
-        "TextInputSelection" => Some(&DEFINITIONS[271]),
-        "TextInputSelectedText" => Some(&DEFINITIONS[272]),
-        "ViewModelPropertyAsset" => Some(&DEFINITIONS[273]),
-        "ViewModelPropertyAssetImage" => Some(&DEFINITIONS[274]),
-        "ViewModelInstanceAsset" => Some(&DEFINITIONS[275]),
-        "ViewModelInstanceAssetImage" => Some(&DEFINITIONS[276]),
-        "BindablePropertyAsset" => Some(&DEFINITIONS[277]),
-        "BindablePropertyList" => Some(&DEFINITIONS[278]),
-        "DataConverterListToLength" => Some(&DEFINITIONS[279]),
-        "CustomPropertyColor" => Some(&DEFINITIONS[280]),
-        "TransitionSelfComparator" => Some(&DEFINITIONS[281]),
-        "BindablePropertyId" => Some(&DEFINITIONS[282]),
-        "BindablePropertyArtboard" => Some(&DEFINITIONS[283]),
-        "ViewModelPropertyArtboard" => Some(&DEFINITIONS[284]),
-        "ViewModelInstanceArtboard" => Some(&DEFINITIONS[285]),
-        "TransitionValueIdComparator" => Some(&DEFINITIONS[286]),
-        "TransitionValueAssetComparator" => Some(&DEFINITIONS[287]),
-        "ScriptedDrawable" => Some(&DEFINITIONS[288]),
-        "ArtboardComponentListOverride" => Some(&DEFINITIONS[289]),
-        "ScriptInputNumber" => Some(&DEFINITIONS[290]),
-        "ScriptInputViewModelProperty" => Some(&DEFINITIONS[291]),
-        "CustomPropertyTrigger" => Some(&DEFINITIONS[292]),
-        "StateMachineFireTrigger" => Some(&DEFINITIONS[293]),
-        "StateMachineFireAction" => Some(&DEFINITIONS[294]),
-        "CustomPropertyEnum" => Some(&DEFINITIONS[295]),
-        "DataConverterToNumber" => Some(&DEFINITIONS[296]),
-        "ScriptInputTrigger" => Some(&DEFINITIONS[297]),
-        "ListPath" => Some(&DEFINITIONS[298]),
-        "PointsCommonPath" => Some(&DEFINITIONS[299]),
-        "ScriptInputArtboard" => Some(&DEFINITIONS[300]),
-        "ListFollowPathConstraint" => Some(&DEFINITIONS[301]),
-        "ScriptInputColor" => Some(&DEFINITIONS[302]),
-        "ScriptInputString" => Some(&DEFINITIONS[303]),
-        "ScriptedDataConverter" => Some(&DEFINITIONS[304]),
-        "TransitionValueArtboardComparator" => Some(&DEFINITIONS[305]),
-        "ScriptInputBoolean" => Some(&DEFINITIONS[306]),
-        "ScriptedLayout" => Some(&DEFINITIONS[307]),
-        "ScriptedPathEffect" => Some(&DEFINITIONS[308]),
-        "ManifestAsset" => Some(&DEFINITIONS[309]),
-        "DataBindPath" => Some(&DEFINITIONS[310]),
-        "TargetEffect" => Some(&DEFINITIONS[311]),
-        "GroupEffect" => Some(&DEFINITIONS[312]),
-        "ScriptedListenerAction" => Some(&DEFINITIONS[313]),
-        "ScriptedTransitionCondition" => Some(&DEFINITIONS[314]),
-        "ArtboardListMapRule" => Some(&DEFINITIONS[315]),
-        "BlobAsset" => Some(&DEFINITIONS[316]),
-        "FocusActionTarget" => Some(&DEFINITIONS[317]),
-        "FocusData" => Some(&DEFINITIONS[318]),
-        "StateMachineListener" => Some(&DEFINITIONS[319]),
-        "ListenerInputType" => Some(&DEFINITIONS[320]),
-        "ListenerInputTypeEvent" => Some(&DEFINITIONS[321]),
-        "ListenerInputTypeViewModel" => Some(&DEFINITIONS[322]),
-        "BindablePropertyViewModel" => Some(&DEFINITIONS[323]),
-        "UserInput" => Some(&DEFINITIONS[324]),
-        "KeyboardInput" => Some(&DEFINITIONS[325]),
-        "ListenerInputTypeKeyboard" => Some(&DEFINITIONS[326]),
-        "ListenerInputTypeText" => Some(&DEFINITIONS[327]),
-        "TransitionPropertyComponentComparator" => Some(&DEFINITIONS[328]),
-        "SemanticData" => Some(&DEFINITIONS[329]),
-        "ListenerInputTypeSemantic" => Some(&DEFINITIONS[330]),
-        "SemanticInput" => Some(&DEFINITIONS[331]),
-        "FocusAction" => Some(&DEFINITIONS[332]),
-        "FocusActionTraversal" => Some(&DEFINITIONS[333]),
-        "ShaderAsset" => Some(&DEFINITIONS[334]),
-        "TextAsset" => Some(&DEFINITIONS[335]),
-        "ScriptedInterpolator" => Some(&DEFINITIONS[336]),
-        "ListenerInputTypeGamepad" => Some(&DEFINITIONS[337]),
-        "GamepadInput" => Some(&DEFINITIONS[338]),
-        "ViewModelPropertyAssetFont" => Some(&DEFINITIONS[339]),
-        "ViewModelInstanceAssetFont" => Some(&DEFINITIONS[340]),
-        "FocusActionClear" => Some(&DEFINITIONS[341]),
-        "TransitionFocusCondition" => Some(&DEFINITIONS[342]),
-        "ComponentOrigin" => Some(&DEFINITIONS[343]),
-        "ViewModelPropertyAssetBlob" => Some(&DEFINITIONS[344]),
-        "ViewModelInstanceAssetBlob" => Some(&DEFINITIONS[345]),
-        "LayoutSizingStyle" => Some(&DEFINITIONS[346]),
-        "LayoutNodeStyle" => Some(&DEFINITIONS[347]),
-        "GridTrack" => Some(&DEFINITIONS[348]),
-        "LayoutParticipant" => Some(&DEFINITIONS[349]),
-        "KeyFrameInt" => Some(&DEFINITIONS[350]),
-        "GridItemPlacement" => Some(&DEFINITIONS[351]),
-        "TextStyleBackground" => Some(&DEFINITIONS[352]),
-        "ScriptModuleAsset" => Some(&DEFINITIONS[353]),
-        "VideoAsset" => Some(&DEFINITIONS[354]),
-        "Video" => Some(&DEFINITIONS[355]),
+        "LayerMask" => Some(&DEFINITIONS[136]),
+        "TextModifierRange" => Some(&DEFINITIONS[137]),
+        "TextModifierGroup" => Some(&DEFINITIONS[138]),
+        "TextModifier" => Some(&DEFINITIONS[139]),
+        "TextShapeModifier" => Some(&DEFINITIONS[140]),
+        "TextVariationModifier" => Some(&DEFINITIONS[141]),
+        "CubicInterpolatorComponent" => Some(&DEFINITIONS[142]),
+        "TextStyleFeature" => Some(&DEFINITIONS[143]),
+        "FollowPathConstraint" => Some(&DEFINITIONS[144]),
+        "CustomProperty" => Some(&DEFINITIONS[145]),
+        "ListenerFireEvent" => Some(&DEFINITIONS[146]),
+        "StateMachineFireEvent" => Some(&DEFINITIONS[147]),
+        "InterpolatingKeyFrame" => Some(&DEFINITIONS[148]),
+        "KeyFrameCallback" => Some(&DEFINITIONS[149]),
+        "ElasticInterpolator" => Some(&DEFINITIONS[150]),
+        "KeyFrameInterpolator" => Some(&DEFINITIONS[151]),
+        "AudioAsset" => Some(&DEFINITIONS[152]),
+        "AudioEvent" => Some(&DEFINITIONS[153]),
+        "LayoutComponent" => Some(&DEFINITIONS[154]),
+        "LayoutComponentStyle" => Some(&DEFINITIONS[155]),
+        "ExportAudio" => Some(&DEFINITIONS[156]),
+        "ViewModelInstanceColor" => Some(&DEFINITIONS[157]),
+        "ViewModelInstanceListItem" => Some(&DEFINITIONS[158]),
+        "ViewModelInstanceValue" => Some(&DEFINITIONS[159]),
+        "ViewModelComponent" => Some(&DEFINITIONS[160]),
+        "ViewModelProperty" => Some(&DEFINITIONS[161]),
+        "ViewModelPropertyNumber" => Some(&DEFINITIONS[162]),
+        "ViewModelInstanceEnum" => Some(&DEFINITIONS[163]),
+        "ViewModelInstanceString" => Some(&DEFINITIONS[164]),
+        "ViewModelPropertyList" => Some(&DEFINITIONS[165]),
+        "ViewModel" => Some(&DEFINITIONS[166]),
+        "ViewModelPropertyViewModel" => Some(&DEFINITIONS[167]),
+        "ViewModelInstance" => Some(&DEFINITIONS[168]),
+        "DataEnumCustom" => Some(&DEFINITIONS[169]),
+        "ViewModelPropertyEnumCustom" => Some(&DEFINITIONS[170]),
+        "ViewModelPropertyColor" => Some(&DEFINITIONS[171]),
+        "ViewModelInstanceList" => Some(&DEFINITIONS[172]),
+        "ViewModelInstanceNumber" => Some(&DEFINITIONS[173]),
+        "ViewModelPropertyString" => Some(&DEFINITIONS[174]),
+        "ViewModelInstanceViewModel" => Some(&DEFINITIONS[175]),
+        "DataEnumValue" => Some(&DEFINITIONS[176]),
+        "DataBind" => Some(&DEFINITIONS[177]),
+        "DataBindContext" => Some(&DEFINITIONS[178]),
+        "ViewModelPropertyBoolean" => Some(&DEFINITIONS[179]),
+        "ViewModelInstanceBoolean" => Some(&DEFINITIONS[180]),
+        "KeyFrameUint" => Some(&DEFINITIONS[181]),
+        "NestedArtboardLeaf" => Some(&DEFINITIONS[182]),
+        "NestedArtboardLayout" => Some(&DEFINITIONS[183]),
+        "BindablePropertyString" => Some(&DEFINITIONS[184]),
+        "BindablePropertyBoolean" => Some(&DEFINITIONS[185]),
+        "BindablePropertyNumber" => Some(&DEFINITIONS[186]),
+        "BindablePropertyEnum" => Some(&DEFINITIONS[187]),
+        "BindablePropertyColor" => Some(&DEFINITIONS[188]),
+        "TransitionCondition" => Some(&DEFINITIONS[189]),
+        "TransitionComparator" => Some(&DEFINITIONS[190]),
+        "TransitionPropertyComparator" => Some(&DEFINITIONS[191]),
+        "TransitionPropertyViewModelComparator" => Some(&DEFINITIONS[192]),
+        "TransitionValueComparator" => Some(&DEFINITIONS[193]),
+        "TransitionValueBooleanComparator" => Some(&DEFINITIONS[194]),
+        "TransitionViewModelCondition" => Some(&DEFINITIONS[195]),
+        "TransitionValueColorComparator" => Some(&DEFINITIONS[196]),
+        "TransitionValueNumberComparator" => Some(&DEFINITIONS[197]),
+        "TransitionValueEnumComparator" => Some(&DEFINITIONS[198]),
+        "TransitionValueStringComparator" => Some(&DEFINITIONS[199]),
+        "ListenerViewModelChange" => Some(&DEFINITIONS[200]),
+        "DataConverter" => Some(&DEFINITIONS[201]),
+        "DataConverterRounder" => Some(&DEFINITIONS[202]),
+        "DataConverterToString" => Some(&DEFINITIONS[203]),
+        "NSlicerTileMode" => Some(&DEFINITIONS[204]),
+        "Axis" => Some(&DEFINITIONS[205]),
+        "NSlicer" => Some(&DEFINITIONS[206]),
+        "AxisY" => Some(&DEFINITIONS[207]),
+        "AxisX" => Some(&DEFINITIONS[208]),
+        "TransitionPropertyArtboardComparator" => Some(&DEFINITIONS[209]),
+        "TransitionArtboardCondition" => Some(&DEFINITIONS[210]),
+        "DataConverterGroupItem" => Some(&DEFINITIONS[211]),
+        "DataConverterGroup" => Some(&DEFINITIONS[212]),
+        "DataConverterOperationValue" => Some(&DEFINITIONS[213]),
+        "ViewModelInstanceTrigger" => Some(&DEFINITIONS[214]),
+        "ViewModelPropertyTrigger" => Some(&DEFINITIONS[215]),
+        "BindablePropertyTrigger" => Some(&DEFINITIONS[216]),
+        "DataConverterTrigger" => Some(&DEFINITIONS[217]),
+        "TransitionValueTriggerComparator" => Some(&DEFINITIONS[218]),
+        "DashPath" => Some(&DEFINITIONS[219]),
+        "Dash" => Some(&DEFINITIONS[220]),
+        "NSlicedNode" => Some(&DEFINITIONS[221]),
+        "ViewModelPropertyEnum" => Some(&DEFINITIONS[222]),
+        "DataEnum" => Some(&DEFINITIONS[223]),
+        "ViewModelPropertyEnumSystem" => Some(&DEFINITIONS[224]),
+        "DataEnumSystem" => Some(&DEFINITIONS[225]),
+        "ForegroundLayoutDrawable" => Some(&DEFINITIONS[226]),
+        "DataConverterSystemDegsToRads" => Some(&DEFINITIONS[227]),
+        "DataConverterSystemNormalizer" => Some(&DEFINITIONS[228]),
+        "DataConverterOperation" => Some(&DEFINITIONS[229]),
+        "DataConverterOperationViewModel" => Some(&DEFINITIONS[230]),
+        "DataConverterRangeMapper" => Some(&DEFINITIONS[231]),
+        "DraggableConstraint" => Some(&DEFINITIONS[232]),
+        "ScrollConstraint" => Some(&DEFINITIONS[233]),
+        "ScrollBarConstraint" => Some(&DEFINITIONS[234]),
+        "ScrollPhysics" => Some(&DEFINITIONS[235]),
+        "ClampedScrollPhysics" => Some(&DEFINITIONS[236]),
+        "ElasticScrollPhysics" => Some(&DEFINITIONS[237]),
+        "BlendState1D" => Some(&DEFINITIONS[238]),
+        "BlendState1DViewModel" => Some(&DEFINITIONS[239]),
+        "ScriptAsset" => Some(&DEFINITIONS[240]),
+        "DataConverterStringPad" => Some(&DEFINITIONS[241]),
+        "DataConverterStringRemoveZeros" => Some(&DEFINITIONS[242]),
+        "DataConverterStringTrim" => Some(&DEFINITIONS[243]),
+        "Feather" => Some(&DEFINITIONS[244]),
+        "DataConverterInterpolator" => Some(&DEFINITIONS[245]),
+        "DataConverterBooleanNegate" => Some(&DEFINITIONS[246]),
+        "DataConverterFormula" => Some(&DEFINITIONS[247]),
+        "FormulaToken" => Some(&DEFINITIONS[248]),
+        "FormulaTokenArgumentSeparator" => Some(&DEFINITIONS[249]),
+        "FormulaTokenParenthesis" => Some(&DEFINITIONS[250]),
+        "FormulaTokenParenthesisClose" => Some(&DEFINITIONS[251]),
+        "FormulaTokenOperation" => Some(&DEFINITIONS[252]),
+        "FormulaTokenFunction" => Some(&DEFINITIONS[253]),
+        "FormulaTokenValue" => Some(&DEFINITIONS[254]),
+        "FormulaTokenParenthesisOpen" => Some(&DEFINITIONS[255]),
+        "FormulaTokenInput" => Some(&DEFINITIONS[256]),
+        "TextTargetModifier" => Some(&DEFINITIONS[257]),
+        "TextFollowPathModifier" => Some(&DEFINITIONS[258]),
+        "CustomPropertyGroup" => Some(&DEFINITIONS[259]),
+        "ArtboardComponentList" => Some(&DEFINITIONS[260]),
+        "ViewModelPropertySymbol" => Some(&DEFINITIONS[261]),
+        "ViewModelPropertySymbolListIndex" => Some(&DEFINITIONS[262]),
+        "ViewModelInstanceSymbol" => Some(&DEFINITIONS[263]),
+        "ViewModelInstanceSymbolListIndex" => Some(&DEFINITIONS[264]),
+        "BindablePropertyInteger" => Some(&DEFINITIONS[265]),
+        "DataConverterNumberToList" => Some(&DEFINITIONS[266]),
+        "TextInput" => Some(&DEFINITIONS[267]),
+        "TextInputDrawable" => Some(&DEFINITIONS[268]),
+        "TextInputCursor" => Some(&DEFINITIONS[269]),
+        "TextInputText" => Some(&DEFINITIONS[270]),
+        "TextStyle" => Some(&DEFINITIONS[271]),
+        "TextInputSelection" => Some(&DEFINITIONS[272]),
+        "TextInputSelectedText" => Some(&DEFINITIONS[273]),
+        "ViewModelPropertyAsset" => Some(&DEFINITIONS[274]),
+        "ViewModelPropertyAssetImage" => Some(&DEFINITIONS[275]),
+        "ViewModelInstanceAsset" => Some(&DEFINITIONS[276]),
+        "ViewModelInstanceAssetImage" => Some(&DEFINITIONS[277]),
+        "BindablePropertyAsset" => Some(&DEFINITIONS[278]),
+        "BindablePropertyList" => Some(&DEFINITIONS[279]),
+        "DataConverterListToLength" => Some(&DEFINITIONS[280]),
+        "CustomPropertyColor" => Some(&DEFINITIONS[281]),
+        "TransitionSelfComparator" => Some(&DEFINITIONS[282]),
+        "BindablePropertyId" => Some(&DEFINITIONS[283]),
+        "BindablePropertyArtboard" => Some(&DEFINITIONS[284]),
+        "ViewModelPropertyArtboard" => Some(&DEFINITIONS[285]),
+        "ViewModelInstanceArtboard" => Some(&DEFINITIONS[286]),
+        "TransitionValueIdComparator" => Some(&DEFINITIONS[287]),
+        "TransitionValueAssetComparator" => Some(&DEFINITIONS[288]),
+        "ScriptedDrawable" => Some(&DEFINITIONS[289]),
+        "ArtboardComponentListOverride" => Some(&DEFINITIONS[290]),
+        "ScriptInputNumber" => Some(&DEFINITIONS[291]),
+        "ScriptInputViewModelProperty" => Some(&DEFINITIONS[292]),
+        "CustomPropertyTrigger" => Some(&DEFINITIONS[293]),
+        "StateMachineFireTrigger" => Some(&DEFINITIONS[294]),
+        "StateMachineFireAction" => Some(&DEFINITIONS[295]),
+        "CustomPropertyEnum" => Some(&DEFINITIONS[296]),
+        "DataConverterToNumber" => Some(&DEFINITIONS[297]),
+        "ScriptInputTrigger" => Some(&DEFINITIONS[298]),
+        "ListPath" => Some(&DEFINITIONS[299]),
+        "PointsCommonPath" => Some(&DEFINITIONS[300]),
+        "ScriptInputArtboard" => Some(&DEFINITIONS[301]),
+        "ListFollowPathConstraint" => Some(&DEFINITIONS[302]),
+        "ScriptInputColor" => Some(&DEFINITIONS[303]),
+        "ScriptInputString" => Some(&DEFINITIONS[304]),
+        "ScriptedDataConverter" => Some(&DEFINITIONS[305]),
+        "TransitionValueArtboardComparator" => Some(&DEFINITIONS[306]),
+        "ScriptInputBoolean" => Some(&DEFINITIONS[307]),
+        "ScriptedLayout" => Some(&DEFINITIONS[308]),
+        "ScriptedPathEffect" => Some(&DEFINITIONS[309]),
+        "ManifestAsset" => Some(&DEFINITIONS[310]),
+        "DataBindPath" => Some(&DEFINITIONS[311]),
+        "TargetEffect" => Some(&DEFINITIONS[312]),
+        "GroupEffect" => Some(&DEFINITIONS[313]),
+        "ScriptedListenerAction" => Some(&DEFINITIONS[314]),
+        "ScriptedTransitionCondition" => Some(&DEFINITIONS[315]),
+        "ArtboardListMapRule" => Some(&DEFINITIONS[316]),
+        "BlobAsset" => Some(&DEFINITIONS[317]),
+        "FocusActionTarget" => Some(&DEFINITIONS[318]),
+        "FocusData" => Some(&DEFINITIONS[319]),
+        "StateMachineListener" => Some(&DEFINITIONS[320]),
+        "ListenerInputType" => Some(&DEFINITIONS[321]),
+        "ListenerInputTypeEvent" => Some(&DEFINITIONS[322]),
+        "ListenerInputTypeViewModel" => Some(&DEFINITIONS[323]),
+        "BindablePropertyViewModel" => Some(&DEFINITIONS[324]),
+        "UserInput" => Some(&DEFINITIONS[325]),
+        "KeyboardInput" => Some(&DEFINITIONS[326]),
+        "ListenerInputTypeKeyboard" => Some(&DEFINITIONS[327]),
+        "ListenerInputTypeText" => Some(&DEFINITIONS[328]),
+        "TransitionPropertyComponentComparator" => Some(&DEFINITIONS[329]),
+        "SemanticData" => Some(&DEFINITIONS[330]),
+        "ListenerInputTypeSemantic" => Some(&DEFINITIONS[331]),
+        "SemanticInput" => Some(&DEFINITIONS[332]),
+        "FocusAction" => Some(&DEFINITIONS[333]),
+        "FocusActionTraversal" => Some(&DEFINITIONS[334]),
+        "ShaderAsset" => Some(&DEFINITIONS[335]),
+        "TextAsset" => Some(&DEFINITIONS[336]),
+        "ScriptedInterpolator" => Some(&DEFINITIONS[337]),
+        "ListenerInputTypeGamepad" => Some(&DEFINITIONS[338]),
+        "GamepadInput" => Some(&DEFINITIONS[339]),
+        "ViewModelPropertyAssetFont" => Some(&DEFINITIONS[340]),
+        "ViewModelInstanceAssetFont" => Some(&DEFINITIONS[341]),
+        "FocusActionClear" => Some(&DEFINITIONS[342]),
+        "TransitionFocusCondition" => Some(&DEFINITIONS[343]),
+        "ComponentOrigin" => Some(&DEFINITIONS[344]),
+        "ViewModelPropertyAssetBlob" => Some(&DEFINITIONS[345]),
+        "ViewModelInstanceAssetBlob" => Some(&DEFINITIONS[346]),
+        "LayoutSizingStyle" => Some(&DEFINITIONS[347]),
+        "LayoutNodeStyle" => Some(&DEFINITIONS[348]),
+        "GridTrack" => Some(&DEFINITIONS[349]),
+        "LayoutParticipant" => Some(&DEFINITIONS[350]),
+        "KeyFrameInt" => Some(&DEFINITIONS[351]),
+        "GridItemPlacement" => Some(&DEFINITIONS[352]),
+        "TextStyleBackground" => Some(&DEFINITIONS[353]),
+        "ScriptModuleAsset" => Some(&DEFINITIONS[354]),
+        "VideoAsset" => Some(&DEFINITIONS[355]),
+        "Video" => Some(&DEFINITIONS[356]),
         _ => None,
     }
 }
@@ -1510,6 +1514,7 @@ pub fn is_id_property_key(key: u16) -> bool {
         408 => true,
         414 => true,
         415 => true,
+        459 => true,
         494 => true,
         549 => true,
         550 => true,
@@ -1855,6 +1860,17 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         452 => Some(CoreRegistryFieldKind::Uint),
         453 => Some(CoreRegistryFieldKind::Uint),
         454 => Some(CoreRegistryFieldKind::Uint),
+        455 => Some(CoreRegistryFieldKind::Uint),
+        456 => Some(CoreRegistryFieldKind::Bool),
+        457 => Some(CoreRegistryFieldKind::Bool),
+        458 => Some(CoreRegistryFieldKind::Double),
+        459 => Some(CoreRegistryFieldKind::Uint),
+        460 => Some(CoreRegistryFieldKind::Uint),
+        461 => Some(CoreRegistryFieldKind::Bool),
+        462 => Some(CoreRegistryFieldKind::Double),
+        463 => Some(CoreRegistryFieldKind::Double),
+        464 => Some(CoreRegistryFieldKind::Double),
+        465 => Some(CoreRegistryFieldKind::Double),
         494 => Some(CoreRegistryFieldKind::Uint),
         498 => Some(CoreRegistryFieldKind::Double),
         499 => Some(CoreRegistryFieldKind::Double),
@@ -2530,6 +2546,17 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         452 => Some(FieldKind::Uint),
         453 => Some(FieldKind::Uint),
         454 => Some(FieldKind::Uint),
+        455 => Some(FieldKind::Uint),
+        456 => Some(FieldKind::Bool),
+        457 => Some(FieldKind::Bool),
+        458 => Some(FieldKind::Double),
+        459 => Some(FieldKind::Uint),
+        460 => Some(FieldKind::Uint),
+        461 => Some(FieldKind::Bool),
+        462 => Some(FieldKind::Double),
+        463 => Some(FieldKind::Double),
+        464 => Some(FieldKind::Double),
+        465 => Some(FieldKind::Double),
         494 => Some(FieldKind::Uint),
         498 => Some(FieldKind::Double),
         499 => Some(FieldKind::Double),
@@ -3187,6 +3214,17 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         452 => Some(FieldKind::Uint),
         453 => Some(FieldKind::Uint),
         454 => Some(FieldKind::Uint),
+        455 => Some(FieldKind::Uint),
+        456 => Some(FieldKind::Bool),
+        457 => Some(FieldKind::Bool),
+        458 => Some(FieldKind::Double),
+        459 => Some(FieldKind::Uint),
+        460 => Some(FieldKind::Uint),
+        461 => Some(FieldKind::Bool),
+        462 => Some(FieldKind::Double),
+        463 => Some(FieldKind::Double),
+        464 => Some(FieldKind::Double),
+        465 => Some(FieldKind::Double),
         494 => Some(FieldKind::Uint),
         498 => Some(FieldKind::Double),
         499 => Some(FieldKind::Double),
@@ -13971,9 +14009,419 @@ static DEF_135_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_136_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_136_ANCESTORS: &[&str] = &["Component"];
 
 static DEF_136_PROPERTIES: &[Property] = &[
+    Property {
+        name: "maskModeValue",
+        key: Key {
+            int: 455,
+            name: "maskmodevalue",
+        },
+        alternates: &[],
+        declared_type: "uint8",
+        runtime_type: FieldKind::Uint,
+        description: None,
+        initial_value: None,
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: false,
+        stores_field: false,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 0,
+            width: 2,
+            host_provided: false,
+        }),
+    },
+    Property {
+        name: "isVisible",
+        key: Key {
+            int: 456,
+            name: "isvisible",
+        },
+        alternates: &[],
+        declared_type: "bool",
+        runtime_type: FieldKind::Bool,
+        description: None,
+        initial_value: None,
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: false,
+        stores_field: false,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 2,
+            width: 1,
+            host_provided: false,
+        }),
+    },
+    Property {
+        name: "sourceDraws",
+        key: Key {
+            int: 457,
+            name: "sourcedraws",
+        },
+        alternates: &[],
+        declared_type: "bool",
+        runtime_type: FieldKind::Bool,
+        description: None,
+        initial_value: None,
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: false,
+        stores_field: false,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 3,
+            width: 1,
+            host_provided: false,
+        }),
+    },
+    Property {
+        name: "resolution",
+        key: Key {
+            int: 458,
+            name: "resolution",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: None,
+        initial_value: Some("1.0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "sourceId",
+        key: Key {
+            int: 459,
+            name: "sourceid",
+        },
+        alternates: &[],
+        declared_type: "Id",
+        runtime_type: FieldKind::Uint,
+        description: None,
+        initial_value: Some("Core.missingId"),
+        initial_value_runtime: Some("-1"),
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "maskFlags",
+        key: Key {
+            int: 460,
+            name: "maskflags",
+        },
+        alternates: &[],
+        declared_type: "uint",
+        runtime_type: FieldKind::Uint,
+        description: None,
+        initial_value: Some("4"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "useCustomBounds",
+        key: Key {
+            int: 461,
+            name: "usecustombounds",
+        },
+        alternates: &[],
+        declared_type: "bool",
+        runtime_type: FieldKind::Bool,
+        description: None,
+        initial_value: None,
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: false,
+        stores_field: false,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 4,
+            width: 1,
+            host_provided: false,
+        }),
+    },
+    Property {
+        name: "boundsX",
+        key: Key {
+            int: 462,
+            name: "boundsx",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: None,
+        initial_value: Some("0.0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "boundsY",
+        key: Key {
+            int: 463,
+            name: "boundsy",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: None,
+        initial_value: Some("0.0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "boundsWidth",
+        key: Key {
+            int: 464,
+            name: "boundswidth",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: None,
+        initial_value: Some("0.0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+    Property {
+        name: "boundsHeight",
+        key: Key {
+            int: 465,
+            name: "boundsheight",
+        },
+        alternates: &[],
+        declared_type: "double",
+        runtime_type: FieldKind::Double,
+        description: None,
+        initial_value: Some("0.0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
+];
+
+static DEF_137_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+
+static DEF_137_PROPERTIES: &[Property] = &[
     Property {
         name: "unitsValue",
         key: Key {
@@ -14361,9 +14809,9 @@ static DEF_136_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_137_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_138_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_137_PROPERTIES: &[Property] = &[
+static DEF_138_PROPERTIES: &[Property] = &[
     Property {
         name: "x",
         key: Key {
@@ -14681,17 +15129,17 @@ static DEF_137_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_138_ANCESTORS: &[&str] = &["Component"];
-
-static DEF_138_PROPERTIES: &[Property] = &[];
-
-static DEF_139_ANCESTORS: &[&str] = &["TextModifier", "Component"];
+static DEF_139_ANCESTORS: &[&str] = &["Component"];
 
 static DEF_139_PROPERTIES: &[Property] = &[];
 
-static DEF_140_ANCESTORS: &[&str] = &["TextShapeModifier", "TextModifier", "Component"];
+static DEF_140_ANCESTORS: &[&str] = &["TextModifier", "Component"];
 
-static DEF_140_PROPERTIES: &[Property] = &[
+static DEF_140_PROPERTIES: &[Property] = &[];
+
+static DEF_141_ANCESTORS: &[&str] = &["TextShapeModifier", "TextModifier", "Component"];
+
+static DEF_141_PROPERTIES: &[Property] = &[
     Property {
         name: "axisTag",
         key: Key {
@@ -14764,9 +15212,9 @@ static DEF_140_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_141_ANCESTORS: &[&str] = &["Component"];
+static DEF_142_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_141_PROPERTIES: &[Property] = &[
+static DEF_142_PROPERTIES: &[Property] = &[
     Property {
         name: "x1",
         key: Key {
@@ -14909,9 +15357,9 @@ static DEF_141_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_142_ANCESTORS: &[&str] = &["Component"];
+static DEF_143_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_142_PROPERTIES: &[Property] = &[
+static DEF_143_PROPERTIES: &[Property] = &[
     Property {
         name: "tag",
         key: Key {
@@ -14984,14 +15432,14 @@ static DEF_142_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_143_ANCESTORS: &[&str] = &[
+static DEF_144_ANCESTORS: &[&str] = &[
     "TransformSpaceConstraint",
     "TargetedConstraint",
     "Constraint",
     "Component",
 ];
 
-static DEF_143_PROPERTIES: &[Property] = &[
+static DEF_144_PROPERTIES: &[Property] = &[
     Property {
         name: "distance",
         key: Key {
@@ -15101,9 +15549,9 @@ static DEF_143_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_144_ANCESTORS: &[&str] = &["Component"];
+static DEF_145_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_144_PROPERTIES: &[Property] = &[Property {
+static DEF_145_PROPERTIES: &[Property] = &[Property {
     name: "nameId",
     key: Key {
         int: 449,
@@ -15139,9 +15587,9 @@ static DEF_144_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_145_ANCESTORS: &[&str] = &["ListenerAction"];
+static DEF_146_ANCESTORS: &[&str] = &["ListenerAction"];
 
-static DEF_145_PROPERTIES: &[Property] = &[Property {
+static DEF_146_PROPERTIES: &[Property] = &[Property {
     name: "eventId",
     key: Key {
         int: 389,
@@ -15177,9 +15625,9 @@ static DEF_145_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_146_ANCESTORS: &[&str] = &["StateMachineFireAction"];
+static DEF_147_ANCESTORS: &[&str] = &["StateMachineFireAction"];
 
-static DEF_146_PROPERTIES: &[Property] = &[Property {
+static DEF_147_PROPERTIES: &[Property] = &[Property {
     name: "eventId",
     key: Key {
         int: 392,
@@ -15215,9 +15663,9 @@ static DEF_146_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_147_ANCESTORS: &[&str] = &["KeyFrame"];
+static DEF_148_ANCESTORS: &[&str] = &["KeyFrame"];
 
-static DEF_147_PROPERTIES: &[Property] = &[
+static DEF_148_PROPERTIES: &[Property] = &[
     Property {
         name: "interpolationType",
         key: Key {
@@ -15292,13 +15740,13 @@ static DEF_147_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_148_ANCESTORS: &[&str] = &["KeyFrame"];
+static DEF_149_ANCESTORS: &[&str] = &["KeyFrame"];
 
-static DEF_148_PROPERTIES: &[Property] = &[];
+static DEF_149_PROPERTIES: &[Property] = &[];
 
-static DEF_149_ANCESTORS: &[&str] = &["KeyFrameInterpolator"];
+static DEF_150_ANCESTORS: &[&str] = &["KeyFrameInterpolator"];
 
-static DEF_149_PROPERTIES: &[Property] = &[
+static DEF_150_PROPERTIES: &[Property] = &[
     Property {
         name: "easingValue",
         key: Key {
@@ -15408,22 +15856,22 @@ static DEF_149_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_150_ANCESTORS: &[&str] = &[];
-
-static DEF_150_PROPERTIES: &[Property] = &[];
-
-static DEF_151_ANCESTORS: &[&str] = &["ExportAudio", "FileAsset", "Asset"];
+static DEF_151_ANCESTORS: &[&str] = &[];
 
 static DEF_151_PROPERTIES: &[Property] = &[];
 
-static DEF_152_ANCESTORS: &[&str] = &[
+static DEF_152_ANCESTORS: &[&str] = &["ExportAudio", "FileAsset", "Asset"];
+
+static DEF_152_PROPERTIES: &[Property] = &[];
+
+static DEF_153_ANCESTORS: &[&str] = &[
     "Event",
     "CustomPropertyGroup",
     "ContainerComponent",
     "Component",
 ];
 
-static DEF_152_PROPERTIES: &[Property] = &[Property {
+static DEF_153_PROPERTIES: &[Property] = &[Property {
     name: "assetId",
     key: Key {
         int: 408,
@@ -15459,7 +15907,7 @@ static DEF_152_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_153_ANCESTORS: &[&str] = &[
+static DEF_154_ANCESTORS: &[&str] = &[
     "Drawable",
     "Node",
     "TransformComponent",
@@ -15468,7 +15916,7 @@ static DEF_153_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_153_PROPERTIES: &[Property] = &[
+static DEF_154_PROPERTIES: &[Property] = &[
     Property {
         name: "width",
         key: Key { int: 7, name: "w" },
@@ -15675,9 +16123,9 @@ static DEF_153_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_154_ANCESTORS: &[&str] = &["LayoutSizingStyle", "Component"];
+static DEF_155_ANCESTORS: &[&str] = &["LayoutSizingStyle", "Component"];
 
-static DEF_154_PROPERTIES: &[Property] = &[
+static DEF_155_PROPERTIES: &[Property] = &[
     Property {
         name: "gapHorizontal",
         key: Key {
@@ -17681,9 +18129,9 @@ static DEF_154_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_155_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
+static DEF_156_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
 
-static DEF_155_PROPERTIES: &[Property] = &[Property {
+static DEF_156_PROPERTIES: &[Property] = &[Property {
     name: "volume",
     key: Key {
         int: 530,
@@ -17719,9 +18167,9 @@ static DEF_155_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_156_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_157_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_156_PROPERTIES: &[Property] = &[Property {
+static DEF_157_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 555,
@@ -17757,9 +18205,9 @@ static DEF_156_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_157_ANCESTORS: &[&str] = &[];
+static DEF_158_ANCESTORS: &[&str] = &[];
 
-static DEF_157_PROPERTIES: &[Property] = &[
+static DEF_158_PROPERTIES: &[Property] = &[
     Property {
         name: "viewModelId",
         key: Key {
@@ -17832,9 +18280,9 @@ static DEF_157_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_158_ANCESTORS: &[&str] = &["Component"];
+static DEF_159_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_158_PROPERTIES: &[Property] = &[Property {
+static DEF_159_PROPERTIES: &[Property] = &[Property {
     name: "viewModelPropertyId",
     key: Key {
         int: 554,
@@ -17872,9 +18320,9 @@ static DEF_158_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_159_ANCESTORS: &[&str] = &[];
+static DEF_160_ANCESTORS: &[&str] = &[];
 
-static DEF_159_PROPERTIES: &[Property] = &[Property {
+static DEF_160_PROPERTIES: &[Property] = &[Property {
     name: "name",
     key: Key {
         int: 557,
@@ -17912,9 +18360,9 @@ static DEF_159_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_160_ANCESTORS: &[&str] = &["ViewModelComponent"];
+static DEF_161_ANCESTORS: &[&str] = &["ViewModelComponent"];
 
-static DEF_160_PROPERTIES: &[Property] = &[
+static DEF_161_PROPERTIES: &[Property] = &[
     Property {
         name: "symbolTypeValue",
         key: Key {
@@ -17989,13 +18437,13 @@ static DEF_160_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_161_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_162_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_161_PROPERTIES: &[Property] = &[];
+static DEF_162_PROPERTIES: &[Property] = &[];
 
-static DEF_162_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_163_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_162_PROPERTIES: &[Property] = &[Property {
+static DEF_163_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 560,
@@ -18031,9 +18479,9 @@ static DEF_162_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_163_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_164_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_163_PROPERTIES: &[Property] = &[Property {
+static DEF_164_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 561,
@@ -18069,13 +18517,13 @@ static DEF_163_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_164_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_165_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_164_PROPERTIES: &[Property] = &[];
+static DEF_165_PROPERTIES: &[Property] = &[];
 
-static DEF_165_ANCESTORS: &[&str] = &["ViewModelComponent"];
+static DEF_166_ANCESTORS: &[&str] = &["ViewModelComponent"];
 
-static DEF_165_PROPERTIES: &[Property] = &[Property {
+static DEF_166_PROPERTIES: &[Property] = &[Property {
     name: "viewModelType",
     key: Key {
         int: 981,
@@ -18111,9 +18559,9 @@ static DEF_165_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_166_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_167_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_166_PROPERTIES: &[Property] = &[Property {
+static DEF_167_PROPERTIES: &[Property] = &[Property {
     name: "viewModelReferenceId",
     key: Key {
         int: 565,
@@ -18149,9 +18597,9 @@ static DEF_166_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_167_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_168_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_167_PROPERTIES: &[Property] = &[Property {
+static DEF_168_PROPERTIES: &[Property] = &[Property {
     name: "viewModelId",
     key: Key {
         int: 566,
@@ -18187,9 +18635,9 @@ static DEF_167_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_168_ANCESTORS: &[&str] = &["DataEnum"];
+static DEF_169_ANCESTORS: &[&str] = &["DataEnum"];
 
-static DEF_168_PROPERTIES: &[Property] = &[Property {
+static DEF_169_PROPERTIES: &[Property] = &[Property {
     name: "name",
     key: Key {
         int: 572,
@@ -18225,13 +18673,13 @@ static DEF_168_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_169_ANCESTORS: &[&str] = &[
+static DEF_170_ANCESTORS: &[&str] = &[
     "ViewModelPropertyEnum",
     "ViewModelProperty",
     "ViewModelComponent",
 ];
 
-static DEF_169_PROPERTIES: &[Property] = &[Property {
+static DEF_170_PROPERTIES: &[Property] = &[Property {
     name: "enumId",
     key: Key {
         int: 574,
@@ -18267,13 +18715,13 @@ static DEF_169_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_170_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_171_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_170_PROPERTIES: &[Property] = &[];
+static DEF_171_PROPERTIES: &[Property] = &[];
 
-static DEF_171_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_172_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_171_PROPERTIES: &[Property] = &[Property {
+static DEF_172_PROPERTIES: &[Property] = &[Property {
     name: "listSource",
     key: Key {
         int: 966,
@@ -18309,9 +18757,9 @@ static DEF_171_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_172_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_173_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_172_PROPERTIES: &[Property] = &[Property {
+static DEF_173_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 575,
@@ -18347,13 +18795,13 @@ static DEF_172_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_173_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_174_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_173_PROPERTIES: &[Property] = &[];
+static DEF_174_PROPERTIES: &[Property] = &[];
 
-static DEF_174_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_175_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_174_PROPERTIES: &[Property] = &[Property {
+static DEF_175_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 577,
@@ -18389,9 +18837,9 @@ static DEF_174_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_175_ANCESTORS: &[&str] = &[];
+static DEF_176_ANCESTORS: &[&str] = &[];
 
-static DEF_175_PROPERTIES: &[Property] = &[
+static DEF_176_PROPERTIES: &[Property] = &[
     Property {
         name: "key",
         key: Key {
@@ -18464,9 +18912,9 @@ static DEF_175_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_176_ANCESTORS: &[&str] = &[];
+static DEF_177_ANCESTORS: &[&str] = &[];
 
-static DEF_176_PROPERTIES: &[Property] = &[
+static DEF_177_PROPERTIES: &[Property] = &[
     Property {
         name: "propertyKey",
         key: Key {
@@ -18574,9 +19022,9 @@ static DEF_176_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_177_ANCESTORS: &[&str] = &["DataBind"];
+static DEF_178_ANCESTORS: &[&str] = &["DataBind"];
 
-static DEF_177_PROPERTIES: &[Property] = &[Property {
+static DEF_178_PROPERTIES: &[Property] = &[Property {
     name: "sourcePathIds",
     key: Key {
         int: 588,
@@ -18612,13 +19060,13 @@ static DEF_177_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_178_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_179_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_178_PROPERTIES: &[Property] = &[];
+static DEF_179_PROPERTIES: &[Property] = &[];
 
-static DEF_179_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_180_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_179_PROPERTIES: &[Property] = &[Property {
+static DEF_180_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 593,
@@ -18654,9 +19102,9 @@ static DEF_179_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_180_ANCESTORS: &[&str] = &["InterpolatingKeyFrame", "KeyFrame"];
+static DEF_181_ANCESTORS: &[&str] = &["InterpolatingKeyFrame", "KeyFrame"];
 
-static DEF_180_PROPERTIES: &[Property] = &[Property {
+static DEF_181_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 631,
@@ -18692,7 +19140,7 @@ static DEF_180_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_181_ANCESTORS: &[&str] = &[
+static DEF_182_ANCESTORS: &[&str] = &[
     "NestedArtboard",
     "Drawable",
     "Node",
@@ -18702,7 +19150,7 @@ static DEF_181_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_181_PROPERTIES: &[Property] = &[
+static DEF_182_PROPERTIES: &[Property] = &[
     Property {
         name: "fit",
         key: Key {
@@ -18845,7 +19293,7 @@ static DEF_181_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_182_ANCESTORS: &[&str] = &[
+static DEF_183_ANCESTORS: &[&str] = &[
     "NestedArtboard",
     "Drawable",
     "Node",
@@ -18855,7 +19303,7 @@ static DEF_182_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_182_PROPERTIES: &[Property] = &[
+static DEF_183_PROPERTIES: &[Property] = &[
     Property {
         name: "instanceWidth",
         key: Key {
@@ -19068,9 +19516,9 @@ static DEF_182_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_183_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_184_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_183_PROPERTIES: &[Property] = &[Property {
+static DEF_184_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 635,
@@ -19106,9 +19554,9 @@ static DEF_183_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_184_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_185_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_184_PROPERTIES: &[Property] = &[Property {
+static DEF_185_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 634,
@@ -19144,9 +19592,9 @@ static DEF_184_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_185_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_186_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_185_PROPERTIES: &[Property] = &[Property {
+static DEF_186_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 636,
@@ -19182,9 +19630,9 @@ static DEF_185_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_186_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_187_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_186_PROPERTIES: &[Property] = &[Property {
+static DEF_187_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 637,
@@ -19220,9 +19668,9 @@ static DEF_186_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_187_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_188_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_187_PROPERTIES: &[Property] = &[Property {
+static DEF_188_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 638,
@@ -19258,29 +19706,29 @@ static DEF_187_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_188_ANCESTORS: &[&str] = &[];
-
-static DEF_188_PROPERTIES: &[Property] = &[];
-
 static DEF_189_ANCESTORS: &[&str] = &[];
 
 static DEF_189_PROPERTIES: &[Property] = &[];
 
-static DEF_190_ANCESTORS: &[&str] = &["TransitionComparator"];
+static DEF_190_ANCESTORS: &[&str] = &[];
 
 static DEF_190_PROPERTIES: &[Property] = &[];
 
-static DEF_191_ANCESTORS: &[&str] = &["TransitionPropertyComparator", "TransitionComparator"];
+static DEF_191_ANCESTORS: &[&str] = &["TransitionComparator"];
 
 static DEF_191_PROPERTIES: &[Property] = &[];
 
-static DEF_192_ANCESTORS: &[&str] = &["TransitionComparator"];
+static DEF_192_ANCESTORS: &[&str] = &["TransitionPropertyComparator", "TransitionComparator"];
 
 static DEF_192_PROPERTIES: &[Property] = &[];
 
-static DEF_193_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+static DEF_193_ANCESTORS: &[&str] = &["TransitionComparator"];
 
-static DEF_193_PROPERTIES: &[Property] = &[Property {
+static DEF_193_PROPERTIES: &[Property] = &[];
+
+static DEF_194_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+
+static DEF_194_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 647,
@@ -19316,9 +19764,9 @@ static DEF_193_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_194_ANCESTORS: &[&str] = &["TransitionCondition"];
+static DEF_195_ANCESTORS: &[&str] = &["TransitionCondition"];
 
-static DEF_194_PROPERTIES: &[Property] = &[Property {
+static DEF_195_PROPERTIES: &[Property] = &[Property {
     name: "opValue",
     key: Key {
         int: 650,
@@ -19354,9 +19802,9 @@ static DEF_194_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_195_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+static DEF_196_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
 
-static DEF_195_PROPERTIES: &[Property] = &[Property {
+static DEF_196_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 651,
@@ -19392,9 +19840,9 @@ static DEF_195_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_196_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+static DEF_197_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
 
-static DEF_196_PROPERTIES: &[Property] = &[Property {
+static DEF_197_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 652,
@@ -19430,17 +19878,17 @@ static DEF_196_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_197_ANCESTORS: &[&str] = &[
+static DEF_198_ANCESTORS: &[&str] = &[
     "TransitionValueIdComparator",
     "TransitionValueComparator",
     "TransitionComparator",
 ];
 
-static DEF_197_PROPERTIES: &[Property] = &[];
+static DEF_198_PROPERTIES: &[Property] = &[];
 
-static DEF_198_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+static DEF_199_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
 
-static DEF_198_PROPERTIES: &[Property] = &[Property {
+static DEF_199_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 654,
@@ -19476,9 +19924,9 @@ static DEF_198_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_199_ANCESTORS: &[&str] = &["ListenerAction"];
+static DEF_200_ANCESTORS: &[&str] = &["ListenerAction"];
 
-static DEF_199_PROPERTIES: &[Property] = &[
+static DEF_200_PROPERTIES: &[Property] = &[
     Property {
         name: "inputValue",
         key: Key {
@@ -19551,9 +19999,9 @@ static DEF_199_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_200_ANCESTORS: &[&str] = &[];
+static DEF_201_ANCESTORS: &[&str] = &[];
 
-static DEF_200_PROPERTIES: &[Property] = &[Property {
+static DEF_201_PROPERTIES: &[Property] = &[Property {
     name: "name",
     key: Key {
         int: 662,
@@ -19589,9 +20037,9 @@ static DEF_200_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_201_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_202_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_201_PROPERTIES: &[Property] = &[Property {
+static DEF_202_PROPERTIES: &[Property] = &[Property {
     name: "decimals",
     key: Key {
         int: 669,
@@ -19627,9 +20075,9 @@ static DEF_201_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_202_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_203_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_202_PROPERTIES: &[Property] = &[
+static DEF_203_PROPERTIES: &[Property] = &[
     Property {
         name: "flags",
         key: Key {
@@ -19737,9 +20185,9 @@ static DEF_202_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_203_ANCESTORS: &[&str] = &["Component"];
+static DEF_204_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_203_PROPERTIES: &[Property] = &[
+static DEF_204_PROPERTIES: &[Property] = &[
     Property {
         name: "patchIndex",
         key: Key {
@@ -19812,9 +20260,9 @@ static DEF_203_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_204_ANCESTORS: &[&str] = &["Component"];
+static DEF_205_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_204_PROPERTIES: &[Property] = &[
+static DEF_205_PROPERTIES: &[Property] = &[
     Property {
         name: "offset",
         key: Key {
@@ -19887,11 +20335,7 @@ static DEF_204_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_205_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
-
-static DEF_205_PROPERTIES: &[Property] = &[];
-
-static DEF_206_ANCESTORS: &[&str] = &["Axis", "Component"];
+static DEF_206_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
 static DEF_206_PROPERTIES: &[Property] = &[];
 
@@ -19899,9 +20343,13 @@ static DEF_207_ANCESTORS: &[&str] = &["Axis", "Component"];
 
 static DEF_207_PROPERTIES: &[Property] = &[];
 
-static DEF_208_ANCESTORS: &[&str] = &["TransitionPropertyComparator", "TransitionComparator"];
+static DEF_208_ANCESTORS: &[&str] = &["Axis", "Component"];
 
-static DEF_208_PROPERTIES: &[Property] = &[Property {
+static DEF_208_PROPERTIES: &[Property] = &[];
+
+static DEF_209_ANCESTORS: &[&str] = &["TransitionPropertyComparator", "TransitionComparator"];
+
+static DEF_209_PROPERTIES: &[Property] = &[Property {
     name: "propertyType",
     key: Key {
         int: 677,
@@ -19937,13 +20385,13 @@ static DEF_208_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_209_ANCESTORS: &[&str] = &["TransitionViewModelCondition", "TransitionCondition"];
+static DEF_210_ANCESTORS: &[&str] = &["TransitionViewModelCondition", "TransitionCondition"];
 
-static DEF_209_PROPERTIES: &[Property] = &[];
+static DEF_210_PROPERTIES: &[Property] = &[];
 
-static DEF_210_ANCESTORS: &[&str] = &[];
+static DEF_211_ANCESTORS: &[&str] = &[];
 
-static DEF_210_PROPERTIES: &[Property] = &[Property {
+static DEF_211_PROPERTIES: &[Property] = &[Property {
     name: "converterId",
     key: Key {
         int: 679,
@@ -19979,13 +20427,13 @@ static DEF_210_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_211_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_212_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_211_PROPERTIES: &[Property] = &[];
+static DEF_212_PROPERTIES: &[Property] = &[];
 
-static DEF_212_ANCESTORS: &[&str] = &["DataConverterOperation", "DataConverter"];
+static DEF_213_ANCESTORS: &[&str] = &["DataConverterOperation", "DataConverter"];
 
-static DEF_212_PROPERTIES: &[Property] = &[Property {
+static DEF_213_PROPERTIES: &[Property] = &[Property {
     name: "operationValue",
     key: Key {
         int: 681,
@@ -20021,9 +20469,9 @@ static DEF_212_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_213_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_214_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_213_PROPERTIES: &[Property] = &[
+static DEF_214_PROPERTIES: &[Property] = &[
     Property {
         name: "propertyValue",
         key: Key {
@@ -20096,21 +20544,21 @@ static DEF_213_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_214_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
-
-static DEF_214_PROPERTIES: &[Property] = &[];
-
-static DEF_215_ANCESTORS: &[&str] = &["BindablePropertyInteger", "BindableProperty"];
+static DEF_215_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
 static DEF_215_PROPERTIES: &[Property] = &[];
 
-static DEF_216_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_216_ANCESTORS: &[&str] = &["BindablePropertyInteger", "BindableProperty"];
 
 static DEF_216_PROPERTIES: &[Property] = &[];
 
-static DEF_217_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+static DEF_217_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_217_PROPERTIES: &[Property] = &[Property {
+static DEF_217_PROPERTIES: &[Property] = &[];
+
+static DEF_218_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+
+static DEF_218_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 689,
@@ -20146,9 +20594,9 @@ static DEF_217_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_218_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_219_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_218_PROPERTIES: &[Property] = &[
+static DEF_219_PROPERTIES: &[Property] = &[
     Property {
         name: "offset",
         key: Key {
@@ -20221,9 +20669,9 @@ static DEF_218_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_219_ANCESTORS: &[&str] = &["Component"];
+static DEF_220_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_219_PROPERTIES: &[Property] = &[
+static DEF_220_PROPERTIES: &[Property] = &[
     Property {
         name: "length",
         key: Key {
@@ -20296,7 +20744,7 @@ static DEF_219_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_220_ANCESTORS: &[&str] = &[
+static DEF_221_ANCESTORS: &[&str] = &[
     "Node",
     "TransformComponent",
     "WorldTransformComponent",
@@ -20304,7 +20752,7 @@ static DEF_220_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_220_PROPERTIES: &[Property] = &[
+static DEF_221_PROPERTIES: &[Property] = &[
     Property {
         name: "initialWidth",
         key: Key {
@@ -20447,21 +20895,21 @@ static DEF_220_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_221_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
-
-static DEF_221_PROPERTIES: &[Property] = &[];
-
-static DEF_222_ANCESTORS: &[&str] = &[];
+static DEF_222_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
 static DEF_222_PROPERTIES: &[Property] = &[];
 
-static DEF_223_ANCESTORS: &[&str] = &[
+static DEF_223_ANCESTORS: &[&str] = &[];
+
+static DEF_223_PROPERTIES: &[Property] = &[];
+
+static DEF_224_ANCESTORS: &[&str] = &[
     "ViewModelPropertyEnum",
     "ViewModelProperty",
     "ViewModelComponent",
 ];
 
-static DEF_223_PROPERTIES: &[Property] = &[Property {
+static DEF_224_PROPERTIES: &[Property] = &[Property {
     name: "enumType",
     key: Key {
         int: 708,
@@ -20497,9 +20945,9 @@ static DEF_223_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_224_ANCESTORS: &[&str] = &["DataEnum"];
+static DEF_225_ANCESTORS: &[&str] = &["DataEnum"];
 
-static DEF_224_PROPERTIES: &[Property] = &[Property {
+static DEF_225_PROPERTIES: &[Property] = &[Property {
     name: "enumType",
     key: Key {
         int: 709,
@@ -20535,21 +20983,13 @@ static DEF_224_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_225_ANCESTORS: &[&str] = &[
+static DEF_226_ANCESTORS: &[&str] = &[
     "Drawable",
     "Node",
     "TransformComponent",
     "WorldTransformComponent",
     "ContainerComponent",
     "Component",
-];
-
-static DEF_225_PROPERTIES: &[Property] = &[];
-
-static DEF_226_ANCESTORS: &[&str] = &[
-    "DataConverterOperationValue",
-    "DataConverterOperation",
-    "DataConverter",
 ];
 
 static DEF_226_PROPERTIES: &[Property] = &[];
@@ -20562,9 +21002,17 @@ static DEF_227_ANCESTORS: &[&str] = &[
 
 static DEF_227_PROPERTIES: &[Property] = &[];
 
-static DEF_228_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_228_ANCESTORS: &[&str] = &[
+    "DataConverterOperationValue",
+    "DataConverterOperation",
+    "DataConverter",
+];
 
-static DEF_228_PROPERTIES: &[Property] = &[Property {
+static DEF_228_PROPERTIES: &[Property] = &[];
+
+static DEF_229_ANCESTORS: &[&str] = &["DataConverter"];
+
+static DEF_229_PROPERTIES: &[Property] = &[Property {
     name: "operationType",
     key: Key {
         int: 682,
@@ -20600,9 +21048,9 @@ static DEF_228_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_229_ANCESTORS: &[&str] = &["DataConverterOperation", "DataConverter"];
+static DEF_230_ANCESTORS: &[&str] = &["DataConverterOperation", "DataConverter"];
 
-static DEF_229_PROPERTIES: &[Property] = &[Property {
+static DEF_230_PROPERTIES: &[Property] = &[Property {
     name: "sourcePathIds",
     key: Key {
         int: 711,
@@ -20638,9 +21086,9 @@ static DEF_229_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_230_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_231_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_230_PROPERTIES: &[Property] = &[
+static DEF_231_PROPERTIES: &[Property] = &[
     Property {
         name: "interpolationType",
         key: Key {
@@ -20890,9 +21338,9 @@ static DEF_230_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_231_ANCESTORS: &[&str] = &["Constraint", "Component"];
+static DEF_232_ANCESTORS: &[&str] = &["Constraint", "Component"];
 
-static DEF_231_PROPERTIES: &[Property] = &[Property {
+static DEF_232_PROPERTIES: &[Property] = &[Property {
     name: "directionValue",
     key: Key {
         int: 722,
@@ -20928,9 +21376,9 @@ static DEF_231_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_232_ANCESTORS: &[&str] = &["DraggableConstraint", "Constraint", "Component"];
+static DEF_233_ANCESTORS: &[&str] = &["DraggableConstraint", "Constraint", "Component"];
 
-static DEF_232_PROPERTIES: &[Property] = &[
+static DEF_233_PROPERTIES: &[Property] = &[
     Property {
         name: "virtualizeBuffer",
         key: Key {
@@ -21606,9 +22054,9 @@ static DEF_232_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_233_ANCESTORS: &[&str] = &["DraggableConstraint", "Constraint", "Component"];
+static DEF_234_ANCESTORS: &[&str] = &["DraggableConstraint", "Constraint", "Component"];
 
-static DEF_233_PROPERTIES: &[Property] = &[
+static DEF_234_PROPERTIES: &[Property] = &[
     Property {
         name: "scrollConstraintId",
         key: Key {
@@ -21683,9 +22131,9 @@ static DEF_233_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_234_ANCESTORS: &[&str] = &["Component"];
+static DEF_235_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_234_PROPERTIES: &[Property] = &[Property {
+static DEF_235_PROPERTIES: &[Property] = &[Property {
     name: "constraintId",
     key: Key {
         int: 731,
@@ -21721,13 +22169,13 @@ static DEF_234_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_235_ANCESTORS: &[&str] = &["ScrollPhysics", "Component"];
-
-static DEF_235_PROPERTIES: &[Property] = &[];
-
 static DEF_236_ANCESTORS: &[&str] = &["ScrollPhysics", "Component"];
 
-static DEF_236_PROPERTIES: &[Property] = &[
+static DEF_236_PROPERTIES: &[Property] = &[];
+
+static DEF_237_ANCESTORS: &[&str] = &["ScrollPhysics", "Component"];
+
+static DEF_237_PROPERTIES: &[Property] = &[
     Property {
         name: "friction",
         key: Key {
@@ -21835,22 +22283,22 @@ static DEF_236_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_237_ANCESTORS: &[&str] = &["BlendState", "LayerState", "StateMachineLayerComponent"];
+static DEF_238_ANCESTORS: &[&str] = &["BlendState", "LayerState", "StateMachineLayerComponent"];
 
-static DEF_237_PROPERTIES: &[Property] = &[];
+static DEF_238_PROPERTIES: &[Property] = &[];
 
-static DEF_238_ANCESTORS: &[&str] = &[
+static DEF_239_ANCESTORS: &[&str] = &[
     "BlendState1D",
     "BlendState",
     "LayerState",
     "StateMachineLayerComponent",
 ];
 
-static DEF_238_PROPERTIES: &[Property] = &[];
+static DEF_239_PROPERTIES: &[Property] = &[];
 
-static DEF_239_ANCESTORS: &[&str] = &["TextAsset", "FileAsset", "Asset"];
+static DEF_240_ANCESTORS: &[&str] = &["TextAsset", "FileAsset", "Asset"];
 
-static DEF_239_PROPERTIES: &[Property] = &[
+static DEF_240_PROPERTIES: &[Property] = &[
     Property {
         name: "generatorFunctionRef",
         key: Key {
@@ -21964,9 +22412,9 @@ static DEF_239_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_240_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_241_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_240_PROPERTIES: &[Property] = &[
+static DEF_241_PROPERTIES: &[Property] = &[
     Property {
         name: "length",
         key: Key {
@@ -22076,13 +22524,13 @@ static DEF_240_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_241_ANCESTORS: &[&str] = &["DataConverter"];
-
-static DEF_241_PROPERTIES: &[Property] = &[];
-
 static DEF_242_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_242_PROPERTIES: &[Property] = &[Property {
+static DEF_242_PROPERTIES: &[Property] = &[];
+
+static DEF_243_ANCESTORS: &[&str] = &["DataConverter"];
+
+static DEF_243_PROPERTIES: &[Property] = &[Property {
     name: "trimType",
     key: Key {
         int: 746,
@@ -22118,9 +22566,9 @@ static DEF_242_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_243_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_244_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_243_PROPERTIES: &[Property] = &[
+static DEF_244_PROPERTIES: &[Property] = &[
     Property {
         name: "spaceValue",
         key: Key {
@@ -22298,9 +22746,9 @@ static DEF_243_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_244_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_245_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_244_PROPERTIES: &[Property] = &[
+static DEF_245_PROPERTIES: &[Property] = &[
     Property {
         name: "duration",
         key: Key {
@@ -22410,13 +22858,13 @@ static DEF_244_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_245_ANCESTORS: &[&str] = &["DataConverter"];
-
-static DEF_245_PROPERTIES: &[Property] = &[];
-
 static DEF_246_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_246_PROPERTIES: &[Property] = &[Property {
+static DEF_246_PROPERTIES: &[Property] = &[];
+
+static DEF_247_ANCESTORS: &[&str] = &["DataConverter"];
+
+static DEF_247_PROPERTIES: &[Property] = &[Property {
     name: "randomModeValue",
     key: Key {
         int: 887,
@@ -22452,11 +22900,7 @@ static DEF_246_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_247_ANCESTORS: &[&str] = &[];
-
-static DEF_247_PROPERTIES: &[Property] = &[];
-
-static DEF_248_ANCESTORS: &[&str] = &["FormulaToken"];
+static DEF_248_ANCESTORS: &[&str] = &[];
 
 static DEF_248_PROPERTIES: &[Property] = &[];
 
@@ -22464,13 +22908,17 @@ static DEF_249_ANCESTORS: &[&str] = &["FormulaToken"];
 
 static DEF_249_PROPERTIES: &[Property] = &[];
 
-static DEF_250_ANCESTORS: &[&str] = &["FormulaTokenParenthesis", "FormulaToken"];
+static DEF_250_ANCESTORS: &[&str] = &["FormulaToken"];
 
 static DEF_250_PROPERTIES: &[Property] = &[];
 
-static DEF_251_ANCESTORS: &[&str] = &["FormulaToken"];
+static DEF_251_ANCESTORS: &[&str] = &["FormulaTokenParenthesis", "FormulaToken"];
 
-static DEF_251_PROPERTIES: &[Property] = &[Property {
+static DEF_251_PROPERTIES: &[Property] = &[];
+
+static DEF_252_ANCESTORS: &[&str] = &["FormulaToken"];
+
+static DEF_252_PROPERTIES: &[Property] = &[Property {
     name: "operationType",
     key: Key {
         int: 775,
@@ -22506,9 +22954,9 @@ static DEF_251_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_252_ANCESTORS: &[&str] = &["FormulaTokenParenthesis", "FormulaToken"];
+static DEF_253_ANCESTORS: &[&str] = &["FormulaTokenParenthesis", "FormulaToken"];
 
-static DEF_252_PROPERTIES: &[Property] = &[Property {
+static DEF_253_PROPERTIES: &[Property] = &[Property {
     name: "functionType",
     key: Key {
         int: 776,
@@ -22544,9 +22992,9 @@ static DEF_252_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_253_ANCESTORS: &[&str] = &["FormulaToken"];
+static DEF_254_ANCESTORS: &[&str] = &["FormulaToken"];
 
-static DEF_253_PROPERTIES: &[Property] = &[Property {
+static DEF_254_PROPERTIES: &[Property] = &[Property {
     name: "operationValue",
     key: Key {
         int: 777,
@@ -22582,17 +23030,17 @@ static DEF_253_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_254_ANCESTORS: &[&str] = &["FormulaTokenParenthesis", "FormulaToken"];
-
-static DEF_254_PROPERTIES: &[Property] = &[];
-
-static DEF_255_ANCESTORS: &[&str] = &["FormulaToken"];
+static DEF_255_ANCESTORS: &[&str] = &["FormulaTokenParenthesis", "FormulaToken"];
 
 static DEF_255_PROPERTIES: &[Property] = &[];
 
-static DEF_256_ANCESTORS: &[&str] = &["TextModifier", "Component"];
+static DEF_256_ANCESTORS: &[&str] = &["FormulaToken"];
 
-static DEF_256_PROPERTIES: &[Property] = &[Property {
+static DEF_256_PROPERTIES: &[Property] = &[];
+
+static DEF_257_ANCESTORS: &[&str] = &["TextModifier", "Component"];
+
+static DEF_257_PROPERTIES: &[Property] = &[Property {
     name: "targetId",
     key: Key {
         int: 778,
@@ -22628,9 +23076,9 @@ static DEF_256_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_257_ANCESTORS: &[&str] = &["TextTargetModifier", "TextModifier", "Component"];
+static DEF_258_ANCESTORS: &[&str] = &["TextTargetModifier", "TextModifier", "Component"];
 
-static DEF_257_PROPERTIES: &[Property] = &[
+static DEF_258_PROPERTIES: &[Property] = &[
     Property {
         name: "radial",
         key: Key {
@@ -22843,11 +23291,11 @@ static DEF_257_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_258_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_259_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_258_PROPERTIES: &[Property] = &[];
+static DEF_259_PROPERTIES: &[Property] = &[];
 
-static DEF_259_ANCESTORS: &[&str] = &[
+static DEF_260_ANCESTORS: &[&str] = &[
     "Drawable",
     "Node",
     "TransformComponent",
@@ -22856,7 +23304,7 @@ static DEF_259_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_259_PROPERTIES: &[Property] = &[Property {
+static DEF_260_PROPERTIES: &[Property] = &[Property {
     name: "listSource",
     key: Key {
         int: 800,
@@ -22892,29 +23340,29 @@ static DEF_259_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_260_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_261_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_260_PROPERTIES: &[Property] = &[];
+static DEF_261_PROPERTIES: &[Property] = &[];
 
-static DEF_261_ANCESTORS: &[&str] = &[
+static DEF_262_ANCESTORS: &[&str] = &[
     "ViewModelPropertySymbol",
     "ViewModelProperty",
     "ViewModelComponent",
 ];
 
-static DEF_261_PROPERTIES: &[Property] = &[];
-
-static DEF_262_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
-
 static DEF_262_PROPERTIES: &[Property] = &[];
 
-static DEF_263_ANCESTORS: &[&str] = &[
+static DEF_263_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+
+static DEF_263_PROPERTIES: &[Property] = &[];
+
+static DEF_264_ANCESTORS: &[&str] = &[
     "ViewModelInstanceSymbol",
     "ViewModelInstanceValue",
     "Component",
 ];
 
-static DEF_263_PROPERTIES: &[Property] = &[Property {
+static DEF_264_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 814,
@@ -22950,9 +23398,9 @@ static DEF_263_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_264_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_265_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_264_PROPERTIES: &[Property] = &[Property {
+static DEF_265_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 686,
@@ -22988,9 +23436,9 @@ static DEF_264_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_265_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_266_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_265_PROPERTIES: &[Property] = &[Property {
+static DEF_266_PROPERTIES: &[Property] = &[Property {
     name: "viewModelId",
     key: Key {
         int: 816,
@@ -23026,7 +23474,7 @@ static DEF_265_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_266_ANCESTORS: &[&str] = &[
+static DEF_267_ANCESTORS: &[&str] = &[
     "Drawable",
     "Node",
     "TransformComponent",
@@ -23035,7 +23483,7 @@ static DEF_266_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_266_PROPERTIES: &[Property] = &[
+static DEF_267_PROPERTIES: &[Property] = &[
     Property {
         name: "alignValue",
         key: Key {
@@ -23283,19 +23731,7 @@ static DEF_266_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_267_ANCESTORS: &[&str] = &[
-    "Drawable",
-    "Node",
-    "TransformComponent",
-    "WorldTransformComponent",
-    "ContainerComponent",
-    "Component",
-];
-
-static DEF_267_PROPERTIES: &[Property] = &[];
-
 static DEF_268_ANCESTORS: &[&str] = &[
-    "TextInputDrawable",
     "Drawable",
     "Node",
     "TransformComponent",
@@ -23318,9 +23754,21 @@ static DEF_269_ANCESTORS: &[&str] = &[
 
 static DEF_269_PROPERTIES: &[Property] = &[];
 
-static DEF_270_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_270_ANCESTORS: &[&str] = &[
+    "TextInputDrawable",
+    "Drawable",
+    "Node",
+    "TransformComponent",
+    "WorldTransformComponent",
+    "ContainerComponent",
+    "Component",
+];
 
-static DEF_270_PROPERTIES: &[Property] = &[
+static DEF_270_PROPERTIES: &[Property] = &[];
+
+static DEF_271_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+
+static DEF_271_PROPERTIES: &[Property] = &[
     Property {
         name: "fontSize",
         key: Key {
@@ -23463,18 +23911,6 @@ static DEF_270_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_271_ANCESTORS: &[&str] = &[
-    "TextInputDrawable",
-    "Drawable",
-    "Node",
-    "TransformComponent",
-    "WorldTransformComponent",
-    "ContainerComponent",
-    "Component",
-];
-
-static DEF_271_PROPERTIES: &[Property] = &[];
-
 static DEF_272_ANCESTORS: &[&str] = &[
     "TextInputDrawable",
     "Drawable",
@@ -23487,21 +23923,33 @@ static DEF_272_ANCESTORS: &[&str] = &[
 
 static DEF_272_PROPERTIES: &[Property] = &[];
 
-static DEF_273_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_273_ANCESTORS: &[&str] = &[
+    "TextInputDrawable",
+    "Drawable",
+    "Node",
+    "TransformComponent",
+    "WorldTransformComponent",
+    "ContainerComponent",
+    "Component",
+];
 
 static DEF_273_PROPERTIES: &[Property] = &[];
 
-static DEF_274_ANCESTORS: &[&str] = &[
+static DEF_274_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+
+static DEF_274_PROPERTIES: &[Property] = &[];
+
+static DEF_275_ANCESTORS: &[&str] = &[
     "ViewModelPropertyAsset",
     "ViewModelProperty",
     "ViewModelComponent",
 ];
 
-static DEF_274_PROPERTIES: &[Property] = &[];
+static DEF_275_PROPERTIES: &[Property] = &[];
 
-static DEF_275_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_276_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
 
-static DEF_275_PROPERTIES: &[Property] = &[Property {
+static DEF_276_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 824,
@@ -23537,21 +23985,21 @@ static DEF_275_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_276_ANCESTORS: &[&str] = &[
+static DEF_277_ANCESTORS: &[&str] = &[
     "ViewModelInstanceAsset",
     "ViewModelInstanceValue",
     "Component",
 ];
 
-static DEF_276_PROPERTIES: &[Property] = &[];
-
-static DEF_277_ANCESTORS: &[&str] = &["BindablePropertyId", "BindableProperty"];
-
 static DEF_277_PROPERTIES: &[Property] = &[];
 
-static DEF_278_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_278_ANCESTORS: &[&str] = &["BindablePropertyId", "BindableProperty"];
 
-static DEF_278_PROPERTIES: &[Property] = &[Property {
+static DEF_278_PROPERTIES: &[Property] = &[];
+
+static DEF_279_ANCESTORS: &[&str] = &["BindableProperty"];
+
+static DEF_279_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 835,
@@ -23587,13 +24035,13 @@ static DEF_278_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_279_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_280_ANCESTORS: &[&str] = &["DataConverter"];
 
-static DEF_279_PROPERTIES: &[Property] = &[];
+static DEF_280_PROPERTIES: &[Property] = &[];
 
-static DEF_280_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
+static DEF_281_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
 
-static DEF_280_PROPERTIES: &[Property] = &[Property {
+static DEF_281_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 836,
@@ -23629,13 +24077,13 @@ static DEF_280_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_281_ANCESTORS: &[&str] = &["TransitionComparator"];
+static DEF_282_ANCESTORS: &[&str] = &["TransitionComparator"];
 
-static DEF_281_PROPERTIES: &[Property] = &[];
+static DEF_282_PROPERTIES: &[Property] = &[];
 
-static DEF_282_ANCESTORS: &[&str] = &["BindableProperty"];
+static DEF_283_ANCESTORS: &[&str] = &["BindableProperty"];
 
-static DEF_282_PROPERTIES: &[Property] = &[Property {
+static DEF_283_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 823,
@@ -23671,17 +24119,17 @@ static DEF_282_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_283_ANCESTORS: &[&str] = &["BindablePropertyId", "BindableProperty"];
-
-static DEF_283_PROPERTIES: &[Property] = &[];
-
-static DEF_284_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
+static DEF_284_ANCESTORS: &[&str] = &["BindablePropertyId", "BindableProperty"];
 
 static DEF_284_PROPERTIES: &[Property] = &[];
 
-static DEF_285_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+static DEF_285_ANCESTORS: &[&str] = &["ViewModelProperty", "ViewModelComponent"];
 
-static DEF_285_PROPERTIES: &[Property] = &[Property {
+static DEF_285_PROPERTIES: &[Property] = &[];
+
+static DEF_286_ANCESTORS: &[&str] = &["ViewModelInstanceValue", "Component"];
+
+static DEF_286_PROPERTIES: &[Property] = &[Property {
     name: "propertyValue",
     key: Key {
         int: 846,
@@ -23717,9 +24165,9 @@ static DEF_285_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_286_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
+static DEF_287_ANCESTORS: &[&str] = &["TransitionValueComparator", "TransitionComparator"];
 
-static DEF_286_PROPERTIES: &[Property] = &[Property {
+static DEF_287_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 653,
@@ -23755,15 +24203,15 @@ static DEF_286_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_287_ANCESTORS: &[&str] = &[
+static DEF_288_ANCESTORS: &[&str] = &[
     "TransitionValueIdComparator",
     "TransitionValueComparator",
     "TransitionComparator",
 ];
 
-static DEF_287_PROPERTIES: &[Property] = &[];
+static DEF_288_PROPERTIES: &[Property] = &[];
 
-static DEF_288_ANCESTORS: &[&str] = &[
+static DEF_289_ANCESTORS: &[&str] = &[
     "Drawable",
     "Node",
     "TransformComponent",
@@ -23772,7 +24220,7 @@ static DEF_288_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_288_PROPERTIES: &[Property] = &[Property {
+static DEF_289_PROPERTIES: &[Property] = &[Property {
     name: "scriptAssetId",
     key: Key {
         int: 848,
@@ -23808,9 +24256,9 @@ static DEF_288_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_289_ANCESTORS: &[&str] = &["Component"];
+static DEF_290_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_289_PROPERTIES: &[Property] = &[
+static DEF_290_PROPERTIES: &[Property] = &[
     Property {
         name: "instanceWidthUnitsValue",
         key: Key {
@@ -24060,13 +24508,13 @@ static DEF_289_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_290_ANCESTORS: &[&str] = &["CustomPropertyNumber", "CustomProperty", "Component"];
+static DEF_291_ANCESTORS: &[&str] = &["CustomPropertyNumber", "CustomProperty", "Component"];
 
-static DEF_290_PROPERTIES: &[Property] = &[];
+static DEF_291_PROPERTIES: &[Property] = &[];
 
-static DEF_291_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
+static DEF_292_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
 
-static DEF_291_PROPERTIES: &[Property] = &[Property {
+static DEF_292_PROPERTIES: &[Property] = &[Property {
     name: "dataBindPathIds",
     key: Key {
         int: 866,
@@ -24102,9 +24550,9 @@ static DEF_291_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_292_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
+static DEF_293_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
 
-static DEF_292_PROPERTIES: &[Property] = &[
+static DEF_293_PROPERTIES: &[Property] = &[
     Property {
         name: "fire",
         key: Key {
@@ -24177,9 +24625,9 @@ static DEF_292_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_293_ANCESTORS: &[&str] = &["StateMachineFireAction"];
+static DEF_294_ANCESTORS: &[&str] = &["StateMachineFireAction"];
 
-static DEF_293_PROPERTIES: &[Property] = &[Property {
+static DEF_294_PROPERTIES: &[Property] = &[Property {
     name: "viewModelPathIds",
     key: Key {
         int: 871,
@@ -24215,9 +24663,9 @@ static DEF_293_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_294_ANCESTORS: &[&str] = &[];
+static DEF_295_ANCESTORS: &[&str] = &[];
 
-static DEF_294_PROPERTIES: &[Property] = &[Property {
+static DEF_295_PROPERTIES: &[Property] = &[Property {
     name: "occursValue",
     key: Key {
         int: 393,
@@ -24253,9 +24701,9 @@ static DEF_294_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_295_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
+static DEF_296_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
 
-static DEF_295_PROPERTIES: &[Property] = &[
+static DEF_296_PROPERTIES: &[Property] = &[
     Property {
         name: "propertyValue",
         key: Key {
@@ -24328,15 +24776,15 @@ static DEF_295_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_296_ANCESTORS: &[&str] = &["DataConverter"];
-
-static DEF_296_PROPERTIES: &[Property] = &[];
-
-static DEF_297_ANCESTORS: &[&str] = &["CustomPropertyTrigger", "CustomProperty", "Component"];
+static DEF_297_ANCESTORS: &[&str] = &["DataConverter"];
 
 static DEF_297_PROPERTIES: &[Property] = &[];
 
-static DEF_298_ANCESTORS: &[&str] = &[
+static DEF_298_ANCESTORS: &[&str] = &["CustomPropertyTrigger", "CustomProperty", "Component"];
+
+static DEF_298_PROPERTIES: &[Property] = &[];
+
+static DEF_299_ANCESTORS: &[&str] = &[
     "PointsCommonPath",
     "Path",
     "Node",
@@ -24346,7 +24794,7 @@ static DEF_298_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_298_PROPERTIES: &[Property] = &[Property {
+static DEF_299_PROPERTIES: &[Property] = &[Property {
     name: "listSource",
     key: Key {
         int: 874,
@@ -24382,7 +24830,7 @@ static DEF_298_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_299_ANCESTORS: &[&str] = &[
+static DEF_300_ANCESTORS: &[&str] = &[
     "Path",
     "Node",
     "TransformComponent",
@@ -24391,7 +24839,7 @@ static DEF_299_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_299_PROPERTIES: &[Property] = &[Property {
+static DEF_300_PROPERTIES: &[Property] = &[Property {
     name: "isClosed",
     key: Key {
         int: 32,
@@ -24427,9 +24875,9 @@ static DEF_299_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_300_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
+static DEF_301_ANCESTORS: &[&str] = &["CustomProperty", "Component"];
 
-static DEF_300_PROPERTIES: &[Property] = &[Property {
+static DEF_301_PROPERTIES: &[Property] = &[Property {
     name: "artboardId",
     key: Key {
         int: 876,
@@ -24465,7 +24913,7 @@ static DEF_300_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_301_ANCESTORS: &[&str] = &[
+static DEF_302_ANCESTORS: &[&str] = &[
     "FollowPathConstraint",
     "TransformSpaceConstraint",
     "TargetedConstraint",
@@ -24473,7 +24921,7 @@ static DEF_301_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_301_PROPERTIES: &[Property] = &[
+static DEF_302_PROPERTIES: &[Property] = &[
     Property {
         name: "distanceEnd",
         key: Key {
@@ -24546,17 +24994,17 @@ static DEF_301_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_302_ANCESTORS: &[&str] = &["CustomPropertyColor", "CustomProperty", "Component"];
-
-static DEF_302_PROPERTIES: &[Property] = &[];
-
-static DEF_303_ANCESTORS: &[&str] = &["CustomPropertyString", "CustomProperty", "Component"];
+static DEF_303_ANCESTORS: &[&str] = &["CustomPropertyColor", "CustomProperty", "Component"];
 
 static DEF_303_PROPERTIES: &[Property] = &[];
 
-static DEF_304_ANCESTORS: &[&str] = &["DataConverter"];
+static DEF_304_ANCESTORS: &[&str] = &["CustomPropertyString", "CustomProperty", "Component"];
 
-static DEF_304_PROPERTIES: &[Property] = &[Property {
+static DEF_304_PROPERTIES: &[Property] = &[];
+
+static DEF_305_ANCESTORS: &[&str] = &["DataConverter"];
+
+static DEF_305_PROPERTIES: &[Property] = &[Property {
     name: "scriptAssetId",
     key: Key {
         int: 892,
@@ -24592,19 +25040,19 @@ static DEF_304_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_305_ANCESTORS: &[&str] = &[
+static DEF_306_ANCESTORS: &[&str] = &[
     "TransitionValueIdComparator",
     "TransitionValueComparator",
     "TransitionComparator",
 ];
 
-static DEF_305_PROPERTIES: &[Property] = &[];
-
-static DEF_306_ANCESTORS: &[&str] = &["CustomPropertyBoolean", "CustomProperty", "Component"];
-
 static DEF_306_PROPERTIES: &[Property] = &[];
 
-static DEF_307_ANCESTORS: &[&str] = &[
+static DEF_307_ANCESTORS: &[&str] = &["CustomPropertyBoolean", "CustomProperty", "Component"];
+
+static DEF_307_PROPERTIES: &[Property] = &[];
+
+static DEF_308_ANCESTORS: &[&str] = &[
     "ScriptedDrawable",
     "Drawable",
     "Node",
@@ -24614,11 +25062,11 @@ static DEF_307_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_307_PROPERTIES: &[Property] = &[];
+static DEF_308_PROPERTIES: &[Property] = &[];
 
-static DEF_308_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_309_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_308_PROPERTIES: &[Property] = &[Property {
+static DEF_309_PROPERTIES: &[Property] = &[Property {
     name: "scriptAssetId",
     key: Key {
         int: 912,
@@ -24654,13 +25102,13 @@ static DEF_308_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_309_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
+static DEF_310_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
 
-static DEF_309_PROPERTIES: &[Property] = &[];
+static DEF_310_PROPERTIES: &[Property] = &[];
 
-static DEF_310_ANCESTORS: &[&str] = &[];
+static DEF_311_ANCESTORS: &[&str] = &[];
 
-static DEF_310_PROPERTIES: &[Property] = &[
+static DEF_311_PROPERTIES: &[Property] = &[
     Property {
         name: "path",
         key: Key {
@@ -24733,9 +25181,9 @@ static DEF_310_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_311_ANCESTORS: &[&str] = &["Component"];
+static DEF_312_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_311_PROPERTIES: &[Property] = &[Property {
+static DEF_312_PROPERTIES: &[Property] = &[Property {
     name: "targetId",
     key: Key {
         int: 922,
@@ -24773,13 +25221,13 @@ static DEF_311_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_312_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_313_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_312_PROPERTIES: &[Property] = &[];
+static DEF_313_PROPERTIES: &[Property] = &[];
 
-static DEF_313_ANCESTORS: &[&str] = &["ListenerAction"];
+static DEF_314_ANCESTORS: &[&str] = &["ListenerAction"];
 
-static DEF_313_PROPERTIES: &[Property] = &[Property {
+static DEF_314_PROPERTIES: &[Property] = &[Property {
     name: "scriptAssetId",
     key: Key {
         int: 930,
@@ -24815,9 +25263,9 @@ static DEF_313_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_314_ANCESTORS: &[&str] = &["TransitionCondition"];
+static DEF_315_ANCESTORS: &[&str] = &["TransitionCondition"];
 
-static DEF_314_PROPERTIES: &[Property] = &[Property {
+static DEF_315_PROPERTIES: &[Property] = &[Property {
     name: "scriptAssetId",
     key: Key {
         int: 931,
@@ -24853,9 +25301,9 @@ static DEF_314_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_315_ANCESTORS: &[&str] = &["Component"];
+static DEF_316_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_315_PROPERTIES: &[Property] = &[
+static DEF_316_PROPERTIES: &[Property] = &[
     Property {
         name: "artboardId",
         key: Key {
@@ -24928,13 +25376,13 @@ static DEF_315_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_316_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
+static DEF_317_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
 
-static DEF_316_PROPERTIES: &[Property] = &[];
+static DEF_317_PROPERTIES: &[Property] = &[];
 
-static DEF_317_ANCESTORS: &[&str] = &["FocusAction", "ListenerAction"];
+static DEF_318_ANCESTORS: &[&str] = &["FocusAction", "ListenerAction"];
 
-static DEF_317_PROPERTIES: &[Property] = &[Property {
+static DEF_318_PROPERTIES: &[Property] = &[Property {
     name: "targetId",
     key: Key {
         int: 952,
@@ -24972,9 +25420,9 @@ static DEF_317_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_318_ANCESTORS: &[&str] = &["Component"];
+static DEF_319_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_318_PROPERTIES: &[Property] = &[
+static DEF_319_PROPERTIES: &[Property] = &[
     Property {
         name: "canFocus",
         key: Key {
@@ -25167,9 +25615,9 @@ static DEF_318_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_319_ANCESTORS: &[&str] = &["StateMachineComponent"];
+static DEF_320_ANCESTORS: &[&str] = &["StateMachineComponent"];
 
-static DEF_319_PROPERTIES: &[Property] = &[Property {
+static DEF_320_PROPERTIES: &[Property] = &[Property {
     name: "targetId",
     key: Key {
         int: 224,
@@ -25205,9 +25653,9 @@ static DEF_319_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_320_ANCESTORS: &[&str] = &[];
+static DEF_321_ANCESTORS: &[&str] = &[];
 
-static DEF_320_PROPERTIES: &[Property] = &[Property {
+static DEF_321_PROPERTIES: &[Property] = &[Property {
     name: "listenerTypeValue",
     key: Key {
         int: 965,
@@ -25243,9 +25691,9 @@ static DEF_320_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_321_ANCESTORS: &[&str] = &["ListenerInputType"];
+static DEF_322_ANCESTORS: &[&str] = &["ListenerInputType"];
 
-static DEF_321_PROPERTIES: &[Property] = &[Property {
+static DEF_322_PROPERTIES: &[Property] = &[Property {
     name: "eventId",
     key: Key {
         int: 962,
@@ -25281,9 +25729,9 @@ static DEF_321_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_322_ANCESTORS: &[&str] = &["ListenerInputType"];
+static DEF_323_ANCESTORS: &[&str] = &["ListenerInputType"];
 
-static DEF_322_PROPERTIES: &[Property] = &[Property {
+static DEF_323_PROPERTIES: &[Property] = &[Property {
     name: "viewModelPathIds",
     key: Key {
         int: 963,
@@ -25321,17 +25769,17 @@ static DEF_322_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_323_ANCESTORS: &[&str] = &["BindablePropertyId", "BindableProperty"];
-
-static DEF_323_PROPERTIES: &[Property] = &[];
-
-static DEF_324_ANCESTORS: &[&str] = &[];
+static DEF_324_ANCESTORS: &[&str] = &["BindablePropertyId", "BindableProperty"];
 
 static DEF_324_PROPERTIES: &[Property] = &[];
 
-static DEF_325_ANCESTORS: &[&str] = &["UserInput"];
+static DEF_325_ANCESTORS: &[&str] = &[];
 
-static DEF_325_PROPERTIES: &[Property] = &[
+static DEF_325_PROPERTIES: &[Property] = &[];
+
+static DEF_326_ANCESTORS: &[&str] = &["UserInput"];
+
+static DEF_326_PROPERTIES: &[Property] = &[
     Property {
         name: "keyType",
         key: Key {
@@ -25439,17 +25887,17 @@ static DEF_325_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_326_ANCESTORS: &[&str] = &["ListenerInputType"];
-
-static DEF_326_PROPERTIES: &[Property] = &[];
-
 static DEF_327_ANCESTORS: &[&str] = &["ListenerInputType"];
 
 static DEF_327_PROPERTIES: &[Property] = &[];
 
-static DEF_328_ANCESTORS: &[&str] = &["TransitionPropertyComparator", "TransitionComparator"];
+static DEF_328_ANCESTORS: &[&str] = &["ListenerInputType"];
 
-static DEF_328_PROPERTIES: &[Property] = &[
+static DEF_328_PROPERTIES: &[Property] = &[];
+
+static DEF_329_ANCESTORS: &[&str] = &["TransitionPropertyComparator", "TransitionComparator"];
+
+static DEF_329_PROPERTIES: &[Property] = &[
     Property {
         name: "objectId",
         key: Key {
@@ -25522,9 +25970,9 @@ static DEF_328_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_329_ANCESTORS: &[&str] = &["Component"];
+static DEF_330_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_329_PROPERTIES: &[Property] = &[
+static DEF_330_PROPERTIES: &[Property] = &[
     Property {
         name: "role",
         key: Key {
@@ -26582,13 +27030,13 @@ static DEF_329_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_330_ANCESTORS: &[&str] = &["ListenerInputType"];
+static DEF_331_ANCESTORS: &[&str] = &["ListenerInputType"];
 
-static DEF_330_PROPERTIES: &[Property] = &[];
+static DEF_331_PROPERTIES: &[Property] = &[];
 
-static DEF_331_ANCESTORS: &[&str] = &["UserInput"];
+static DEF_332_ANCESTORS: &[&str] = &["UserInput"];
 
-static DEF_331_PROPERTIES: &[Property] = &[Property {
+static DEF_332_PROPERTIES: &[Property] = &[Property {
     name: "actionType",
     key: Key {
         int: 1010,
@@ -26626,13 +27074,13 @@ static DEF_331_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_332_ANCESTORS: &[&str] = &["ListenerAction"];
+static DEF_333_ANCESTORS: &[&str] = &["ListenerAction"];
 
-static DEF_332_PROPERTIES: &[Property] = &[];
+static DEF_333_PROPERTIES: &[Property] = &[];
 
-static DEF_333_ANCESTORS: &[&str] = &["FocusAction", "ListenerAction"];
+static DEF_334_ANCESTORS: &[&str] = &["FocusAction", "ListenerAction"];
 
-static DEF_333_PROPERTIES: &[Property] = &[Property {
+static DEF_334_PROPERTIES: &[Property] = &[Property {
     name: "traversalKind",
     key: Key {
         int: 1011,
@@ -26670,13 +27118,13 @@ static DEF_333_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_334_ANCESTORS: &[&str] = &["TextAsset", "FileAsset", "Asset"];
+static DEF_335_ANCESTORS: &[&str] = &["TextAsset", "FileAsset", "Asset"];
 
-static DEF_334_PROPERTIES: &[Property] = &[];
+static DEF_335_PROPERTIES: &[Property] = &[];
 
-static DEF_335_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
+static DEF_336_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
 
-static DEF_335_PROPERTIES: &[Property] = &[Property {
+static DEF_336_PROPERTIES: &[Property] = &[Property {
     name: "folderPath",
     key: Key {
         int: 926,
@@ -26714,9 +27162,9 @@ static DEF_335_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_336_ANCESTORS: &[&str] = &["KeyFrameInterpolator"];
+static DEF_337_ANCESTORS: &[&str] = &["KeyFrameInterpolator"];
 
-static DEF_336_PROPERTIES: &[Property] = &[Property {
+static DEF_337_PROPERTIES: &[Property] = &[Property {
     name: "scriptAssetId",
     key: Key {
         int: 1015,
@@ -26752,13 +27200,13 @@ static DEF_336_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_337_ANCESTORS: &[&str] = &["ListenerInputType"];
+static DEF_338_ANCESTORS: &[&str] = &["ListenerInputType"];
 
-static DEF_337_PROPERTIES: &[Property] = &[];
+static DEF_338_PROPERTIES: &[Property] = &[];
 
-static DEF_338_ANCESTORS: &[&str] = &["UserInput"];
+static DEF_339_ANCESTORS: &[&str] = &["UserInput"];
 
-static DEF_338_PROPERTIES: &[Property] = &[
+static DEF_339_PROPERTIES: &[Property] = &[
     Property {
         name: "mapping",
         key: Key {
@@ -26907,33 +27355,33 @@ static DEF_338_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_339_ANCESTORS: &[&str] = &[
+static DEF_340_ANCESTORS: &[&str] = &[
     "ViewModelPropertyAsset",
     "ViewModelProperty",
     "ViewModelComponent",
 ];
 
-static DEF_339_PROPERTIES: &[Property] = &[];
+static DEF_340_PROPERTIES: &[Property] = &[];
 
-static DEF_340_ANCESTORS: &[&str] = &[
+static DEF_341_ANCESTORS: &[&str] = &[
     "ViewModelInstanceAsset",
     "ViewModelInstanceValue",
     "Component",
 ];
 
-static DEF_340_PROPERTIES: &[Property] = &[];
-
-static DEF_341_ANCESTORS: &[&str] = &["FocusAction", "ListenerAction"];
-
 static DEF_341_PROPERTIES: &[Property] = &[];
 
-static DEF_342_ANCESTORS: &[&str] = &["TransitionViewModelCondition", "TransitionCondition"];
+static DEF_342_ANCESTORS: &[&str] = &["FocusAction", "ListenerAction"];
 
 static DEF_342_PROPERTIES: &[Property] = &[];
 
-static DEF_343_ANCESTORS: &[&str] = &["Component"];
+static DEF_343_ANCESTORS: &[&str] = &["TransitionViewModelCondition", "TransitionCondition"];
 
-static DEF_343_PROPERTIES: &[Property] = &[
+static DEF_343_PROPERTIES: &[Property] = &[];
+
+static DEF_344_ANCESTORS: &[&str] = &["Component"];
+
+static DEF_344_PROPERTIES: &[Property] = &[
     Property {
         name: "originX",
         key: Key {
@@ -27010,25 +27458,25 @@ static DEF_343_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_344_ANCESTORS: &[&str] = &[
+static DEF_345_ANCESTORS: &[&str] = &[
     "ViewModelPropertyAsset",
     "ViewModelProperty",
     "ViewModelComponent",
 ];
 
-static DEF_344_PROPERTIES: &[Property] = &[];
+static DEF_345_PROPERTIES: &[Property] = &[];
 
-static DEF_345_ANCESTORS: &[&str] = &[
+static DEF_346_ANCESTORS: &[&str] = &[
     "ViewModelInstanceAsset",
     "ViewModelInstanceValue",
     "Component",
 ];
 
-static DEF_345_PROPERTIES: &[Property] = &[];
+static DEF_346_PROPERTIES: &[Property] = &[];
 
-static DEF_346_ANCESTORS: &[&str] = &["Component"];
+static DEF_347_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_346_PROPERTIES: &[Property] = &[
+static DEF_347_PROPERTIES: &[Property] = &[
     Property {
         name: "hugUnbounded",
         key: Key {
@@ -27558,9 +28006,9 @@ static DEF_346_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_347_ANCESTORS: &[&str] = &["LayoutSizingStyle", "Component"];
+static DEF_348_ANCESTORS: &[&str] = &["LayoutSizingStyle", "Component"];
 
-static DEF_347_PROPERTIES: &[Property] = &[
+static DEF_348_PROPERTIES: &[Property] = &[
     Property {
         name: "fractionalWidth",
         key: Key {
@@ -27707,9 +28155,9 @@ static DEF_347_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_348_ANCESTORS: &[&str] = &["Component"];
+static DEF_349_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_348_PROPERTIES: &[Property] = &[
+static DEF_349_PROPERTIES: &[Property] = &[
     Property {
         name: "collection",
         key: Key {
@@ -27891,13 +28339,13 @@ static DEF_348_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_349_ANCESTORS: &[&str] = &["LayoutNodeStyle", "LayoutSizingStyle", "Component"];
+static DEF_350_ANCESTORS: &[&str] = &["LayoutNodeStyle", "LayoutSizingStyle", "Component"];
 
-static DEF_349_PROPERTIES: &[Property] = &[];
+static DEF_350_PROPERTIES: &[Property] = &[];
 
-static DEF_350_ANCESTORS: &[&str] = &["InterpolatingKeyFrame", "KeyFrame"];
+static DEF_351_ANCESTORS: &[&str] = &["InterpolatingKeyFrame", "KeyFrame"];
 
-static DEF_350_PROPERTIES: &[Property] = &[Property {
+static DEF_351_PROPERTIES: &[Property] = &[Property {
     name: "value",
     key: Key {
         int: 1068,
@@ -27933,9 +28381,9 @@ static DEF_350_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_351_ANCESTORS: &[&str] = &["Component"];
+static DEF_352_ANCESTORS: &[&str] = &["Component"];
 
-static DEF_351_PROPERTIES: &[Property] = &[
+static DEF_352_PROPERTIES: &[Property] = &[
     Property {
         name: "gridColumn",
         key: Key {
@@ -28082,9 +28530,9 @@ static DEF_351_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_352_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
+static DEF_353_ANCESTORS: &[&str] = &["ContainerComponent", "Component"];
 
-static DEF_352_PROPERTIES: &[Property] = &[Property {
+static DEF_353_PROPERTIES: &[Property] = &[Property {
     name: "cornerRadius",
     key: Key {
         int: 1071,
@@ -28120,9 +28568,9 @@ static DEF_352_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_353_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
+static DEF_354_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
 
-static DEF_353_PROPERTIES: &[Property] = &[Property {
+static DEF_354_PROPERTIES: &[Property] = &[Property {
     name: "language",
     key: Key {
         int: 1087,
@@ -28160,9 +28608,9 @@ static DEF_353_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_354_ANCESTORS: &[&str] = &["DrawableAsset", "FileAsset", "Asset"];
+static DEF_355_ANCESTORS: &[&str] = &["DrawableAsset", "FileAsset", "Asset"];
 
-static DEF_354_PROPERTIES: &[Property] = &[
+static DEF_355_PROPERTIES: &[Property] = &[
     Property {
         name: "sourceKey",
         key: Key {
@@ -28270,7 +28718,7 @@ static DEF_354_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_355_ANCESTORS: &[&str] = &[
+static DEF_356_ANCESTORS: &[&str] = &[
     "Image",
     "Drawable",
     "Node",
@@ -28280,7 +28728,7 @@ static DEF_355_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_355_PROPERTIES: &[Property] = &[
+static DEF_356_PROPERTIES: &[Property] = &[
     Property {
         name: "autoplay",
         key: Key {
@@ -28935,8 +29383,8 @@ pub fn property_by_key_in_hierarchy(
     match (type_key, property_key) {
         (1, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1, 7) => Some(("LayoutComponent", &DEF_153_PROPERTIES[0])),
-        (1, 8) => Some(("LayoutComponent", &DEF_153_PROPERTIES[1])),
+        (1, 7) => Some(("LayoutComponent", &DEF_154_PROPERTIES[0])),
+        (1, 8) => Some(("LayoutComponent", &DEF_154_PROPERTIES[1])),
         (1, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
         (1, 10) => Some(("Node", &DEF_1_PROPERTIES[1])),
         (1, 11) => Some(("Artboard", &DEF_0_PROPERTIES[0])),
@@ -28949,13 +29397,13 @@ pub fn property_by_key_in_hierarchy(
         (1, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
         (1, 23) => Some(("Drawable", &DEF_12_PROPERTIES[0])),
         (1, 129) => Some(("Drawable", &DEF_12_PROPERTIES[1])),
-        (1, 196) => Some(("LayoutComponent", &DEF_153_PROPERTIES[2])),
+        (1, 196) => Some(("LayoutComponent", &DEF_154_PROPERTIES[2])),
         (1, 236) => Some(("Artboard", &DEF_0_PROPERTIES[2])),
         (1, 450) => Some(("Drawable", &DEF_12_PROPERTIES[2])),
-        (1, 494) => Some(("LayoutComponent", &DEF_153_PROPERTIES[3])),
+        (1, 494) => Some(("LayoutComponent", &DEF_154_PROPERTIES[3])),
         (1, 583) => Some(("Artboard", &DEF_0_PROPERTIES[3])),
-        (1, 706) => Some(("LayoutComponent", &DEF_153_PROPERTIES[4])),
-        (1, 707) => Some(("LayoutComponent", &DEF_153_PROPERTIES[5])),
+        (1, 706) => Some(("LayoutComponent", &DEF_154_PROPERTIES[4])),
+        (1, 707) => Some(("LayoutComponent", &DEF_154_PROPERTIES[5])),
         (1, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (1, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
         (1, 808) => Some(("Node", &DEF_1_PROPERTIES[4])),
@@ -29177,7 +29625,7 @@ pub fn property_by_key_in_hierarchy(
         (16, 16) => Some(("TransformComponent", &DEF_35_PROPERTIES[1])),
         (16, 17) => Some(("TransformComponent", &DEF_35_PROPERTIES[2])),
         (16, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
-        (16, 32) => Some(("PointsCommonPath", &DEF_299_PROPERTIES[0])),
+        (16, 32) => Some(("PointsCommonPath", &DEF_300_PROPERTIES[0])),
         (16, 128) => Some(("Path", &DEF_11_PROPERTIES[0])),
         (16, 770) => Some(("Path", &DEF_11_PROPERTIES[1])),
         (16, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
@@ -29238,8 +29686,8 @@ pub fn property_by_key_in_hierarchy(
         (28, 66) => Some(("CubicInterpolator", &DEF_128_PROPERTIES[3])),
         (29, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
         (30, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (30, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (30, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
+        (30, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (30, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
         (30, 70) => Some(("KeyFrameDouble", &DEF_29_PROPERTIES[0])),
         (31, 55) => Some(("Animation", &DEF_26_PROPERTIES[0])),
         (31, 56) => Some(("LinearAnimation", &DEF_30_PROPERTIES[0])),
@@ -29268,8 +29716,8 @@ pub fn property_by_key_in_hierarchy(
         (36, 24) => Some(("Vertex", &DEF_101_PROPERTIES[0])),
         (36, 25) => Some(("Vertex", &DEF_101_PROPERTIES[1])),
         (37, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (37, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (37, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
+        (37, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (37, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
         (37, 88) => Some(("KeyFrameColor", &DEF_34_PROPERTIES[0])),
         (38, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (38, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
@@ -29347,8 +29795,8 @@ pub fn property_by_key_in_hierarchy(
         (49, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (49, 121) => Some(("DrawRules", &DEF_46_PROPERTIES[0])),
         (50, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (50, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (50, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
+        (50, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (50, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
         (50, 122) => Some(("KeyFrameId", &DEF_47_PROPERTIES[0])),
         (51, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (51, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
@@ -29482,8 +29930,8 @@ pub fn property_by_key_in_hierarchy(
         (83, 372) => Some(("TransformConstraint", &DEF_80_PROPERTIES[0])),
         (83, 373) => Some(("TransformConstraint", &DEF_80_PROPERTIES[1])),
         (84, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (84, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (84, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
+        (84, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (84, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
         (84, 181) => Some(("KeyFrameBool", &DEF_81_PROPERTIES[0])),
         (85, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (85, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
@@ -29716,7 +30164,7 @@ pub fn property_by_key_in_hierarchy(
         (110, 809) => Some(("Node", &DEF_1_PROPERTIES[5])),
         (110, 810) => Some(("Node", &DEF_1_PROPERTIES[6])),
         (110, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
-        (110, 848) => Some(("ScriptedDrawable", &DEF_288_PROPERTIES[0])),
+        (110, 848) => Some(("ScriptedDrawable", &DEF_289_PROPERTIES[0])),
         (110, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (110, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
         (111, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
@@ -29738,7 +30186,7 @@ pub fn property_by_key_in_hierarchy(
         (113, 415) => Some(("PaintImage", &DEF_106_PROPERTIES[8])),
         (113, 416) => Some(("PaintImage", &DEF_106_PROPERTIES[9])),
         (114, 138) => Some(("StateMachineComponent", &DEF_51_PROPERTIES[0])),
-        (114, 224) => Some(("StateMachineListener", &DEF_319_PROPERTIES[0])),
+        (114, 224) => Some(("StateMachineListener", &DEF_320_PROPERTIES[0])),
         (114, 225) => Some(("StateMachineListenerSingle", &DEF_107_PROPERTIES[0])),
         (114, 399) => Some(("StateMachineListenerSingle", &DEF_107_PROPERTIES[1])),
         (114, 868) => Some(("StateMachineListenerSingle", &DEF_107_PROPERTIES[2])),
@@ -29778,18 +30226,18 @@ pub fn property_by_key_in_hierarchy(
         (127, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (127, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (127, 243) => Some(("CustomPropertyNumber", &DEF_118_PROPERTIES[0])),
-        (127, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
+        (127, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
         (128, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (128, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (128, 395) => Some(("Event", &DEF_119_PROPERTIES[0])),
         (129, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (129, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (129, 245) => Some(("CustomPropertyBoolean", &DEF_120_PROPERTIES[0])),
-        (129, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
+        (129, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
         (130, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (130, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (130, 246) => Some(("CustomPropertyString", &DEF_121_PROPERTIES[0])),
-        (130, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
+        (130, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
         (131, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (131, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (131, 248) => Some(("OpenUrlEvent", &DEF_122_PROPERTIES[0])),
@@ -29846,10 +30294,10 @@ pub fn property_by_key_in_hierarchy(
         (136, 420) => Some(("BitmapCache", &DEF_125_PROPERTIES[3])),
         (137, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (137, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (137, 274) => Some(("TextStyle", &DEF_270_PROPERTIES[0])),
-        (137, 279) => Some(("TextStyle", &DEF_270_PROPERTIES[1])),
-        (137, 370) => Some(("TextStyle", &DEF_270_PROPERTIES[2])),
-        (137, 390) => Some(("TextStyle", &DEF_270_PROPERTIES[3])),
+        (137, 274) => Some(("TextStyle", &DEF_271_PROPERTIES[0])),
+        (137, 279) => Some(("TextStyle", &DEF_271_PROPERTIES[1])),
+        (137, 370) => Some(("TextStyle", &DEF_271_PROPERTIES[2])),
+        (137, 390) => Some(("TextStyle", &DEF_271_PROPERTIES[3])),
         (138, 63) => Some(("CubicInterpolator", &DEF_128_PROPERTIES[0])),
         (138, 64) => Some(("CubicInterpolator", &DEF_128_PROPERTIES[1])),
         (138, 65) => Some(("CubicInterpolator", &DEF_128_PROPERTIES[2])),
@@ -29863,8 +30311,8 @@ pub fn property_by_key_in_hierarchy(
         (141, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (141, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
         (142, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (142, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (142, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
+        (142, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (142, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
         (142, 280) => Some(("KeyFrameString", &DEF_130_PROPERTIES[0])),
         (144, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (144, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
@@ -29907,84 +30355,97 @@ pub fn property_by_key_in_hierarchy(
         (148, 313) => Some(("Joystick", &DEF_134_PROPERTIES[11])),
         (153, 447) => Some(("SelectionStyle", &DEF_135_PROPERTIES[0])),
         (153, 448) => Some(("SelectionStyle", &DEF_135_PROPERTIES[1])),
+        (154, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
+        (154, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
+        (154, 455) => Some(("LayerMask", &DEF_136_PROPERTIES[0])),
+        (154, 456) => Some(("LayerMask", &DEF_136_PROPERTIES[1])),
+        (154, 457) => Some(("LayerMask", &DEF_136_PROPERTIES[2])),
+        (154, 458) => Some(("LayerMask", &DEF_136_PROPERTIES[3])),
+        (154, 459) => Some(("LayerMask", &DEF_136_PROPERTIES[4])),
+        (154, 460) => Some(("LayerMask", &DEF_136_PROPERTIES[5])),
+        (154, 461) => Some(("LayerMask", &DEF_136_PROPERTIES[6])),
+        (154, 462) => Some(("LayerMask", &DEF_136_PROPERTIES[7])),
+        (154, 463) => Some(("LayerMask", &DEF_136_PROPERTIES[8])),
+        (154, 464) => Some(("LayerMask", &DEF_136_PROPERTIES[9])),
+        (154, 465) => Some(("LayerMask", &DEF_136_PROPERTIES[10])),
         (158, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (158, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (158, 316) => Some(("TextModifierRange", &DEF_136_PROPERTIES[0])),
-        (158, 317) => Some(("TextModifierRange", &DEF_136_PROPERTIES[1])),
-        (158, 318) => Some(("TextModifierRange", &DEF_136_PROPERTIES[2])),
-        (158, 319) => Some(("TextModifierRange", &DEF_136_PROPERTIES[3])),
-        (158, 325) => Some(("TextModifierRange", &DEF_136_PROPERTIES[4])),
-        (158, 326) => Some(("TextModifierRange", &DEF_136_PROPERTIES[5])),
-        (158, 327) => Some(("TextModifierRange", &DEF_136_PROPERTIES[6])),
-        (158, 333) => Some(("TextModifierRange", &DEF_136_PROPERTIES[7])),
-        (158, 334) => Some(("TextModifierRange", &DEF_136_PROPERTIES[8])),
-        (158, 336) => Some(("TextModifierRange", &DEF_136_PROPERTIES[9])),
-        (158, 378) => Some(("TextModifierRange", &DEF_136_PROPERTIES[10])),
+        (158, 316) => Some(("TextModifierRange", &DEF_137_PROPERTIES[0])),
+        (158, 317) => Some(("TextModifierRange", &DEF_137_PROPERTIES[1])),
+        (158, 318) => Some(("TextModifierRange", &DEF_137_PROPERTIES[2])),
+        (158, 319) => Some(("TextModifierRange", &DEF_137_PROPERTIES[3])),
+        (158, 325) => Some(("TextModifierRange", &DEF_137_PROPERTIES[4])),
+        (158, 326) => Some(("TextModifierRange", &DEF_137_PROPERTIES[5])),
+        (158, 327) => Some(("TextModifierRange", &DEF_137_PROPERTIES[6])),
+        (158, 333) => Some(("TextModifierRange", &DEF_137_PROPERTIES[7])),
+        (158, 334) => Some(("TextModifierRange", &DEF_137_PROPERTIES[8])),
+        (158, 336) => Some(("TextModifierRange", &DEF_137_PROPERTIES[9])),
+        (158, 378) => Some(("TextModifierRange", &DEF_137_PROPERTIES[10])),
         (159, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (159, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (159, 322) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[0])),
-        (159, 323) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[1])),
-        (159, 324) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[2])),
-        (159, 328) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[3])),
-        (159, 329) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[4])),
-        (159, 330) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[5])),
-        (159, 331) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[6])),
-        (159, 332) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[7])),
-        (159, 335) => Some(("TextModifierGroup", &DEF_137_PROPERTIES[8])),
+        (159, 322) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[0])),
+        (159, 323) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[1])),
+        (159, 324) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[2])),
+        (159, 328) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[3])),
+        (159, 329) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[4])),
+        (159, 330) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[5])),
+        (159, 331) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[6])),
+        (159, 332) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[7])),
+        (159, 335) => Some(("TextModifierGroup", &DEF_138_PROPERTIES[8])),
         (160, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (160, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (161, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (161, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (162, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (162, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (162, 320) => Some(("TextVariationModifier", &DEF_140_PROPERTIES[0])),
-        (162, 321) => Some(("TextVariationModifier", &DEF_140_PROPERTIES[1])),
+        (162, 320) => Some(("TextVariationModifier", &DEF_141_PROPERTIES[0])),
+        (162, 321) => Some(("TextVariationModifier", &DEF_141_PROPERTIES[1])),
         (163, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (163, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (163, 337) => Some(("CubicInterpolatorComponent", &DEF_141_PROPERTIES[0])),
-        (163, 338) => Some(("CubicInterpolatorComponent", &DEF_141_PROPERTIES[1])),
-        (163, 339) => Some(("CubicInterpolatorComponent", &DEF_141_PROPERTIES[2])),
-        (163, 340) => Some(("CubicInterpolatorComponent", &DEF_141_PROPERTIES[3])),
+        (163, 337) => Some(("CubicInterpolatorComponent", &DEF_142_PROPERTIES[0])),
+        (163, 338) => Some(("CubicInterpolatorComponent", &DEF_142_PROPERTIES[1])),
+        (163, 339) => Some(("CubicInterpolatorComponent", &DEF_142_PROPERTIES[2])),
+        (163, 340) => Some(("CubicInterpolatorComponent", &DEF_142_PROPERTIES[3])),
         (164, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (164, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (164, 356) => Some(("TextStyleFeature", &DEF_142_PROPERTIES[0])),
-        (164, 357) => Some(("TextStyleFeature", &DEF_142_PROPERTIES[1])),
+        (164, 356) => Some(("TextStyleFeature", &DEF_143_PROPERTIES[0])),
+        (164, 357) => Some(("TextStyleFeature", &DEF_143_PROPERTIES[1])),
         (165, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (165, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (165, 172) => Some(("Constraint", &DEF_76_PROPERTIES[0])),
         (165, 173) => Some(("TargetedConstraint", &DEF_77_PROPERTIES[0])),
         (165, 179) => Some(("TransformSpaceConstraint", &DEF_87_PROPERTIES[0])),
         (165, 180) => Some(("TransformSpaceConstraint", &DEF_87_PROPERTIES[1])),
-        (165, 363) => Some(("FollowPathConstraint", &DEF_143_PROPERTIES[0])),
-        (165, 364) => Some(("FollowPathConstraint", &DEF_143_PROPERTIES[1])),
-        (165, 365) => Some(("FollowPathConstraint", &DEF_143_PROPERTIES[2])),
+        (165, 363) => Some(("FollowPathConstraint", &DEF_144_PROPERTIES[0])),
+        (165, 364) => Some(("FollowPathConstraint", &DEF_144_PROPERTIES[1])),
+        (165, 365) => Some(("FollowPathConstraint", &DEF_144_PROPERTIES[2])),
         (167, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (167, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (167, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (168, 389) => Some(("ListenerFireEvent", &DEF_145_PROPERTIES[0])),
+        (167, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (168, 389) => Some(("ListenerFireEvent", &DEF_146_PROPERTIES[0])),
         (168, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
-        (169, 392) => Some(("StateMachineFireEvent", &DEF_146_PROPERTIES[0])),
-        (169, 393) => Some(("StateMachineFireAction", &DEF_294_PROPERTIES[0])),
+        (169, 392) => Some(("StateMachineFireEvent", &DEF_147_PROPERTIES[0])),
+        (169, 393) => Some(("StateMachineFireAction", &DEF_295_PROPERTIES[0])),
         (170, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (170, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (170, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
+        (170, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (170, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
         (171, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (174, 405) => Some(("ElasticInterpolator", &DEF_149_PROPERTIES[0])),
-        (174, 406) => Some(("ElasticInterpolator", &DEF_149_PROPERTIES[1])),
-        (174, 407) => Some(("ElasticInterpolator", &DEF_149_PROPERTIES[2])),
+        (174, 405) => Some(("ElasticInterpolator", &DEF_150_PROPERTIES[0])),
+        (174, 406) => Some(("ElasticInterpolator", &DEF_150_PROPERTIES[1])),
+        (174, 407) => Some(("ElasticInterpolator", &DEF_150_PROPERTIES[2])),
         (406, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (406, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (406, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (406, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (406, 530) => Some(("ExportAudio", &DEF_155_PROPERTIES[0])),
+        (406, 530) => Some(("ExportAudio", &DEF_156_PROPERTIES[0])),
         (407, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (407, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (407, 395) => Some(("Event", &DEF_119_PROPERTIES[0])),
-        (407, 408) => Some(("AudioEvent", &DEF_152_PROPERTIES[0])),
+        (407, 408) => Some(("AudioEvent", &DEF_153_PROPERTIES[0])),
         (409, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (409, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (409, 7) => Some(("LayoutComponent", &DEF_153_PROPERTIES[0])),
-        (409, 8) => Some(("LayoutComponent", &DEF_153_PROPERTIES[1])),
+        (409, 7) => Some(("LayoutComponent", &DEF_154_PROPERTIES[0])),
+        (409, 8) => Some(("LayoutComponent", &DEF_154_PROPERTIES[1])),
         (409, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
         (409, 10) => Some(("Node", &DEF_1_PROPERTIES[1])),
         (409, 13) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -29995,11 +30456,11 @@ pub fn property_by_key_in_hierarchy(
         (409, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
         (409, 23) => Some(("Drawable", &DEF_12_PROPERTIES[0])),
         (409, 129) => Some(("Drawable", &DEF_12_PROPERTIES[1])),
-        (409, 196) => Some(("LayoutComponent", &DEF_153_PROPERTIES[2])),
+        (409, 196) => Some(("LayoutComponent", &DEF_154_PROPERTIES[2])),
         (409, 450) => Some(("Drawable", &DEF_12_PROPERTIES[2])),
-        (409, 494) => Some(("LayoutComponent", &DEF_153_PROPERTIES[3])),
-        (409, 706) => Some(("LayoutComponent", &DEF_153_PROPERTIES[4])),
-        (409, 707) => Some(("LayoutComponent", &DEF_153_PROPERTIES[5])),
+        (409, 494) => Some(("LayoutComponent", &DEF_154_PROPERTIES[3])),
+        (409, 706) => Some(("LayoutComponent", &DEF_154_PROPERTIES[4])),
+        (409, 707) => Some(("LayoutComponent", &DEF_154_PROPERTIES[5])),
         (409, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (409, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
         (409, 808) => Some(("Node", &DEF_1_PROPERTIES[4])),
@@ -30010,162 +30471,162 @@ pub fn property_by_key_in_hierarchy(
         (409, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
         (420, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (420, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (420, 451) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[0])),
-        (420, 498) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[0])),
-        (420, 499) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[1])),
-        (420, 500) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[1])),
-        (420, 501) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[2])),
-        (420, 502) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[3])),
-        (420, 503) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[4])),
-        (420, 504) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[2])),
-        (420, 505) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[3])),
-        (420, 506) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[4])),
-        (420, 507) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[5])),
-        (420, 508) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[6])),
-        (420, 509) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[7])),
-        (420, 510) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[8])),
-        (420, 511) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[9])),
-        (420, 512) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[10])),
-        (420, 513) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[11])),
-        (420, 514) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[12])),
-        (420, 515) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[13])),
-        (420, 516) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[14])),
-        (420, 517) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[15])),
-        (420, 518) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[16])),
-        (420, 519) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[17])),
-        (420, 523) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[18])),
-        (420, 524) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[19])),
-        (420, 589) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[20])),
-        (420, 590) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[21])),
-        (420, 591) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[22])),
-        (420, 592) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[23])),
-        (420, 596) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[5])),
-        (420, 597) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[24])),
-        (420, 598) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[25])),
-        (420, 599) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[26])),
-        (420, 604) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[27])),
-        (420, 605) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[28])),
-        (420, 606) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[29])),
-        (420, 607) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[6])),
-        (420, 608) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[7])),
-        (420, 609) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[30])),
-        (420, 610) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[31])),
-        (420, 611) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[32])),
-        (420, 612) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[33])),
-        (420, 613) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[34])),
-        (420, 614) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[35])),
-        (420, 615) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[36])),
-        (420, 616) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[37])),
-        (420, 617) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[38])),
-        (420, 618) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[39])),
-        (420, 619) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[40])),
-        (420, 620) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[41])),
-        (420, 621) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[42])),
-        (420, 622) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[43])),
-        (420, 623) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[44])),
-        (420, 624) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[45])),
-        (420, 625) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[46])),
-        (420, 626) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[47])),
-        (420, 627) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[8])),
-        (420, 628) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[9])),
-        (420, 629) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[10])),
-        (420, 630) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[11])),
-        (420, 632) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[48])),
-        (420, 639) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[49])),
-        (420, 640) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[50])),
-        (420, 641) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[51])),
-        (420, 642) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[52])),
-        (420, 643) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[53])),
-        (420, 655) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[12])),
-        (420, 656) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[13])),
-        (420, 705) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[54])),
-        (420, 1045) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[55])),
-        (420, 1046) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[14])),
-        (420, 1059) => Some(("LayoutComponentStyle", &DEF_154_PROPERTIES[56])),
+        (420, 451) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[0])),
+        (420, 498) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[0])),
+        (420, 499) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[1])),
+        (420, 500) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[1])),
+        (420, 501) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[2])),
+        (420, 502) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[3])),
+        (420, 503) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[4])),
+        (420, 504) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[2])),
+        (420, 505) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[3])),
+        (420, 506) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[4])),
+        (420, 507) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[5])),
+        (420, 508) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[6])),
+        (420, 509) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[7])),
+        (420, 510) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[8])),
+        (420, 511) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[9])),
+        (420, 512) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[10])),
+        (420, 513) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[11])),
+        (420, 514) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[12])),
+        (420, 515) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[13])),
+        (420, 516) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[14])),
+        (420, 517) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[15])),
+        (420, 518) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[16])),
+        (420, 519) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[17])),
+        (420, 523) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[18])),
+        (420, 524) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[19])),
+        (420, 589) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[20])),
+        (420, 590) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[21])),
+        (420, 591) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[22])),
+        (420, 592) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[23])),
+        (420, 596) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[5])),
+        (420, 597) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[24])),
+        (420, 598) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[25])),
+        (420, 599) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[26])),
+        (420, 604) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[27])),
+        (420, 605) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[28])),
+        (420, 606) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[29])),
+        (420, 607) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[6])),
+        (420, 608) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[7])),
+        (420, 609) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[30])),
+        (420, 610) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[31])),
+        (420, 611) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[32])),
+        (420, 612) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[33])),
+        (420, 613) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[34])),
+        (420, 614) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[35])),
+        (420, 615) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[36])),
+        (420, 616) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[37])),
+        (420, 617) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[38])),
+        (420, 618) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[39])),
+        (420, 619) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[40])),
+        (420, 620) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[41])),
+        (420, 621) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[42])),
+        (420, 622) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[43])),
+        (420, 623) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[44])),
+        (420, 624) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[45])),
+        (420, 625) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[46])),
+        (420, 626) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[47])),
+        (420, 627) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[8])),
+        (420, 628) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[9])),
+        (420, 629) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[10])),
+        (420, 630) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[11])),
+        (420, 632) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[48])),
+        (420, 639) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[49])),
+        (420, 640) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[50])),
+        (420, 641) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[51])),
+        (420, 642) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[52])),
+        (420, 643) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[53])),
+        (420, 655) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[12])),
+        (420, 656) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[13])),
+        (420, 705) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[54])),
+        (420, 1045) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[55])),
+        (420, 1046) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[14])),
+        (420, 1059) => Some(("LayoutComponentStyle", &DEF_155_PROPERTIES[56])),
         (422, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (422, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (422, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (422, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (422, 530) => Some(("ExportAudio", &DEF_155_PROPERTIES[0])),
+        (422, 530) => Some(("ExportAudio", &DEF_156_PROPERTIES[0])),
         (426, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (426, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (426, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (426, 555) => Some(("ViewModelInstanceColor", &DEF_156_PROPERTIES[0])),
-        (427, 549) => Some(("ViewModelInstanceListItem", &DEF_157_PROPERTIES[0])),
-        (427, 550) => Some(("ViewModelInstanceListItem", &DEF_157_PROPERTIES[1])),
+        (426, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (426, 555) => Some(("ViewModelInstanceColor", &DEF_157_PROPERTIES[0])),
+        (427, 549) => Some(("ViewModelInstanceListItem", &DEF_158_PROPERTIES[0])),
+        (427, 550) => Some(("ViewModelInstanceListItem", &DEF_158_PROPERTIES[1])),
         (428, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (428, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (428, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (429, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (430, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (430, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (430, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (431, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (431, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (431, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (428, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (429, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (430, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (430, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (430, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (431, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (431, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (431, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (432, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (432, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (432, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (432, 560) => Some(("ViewModelInstanceEnum", &DEF_162_PROPERTIES[0])),
+        (432, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (432, 560) => Some(("ViewModelInstanceEnum", &DEF_163_PROPERTIES[0])),
         (433, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (433, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (433, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (433, 561) => Some(("ViewModelInstanceString", &DEF_163_PROPERTIES[0])),
-        (434, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (434, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (434, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (435, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (435, 981) => Some(("ViewModel", &DEF_165_PROPERTIES[0])),
-        (436, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (436, 565) => Some(("ViewModelPropertyViewModel", &DEF_166_PROPERTIES[0])),
-        (436, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (436, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (433, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (433, 561) => Some(("ViewModelInstanceString", &DEF_164_PROPERTIES[0])),
+        (434, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (434, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (434, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (435, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (435, 981) => Some(("ViewModel", &DEF_166_PROPERTIES[0])),
+        (436, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (436, 565) => Some(("ViewModelPropertyViewModel", &DEF_167_PROPERTIES[0])),
+        (436, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (436, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (437, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (437, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (437, 566) => Some(("ViewModelInstance", &DEF_167_PROPERTIES[0])),
-        (438, 572) => Some(("DataEnumCustom", &DEF_168_PROPERTIES[0])),
-        (439, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (439, 574) => Some(("ViewModelPropertyEnumCustom", &DEF_169_PROPERTIES[0])),
-        (439, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (439, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (440, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (440, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (440, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (437, 566) => Some(("ViewModelInstance", &DEF_168_PROPERTIES[0])),
+        (438, 572) => Some(("DataEnumCustom", &DEF_169_PROPERTIES[0])),
+        (439, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (439, 574) => Some(("ViewModelPropertyEnumCustom", &DEF_170_PROPERTIES[0])),
+        (439, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (439, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (440, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (440, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (440, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (441, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (441, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (441, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (441, 966) => Some(("ViewModelInstanceList", &DEF_171_PROPERTIES[0])),
+        (441, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (441, 966) => Some(("ViewModelInstanceList", &DEF_172_PROPERTIES[0])),
         (442, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (442, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (442, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (442, 575) => Some(("ViewModelInstanceNumber", &DEF_172_PROPERTIES[0])),
-        (443, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (443, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (443, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (442, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (442, 575) => Some(("ViewModelInstanceNumber", &DEF_173_PROPERTIES[0])),
+        (443, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (443, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (443, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (444, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (444, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (444, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (444, 577) => Some(("ViewModelInstanceViewModel", &DEF_174_PROPERTIES[0])),
-        (445, 578) => Some(("DataEnumValue", &DEF_175_PROPERTIES[0])),
-        (445, 579) => Some(("DataEnumValue", &DEF_175_PROPERTIES[1])),
-        (446, 586) => Some(("DataBind", &DEF_176_PROPERTIES[0])),
-        (446, 587) => Some(("DataBind", &DEF_176_PROPERTIES[1])),
-        (446, 660) => Some(("DataBind", &DEF_176_PROPERTIES[2])),
-        (447, 586) => Some(("DataBind", &DEF_176_PROPERTIES[0])),
-        (447, 587) => Some(("DataBind", &DEF_176_PROPERTIES[1])),
-        (447, 588) => Some(("DataBindContext", &DEF_177_PROPERTIES[0])),
-        (447, 660) => Some(("DataBind", &DEF_176_PROPERTIES[2])),
-        (448, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (448, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (448, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (444, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (444, 577) => Some(("ViewModelInstanceViewModel", &DEF_175_PROPERTIES[0])),
+        (445, 578) => Some(("DataEnumValue", &DEF_176_PROPERTIES[0])),
+        (445, 579) => Some(("DataEnumValue", &DEF_176_PROPERTIES[1])),
+        (446, 586) => Some(("DataBind", &DEF_177_PROPERTIES[0])),
+        (446, 587) => Some(("DataBind", &DEF_177_PROPERTIES[1])),
+        (446, 660) => Some(("DataBind", &DEF_177_PROPERTIES[2])),
+        (447, 586) => Some(("DataBind", &DEF_177_PROPERTIES[0])),
+        (447, 587) => Some(("DataBind", &DEF_177_PROPERTIES[1])),
+        (447, 588) => Some(("DataBindContext", &DEF_178_PROPERTIES[0])),
+        (447, 660) => Some(("DataBind", &DEF_177_PROPERTIES[2])),
+        (448, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (448, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (448, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (449, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (449, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (449, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (449, 593) => Some(("ViewModelInstanceBoolean", &DEF_179_PROPERTIES[0])),
+        (449, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (449, 593) => Some(("ViewModelInstanceBoolean", &DEF_180_PROPERTIES[0])),
         (450, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (450, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (450, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
-        (450, 631) => Some(("KeyFrameUint", &DEF_180_PROPERTIES[0])),
+        (450, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (450, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
+        (450, 631) => Some(("KeyFrameUint", &DEF_181_PROPERTIES[0])),
         (451, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (451, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (451, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30180,10 +30641,10 @@ pub fn property_by_key_in_hierarchy(
         (451, 129) => Some(("Drawable", &DEF_12_PROPERTIES[1])),
         (451, 197) => Some(("NestedArtboard", &DEF_89_PROPERTIES[0])),
         (451, 450) => Some(("Drawable", &DEF_12_PROPERTIES[2])),
-        (451, 538) => Some(("NestedArtboardLeaf", &DEF_181_PROPERTIES[0])),
+        (451, 538) => Some(("NestedArtboardLeaf", &DEF_182_PROPERTIES[0])),
         (451, 582) => Some(("NestedArtboard", &DEF_89_PROPERTIES[1])),
-        (451, 644) => Some(("NestedArtboardLeaf", &DEF_181_PROPERTIES[1])),
-        (451, 645) => Some(("NestedArtboardLeaf", &DEF_181_PROPERTIES[2])),
+        (451, 644) => Some(("NestedArtboardLeaf", &DEF_182_PROPERTIES[1])),
+        (451, 645) => Some(("NestedArtboardLeaf", &DEF_182_PROPERTIES[2])),
         (451, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (451, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
         (451, 808) => Some(("Node", &DEF_1_PROPERTIES[4])),
@@ -30196,7 +30657,7 @@ pub fn property_by_key_in_hierarchy(
         (451, 907) => Some(("NestedArtboard", &DEF_89_PROPERTIES[3])),
         (451, 908) => Some(("NestedArtboard", &DEF_89_PROPERTIES[4])),
         (451, 1014) => Some(("NestedArtboard", &DEF_89_PROPERTIES[5])),
-        (451, 1098) => Some(("NestedArtboardLeaf", &DEF_181_PROPERTIES[3])),
+        (451, 1098) => Some(("NestedArtboardLeaf", &DEF_182_PROPERTIES[3])),
         (452, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (452, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (452, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30212,12 +30673,12 @@ pub fn property_by_key_in_hierarchy(
         (452, 197) => Some(("NestedArtboard", &DEF_89_PROPERTIES[0])),
         (452, 450) => Some(("Drawable", &DEF_12_PROPERTIES[2])),
         (452, 582) => Some(("NestedArtboard", &DEF_89_PROPERTIES[1])),
-        (452, 663) => Some(("NestedArtboardLayout", &DEF_182_PROPERTIES[0])),
-        (452, 664) => Some(("NestedArtboardLayout", &DEF_182_PROPERTIES[1])),
-        (452, 665) => Some(("NestedArtboardLayout", &DEF_182_PROPERTIES[2])),
-        (452, 666) => Some(("NestedArtboardLayout", &DEF_182_PROPERTIES[3])),
-        (452, 667) => Some(("NestedArtboardLayout", &DEF_182_PROPERTIES[4])),
-        (452, 668) => Some(("NestedArtboardLayout", &DEF_182_PROPERTIES[5])),
+        (452, 663) => Some(("NestedArtboardLayout", &DEF_183_PROPERTIES[0])),
+        (452, 664) => Some(("NestedArtboardLayout", &DEF_183_PROPERTIES[1])),
+        (452, 665) => Some(("NestedArtboardLayout", &DEF_183_PROPERTIES[2])),
+        (452, 666) => Some(("NestedArtboardLayout", &DEF_183_PROPERTIES[3])),
+        (452, 667) => Some(("NestedArtboardLayout", &DEF_183_PROPERTIES[4])),
+        (452, 668) => Some(("NestedArtboardLayout", &DEF_183_PROPERTIES[5])),
         (452, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (452, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
         (452, 808) => Some(("Node", &DEF_1_PROPERTIES[4])),
@@ -30230,74 +30691,74 @@ pub fn property_by_key_in_hierarchy(
         (452, 907) => Some(("NestedArtboard", &DEF_89_PROPERTIES[3])),
         (452, 908) => Some(("NestedArtboard", &DEF_89_PROPERTIES[4])),
         (452, 1014) => Some(("NestedArtboard", &DEF_89_PROPERTIES[5])),
-        (471, 635) => Some(("BindablePropertyString", &DEF_183_PROPERTIES[0])),
-        (472, 634) => Some(("BindablePropertyBoolean", &DEF_184_PROPERTIES[0])),
-        (473, 636) => Some(("BindablePropertyNumber", &DEF_185_PROPERTIES[0])),
-        (474, 637) => Some(("BindablePropertyEnum", &DEF_186_PROPERTIES[0])),
-        (475, 638) => Some(("BindablePropertyColor", &DEF_187_PROPERTIES[0])),
-        (481, 647) => Some(("TransitionValueBooleanComparator", &DEF_193_PROPERTIES[0])),
-        (482, 650) => Some(("TransitionViewModelCondition", &DEF_194_PROPERTIES[0])),
-        (483, 651) => Some(("TransitionValueColorComparator", &DEF_195_PROPERTIES[0])),
-        (484, 652) => Some(("TransitionValueNumberComparator", &DEF_196_PROPERTIES[0])),
-        (485, 653) => Some(("TransitionValueIdComparator", &DEF_286_PROPERTIES[0])),
-        (486, 654) => Some(("TransitionValueStringComparator", &DEF_198_PROPERTIES[0])),
-        (487, 453) => Some(("ListenerViewModelChange", &DEF_199_PROPERTIES[0])),
-        (487, 454) => Some(("ListenerViewModelChange", &DEF_199_PROPERTIES[1])),
+        (471, 635) => Some(("BindablePropertyString", &DEF_184_PROPERTIES[0])),
+        (472, 634) => Some(("BindablePropertyBoolean", &DEF_185_PROPERTIES[0])),
+        (473, 636) => Some(("BindablePropertyNumber", &DEF_186_PROPERTIES[0])),
+        (474, 637) => Some(("BindablePropertyEnum", &DEF_187_PROPERTIES[0])),
+        (475, 638) => Some(("BindablePropertyColor", &DEF_188_PROPERTIES[0])),
+        (481, 647) => Some(("TransitionValueBooleanComparator", &DEF_194_PROPERTIES[0])),
+        (482, 650) => Some(("TransitionViewModelCondition", &DEF_195_PROPERTIES[0])),
+        (483, 651) => Some(("TransitionValueColorComparator", &DEF_196_PROPERTIES[0])),
+        (484, 652) => Some(("TransitionValueNumberComparator", &DEF_197_PROPERTIES[0])),
+        (485, 653) => Some(("TransitionValueIdComparator", &DEF_287_PROPERTIES[0])),
+        (486, 654) => Some(("TransitionValueStringComparator", &DEF_199_PROPERTIES[0])),
+        (487, 453) => Some(("ListenerViewModelChange", &DEF_200_PROPERTIES[0])),
+        (487, 454) => Some(("ListenerViewModelChange", &DEF_200_PROPERTIES[1])),
         (487, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
-        (488, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (489, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (489, 669) => Some(("DataConverterRounder", &DEF_201_PROPERTIES[0])),
-        (490, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (490, 764) => Some(("DataConverterToString", &DEF_202_PROPERTIES[0])),
-        (490, 765) => Some(("DataConverterToString", &DEF_202_PROPERTIES[1])),
-        (490, 766) => Some(("DataConverterToString", &DEF_202_PROPERTIES[2])),
+        (488, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (489, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (489, 669) => Some(("DataConverterRounder", &DEF_202_PROPERTIES[0])),
+        (490, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (490, 764) => Some(("DataConverterToString", &DEF_203_PROPERTIES[0])),
+        (490, 765) => Some(("DataConverterToString", &DEF_203_PROPERTIES[1])),
+        (490, 766) => Some(("DataConverterToString", &DEF_203_PROPERTIES[2])),
         (491, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (491, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (491, 672) => Some(("NSlicerTileMode", &DEF_203_PROPERTIES[0])),
-        (491, 673) => Some(("NSlicerTileMode", &DEF_203_PROPERTIES[1])),
+        (491, 672) => Some(("NSlicerTileMode", &DEF_204_PROPERTIES[0])),
+        (491, 673) => Some(("NSlicerTileMode", &DEF_204_PROPERTIES[1])),
         (492, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (492, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (492, 675) => Some(("Axis", &DEF_204_PROPERTIES[0])),
-        (492, 676) => Some(("Axis", &DEF_204_PROPERTIES[1])),
+        (492, 675) => Some(("Axis", &DEF_205_PROPERTIES[0])),
+        (492, 676) => Some(("Axis", &DEF_205_PROPERTIES[1])),
         (493, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (493, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (494, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (494, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (494, 675) => Some(("Axis", &DEF_204_PROPERTIES[0])),
-        (494, 676) => Some(("Axis", &DEF_204_PROPERTIES[1])),
+        (494, 675) => Some(("Axis", &DEF_205_PROPERTIES[0])),
+        (494, 676) => Some(("Axis", &DEF_205_PROPERTIES[1])),
         (495, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (495, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (495, 675) => Some(("Axis", &DEF_204_PROPERTIES[0])),
-        (495, 676) => Some(("Axis", &DEF_204_PROPERTIES[1])),
+        (495, 675) => Some(("Axis", &DEF_205_PROPERTIES[0])),
+        (495, 676) => Some(("Axis", &DEF_205_PROPERTIES[1])),
         (496, 677) => Some((
             "TransitionPropertyArtboardComparator",
-            &DEF_208_PROPERTIES[0],
+            &DEF_209_PROPERTIES[0],
         )),
-        (497, 650) => Some(("TransitionViewModelCondition", &DEF_194_PROPERTIES[0])),
-        (498, 679) => Some(("DataConverterGroupItem", &DEF_210_PROPERTIES[0])),
-        (499, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (500, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (500, 681) => Some(("DataConverterOperationValue", &DEF_212_PROPERTIES[0])),
-        (500, 682) => Some(("DataConverterOperation", &DEF_228_PROPERTIES[0])),
+        (497, 650) => Some(("TransitionViewModelCondition", &DEF_195_PROPERTIES[0])),
+        (498, 679) => Some(("DataConverterGroupItem", &DEF_211_PROPERTIES[0])),
+        (499, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (500, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (500, 681) => Some(("DataConverterOperationValue", &DEF_213_PROPERTIES[0])),
+        (500, 682) => Some(("DataConverterOperation", &DEF_229_PROPERTIES[0])),
         (501, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (501, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (501, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (501, 687) => Some(("ViewModelInstanceTrigger", &DEF_213_PROPERTIES[0])),
-        (501, 1016) => Some(("ViewModelInstanceTrigger", &DEF_213_PROPERTIES[1])),
-        (502, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (502, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (502, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (503, 686) => Some(("BindablePropertyInteger", &DEF_264_PROPERTIES[0])),
-        (504, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (505, 689) => Some(("TransitionValueTriggerComparator", &DEF_217_PROPERTIES[0])),
+        (501, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (501, 687) => Some(("ViewModelInstanceTrigger", &DEF_214_PROPERTIES[0])),
+        (501, 1016) => Some(("ViewModelInstanceTrigger", &DEF_214_PROPERTIES[1])),
+        (502, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (502, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (502, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (503, 686) => Some(("BindablePropertyInteger", &DEF_265_PROPERTIES[0])),
+        (504, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (505, 689) => Some(("TransitionValueTriggerComparator", &DEF_218_PROPERTIES[0])),
         (506, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (506, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (506, 690) => Some(("DashPath", &DEF_218_PROPERTIES[0])),
-        (506, 691) => Some(("DashPath", &DEF_218_PROPERTIES[1])),
+        (506, 690) => Some(("DashPath", &DEF_219_PROPERTIES[0])),
+        (506, 691) => Some(("DashPath", &DEF_219_PROPERTIES[1])),
         (507, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (507, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (507, 692) => Some(("Dash", &DEF_219_PROPERTIES[0])),
-        (507, 693) => Some(("Dash", &DEF_219_PROPERTIES[1])),
+        (507, 692) => Some(("Dash", &DEF_220_PROPERTIES[0])),
+        (507, 693) => Some(("Dash", &DEF_220_PROPERTIES[1])),
         (508, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (508, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (508, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30308,10 +30769,10 @@ pub fn property_by_key_in_hierarchy(
         (508, 16) => Some(("TransformComponent", &DEF_35_PROPERTIES[1])),
         (508, 17) => Some(("TransformComponent", &DEF_35_PROPERTIES[2])),
         (508, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
-        (508, 697) => Some(("NSlicedNode", &DEF_220_PROPERTIES[0])),
-        (508, 698) => Some(("NSlicedNode", &DEF_220_PROPERTIES[1])),
-        (508, 699) => Some(("NSlicedNode", &DEF_220_PROPERTIES[2])),
-        (508, 700) => Some(("NSlicedNode", &DEF_220_PROPERTIES[3])),
+        (508, 697) => Some(("NSlicedNode", &DEF_221_PROPERTIES[0])),
+        (508, 698) => Some(("NSlicedNode", &DEF_221_PROPERTIES[1])),
+        (508, 699) => Some(("NSlicedNode", &DEF_221_PROPERTIES[2])),
+        (508, 700) => Some(("NSlicedNode", &DEF_221_PROPERTIES[3])),
         (508, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (508, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
         (508, 808) => Some(("Node", &DEF_1_PROPERTIES[4])),
@@ -30320,14 +30781,14 @@ pub fn property_by_key_in_hierarchy(
         (508, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
         (508, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (508, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
-        (509, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (509, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (509, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (511, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (511, 708) => Some(("ViewModelPropertyEnumSystem", &DEF_223_PROPERTIES[0])),
-        (511, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (511, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (512, 709) => Some(("DataEnumSystem", &DEF_224_PROPERTIES[0])),
+        (509, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (509, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (509, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (511, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (511, 708) => Some(("ViewModelPropertyEnumSystem", &DEF_224_PROPERTIES[0])),
+        (511, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (511, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (512, 709) => Some(("DataEnumSystem", &DEF_225_PROPERTIES[0])),
         (513, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (513, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (513, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30349,116 +30810,116 @@ pub fn property_by_key_in_hierarchy(
         (513, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
         (513, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (513, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
-        (514, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (514, 681) => Some(("DataConverterOperationValue", &DEF_212_PROPERTIES[0])),
-        (514, 682) => Some(("DataConverterOperation", &DEF_228_PROPERTIES[0])),
-        (515, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (515, 681) => Some(("DataConverterOperationValue", &DEF_212_PROPERTIES[0])),
-        (515, 682) => Some(("DataConverterOperation", &DEF_228_PROPERTIES[0])),
-        (516, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (516, 682) => Some(("DataConverterOperation", &DEF_228_PROPERTIES[0])),
-        (517, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (517, 682) => Some(("DataConverterOperation", &DEF_228_PROPERTIES[0])),
-        (517, 711) => Some(("DataConverterOperationViewModel", &DEF_229_PROPERTIES[0])),
-        (519, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (519, 713) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[0])),
-        (519, 714) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[1])),
-        (519, 715) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[2])),
-        (519, 716) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[3])),
-        (519, 717) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[4])),
-        (519, 718) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[5])),
-        (519, 719) => Some(("DataConverterRangeMapper", &DEF_230_PROPERTIES[6])),
+        (514, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (514, 681) => Some(("DataConverterOperationValue", &DEF_213_PROPERTIES[0])),
+        (514, 682) => Some(("DataConverterOperation", &DEF_229_PROPERTIES[0])),
+        (515, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (515, 681) => Some(("DataConverterOperationValue", &DEF_213_PROPERTIES[0])),
+        (515, 682) => Some(("DataConverterOperation", &DEF_229_PROPERTIES[0])),
+        (516, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (516, 682) => Some(("DataConverterOperation", &DEF_229_PROPERTIES[0])),
+        (517, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (517, 682) => Some(("DataConverterOperation", &DEF_229_PROPERTIES[0])),
+        (517, 711) => Some(("DataConverterOperationViewModel", &DEF_230_PROPERTIES[0])),
+        (519, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (519, 713) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[0])),
+        (519, 714) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[1])),
+        (519, 715) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[2])),
+        (519, 716) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[3])),
+        (519, 717) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[4])),
+        (519, 718) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[5])),
+        (519, 719) => Some(("DataConverterRangeMapper", &DEF_231_PROPERTIES[6])),
         (520, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (520, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (520, 172) => Some(("Constraint", &DEF_76_PROPERTIES[0])),
-        (520, 722) => Some(("DraggableConstraint", &DEF_231_PROPERTIES[0])),
+        (520, 722) => Some(("DraggableConstraint", &DEF_232_PROPERTIES[0])),
         (521, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (521, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (521, 172) => Some(("Constraint", &DEF_76_PROPERTIES[0])),
-        (521, 221) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[0])),
-        (521, 722) => Some(("DraggableConstraint", &DEF_231_PROPERTIES[0])),
-        (521, 724) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[1])),
-        (521, 726) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[2])),
-        (521, 727) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[3])),
-        (521, 759) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[4])),
-        (521, 760) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[5])),
-        (521, 761) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[6])),
-        (521, 762) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[7])),
-        (521, 763) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[8])),
-        (521, 850) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[9])),
-        (521, 851) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[10])),
-        (521, 891) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[11])),
-        (521, 894) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[12])),
-        (521, 1023) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[13])),
-        (521, 1024) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[14])),
-        (521, 1025) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[15])),
-        (521, 1029) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[16])),
-        (521, 1069) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[17])),
-        (521, 1070) => Some(("ScrollConstraint", &DEF_232_PROPERTIES[18])),
+        (521, 221) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[0])),
+        (521, 722) => Some(("DraggableConstraint", &DEF_232_PROPERTIES[0])),
+        (521, 724) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[1])),
+        (521, 726) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[2])),
+        (521, 727) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[3])),
+        (521, 759) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[4])),
+        (521, 760) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[5])),
+        (521, 761) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[6])),
+        (521, 762) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[7])),
+        (521, 763) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[8])),
+        (521, 850) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[9])),
+        (521, 851) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[10])),
+        (521, 891) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[11])),
+        (521, 894) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[12])),
+        (521, 1023) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[13])),
+        (521, 1024) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[14])),
+        (521, 1025) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[15])),
+        (521, 1029) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[16])),
+        (521, 1069) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[17])),
+        (521, 1070) => Some(("ScrollConstraint", &DEF_233_PROPERTIES[18])),
         (522, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (522, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (522, 172) => Some(("Constraint", &DEF_76_PROPERTIES[0])),
-        (522, 722) => Some(("DraggableConstraint", &DEF_231_PROPERTIES[0])),
-        (522, 725) => Some(("ScrollBarConstraint", &DEF_233_PROPERTIES[0])),
-        (522, 734) => Some(("ScrollBarConstraint", &DEF_233_PROPERTIES[1])),
+        (522, 722) => Some(("DraggableConstraint", &DEF_232_PROPERTIES[0])),
+        (522, 725) => Some(("ScrollBarConstraint", &DEF_234_PROPERTIES[0])),
+        (522, 734) => Some(("ScrollBarConstraint", &DEF_234_PROPERTIES[1])),
         (523, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (523, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (523, 731) => Some(("ScrollPhysics", &DEF_234_PROPERTIES[0])),
+        (523, 731) => Some(("ScrollPhysics", &DEF_235_PROPERTIES[0])),
         (524, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (524, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (524, 731) => Some(("ScrollPhysics", &DEF_234_PROPERTIES[0])),
+        (524, 731) => Some(("ScrollPhysics", &DEF_235_PROPERTIES[0])),
         (525, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (525, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (525, 728) => Some(("ElasticScrollPhysics", &DEF_236_PROPERTIES[0])),
-        (525, 729) => Some(("ElasticScrollPhysics", &DEF_236_PROPERTIES[1])),
-        (525, 730) => Some(("ElasticScrollPhysics", &DEF_236_PROPERTIES[2])),
-        (525, 731) => Some(("ScrollPhysics", &DEF_234_PROPERTIES[0])),
+        (525, 728) => Some(("ElasticScrollPhysics", &DEF_237_PROPERTIES[0])),
+        (525, 729) => Some(("ElasticScrollPhysics", &DEF_237_PROPERTIES[1])),
+        (525, 730) => Some(("ElasticScrollPhysics", &DEF_237_PROPERTIES[2])),
+        (525, 731) => Some(("ScrollPhysics", &DEF_235_PROPERTIES[0])),
         (527, 536) => Some(("LayerState", &DEF_57_PROPERTIES[0])),
         (528, 536) => Some(("LayerState", &DEF_57_PROPERTIES[0])),
         (529, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (529, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (529, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (529, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (529, 893) => Some(("ScriptAsset", &DEF_239_PROPERTIES[0])),
-        (529, 914) => Some(("ScriptAsset", &DEF_239_PROPERTIES[1])),
-        (529, 926) => Some(("TextAsset", &DEF_335_PROPERTIES[0])),
-        (529, 1022) => Some(("ScriptAsset", &DEF_239_PROPERTIES[2])),
-        (530, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (530, 743) => Some(("DataConverterStringPad", &DEF_240_PROPERTIES[0])),
-        (530, 744) => Some(("DataConverterStringPad", &DEF_240_PROPERTIES[1])),
-        (530, 745) => Some(("DataConverterStringPad", &DEF_240_PROPERTIES[2])),
-        (531, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (532, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (532, 746) => Some(("DataConverterStringTrim", &DEF_242_PROPERTIES[0])),
+        (529, 893) => Some(("ScriptAsset", &DEF_240_PROPERTIES[0])),
+        (529, 914) => Some(("ScriptAsset", &DEF_240_PROPERTIES[1])),
+        (529, 926) => Some(("TextAsset", &DEF_336_PROPERTIES[0])),
+        (529, 1022) => Some(("ScriptAsset", &DEF_240_PROPERTIES[2])),
+        (530, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (530, 743) => Some(("DataConverterStringPad", &DEF_241_PROPERTIES[0])),
+        (530, 744) => Some(("DataConverterStringPad", &DEF_241_PROPERTIES[1])),
+        (530, 745) => Some(("DataConverterStringPad", &DEF_241_PROPERTIES[2])),
+        (531, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (532, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (532, 746) => Some(("DataConverterStringTrim", &DEF_243_PROPERTIES[0])),
         (533, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (533, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (533, 748) => Some(("Feather", &DEF_243_PROPERTIES[0])),
-        (533, 749) => Some(("Feather", &DEF_243_PROPERTIES[1])),
-        (533, 750) => Some(("Feather", &DEF_243_PROPERTIES[2])),
-        (533, 751) => Some(("Feather", &DEF_243_PROPERTIES[3])),
-        (533, 752) => Some(("Feather", &DEF_243_PROPERTIES[4])),
-        (534, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (534, 756) => Some(("DataConverterInterpolator", &DEF_244_PROPERTIES[0])),
-        (534, 757) => Some(("DataConverterInterpolator", &DEF_244_PROPERTIES[1])),
-        (534, 758) => Some(("DataConverterInterpolator", &DEF_244_PROPERTIES[2])),
-        (535, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (536, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (536, 887) => Some(("DataConverterFormula", &DEF_246_PROPERTIES[0])),
-        (541, 775) => Some(("FormulaTokenOperation", &DEF_251_PROPERTIES[0])),
-        (542, 776) => Some(("FormulaTokenFunction", &DEF_252_PROPERTIES[0])),
-        (543, 777) => Some(("FormulaTokenValue", &DEF_253_PROPERTIES[0])),
+        (533, 748) => Some(("Feather", &DEF_244_PROPERTIES[0])),
+        (533, 749) => Some(("Feather", &DEF_244_PROPERTIES[1])),
+        (533, 750) => Some(("Feather", &DEF_244_PROPERTIES[2])),
+        (533, 751) => Some(("Feather", &DEF_244_PROPERTIES[3])),
+        (533, 752) => Some(("Feather", &DEF_244_PROPERTIES[4])),
+        (534, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (534, 756) => Some(("DataConverterInterpolator", &DEF_245_PROPERTIES[0])),
+        (534, 757) => Some(("DataConverterInterpolator", &DEF_245_PROPERTIES[1])),
+        (534, 758) => Some(("DataConverterInterpolator", &DEF_245_PROPERTIES[2])),
+        (535, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (536, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (536, 887) => Some(("DataConverterFormula", &DEF_247_PROPERTIES[0])),
+        (541, 775) => Some(("FormulaTokenOperation", &DEF_252_PROPERTIES[0])),
+        (542, 776) => Some(("FormulaTokenFunction", &DEF_253_PROPERTIES[0])),
+        (543, 777) => Some(("FormulaTokenValue", &DEF_254_PROPERTIES[0])),
         (546, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (546, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (546, 778) => Some(("TextTargetModifier", &DEF_256_PROPERTIES[0])),
+        (546, 778) => Some(("TextTargetModifier", &DEF_257_PROPERTIES[0])),
         (547, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (547, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (547, 778) => Some(("TextTargetModifier", &DEF_256_PROPERTIES[0])),
-        (547, 779) => Some(("TextFollowPathModifier", &DEF_257_PROPERTIES[0])),
-        (547, 782) => Some(("TextFollowPathModifier", &DEF_257_PROPERTIES[1])),
-        (547, 783) => Some(("TextFollowPathModifier", &DEF_257_PROPERTIES[2])),
-        (547, 784) => Some(("TextFollowPathModifier", &DEF_257_PROPERTIES[3])),
-        (547, 785) => Some(("TextFollowPathModifier", &DEF_257_PROPERTIES[4])),
-        (547, 786) => Some(("TextFollowPathModifier", &DEF_257_PROPERTIES[5])),
+        (547, 778) => Some(("TextTargetModifier", &DEF_257_PROPERTIES[0])),
+        (547, 779) => Some(("TextFollowPathModifier", &DEF_258_PROPERTIES[0])),
+        (547, 782) => Some(("TextFollowPathModifier", &DEF_258_PROPERTIES[1])),
+        (547, 783) => Some(("TextFollowPathModifier", &DEF_258_PROPERTIES[2])),
+        (547, 784) => Some(("TextFollowPathModifier", &DEF_258_PROPERTIES[3])),
+        (547, 785) => Some(("TextFollowPathModifier", &DEF_258_PROPERTIES[4])),
+        (547, 786) => Some(("TextFollowPathModifier", &DEF_258_PROPERTIES[5])),
         (548, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (548, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (559, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
@@ -30474,7 +30935,7 @@ pub fn property_by_key_in_hierarchy(
         (559, 23) => Some(("Drawable", &DEF_12_PROPERTIES[0])),
         (559, 129) => Some(("Drawable", &DEF_12_PROPERTIES[1])),
         (559, 450) => Some(("Drawable", &DEF_12_PROPERTIES[2])),
-        (559, 800) => Some(("ArtboardComponentList", &DEF_259_PROPERTIES[0])),
+        (559, 800) => Some(("ArtboardComponentList", &DEF_260_PROPERTIES[0])),
         (559, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (559, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
         (559, 808) => Some(("Node", &DEF_1_PROPERTIES[4])),
@@ -30483,22 +30944,22 @@ pub fn property_by_key_in_hierarchy(
         (559, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
         (559, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (559, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
-        (563, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (563, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (563, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (564, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (564, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (564, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (563, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (563, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (563, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (564, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (564, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (564, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (565, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (565, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (565, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
+        (565, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
         (566, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (566, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (566, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (566, 814) => Some(("ViewModelInstanceSymbolListIndex", &DEF_263_PROPERTIES[0])),
-        (567, 686) => Some(("BindablePropertyInteger", &DEF_264_PROPERTIES[0])),
-        (568, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (568, 816) => Some(("DataConverterNumberToList", &DEF_265_PROPERTIES[0])),
+        (566, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (566, 814) => Some(("ViewModelInstanceSymbolListIndex", &DEF_264_PROPERTIES[0])),
+        (567, 686) => Some(("BindablePropertyInteger", &DEF_265_PROPERTIES[0])),
+        (568, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (568, 816) => Some(("DataConverterNumberToList", &DEF_266_PROPERTIES[0])),
         (569, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (569, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (569, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30511,7 +30972,7 @@ pub fn property_by_key_in_hierarchy(
         (569, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
         (569, 23) => Some(("Drawable", &DEF_12_PROPERTIES[0])),
         (569, 129) => Some(("Drawable", &DEF_12_PROPERTIES[1])),
-        (569, 222) => Some(("TextInput", &DEF_266_PROPERTIES[0])),
+        (569, 222) => Some(("TextInput", &DEF_267_PROPERTIES[0])),
         (569, 450) => Some(("Drawable", &DEF_12_PROPERTIES[2])),
         (569, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
         (569, 807) => Some(("Node", &DEF_1_PROPERTIES[3])),
@@ -30519,14 +30980,14 @@ pub fn property_by_key_in_hierarchy(
         (569, 809) => Some(("Node", &DEF_1_PROPERTIES[5])),
         (569, 810) => Some(("Node", &DEF_1_PROPERTIES[6])),
         (569, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
-        (569, 817) => Some(("TextInput", &DEF_266_PROPERTIES[1])),
-        (569, 818) => Some(("TextInput", &DEF_266_PROPERTIES[2])),
+        (569, 817) => Some(("TextInput", &DEF_267_PROPERTIES[1])),
+        (569, 818) => Some(("TextInput", &DEF_267_PROPERTIES[2])),
         (569, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (569, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
-        (569, 979) => Some(("TextInput", &DEF_266_PROPERTIES[3])),
-        (569, 1094) => Some(("TextInput", &DEF_266_PROPERTIES[4])),
-        (569, 1095) => Some(("TextInput", &DEF_266_PROPERTIES[5])),
-        (569, 1099) => Some(("TextInput", &DEF_266_PROPERTIES[6])),
+        (569, 979) => Some(("TextInput", &DEF_267_PROPERTIES[3])),
+        (569, 1094) => Some(("TextInput", &DEF_267_PROPERTIES[4])),
+        (569, 1095) => Some(("TextInput", &DEF_267_PROPERTIES[5])),
+        (569, 1099) => Some(("TextInput", &DEF_267_PROPERTIES[6])),
         (570, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (570, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (570, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30592,10 +31053,10 @@ pub fn property_by_key_in_hierarchy(
         (572, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
         (573, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (573, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (573, 274) => Some(("TextStyle", &DEF_270_PROPERTIES[0])),
-        (573, 279) => Some(("TextStyle", &DEF_270_PROPERTIES[1])),
-        (573, 370) => Some(("TextStyle", &DEF_270_PROPERTIES[2])),
-        (573, 390) => Some(("TextStyle", &DEF_270_PROPERTIES[3])),
+        (573, 274) => Some(("TextStyle", &DEF_271_PROPERTIES[0])),
+        (573, 279) => Some(("TextStyle", &DEF_271_PROPERTIES[1])),
+        (573, 370) => Some(("TextStyle", &DEF_271_PROPERTIES[2])),
+        (573, 390) => Some(("TextStyle", &DEF_271_PROPERTIES[3])),
         (574, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (574, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (574, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30638,38 +31099,38 @@ pub fn property_by_key_in_hierarchy(
         (575, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
         (575, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (575, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
-        (584, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (584, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (584, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
-        (585, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (585, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (585, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (584, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (584, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (584, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
+        (585, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (585, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (585, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (586, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (586, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (586, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (586, 824) => Some(("ViewModelInstanceAsset", &DEF_275_PROPERTIES[0])),
+        (586, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (586, 824) => Some(("ViewModelInstanceAsset", &DEF_276_PROPERTIES[0])),
         (587, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (587, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (587, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (587, 824) => Some(("ViewModelInstanceAsset", &DEF_275_PROPERTIES[0])),
-        (588, 823) => Some(("BindablePropertyId", &DEF_282_PROPERTIES[0])),
-        (590, 835) => Some(("BindablePropertyList", &DEF_278_PROPERTIES[0])),
-        (591, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
+        (587, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (587, 824) => Some(("ViewModelInstanceAsset", &DEF_276_PROPERTIES[0])),
+        (588, 823) => Some(("BindablePropertyId", &DEF_283_PROPERTIES[0])),
+        (590, 835) => Some(("BindablePropertyList", &DEF_279_PROPERTIES[0])),
+        (591, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
         (592, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (592, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (592, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (592, 836) => Some(("CustomPropertyColor", &DEF_280_PROPERTIES[0])),
-        (596, 823) => Some(("BindablePropertyId", &DEF_282_PROPERTIES[0])),
-        (597, 823) => Some(("BindablePropertyId", &DEF_282_PROPERTIES[0])),
-        (598, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (598, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (598, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (592, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (592, 836) => Some(("CustomPropertyColor", &DEF_281_PROPERTIES[0])),
+        (596, 823) => Some(("BindablePropertyId", &DEF_283_PROPERTIES[0])),
+        (597, 823) => Some(("BindablePropertyId", &DEF_283_PROPERTIES[0])),
+        (598, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (598, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (598, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (599, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (599, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (599, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (599, 846) => Some(("ViewModelInstanceArtboard", &DEF_285_PROPERTIES[0])),
-        (601, 653) => Some(("TransitionValueIdComparator", &DEF_286_PROPERTIES[0])),
-        (602, 653) => Some(("TransitionValueIdComparator", &DEF_286_PROPERTIES[0])),
+        (599, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (599, 846) => Some(("ViewModelInstanceArtboard", &DEF_286_PROPERTIES[0])),
+        (601, 653) => Some(("TransitionValueIdComparator", &DEF_287_PROPERTIES[0])),
+        (602, 653) => Some(("TransitionValueIdComparator", &DEF_287_PROPERTIES[0])),
         (603, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (603, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (603, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30689,45 +31150,45 @@ pub fn property_by_key_in_hierarchy(
         (603, 809) => Some(("Node", &DEF_1_PROPERTIES[5])),
         (603, 810) => Some(("Node", &DEF_1_PROPERTIES[6])),
         (603, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
-        (603, 848) => Some(("ScriptedDrawable", &DEF_288_PROPERTIES[0])),
+        (603, 848) => Some(("ScriptedDrawable", &DEF_289_PROPERTIES[0])),
         (603, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (603, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
         (606, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (606, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (606, 856) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[0])),
-        (606, 858) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[1])),
-        (606, 859) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[2])),
-        (606, 860) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[3])),
-        (606, 861) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[4])),
-        (606, 862) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[5])),
-        (606, 863) => Some(("ArtboardComponentListOverride", &DEF_289_PROPERTIES[6])),
+        (606, 856) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[0])),
+        (606, 858) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[1])),
+        (606, 859) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[2])),
+        (606, 860) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[3])),
+        (606, 861) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[4])),
+        (606, 862) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[5])),
+        (606, 863) => Some(("ArtboardComponentListOverride", &DEF_290_PROPERTIES[6])),
         (611, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (611, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (611, 243) => Some(("CustomPropertyNumber", &DEF_118_PROPERTIES[0])),
-        (611, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
+        (611, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
         (612, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (612, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (612, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (612, 866) => Some(("ScriptInputViewModelProperty", &DEF_291_PROPERTIES[0])),
+        (612, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (612, 866) => Some(("ScriptInputViewModelProperty", &DEF_292_PROPERTIES[0])),
         (613, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (613, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (613, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (613, 869) => Some(("CustomPropertyTrigger", &DEF_292_PROPERTIES[0])),
-        (613, 870) => Some(("CustomPropertyTrigger", &DEF_292_PROPERTIES[1])),
-        (614, 393) => Some(("StateMachineFireAction", &DEF_294_PROPERTIES[0])),
-        (614, 871) => Some(("StateMachineFireTrigger", &DEF_293_PROPERTIES[0])),
-        (615, 393) => Some(("StateMachineFireAction", &DEF_294_PROPERTIES[0])),
+        (613, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (613, 869) => Some(("CustomPropertyTrigger", &DEF_293_PROPERTIES[0])),
+        (613, 870) => Some(("CustomPropertyTrigger", &DEF_293_PROPERTIES[1])),
+        (614, 393) => Some(("StateMachineFireAction", &DEF_295_PROPERTIES[0])),
+        (614, 871) => Some(("StateMachineFireTrigger", &DEF_294_PROPERTIES[0])),
+        (615, 393) => Some(("StateMachineFireAction", &DEF_295_PROPERTIES[0])),
         (616, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (616, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (616, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (616, 872) => Some(("CustomPropertyEnum", &DEF_295_PROPERTIES[0])),
-        (616, 873) => Some(("CustomPropertyEnum", &DEF_295_PROPERTIES[1])),
-        (617, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
+        (616, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (616, 872) => Some(("CustomPropertyEnum", &DEF_296_PROPERTIES[0])),
+        (616, 873) => Some(("CustomPropertyEnum", &DEF_296_PROPERTIES[1])),
+        (617, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
         (618, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (618, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (618, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (618, 869) => Some(("CustomPropertyTrigger", &DEF_292_PROPERTIES[0])),
-        (618, 870) => Some(("CustomPropertyTrigger", &DEF_292_PROPERTIES[1])),
+        (618, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (618, 869) => Some(("CustomPropertyTrigger", &DEF_293_PROPERTIES[0])),
+        (618, 870) => Some(("CustomPropertyTrigger", &DEF_293_PROPERTIES[1])),
         (619, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (619, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (619, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30738,7 +31199,7 @@ pub fn property_by_key_in_hierarchy(
         (619, 16) => Some(("TransformComponent", &DEF_35_PROPERTIES[1])),
         (619, 17) => Some(("TransformComponent", &DEF_35_PROPERTIES[2])),
         (619, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
-        (619, 32) => Some(("PointsCommonPath", &DEF_299_PROPERTIES[0])),
+        (619, 32) => Some(("PointsCommonPath", &DEF_300_PROPERTIES[0])),
         (619, 128) => Some(("Path", &DEF_11_PROPERTIES[0])),
         (619, 770) => Some(("Path", &DEF_11_PROPERTIES[1])),
         (619, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
@@ -30749,7 +31210,7 @@ pub fn property_by_key_in_hierarchy(
         (619, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
         (619, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (619, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
-        (619, 874) => Some(("ListPath", &DEF_298_PROPERTIES[0])),
+        (619, 874) => Some(("ListPath", &DEF_299_PROPERTIES[0])),
         (620, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (620, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (620, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30760,7 +31221,7 @@ pub fn property_by_key_in_hierarchy(
         (620, 16) => Some(("TransformComponent", &DEF_35_PROPERTIES[1])),
         (620, 17) => Some(("TransformComponent", &DEF_35_PROPERTIES[2])),
         (620, 18) => Some(("WorldTransformComponent", &DEF_88_PROPERTIES[0])),
-        (620, 32) => Some(("PointsCommonPath", &DEF_299_PROPERTIES[0])),
+        (620, 32) => Some(("PointsCommonPath", &DEF_300_PROPERTIES[0])),
         (620, 128) => Some(("Path", &DEF_11_PROPERTIES[0])),
         (620, 770) => Some(("Path", &DEF_11_PROPERTIES[1])),
         (620, 806) => Some(("Node", &DEF_1_PROPERTIES[2])),
@@ -30773,34 +31234,34 @@ pub fn property_by_key_in_hierarchy(
         (620, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
         (621, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (621, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (621, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (621, 876) => Some(("ScriptInputArtboard", &DEF_300_PROPERTIES[0])),
+        (621, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (621, 876) => Some(("ScriptInputArtboard", &DEF_301_PROPERTIES[0])),
         (625, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (625, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (625, 172) => Some(("Constraint", &DEF_76_PROPERTIES[0])),
         (625, 173) => Some(("TargetedConstraint", &DEF_77_PROPERTIES[0])),
         (625, 179) => Some(("TransformSpaceConstraint", &DEF_87_PROPERTIES[0])),
         (625, 180) => Some(("TransformSpaceConstraint", &DEF_87_PROPERTIES[1])),
-        (625, 363) => Some(("FollowPathConstraint", &DEF_143_PROPERTIES[0])),
-        (625, 364) => Some(("FollowPathConstraint", &DEF_143_PROPERTIES[1])),
-        (625, 365) => Some(("FollowPathConstraint", &DEF_143_PROPERTIES[2])),
-        (625, 888) => Some(("ListFollowPathConstraint", &DEF_301_PROPERTIES[0])),
-        (625, 889) => Some(("ListFollowPathConstraint", &DEF_301_PROPERTIES[1])),
+        (625, 363) => Some(("FollowPathConstraint", &DEF_144_PROPERTIES[0])),
+        (625, 364) => Some(("FollowPathConstraint", &DEF_144_PROPERTIES[1])),
+        (625, 365) => Some(("FollowPathConstraint", &DEF_144_PROPERTIES[2])),
+        (625, 888) => Some(("ListFollowPathConstraint", &DEF_302_PROPERTIES[0])),
+        (625, 889) => Some(("ListFollowPathConstraint", &DEF_302_PROPERTIES[1])),
         (626, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (626, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (626, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (626, 836) => Some(("CustomPropertyColor", &DEF_280_PROPERTIES[0])),
+        (626, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (626, 836) => Some(("CustomPropertyColor", &DEF_281_PROPERTIES[0])),
         (627, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (627, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (627, 246) => Some(("CustomPropertyString", &DEF_121_PROPERTIES[0])),
-        (627, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
-        (629, 662) => Some(("DataConverter", &DEF_200_PROPERTIES[0])),
-        (629, 892) => Some(("ScriptedDataConverter", &DEF_304_PROPERTIES[0])),
-        (630, 653) => Some(("TransitionValueIdComparator", &DEF_286_PROPERTIES[0])),
+        (627, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
+        (629, 662) => Some(("DataConverter", &DEF_201_PROPERTIES[0])),
+        (629, 892) => Some(("ScriptedDataConverter", &DEF_305_PROPERTIES[0])),
+        (630, 653) => Some(("TransitionValueIdComparator", &DEF_287_PROPERTIES[0])),
         (631, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (631, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (631, 245) => Some(("CustomPropertyBoolean", &DEF_120_PROPERTIES[0])),
-        (631, 449) => Some(("CustomProperty", &DEF_144_PROPERTIES[0])),
+        (631, 449) => Some(("CustomProperty", &DEF_145_PROPERTIES[0])),
         (637, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (637, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (637, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -30820,227 +31281,227 @@ pub fn property_by_key_in_hierarchy(
         (637, 809) => Some(("Node", &DEF_1_PROPERTIES[5])),
         (637, 810) => Some(("Node", &DEF_1_PROPERTIES[6])),
         (637, 811) => Some(("Node", &DEF_1_PROPERTIES[7])),
-        (637, 848) => Some(("ScriptedDrawable", &DEF_288_PROPERTIES[0])),
+        (637, 848) => Some(("ScriptedDrawable", &DEF_289_PROPERTIES[0])),
         (637, 864) => Some(("Node", &DEF_1_PROPERTIES[8])),
         (637, 865) => Some(("Node", &DEF_1_PROPERTIES[9])),
         (640, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (640, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (640, 912) => Some(("ScriptedPathEffect", &DEF_308_PROPERTIES[0])),
+        (640, 912) => Some(("ScriptedPathEffect", &DEF_309_PROPERTIES[0])),
         (642, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (642, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (642, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (642, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (643, 920) => Some(("DataBindPath", &DEF_310_PROPERTIES[0])),
-        (643, 921) => Some(("DataBindPath", &DEF_310_PROPERTIES[1])),
+        (643, 920) => Some(("DataBindPath", &DEF_311_PROPERTIES[0])),
+        (643, 921) => Some(("DataBindPath", &DEF_311_PROPERTIES[1])),
         (644, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (644, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (644, 922) => Some(("TargetEffect", &DEF_311_PROPERTIES[0])),
+        (644, 922) => Some(("TargetEffect", &DEF_312_PROPERTIES[0])),
         (645, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (645, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (646, 930) => Some(("ScriptedListenerAction", &DEF_313_PROPERTIES[0])),
+        (646, 930) => Some(("ScriptedListenerAction", &DEF_314_PROPERTIES[0])),
         (646, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
-        (647, 931) => Some(("ScriptedTransitionCondition", &DEF_314_PROPERTIES[0])),
+        (647, 931) => Some(("ScriptedTransitionCondition", &DEF_315_PROPERTIES[0])),
         (648, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (648, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (648, 934) => Some(("ArtboardListMapRule", &DEF_315_PROPERTIES[0])),
-        (648, 935) => Some(("ArtboardListMapRule", &DEF_315_PROPERTIES[1])),
+        (648, 934) => Some(("ArtboardListMapRule", &DEF_316_PROPERTIES[0])),
+        (648, 935) => Some(("ArtboardListMapRule", &DEF_316_PROPERTIES[1])),
         (649, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (649, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (649, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (649, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (652, 952) => Some(("FocusActionTarget", &DEF_317_PROPERTIES[0])),
+        (652, 952) => Some(("FocusActionTarget", &DEF_318_PROPERTIES[0])),
         (652, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
         (653, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (653, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (653, 953) => Some(("FocusData", &DEF_318_PROPERTIES[0])),
-        (653, 954) => Some(("FocusData", &DEF_318_PROPERTIES[1])),
-        (653, 955) => Some(("FocusData", &DEF_318_PROPERTIES[2])),
-        (653, 956) => Some(("FocusData", &DEF_318_PROPERTIES[3])),
-        (653, 1033) => Some(("FocusData", &DEF_318_PROPERTIES[4])),
+        (653, 953) => Some(("FocusData", &DEF_319_PROPERTIES[0])),
+        (653, 954) => Some(("FocusData", &DEF_319_PROPERTIES[1])),
+        (653, 955) => Some(("FocusData", &DEF_319_PROPERTIES[2])),
+        (653, 956) => Some(("FocusData", &DEF_319_PROPERTIES[3])),
+        (653, 1033) => Some(("FocusData", &DEF_319_PROPERTIES[4])),
         (654, 138) => Some(("StateMachineComponent", &DEF_51_PROPERTIES[0])),
-        (654, 224) => Some(("StateMachineListener", &DEF_319_PROPERTIES[0])),
-        (658, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
-        (659, 962) => Some(("ListenerInputTypeEvent", &DEF_321_PROPERTIES[0])),
-        (659, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
-        (660, 963) => Some(("ListenerInputTypeViewModel", &DEF_322_PROPERTIES[0])),
-        (660, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
-        (662, 823) => Some(("BindablePropertyId", &DEF_282_PROPERTIES[0])),
-        (664, 971) => Some(("KeyboardInput", &DEF_325_PROPERTIES[0])),
-        (664, 972) => Some(("KeyboardInput", &DEF_325_PROPERTIES[1])),
-        (664, 973) => Some(("KeyboardInput", &DEF_325_PROPERTIES[2])),
-        (665, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
-        (666, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
+        (654, 224) => Some(("StateMachineListener", &DEF_320_PROPERTIES[0])),
+        (658, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
+        (659, 962) => Some(("ListenerInputTypeEvent", &DEF_322_PROPERTIES[0])),
+        (659, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
+        (660, 963) => Some(("ListenerInputTypeViewModel", &DEF_323_PROPERTIES[0])),
+        (660, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
+        (662, 823) => Some(("BindablePropertyId", &DEF_283_PROPERTIES[0])),
+        (664, 971) => Some(("KeyboardInput", &DEF_326_PROPERTIES[0])),
+        (664, 972) => Some(("KeyboardInput", &DEF_326_PROPERTIES[1])),
+        (664, 973) => Some(("KeyboardInput", &DEF_326_PROPERTIES[2])),
+        (665, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
+        (666, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
         (667, 977) => Some((
             "TransitionPropertyComponentComparator",
-            &DEF_328_PROPERTIES[0],
+            &DEF_329_PROPERTIES[0],
         )),
         (667, 978) => Some((
             "TransitionPropertyComponentComparator",
-            &DEF_328_PROPERTIES[1],
+            &DEF_329_PROPERTIES[1],
         )),
         (668, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (668, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (668, 982) => Some(("SemanticData", &DEF_329_PROPERTIES[0])),
-        (668, 983) => Some(("SemanticData", &DEF_329_PROPERTIES[1])),
-        (668, 984) => Some(("SemanticData", &DEF_329_PROPERTIES[2])),
-        (668, 985) => Some(("SemanticData", &DEF_329_PROPERTIES[3])),
-        (668, 986) => Some(("SemanticData", &DEF_329_PROPERTIES[4])),
-        (668, 987) => Some(("SemanticData", &DEF_329_PROPERTIES[5])),
-        (668, 988) => Some(("SemanticData", &DEF_329_PROPERTIES[6])),
-        (668, 989) => Some(("SemanticData", &DEF_329_PROPERTIES[7])),
-        (668, 990) => Some(("SemanticData", &DEF_329_PROPERTIES[8])),
-        (668, 991) => Some(("SemanticData", &DEF_329_PROPERTIES[9])),
-        (668, 992) => Some(("SemanticData", &DEF_329_PROPERTIES[10])),
-        (668, 993) => Some(("SemanticData", &DEF_329_PROPERTIES[11])),
-        (668, 994) => Some(("SemanticData", &DEF_329_PROPERTIES[12])),
-        (668, 995) => Some(("SemanticData", &DEF_329_PROPERTIES[13])),
-        (668, 996) => Some(("SemanticData", &DEF_329_PROPERTIES[14])),
-        (668, 997) => Some(("SemanticData", &DEF_329_PROPERTIES[15])),
-        (668, 998) => Some(("SemanticData", &DEF_329_PROPERTIES[16])),
-        (668, 1000) => Some(("SemanticData", &DEF_329_PROPERTIES[17])),
-        (668, 1001) => Some(("SemanticData", &DEF_329_PROPERTIES[18])),
-        (668, 1002) => Some(("SemanticData", &DEF_329_PROPERTIES[19])),
-        (668, 1003) => Some(("SemanticData", &DEF_329_PROPERTIES[20])),
-        (668, 1004) => Some(("SemanticData", &DEF_329_PROPERTIES[21])),
-        (668, 1005) => Some(("SemanticData", &DEF_329_PROPERTIES[22])),
-        (668, 1006) => Some(("SemanticData", &DEF_329_PROPERTIES[23])),
-        (668, 1007) => Some(("SemanticData", &DEF_329_PROPERTIES[24])),
-        (668, 1008) => Some(("SemanticData", &DEF_329_PROPERTIES[25])),
-        (668, 1009) => Some(("SemanticData", &DEF_329_PROPERTIES[26])),
-        (669, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
-        (670, 1010) => Some(("SemanticInput", &DEF_331_PROPERTIES[0])),
+        (668, 982) => Some(("SemanticData", &DEF_330_PROPERTIES[0])),
+        (668, 983) => Some(("SemanticData", &DEF_330_PROPERTIES[1])),
+        (668, 984) => Some(("SemanticData", &DEF_330_PROPERTIES[2])),
+        (668, 985) => Some(("SemanticData", &DEF_330_PROPERTIES[3])),
+        (668, 986) => Some(("SemanticData", &DEF_330_PROPERTIES[4])),
+        (668, 987) => Some(("SemanticData", &DEF_330_PROPERTIES[5])),
+        (668, 988) => Some(("SemanticData", &DEF_330_PROPERTIES[6])),
+        (668, 989) => Some(("SemanticData", &DEF_330_PROPERTIES[7])),
+        (668, 990) => Some(("SemanticData", &DEF_330_PROPERTIES[8])),
+        (668, 991) => Some(("SemanticData", &DEF_330_PROPERTIES[9])),
+        (668, 992) => Some(("SemanticData", &DEF_330_PROPERTIES[10])),
+        (668, 993) => Some(("SemanticData", &DEF_330_PROPERTIES[11])),
+        (668, 994) => Some(("SemanticData", &DEF_330_PROPERTIES[12])),
+        (668, 995) => Some(("SemanticData", &DEF_330_PROPERTIES[13])),
+        (668, 996) => Some(("SemanticData", &DEF_330_PROPERTIES[14])),
+        (668, 997) => Some(("SemanticData", &DEF_330_PROPERTIES[15])),
+        (668, 998) => Some(("SemanticData", &DEF_330_PROPERTIES[16])),
+        (668, 1000) => Some(("SemanticData", &DEF_330_PROPERTIES[17])),
+        (668, 1001) => Some(("SemanticData", &DEF_330_PROPERTIES[18])),
+        (668, 1002) => Some(("SemanticData", &DEF_330_PROPERTIES[19])),
+        (668, 1003) => Some(("SemanticData", &DEF_330_PROPERTIES[20])),
+        (668, 1004) => Some(("SemanticData", &DEF_330_PROPERTIES[21])),
+        (668, 1005) => Some(("SemanticData", &DEF_330_PROPERTIES[22])),
+        (668, 1006) => Some(("SemanticData", &DEF_330_PROPERTIES[23])),
+        (668, 1007) => Some(("SemanticData", &DEF_330_PROPERTIES[24])),
+        (668, 1008) => Some(("SemanticData", &DEF_330_PROPERTIES[25])),
+        (668, 1009) => Some(("SemanticData", &DEF_330_PROPERTIES[26])),
+        (669, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
+        (670, 1010) => Some(("SemanticInput", &DEF_332_PROPERTIES[0])),
         (671, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
         (672, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
-        (672, 1011) => Some(("FocusActionTraversal", &DEF_333_PROPERTIES[0])),
+        (672, 1011) => Some(("FocusActionTraversal", &DEF_334_PROPERTIES[0])),
         (970, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (970, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (970, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (970, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (970, 926) => Some(("TextAsset", &DEF_335_PROPERTIES[0])),
+        (970, 926) => Some(("TextAsset", &DEF_336_PROPERTIES[0])),
         (971, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (971, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (971, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (971, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (971, 926) => Some(("TextAsset", &DEF_335_PROPERTIES[0])),
-        (972, 1015) => Some(("ScriptedInterpolator", &DEF_336_PROPERTIES[0])),
-        (973, 965) => Some(("ListenerInputType", &DEF_320_PROPERTIES[0])),
-        (974, 1018) => Some(("GamepadInput", &DEF_338_PROPERTIES[0])),
-        (974, 1019) => Some(("GamepadInput", &DEF_338_PROPERTIES[1])),
-        (974, 1020) => Some(("GamepadInput", &DEF_338_PROPERTIES[2])),
-        (974, 1021) => Some(("GamepadInput", &DEF_338_PROPERTIES[3])),
-        (1034, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (1034, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (1034, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (971, 926) => Some(("TextAsset", &DEF_336_PROPERTIES[0])),
+        (972, 1015) => Some(("ScriptedInterpolator", &DEF_337_PROPERTIES[0])),
+        (973, 965) => Some(("ListenerInputType", &DEF_321_PROPERTIES[0])),
+        (974, 1018) => Some(("GamepadInput", &DEF_339_PROPERTIES[0])),
+        (974, 1019) => Some(("GamepadInput", &DEF_339_PROPERTIES[1])),
+        (974, 1020) => Some(("GamepadInput", &DEF_339_PROPERTIES[2])),
+        (974, 1021) => Some(("GamepadInput", &DEF_339_PROPERTIES[3])),
+        (1034, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (1034, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (1034, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (1035, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1035, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1035, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (1035, 824) => Some(("ViewModelInstanceAsset", &DEF_275_PROPERTIES[0])),
+        (1035, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (1035, 824) => Some(("ViewModelInstanceAsset", &DEF_276_PROPERTIES[0])),
         (1037, 980) => Some(("ListenerAction", &DEF_116_PROPERTIES[0])),
-        (1038, 650) => Some(("TransitionViewModelCondition", &DEF_194_PROPERTIES[0])),
+        (1038, 650) => Some(("TransitionViewModelCondition", &DEF_195_PROPERTIES[0])),
         (1039, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1039, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1039, 1040) => Some(("ComponentOrigin", &DEF_343_PROPERTIES[0])),
-        (1039, 1041) => Some(("ComponentOrigin", &DEF_343_PROPERTIES[1])),
-        (1043, 557) => Some(("ViewModelComponent", &DEF_159_PROPERTIES[0])),
-        (1043, 875) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[0])),
-        (1043, 957) => Some(("ViewModelProperty", &DEF_160_PROPERTIES[1])),
+        (1039, 1040) => Some(("ComponentOrigin", &DEF_344_PROPERTIES[0])),
+        (1039, 1041) => Some(("ComponentOrigin", &DEF_344_PROPERTIES[1])),
+        (1043, 557) => Some(("ViewModelComponent", &DEF_160_PROPERTIES[0])),
+        (1043, 875) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[0])),
+        (1043, 957) => Some(("ViewModelProperty", &DEF_161_PROPERTIES[1])),
         (1044, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1044, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1044, 554) => Some(("ViewModelInstanceValue", &DEF_158_PROPERTIES[0])),
-        (1044, 824) => Some(("ViewModelInstanceAsset", &DEF_275_PROPERTIES[0])),
+        (1044, 554) => Some(("ViewModelInstanceValue", &DEF_159_PROPERTIES[0])),
+        (1044, 824) => Some(("ViewModelInstanceAsset", &DEF_276_PROPERTIES[0])),
         (1056, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1056, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1056, 451) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[0])),
-        (1056, 500) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[1])),
-        (1056, 501) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[2])),
-        (1056, 502) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[3])),
-        (1056, 503) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[4])),
-        (1056, 596) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[5])),
-        (1056, 607) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[6])),
-        (1056, 608) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[7])),
-        (1056, 627) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[8])),
-        (1056, 628) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[9])),
-        (1056, 629) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[10])),
-        (1056, 630) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[11])),
-        (1056, 655) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[12])),
-        (1056, 656) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[13])),
-        (1056, 1046) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[14])),
+        (1056, 451) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[0])),
+        (1056, 500) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[1])),
+        (1056, 501) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[2])),
+        (1056, 502) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[3])),
+        (1056, 503) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[4])),
+        (1056, 596) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[5])),
+        (1056, 607) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[6])),
+        (1056, 608) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[7])),
+        (1056, 627) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[8])),
+        (1056, 628) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[9])),
+        (1056, 629) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[10])),
+        (1056, 630) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[11])),
+        (1056, 655) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[12])),
+        (1056, 656) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[13])),
+        (1056, 1046) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[14])),
         (1057, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1057, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1057, 451) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[0])),
-        (1057, 500) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[1])),
-        (1057, 501) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[2])),
-        (1057, 502) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[3])),
-        (1057, 503) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[4])),
-        (1057, 596) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[5])),
-        (1057, 607) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[6])),
-        (1057, 608) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[7])),
-        (1057, 627) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[8])),
-        (1057, 628) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[9])),
-        (1057, 629) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[10])),
-        (1057, 630) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[11])),
-        (1057, 655) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[12])),
-        (1057, 656) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[13])),
-        (1057, 1046) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[14])),
-        (1057, 1057) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[0])),
-        (1057, 1058) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[1])),
-        (1057, 1066) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[2])),
-        (1057, 1067) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[3])),
+        (1057, 451) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[0])),
+        (1057, 500) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[1])),
+        (1057, 501) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[2])),
+        (1057, 502) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[3])),
+        (1057, 503) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[4])),
+        (1057, 596) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[5])),
+        (1057, 607) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[6])),
+        (1057, 608) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[7])),
+        (1057, 627) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[8])),
+        (1057, 628) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[9])),
+        (1057, 629) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[10])),
+        (1057, 630) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[11])),
+        (1057, 655) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[12])),
+        (1057, 656) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[13])),
+        (1057, 1046) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[14])),
+        (1057, 1057) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[0])),
+        (1057, 1058) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[1])),
+        (1057, 1066) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[2])),
+        (1057, 1067) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[3])),
         (1058, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1058, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1058, 1061) => Some(("GridTrack", &DEF_348_PROPERTIES[0])),
-        (1058, 1062) => Some(("GridTrack", &DEF_348_PROPERTIES[1])),
-        (1058, 1063) => Some(("GridTrack", &DEF_348_PROPERTIES[2])),
-        (1058, 1064) => Some(("GridTrack", &DEF_348_PROPERTIES[3])),
-        (1058, 1065) => Some(("GridTrack", &DEF_348_PROPERTIES[4])),
+        (1058, 1061) => Some(("GridTrack", &DEF_349_PROPERTIES[0])),
+        (1058, 1062) => Some(("GridTrack", &DEF_349_PROPERTIES[1])),
+        (1058, 1063) => Some(("GridTrack", &DEF_349_PROPERTIES[2])),
+        (1058, 1064) => Some(("GridTrack", &DEF_349_PROPERTIES[3])),
+        (1058, 1065) => Some(("GridTrack", &DEF_349_PROPERTIES[4])),
         (1066, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1066, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1066, 451) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[0])),
-        (1066, 500) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[1])),
-        (1066, 501) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[2])),
-        (1066, 502) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[3])),
-        (1066, 503) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[4])),
-        (1066, 596) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[5])),
-        (1066, 607) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[6])),
-        (1066, 608) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[7])),
-        (1066, 627) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[8])),
-        (1066, 628) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[9])),
-        (1066, 629) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[10])),
-        (1066, 630) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[11])),
-        (1066, 655) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[12])),
-        (1066, 656) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[13])),
-        (1066, 1046) => Some(("LayoutSizingStyle", &DEF_346_PROPERTIES[14])),
-        (1066, 1057) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[0])),
-        (1066, 1058) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[1])),
-        (1066, 1066) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[2])),
-        (1066, 1067) => Some(("LayoutNodeStyle", &DEF_347_PROPERTIES[3])),
+        (1066, 451) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[0])),
+        (1066, 500) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[1])),
+        (1066, 501) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[2])),
+        (1066, 502) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[3])),
+        (1066, 503) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[4])),
+        (1066, 596) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[5])),
+        (1066, 607) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[6])),
+        (1066, 608) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[7])),
+        (1066, 627) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[8])),
+        (1066, 628) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[9])),
+        (1066, 629) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[10])),
+        (1066, 630) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[11])),
+        (1066, 655) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[12])),
+        (1066, 656) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[13])),
+        (1066, 1046) => Some(("LayoutSizingStyle", &DEF_347_PROPERTIES[14])),
+        (1066, 1057) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[0])),
+        (1066, 1058) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[1])),
+        (1066, 1066) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[2])),
+        (1066, 1067) => Some(("LayoutNodeStyle", &DEF_348_PROPERTIES[3])),
         (1067, 67) => Some(("KeyFrame", &DEF_28_PROPERTIES[0])),
-        (1067, 68) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[0])),
-        (1067, 69) => Some(("InterpolatingKeyFrame", &DEF_147_PROPERTIES[1])),
-        (1067, 1068) => Some(("KeyFrameInt", &DEF_350_PROPERTIES[0])),
+        (1067, 68) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[0])),
+        (1067, 69) => Some(("InterpolatingKeyFrame", &DEF_148_PROPERTIES[1])),
+        (1067, 1068) => Some(("KeyFrameInt", &DEF_351_PROPERTIES[0])),
         (1068, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1068, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1068, 1047) => Some(("GridItemPlacement", &DEF_351_PROPERTIES[0])),
-        (1068, 1048) => Some(("GridItemPlacement", &DEF_351_PROPERTIES[1])),
-        (1068, 1049) => Some(("GridItemPlacement", &DEF_351_PROPERTIES[2])),
-        (1068, 1050) => Some(("GridItemPlacement", &DEF_351_PROPERTIES[3])),
+        (1068, 1047) => Some(("GridItemPlacement", &DEF_352_PROPERTIES[0])),
+        (1068, 1048) => Some(("GridItemPlacement", &DEF_352_PROPERTIES[1])),
+        (1068, 1049) => Some(("GridItemPlacement", &DEF_352_PROPERTIES[2])),
+        (1068, 1050) => Some(("GridItemPlacement", &DEF_352_PROPERTIES[3])),
         (1069, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1069, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
-        (1069, 1071) => Some(("TextStyleBackground", &DEF_352_PROPERTIES[0])),
+        (1069, 1071) => Some(("TextStyleBackground", &DEF_353_PROPERTIES[0])),
         (1071, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (1071, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (1071, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (1071, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (1071, 1087) => Some(("ScriptModuleAsset", &DEF_353_PROPERTIES[0])),
+        (1071, 1087) => Some(("ScriptModuleAsset", &DEF_354_PROPERTIES[0])),
         (60000, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (60000, 204) => Some(("FileAsset", &DEF_97_PROPERTIES[0])),
         (60000, 207) => Some(("DrawableAsset", &DEF_98_PROPERTIES[0])),
         (60000, 208) => Some(("DrawableAsset", &DEF_98_PROPERTIES[1])),
         (60000, 359) => Some(("FileAsset", &DEF_97_PROPERTIES[1])),
         (60000, 362) => Some(("FileAsset", &DEF_97_PROPERTIES[2])),
-        (60000, 60000) => Some(("VideoAsset", &DEF_354_PROPERTIES[0])),
-        (60000, 60001) => Some(("VideoAsset", &DEF_354_PROPERTIES[1])),
-        (60000, 60002) => Some(("VideoAsset", &DEF_354_PROPERTIES[2])),
+        (60000, 60000) => Some(("VideoAsset", &DEF_355_PROPERTIES[0])),
+        (60000, 60001) => Some(("VideoAsset", &DEF_355_PROPERTIES[1])),
+        (60000, 60002) => Some(("VideoAsset", &DEF_355_PROPERTIES[2])),
         (60001, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (60001, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (60001, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -31071,19 +31532,19 @@ pub fn property_by_key_in_hierarchy(
         (60001, 1076) => Some(("Image", &DEF_96_PROPERTIES[6])),
         (60001, 1077) => Some(("Image", &DEF_96_PROPERTIES[7])),
         (60001, 1078) => Some(("Image", &DEF_96_PROPERTIES[8])),
-        (60001, 60003) => Some(("Video", &DEF_355_PROPERTIES[0])),
-        (60001, 60004) => Some(("Video", &DEF_355_PROPERTIES[1])),
-        (60001, 60005) => Some(("Video", &DEF_355_PROPERTIES[2])),
-        (60001, 60006) => Some(("Video", &DEF_355_PROPERTIES[3])),
-        (60001, 60007) => Some(("Video", &DEF_355_PROPERTIES[4])),
-        (60001, 60008) => Some(("Video", &DEF_355_PROPERTIES[5])),
-        (60001, 60009) => Some(("Video", &DEF_355_PROPERTIES[6])),
-        (60001, 60010) => Some(("Video", &DEF_355_PROPERTIES[7])),
-        (60001, 60011) => Some(("Video", &DEF_355_PROPERTIES[8])),
-        (60001, 60012) => Some(("Video", &DEF_355_PROPERTIES[9])),
-        (60001, 60013) => Some(("Video", &DEF_355_PROPERTIES[10])),
-        (60001, 60014) => Some(("Video", &DEF_355_PROPERTIES[11])),
-        (60001, 60015) => Some(("Video", &DEF_355_PROPERTIES[12])),
+        (60001, 60003) => Some(("Video", &DEF_356_PROPERTIES[0])),
+        (60001, 60004) => Some(("Video", &DEF_356_PROPERTIES[1])),
+        (60001, 60005) => Some(("Video", &DEF_356_PROPERTIES[2])),
+        (60001, 60006) => Some(("Video", &DEF_356_PROPERTIES[3])),
+        (60001, 60007) => Some(("Video", &DEF_356_PROPERTIES[4])),
+        (60001, 60008) => Some(("Video", &DEF_356_PROPERTIES[5])),
+        (60001, 60009) => Some(("Video", &DEF_356_PROPERTIES[6])),
+        (60001, 60010) => Some(("Video", &DEF_356_PROPERTIES[7])),
+        (60001, 60011) => Some(("Video", &DEF_356_PROPERTIES[8])),
+        (60001, 60012) => Some(("Video", &DEF_356_PROPERTIES[9])),
+        (60001, 60013) => Some(("Video", &DEF_356_PROPERTIES[10])),
+        (60001, 60014) => Some(("Video", &DEF_356_PROPERTIES[11])),
+        (60001, 60015) => Some(("Video", &DEF_356_PROPERTIES[12])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),
@@ -31170,6 +31631,30 @@ pub fn bitmask_passthrough_by_key_in_hierarchy(
         (136, 420) => Some(BitmaskPassthrough {
             target: "cacheFlags",
             bit: 1,
+            width: 1,
+            host_provided: false,
+        }),
+        (154, 455) => Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 0,
+            width: 2,
+            host_provided: false,
+        }),
+        (154, 456) => Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 2,
+            width: 1,
+            host_provided: false,
+        }),
+        (154, 457) => Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 3,
+            width: 1,
+            host_provided: false,
+        }),
+        (154, 461) => Some(BitmaskPassthrough {
+            target: "maskFlags",
+            bit: 4,
             width: 1,
             host_provided: false,
         }),
@@ -33901,6 +34386,25 @@ pub static DEFINITIONS: &[Definition] = &[
         ancestors: DEF_135_ANCESTORS,
     },
     Definition {
+        name: "LayerMask",
+        rust_variant: "LayerMask",
+        file: "layer_mask.json",
+        type_key: Key {
+            int: 154,
+            name: "layermask",
+        },
+        runtime_parent: Some("Component"),
+        raw_parent_file: Some("component.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_136_PROPERTIES,
+        ancestors: DEF_136_ANCESTORS,
+    },
+    Definition {
         name: "TextModifierRange",
         rust_variant: "TextModifierRange",
         file: "text/text_modifier_range.json",
@@ -33916,8 +34420,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_136_PROPERTIES,
-        ancestors: DEF_136_ANCESTORS,
+        properties: DEF_137_PROPERTIES,
+        ancestors: DEF_137_ANCESTORS,
     },
     Definition {
         name: "TextModifierGroup",
@@ -33935,8 +34439,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_137_PROPERTIES,
-        ancestors: DEF_137_ANCESTORS,
+        properties: DEF_138_PROPERTIES,
+        ancestors: DEF_138_ANCESTORS,
     },
     Definition {
         name: "TextModifier",
@@ -33954,8 +34458,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_138_PROPERTIES,
-        ancestors: DEF_138_ANCESTORS,
+        properties: DEF_139_PROPERTIES,
+        ancestors: DEF_139_ANCESTORS,
     },
     Definition {
         name: "TextShapeModifier",
@@ -33973,8 +34477,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_139_PROPERTIES,
-        ancestors: DEF_139_ANCESTORS,
+        properties: DEF_140_PROPERTIES,
+        ancestors: DEF_140_ANCESTORS,
     },
     Definition {
         name: "TextVariationModifier",
@@ -33992,8 +34496,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_140_PROPERTIES,
-        ancestors: DEF_140_ANCESTORS,
+        properties: DEF_141_PROPERTIES,
+        ancestors: DEF_141_ANCESTORS,
     },
     Definition {
         name: "CubicInterpolatorComponent",
@@ -34011,8 +34515,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_141_PROPERTIES,
-        ancestors: DEF_141_ANCESTORS,
+        properties: DEF_142_PROPERTIES,
+        ancestors: DEF_142_ANCESTORS,
     },
     Definition {
         name: "TextStyleFeature",
@@ -34030,8 +34534,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_142_PROPERTIES,
-        ancestors: DEF_142_ANCESTORS,
+        properties: DEF_143_PROPERTIES,
+        ancestors: DEF_143_ANCESTORS,
     },
     Definition {
         name: "FollowPathConstraint",
@@ -34049,8 +34553,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_143_PROPERTIES,
-        ancestors: DEF_143_ANCESTORS,
+        properties: DEF_144_PROPERTIES,
+        ancestors: DEF_144_ANCESTORS,
     },
     Definition {
         name: "CustomProperty",
@@ -34068,8 +34572,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_144_PROPERTIES,
-        ancestors: DEF_144_ANCESTORS,
+        properties: DEF_145_PROPERTIES,
+        ancestors: DEF_145_ANCESTORS,
     },
     Definition {
         name: "ListenerFireEvent",
@@ -34087,8 +34591,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_145_PROPERTIES,
-        ancestors: DEF_145_ANCESTORS,
+        properties: DEF_146_PROPERTIES,
+        ancestors: DEF_146_ANCESTORS,
     },
     Definition {
         name: "StateMachineFireEvent",
@@ -34106,8 +34610,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_146_PROPERTIES,
-        ancestors: DEF_146_ANCESTORS,
+        properties: DEF_147_PROPERTIES,
+        ancestors: DEF_147_ANCESTORS,
     },
     Definition {
         name: "InterpolatingKeyFrame",
@@ -34125,8 +34629,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_147_PROPERTIES,
-        ancestors: DEF_147_ANCESTORS,
+        properties: DEF_148_PROPERTIES,
+        ancestors: DEF_148_ANCESTORS,
     },
     Definition {
         name: "KeyFrameCallback",
@@ -34144,8 +34648,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_148_PROPERTIES,
-        ancestors: DEF_148_ANCESTORS,
+        properties: DEF_149_PROPERTIES,
+        ancestors: DEF_149_ANCESTORS,
     },
     Definition {
         name: "ElasticInterpolator",
@@ -34163,8 +34667,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: true,
         abstract_: false,
         cloneable: true,
-        properties: DEF_149_PROPERTIES,
-        ancestors: DEF_149_ANCESTORS,
+        properties: DEF_150_PROPERTIES,
+        ancestors: DEF_150_ANCESTORS,
     },
     Definition {
         name: "KeyFrameInterpolator",
@@ -34182,8 +34686,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_150_PROPERTIES,
-        ancestors: DEF_150_ANCESTORS,
+        properties: DEF_151_PROPERTIES,
+        ancestors: DEF_151_ANCESTORS,
     },
     Definition {
         name: "AudioAsset",
@@ -34201,8 +34705,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_151_PROPERTIES,
-        ancestors: DEF_151_ANCESTORS,
+        properties: DEF_152_PROPERTIES,
+        ancestors: DEF_152_ANCESTORS,
     },
     Definition {
         name: "AudioEvent",
@@ -34220,8 +34724,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_152_PROPERTIES,
-        ancestors: DEF_152_ANCESTORS,
+        properties: DEF_153_PROPERTIES,
+        ancestors: DEF_153_ANCESTORS,
     },
     Definition {
         name: "LayoutComponent",
@@ -34239,8 +34743,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_153_PROPERTIES,
-        ancestors: DEF_153_ANCESTORS,
+        properties: DEF_154_PROPERTIES,
+        ancestors: DEF_154_ANCESTORS,
     },
     Definition {
         name: "LayoutComponentStyle",
@@ -34258,8 +34762,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_154_PROPERTIES,
-        ancestors: DEF_154_ANCESTORS,
+        properties: DEF_155_PROPERTIES,
+        ancestors: DEF_155_ANCESTORS,
     },
     Definition {
         name: "ExportAudio",
@@ -34277,8 +34781,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_155_PROPERTIES,
-        ancestors: DEF_155_ANCESTORS,
+        properties: DEF_156_PROPERTIES,
+        ancestors: DEF_156_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceColor",
@@ -34296,8 +34800,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_156_PROPERTIES,
-        ancestors: DEF_156_ANCESTORS,
+        properties: DEF_157_PROPERTIES,
+        ancestors: DEF_157_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceListItem",
@@ -34315,8 +34819,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_157_PROPERTIES,
-        ancestors: DEF_157_ANCESTORS,
+        properties: DEF_158_PROPERTIES,
+        ancestors: DEF_158_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceValue",
@@ -34334,8 +34838,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_158_PROPERTIES,
-        ancestors: DEF_158_ANCESTORS,
+        properties: DEF_159_PROPERTIES,
+        ancestors: DEF_159_ANCESTORS,
     },
     Definition {
         name: "ViewModelComponent",
@@ -34353,8 +34857,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_159_PROPERTIES,
-        ancestors: DEF_159_ANCESTORS,
+        properties: DEF_160_PROPERTIES,
+        ancestors: DEF_160_ANCESTORS,
     },
     Definition {
         name: "ViewModelProperty",
@@ -34372,8 +34876,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_160_PROPERTIES,
-        ancestors: DEF_160_ANCESTORS,
+        properties: DEF_161_PROPERTIES,
+        ancestors: DEF_161_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyNumber",
@@ -34391,8 +34895,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_161_PROPERTIES,
-        ancestors: DEF_161_ANCESTORS,
+        properties: DEF_162_PROPERTIES,
+        ancestors: DEF_162_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceEnum",
@@ -34410,8 +34914,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_162_PROPERTIES,
-        ancestors: DEF_162_ANCESTORS,
+        properties: DEF_163_PROPERTIES,
+        ancestors: DEF_163_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceString",
@@ -34429,8 +34933,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_163_PROPERTIES,
-        ancestors: DEF_163_ANCESTORS,
+        properties: DEF_164_PROPERTIES,
+        ancestors: DEF_164_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyList",
@@ -34448,8 +34952,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_164_PROPERTIES,
-        ancestors: DEF_164_ANCESTORS,
+        properties: DEF_165_PROPERTIES,
+        ancestors: DEF_165_ANCESTORS,
     },
     Definition {
         name: "ViewModel",
@@ -34467,8 +34971,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_165_PROPERTIES,
-        ancestors: DEF_165_ANCESTORS,
+        properties: DEF_166_PROPERTIES,
+        ancestors: DEF_166_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyViewModel",
@@ -34486,8 +34990,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_166_PROPERTIES,
-        ancestors: DEF_166_ANCESTORS,
+        properties: DEF_167_PROPERTIES,
+        ancestors: DEF_167_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstance",
@@ -34505,8 +35009,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_167_PROPERTIES,
-        ancestors: DEF_167_ANCESTORS,
+        properties: DEF_168_PROPERTIES,
+        ancestors: DEF_168_ANCESTORS,
     },
     Definition {
         name: "DataEnumCustom",
@@ -34524,8 +35028,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_168_PROPERTIES,
-        ancestors: DEF_168_ANCESTORS,
+        properties: DEF_169_PROPERTIES,
+        ancestors: DEF_169_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyEnumCustom",
@@ -34543,8 +35047,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_169_PROPERTIES,
-        ancestors: DEF_169_ANCESTORS,
+        properties: DEF_170_PROPERTIES,
+        ancestors: DEF_170_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyColor",
@@ -34562,8 +35066,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_170_PROPERTIES,
-        ancestors: DEF_170_ANCESTORS,
+        properties: DEF_171_PROPERTIES,
+        ancestors: DEF_171_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceList",
@@ -34581,8 +35085,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_171_PROPERTIES,
-        ancestors: DEF_171_ANCESTORS,
+        properties: DEF_172_PROPERTIES,
+        ancestors: DEF_172_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceNumber",
@@ -34600,8 +35104,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_172_PROPERTIES,
-        ancestors: DEF_172_ANCESTORS,
+        properties: DEF_173_PROPERTIES,
+        ancestors: DEF_173_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyString",
@@ -34619,8 +35123,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_173_PROPERTIES,
-        ancestors: DEF_173_ANCESTORS,
+        properties: DEF_174_PROPERTIES,
+        ancestors: DEF_174_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceViewModel",
@@ -34638,8 +35142,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_174_PROPERTIES,
-        ancestors: DEF_174_ANCESTORS,
+        properties: DEF_175_PROPERTIES,
+        ancestors: DEF_175_ANCESTORS,
     },
     Definition {
         name: "DataEnumValue",
@@ -34657,8 +35161,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_175_PROPERTIES,
-        ancestors: DEF_175_ANCESTORS,
+        properties: DEF_176_PROPERTIES,
+        ancestors: DEF_176_ANCESTORS,
     },
     Definition {
         name: "DataBind",
@@ -34676,8 +35180,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_176_PROPERTIES,
-        ancestors: DEF_176_ANCESTORS,
+        properties: DEF_177_PROPERTIES,
+        ancestors: DEF_177_ANCESTORS,
     },
     Definition {
         name: "DataBindContext",
@@ -34695,8 +35199,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_177_PROPERTIES,
-        ancestors: DEF_177_ANCESTORS,
+        properties: DEF_178_PROPERTIES,
+        ancestors: DEF_178_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyBoolean",
@@ -34714,8 +35218,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_178_PROPERTIES,
-        ancestors: DEF_178_ANCESTORS,
+        properties: DEF_179_PROPERTIES,
+        ancestors: DEF_179_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceBoolean",
@@ -34733,8 +35237,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_179_PROPERTIES,
-        ancestors: DEF_179_ANCESTORS,
+        properties: DEF_180_PROPERTIES,
+        ancestors: DEF_180_ANCESTORS,
     },
     Definition {
         name: "KeyFrameUint",
@@ -34752,8 +35256,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_180_PROPERTIES,
-        ancestors: DEF_180_ANCESTORS,
+        properties: DEF_181_PROPERTIES,
+        ancestors: DEF_181_ANCESTORS,
     },
     Definition {
         name: "NestedArtboardLeaf",
@@ -34771,8 +35275,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_181_PROPERTIES,
-        ancestors: DEF_181_ANCESTORS,
+        properties: DEF_182_PROPERTIES,
+        ancestors: DEF_182_ANCESTORS,
     },
     Definition {
         name: "NestedArtboardLayout",
@@ -34790,8 +35294,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_182_PROPERTIES,
-        ancestors: DEF_182_ANCESTORS,
+        properties: DEF_183_PROPERTIES,
+        ancestors: DEF_183_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyString",
@@ -34809,8 +35313,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_183_PROPERTIES,
-        ancestors: DEF_183_ANCESTORS,
+        properties: DEF_184_PROPERTIES,
+        ancestors: DEF_184_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyBoolean",
@@ -34828,8 +35332,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_184_PROPERTIES,
-        ancestors: DEF_184_ANCESTORS,
+        properties: DEF_185_PROPERTIES,
+        ancestors: DEF_185_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyNumber",
@@ -34847,8 +35351,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_185_PROPERTIES,
-        ancestors: DEF_185_ANCESTORS,
+        properties: DEF_186_PROPERTIES,
+        ancestors: DEF_186_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyEnum",
@@ -34866,8 +35370,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_186_PROPERTIES,
-        ancestors: DEF_186_ANCESTORS,
+        properties: DEF_187_PROPERTIES,
+        ancestors: DEF_187_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyColor",
@@ -34885,8 +35389,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_187_PROPERTIES,
-        ancestors: DEF_187_ANCESTORS,
+        properties: DEF_188_PROPERTIES,
+        ancestors: DEF_188_ANCESTORS,
     },
     Definition {
         name: "TransitionCondition",
@@ -34904,8 +35408,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_188_PROPERTIES,
-        ancestors: DEF_188_ANCESTORS,
+        properties: DEF_189_PROPERTIES,
+        ancestors: DEF_189_ANCESTORS,
     },
     Definition {
         name: "TransitionComparator",
@@ -34923,8 +35427,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_189_PROPERTIES,
-        ancestors: DEF_189_ANCESTORS,
+        properties: DEF_190_PROPERTIES,
+        ancestors: DEF_190_ANCESTORS,
     },
     Definition {
         name: "TransitionPropertyComparator",
@@ -34942,8 +35446,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_190_PROPERTIES,
-        ancestors: DEF_190_ANCESTORS,
+        properties: DEF_191_PROPERTIES,
+        ancestors: DEF_191_ANCESTORS,
     },
     Definition {
         name: "TransitionPropertyViewModelComparator",
@@ -34961,8 +35465,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_191_PROPERTIES,
-        ancestors: DEF_191_ANCESTORS,
+        properties: DEF_192_PROPERTIES,
+        ancestors: DEF_192_ANCESTORS,
     },
     Definition {
         name: "TransitionValueComparator",
@@ -34980,8 +35484,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_192_PROPERTIES,
-        ancestors: DEF_192_ANCESTORS,
+        properties: DEF_193_PROPERTIES,
+        ancestors: DEF_193_ANCESTORS,
     },
     Definition {
         name: "TransitionValueBooleanComparator",
@@ -34999,8 +35503,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_193_PROPERTIES,
-        ancestors: DEF_193_ANCESTORS,
+        properties: DEF_194_PROPERTIES,
+        ancestors: DEF_194_ANCESTORS,
     },
     Definition {
         name: "TransitionViewModelCondition",
@@ -35018,8 +35522,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_194_PROPERTIES,
-        ancestors: DEF_194_ANCESTORS,
+        properties: DEF_195_PROPERTIES,
+        ancestors: DEF_195_ANCESTORS,
     },
     Definition {
         name: "TransitionValueColorComparator",
@@ -35037,8 +35541,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_195_PROPERTIES,
-        ancestors: DEF_195_ANCESTORS,
+        properties: DEF_196_PROPERTIES,
+        ancestors: DEF_196_ANCESTORS,
     },
     Definition {
         name: "TransitionValueNumberComparator",
@@ -35056,8 +35560,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_196_PROPERTIES,
-        ancestors: DEF_196_ANCESTORS,
+        properties: DEF_197_PROPERTIES,
+        ancestors: DEF_197_ANCESTORS,
     },
     Definition {
         name: "TransitionValueEnumComparator",
@@ -35075,8 +35579,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_197_PROPERTIES,
-        ancestors: DEF_197_ANCESTORS,
+        properties: DEF_198_PROPERTIES,
+        ancestors: DEF_198_ANCESTORS,
     },
     Definition {
         name: "TransitionValueStringComparator",
@@ -35094,8 +35598,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_198_PROPERTIES,
-        ancestors: DEF_198_ANCESTORS,
+        properties: DEF_199_PROPERTIES,
+        ancestors: DEF_199_ANCESTORS,
     },
     Definition {
         name: "ListenerViewModelChange",
@@ -35113,8 +35617,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_199_PROPERTIES,
-        ancestors: DEF_199_ANCESTORS,
+        properties: DEF_200_PROPERTIES,
+        ancestors: DEF_200_ANCESTORS,
     },
     Definition {
         name: "DataConverter",
@@ -35132,8 +35636,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_200_PROPERTIES,
-        ancestors: DEF_200_ANCESTORS,
+        properties: DEF_201_PROPERTIES,
+        ancestors: DEF_201_ANCESTORS,
     },
     Definition {
         name: "DataConverterRounder",
@@ -35151,8 +35655,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_201_PROPERTIES,
-        ancestors: DEF_201_ANCESTORS,
+        properties: DEF_202_PROPERTIES,
+        ancestors: DEF_202_ANCESTORS,
     },
     Definition {
         name: "DataConverterToString",
@@ -35170,8 +35674,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_202_PROPERTIES,
-        ancestors: DEF_202_ANCESTORS,
+        properties: DEF_203_PROPERTIES,
+        ancestors: DEF_203_ANCESTORS,
     },
     Definition {
         name: "NSlicerTileMode",
@@ -35189,8 +35693,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_203_PROPERTIES,
-        ancestors: DEF_203_ANCESTORS,
+        properties: DEF_204_PROPERTIES,
+        ancestors: DEF_204_ANCESTORS,
     },
     Definition {
         name: "Axis",
@@ -35208,8 +35712,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_204_PROPERTIES,
-        ancestors: DEF_204_ANCESTORS,
+        properties: DEF_205_PROPERTIES,
+        ancestors: DEF_205_ANCESTORS,
     },
     Definition {
         name: "NSlicer",
@@ -35227,8 +35731,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_205_PROPERTIES,
-        ancestors: DEF_205_ANCESTORS,
+        properties: DEF_206_PROPERTIES,
+        ancestors: DEF_206_ANCESTORS,
     },
     Definition {
         name: "AxisY",
@@ -35246,8 +35750,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_206_PROPERTIES,
-        ancestors: DEF_206_ANCESTORS,
+        properties: DEF_207_PROPERTIES,
+        ancestors: DEF_207_ANCESTORS,
     },
     Definition {
         name: "AxisX",
@@ -35265,8 +35769,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_207_PROPERTIES,
-        ancestors: DEF_207_ANCESTORS,
+        properties: DEF_208_PROPERTIES,
+        ancestors: DEF_208_ANCESTORS,
     },
     Definition {
         name: "TransitionPropertyArtboardComparator",
@@ -35284,8 +35788,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_208_PROPERTIES,
-        ancestors: DEF_208_ANCESTORS,
+        properties: DEF_209_PROPERTIES,
+        ancestors: DEF_209_ANCESTORS,
     },
     Definition {
         name: "TransitionArtboardCondition",
@@ -35303,8 +35807,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_209_PROPERTIES,
-        ancestors: DEF_209_ANCESTORS,
+        properties: DEF_210_PROPERTIES,
+        ancestors: DEF_210_ANCESTORS,
     },
     Definition {
         name: "DataConverterGroupItem",
@@ -35322,8 +35826,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_210_PROPERTIES,
-        ancestors: DEF_210_ANCESTORS,
+        properties: DEF_211_PROPERTIES,
+        ancestors: DEF_211_ANCESTORS,
     },
     Definition {
         name: "DataConverterGroup",
@@ -35341,8 +35845,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_211_PROPERTIES,
-        ancestors: DEF_211_ANCESTORS,
+        properties: DEF_212_PROPERTIES,
+        ancestors: DEF_212_ANCESTORS,
     },
     Definition {
         name: "DataConverterOperationValue",
@@ -35360,8 +35864,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_212_PROPERTIES,
-        ancestors: DEF_212_ANCESTORS,
+        properties: DEF_213_PROPERTIES,
+        ancestors: DEF_213_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceTrigger",
@@ -35379,8 +35883,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_213_PROPERTIES,
-        ancestors: DEF_213_ANCESTORS,
+        properties: DEF_214_PROPERTIES,
+        ancestors: DEF_214_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyTrigger",
@@ -35398,8 +35902,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_214_PROPERTIES,
-        ancestors: DEF_214_ANCESTORS,
+        properties: DEF_215_PROPERTIES,
+        ancestors: DEF_215_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyTrigger",
@@ -35417,8 +35921,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_215_PROPERTIES,
-        ancestors: DEF_215_ANCESTORS,
+        properties: DEF_216_PROPERTIES,
+        ancestors: DEF_216_ANCESTORS,
     },
     Definition {
         name: "DataConverterTrigger",
@@ -35436,8 +35940,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_216_PROPERTIES,
-        ancestors: DEF_216_ANCESTORS,
+        properties: DEF_217_PROPERTIES,
+        ancestors: DEF_217_ANCESTORS,
     },
     Definition {
         name: "TransitionValueTriggerComparator",
@@ -35455,8 +35959,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_217_PROPERTIES,
-        ancestors: DEF_217_ANCESTORS,
+        properties: DEF_218_PROPERTIES,
+        ancestors: DEF_218_ANCESTORS,
     },
     Definition {
         name: "DashPath",
@@ -35474,8 +35978,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_218_PROPERTIES,
-        ancestors: DEF_218_ANCESTORS,
+        properties: DEF_219_PROPERTIES,
+        ancestors: DEF_219_ANCESTORS,
     },
     Definition {
         name: "Dash",
@@ -35493,8 +35997,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_219_PROPERTIES,
-        ancestors: DEF_219_ANCESTORS,
+        properties: DEF_220_PROPERTIES,
+        ancestors: DEF_220_ANCESTORS,
     },
     Definition {
         name: "NSlicedNode",
@@ -35512,8 +36016,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_220_PROPERTIES,
-        ancestors: DEF_220_ANCESTORS,
+        properties: DEF_221_PROPERTIES,
+        ancestors: DEF_221_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyEnum",
@@ -35531,8 +36035,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_221_PROPERTIES,
-        ancestors: DEF_221_ANCESTORS,
+        properties: DEF_222_PROPERTIES,
+        ancestors: DEF_222_ANCESTORS,
     },
     Definition {
         name: "DataEnum",
@@ -35550,8 +36054,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_222_PROPERTIES,
-        ancestors: DEF_222_ANCESTORS,
+        properties: DEF_223_PROPERTIES,
+        ancestors: DEF_223_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyEnumSystem",
@@ -35569,8 +36073,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_223_PROPERTIES,
-        ancestors: DEF_223_ANCESTORS,
+        properties: DEF_224_PROPERTIES,
+        ancestors: DEF_224_ANCESTORS,
     },
     Definition {
         name: "DataEnumSystem",
@@ -35588,8 +36092,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_224_PROPERTIES,
-        ancestors: DEF_224_ANCESTORS,
+        properties: DEF_225_PROPERTIES,
+        ancestors: DEF_225_ANCESTORS,
     },
     Definition {
         name: "ForegroundLayoutDrawable",
@@ -35607,8 +36111,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_225_PROPERTIES,
-        ancestors: DEF_225_ANCESTORS,
+        properties: DEF_226_PROPERTIES,
+        ancestors: DEF_226_ANCESTORS,
     },
     Definition {
         name: "DataConverterSystemDegsToRads",
@@ -35626,8 +36130,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_226_PROPERTIES,
-        ancestors: DEF_226_ANCESTORS,
+        properties: DEF_227_PROPERTIES,
+        ancestors: DEF_227_ANCESTORS,
     },
     Definition {
         name: "DataConverterSystemNormalizer",
@@ -35645,8 +36149,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_227_PROPERTIES,
-        ancestors: DEF_227_ANCESTORS,
+        properties: DEF_228_PROPERTIES,
+        ancestors: DEF_228_ANCESTORS,
     },
     Definition {
         name: "DataConverterOperation",
@@ -35664,8 +36168,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_228_PROPERTIES,
-        ancestors: DEF_228_ANCESTORS,
+        properties: DEF_229_PROPERTIES,
+        ancestors: DEF_229_ANCESTORS,
     },
     Definition {
         name: "DataConverterOperationViewModel",
@@ -35683,8 +36187,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_229_PROPERTIES,
-        ancestors: DEF_229_ANCESTORS,
+        properties: DEF_230_PROPERTIES,
+        ancestors: DEF_230_ANCESTORS,
     },
     Definition {
         name: "DataConverterRangeMapper",
@@ -35702,8 +36206,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_230_PROPERTIES,
-        ancestors: DEF_230_ANCESTORS,
+        properties: DEF_231_PROPERTIES,
+        ancestors: DEF_231_ANCESTORS,
     },
     Definition {
         name: "DraggableConstraint",
@@ -35721,8 +36225,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_231_PROPERTIES,
-        ancestors: DEF_231_ANCESTORS,
+        properties: DEF_232_PROPERTIES,
+        ancestors: DEF_232_ANCESTORS,
     },
     Definition {
         name: "ScrollConstraint",
@@ -35740,8 +36244,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_232_PROPERTIES,
-        ancestors: DEF_232_ANCESTORS,
+        properties: DEF_233_PROPERTIES,
+        ancestors: DEF_233_ANCESTORS,
     },
     Definition {
         name: "ScrollBarConstraint",
@@ -35759,8 +36263,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_233_PROPERTIES,
-        ancestors: DEF_233_ANCESTORS,
+        properties: DEF_234_PROPERTIES,
+        ancestors: DEF_234_ANCESTORS,
     },
     Definition {
         name: "ScrollPhysics",
@@ -35778,8 +36282,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_234_PROPERTIES,
-        ancestors: DEF_234_ANCESTORS,
+        properties: DEF_235_PROPERTIES,
+        ancestors: DEF_235_ANCESTORS,
     },
     Definition {
         name: "ClampedScrollPhysics",
@@ -35797,8 +36301,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_235_PROPERTIES,
-        ancestors: DEF_235_ANCESTORS,
+        properties: DEF_236_PROPERTIES,
+        ancestors: DEF_236_ANCESTORS,
     },
     Definition {
         name: "ElasticScrollPhysics",
@@ -35816,8 +36320,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_236_PROPERTIES,
-        ancestors: DEF_236_ANCESTORS,
+        properties: DEF_237_PROPERTIES,
+        ancestors: DEF_237_ANCESTORS,
     },
     Definition {
         name: "BlendState1D",
@@ -35835,8 +36339,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_237_PROPERTIES,
-        ancestors: DEF_237_ANCESTORS,
+        properties: DEF_238_PROPERTIES,
+        ancestors: DEF_238_ANCESTORS,
     },
     Definition {
         name: "BlendState1DViewModel",
@@ -35854,8 +36358,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_238_PROPERTIES,
-        ancestors: DEF_238_ANCESTORS,
+        properties: DEF_239_PROPERTIES,
+        ancestors: DEF_239_ANCESTORS,
     },
     Definition {
         name: "ScriptAsset",
@@ -35873,8 +36377,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_239_PROPERTIES,
-        ancestors: DEF_239_ANCESTORS,
+        properties: DEF_240_PROPERTIES,
+        ancestors: DEF_240_ANCESTORS,
     },
     Definition {
         name: "DataConverterStringPad",
@@ -35892,8 +36396,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_240_PROPERTIES,
-        ancestors: DEF_240_ANCESTORS,
+        properties: DEF_241_PROPERTIES,
+        ancestors: DEF_241_ANCESTORS,
     },
     Definition {
         name: "DataConverterStringRemoveZeros",
@@ -35911,8 +36415,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_241_PROPERTIES,
-        ancestors: DEF_241_ANCESTORS,
+        properties: DEF_242_PROPERTIES,
+        ancestors: DEF_242_ANCESTORS,
     },
     Definition {
         name: "DataConverterStringTrim",
@@ -35930,8 +36434,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_242_PROPERTIES,
-        ancestors: DEF_242_ANCESTORS,
+        properties: DEF_243_PROPERTIES,
+        ancestors: DEF_243_ANCESTORS,
     },
     Definition {
         name: "Feather",
@@ -35949,8 +36453,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_243_PROPERTIES,
-        ancestors: DEF_243_ANCESTORS,
+        properties: DEF_244_PROPERTIES,
+        ancestors: DEF_244_ANCESTORS,
     },
     Definition {
         name: "DataConverterInterpolator",
@@ -35968,8 +36472,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_244_PROPERTIES,
-        ancestors: DEF_244_ANCESTORS,
+        properties: DEF_245_PROPERTIES,
+        ancestors: DEF_245_ANCESTORS,
     },
     Definition {
         name: "DataConverterBooleanNegate",
@@ -35987,8 +36491,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_245_PROPERTIES,
-        ancestors: DEF_245_ANCESTORS,
+        properties: DEF_246_PROPERTIES,
+        ancestors: DEF_246_ANCESTORS,
     },
     Definition {
         name: "DataConverterFormula",
@@ -36006,8 +36510,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_246_PROPERTIES,
-        ancestors: DEF_246_ANCESTORS,
+        properties: DEF_247_PROPERTIES,
+        ancestors: DEF_247_ANCESTORS,
     },
     Definition {
         name: "FormulaToken",
@@ -36025,8 +36529,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_247_PROPERTIES,
-        ancestors: DEF_247_ANCESTORS,
+        properties: DEF_248_PROPERTIES,
+        ancestors: DEF_248_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenArgumentSeparator",
@@ -36044,8 +36548,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_248_PROPERTIES,
-        ancestors: DEF_248_ANCESTORS,
+        properties: DEF_249_PROPERTIES,
+        ancestors: DEF_249_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenParenthesis",
@@ -36063,8 +36567,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_249_PROPERTIES,
-        ancestors: DEF_249_ANCESTORS,
+        properties: DEF_250_PROPERTIES,
+        ancestors: DEF_250_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenParenthesisClose",
@@ -36082,8 +36586,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_250_PROPERTIES,
-        ancestors: DEF_250_ANCESTORS,
+        properties: DEF_251_PROPERTIES,
+        ancestors: DEF_251_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenOperation",
@@ -36101,8 +36605,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_251_PROPERTIES,
-        ancestors: DEF_251_ANCESTORS,
+        properties: DEF_252_PROPERTIES,
+        ancestors: DEF_252_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenFunction",
@@ -36120,8 +36624,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_252_PROPERTIES,
-        ancestors: DEF_252_ANCESTORS,
+        properties: DEF_253_PROPERTIES,
+        ancestors: DEF_253_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenValue",
@@ -36139,8 +36643,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_253_PROPERTIES,
-        ancestors: DEF_253_ANCESTORS,
+        properties: DEF_254_PROPERTIES,
+        ancestors: DEF_254_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenParenthesisOpen",
@@ -36158,8 +36662,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_254_PROPERTIES,
-        ancestors: DEF_254_ANCESTORS,
+        properties: DEF_255_PROPERTIES,
+        ancestors: DEF_255_ANCESTORS,
     },
     Definition {
         name: "FormulaTokenInput",
@@ -36177,8 +36681,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_255_PROPERTIES,
-        ancestors: DEF_255_ANCESTORS,
+        properties: DEF_256_PROPERTIES,
+        ancestors: DEF_256_ANCESTORS,
     },
     Definition {
         name: "TextTargetModifier",
@@ -36196,8 +36700,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_256_PROPERTIES,
-        ancestors: DEF_256_ANCESTORS,
+        properties: DEF_257_PROPERTIES,
+        ancestors: DEF_257_ANCESTORS,
     },
     Definition {
         name: "TextFollowPathModifier",
@@ -36215,8 +36719,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_257_PROPERTIES,
-        ancestors: DEF_257_ANCESTORS,
+        properties: DEF_258_PROPERTIES,
+        ancestors: DEF_258_ANCESTORS,
     },
     Definition {
         name: "CustomPropertyGroup",
@@ -36234,8 +36738,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_258_PROPERTIES,
-        ancestors: DEF_258_ANCESTORS,
+        properties: DEF_259_PROPERTIES,
+        ancestors: DEF_259_ANCESTORS,
     },
     Definition {
         name: "ArtboardComponentList",
@@ -36253,8 +36757,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_259_PROPERTIES,
-        ancestors: DEF_259_ANCESTORS,
+        properties: DEF_260_PROPERTIES,
+        ancestors: DEF_260_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertySymbol",
@@ -36272,8 +36776,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_260_PROPERTIES,
-        ancestors: DEF_260_ANCESTORS,
+        properties: DEF_261_PROPERTIES,
+        ancestors: DEF_261_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertySymbolListIndex",
@@ -36291,8 +36795,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_261_PROPERTIES,
-        ancestors: DEF_261_ANCESTORS,
+        properties: DEF_262_PROPERTIES,
+        ancestors: DEF_262_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceSymbol",
@@ -36310,8 +36814,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_262_PROPERTIES,
-        ancestors: DEF_262_ANCESTORS,
+        properties: DEF_263_PROPERTIES,
+        ancestors: DEF_263_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceSymbolListIndex",
@@ -36329,8 +36833,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_263_PROPERTIES,
-        ancestors: DEF_263_ANCESTORS,
+        properties: DEF_264_PROPERTIES,
+        ancestors: DEF_264_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyInteger",
@@ -36348,8 +36852,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_264_PROPERTIES,
-        ancestors: DEF_264_ANCESTORS,
+        properties: DEF_265_PROPERTIES,
+        ancestors: DEF_265_ANCESTORS,
     },
     Definition {
         name: "DataConverterNumberToList",
@@ -36367,8 +36871,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_265_PROPERTIES,
-        ancestors: DEF_265_ANCESTORS,
+        properties: DEF_266_PROPERTIES,
+        ancestors: DEF_266_ANCESTORS,
     },
     Definition {
         name: "TextInput",
@@ -36386,8 +36890,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_266_PROPERTIES,
-        ancestors: DEF_266_ANCESTORS,
+        properties: DEF_267_PROPERTIES,
+        ancestors: DEF_267_ANCESTORS,
     },
     Definition {
         name: "TextInputDrawable",
@@ -36405,8 +36909,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_267_PROPERTIES,
-        ancestors: DEF_267_ANCESTORS,
+        properties: DEF_268_PROPERTIES,
+        ancestors: DEF_268_ANCESTORS,
     },
     Definition {
         name: "TextInputCursor",
@@ -36424,8 +36928,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_268_PROPERTIES,
-        ancestors: DEF_268_ANCESTORS,
+        properties: DEF_269_PROPERTIES,
+        ancestors: DEF_269_ANCESTORS,
     },
     Definition {
         name: "TextInputText",
@@ -36443,8 +36947,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_269_PROPERTIES,
-        ancestors: DEF_269_ANCESTORS,
+        properties: DEF_270_PROPERTIES,
+        ancestors: DEF_270_ANCESTORS,
     },
     Definition {
         name: "TextStyle",
@@ -36462,8 +36966,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_270_PROPERTIES,
-        ancestors: DEF_270_ANCESTORS,
+        properties: DEF_271_PROPERTIES,
+        ancestors: DEF_271_ANCESTORS,
     },
     Definition {
         name: "TextInputSelection",
@@ -36481,8 +36985,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_271_PROPERTIES,
-        ancestors: DEF_271_ANCESTORS,
+        properties: DEF_272_PROPERTIES,
+        ancestors: DEF_272_ANCESTORS,
     },
     Definition {
         name: "TextInputSelectedText",
@@ -36500,8 +37004,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_272_PROPERTIES,
-        ancestors: DEF_272_ANCESTORS,
+        properties: DEF_273_PROPERTIES,
+        ancestors: DEF_273_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyAsset",
@@ -36519,8 +37023,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_273_PROPERTIES,
-        ancestors: DEF_273_ANCESTORS,
+        properties: DEF_274_PROPERTIES,
+        ancestors: DEF_274_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyAssetImage",
@@ -36538,8 +37042,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_274_PROPERTIES,
-        ancestors: DEF_274_ANCESTORS,
+        properties: DEF_275_PROPERTIES,
+        ancestors: DEF_275_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceAsset",
@@ -36557,8 +37061,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_275_PROPERTIES,
-        ancestors: DEF_275_ANCESTORS,
+        properties: DEF_276_PROPERTIES,
+        ancestors: DEF_276_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceAssetImage",
@@ -36576,8 +37080,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_276_PROPERTIES,
-        ancestors: DEF_276_ANCESTORS,
+        properties: DEF_277_PROPERTIES,
+        ancestors: DEF_277_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyAsset",
@@ -36595,8 +37099,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_277_PROPERTIES,
-        ancestors: DEF_277_ANCESTORS,
+        properties: DEF_278_PROPERTIES,
+        ancestors: DEF_278_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyList",
@@ -36614,8 +37118,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_278_PROPERTIES,
-        ancestors: DEF_278_ANCESTORS,
+        properties: DEF_279_PROPERTIES,
+        ancestors: DEF_279_ANCESTORS,
     },
     Definition {
         name: "DataConverterListToLength",
@@ -36633,8 +37137,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_279_PROPERTIES,
-        ancestors: DEF_279_ANCESTORS,
+        properties: DEF_280_PROPERTIES,
+        ancestors: DEF_280_ANCESTORS,
     },
     Definition {
         name: "CustomPropertyColor",
@@ -36652,8 +37156,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_280_PROPERTIES,
-        ancestors: DEF_280_ANCESTORS,
+        properties: DEF_281_PROPERTIES,
+        ancestors: DEF_281_ANCESTORS,
     },
     Definition {
         name: "TransitionSelfComparator",
@@ -36671,8 +37175,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_281_PROPERTIES,
-        ancestors: DEF_281_ANCESTORS,
+        properties: DEF_282_PROPERTIES,
+        ancestors: DEF_282_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyId",
@@ -36690,8 +37194,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_282_PROPERTIES,
-        ancestors: DEF_282_ANCESTORS,
+        properties: DEF_283_PROPERTIES,
+        ancestors: DEF_283_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyArtboard",
@@ -36709,8 +37213,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_283_PROPERTIES,
-        ancestors: DEF_283_ANCESTORS,
+        properties: DEF_284_PROPERTIES,
+        ancestors: DEF_284_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyArtboard",
@@ -36728,8 +37232,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_284_PROPERTIES,
-        ancestors: DEF_284_ANCESTORS,
+        properties: DEF_285_PROPERTIES,
+        ancestors: DEF_285_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceArtboard",
@@ -36747,8 +37251,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_285_PROPERTIES,
-        ancestors: DEF_285_ANCESTORS,
+        properties: DEF_286_PROPERTIES,
+        ancestors: DEF_286_ANCESTORS,
     },
     Definition {
         name: "TransitionValueIdComparator",
@@ -36766,8 +37270,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_286_PROPERTIES,
-        ancestors: DEF_286_ANCESTORS,
+        properties: DEF_287_PROPERTIES,
+        ancestors: DEF_287_ANCESTORS,
     },
     Definition {
         name: "TransitionValueAssetComparator",
@@ -36785,8 +37289,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_287_PROPERTIES,
-        ancestors: DEF_287_ANCESTORS,
+        properties: DEF_288_PROPERTIES,
+        ancestors: DEF_288_ANCESTORS,
     },
     Definition {
         name: "ScriptedDrawable",
@@ -36804,8 +37308,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_288_PROPERTIES,
-        ancestors: DEF_288_ANCESTORS,
+        properties: DEF_289_PROPERTIES,
+        ancestors: DEF_289_ANCESTORS,
     },
     Definition {
         name: "ArtboardComponentListOverride",
@@ -36823,8 +37327,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_289_PROPERTIES,
-        ancestors: DEF_289_ANCESTORS,
+        properties: DEF_290_PROPERTIES,
+        ancestors: DEF_290_ANCESTORS,
     },
     Definition {
         name: "ScriptInputNumber",
@@ -36842,8 +37346,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_290_PROPERTIES,
-        ancestors: DEF_290_ANCESTORS,
+        properties: DEF_291_PROPERTIES,
+        ancestors: DEF_291_ANCESTORS,
     },
     Definition {
         name: "ScriptInputViewModelProperty",
@@ -36861,8 +37365,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_291_PROPERTIES,
-        ancestors: DEF_291_ANCESTORS,
+        properties: DEF_292_PROPERTIES,
+        ancestors: DEF_292_ANCESTORS,
     },
     Definition {
         name: "CustomPropertyTrigger",
@@ -36880,8 +37384,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_292_PROPERTIES,
-        ancestors: DEF_292_ANCESTORS,
+        properties: DEF_293_PROPERTIES,
+        ancestors: DEF_293_ANCESTORS,
     },
     Definition {
         name: "StateMachineFireTrigger",
@@ -36899,8 +37403,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_293_PROPERTIES,
-        ancestors: DEF_293_ANCESTORS,
+        properties: DEF_294_PROPERTIES,
+        ancestors: DEF_294_ANCESTORS,
     },
     Definition {
         name: "StateMachineFireAction",
@@ -36918,8 +37422,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_294_PROPERTIES,
-        ancestors: DEF_294_ANCESTORS,
+        properties: DEF_295_PROPERTIES,
+        ancestors: DEF_295_ANCESTORS,
     },
     Definition {
         name: "CustomPropertyEnum",
@@ -36937,8 +37441,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_295_PROPERTIES,
-        ancestors: DEF_295_ANCESTORS,
+        properties: DEF_296_PROPERTIES,
+        ancestors: DEF_296_ANCESTORS,
     },
     Definition {
         name: "DataConverterToNumber",
@@ -36956,8 +37460,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_296_PROPERTIES,
-        ancestors: DEF_296_ANCESTORS,
+        properties: DEF_297_PROPERTIES,
+        ancestors: DEF_297_ANCESTORS,
     },
     Definition {
         name: "ScriptInputTrigger",
@@ -36975,8 +37479,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_297_PROPERTIES,
-        ancestors: DEF_297_ANCESTORS,
+        properties: DEF_298_PROPERTIES,
+        ancestors: DEF_298_ANCESTORS,
     },
     Definition {
         name: "ListPath",
@@ -36994,8 +37498,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_298_PROPERTIES,
-        ancestors: DEF_298_ANCESTORS,
+        properties: DEF_299_PROPERTIES,
+        ancestors: DEF_299_ANCESTORS,
     },
     Definition {
         name: "PointsCommonPath",
@@ -37013,8 +37517,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_299_PROPERTIES,
-        ancestors: DEF_299_ANCESTORS,
+        properties: DEF_300_PROPERTIES,
+        ancestors: DEF_300_ANCESTORS,
     },
     Definition {
         name: "ScriptInputArtboard",
@@ -37032,8 +37536,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_300_PROPERTIES,
-        ancestors: DEF_300_ANCESTORS,
+        properties: DEF_301_PROPERTIES,
+        ancestors: DEF_301_ANCESTORS,
     },
     Definition {
         name: "ListFollowPathConstraint",
@@ -37051,8 +37555,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_301_PROPERTIES,
-        ancestors: DEF_301_ANCESTORS,
+        properties: DEF_302_PROPERTIES,
+        ancestors: DEF_302_ANCESTORS,
     },
     Definition {
         name: "ScriptInputColor",
@@ -37070,8 +37574,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_302_PROPERTIES,
-        ancestors: DEF_302_ANCESTORS,
+        properties: DEF_303_PROPERTIES,
+        ancestors: DEF_303_ANCESTORS,
     },
     Definition {
         name: "ScriptInputString",
@@ -37089,8 +37593,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_303_PROPERTIES,
-        ancestors: DEF_303_ANCESTORS,
+        properties: DEF_304_PROPERTIES,
+        ancestors: DEF_304_ANCESTORS,
     },
     Definition {
         name: "ScriptedDataConverter",
@@ -37108,8 +37612,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_304_PROPERTIES,
-        ancestors: DEF_304_ANCESTORS,
+        properties: DEF_305_PROPERTIES,
+        ancestors: DEF_305_ANCESTORS,
     },
     Definition {
         name: "TransitionValueArtboardComparator",
@@ -37127,8 +37631,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_305_PROPERTIES,
-        ancestors: DEF_305_ANCESTORS,
+        properties: DEF_306_PROPERTIES,
+        ancestors: DEF_306_ANCESTORS,
     },
     Definition {
         name: "ScriptInputBoolean",
@@ -37146,8 +37650,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_306_PROPERTIES,
-        ancestors: DEF_306_ANCESTORS,
+        properties: DEF_307_PROPERTIES,
+        ancestors: DEF_307_ANCESTORS,
     },
     Definition {
         name: "ScriptedLayout",
@@ -37165,8 +37669,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_307_PROPERTIES,
-        ancestors: DEF_307_ANCESTORS,
+        properties: DEF_308_PROPERTIES,
+        ancestors: DEF_308_ANCESTORS,
     },
     Definition {
         name: "ScriptedPathEffect",
@@ -37184,8 +37688,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_308_PROPERTIES,
-        ancestors: DEF_308_ANCESTORS,
+        properties: DEF_309_PROPERTIES,
+        ancestors: DEF_309_ANCESTORS,
     },
     Definition {
         name: "ManifestAsset",
@@ -37203,8 +37707,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_309_PROPERTIES,
-        ancestors: DEF_309_ANCESTORS,
+        properties: DEF_310_PROPERTIES,
+        ancestors: DEF_310_ANCESTORS,
     },
     Definition {
         name: "DataBindPath",
@@ -37222,8 +37726,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_310_PROPERTIES,
-        ancestors: DEF_310_ANCESTORS,
+        properties: DEF_311_PROPERTIES,
+        ancestors: DEF_311_ANCESTORS,
     },
     Definition {
         name: "TargetEffect",
@@ -37241,8 +37745,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_311_PROPERTIES,
-        ancestors: DEF_311_ANCESTORS,
+        properties: DEF_312_PROPERTIES,
+        ancestors: DEF_312_ANCESTORS,
     },
     Definition {
         name: "GroupEffect",
@@ -37260,8 +37764,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_312_PROPERTIES,
-        ancestors: DEF_312_ANCESTORS,
+        properties: DEF_313_PROPERTIES,
+        ancestors: DEF_313_ANCESTORS,
     },
     Definition {
         name: "ScriptedListenerAction",
@@ -37279,8 +37783,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_313_PROPERTIES,
-        ancestors: DEF_313_ANCESTORS,
+        properties: DEF_314_PROPERTIES,
+        ancestors: DEF_314_ANCESTORS,
     },
     Definition {
         name: "ScriptedTransitionCondition",
@@ -37298,8 +37802,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_314_PROPERTIES,
-        ancestors: DEF_314_ANCESTORS,
+        properties: DEF_315_PROPERTIES,
+        ancestors: DEF_315_ANCESTORS,
     },
     Definition {
         name: "ArtboardListMapRule",
@@ -37317,8 +37821,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_315_PROPERTIES,
-        ancestors: DEF_315_ANCESTORS,
+        properties: DEF_316_PROPERTIES,
+        ancestors: DEF_316_ANCESTORS,
     },
     Definition {
         name: "BlobAsset",
@@ -37336,8 +37840,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_316_PROPERTIES,
-        ancestors: DEF_316_ANCESTORS,
+        properties: DEF_317_PROPERTIES,
+        ancestors: DEF_317_ANCESTORS,
     },
     Definition {
         name: "FocusActionTarget",
@@ -37355,8 +37859,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_317_PROPERTIES,
-        ancestors: DEF_317_ANCESTORS,
+        properties: DEF_318_PROPERTIES,
+        ancestors: DEF_318_ANCESTORS,
     },
     Definition {
         name: "FocusData",
@@ -37374,8 +37878,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_318_PROPERTIES,
-        ancestors: DEF_318_ANCESTORS,
+        properties: DEF_319_PROPERTIES,
+        ancestors: DEF_319_ANCESTORS,
     },
     Definition {
         name: "StateMachineListener",
@@ -37393,8 +37897,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_319_PROPERTIES,
-        ancestors: DEF_319_ANCESTORS,
+        properties: DEF_320_PROPERTIES,
+        ancestors: DEF_320_ANCESTORS,
     },
     Definition {
         name: "ListenerInputType",
@@ -37412,8 +37916,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_320_PROPERTIES,
-        ancestors: DEF_320_ANCESTORS,
+        properties: DEF_321_PROPERTIES,
+        ancestors: DEF_321_ANCESTORS,
     },
     Definition {
         name: "ListenerInputTypeEvent",
@@ -37431,8 +37935,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_321_PROPERTIES,
-        ancestors: DEF_321_ANCESTORS,
+        properties: DEF_322_PROPERTIES,
+        ancestors: DEF_322_ANCESTORS,
     },
     Definition {
         name: "ListenerInputTypeViewModel",
@@ -37450,8 +37954,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_322_PROPERTIES,
-        ancestors: DEF_322_ANCESTORS,
+        properties: DEF_323_PROPERTIES,
+        ancestors: DEF_323_ANCESTORS,
     },
     Definition {
         name: "BindablePropertyViewModel",
@@ -37469,8 +37973,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_323_PROPERTIES,
-        ancestors: DEF_323_ANCESTORS,
+        properties: DEF_324_PROPERTIES,
+        ancestors: DEF_324_ANCESTORS,
     },
     Definition {
         name: "UserInput",
@@ -37488,8 +37992,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_324_PROPERTIES,
-        ancestors: DEF_324_ANCESTORS,
+        properties: DEF_325_PROPERTIES,
+        ancestors: DEF_325_ANCESTORS,
     },
     Definition {
         name: "KeyboardInput",
@@ -37507,8 +38011,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_325_PROPERTIES,
-        ancestors: DEF_325_ANCESTORS,
+        properties: DEF_326_PROPERTIES,
+        ancestors: DEF_326_ANCESTORS,
     },
     Definition {
         name: "ListenerInputTypeKeyboard",
@@ -37526,8 +38030,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_326_PROPERTIES,
-        ancestors: DEF_326_ANCESTORS,
+        properties: DEF_327_PROPERTIES,
+        ancestors: DEF_327_ANCESTORS,
     },
     Definition {
         name: "ListenerInputTypeText",
@@ -37545,8 +38049,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_327_PROPERTIES,
-        ancestors: DEF_327_ANCESTORS,
+        properties: DEF_328_PROPERTIES,
+        ancestors: DEF_328_ANCESTORS,
     },
     Definition {
         name: "TransitionPropertyComponentComparator",
@@ -37564,8 +38068,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_328_PROPERTIES,
-        ancestors: DEF_328_ANCESTORS,
+        properties: DEF_329_PROPERTIES,
+        ancestors: DEF_329_ANCESTORS,
     },
     Definition {
         name: "SemanticData",
@@ -37583,8 +38087,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_329_PROPERTIES,
-        ancestors: DEF_329_ANCESTORS,
+        properties: DEF_330_PROPERTIES,
+        ancestors: DEF_330_ANCESTORS,
     },
     Definition {
         name: "ListenerInputTypeSemantic",
@@ -37602,8 +38106,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_330_PROPERTIES,
-        ancestors: DEF_330_ANCESTORS,
+        properties: DEF_331_PROPERTIES,
+        ancestors: DEF_331_ANCESTORS,
     },
     Definition {
         name: "SemanticInput",
@@ -37621,8 +38125,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_331_PROPERTIES,
-        ancestors: DEF_331_ANCESTORS,
+        properties: DEF_332_PROPERTIES,
+        ancestors: DEF_332_ANCESTORS,
     },
     Definition {
         name: "FocusAction",
@@ -37640,8 +38144,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_332_PROPERTIES,
-        ancestors: DEF_332_ANCESTORS,
+        properties: DEF_333_PROPERTIES,
+        ancestors: DEF_333_ANCESTORS,
     },
     Definition {
         name: "FocusActionTraversal",
@@ -37659,8 +38163,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_333_PROPERTIES,
-        ancestors: DEF_333_ANCESTORS,
+        properties: DEF_334_PROPERTIES,
+        ancestors: DEF_334_ANCESTORS,
     },
     Definition {
         name: "ShaderAsset",
@@ -37678,8 +38182,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_334_PROPERTIES,
-        ancestors: DEF_334_ANCESTORS,
+        properties: DEF_335_PROPERTIES,
+        ancestors: DEF_335_ANCESTORS,
     },
     Definition {
         name: "TextAsset",
@@ -37697,8 +38201,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_335_PROPERTIES,
-        ancestors: DEF_335_ANCESTORS,
+        properties: DEF_336_PROPERTIES,
+        ancestors: DEF_336_ANCESTORS,
     },
     Definition {
         name: "ScriptedInterpolator",
@@ -37716,8 +38220,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_336_PROPERTIES,
-        ancestors: DEF_336_ANCESTORS,
+        properties: DEF_337_PROPERTIES,
+        ancestors: DEF_337_ANCESTORS,
     },
     Definition {
         name: "ListenerInputTypeGamepad",
@@ -37735,8 +38239,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_337_PROPERTIES,
-        ancestors: DEF_337_ANCESTORS,
+        properties: DEF_338_PROPERTIES,
+        ancestors: DEF_338_ANCESTORS,
     },
     Definition {
         name: "GamepadInput",
@@ -37754,8 +38258,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_338_PROPERTIES,
-        ancestors: DEF_338_ANCESTORS,
+        properties: DEF_339_PROPERTIES,
+        ancestors: DEF_339_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyAssetFont",
@@ -37773,8 +38277,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_339_PROPERTIES,
-        ancestors: DEF_339_ANCESTORS,
+        properties: DEF_340_PROPERTIES,
+        ancestors: DEF_340_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceAssetFont",
@@ -37792,8 +38296,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_340_PROPERTIES,
-        ancestors: DEF_340_ANCESTORS,
+        properties: DEF_341_PROPERTIES,
+        ancestors: DEF_341_ANCESTORS,
     },
     Definition {
         name: "FocusActionClear",
@@ -37811,8 +38315,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_341_PROPERTIES,
-        ancestors: DEF_341_ANCESTORS,
+        properties: DEF_342_PROPERTIES,
+        ancestors: DEF_342_ANCESTORS,
     },
     Definition {
         name: "TransitionFocusCondition",
@@ -37830,8 +38334,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_342_PROPERTIES,
-        ancestors: DEF_342_ANCESTORS,
+        properties: DEF_343_PROPERTIES,
+        ancestors: DEF_343_ANCESTORS,
     },
     Definition {
         name: "ComponentOrigin",
@@ -37849,8 +38353,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_343_PROPERTIES,
-        ancestors: DEF_343_ANCESTORS,
+        properties: DEF_344_PROPERTIES,
+        ancestors: DEF_344_ANCESTORS,
     },
     Definition {
         name: "ViewModelPropertyAssetBlob",
@@ -37868,8 +38372,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_344_PROPERTIES,
-        ancestors: DEF_344_ANCESTORS,
+        properties: DEF_345_PROPERTIES,
+        ancestors: DEF_345_ANCESTORS,
     },
     Definition {
         name: "ViewModelInstanceAssetBlob",
@@ -37887,8 +38391,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_345_PROPERTIES,
-        ancestors: DEF_345_ANCESTORS,
+        properties: DEF_346_PROPERTIES,
+        ancestors: DEF_346_ANCESTORS,
     },
     Definition {
         name: "LayoutSizingStyle",
@@ -37906,8 +38410,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: true,
         cloneable: false,
-        properties: DEF_346_PROPERTIES,
-        ancestors: DEF_346_ANCESTORS,
+        properties: DEF_347_PROPERTIES,
+        ancestors: DEF_347_ANCESTORS,
     },
     Definition {
         name: "LayoutNodeStyle",
@@ -37925,8 +38429,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_347_PROPERTIES,
-        ancestors: DEF_347_ANCESTORS,
+        properties: DEF_348_PROPERTIES,
+        ancestors: DEF_348_ANCESTORS,
     },
     Definition {
         name: "GridTrack",
@@ -37944,8 +38448,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_348_PROPERTIES,
-        ancestors: DEF_348_ANCESTORS,
+        properties: DEF_349_PROPERTIES,
+        ancestors: DEF_349_ANCESTORS,
     },
     Definition {
         name: "LayoutParticipant",
@@ -37963,8 +38467,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_349_PROPERTIES,
-        ancestors: DEF_349_ANCESTORS,
+        properties: DEF_350_PROPERTIES,
+        ancestors: DEF_350_ANCESTORS,
     },
     Definition {
         name: "KeyFrameInt",
@@ -37982,8 +38486,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_350_PROPERTIES,
-        ancestors: DEF_350_ANCESTORS,
+        properties: DEF_351_PROPERTIES,
+        ancestors: DEF_351_ANCESTORS,
     },
     Definition {
         name: "GridItemPlacement",
@@ -38001,8 +38505,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_351_PROPERTIES,
-        ancestors: DEF_351_ANCESTORS,
+        properties: DEF_352_PROPERTIES,
+        ancestors: DEF_352_ANCESTORS,
     },
     Definition {
         name: "TextStyleBackground",
@@ -38020,8 +38524,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_352_PROPERTIES,
-        ancestors: DEF_352_ANCESTORS,
+        properties: DEF_353_PROPERTIES,
+        ancestors: DEF_353_ANCESTORS,
     },
     Definition {
         name: "ScriptModuleAsset",
@@ -38039,8 +38543,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_353_PROPERTIES,
-        ancestors: DEF_353_ANCESTORS,
+        properties: DEF_354_PROPERTIES,
+        ancestors: DEF_354_ANCESTORS,
     },
     Definition {
         name: "VideoAsset",
@@ -38058,8 +38562,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_354_PROPERTIES,
-        ancestors: DEF_354_ANCESTORS,
+        properties: DEF_355_PROPERTIES,
+        ancestors: DEF_355_ANCESTORS,
     },
     Definition {
         name: "Video",
@@ -38077,7 +38581,7 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_355_PROPERTIES,
-        ancestors: DEF_355_ANCESTORS,
+        properties: DEF_356_PROPERTIES,
+        ancestors: DEF_356_ANCESTORS,
     },
 ];

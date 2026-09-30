@@ -141,6 +141,8 @@ impl RiveRenderPaint {
 }
 
 impl crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::RiveRenderPaintContract for RiveRenderPaint {
+    fn getIsLayerMask(&self) -> bool { self.getIsLayerMask() }
+    fn getLayerMaskMode(&self) -> nuxie_render_api::LayerMaskMode { self.getLayerMaskMode() }
     fn getAdditiveness(&self)->f32 { self.getAdditiveness() }
     fn getBlendMode(&self)->nuxie_render_api::BlendMode { self.getBlendMode() }
     fn getImageTexture(&self)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::Texture> { unsafe { crate::mechanical_port::source::include::rive::refcnt_hpp::ref_rcp(self.m_data.m_imageTexture.get()) } }

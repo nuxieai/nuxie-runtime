@@ -978,6 +978,8 @@ pub(super) struct MechanicalRenderContext {
     resource_domain: RenderResourceDomain,
     #[cfg(test)]
     deterministic_validation_thresholds: bool,
+    #[cfg(test)]
+    testing_frame_mode: Option<nuxie_render_api::RenderCanvasFrameMode>,
     in_flight: Vec<(
         Retained<ProtocolObject<dyn MTLCommandBuffer>>,
         MechanicalCompletionToken,
@@ -1059,6 +1061,8 @@ impl MechanicalRenderContext {
             resource_domain: RenderResourceDomain::new(),
             #[cfg(test)]
             deterministic_validation_thresholds: false,
+            #[cfg(test)]
+            testing_frame_mode: None,
             in_flight: Vec::new(),
         })
     }
@@ -1066,6 +1070,12 @@ impl MechanicalRenderContext {
     #[cfg(test)]
     pub(super) fn use_deterministic_validation_thresholds(&mut self) {
         self.deterministic_validation_thresholds = true;
+    }
+
+    #[cfg(test)]
+    pub(super) fn testing_set_frame_mode(&mut self, mode: nuxie_render_api::RenderCanvasFrameMode) {
+        assert!(!self.active_frame);
+        self.testing_frame_mode = Some(mode);
     }
 
     #[cfg(test)]
@@ -1124,6 +1134,9 @@ impl MechanicalRenderContext {
 
     pub(super) fn render_context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.render_context.as_mut()
+    }
+    pub(super) fn supports_layer_mask(&self) -> bool {
+        self.render_context.as_ref().get_ref().supportsLayerMask()
     }
 
     /// Selected native source-factory seam. NativeMetalFrame's later wholesale
@@ -1317,6 +1330,14 @@ impl MechanicalRenderContext {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
             }
+        }
+        // TestingWindow accepts these independent policies per frame. Keep
+        // that exact test seam without changing production RenderMode defaults.
+        #[cfg(test)]
+        if let Some(mode) = self.testing_frame_mode {
+            descriptor.disableRasterOrdering = mode.disable_raster_ordering;
+            descriptor.msaaSampleCount = mode.msaa_sample_count;
+            descriptor.clockwiseFillOverride = mode.clockwise_fill_override;
         }
         let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
         unsafe { metal_impl_mut(context) }

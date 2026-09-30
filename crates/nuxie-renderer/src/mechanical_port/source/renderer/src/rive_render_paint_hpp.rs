@@ -192,6 +192,8 @@ pub(crate) struct Data {
     pub m_additiveness: f32,
     pub m_blendMode: BlendMode,
     pub m_stroked: bool,
+    pub m_isLayerMask: bool,
+    pub m_layerMaskMode: nuxie_render_api::LayerMaskMode,
     pub m_imageTransform: Mat2D,
     pub m_forceClosed: bool,
 }
@@ -213,6 +215,8 @@ impl Default for RiveRenderPaint {
                 m_additiveness: 0.0,
                 m_blendMode: BlendMode::SrcOver,
                 m_stroked: false,
+                m_isLayerMask: false,
+                m_layerMaskMode: nuxie_render_api::LayerMaskMode::Alpha,
                 m_imageTransform: Mat2D::IDENTITY,
                 m_forceClosed: false,
             }),
@@ -294,6 +298,20 @@ impl RiveRenderPaint {
     }
     pub fn getAdditiveness(&self) -> f32 {
         self.m_data.m_additiveness
+    }
+    pub fn getIsLayerMask(&self) -> bool {
+        self.m_data.m_isLayerMask
+    }
+    pub fn getLayerMaskMode(&self) -> nuxie_render_api::LayerMaskMode {
+        self.m_data.m_layerMaskMode
+    }
+    pub fn layerMask(&mut self, texture: rcp<Texture>, mode: nuxie_render_api::LayerMaskMode) {
+        self.m_data.m_paintType = gpu::PaintType::solidColor;
+        self.m_data.m_simpleValue = gpu::SimplePaintValue { color: 0xffff_ffff };
+        *self.m_data.m_gradient = rcp::new();
+        *self.m_data.m_imageTexture = texture;
+        self.m_data.m_isLayerMask = true;
+        self.m_data.m_layerMaskMode = mode;
     }
     pub fn blendMode(&mut self, v: BlendMode) {
         self.m_data.m_blendMode = foldAdditiveToSrcOver(v);
@@ -402,6 +420,9 @@ impl RiveRenderPaint {
         self.m_data.m_simpleValue
     }
     pub fn getIsOpaque(&self) -> bool {
+        if self.m_data.m_isLayerMask {
+            return false;
+        }
         if self.m_data.m_feather != 0.0
             || self.m_data.m_blendMode != BlendMode::SrcOver
             || self.m_data.m_additiveness != 0.0

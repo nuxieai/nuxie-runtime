@@ -11,14 +11,17 @@ use std::fmt::Write;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 mod aabb;
 pub mod authored_ore_shader;
 mod factory;
+pub mod layer_mask_mode;
+pub use layer_mask_mode::LayerMaskMode;
 pub mod line_break;
 pub mod line_break_data;
+pub mod paint_outset;
 mod routing;
 pub mod serialize_ops;
 pub mod serialized_replay;
@@ -27,8 +30,8 @@ pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAab
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use nuxie_ore_metal::context::FrameDescriptor as OreFrameDescriptor;
 pub use routing::{
-    DeferredCanvasHost, DeferredCanvasHostHandle, OreContextHandle, RenderCanvasHandle,
-    canvas_texture_info, canvas_texture_owner,
+    canvas_texture_info, canvas_texture_owner, DeferredCanvasHost, DeferredCanvasHostHandle,
+    OreContextHandle, RenderCanvasHandle,
 };
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
@@ -567,7 +570,7 @@ pub fn annotate_glyph_runs(
     text: &[char],
     run_text_indices: &[&[u32]],
 ) -> Result<Vec<GlyphRunAnnotations>, GlyphRunAnnotationError> {
-    use line_break::{LineBreak, LineBreakClass, compute_line_breaks, line_break_props};
+    use line_break::{compute_line_breaks, line_break_props, LineBreak, LineBreakClass};
     // Adapt the public char slice without allocating for typical UI strings.
     let mut inline_unichars = [0u32; 256];
     let mut heap_unichars = Vec::new();
@@ -2690,13 +2693,26 @@ pub trait RenderPath: Any {
 }
 
 pub trait Renderer {
+    /// Multiply the current target by mask coverage; unsupported renderers leave it unmasked.
+    fn apply_layer_mask(
+        &mut self,
+        _mask: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        _mode: LayerMaskMode,
+    ) {
+    }
     /// Source default for non-Rive renderers; UV transforms are intentionally
     /// unsupported here, exactly as in upstream's default implementation.
     #[allow(clippy::too_many_arguments)]
     fn draw_image_mesh_instanced(
-        &mut self, image: Option<&dyn RenderImage>, sampler: ImageSampler,
-        vertices: Option<&dyn RenderBuffer>, uv_coords: Option<&dyn RenderBuffer>,
-        indices: Option<&dyn RenderBuffer>, vertex_count: u32, index_count: u32,
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
         instances: Option<&ImageMeshInstancesHandle>,
     ) {
         let Some(instances) = instances else { return };
@@ -2704,7 +2720,18 @@ pub trait Renderer {
         for instance in instances.instance_data() {
             self.save();
             self.transform(instance.transform);
-            self.draw_image_mesh_with_additiveness(image, sampler, vertices, uv_coords, indices, vertex_count, index_count, BlendMode::SrcOver, instance.opacity, instance.additiveness);
+            self.draw_image_mesh_with_additiveness(
+                image,
+                sampler,
+                vertices,
+                uv_coords,
+                indices,
+                vertex_count,
+                index_count,
+                BlendMode::SrcOver,
+                instance.opacity,
+                instance.additiveness,
+            );
             self.restore();
         }
     }
@@ -2964,6 +2991,9 @@ impl PersistentFactoryContext {
 }
 
 pub trait Factory {
+    fn supports_layer_mask(&self) -> bool {
+        false
+    }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         Rc::new(RefCell::new(ImageMeshInstancesStorage::new(count)))
     }
@@ -3198,6 +3228,9 @@ pub trait Factory {
 // the surrounding script callback. That callback can enter an artboard which
 // retains this same factory identity without manufacturing an aliasing &mut.
 impl Factory for PersistentFactoryContext {
+    fn supports_layer_mask(&self) -> bool {
+        self.with_factory(|factory| factory.supports_layer_mask())
+    }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         self.with_factory(|factory| factory.make_image_mesh_instances(count))
     }
@@ -3344,6 +3377,9 @@ impl Factory for PersistentFactoryContext {
 }
 
 impl<F: Factory + 'static> Factory for PersistentFactory<F> {
+    fn supports_layer_mask(&self) -> bool {
+        self.borrow().supports_layer_mask()
+    }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         self.borrow_mut().make_image_mesh_instances(count)
     }
@@ -4453,10 +4489,17 @@ impl RenderBuffer for NullRenderBuffer {
 
 impl Renderer for NullRenderer {
     fn draw_image_mesh_instanced(
-        &mut self, _: Option<&dyn RenderImage>, _: ImageSampler,
-        _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>,
-        _: u32, _: u32, _: Option<&ImageMeshInstancesHandle>,
-    ) {}
+        &mut self,
+        _: Option<&dyn RenderImage>,
+        _: ImageSampler,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: u32,
+        _: u32,
+        _: Option<&ImageMeshInstancesHandle>,
+    ) {
+    }
     fn save(&mut self) {}
 
     fn restore(&mut self) {}
@@ -4811,7 +4854,8 @@ impl Renderer for RecordingRenderer {
         index_count: u32,
         instances: Option<&ImageMeshInstancesHandle>,
     ) {
-        let instances = instances.map(|value| value.borrow().instance_data().to_vec())
+        let instances = instances
+            .map(|value| value.borrow().instance_data().to_vec())
             .unwrap_or_default();
         let mut stream = self.stream.borrow_mut();
         stream.line(format!(
@@ -4821,9 +4865,14 @@ impl Renderer for RecordingRenderer {
             mesh_instances_to_string(&instances),
         ));
         stream.semantic(SemanticRecordingCommand::DrawImageMeshInstanced {
-            image: image_snapshot(image), sampler,
-            vertices: buffer_snapshot(vertices), uv_coords: buffer_snapshot(uv_coords),
-            indices: buffer_snapshot(indices), vertex_count, index_count, instances,
+            image: image_snapshot(image),
+            sampler,
+            vertices: buffer_snapshot(vertices),
+            uv_coords: buffer_snapshot(uv_coords),
+            indices: buffer_snapshot(indices),
+            vertex_count,
+            index_count,
+            instances,
         });
     }
     fn save(&mut self) {
@@ -5017,7 +5066,14 @@ fn canonicalize_recording_commands(commands: &[SemanticRecordingCommand]) -> Str
     for command in commands {
         match command {
             SemanticRecordingCommand::DrawImageMeshInstanced {
-                image, sampler, vertices, uv_coords, indices, vertex_count, index_count, instances,
+                image,
+                sampler,
+                vertices,
+                uv_coords,
+                indices,
+                vertex_count,
+                index_count,
+                instances,
             } => {
                 canonical.push_str("drawImageMeshInstanced image=");
                 write_canonical_image(&mut canonical, image.as_ref(), &mut ids.images);
@@ -5029,8 +5085,12 @@ fn canonicalize_recording_commands(commands: &[SemanticRecordingCommand]) -> Str
                 write_canonical_buffer(&mut canonical, uv_coords.as_ref(), &mut ids.buffers);
                 canonical.push_str(" indices=");
                 write_canonical_buffer(&mut canonical, indices.as_ref(), &mut ids.buffers);
-                write!(canonical, " vertexCount={vertex_count} indexCount={index_count} instances={}",
-                    mesh_instances_to_string(instances)).expect("writing to String");
+                write!(
+                    canonical,
+                    " vertexCount={vertex_count} indexCount={index_count} instances={}",
+                    mesh_instances_to_string(instances)
+                )
+                .expect("writing to String");
             }
             SemanticRecordingCommand::Line(line) => canonical.push_str(line),
             SemanticRecordingCommand::DrawPath { path, paint } => {
@@ -5277,13 +5337,19 @@ fn write_raw_path(out: &mut String, path: &RawPath) {
 }
 
 fn mesh_instances_to_string(instances: &[ImageMeshInstanceData]) -> String {
-    let values = instances.iter().map(|instance| format!(
+    let values =
+        instances
+            .iter()
+            .map(|instance| {
+                format!(
         "{{transform={},uvTranslate=[{},{}],uvScale=[{},{}],opacity={},additiveness={}}}",
         mat_to_string(instance.transform),
         float_to_string(instance.uv_translate[0]), float_to_string(instance.uv_translate[1]),
         float_to_string(instance.uv_scale[0]), float_to_string(instance.uv_scale[1]),
         float_to_string(instance.opacity), float_to_string(instance.additiveness),
-    )).collect::<Vec<_>>();
+    )
+            })
+            .collect::<Vec<_>>();
     format!("[{}]", values.join(","))
 }
 

@@ -6,6 +6,7 @@ pub mod assets;
 pub mod audio_event_base;
 pub mod backboard_base;
 pub mod bitmap_cache_base;
+pub mod layer_mask_base;
 pub mod bones;
 pub mod component_base;
 pub mod component_origin_base;

@@ -5,10 +5,10 @@
 //! every product concept layered above a runtime-native player.
 
 use super::{
+    enter_handle, enter_occurrence, ffi_guard, ffi_guard_with_handle_result, ffi_guard_with_result,
+    publish_result, register_handle, remove_handle, struct_size_supports, write_caller_struct,
     HandleKind, NuxCapiResult, NuxPlayer, NuxStatus, RendererDomain, RendererDomainBinding,
-    RendererDomainCacheKey, enter_handle, enter_occurrence, ffi_guard,
-    ffi_guard_with_handle_result, ffi_guard_with_result, publish_result, register_handle,
-    remove_handle, struct_size_supports, write_caller_struct,
+    RendererDomainCacheKey,
 };
 use super::{NuxFile, NuxFileImportConfig};
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
@@ -23,7 +23,7 @@ use nuxie::{
     RenderPath, RenderShader, Renderer,
 };
 use nuxie_renderer::deferred::cmd::{
-    deferred_replayer::{DeferredFrameSink, DeferredReplayer, take_frame},
+    deferred_replayer::{take_frame, DeferredFrameSink, DeferredReplayer},
     deferred_session::{DeferredSession, ReplayCaps},
     render_replay::RendererOwner,
 };
@@ -40,8 +40,8 @@ use std::ffi::c_void;
 use std::ptr;
 use std::ptr::NonNull;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::thread;
 
 /// Rust-only trust seam for the upper-leaf product adapter. This is kept out
@@ -440,6 +440,9 @@ impl crate::asset_hooks::AssetUploadFactory for AppleMetalFactory {
 }
 
 impl Factory for AppleMetalFactory {
+    fn supports_layer_mask(&self) -> bool {
+        nuxie::render_api::Factory::supports_layer_mask(&self.session)
+    }
     fn make_image_mesh_instances(
         &mut self,
         count: usize,
@@ -608,6 +611,19 @@ impl ReplayFrame {
 struct ReplayFrameRenderer(Rc<RefCell<Option<ReplayFrame>>>);
 
 impl Renderer for ReplayFrameRenderer {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie::render_api::LayerMaskMode,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .apply_layer_mask(mask, sampler, mode);
+    }
     fn draw_image_mesh_instanced(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -1762,8 +1778,8 @@ mod tests {
     #[cfg(feature = "apple-authored-msl")]
     use nuxie::GpuCanvasShaderProfile;
     use std::cell::Cell;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize};
+    use std::sync::Arc;
     use std::time::{Duration, Instant};
 
     thread_local! {

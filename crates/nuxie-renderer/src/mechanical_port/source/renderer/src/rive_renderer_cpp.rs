@@ -1902,6 +1902,53 @@ impl RiveRenderer {
 }
 
 impl RendererContract for RiveRenderer {
+    unsafe fn applyLayerMask(
+        &mut self,
+        image: *const crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        if !unsafe { (&*self.m_context).frameSupportsLayerMask() } {
+            return;
+        }
+        if image.is_null() {
+            return;
+        }
+        // The adapter proves the exact image owner before entering this boundary.
+        let image = unsafe { &*(image.cast::<RiveRenderImage>()) };
+        let texture = image.refTexture();
+        if texture.get().is_null() || self.current_state().overallClipPixelBounds.empty() {
+            return;
+        }
+        if self.m_unitRectPath.is_none() {
+            *self.m_unitRectPath = Some(make_rcp(RiveRenderPath::default));
+            let path = unsafe { &mut *self.m_unitRectPath.as_mut().unwrap().get() };
+            path.line_to(1.0, 0.0);
+            path.line_to(1.0, 1.0);
+            path.line_to(0.0, 1.0);
+        }
+        self.save();
+        self.transform(&Mat2D([
+            image.width() as f32,
+            0.0,
+            0.0,
+            image.height() as f32,
+            0.0,
+            0.0,
+        ]));
+        let mut paint = RiveRenderPaint::new();
+        paint.layerMask(texture, mode);
+        paint.imageSampler(sampler);
+        let path = unsafe { &*self.m_unitRectPath.as_ref().unwrap().get() };
+        unsafe {
+            <Self as RendererContract>::drawPath(
+                self,
+                path.base.base.renderPath_const() as *mut _,
+                paint.base_ptr(),
+            );
+        }
+        self.restore();
+    }
     unsafe fn drawImageMeshInstanced(
         &mut self,
         image: *const crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage,

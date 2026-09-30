@@ -1167,6 +1167,8 @@ pub struct Draw {
     pub(crate) image_matrix: nuxie_render_api::Mat2D,
     pub(crate) blend_mode: nuxie_render_api::BlendMode,
     pub(crate) additiveness: f32,
+    pub(crate) is_layer_mask: bool,
+    pub(crate) layer_mask_mode: nuxie_render_api::LayerMaskMode,
     pub(crate) draw_type: DrawObjectType,
     pub(crate) clipped_pixel_bounds: IAABB,
     pub(crate) clipping_pixel_bounds: Option<IAABB>,
@@ -1204,6 +1206,8 @@ impl Draw {
             image_matrix: nuxie_render_api::Mat2D::IDENTITY,
             blend_mode: nuxie_render_api::BlendMode::SrcOver,
             additiveness: 0.0,
+            is_layer_mask: false,
+            layer_mask_mode: nuxie_render_api::LayerMaskMode::Alpha,
             draw_type: DrawObjectType::path,
             clipped_pixel_bounds: IAABB::default(),
             clipping_pixel_bounds: None,
@@ -1269,6 +1273,12 @@ impl Draw {
     }
     pub fn additiveness(&self) -> f32 {
         self.additiveness
+    }
+    pub fn isLayerMask(&self) -> bool {
+        self.is_layer_mask
+    }
+    pub fn layerMaskMode(&self) -> nuxie_render_api::LayerMaskMode {
+        self.layer_mask_mode
     }
     pub fn blendMode(&self) -> nuxie_render_api::BlendMode {
         self.blend_mode
@@ -2224,6 +2234,7 @@ pub struct RenderContextMembers {
     pub(crate) m_triangulation_controller: TriangulationController,
     pub(crate) m_frame_descriptor: FrameDescriptor,
     pub(crate) m_frame_interlock_mode: gpu::InterlockMode,
+    pub(crate) m_frame_can_apply_layer_mask: std::sync::atomic::AtomicBool,
     pub(crate) m_frame_shader_features_mask: gpu::ShaderFeatures,
     #[cfg(debug_assertions)]
     pub(crate) m_did_begin_frame: bool,
@@ -2375,7 +2386,8 @@ impl RenderContext {
                 m_last_resource_trim_time_in_seconds: 0.0,
                 m_triangulation_controller: TriangulationController::default(),
                 m_frame_descriptor: FrameDescriptor::default(),
-                m_frame_interlock_mode: gpu::InterlockMode::depthStencil,
+                m_frame_interlock_mode: gpu::InterlockMode::rasterOrdering,
+                m_frame_can_apply_layer_mask: std::sync::atomic::AtomicBool::new(true),
                 m_frame_shader_features_mask: gpu::ShaderFeatures::NONE,
                 #[cfg(debug_assertions)]
                 m_did_begin_frame: false,
@@ -2783,9 +2795,21 @@ pub trait LogicalFlushContract {
         draw: *mut PathDraw,
         path_id: u32,
     ) -> *mut gpu::DrawBatch;
-    unsafe fn pushImageRectDraw(&mut self, draw: *mut ImageRectDraw, z_index: u32) -> *mut gpu::DrawBatch;
-    unsafe fn pushImageMeshDraw(&mut self, draw: *mut ImageMeshDraw, z_index: u32) -> *mut gpu::DrawBatch;
-    unsafe fn pushClipResetDraw(&mut self, draw: *mut ClipReset, z_index: u32) -> *mut gpu::DrawBatch;
+    unsafe fn pushImageRectDraw(
+        &mut self,
+        draw: *mut ImageRectDraw,
+        z_index: u32,
+    ) -> *mut gpu::DrawBatch;
+    unsafe fn pushImageMeshDraw(
+        &mut self,
+        draw: *mut ImageMeshDraw,
+        z_index: u32,
+    ) -> *mut gpu::DrawBatch;
+    unsafe fn pushClipResetDraw(
+        &mut self,
+        draw: *mut ClipReset,
+        z_index: u32,
+    ) -> *mut gpu::DrawBatch;
     fn getWritableClipInfo(&mut self, clip_id: u32) -> &mut ClipInfo;
     unsafe fn pushPathDraw(
         &mut self,

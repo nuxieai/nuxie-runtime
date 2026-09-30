@@ -21,11 +21,12 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::rende
 pub use nuxie_render_api::{BlendMode, FillRule, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D};
 
 pub(crate) use crate::draw::{
-    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
-    StrokeTessellation, build_feather_tessellation_with_direction, build_fill_tessellation,
+    build_feather_tessellation_with_direction, build_fill_tessellation,
     build_interior_tessellation, build_stroke_tessellation_with_layout,
     clockwise_atomic_negate_coverage, feather_atlas_fill_direction, feather_atlas_scale,
     feather_pixel_bounds, feather_requires_atlas, path_coarse_area, path_pixel_bounds,
+    FeatherFillDirection, FillTessellation, InteriorTessellation, StrokePreparationScratch,
+    StrokeTessellation,
 };
 
 #[repr(i32)]
@@ -60,6 +61,12 @@ pub const FULLSCREEN_PIXEL_BOUNDS:
 /// contract preserves every source getter, including the already-opacity-
 /// modulated gradient owner returned by `getModulatedGradient()`.
 pub trait RiveRenderPaintContract {
+    fn getIsLayerMask(&self) -> bool {
+        false
+    }
+    fn getLayerMaskMode(&self) -> nuxie_render_api::LayerMaskMode {
+        nuxie_render_api::LayerMaskMode::Alpha
+    }
     fn getBlendMode(&self) -> BlendMode;
     fn getAdditiveness(&self) -> f32;
     fn getImageTexture(

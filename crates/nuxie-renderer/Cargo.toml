@@ -94,7 +94,7 @@ web-sys = { version = "0.3", optional = true, features = ["Event", "EventTarget"
 
 [dev-dependencies]
 nuxie-render-stream = { path = "../nuxie-render-stream" }
-nuxie-runtime = { path = "../nuxie-runtime" }
+nuxie-runtime = { path = "../nuxie-runtime", features = ["testing"] }
 pixel-compare = { path = "../../tools/pixel-compare" }
 
 [[example]]

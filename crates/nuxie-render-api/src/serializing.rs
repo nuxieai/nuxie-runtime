@@ -1,12 +1,13 @@
 use super::{
-    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
-    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
-    encoded_image_dimensions,
+    encoded_image_dimensions, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError,
+    ImageSampler, LayerMaskMode, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
+    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
+    StrokeCap, StrokeJoin,
 };
 use crate::{
-    DeferredCanvasHost, DeferredCanvasHostHandle, PersistentFactoryContext, RenderCanvasHandle,
-    ImageMeshInstanceData, ImageMeshInstances, ImageMeshInstancesHandle, ImageMeshInstancesStorage,
+    DeferredCanvasHost, DeferredCanvasHostHandle, ImageMeshInstanceData, ImageMeshInstances,
+    ImageMeshInstancesHandle, ImageMeshInstancesStorage, PersistentFactoryContext,
+    RenderCanvasHandle,
 };
 use std::any::Any;
 use std::cell::RefCell;
@@ -100,6 +101,9 @@ impl SerializingCanvasHost {
 }
 
 impl DeferredCanvasHost for SerializingCanvasHost {
+    fn supports_layer_mask(&self) -> bool {
+        true
+    }
     fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
         let mut context = self.canvases.borrow().bitmap_cache_context.clone()?;
         let canvas = context.make_deferred_render_canvas(width, height).ok()?;
@@ -214,6 +218,9 @@ impl Default for SerializingFactory {
 }
 
 impl DeferredCanvasHost for SerializingFactory {
+    fn supports_layer_mask(&self) -> bool {
+        true
+    }
     fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
         self.canvas_host().make_content_canvas(width, height)
     }
@@ -233,6 +240,9 @@ impl DeferredCanvasHost for SerializingFactory {
 }
 
 impl Factory for SerializingFactory {
+    fn supports_layer_mask(&self) -> bool {
+        true
+    }
     fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
         let id = self.next_image_mesh_instances_id;
         self.next_image_mesh_instances_id += 1;
@@ -718,8 +728,12 @@ struct SerializingImageMeshInstances {
 }
 
 impl ImageMeshInstances for SerializingImageMeshInstances {
-    fn as_any(&self) -> &dyn Any { self }
-    fn instance_data(&self) -> &[ImageMeshInstanceData] { self.storage.instance_data() }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn instance_data(&self) -> &[ImageMeshInstanceData] {
+        self.storage.instance_data()
+    }
     fn edit(&mut self, count: Option<usize>) -> &mut [ImageMeshInstanceData] {
         self.storage.edit(count)
     }
@@ -731,15 +745,25 @@ impl ImageMeshInstances for SerializingImageMeshInstances {
         writer.varuint(self.id);
         writer.varuint(data.len() as u64);
         for instance in data {
-            for value in instance.transform.0 { writer.float(value); }
-            for value in instance.uv_translate { writer.float(value); }
-            for value in instance.uv_scale { writer.float(value); }
+            for value in instance.transform.0 {
+                writer.float(value);
+            }
+            for value in instance.uv_translate {
+                writer.float(value);
+            }
+            for value in instance.uv_scale {
+                writer.float(value);
+            }
             writer.float(instance.opacity);
             writer.float(instance.additiveness);
         }
     }
-    fn edit_count(&self) -> usize { self.storage.edit_count() }
-    fn is_editing(&self) -> bool { self.storage.is_editing() }
+    fn edit_count(&self) -> usize {
+        self.storage.edit_count()
+    }
+    fn is_editing(&self) -> bool {
+        self.storage.is_editing()
+    }
 }
 
 struct SerializingRenderBuffer {
@@ -803,6 +827,21 @@ pub struct SerializingRenderer {
 }
 
 impl Renderer for SerializingRenderer {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        _sampler: ImageSampler,
+        mode: LayerMaskMode,
+    ) {
+        let id = image_id(
+            &self.canvases.borrow(),
+            mask.expect("non-null serialized mask"),
+        );
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(APPLY_LAYER_MASK);
+        writer.varuint(id);
+        writer.varuint(mode as u64);
+    }
     fn draw_image_mesh_instanced(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -814,9 +853,14 @@ impl Renderer for SerializingRenderer {
         _index_count: u32,
         instances: Option<&ImageMeshInstancesHandle>,
     ) {
-        let id = image_id(&self.canvases.borrow(), image.expect("non-null serialized image"));
+        let id = image_id(
+            &self.canvases.borrow(),
+            image.expect("non-null serialized image"),
+        );
         let instances = instances.expect("non-null serialized instances").borrow();
-        let instances = instances.as_any().downcast_ref::<SerializingImageMeshInstances>()
+        let instances = instances
+            .as_any()
+            .downcast_ref::<SerializingImageMeshInstances>()
             .expect("SerializingFactory requires SerializingImageMeshInstances");
         let mut writer = self.writer.borrow_mut();
         writer.varuint(DRAW_IMAGE_MESH_INSTANCED);

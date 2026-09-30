@@ -64,6 +64,7 @@ pub struct SessionRouting {
     active_begin: u32,
     open_screen: u64,
     has_open_screen: bool,
+    canvas_stack: Vec<u64>,
     pub has_ore_marker: bool,
 }
 impl SessionRouting {
@@ -82,6 +83,7 @@ impl SessionRouting {
             active_begin: 0,
             open_screen: 0,
             has_open_screen: false,
+            canvas_stack: Vec::new(),
             has_ore_marker: false,
         }
     }
@@ -127,6 +129,11 @@ impl SessionRouting {
         self.reopen_unrouted_range();
     }
     pub fn end_canvas_content(&mut self) {
+        self.canvas_stack.pop();
+        if let Some(&canvas) = self.canvas_stack.last() {
+            self.route_to(canvas);
+            return;
+        }
         if self.has_open_screen {
             self.route_to(screen_target(self.open_screen));
             return;
@@ -143,6 +150,7 @@ impl SessionRouting {
     pub fn begin_canvas_content(&mut self, canvas: RenderCanvasHandle, clear_color: u32) -> u32 {
         let id = self.register_canvas(canvas);
         self.canvas_clear.insert(u64::from(id), clear_color);
+        self.canvas_stack.push(u64::from(id));
         self.route_to(u64::from(id));
         id
     }
@@ -170,6 +178,7 @@ impl SessionRouting {
         self.active_begin = 0;
         self.open_screen = 0;
         self.has_open_screen = false;
+        self.canvas_stack.clear();
         self.has_ore_marker = false;
         self.segments.clear();
     }
@@ -463,6 +472,14 @@ impl DeferredRouteHost for DeferredSession {
 }
 struct ScopedRenderer(RendererOwner);
 impl Renderer for ScopedRenderer {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: LayerMaskMode,
+    ) {
+        self.0.borrow_mut().apply_layer_mask(mask, sampler, mode);
+    }
     fn save(&mut self) {
         self.0.borrow_mut().save();
     }
@@ -567,6 +584,12 @@ impl Renderer for ScopedRenderer {
     }
 }
 impl DeferredCanvasHost for DeferredSession {
+    fn supports_layer_mask(&self) -> bool {
+        self.render_context
+            .borrow()
+            .as_ref()
+            .is_none_or(|context| context.supports_layer_mask())
+    }
     // Recording: the stream only names the canvas, and whoever replays
     // resolves it against its own device.
     fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>> {
@@ -633,6 +656,9 @@ impl DeferredCanvasHost for DeferredSession {
     }
 }
 impl Factory for DeferredSession {
+    fn supports_layer_mask(&self) -> bool {
+        DeferredCanvasHost::supports_layer_mask(self)
+    }
     fn ore(&mut self) -> Option<OreContextHandle> {
         Some(self.ore_context.clone())
     }

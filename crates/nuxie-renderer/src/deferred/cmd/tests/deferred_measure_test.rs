@@ -356,6 +356,7 @@ const COMMAND_NAMES: [&str; RenderCmd::ResourceNewVersion as usize + 1] = [
     "drawImageMeshInstanced",
     "modulateOpacity",
     "modulateColor",
+    "applyLayerMask",
     "canvasContentBegin",
     "canvasContentEnd",
     "resourceNewVersion",

@@ -7,26 +7,26 @@ namespace gpu {
 namespace glsl {
 const char draw_mesh_frag[] = R"===(#ifdef EB
 #if(defined(V)&&!defined(A))||defined(QB)
-#undef cc
+#undef dc
 #else
-#define cc
+#define dc
 #endif
-Q1
+R1
 #ifndef V
-A0(L2,o0);
+B0(L2,n0);
 #endif
 #ifndef QB
 o1(d3,m0);
 #ifndef V
-A0(n6,B4);
+B0(p6,C4);
 #endif
-o1(T6,V0);
+o1(V6,W0);
 #else
-A0(d3,m0);
+B0(d3,m0);
 #endif
-R1
+S1
 #ifdef NB
-O3 i3(r5,l4,IC);P3 v5 m4(f6) w5 f4 g4
+O3 i3(x5,m4,DC);P3 y5 n4(v5) z5 g4 h4
 #endif
 #ifdef V
 #ifdef NB
@@ -43,9 +43,9 @@ T1(IB)
 #endif
 {
 #ifdef FB
-q(a1,e);
+q(a1,f);
 #if defined(GB)
-q(F1,P);
+q(r1,P);
 #endif
 q(K2,c);
 #endif
@@ -53,50 +53,50 @@ q(K2,c);
 q(Z3,d);
 #endif
 #ifdef AB
-q(R0,e);
+q(S0,f);
 #endif
 #if defined(FB)&&defined(O)
 q(Q0,d);
 #endif
 #ifdef NB
-q(T5,c);q(P1,i);
+q(W5,c);q(Q1,i);
 #ifdef O
 q(H1,R);
 #endif
 #endif
 #ifdef FB
-i l=Y7(
+i l=Z7(
 #ifdef GB
-F1,
+r1,
 #endif
 #ifdef O
 k3(Q0),
 #endif
-a1 e3);d o=clamp(o2(GD,ma,K2,.0).x,M0(.0),M0(1.));
+a1 e3);d o=clamp(o2(GD,na,K2,.0).x,I0(.0),I0(1.));
 #endif
 #ifdef NB
-i l=K7(IC,f6,T5,j.Vd);d o=1.;
+i l=L7(DC,v5,W5,j.Wd);d o=1.;
 #endif
 #ifdef AB
-if(AB){d l5=max(v3(q5(R0)),M0(.0));o=min(l5,o);}
+if(AB){d n5=max(v3(w5(S0)),I0(.0));o=min(n5,o);}
 #endif
-#ifdef cc
+#ifdef dc
 F2;
 #endif
 #if defined(A)
 if(A&&Z3!=.0){d G3;
 #ifndef QB
-C T0=unpackHalf2x16(h1(m0));d O6=T0.y;G3=max(O6==Z3?T0.x:M0(.0),M0(.0));
+C U0=unpackHalf2x16(h1(m0));d Q6=U0.y;G3=max(Q6==Z3?U0.x:I0(.0),I0(.0));
 #else
 G3=N0(m0).x;
 #endif
-G3=max(G3,M0(.0));o=min(o,G3);}
+G3=max(G3,I0(.0));o=min(o,G3);}
 #endif
 #ifdef NB
-l*=P1;
+l*=Q1;
 #endif
 #if!defined(V)
-i S1=N0(o0);
+i I1=N0(n0);
 #ifdef O
 #ifdef FB
 R y3=k3(Q0);
@@ -104,11 +104,11 @@ R y3=k3(Q0);
 #ifdef NB
 R y3=H1;
 #endif
-if(O&&y3!=L4){
+if(O&&y3!=M4){
 #ifdef NB
-l.xyz=P6(l);
+l.xyz=R6(l);
 #endif
-l.xyz=h5(l.xyz,S1,y3)*l.w;}
+l.xyz=i5(l.xyz,I1,y3)*l.w;}
 #endif
 l*=o;
 #ifdef CC
@@ -116,22 +116,22 @@ if(CC){l=z3(l);}
 #endif
 l.xyz=O2(l.xyz,l.w,f0.xy,j.M3,j.N3);
 #ifndef QB
-l=S1*(1.-l.w)+l;
+l=I1*(1.-l.w)+l;
 #endif
-B0(o0,l);
+y0(n0,l);
 #endif
 #ifndef QB
-k2(m0);k2(V0);
+Z1(m0);Z1(W0);
 #else
-B0(m0,G0(.0));
+y0(m0,G0(.0));
 #endif
-#ifdef cc
+#ifdef dc
 G2;
 #endif
 #ifdef V
-l=(l*o);l.xyz=O2(l.xyz,l.w,f0.xy,j.M3,j.N3);J1=l;A3
+l=(l*o);l.xyz=O2(l.xyz,l.w,f0.xy,j.M3,j.N3);K1=l;A3
 #else
-g2;
+h2;
 #endif
 }
 #endif

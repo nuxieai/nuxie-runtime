@@ -1,0 +1,18 @@
+{
+  "name": "LayerMask",
+  "key": {"int": 154, "string": "layermask"},
+  "extends": "component.json",
+  "properties": {
+    "sourceId": {"type": "Id", "typeRuntime": "uint", "initialValue": "Core.missingId", "initialValueRuntime": "-1", "key": {"int": 459, "string": "sourceid"}},
+    "maskFlags": {"type": "uint", "initialValue": "4", "key": {"int": 460, "string": "maskflags"}},
+    "maskModeValue": {"type": "uint8", "key": {"int": 455, "string": "maskmodevalue"}, "passthroughForBitmask": "maskFlags", "passthroughBit": 0, "passthroughBitWidth": 2},
+    "isVisible": {"type": "bool", "key": {"int": 456, "string": "isvisible"}, "passthroughForBitmask": "maskFlags", "passthroughBit": 2},
+    "sourceDraws": {"type": "bool", "key": {"int": 457, "string": "sourcedraws"}, "passthroughForBitmask": "maskFlags", "passthroughBit": 3},
+    "useCustomBounds": {"type": "bool", "key": {"int": 461, "string": "usecustombounds"}, "passthroughForBitmask": "maskFlags", "passthroughBit": 4},
+    "resolution": {"type": "double", "initialValue": "1.0", "key": {"int": 458, "string": "resolution"}},
+    "boundsX": {"type": "double", "initialValue": "0.0", "key": {"int": 462, "string": "boundsx"}},
+    "boundsY": {"type": "double", "initialValue": "0.0", "key": {"int": 463, "string": "boundsy"}},
+    "boundsWidth": {"type": "double", "initialValue": "0.0", "key": {"int": 464, "string": "boundswidth"}},
+    "boundsHeight": {"type": "double", "initialValue": "0.0", "key": {"int": 465, "string": "boundsheight"}}
+  }
+}

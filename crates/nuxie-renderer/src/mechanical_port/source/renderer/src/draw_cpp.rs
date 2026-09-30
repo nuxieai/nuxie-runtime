@@ -1755,8 +1755,11 @@ pub unsafe fn make_path_draw_from_source(
     if modulated_opacity != 1.0 || modulated_color != 0xffff_ffff {
         match paint_type {
             gpu::PaintType::solidColor => {
-                simple_paint_value.color =
-                    color_modulate(unsafe { simple_paint_value.color }, modulated_color, modulated_opacity)
+                simple_paint_value.color = color_modulate(
+                    unsafe { simple_paint_value.color },
+                    modulated_color,
+                    modulated_opacity,
+                )
             }
             gpu::PaintType::linearGradient
             | gpu::PaintType::radialGradient
@@ -1798,6 +1801,8 @@ pub unsafe fn make_path_draw_from_source(
     } else {
         initial_fill_rule
     };
+    owner.draw.base.is_layer_mask = paint.getIsLayerMask();
+    owner.draw.base.layer_mask_mode = paint.getLayerMaskMode();
     owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(paint_matrix) < 0.0;
     owner.triangulator_negate_winding = owner.triangulator_reverse_triangles
         != (directions == gpu::ContourDirections::forwardThenReverse);

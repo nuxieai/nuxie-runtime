@@ -59,6 +59,10 @@ impl std::ops::DerefMut for Image {
 }
 
 impl Image {
+    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
+        if self.mesh.is_some() {return crate::mechanical_port::source::drawable::BoundsFidelity::None;}
+        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&self.local_bounds(),self.base.world_transform(),None,out)
+    }
     pub const TYPE_KEY: u16 = ImageBase::TYPE_KEY;
 }
 

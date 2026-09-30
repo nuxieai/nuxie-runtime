@@ -665,19 +665,17 @@ impl RiveRenderPath {
         stroke: Option<&crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::StrokeParams>,
         feather: f32,
     ) -> f32 {
-        let mut outset = 0.0;
-        if let Some(stroke) = stroke {
-            outset = stroke.thickness * 0.5;
-            if stroke.join == nuxie_render_api::StrokeJoin::Miter {
-                outset *= 4.0; // RIVE_MITER_LIMIT
-            } else if stroke.cap == nuxie_render_api::StrokeCap::Square {
-                outset *= std::f32::consts::SQRT_2;
-            }
-        }
-        if feather != 0.0 {
-            outset += super::gpu_cpp::featherRadiusFromFeather(feather);
-        }
-        outset
+        const _: () = {
+            assert!(
+                nuxie_render_api::paint_outset::K_MITER_LIMIT
+                    == super::shaders::constants_glsl::RIVE_MITER_LIMIT
+            );
+            assert!(
+                nuxie_render_api::paint_outset::K_GAUSSIAN_INTEGRAL_STD_DEVS
+                    == super::shaders::constants_glsl::GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS
+            );
+        };
+        nuxie_render_api::paint_outset::paint_bounds_outset(stroke, feather)
     }
 
     pub fn calculatePixelBounds(

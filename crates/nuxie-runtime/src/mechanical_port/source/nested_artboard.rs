@@ -143,6 +143,13 @@ impl Drop for NestedArtboard {
 }
 
 impl NestedArtboard {
+    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
+        let Some(nested)=self.artboard_instance_default() else {return crate::mechanical_port::source::drawable::BoundsFidelity::None};
+        nested.with_artboard(|nested| {
+            let fidelity=crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&nested.bounds(),&self.world_transform(),None,out);
+            if fidelity==crate::mechanical_port::source::drawable::BoundsFidelity::None || nested.clip() {fidelity}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+        })
+    }
     pub(crate) fn take_artboard_instance(&mut self) -> Option<RuntimeArtboardInstanceHandle> {
         self.instance.take()
     }

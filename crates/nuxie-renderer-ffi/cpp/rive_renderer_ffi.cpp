@@ -884,6 +884,22 @@ extern "C" void rive_ffi_renderer_draw_image(
     }
 }
 
+extern "C" bool rive_ffi_context_supports_layer_mask(const rive_ffi_context* context)
+{
+    return context != nullptr && context->context != nullptr && context->context->supportsLayerMask();
+}
+
+extern "C" void rive_ffi_renderer_apply_layer_mask(
+    rive_ffi_renderer* renderer, const rive_ffi_render_image* image, uint8_t sampler, uint8_t mode)
+{
+    if (renderer != nullptr && renderer->context->renderer != nullptr)
+    {
+        renderer->context->renderer->applyLayerMask(image == nullptr ? nullptr : image->image.get(),
+            to_image_sampler(sampler), static_cast<rive::LayerMaskMode>(mode));
+        renderer->context->drawCount += 1;
+    }
+}
+
 extern "C" void rive_ffi_renderer_draw_image_with_additiveness(
     rive_ffi_renderer* renderer,
     const rive_ffi_render_image* image,

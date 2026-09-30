@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
+ * Upstream source revision: 8398db3199cea4cd3eba53747aac562b5c0df3da
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "040e8e34e9767b7c642fbdbb9a60ce35cc21636d3c1c684350567c8618b0e592";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 385;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 16503;
+    "4a3869ab3db7b4563e81f4dc827a0df96e685532f292d6e97515b4b9084c591a";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 398;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17095;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -183,6 +183,19 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define PAINT_FLAG_EVEN_ODD_FILL 0x200u
 #define PAINT_FLAG_HAS_CLIP_RECT 0x400u
 #define PAINT_FLAG_HAS_IMAGE 0x800u
+// A layer-mask apply: the sampled image is coverage, not color, and the blend
+// step multiplies the destination by a factor derived from it. Bits 13-14 hold
+// which factor (rive::LayerMaskMode). Bits 12-15 of paintData.x were free; 8-11
+// are the flags above and 16-31 are the clipID.
+#define PAINT_FLAG_LAYER_MASK 0x1000u
+#define PAINT_LAYER_MASK_MODE_SHIFT 13u
+#define PAINT_LAYER_MASK_MODE_MASK 0x6000u
+
+// rive::LayerMaskMode
+#define LAYER_MASK_MODE_ALPHA 0u
+#define LAYER_MASK_MODE_INVERTED_ALPHA 1u
+#define LAYER_MASK_MODE_LUMINANCE 2u
+#define LAYER_MASK_MODE_INVERTED_LUMINANCE 3u
 
 // PLS draw resources are either updated per flush or per draw. They go into set
 // 0 or set 1, depending on how often they are updated.
@@ -439,3 +452,12 @@ pub const DS_MIDPOINT_VERTEX_ID: i32 = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 
 pub const VERTEX_FLAGS_SHIFT: i32 = 29;
 pub const VERTEX_FLAG_DISABLE_COLOR_WRITE: i32 = 1 << VERTEX_FLAGS_SHIFT;
 pub const VERTEX_FLAG_OUTER_CUBIC: i32 = 1 << (VERTEX_FLAGS_SHIFT + 1);
+pub const PAINT_FLAG_LAYER_MASK: u32 = 0x1000;
+pub const PAINT_LAYER_MASK_MODE_SHIFT: u32 = 13;
+pub const PAINT_LAYER_MASK_MODE_MASK: u32 = 0x6000;
+pub const LAYER_MASK_MODE_ALPHA: u32 = 0;
+pub const LAYER_MASK_MODE_INVERTED_ALPHA: u32 = 1;
+pub const LAYER_MASK_MODE_LUMINANCE: u32 = 2;
+pub const LAYER_MASK_MODE_INVERTED_LUMINANCE: u32 = 3;
+pub const RIVE_MITER_LIMIT: f32 = 4.0;
+pub const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 3.0;

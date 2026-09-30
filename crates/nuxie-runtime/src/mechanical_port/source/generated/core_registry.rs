@@ -3788,6 +3788,7 @@ pub enum CoreConcreteType {
     Event,
     FocusData,
     BitmapCache,
+    LayerMask,
     CustomPropertyBoolean,
     ScriptInputBoolean,
     ScriptInputColor,
@@ -4040,6 +4041,17 @@ pub enum CoreField {
     BitmapCacheCacheFlags,
     BitmapCacheCacheEnabled,
     BitmapCacheDither,
+    LayerMaskSourceId,
+    LayerMaskMaskFlags,
+    LayerMaskMaskModeValue,
+    LayerMaskIsVisible,
+    LayerMaskSourceDraws,
+    LayerMaskUseCustomBounds,
+    LayerMaskResolution,
+    LayerMaskBoundsX,
+    LayerMaskBoundsY,
+    LayerMaskBoundsWidth,
+    LayerMaskBoundsHeight,
     FollowPathConstraintDistance,
     FollowPathConstraintOffset,
     FollowPathConstraintOrient,
@@ -7985,6 +7997,7 @@ impl CoreRegistry {
             128 => CoreConcreteType::Event,
             653 => CoreConcreteType::FocusData,
             136 => CoreConcreteType::BitmapCache,
+            154 => CoreConcreteType::LayerMask,
             129 => CoreConcreteType::CustomPropertyBoolean,
             631 => CoreConcreteType::ScriptInputBoolean,
             626 => CoreConcreteType::ScriptInputColor,
@@ -8087,6 +8100,7 @@ impl CoreRegistry {
     }
     pub fn set_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            459 => CoreField::LayerMaskSourceId,
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
@@ -8179,6 +8193,9 @@ impl CoreRegistry {
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            459 => CoreField::LayerMaskSourceId,
+            460 => CoreField::LayerMaskMaskFlags,
+            455 => CoreField::LayerMaskMaskModeValue,
             453 => CoreField::ListenerViewModelChangeInputValue,
             454 => CoreField::ListenerViewModelChangeInputValueIndex,
             273 => CoreField::ScriptedTransitionActiveComponentId,
@@ -8542,6 +8559,9 @@ impl CoreRegistry {
         value: bool,
     ) {
         let field = match property_key {
+            456 => CoreField::LayerMaskIsVisible,
+            457 => CoreField::LayerMaskSourceDraws,
+            461 => CoreField::LayerMaskUseCustomBounds,
             593 => CoreField::ViewModelInstanceBooleanPropertyValue,
             364 => CoreField::FollowPathConstraintOrient,
             365 => CoreField::FollowPathConstraintOffset,
@@ -8630,6 +8650,11 @@ impl CoreRegistry {
         value: f32,
     ) {
         let field = match property_key {
+            458 => CoreField::LayerMaskResolution,
+            462 => CoreField::LayerMaskBoundsX,
+            463 => CoreField::LayerMaskBoundsY,
+            464 => CoreField::LayerMaskBoundsWidth,
+            465 => CoreField::LayerMaskBoundsHeight,
             448 => CoreField::SelectionStyleCornerRadius,
             416 => CoreField::PaintImageImageScaleX,
             368 => CoreField::PaintImageImageScaleY,
@@ -8898,6 +8923,7 @@ impl CoreRegistry {
     }
     pub fn get_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            459 => CoreField::LayerMaskSourceId,
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
@@ -8990,6 +9016,9 @@ impl CoreRegistry {
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            459 => CoreField::LayerMaskSourceId,
+            460 => CoreField::LayerMaskMaskFlags,
+            455 => CoreField::LayerMaskMaskModeValue,
             453 => CoreField::ListenerViewModelChangeInputValue,
             454 => CoreField::ListenerViewModelChangeInputValueIndex,
             273 => CoreField::ScriptedTransitionActiveComponentId,
@@ -9321,6 +9350,9 @@ impl CoreRegistry {
     }
     pub fn get_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> bool {
         let field = match property_key {
+            456 => CoreField::LayerMaskIsVisible,
+            457 => CoreField::LayerMaskSourceDraws,
+            461 => CoreField::LayerMaskUseCustomBounds,
             953 => CoreField::FocusDataCanFocus,
             954 => CoreField::FocusDataCanTouch,
             955 => CoreField::FocusDataCanTraverse,
@@ -9407,6 +9439,11 @@ impl CoreRegistry {
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
         let field = match property_key {
+            458 => CoreField::LayerMaskResolution,
+            462 => CoreField::LayerMaskBoundsX,
+            463 => CoreField::LayerMaskBoundsY,
+            464 => CoreField::LayerMaskBoundsWidth,
+            465 => CoreField::LayerMaskBoundsHeight,
             448 => CoreField::SelectionStyleCornerRadius,
             416 => CoreField::PaintImageImageScaleX,
             368 => CoreField::PaintImageImageScaleY,
@@ -9809,6 +9846,9 @@ impl CoreRegistry {
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
             453 | 454 => 0,
+            455 | 459 | 460 => 0,
+            456 | 457 | 461 => 4,
+            458 | 462..=465 => 2,
             273 => 0,
             414 => 0,
             415 => 0,
@@ -10463,6 +10503,7 @@ impl CoreRegistry {
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
         let owner_type = match property_key {
             453 | 454 => 487,
+            455..=465 => 154,
             273 => 110,
             414 => 110,
             415 => 113,
@@ -78235,6 +78276,7 @@ impl CoreRegistry {
             128 => Some(Box::new(<crate::mechanical_port::source::event::Event>::default())),
             653 => Some(Box::new(<crate::mechanical_port::source::focus_data::FocusData>::default())),
             136 => Some(Box::new(<crate::mechanical_port::source::bitmap_cache::BitmapCache>::default())),
+            154 => Some(Box::new(<crate::mechanical_port::source::layer_mask::LayerMask>::default())),
             129 => Some(Box::new(<crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean>::default())),
             631 => Some(Box::new(<crate::mechanical_port::source::script_input_boolean::ScriptInputBoolean>::default())),
             626 => Some(Box::new(<crate::mechanical_port::source::script_input_color::ScriptInputColor>::default())),
@@ -78978,5 +79020,247 @@ impl CoreCapabilities for crate::mechanical_port::source::bitmap_cache::BitmapCa
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::component::Component> {
         Some(&mut self.base.base)
+    }
+}
+
+// LayerMask source registration at upstream 8398db31.
+use crate::mechanical_port::source::generated::layer_mask_base::{
+    LayerMaskBase, LayerMaskBaseCallbacks,
+};
+use crate::mechanical_port::source::layer_mask::LayerMask as RegistryLayerMask;
+impl crate::mechanical_port::source::core::CoreType for RegistryLayerMask {
+    const TYPE_KEY: u16 = LayerMaskBase::TYPE_KEY;
+}
+impl CoreRegistryObject for RegistryLayerMask {
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, key: u16) -> bool {
+        LayerMaskBase::is_type_of(key)
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::ComponentParentId => {
+                if self.base.base.base.set_parent_id_value(value) {
+                    <Self as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    <Self as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 5);
+                }
+            }
+            CoreField::LayerMaskSourceId => {
+                if self.base.set_source_id_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::source_id_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 459);
+                }
+            }
+            CoreField::LayerMaskMaskFlags => {
+                if self.base.set_mask_flags_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 460);
+                }
+            }
+            CoreField::LayerMaskMaskModeValue => {
+                if self.base.set_mask_mode_value_value(value as u8) {
+                    <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 460);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ComponentParentId => self.base.base.base.parent_id(),
+            CoreField::LayerMaskSourceId => self.base.source_id(),
+            CoreField::LayerMaskMaskFlags => self.base.mask_flags(),
+            CoreField::LayerMaskMaskModeValue => self.base.mask_mode_value() as u32,
+            _ => 0,
+        }
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        match field {
+            CoreField::LayerMaskIsVisible => {
+                if self.base.set_is_visible_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 460);
+                }
+            }
+            CoreField::LayerMaskSourceDraws => {
+                if self.base.set_source_draws_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 460);
+                }
+            }
+            CoreField::LayerMaskUseCustomBounds => {
+                if self.base.set_use_custom_bounds_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 460);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        match field {
+            CoreField::LayerMaskIsVisible => self.base.is_visible(),
+            CoreField::LayerMaskSourceDraws => self.base.source_draws(),
+            CoreField::LayerMaskUseCustomBounds => self.base.use_custom_bounds(),
+            _ => false,
+        }
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        match field {
+            CoreField::LayerMaskResolution => {
+                if self.base.set_resolution_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::resolution_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 458);
+                }
+            }
+            CoreField::LayerMaskBoundsX => {
+                if self.base.set_bounds_x_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::bounds_x_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 462);
+                }
+            }
+            CoreField::LayerMaskBoundsY => {
+                if self.base.set_bounds_y_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::bounds_y_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 463);
+                }
+            }
+            CoreField::LayerMaskBoundsWidth => {
+                if self.base.set_bounds_width_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::bounds_width_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 464);
+                }
+            }
+            CoreField::LayerMaskBoundsHeight => {
+                if self.base.set_bounds_height_value(value) {
+                    <Self as LayerMaskBaseCallbacks>::bounds_height_changed(self);
+                    <Self as LayerMaskBaseCallbacks>::notify_property_changed(self, 465);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        match field {
+            CoreField::LayerMaskResolution => self.base.resolution(),
+            CoreField::LayerMaskBoundsX => self.base.bounds_x(),
+            CoreField::LayerMaskBoundsY => self.base.bounds_y(),
+            CoreField::LayerMaskBoundsWidth => self.base.bounds_width(),
+            CoreField::LayerMaskBoundsHeight => self.base.bounds_height(),
+            _ => 0.0,
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        if field == CoreField::ComponentName && self.base.base.base.set_name_value(value) {
+            <Self as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+            <Self as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 4);
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        if field == CoreField::ComponentName {
+            self.base.base.base.name().to_owned()
+        } else {
+            String::new()
+        }
+    }
+    fn set_color(&mut self, _: CoreField, _: i32) {}
+    fn get_color(&mut self, _: CoreField) -> i32 {
+        0
+    }
+    fn set_int(&mut self, _: CoreField, _: i32) {}
+    fn get_int(&mut self, _: CoreField) -> i32 {
+        0
+    }
+    fn set_callback(&mut self, _: CoreField, _: CallbackData<'_>) {}
+}
+impl crate::mechanical_port::source::core::CoreObject for RegistryLayerMask {
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        LayerMaskBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        LayerMaskBase::TYPE_KEY
+    }
+    fn is_type_of(&self, key: u16) -> bool {
+        LayerMaskBase::is_type_of(key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        let mut callbacks = Self::default();
+        Some(Box::new(self.base.clone_into(&mut callbacks)))
+    }
+    fn deserialize(
+        &mut self,
+        key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(key, reader, self);
+        self.base = base;
+        result
+    }
+}
+impl CoreCapabilities for RegistryLayerMask {
+    fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
+        Some(&self.base.base)
+    }
+    fn as_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::component::Component> {
+        Some(&mut self.base.base)
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        self.build_dependencies();
+        true
+    }
+    fn component_update(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        self.update(dirt);
+        true
+    }
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(
+            crate::mechanical_port::source::component::Component::validate(
+                &mut self.base.base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_on_added_dirty(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.on_added_dirty(context))
+    }
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.on_added_clean(context))
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::component::Component::import(
+                &mut self.base.base,
+                stack,
+            ),
+        )
     }
 }

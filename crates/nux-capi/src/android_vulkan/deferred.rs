@@ -1,5 +1,5 @@
 //! Android's recorded producer and native Vulkan replay boundary.
-use super::{ApiFailure, renderer_failure};
+use super::{renderer_failure, ApiFailure};
 use crate::NuxStatus;
 use nuxie::render_api::{
     BlendMode, ImageSampler, Mat2D, PersistentFactoryContext, RawPath, RenderCanvasFrame,
@@ -95,6 +95,9 @@ impl crate::asset_hooks::AssetUploadFactory for AndroidVulkanFactory {
 }
 
 impl Factory for AndroidVulkanFactory {
+    fn supports_layer_mask(&self) -> bool {
+        nuxie::render_api::Factory::supports_layer_mask(&self.session)
+    }
     fn make_image_mesh_instances(
         &mut self,
         count: usize,
@@ -233,6 +236,19 @@ impl ReplayFrame {
 struct ReplayFrameRenderer(Rc<RefCell<Option<ReplayFrame>>>);
 
 impl Renderer for ReplayFrameRenderer {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie::render_api::LayerMaskMode,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .apply_layer_mask(mask, sampler, mode);
+    }
     fn draw_image_mesh_instanced(
         &mut self,
         image: Option<&dyn RenderImage>,

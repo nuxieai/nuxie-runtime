@@ -42,13 +42,14 @@ pub enum RenderCmd {
     DrawImageMeshInstanced,
     ModulateOpacity,
     ModulateColor,
+    ApplyLayerMask,
     CanvasContentBegin,
     CanvasContentEnd,
     ResourceNewVersion,
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 41] = [
+        const COMMANDS: [RenderCmd; 42] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -87,6 +88,7 @@ impl RenderCmd {
             RenderCmd::DrawImageMeshInstanced,
             RenderCmd::ModulateOpacity,
             RenderCmd::ModulateColor,
+            RenderCmd::ApplyLayerMask,
             RenderCmd::CanvasContentBegin,
             RenderCmd::CanvasContentEnd,
             RenderCmd::ResourceNewVersion,
@@ -259,6 +261,13 @@ wire_pod!(DrawImagePod {
     opacity: f32,
     additiveness: f32
 });
+wire_pod!(ApplyLayerMaskPod {
+    mask: u32,
+    wrap_x: u8,
+    wrap_y: u8,
+    filter: u8,
+    mode: u8
+});
 wire_pod!(DrawImageMeshPod {
     image: u32,
     vertices: u32,
@@ -351,6 +360,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::DrawImageMeshInstanced => DrawImageMeshInstancedPod::SIZE,
         RenderCmd::ModulateOpacity => OpacityPod::SIZE,
         RenderCmd::ModulateColor => ModulateColorPod::SIZE,
+        RenderCmd::ApplyLayerMask => ApplyLayerMaskPod::SIZE,
         RenderCmd::CanvasContentBegin => CanvasContentPod::SIZE,
         RenderCmd::ResourceNewVersion => ResourceVersionPod::SIZE,
     }
@@ -363,4 +373,5 @@ const _: () = assert!(
         && DecodeImagePod::SIZE == 32
         && BufferDataPod::SIZE == 16
         && ClipStrokePod::SIZE == 16
+        && ApplyLayerMaskPod::SIZE == 8
 );

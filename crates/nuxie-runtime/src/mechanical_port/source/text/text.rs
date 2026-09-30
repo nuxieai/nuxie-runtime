@@ -420,6 +420,10 @@ impl std::ops::DerefMut for Text {
 }
 
 impl Text {
+    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
+        let fidelity=crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&self.local_bounds(),self.base.world_transform(),None,out);
+        if fidelity==crate::mechanical_port::source::drawable::BoundsFidelity::None {fidelity}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+    }
     pub const TYPE_KEY: u16 = TextBase::TYPE_KEY;
 }
 

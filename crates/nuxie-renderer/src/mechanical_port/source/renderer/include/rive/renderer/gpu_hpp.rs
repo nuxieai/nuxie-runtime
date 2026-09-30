@@ -2412,6 +2412,7 @@ pub use crate::mechanical_port::source::renderer::include::rive::renderer::textu
 pub enum GrInnerFanTriangulator {}
 
 pub const MIP_MAP_LOD_BIAS: f32 = -0.5;
+const _: () = assert!(MIP_MAP_LOD_BIAS > -1.0);
 pub const kParametricPrecision: i32 = 4;
 pub const kPolarPrecision: i32 = 8;
 pub const kMaxParametricSegments: u32 = 1023;

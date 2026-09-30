@@ -6,23 +6,23 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_clockwise_path_frag[] = R"===(#ifdef EB
-Q1
+R1
 #ifndef V
-A0(L2,o0);
+B0(L2,n0);
 #endif
 o1(d3,m0);
 #ifndef V
-sb(n6,N6);
+tb(p6,P6);
 #endif
-o1(T6,V0);R1
+o1(V6,W0);S1
 #ifdef V
 A2(IB)
 #else
 T1(IB)
 #endif
-{q(a1,e);
+{q(a1,f);
 #ifdef GB
-q(F1,P);
+q(r1,P);
 #endif
 #ifdef DB
 q(m1,d);
@@ -34,88 +34,88 @@ q(F0,d);
 q(l1,C);
 #endif
 #ifdef AB
-q(R0,e);
+q(S0,f);
 #endif
 #ifdef O
 q(Q0,d);
 #endif
-d z0=
+d A0=
 #ifdef DB
 m1;
 #else
-Ub(S);
+Vb(S);
 #endif
-i n0;d M1;
-#if defined(DB)&&defined(EC)
-if(!EC)
+i o0;d N1;
+#if defined(DB)&&defined(FC)
+if(!FC)
 #endif
-{n0=Y7(
+{o0=Z7(
 #ifdef GB
-F1,
+r1,
 #endif
 #ifdef O
 k3(Q0),
 #endif
-a1 e3);M1=1.;
+a1 e3);N1=1.;
 #ifdef AB
-if(AB){d Zb=v3(q5(R0));M1=min(Zb,M1);}
+if(AB){d ac=v3(w5(S0));N1=min(ac,N1);}
 #endif
 }F2;
-#if defined(DB)&&defined(EC)
-if(EC){j1(V0,packHalf2x16(I2(z0,F0)));
+#if defined(DB)&&defined(FC)
+if(FC){j1(W0,packHalf2x16(I2(A0,F0)));
 #ifndef V
-E2(o0);
+E2(n0);
 #endif
 }else
 #endif
-{C d5=unpackHalf2x16(h1(V0));d C9=d5.y;d f5=C9==F0?d5.x:M0(.0);d Xe=
+{C e5=unpackHalf2x16(h1(W0));d E9=e5.y;d g5=E9==F0?e5.x:I0(.0);d af=
 #ifndef DB
-e6(S)?max(f5,z0):
+g6(S)?max(g5,A0):
 #endif
-f5+z0;
+g5+A0;
 #ifdef A
-if(A&&l1.x!=.0){C T0=unpackHalf2x16(h1(m0));d V5=T0.y;d ac=V5==l1.x?T0.x:M0(.0);M1=min(ac,M1);}
+if(A&&l1.x!=.0){C U0=unpackHalf2x16(h1(m0));d Y5=U0.y;d bc=Y5==l1.x?U0.x:I0(.0);N1=min(bc,N1);}
 #endif
-M1=max(M1,.0);d h2=Aa(f5,.0,M1);d L1=Aa(Xe,.0,M1);
+N1=max(N1,.0);d i2=Ba(g5,.0,N1);d M1=Ba(af,.0,N1);
 #ifdef OB
-d U5;if(OB){U5=Da(f0.xy,j.M3,j.N3);}
+d X5;if(OB){X5=Ea(f0.xy,j.M3,j.N3);}
 #endif
 #ifndef V
-i S1=N0(o0);
+i I1=N0(n0);
 #ifdef O
-if(O&&Q0!=i6(L4)){if(L1!=.0){if(h2==.0){n0.xyz=h5(n0.xyz,S1,k3(Q0));
+if(O&&Q0!=k6(M4)){if(M1!=.0){if(i2==.0){o0.xyz=i5(o0.xyz,I1,k3(Q0));
 #ifndef DB
-if(L1<M1){v d8=n0.xyz;
+if(M1<N1){v f8=o0.xyz;
 #ifdef OB
-if(OB){d8+=U5*j.Wd;}
+if(OB){f8+=X5*j.Xd;}
 #endif
-B0(N6,G0(d8,0.0));}
+y0(P6,G0(f8,0.0));}
 #endif
-}else{n0.xyz=N0(N6).xyz;E2(N6);}}n0.xyz*=n0.w;}
+}else{o0.xyz=N0(P6).xyz;E2(P6);}}o0.xyz*=o0.w;}
 #endif
 #endif
-n0*=a9(h2,L1,n0.w);
+o0*=d9(i2,M1,o0.w);
 #ifdef OB
-n0.xyz=O2(n0.xyz,n0.w,U5);
+o0.xyz=O2(o0.xyz,o0.w,X5);
 #endif
 #ifndef DB
 #ifdef O
-#define Ye (!O||Q0==i6(L4))&&n0.w>=1.
+#define bf (!O||Q0==k6(M4))&&o0.w>=1.
 #else
-#define Ye n0.w>=1.
+#define bf o0.w>=1.
 #endif
-je(Ye,V0,packHalf2x16(I2(Xe,F0)));
+ke(bf,W0,packHalf2x16(I2(af,F0)));
 #else
-k2(V0);
+Z1(W0);
 #endif
 #ifndef V
-ie(n0.x+n0.y+n0.z+n0.w==.0,o0,S1*(1.-n0.w)+n0);
+je(o0.x+o0.y+o0.z+o0.w==.0,n0,I1*(1.-o0.w)+o0);
 #endif
-}k2(m0);G2;
+}Z1(m0);G2;
 #ifdef V
-J1=n0;A3
+K1=o0;A3
 #else
-g2;
+h2;
 #endif
 }
 #endif

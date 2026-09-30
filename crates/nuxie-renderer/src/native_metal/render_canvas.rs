@@ -389,6 +389,14 @@ impl RenderCanvasFrame for NativeMetalRenderCanvasFrame {
 }
 
 impl Renderer for NativeMetalRenderCanvasFrame {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        self.renderer.apply_layer_mask(mask, sampler, mode);
+    }
     fn save(&mut self) {
         self.renderer.save();
     }

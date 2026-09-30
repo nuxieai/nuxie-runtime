@@ -66,6 +66,7 @@ pub enum OpKind {
     MakeImageMeshInstances = 39,
     SetImageMeshInstancesData = 40,
     DrawImageMeshInstanced = 41,
+    ApplyLayerMask = 42,
 }
 
 impl OpKind {
@@ -111,6 +112,7 @@ impl OpKind {
             39 => Self::MakeImageMeshInstances,
             40 => Self::SetImageMeshInstancesData,
             41 => Self::DrawImageMeshInstanced,
+            42 => Self::ApplyLayerMask,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -164,6 +166,7 @@ impl Display for OpKind {
             Self::MakeImageMeshInstances => "makeImageMeshInstances",
             Self::SetImageMeshInstancesData => "setImageMeshInstancesData",
             Self::DrawImageMeshInstanced => "drawImageMeshInstanced",
+            Self::ApplyLayerMask => "applyLayerMask",
         })
     }
 }
@@ -492,6 +495,10 @@ fn parse_fields(
         OpKind::ClipPath => {
             push_uint(reader, fields, "path_id")?;
         }
+        OpKind::ApplyLayerMask => {
+            push_uint(reader, fields, "layermask_id")?;
+            push_uint(reader, fields, "layermask_mode")?;
+        }
         OpKind::DrawImage | OpKind::DrawImageAdditive => {
             push_uint(reader, fields, "image_id")?;
             push_uint(reader, fields, "blend_mode")?;
@@ -520,15 +527,32 @@ fn parse_fields(
             let count = push_uint(reader, fields, "count")?;
             for _ in 0..count {
                 // Match advancedMatch's twelve independent float comparisons.
-                for name in ["xx", "yx", "xy", "yy", "tx", "ty",
-                    "uv_translate_x", "uv_translate_y", "uv_scale_x", "uv_scale_y",
-                    "opacity", "additiveness"] {
+                for name in [
+                    "xx",
+                    "yx",
+                    "xy",
+                    "yy",
+                    "tx",
+                    "ty",
+                    "uv_translate_x",
+                    "uv_translate_y",
+                    "uv_scale_x",
+                    "uv_scale_y",
+                    "opacity",
+                    "additiveness",
+                ] {
                     push_float(reader, fields, name)?;
                 }
             }
         }
         OpKind::DrawImageMeshInstanced => {
-            for name in ["image_id", "positions_id", "uvs_id", "indices_id", "instances_id"] {
+            for name in [
+                "image_id",
+                "positions_id",
+                "uvs_id",
+                "indices_id",
+                "instances_id",
+            ] {
                 push_uint(reader, fields, name)?;
             }
         }
@@ -795,7 +819,9 @@ mod tests {
     fn parses_and_compares_instanced_mesh_operations() {
         let mut bytes = header();
         bytes.extend([39, 7, 1, 40, 7, 1]);
-        for value in 0..12 { bytes.extend(float(value as f32)); }
+        for value in 0..12 {
+            bytes.extend(float(value as f32));
+        }
         bytes.extend([41, 1, 2, 3, 4, 7]);
         let parsed = parse_sriv(&bytes).unwrap();
         assert_eq!(parsed.operations.len(), 3);
@@ -804,7 +830,10 @@ mod tests {
         assert!(compare_sriv(&parsed, &parsed).is_ok());
         let mut changed = parsed.clone();
         changed.operations[1].fields[13].value = Value::Float(0.0f32.to_bits());
-        assert_eq!(compare_sriv(&parsed, &changed).unwrap_err().field, Some("additiveness"));
+        assert_eq!(
+            compare_sriv(&parsed, &changed).unwrap_err().field,
+            Some("additiveness")
+        );
     }
 
     #[test]
@@ -857,40 +886,30 @@ mod tests {
 
     #[test]
     fn rejects_bad_header_version_unknown_op_and_truncation() {
-        assert!(
-            parse_sriv(b"NOPE\x01")
-                .unwrap_err()
-                .message
-                .contains("header")
-        );
-        assert!(
-            parse_sriv(b"SRIV\x02")
-                .unwrap_err()
-                .message
-                .contains("version")
-        );
-        assert!(
-            parse_sriv(b"SRIV\x01\x04")
-                .unwrap_err()
-                .message
-                .contains("unknown")
-        );
-        assert!(
-            parse_sriv(b"SRIV\x01\x09\0")
-                .unwrap_err()
-                .message
-                .contains("truncated")
-        );
+        assert!(parse_sriv(b"NOPE\x01")
+            .unwrap_err()
+            .message
+            .contains("header"));
+        assert!(parse_sriv(b"SRIV\x02")
+            .unwrap_err()
+            .message
+            .contains("version"));
+        assert!(parse_sriv(b"SRIV\x01\x04")
+            .unwrap_err()
+            .message
+            .contains("unknown"));
+        assert!(parse_sriv(b"SRIV\x01\x09\0")
+            .unwrap_err()
+            .message
+            .contains("truncated"));
     }
 
     #[test]
     fn rejects_noncanonical_and_overflowing_varuints() {
-        assert!(
-            parse_sriv(b"SRIV\x81\0")
-                .unwrap_err()
-                .message
-                .contains("non-canonical")
-        );
+        assert!(parse_sriv(b"SRIV\x81\0")
+            .unwrap_err()
+            .message
+            .contains("non-canonical"));
         let mut bytes = b"SRIV".to_vec();
         bytes.extend([0xff; 10]);
         assert!(parse_sriv(&bytes).unwrap_err().message.contains("overflow"));

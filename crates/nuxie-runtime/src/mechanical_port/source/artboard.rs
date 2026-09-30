@@ -169,7 +169,8 @@ struct DrawVisitorScope {
 }
 impl Drop for DrawVisitorScope {
     fn drop(&mut self) {
-        self.artboard.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor = self.previous.take());
+        self.artboard
+            .with_downcast_mut::<Artboard, _>(|a| a.draw_visitor = self.previous.take());
     }
 }
 
@@ -187,6 +188,7 @@ pub struct Artboard {
     dispose_source_for_replacement: bool,
     drawables: Vec<RuntimeDrawableOccurrence>,
     clipping_shapes: Vec<CoreHandle>,
+    layer_masks: Vec<CoreHandle>,
     draw_targets: Vec<CoreHandle>,
     nested_artboards: Vec<CoreHandle>,
     component_lists: Vec<CoreHandle>,
@@ -275,6 +277,7 @@ impl Default for Artboard {
             dispose_source_for_replacement: false,
             drawables: Vec::new(),
             clipping_shapes: Vec::new(),
+            layer_masks: Vec::new(),
             draw_targets: Vec::new(),
             nested_artboards: Vec::new(),
             component_lists: Vec::new(),
@@ -467,7 +470,7 @@ impl Artboard {
         artboard
     }
 
-    #[cfg(any(test, feature = "tools"))]
+    #[cfg(any(test, feature = "tools", feature = "testing"))]
     pub fn with_factory(factory: RuntimeFactoryHandle) -> Self {
         let mut artboard = Self::default();
         artboard.factory = Some(factory);
@@ -809,12 +812,12 @@ impl Artboard {
 
     // TESTING exposes addObject in the pinned header. This is only the live
     // object-list append: callers still perform the explicit source lifecycle.
-    #[cfg(feature = "tools")]
+    #[cfg(any(feature = "tools", feature = "testing"))]
     pub fn add_object(&mut self, object: Option<CoreHandle>) {
         self.objects.push(object);
     }
 
-    #[cfg(not(feature = "tools"))]
+    #[cfg(not(any(feature = "tools", feature = "testing")))]
     pub(crate) fn add_object(&mut self, object: Option<CoreHandle>) {
         self.objects.push(object);
     }
@@ -891,6 +894,7 @@ impl Artboard {
         });
         let mut drawables = Vec::new();
         let mut clipping_shapes = Vec::new();
+        let mut layer_masks = Vec::new();
 
         for object in objects.clone().into_iter().flatten() {
             let code = object
@@ -1078,6 +1082,10 @@ impl Artboard {
                 .unwrap_or(false)
             {
                 clipping_shapes.push(object);
+            } else if object
+                .is_type_of(crate::mechanical_port::source::layer_mask::LayerMask::TYPE_KEY)
+            {
+                layer_masks.push(object);
             }
         }
 
@@ -1151,6 +1159,7 @@ impl Artboard {
         root.with_downcast_mut::<Artboard, _>(|artboard| {
             artboard.drawables = drawables;
             artboard.clipping_shapes = clipping_shapes;
+            artboard.layer_masks = layer_masks;
             artboard.sort_dependencies();
         });
         let rules_list: Vec<CoreHandle> = objects
@@ -1470,7 +1479,216 @@ impl Artboard {
                 next_drawable = Some(proxy);
             }
         }
+        self.interleave_layer_masks();
         self.clear_redundant_operations();
+    }
+
+    pub fn all_layer_masks(&self) -> &[CoreHandle] {
+        &self.layer_masks
+    }
+
+    fn splice_layer_mask_bracket(
+        &mut self,
+        mask: &CoreHandle,
+        members: &[RuntimeDrawableOccurrence],
+        start_op: crate::mechanical_port::source::layer_mask::LayerMaskOp,
+        end_op: crate::mechanical_port::source::layer_mask::LayerMaskOp,
+    ) -> Option<RuntimeDrawableOccurrence> {
+        use crate::mechanical_port::source::layer_mask::LayerMask;
+        if members.is_empty() {
+            return None;
+        }
+        let member_set: std::collections::HashSet<_> = members.iter().cloned().collect();
+        let mut first = None;
+        let mut last = None;
+        let mut d = self.first_drawable.clone();
+        while let Some(current) = d {
+            d = current.with(Drawable::prev_drawable).flatten();
+            if member_set.contains(&current) {
+                if first.is_none() {
+                    first = Some(current.clone());
+                }
+                last = Some(current);
+            }
+        }
+        let mut first = first?;
+        let mut last = last?;
+        let mut grew = true;
+        while grew {
+            grew = false;
+            let (mut clip_depth, mut mask_depth, mut clip_deficit, mut mask_deficit) = (0, 0, 0, 0);
+            let mut d = first.clone();
+            loop {
+                if d.is_clip_start() {
+                    clip_depth += 1;
+                } else if d.is_clip_end() {
+                    if clip_depth > 0 {
+                        clip_depth -= 1;
+                    } else {
+                        clip_deficit += 1;
+                    }
+                } else if d.is_mask_start() {
+                    mask_depth += 1;
+                } else if d.is_mask_end() {
+                    if mask_depth > 0 {
+                        mask_depth -= 1;
+                    } else {
+                        mask_deficit += 1;
+                    }
+                }
+                if d == last {
+                    break;
+                }
+                d = d
+                    .with(Drawable::prev_drawable)
+                    .flatten()
+                    .expect("balanced draw list");
+            }
+            while clip_deficit > 0 || mask_deficit > 0 {
+                let Some(before) = first.with(Drawable::next_drawable).flatten() else {
+                    break;
+                };
+                if mask_deficit > 0 && before.is_mask_start() {
+                    mask_deficit -= 1;
+                } else if clip_deficit > 0 && before.is_clip_start() {
+                    clip_deficit -= 1;
+                } else {
+                    break;
+                }
+                first = before;
+                grew = true;
+            }
+            while clip_depth > 0 || mask_depth > 0 {
+                let Some(after) = last.with(Drawable::prev_drawable).flatten() else {
+                    break;
+                };
+                if mask_depth > 0 && after.is_mask_end() {
+                    mask_depth -= 1;
+                } else if clip_depth > 0 && after.is_clip_end() {
+                    clip_depth -= 1;
+                } else {
+                    break;
+                }
+                last = after;
+                grew = true;
+            }
+            if !grew && (clip_deficit > 0 || mask_deficit > 0 || clip_depth > 0 || mask_depth > 0) {
+                return None;
+            }
+        }
+        let mut d = first.clone();
+        loop {
+            let spans = member_set.contains(&d)
+                || d.with_proxy(|p| {
+                    d.is_clip_start()
+                        || d.is_clip_end()
+                        || d.is_mask_start()
+                        || d.is_mask_end()
+                        || p.hittable_component().is_some_and(|h| {
+                            member_set.contains(&RuntimeDrawableOccurrence::Authored(h))
+                        })
+                })
+                .unwrap_or(false);
+            if !spans {
+                return None;
+            }
+            if d == last {
+                break;
+            }
+            d = d
+                .with(Drawable::prev_drawable)
+                .flatten()
+                .expect("contiguous draw list");
+        }
+        let (start, end) = mask
+            .with_downcast_mut::<LayerMask, _>(|m| {
+                (
+                    m.create_proxy_drawable(start_op),
+                    m.create_proxy_drawable(end_op),
+                )
+            })
+            .expect("live mask");
+        let before = first.with(Drawable::next_drawable).flatten();
+        start.with_mut(|d| {
+            d.next = before.as_ref().map(RuntimeDrawableOccurrence::downgrade);
+            d.prev = Some(first.downgrade());
+        });
+        if let Some(before) = before {
+            before.with_mut(|d| d.prev = Some(start.downgrade()));
+        } else {
+            self.first_drawable = Some(start.clone());
+        }
+        first.with_mut(|d| d.next = Some(start.downgrade()));
+        let after = last.with(Drawable::prev_drawable).flatten();
+        end.with_mut(|d| {
+            d.prev = after.as_ref().map(RuntimeDrawableOccurrence::downgrade);
+            d.next = Some(last.downgrade());
+        });
+        if let Some(after) = after {
+            after.with_mut(|d| d.next = Some(end.downgrade()));
+        }
+        last.with_mut(|d| d.prev = Some(end.downgrade()));
+        start.layer_mask_marker().unwrap().borrow_mut().paired_end = Some(end.downgrade());
+        Some(start)
+    }
+
+    fn interleave_layer_masks(&mut self) {
+        use crate::mechanical_port::source::layer_mask::{LayerMask, LayerMaskOp};
+        for mask in &self.layer_masks {
+            mask.with_downcast_mut::<LayerMask, _>(LayerMask::reset_drawables);
+        }
+        for mask in self.layer_masks.clone() {
+            if mask
+                .with_downcast::<LayerMask, _>(LayerMask::is_self_referential)
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let mut members = Vec::new();
+            let mut d = self.first_drawable.clone();
+            while let Some(current) = d {
+                d = current.with(Drawable::prev_drawable).flatten();
+                if current.layer_masks().contains(&mask) {
+                    members.push(current);
+                }
+            }
+            if self
+                .splice_layer_mask_bracket(
+                    &mask,
+                    &members,
+                    LayerMaskOp::MaskStart,
+                    LayerMaskOp::MaskEnd,
+                )
+                .is_none()
+            {
+                continue;
+            }
+            let source = mask
+                .with_downcast::<LayerMask, _>(|m| {
+                    m.source_drawables()
+                        .iter()
+                        .cloned()
+                        .map(RuntimeDrawableOccurrence::Authored)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            if let Some(start) = self.splice_layer_mask_bracket(
+                &mask,
+                &source,
+                LayerMaskOp::SourceStart,
+                LayerMaskOp::SourceEnd,
+            ) {
+                let end = start
+                    .layer_mask_marker()
+                    .unwrap()
+                    .borrow()
+                    .paired_end
+                    .as_ref()
+                    .and_then(|p| p.upgrade())
+                    .unwrap();
+                mask.with_downcast_mut::<LayerMask, _>(|m| m.source_bracket(start, end));
+            }
+        }
     }
 
     fn clear_redundant_operations(&mut self) {
@@ -2696,48 +2914,104 @@ impl Artboard {
     }
 
     pub fn draw_visitor_file_handle(root: &CoreHandle) -> Option<RuntimeFileHandle> {
-        root.with_downcast::<Artboard, _>(|a| a.draw_visitor_file.as_ref().and_then(RuntimeFileWeakHandle::upgrade).or_else(|| a.artboard_file().and_then(|f| f.upgrade()))).flatten()
+        root.with_downcast::<Artboard, _>(|a| {
+            a.draw_visitor_file
+                .as_ref()
+                .and_then(RuntimeFileWeakHandle::upgrade)
+                .or_else(|| a.artboard_file().and_then(|f| f.upgrade()))
+        })
+        .flatten()
     }
 
     pub fn draw_hosted_handle(host: &CoreHandle, hosted: &CoreHandle, renderer: &mut Renderer) {
-        let mut visitor = host.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone()).flatten();
+        let mut visitor = host
+            .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+            .flatten();
         if visitor.is_some() {
             let file = Self::draw_visitor_file_handle(host);
-            let hosted_file = hosted.with_downcast::<Artboard, _>(|a| a.artboard_file().and_then(|f| f.upgrade())).flatten();
-            if hosted_file.as_ref().is_some_and(|hosted| !file.as_ref().is_some_and(|file| hosted.ptr_eq(file))) {
+            let hosted_file = hosted
+                .with_downcast::<Artboard, _>(|a| a.artboard_file().and_then(|f| f.upgrade()))
+                .flatten();
+            if hosted_file
+                .as_ref()
+                .is_some_and(|hosted| !file.as_ref().is_some_and(|file| hosted.ptr_eq(file)))
+            {
                 visitor = None;
             }
-            hosted.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor_file = file.as_ref().map(RuntimeFileHandle::downgrade));
+            hosted.with_downcast_mut::<Artboard, _>(|a| {
+                a.draw_visitor_file = file.as_ref().map(RuntimeFileHandle::downgrade)
+            });
         }
         Self::draw_internal_with_visitor_handle(hosted, renderer, visitor, None);
     }
 
-    pub fn draw_modulated_handle(root: &CoreHandle, renderer: &mut Renderer, property_key: u32, keys_file: Option<RuntimeFileHandle>) {
-        use crate::mechanical_port::source::{generated::{custom_property_number_base::CustomPropertyNumberBase, custom_property_color_base::CustomPropertyColorBase}, shapes::paint::color::*};
+    pub fn draw_modulated_handle(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        property_key: u32,
+        keys_file: Option<RuntimeFileHandle>,
+    ) {
+        use crate::mechanical_port::source::{
+            generated::{
+                custom_property_color_base::CustomPropertyColorBase,
+                custom_property_number_base::CustomPropertyNumberBase,
+            },
+            shapes::paint::color::*,
+        };
         let level = Rc::new(Cell::new([1.0f32; 4]));
         let visitor: RuntimeDrawVisitor = Rc::new(move |drawable, renderer| {
             let own = Drawable::custom_property_handle(drawable, property_key).and_then(|p| {
                 if p.is_type_of(CustomPropertyNumberBase::TYPE_KEY) {
-                    let value = crate::mechanical_port::source::math::math_types::clamp(CoreRegistry::get_double_handle(&p, CustomPropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()).unwrap(), 0.0, 1.0);
+                    let value = crate::mechanical_port::source::math::math_types::clamp(
+                        CoreRegistry::get_double_handle(
+                            &p,
+                            CustomPropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                        )
+                        .unwrap(),
+                        0.0,
+                        1.0,
+                    );
                     Some([1.0, value, value, value])
                 } else if p.is_type_of(CustomPropertyColorBase::TYPE_KEY) {
-                    let color = CoreRegistry::get_color_handle(&p, CustomPropertyColorBase::PROPERTY_VALUE_PROPERTY_KEY.into()).unwrap() as u32;
-                    Some([color_opacity(color), color_red(color) as f32 / 255.0, color_green(color) as f32 / 255.0, color_blue(color) as f32 / 255.0])
-                } else { None }
+                    let color = CoreRegistry::get_color_handle(
+                        &p,
+                        CustomPropertyColorBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+                    )
+                    .unwrap() as u32;
+                    Some([
+                        color_opacity(color),
+                        color_red(color) as f32 / 255.0,
+                        color_green(color) as f32 / 255.0,
+                        color_blue(color) as f32 / 255.0,
+                    ])
+                } else {
+                    None
+                }
             });
-            let Some(own) = own else { Drawable::draw_handle(drawable, renderer); return; };
+            let Some(own) = own else {
+                Drawable::draw_handle(drawable, renderer);
+                return;
+            };
             let outer = level.get();
             let combined = std::array::from_fn(|i| outer[i] * own[i]);
             level.set(combined);
             let channels: [i32; 4] = combined.map(|v| (v * 255.0).round() as i32);
-            renderer.modulate_color(color_argb(channels[0], channels[1], channels[2], channels[3]), true);
+            renderer.modulate_color(
+                color_argb(channels[0], channels[1], channels[2], channels[3]),
+                true,
+            );
             Drawable::draw_handle(drawable, renderer);
             level.set(outer);
         });
         Self::draw_internal_with_visitor_handle(root, renderer, Some(visitor), keys_file);
     }
 
-    pub fn draw_internal_with_visitor_handle(root: &CoreHandle, renderer: &mut Renderer, visitor: Option<RuntimeDrawVisitor>, keys_file: Option<RuntimeFileHandle>) {
+    pub fn draw_internal_with_visitor_handle(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        visitor: Option<RuntimeDrawVisitor>,
+        keys_file: Option<RuntimeFileHandle>,
+    ) {
         if let Some(file) = keys_file {
             root.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor_file = Some(file.downgrade()));
         }
@@ -2758,16 +3032,27 @@ impl Artboard {
         Self::draw_content_with_visitor_handle(root, renderer, None);
     }
 
-    pub fn draw_content_with_visitor_handle(root: &CoreHandle, renderer: &mut Renderer, visitor: Option<RuntimeDrawVisitor>) {
+    pub fn draw_content_with_visitor_handle(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        visitor: Option<RuntimeDrawVisitor>,
+    ) {
         let Some((save, first_drawable)) = root
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
             .flatten()
         else {
             return;
         };
-        let previous = root.with_downcast_mut::<Artboard, _>(|a| std::mem::replace(&mut a.draw_visitor, visitor.clone())).flatten();
-        let _scope = DrawVisitorScope { artboard: root.clone(), previous };
-        Self::draw_drawables(renderer, first_drawable, visitor);
+        let previous = root
+            .with_downcast_mut::<Artboard, _>(|a| {
+                std::mem::replace(&mut a.draw_visitor, visitor.clone())
+            })
+            .flatten();
+        let _scope = DrawVisitorScope {
+            artboard: root.clone(),
+            previous,
+        };
+        Self::draw_drawable_range_handle(root, renderer, first_drawable, None);
         if save {
             renderer.restore();
         }
@@ -2834,11 +3119,19 @@ impl Artboard {
         Some((save, self.first_drawable.clone()))
     }
 
-    fn draw_drawables(renderer: &mut Renderer, first_drawable: Option<RuntimeDrawableOccurrence>, visitor: Option<RuntimeDrawVisitor>) {
+    pub fn draw_drawable_range_handle(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        first_drawable: Option<RuntimeDrawableOccurrence>,
+        stop: Option<RuntimeDrawableOccurrence>,
+    ) {
         let mut empty_clips = 0;
         let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();
         let mut drawable = first_drawable;
         while let Some(current) = drawable {
+            if stop.as_ref() == Some(&current) {
+                break;
+            }
             drawable = current.with(Drawable::prev_drawable).flatten();
             let previous_clips = empty_clips;
             empty_clips += current.empty_clip_count();
@@ -2857,8 +3150,33 @@ impl Artboard {
                     pending.draw(renderer);
                 }
             }
-            let tagged = current.with(Drawable::has_custom_properties).unwrap_or(false);
-            if let (Some(visitor), Some(handle)) = (visitor.as_ref().filter(|_| tagged), current.authored_handle()) {
+            if current.is_mask_start() {
+                let end = current
+                    .layer_mask_marker()
+                    .unwrap()
+                    .borrow()
+                    .paired_end
+                    .as_ref()
+                    .and_then(|p| p.upgrade())
+                    .expect("paired mask end");
+                if Self::draw_masked_handle(root, renderer, &current, &end) {
+                    drawable = end.with(Drawable::prev_drawable).flatten();
+                }
+                continue;
+            }
+            if current.is_mask_end() {
+                continue;
+            }
+            let visitor = root
+                .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+                .flatten();
+            let tagged = current
+                .with(Drawable::has_custom_properties)
+                .unwrap_or(false);
+            if let (Some(visitor), Some(handle)) = (
+                visitor.as_ref().filter(|_| tagged),
+                current.authored_handle(),
+            ) {
                 renderer.save();
                 visitor(&handle, renderer);
                 renderer.restore();
@@ -2866,6 +3184,377 @@ impl Artboard {
                 current.draw(renderer);
             }
         }
+    }
+
+    pub fn range_draw_bounds(
+        first: Option<RuntimeDrawableOccurrence>,
+        stop: Option<RuntimeDrawableOccurrence>,
+        raster_scale: f32,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+        any_drawn: &mut bool,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        use crate::mechanical_port::source::{drawable::BoundsFidelity, math::aabb::Aabb};
+        let mut empty_clips = 0;
+        let mut accumulated = Aabb::for_expansion();
+        let mut worst = BoundsFidelity::Exact;
+        let mut drew = false;
+        let mut current = first;
+        while let Some(d) = current {
+            if stop.as_ref() == Some(&d) {
+                break;
+            }
+            current = d.with(Drawable::prev_drawable).flatten();
+            let prev = empty_clips;
+            empty_clips += d.empty_clip_count();
+            if !d.will_draw() || empty_clips != prev || empty_clips > 0 {
+                continue;
+            }
+            if d.is_clip_start() || d.is_clip_end() || d.is_mask_start() || d.is_mask_end() {
+                continue;
+            }
+            drew = true;
+            let mut painted = Aabb::default();
+            let fidelity = d.painted_world_bounds(&mut painted);
+            if fidelity == BoundsFidelity::None {
+                *any_drawn = true;
+                return BoundsFidelity::None;
+            }
+            if fidelity == BoundsFidelity::Approximate {
+                worst = BoundsFidelity::Approximate;
+                let relative = 0.25
+                    * if painted.width() < painted.height() {
+                        painted.height()
+                    } else {
+                        painted.width()
+                    };
+                let absolute = if raster_scale > 0.0 {
+                    8.0 / raster_scale
+                } else {
+                    8.0
+                };
+                let slop = if relative < absolute {
+                    absolute
+                } else {
+                    relative
+                };
+                if slop.is_finite() && slop > 0.0 {
+                    painted = painted.outset(slop, slop);
+                }
+            }
+            if !painted.is_empty_or_nan() {
+                accumulated.expand(painted);
+            }
+        }
+        *any_drawn = drew;
+        if !drew {
+            return BoundsFidelity::Exact;
+        }
+        if accumulated.is_empty_or_nan() {
+            return BoundsFidelity::None;
+        }
+        *out = accumulated;
+        worst
+    }
+
+    pub fn draw_masked_handle(
+        root: &CoreHandle,
+        renderer: &mut Renderer,
+        start: &RuntimeDrawableOccurrence,
+        end: &RuntimeDrawableOccurrence,
+    ) -> bool {
+        use crate::mechanical_port::source::{
+            drawable::BoundsFidelity,
+            layer_mask::{LayerMask, MaskMode},
+            math::aabb::Aabb,
+            offscreen_raster as offscreen,
+        };
+        let mask = start.layer_mask_marker().unwrap().borrow().mask.clone();
+        let drawing = mask
+            .with_downcast_mut::<LayerMask, _>(|m| {
+                if !m.is_visible() || m.is_drawing {
+                    return false;
+                }
+                m.is_drawing = true;
+                true
+            })
+            .unwrap_or(false);
+        if !drawing {
+            return false;
+        }
+        struct DrawingGuard(CoreHandle);
+        impl Drop for DrawingGuard {
+            fn drop(&mut self) {
+                self.0
+                    .with_downcast_mut::<LayerMask, _>(|m| m.is_drawing = false);
+            }
+        }
+        let _guard = DrawingGuard(mask.clone());
+        let Some(host) = root
+            .with_downcast::<Artboard, _>(|a| {
+                a.factory()
+                    .and_then(|f| f.with_factory_mut(|f| f.canvas_content_host()))
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        if !host.borrow().supports_layer_mask() {
+            return false;
+        }
+        let mut plan = offscreen::RasterPlan::default();
+        let resolution = mask
+            .with_downcast::<LayerMask, _>(|m| m.resolution())
+            .unwrap();
+        if !offscreen::plan_raster_scale(renderer, resolution, &mut plan) {
+            return false;
+        }
+        let (content_changed, source_start, source_end, mode) = mask
+            .with_downcast::<LayerMask, _>(|m| {
+                (
+                    m.content_canvas.is_none() || m.mask_canvas.is_none() || m.dirty,
+                    m.source_start.clone(),
+                    m.source_end.clone(),
+                    m.mask_mode(),
+                )
+            })
+            .unwrap();
+        fn intersect(a: Aabb, b: Aabb) -> Option<Aabb> {
+            fn min(a: f32, b: f32) -> f32 {
+                if b < a { b } else { a }
+            }
+            fn max(a: f32, b: f32) -> f32 {
+                if a < b { b } else { a }
+            }
+            let r = Aabb::new(
+                max(a.left(), b.left()),
+                max(a.top(), b.top()),
+                min(a.right(), b.right()),
+                min(a.bottom(), b.bottom()),
+            );
+            (!r.is_empty_or_nan()).then_some(r)
+        }
+        let tight;
+        if content_changed {
+            let mut content_draws = false;
+            let mut content_box = Aabb::default();
+            let content_fidelity = Self::range_draw_bounds(
+                start.with(Drawable::prev_drawable).flatten(),
+                Some(end.clone()),
+                plan.raster_scale,
+                &mut content_box,
+                &mut content_draws,
+            );
+            if !content_draws {
+                return true;
+            }
+            let mut coverage_draws = false;
+            let mut source_box = Aabb::default();
+            let mut source_fidelity = BoundsFidelity::None;
+            if let Some(source_start) = &source_start {
+                source_fidelity = Self::range_draw_bounds(
+                    source_start.with(Drawable::prev_drawable).flatten(),
+                    source_end.clone(),
+                    plan.raster_scale,
+                    &mut source_box,
+                    &mut coverage_draws,
+                );
+            } else {
+                let sources = mask
+                    .with_downcast::<LayerMask, _>(|m| m.source_drawables().to_vec())
+                    .unwrap();
+                if sources
+                    .into_iter()
+                    .any(|h| RuntimeDrawableOccurrence::Authored(h).will_draw())
+                {
+                    return false;
+                }
+            }
+            if !coverage_draws {
+                return matches!(mode, MaskMode::Alpha | MaskMode::Luminance);
+            }
+            let (custom, authored) = mask
+                .with_downcast::<LayerMask, _>(|m| (m.use_custom_bounds(), m.custom_bounds()))
+                .unwrap();
+            let authored_box = custom && !authored.is_empty_or_nan();
+            let mut measured;
+            if authored_box {
+                measured = authored;
+            } else if content_fidelity == BoundsFidelity::None {
+                measured = root.with_downcast::<Artboard, _>(|a| a.bounds()).unwrap();
+            } else {
+                measured = content_box;
+                if source_fidelity != BoundsFidelity::None {
+                    let overlap = intersect(measured, source_box);
+                    if matches!(mode, MaskMode::Alpha | MaskMode::Luminance) {
+                        let Some(overlap) = overlap else {
+                            return true;
+                        };
+                        measured = overlap;
+                    } else if overlap.is_none() {
+                        return false;
+                    }
+                }
+            }
+            let (clip, bounds) = root
+                .with_downcast::<Artboard, _>(|a| (a.clip(), a.bounds()))
+                .unwrap();
+            if !authored_box && clip {
+                let Some(overlap) = intersect(measured, bounds) else {
+                    return false;
+                };
+                measured = overlap;
+            }
+            tight = measured;
+        } else {
+            tight = mask.with_downcast::<LayerMask, _>(|m| m.tight_box).unwrap();
+        }
+        if !offscreen::fit_raster_to_box(&tight, 2, offscreen::RasterFit::StableGrid, &mut plan) {
+            return false;
+        }
+        let resize = mask
+            .with_downcast_mut::<LayerMask, _>(|m| {
+                offscreen::decide_raster_resize(
+                    plan.width_px,
+                    plan.height_px,
+                    m.width_px,
+                    m.height_px,
+                    &mut m.shrink_streak,
+                )
+            })
+            .unwrap();
+        offscreen::hold_raster_allocation(resize.width_px, resize.height_px, &mut plan);
+        let must_raster = content_changed
+            || resize.reallocate
+            || mask
+                .with_downcast::<LayerMask, _>(|m| m.raster_scale != plan.raster_scale)
+                .unwrap();
+        if must_raster {
+            if resize.reallocate
+                || mask
+                    .with_downcast::<LayerMask, _>(|m| {
+                        m.content_canvas.is_none() || m.mask_canvas.is_none()
+                    })
+                    .unwrap()
+            {
+                let content = host
+                    .borrow_mut()
+                    .make_content_canvas(plan.width_px, plan.height_px);
+                let coverage = host
+                    .borrow_mut()
+                    .make_content_canvas(plan.width_px, plan.height_px);
+                mask.with_downcast_mut::<LayerMask, _>(|m| {
+                    m.content_canvas = content;
+                    m.mask_canvas = coverage;
+                    #[cfg(any(test, feature = "testing"))]
+                    {
+                        m.test_allocations += 1;
+                    }
+                });
+            }
+            let (content, coverage) = mask
+                .with_downcast::<LayerMask, _>(|m| {
+                    (m.content_canvas.clone(), m.mask_canvas.clone())
+                })
+                .unwrap();
+            let (Some(content), Some(coverage)) = (content, coverage) else {
+                mask.with_downcast_mut::<LayerMask, _>(LayerMask::release_canvases);
+                return false;
+            };
+            let mut opened = true;
+            {
+                let mut scope =
+                    offscreen::CanvasContentScope::new(Some(&host), Some(&coverage), &plan, 0);
+                if let Some(r) = scope.renderer() {
+                    Self::draw_drawable_range_handle(
+                        root,
+                        r,
+                        source_start
+                            .as_ref()
+                            .and_then(|s| s.with(Drawable::prev_drawable).flatten()),
+                        source_end.clone(),
+                    );
+                } else {
+                    opened = false;
+                }
+            }
+            if opened {
+                let mut scope =
+                    offscreen::CanvasContentScope::new(Some(&host), Some(&content), &plan, 0);
+                if let Some(r) = scope.renderer() {
+                    Self::draw_drawable_range_handle(
+                        root,
+                        r,
+                        start.with(Drawable::prev_drawable).flatten(),
+                        Some(end.clone()),
+                    );
+                    if let Some(image) = host.borrow_mut().content_canvas_image(&coverage) {
+                        r.save();
+                        let inv = 1.0 / plan.raster_scale;
+                        r.translate(plan.bounds.left(), plan.bounds.top());
+                        r.transform(nuxie_render_api::Mat2D([inv, 0.0, 0.0, inv, 0.0, 0.0]));
+                        let mode = match mode {
+                            MaskMode::Alpha => nuxie_render_api::LayerMaskMode::Alpha,
+                            MaskMode::InvertedAlpha => {
+                                nuxie_render_api::LayerMaskMode::InvertedAlpha
+                            }
+                            MaskMode::Luminance => nuxie_render_api::LayerMaskMode::Luminance,
+                            MaskMode::InvertedLuminance => {
+                                nuxie_render_api::LayerMaskMode::InvertedLuminance
+                            }
+                        };
+                        r.apply_layer_mask(
+                            Some(image.as_ref()),
+                            nuxie_render_api::ImageSampler::LINEAR_CLAMP,
+                            mode,
+                        );
+                        r.restore();
+                    }
+                } else {
+                    opened = false;
+                }
+            }
+            if !opened {
+                mask.with_downcast_mut::<LayerMask, _>(|m| {
+                    m.release_canvases();
+                    m.dirty = true;
+                });
+                return false;
+            }
+            mask.with_downcast_mut::<LayerMask, _>(|m| {
+                m.tight_box = tight;
+                m.raster_box = plan.bounds;
+                m.width_px = plan.width_px;
+                m.height_px = plan.height_px;
+                m.raster_scale = plan.raster_scale;
+                m.dirty = false;
+            });
+        }
+        let (content, coverage, scale, bounds) = mask
+            .with_downcast::<LayerMask, _>(|m| {
+                (
+                    m.content_canvas.clone().unwrap(),
+                    m.mask_canvas.clone().unwrap(),
+                    m.raster_scale,
+                    m.raster_box,
+                )
+            })
+            .unwrap();
+        let content_image = host.borrow_mut().content_canvas_image(&content);
+        let coverage_image = host.borrow_mut().content_canvas_image(&coverage);
+        let (Some(image), Some(_)) = (content_image, coverage_image) else {
+            return false;
+        };
+        let mut placement =
+            offscreen::begin_composite_for_box(renderer, Some(&host), &plan, scale, &bounds);
+        let opacity = placement.opacity;
+        placement.renderer().draw_image(
+            Some(image.as_ref()),
+            nuxie_render_api::ImageSampler::LINEAR_CLAMP,
+            nuxie_render_api::BlendMode::SrcOver,
+            opacity,
+        );
+        offscreen::end_composite(placement);
+        true
     }
 
     /// Renders this artboard's content into the BitmapCache child's offscreen
@@ -2961,64 +3650,16 @@ impl Artboard {
             return false;
         }
 
-        // How many device pixels one artboard unit covers right now: viewport
-        // zoom times window density times whatever scale the mount transform
-        // adds. Reading it here (rather than at replay) is why DeferredRenderer
-        // shadows its CTM: the raster size has to be chosen while recording.
-        let ctm = renderer
-            .current_transform()
-            .map(|m| Mat2D::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5]));
-        // Read before rasterizing, for the same reason as the CTM: if the host
-        // hands back a fresh renderer to composite through, that renderer
-        // starts at opacity 1 and the enclosing modulate_opacity() scope has
-        // to be carried over by hand.
-        let modulated_opacity = renderer.current_modulated_opacity();
-        let mut device_scale = 1.0f32;
-        if let Some(ctm) = ctm {
-            let s = ctm.find_max_scale();
-            if s.is_finite() && s > 0.0 {
-                // Quantize to sixteenths so scrubbing zoom does not re-raster
-                // and re-allocate on every frame. Rounding up keeps the raster
-                // at least as fine as the screen, and the scales a user
-                // actually rests at (1, 1.5, 2, 3, 4) are already multiples of
-                // 1/16.
-                const SCALE_QUANTUM: f32 = 16.0;
-                device_scale = (s * SCALE_QUANTUM).ceil() / SCALE_QUANTUM;
-            }
-        }
-
-        // std::min/std::max keep their C++ argument order so a NaN resolution
-        // propagates to the finiteness check below, as upstream relies on.
-        fn cpp_min(a: f32, b: f32) -> f32 {
-            if b < a { b } else { a }
-        }
-        fn cpp_max(a: f32, b: f32) -> f32 {
-            if a < b { b } else { a }
-        }
-        const MIN_RES: f32 = 0.01;
-        const MAX_RES: f32 = 8.0;
+        use crate::mechanical_port::source::offscreen_raster as offscreen;
         let resolution = cache
-            .with_downcast::<BitmapCache, _>(|cache| cache.resolution())
-            .unwrap_or(1.0);
-        let res = cpp_min(cpp_max(resolution, MIN_RES), MAX_RES);
-
-        // Texels per artboard unit. resolution 1 means one texel per screen
-        // pixel, so the composite is a 1:1 blit; 2 is a genuine 2x supersample
-        // of what the screen shows. A renderer that cannot report a transform
-        // leaves device_scale at 1, which is the artboard-unit meaning.
-        let mut raster_scale = res * device_scale;
-
-        // Cap by shrinking the scale, not by clamping one axis: the composite
-        // below inverts one scale for both axes.
-        const MAX_DIM: u32 = 2048;
-        let max_scale = cpp_min(MAX_DIM as f32 / w, MAX_DIM as f32 / h);
-        raster_scale = cpp_min(raster_scale, max_scale);
-        if !(raster_scale > 0.0) || !raster_scale.is_finite() {
+            .with_downcast::<BitmapCache, _>(|c| c.resolution())
+            .unwrap();
+        let mut plan = offscreen::RasterPlan::default();
+        if !offscreen::plan_raster(renderer, &bx, resolution, &mut plan) {
             return false;
         }
-
-        let width_px = cpp_min(cpp_max((w * raster_scale).ceil(), 1.0), MAX_DIM as f32) as u32;
-        let height_px = cpp_min(cpp_max((h * raster_scale).ceil(), 1.0), MAX_DIM as f32) as u32;
+        let (width_px, height_px, raster_scale) =
+            (plan.width_px, plan.height_px, plan.raster_scale);
 
         // Rebuild when there is no cache, it was explicitly invalidated
         // (resolution changed), the target size or raster scale changed
@@ -3033,14 +3674,7 @@ impl Artboard {
             })
             .unwrap_or(false);
         if needs_render {
-            Self::render_into_canvas_handle(
-                root,
-                &cache,
-                &deferred_host,
-                width_px,
-                height_px,
-                raster_scale,
-            );
+            Self::render_into_canvas_handle(root, &cache, &deferred_host, &plan);
         }
         let Some((canvas, cache_raster_scale)) = cache
             .with_downcast::<BitmapCache, _>(|cache| {
@@ -3065,66 +3699,16 @@ impl Artboard {
         let Some(image) = deferred_host.borrow_mut().content_canvas_image(&canvas) else {
             return false;
         };
-        // Some hosts cannot composite through the renderer that was drawing
-        // when the offscreen frame interrupted it, and hand back a clean one
-        // instead. It shares no state, so the current transform and the
-        // modulated opacity both have to be re-applied by hand -- and it
-        // inherits no clip.
-        let fresh = deferred_host.borrow_mut().composite_renderer();
-        let mut fresh = match (fresh, ctm, modulated_opacity) {
-            (Some(fresh), Some(_), Some(_)) => Some(fresh),
-            _ => None,
-        };
-        // The opacity the composite has to supply itself. Stays 1 on the
-        // in-place path, where the interrupted renderer still carries its own
-        // modulated opacity and folds it into the draw below.
-        let composite_opacity = if fresh.is_some() {
-            modulated_opacity.unwrap_or(1.0)
-        } else {
-            1.0
-        };
-        let is_fresh = fresh.is_some();
-        let composite: &mut Renderer = match fresh.as_mut() {
-            Some(fresh) => fresh.as_mut(),
-            None => renderer,
-        };
-        composite.save();
-        if is_fresh {
-            if let Some(ctm) = ctm {
-                composite.transform(nuxie_render_api::Mat2D(*ctm.values()));
-            }
-        }
-        // Pixel snap. An origin that lands on a half pixel makes every
-        // bilinear tap a blend of two texels. Only meaningful when the
-        // transform is axis aligned; under rotation or skew there is no pixel
-        // grid to snap to.
-        if let Some(ctm) = ctm {
-            if ctm.xy() == 0.0 && ctm.yx() == 0.0 && ctm.xx() != 0.0 && ctm.yy() != 0.0 {
-                let device_origin = ctm * Vec2D::new(bx.left(), bx.top());
-                let delta = Vec2D::new(
-                    device_origin.x.round() - device_origin.x,
-                    device_origin.y.round() - device_origin.y,
-                );
-                // The nudge is in device space but transform() concatenates
-                // in local space, so push it back through the (diagonal)
-                // linear part.
-                composite.translate(delta.x / ctm.xx(), delta.y / ctm.yy());
-            }
-        }
-        composite.translate(bx.left(), bx.top());
-        // The exact inverse of the scale the content was rasterized at, not
-        // w / width_px, which would fold ceil()'s rounding into the mapping.
-        let inv_scale = 1.0 / cache_raster_scale;
-        composite.transform(nuxie_render_api::Mat2D([
-            inv_scale, 0.0, 0.0, inv_scale, 0.0, 0.0,
-        ]));
-        composite.draw_image(
+        let mut placement =
+            offscreen::begin_composite(renderer, Some(&deferred_host), &plan, cache_raster_scale);
+        let opacity = placement.opacity;
+        placement.renderer().draw_image(
             Some(image.as_ref()),
             nuxie_render_api::ImageSampler::LINEAR_CLAMP,
             nuxie_render_api::BlendMode::SrcOver,
-            composite_opacity,
+            opacity,
         );
-        composite.restore();
+        offscreen::end_composite(placement);
         true
     }
 
@@ -3132,79 +3716,43 @@ impl Artboard {
         root: &CoreHandle,
         cache: &CoreHandle,
         deferred_host: &nuxie_render_api::DeferredCanvasHostHandle,
-        width_px: u32,
-        height_px: u32,
-        raster_scale: f32,
+        plan: &crate::mechanical_port::source::offscreen_raster::RasterPlan,
     ) {
-        let Some(bx) = root.with_downcast::<Artboard, _>(|artboard| artboard.bounds()) else {
-            return;
-        };
-        // Reuse the texture whenever it is already the right size. This runs
-        // on every frame the artboard changes, and on an immediate host each
-        // of these is a real GPU allocation.
+        use crate::mechanical_port::source::offscreen_raster::CanvasContentScope;
         let reuse = cache
-            .with_downcast::<BitmapCache, _>(|cache| {
-                cache.canvas.is_some() && cache.width_px == width_px && cache.height_px == height_px
+            .with_downcast::<BitmapCache, _>(|c| {
+                c.canvas.is_some() && c.width_px == plan.width_px && c.height_px == plan.height_px
             })
             .unwrap_or(false);
         if !reuse {
-            // The host decides whether this needs real pixels now or can
-            // defer them to whoever replays.
             let canvas = deferred_host
                 .borrow_mut()
-                .make_content_canvas(width_px, height_px);
-            cache.with_downcast_mut::<BitmapCache, _>(|cache| cache.canvas = canvas);
+                .make_content_canvas(plan.width_px, plan.height_px);
+            cache.with_downcast_mut::<BitmapCache, _>(|c| c.canvas = canvas);
         }
         let Some(canvas) = cache
-            .with_downcast::<BitmapCache, _>(|cache| cache.canvas.clone())
+            .with_downcast::<BitmapCache, _>(|c| c.canvas.clone())
             .flatten()
         else {
             return;
         };
-
-        // begin_canvas_content hands back a recording renderer whose frame
-        // targets the canvas texture. Draw our content into it at exactly
-        // raster_scale texels per artboard unit. clear_color is transparent
-        // black.
-        let content = deferred_host
-            .borrow_mut()
-            .begin_canvas_content(canvas.clone(), 0);
-        let Some(mut r) = content else {
-            // The host could not open an offscreen frame. Nothing was drawn,
-            // so drop the canvas rather than end a bracket that never began:
-            // the caller's check then takes the vector path, and leaving the
-            // cache dirty means a later frame retries.
-            cache.with_downcast_mut::<BitmapCache, _>(|cache| {
-                cache.canvas = None;
-                cache.width_px = 0;
-                cache.height_px = 0;
-                cache.dirty = true;
+        let mut scope = CanvasContentScope::new(Some(deferred_host), Some(&canvas), plan, 0);
+        let Some(r) = scope.renderer() else {
+            cache.with_downcast_mut::<BitmapCache, _>(|c| {
+                c.canvas = None;
+                c.width_px = 0;
+                c.height_px = 0;
+                c.dirty = true;
             });
             return;
         };
-        r.save();
-        r.transform(nuxie_render_api::Mat2D([
-            raster_scale,
-            0.0,
-            0.0,
-            raster_scale,
-            0.0,
-            0.0,
-        ]));
-        r.translate(-bx.left(), -bx.top());
-        // draw_content (not draw_internal) so we never re-enter the cache hook.
-        Self::draw_content_handle(root, r.as_mut());
-        r.restore();
-        // The content renderer is a scoped proxy that must not outlive the
-        // bracket it records into.
-        drop(r);
-        deferred_host.borrow_mut().end_canvas_content(&canvas);
-
-        cache.with_downcast_mut::<BitmapCache, _>(|cache| {
-            cache.width_px = width_px;
-            cache.height_px = height_px;
-            cache.raster_scale = raster_scale;
-            cache.dirty = false;
+        Self::draw_content_handle(root, r);
+        drop(scope);
+        cache.with_downcast_mut::<BitmapCache, _>(|c| {
+            c.width_px = plan.width_px;
+            c.height_px = plan.height_px;
+            c.raster_scale = plan.raster_scale;
+            c.dirty = false;
         });
     }
 
@@ -5062,7 +5610,9 @@ impl Drop for Artboard {
         }
         if let (Some(engine), Some(identity)) = (
             self.audio_engine.clone().or_else(|| {
-                crate::mechanical_port::source::audio::audio_engine::AudioEngine::runtime_engine(false)
+                crate::mechanical_port::source::audio::audio_engine::AudioEngine::runtime_engine(
+                    false,
+                )
             }),
             self.runtime_self.audio_identity(),
         ) {

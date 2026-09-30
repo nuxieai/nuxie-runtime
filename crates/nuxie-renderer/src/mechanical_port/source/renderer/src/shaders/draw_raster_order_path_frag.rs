@@ -2,7 +2,7 @@
  * Upstream-derived shader with a local Metal blend-contraction adaptation:
  * renderer/src/shaders/draw_raster_order_path.frag.
  *
- * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
+ * Upstream source revision: 8398db3199cea4cd3eba53747aac562b5c0df3da
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
+pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_raster_order_path.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 238;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 8258;
+    "bf0da3019985a1ebfd0faf8f9db544f5c59d24aecd6456955cef8198fb38c4e3";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 268;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 9648;
 
 /// Upstream source with the retained Metal blend-contraction adaptation.
 pub const PINNED_DRAW_RASTER_ORDER_PATH_FRAG_SOURCE: &str = r###"/*
@@ -210,48 +210,78 @@ PLS_MAIN(@drawFragmentMain)
 #endif
         }
 
-        // Blend with the framebuffer color.
+        bool isLayerMask = false;
+#ifdef @ENABLE_MODULATED_IMAGE
+        isLayerMask = @ENABLE_MODULATED_IMAGE && v_image.z < .0;
+#endif
+        if (isLayerMask)
+        {
+#ifdef @ENABLE_MODULATED_IMAGE
+            // Layer mask: scale what is already here instead of compositing
+            // over it. `color` is the mask's premultiplied texel (see
+            // find_paint_color), and all four channels scale together, which is
+            // exactly "change this layer's opacity, per pixel".
+            //
+            // No dither: dithering is for quantizing a *new* color, and this
+            // only attenuates one that is already quantized. Hardware blending
+            // is off in rasterOrdering (the color plane is stored directly), so
+            // this really is the final value.
+            uint maskMode = uint(-v_image.z - 1.);
+            half f = layer_mask_factor(color, maskMode);
+            // coverage lerps the factor in across the quad's antialiased edge;
+            // it is 1 everywhere inside, which is where the mask applies.
+            color = dstColorPremul * mix(make_half(1.), f, coverage);
+            PLS_STORE4F(colorBuffer, color);
+            PLS_PRESERVE_UI(clipBuffer);
+#endif
+        }
+        else
+        {
+            // Blend with the framebuffer color.
 #ifdef @ENABLE_ADVANCED_BLEND
-        if (@ENABLE_ADVANCED_BLEND &&
-            v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
-        {
-            color.rgb = advanced_color_blend(color.rgb,
-                                             dstColorPremul,
-                                             cast_half_to_ushort(v_blendMode)) *
-                        color.a;
-        }
+            if (@ENABLE_ADVANCED_BLEND &&
+                v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
+            {
+                color.rgb =
+                    advanced_color_blend(color.rgb,
+                                         dstColorPremul,
+                                         cast_half_to_ushort(v_blendMode)) *
+                    color.a;
+            }
 #endif
-        color *= coverage;
+            color *= coverage;
 
-        // Certain platforms give us less control of the format of what we are
-        // rendering too. Specifically, we are auto converted from linear ->
-        // sRGB on render target writes in unreal. In those cases we made need
-        // to end up in linear color space
+            // Certain platforms give us less control of the format of what we
+            // are rendering too. Specifically, we are auto converted from
+            // linear -> sRGB on render target writes in unreal. In those cases
+            // we made need to end up in linear color space
 #ifdef @NEEDS_GAMMA_CORRECTION
-        if (@NEEDS_GAMMA_CORRECTION)
-        {
-            color = gamma_to_linear(color);
-        }
+            if (@NEEDS_GAMMA_CORRECTION)
+            {
+                color = gamma_to_linear(color);
+            }
 #endif
 
-        // Save paint alpha before destructively updating it with the dstColor.
-        half paintAlpha = color.a;
+            // Save paint alpha before destructively updating it with the
+            // dstColor.
+            half paintAlpha = color.a;
 #ifdef METAL
-        // Pin the blend contraction: specialized shaders can premultiply in
-        // the vertex stage, while ubershaders do so here. An implicit add lets
-        // the compiler fuse a different product in each variant.
-        color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color);
+            // Pin the blend contraction: specialized shaders can premultiply in
+            // the vertex stage, while ubershaders do so here. An implicit add lets
+            // the compiler fuse a different product in each variant.
+            color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color);
 #else
-        color += dstColorPremul * (1. - paintAlpha);
+            color += dstColorPremul * (1. - paintAlpha);
 #endif
-        color.rgb = add_dither_if_alpha_nonzero(color.rgb,
-                                                paintAlpha,
-                                                _fragCoord.xy,
-                                                uniforms.ditherScale,
-                                                uniforms.ditherBias);
+            color.rgb = add_dither_if_alpha_nonzero(color.rgb,
+                                                    paintAlpha,
+                                                    _fragCoord.xy,
+                                                    uniforms.ditherScale,
+                                                    uniforms.ditherBias);
 
-        PLS_STORE4F(colorBuffer, color);
-        PLS_PRESERVE_UI(clipBuffer);
+            PLS_STORE4F(colorBuffer, color);
+            PLS_PRESERVE_UI(clipBuffer);
+        }
     }
 
 #if !defined(@DRAW_INTERIOR_TRIANGLES)

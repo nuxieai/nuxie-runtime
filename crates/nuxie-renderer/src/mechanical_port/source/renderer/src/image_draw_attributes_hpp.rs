@@ -67,7 +67,7 @@ pub const ImageMeshInstanceAttributes: [VertexAttribute; 8] = [
     ImageDrawInstanceBaseAttributes[2], ImageDrawInstanceBaseAttributes[3],
     ImageDrawInstanceBaseAttributes[4], ImageDrawInstanceBaseAttributes[5],
     ImageDrawInstanceBaseAttributes[6],
-    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "HC" },
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "IC" },
 ];
 
 const _: () = {

@@ -1,36 +1,36 @@
 struct UB {
-    Qc: f32,
-    Td: f32,
-    Yf: f32,
-    Zf: f32,
-    z6_: u32,
-    X9_: u32,
-    Kf: u32,
-    Lf: u32,
-    i8_: vec4<i32>,
-    Ch: vec2<f32>,
-    Ud: vec2<f32>,
-    i2_: u32,
-    Gh: f32,
-    T4_: u32,
+    Rc: f32,
+    Ud: f32,
+    cg: f32,
+    dg: f32,
+    B6_: u32,
+    Y9_: u32,
+    Of: u32,
+    Pf: u32,
+    k8_: vec4<i32>,
+    Mh: vec2<f32>,
+    Vd: vec2<f32>,
+    j2_: u32,
+    Qh: f32,
+    U4_: u32,
     c3_: f32,
-    Vd: f32,
-    Ef: u32,
+    Wd: f32,
+    If: u32,
     M3_: f32,
     N3_: f32,
-    Wd: f32,
-    zh: u32,
-    W9_: u32,
-    wc: f32,
+    Xd: f32,
+    Jh: u32,
+    X9_: u32,
     xc: f32,
+    yc: f32,
 }
 
-struct eh {
-    j2_: array<vec4<u32>>,
+struct oh {
+    k2_: array<vec4<u32>>,
 }
 
-struct dh {
-    j2_: array<vec4<u32>>,
+struct nh {
+    k2_: array<vec4<u32>>,
 }
 
 struct gl_PerVertex {
@@ -57,18 +57,18 @@ var<private> VB_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: UB;
 @group(0) @binding(5)
-var<storage> AD: eh;
+var<storage> AD: oh;
 @group(0) @binding(2)
-var<storage> LB: dh;
+var<storage> LB: nh;
 @group(0) @binding(9)
 var ZC: texture_2d<f32>;
 @group(3) @binding(9)
-var wa: sampler;
-var<private> K6_: vec4<f32>;
-var<private> L6_: vec4<f32>;
-var<private> Z4_: vec4<f32>;
-var<private> a5_: vec3<f32>;
-var<private> S7_: u32;
+var xa: sampler;
+var<private> M6_: vec4<f32>;
+var<private> N6_: vec4<f32>;
+var<private> a5_: vec4<f32>;
+var<private> c5_: vec3<f32>;
+var<private> T7_: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -161,7 +161,7 @@ fn main_1() {
     }
     let _e101 = phi_1773_;
     let _e102 = vec2<f32>(select(_e93, _e90, ((_e59 & 1i) == 0i)), _e101);
-    let _e105 = j.Td;
+    let _e105 = j.Ud;
     phi_1970_ = _e102;
     if (((_e93 - _e90) * _e105) < 0f) {
         phi_1970_ = vec2<f32>(_e102.x, (((2f * _e72) + 1f) - _e101));
@@ -173,14 +173,14 @@ fn main_1() {
     let _e123 = VB_1[3u];
     let _e124 = (_e123 & 65535u);
     if (_e124 > 0u) {
-        let _e131 = AD.j2_[(max(_e124, 1u) - 1u)][2u];
+        let _e131 = AD.k2_[(max(_e124, 1u) - 1u)][2u];
         phi_1774_ = _e131;
     } else {
         phi_1774_ = 0u;
     }
     let _e133 = phi_1774_;
     if (_e133 != 0u) {
-        let _e139 = LB.j2_[((_e133 * 4u) + 1u)];
+        let _e139 = LB.k2_[((_e133 * 4u) + 1u)];
         phi_1775_ = _e139;
     } else {
         phi_1775_ = vec4<u32>(0u, 0u, 0u, 0u);
@@ -352,7 +352,7 @@ fn main_1() {
         let _e339 = phi_1839_;
         let _e343 = local_4;
         let _e345 = local_5;
-        let _e355 = textureSampleLevel(ZC, wa, vec2<f32>((0.5f * min(min((1f - (_e339 * 0.31830987f)), (((dot(_e343, _e345) / (_e208 * _e208)) - 1f) * 0.5f)), 0.99f)), 1f), 0f);
+        let _e355 = textureSampleLevel(ZC, xa, vec2<f32>((0.5f * min(min((1f - (_e339 * 0.31830987f)), (((dot(_e343, _e345) / (_e208 * _e208)) - 1f) * 0.5f)), 0.99f)), 1f), 0f);
         let _e359 = (((_e355.x * -2f) + 1f) * _e145);
         if (_e207 < 0f) {
             phi_1840_ = -(_e359);
@@ -382,7 +382,7 @@ fn main_1() {
     let _e383 = phi_1891_;
     phi_1914_ = _e116;
     if ((_e123 & 536870912u) != 0u) {
-        let _e389 = LB.j2_[(_e133 * 4u)];
+        let _e389 = LB.k2_[(_e133 * 4u)];
         let _e390 = bitcast<vec4<f32>>(_e389);
         let _e397 = mat2x2<f32>(vec2<f32>(_e390.x, _e390.y), vec2<f32>(_e390.z, _e390.w));
         let _e401 = (_e397 * (((_e383 * -2f) + _e381) + _e61));
@@ -424,13 +424,13 @@ fn main_1() {
         phi_1994_ = -(_e452);
     }
     let _e464 = phi_1994_;
-    K6_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
-    L6_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
+    M6_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
+    N6_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
     let _e475 = f32((((_e417 + _e119) + _e121) - 1u));
-    Z4_ = vec4<f32>((_e475 - abs((_e93 - _e115.x))), _e475, f32(((_e121 << bitcast<u32>(10i)) | _e417)), _e464);
+    a5_ = vec4<f32>((_e475 - abs((_e93 - _e115.x))), _e475, f32(((_e121 << bitcast<u32>(10i)) | _e417)), _e464);
     let _e485 = VC_1;
-    a5_[0u] = _e485.x;
-    a5_[1u] = _e485.y;
+    c5_[0u] = _e485.x;
+    c5_[1u] = _e485.y;
     if (_e121 > 1u) {
         let _e491 = vec2<f32>(_e485.x, _e485.y);
         let _e495 = (_e442 * dot(_e491, _e491));
@@ -452,14 +452,14 @@ fn main_1() {
             phi_2004_ = -(_e509);
         }
         let _e514 = phi_2004_;
-        a5_[2u] = _e514;
+        c5_[2u] = _e514;
     }
     phi_2008_ = _e123;
     if (_e93 < _e90) {
         phi_2008_ = (_e123 | 8388608u);
     }
     let _e519 = phi_2008_;
-    S7_ = _e519;
+    T7_ = _e519;
     unnamed.gl_Position = vec4<f32>(((_e115.x * 0.0009765625f) - 1f), ((_e115.y * _e105) - sign(_e105)), 0f, 1f);
     return;
 }
@@ -472,11 +472,11 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LD: vec4<f32>, 
     VC_1 = VC;
     VB_1 = VB;
     main_1();
-    let _e18 = K6_;
-    let _e19 = L6_;
-    let _e20 = Z4_;
-    let _e21 = a5_;
-    let _e22 = S7_;
+    let _e18 = M6_;
+    let _e19 = N6_;
+    let _e20 = a5_;
+    let _e21 = c5_;
+    let _e22 = T7_;
     let _e23 = unnamed.gl_Position;
     return VertexOutput(_e18, _e19, _e20, _e21, _e22, _e23);
 }

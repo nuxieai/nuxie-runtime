@@ -117,7 +117,7 @@ use nuxie_render_api::{
     Aabb, AudioDecodeError, AudioSource, ColorInt, DecodedFont, FillRule, FontDecodeError, RawPath,
 };
 
-use super::refcnt_hpp::{RefCnt, RefCntTarget, rcp};
+use super::refcnt_hpp::{rcp, RefCnt, RefCntTarget};
 use super::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPath,
     RenderShader,
@@ -207,6 +207,9 @@ pub trait FactoryAccess {
 /// pointer/count ABI. Slice adapters live on concrete product owners and
 /// validate lengths before crossing this boundary.
 pub trait FactoryContract: FactoryAccess {
+    fn supportsLayerMask(&self) -> bool {
+        false
+    }
     fn makeImageMeshInstances(
         &mut self,
         count: usize,

@@ -10,6 +10,7 @@ pub mod group_effect;
 pub mod image_sampler;
 pub mod linear_gradient;
 pub mod paint_image;
+pub mod paint_outset;
 pub mod radial_gradient;
 pub mod shape_paint;
 pub mod shape_paint_mutator;

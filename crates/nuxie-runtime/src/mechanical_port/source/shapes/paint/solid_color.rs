@@ -95,6 +95,22 @@ impl SolidColor {
     }
     pub fn color_value_changed(&mut self) {
         self.render_opacity_changed();
+        let mut current = self.parent_handle();
+        while let Some(c) = current {
+            let masks = c
+                .with(|o| {
+                    o.as_drawable()
+                        .map(|d| (d.layer_masks().to_vec(), d.source_of_layer_masks().to_vec()))
+                })
+                .flatten();
+            if let Some((content, coverage)) = masks {
+                for mask in content.into_iter().chain(coverage) {
+                    mask.with_downcast_mut::<crate::mechanical_port::source::layer_mask::LayerMask, _>(|m| m.mark_raster_dirty());
+                }
+                break;
+            }
+            current = c.with(|o| o.component_parent_handle()).flatten();
+        }
     }
 }
 

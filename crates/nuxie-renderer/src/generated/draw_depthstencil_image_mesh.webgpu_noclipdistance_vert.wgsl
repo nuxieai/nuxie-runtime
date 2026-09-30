@@ -46,7 +46,7 @@ var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> OC_1: vec2<f32>;
 var<private> NB_1: vec4<f32>;
-var<private> I5_: vec2<f32>;
+var<private> J5_: vec2<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> O3_: f32;
 var<private> YB_1: u32;
@@ -68,7 +68,7 @@ fn main_1() {
     let _e37 = NB_1;
     let _e39 = ((mat2x2<f32>(vec2<f32>(_e27.x, _e27.y), vec2<f32>(_e27.z, _e27.w)) * _e35) + _e37.xy);
     let _e40 = PC_1;
-    I5_ = _e40;
+    J5_ = _e40;
     if Eh {
         let _e41 = YB_1;
         let _e43 = j.c6_;
@@ -105,7 +105,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) WB: vec4<f32>, 
     XB_1 = XB;
     ZB_1 = ZB;
     main_1();
-    let _e27 = I5_;
+    let _e27 = J5_;
     let _e28 = O3_;
     let _e29 = K1_;
     let _e30 = D1_;

@@ -77,7 +77,7 @@ var<private> O0_1: vec4<f32>;
 @group(2) @binding(3)
 var<storage, read_write> A4_: A4Sd;
 var<private> B3_1: u32;
-var<private> N5_1: vec4<f32>;
+var<private> a5_1: vec4<f32>;
 var<private> K1_1: vec4<f32>;
 var<private> D1_1: u32;
 @group(3) @binding(9)
@@ -448,10 +448,10 @@ fn main_1() {
         phi_7649_ = _e662;
     }
     let _e664 = phi_7649_;
-    let _e666 = N5_1[3u];
+    let _e666 = a5_1[3u];
     phi_6172_ = _e126;
     if (_e666 != 0f) {
-        let _e668 = N5_1;
+        let _e668 = a5_1;
         if (_e668.z > 0f) {
             phi_6139_ = _e668.x;
         } else {
@@ -705,13 +705,13 @@ fn main_1() {
 }
 
 @fragment
-fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(0) c2_: vec2<f32>, @location(1) Z4_: f32, @location(3) O0_: vec4<f32>, @location(5) @interpolate(flat, either) B3_: u32, @location(2) N5_: vec4<f32>, @location(4) @interpolate(flat, either) K1_: vec4<f32>, @location(6) @interpolate(flat, either) D1_: u32) {
+fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(0) c2_: vec2<f32>, @location(1) Z4_: f32, @location(3) O0_: vec4<f32>, @location(5) @interpolate(flat, either) B3_: u32, @location(2) a5_: vec4<f32>, @location(4) @interpolate(flat, either) K1_: vec4<f32>, @location(6) @interpolate(flat, either) D1_: u32) {
     gl_FragCoord_1 = gl_FragCoord;
     c2_1 = c2_;
     Z4_1 = Z4_;
     O0_1 = O0_;
     B3_1 = B3_;
-    N5_1 = N5_;
+    a5_1 = a5_;
     K1_1 = K1_;
     D1_1 = D1_;
     main_1();

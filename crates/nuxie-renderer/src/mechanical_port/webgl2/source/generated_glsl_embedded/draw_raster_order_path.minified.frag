@@ -39,7 +39,7 @@ o=min(o,J0(1.));}
 #ifdef I
 if(I&&Y1.x<.0){d m1=-Y1.x;
 #ifdef YC
-if(YC){d J5=Y1.y;if(J5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==J5?Q0.x:.0;
+if(YC){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==K5?Q0.x:.0;
 #ifndef DB
 A0(p4,E0(w4,.0,.0,.0));
 #endif
@@ -56,7 +56,7 @@ d1(i0,packHalf2x16(D2(o,m1)));y2(m0);}else
 if(I){d m1=Y1.x;if(m1!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;o=(E6==m1)?min(Q0.x,o):J0(.0);}}
 #endif
 #ifdef AB
-if(AB){d a5=m3(f5(O0));o=clamp(a5,J0(.0),o);}
+if(AB){d c5=m3(g5(O0));o=clamp(c5,J0(.0),o);}
 #endif
 i k=L7(
 #ifdef IB

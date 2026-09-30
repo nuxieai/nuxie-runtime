@@ -1,7 +1,7 @@
 #ifdef CB
 h1(n3)K(0,c,OC);i1 h1(C3)K(1,c,PC);i1 h1(p1)K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);i1
 #endif
-q2 I0 W(0,c,I5);
+q2 I0 W(0,c,J5);
 #ifdef I
 MB W(1,d,O3);
 #endif
@@ -14,7 +14,7 @@ V2 W(4,N,D1);
 #endif
 i2
 #ifdef CB
-Y3 Z3 I6(EC,n3,o3,C3,D3,p1,h0,A){L(A,o3,OC,c);L(A,D3,PC,c);L(r,h0,WB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,XB,uint);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,LC,uint);V(I5,c);
+Y3 Z3 I6(EC,n3,o3,C3,D3,p1,h0,A){L(A,o3,OC,c);L(A,D3,PC,c);L(r,h0,WB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,XB,uint);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,LC,uint);V(J5,c);
 #ifdef I
 V(O3,d);
 #endif
@@ -25,16 +25,16 @@ V(K1,i);
 #ifdef T
 V(D1,N);
 #endif
-c l0=P0(L1(WB),OC)+NB.xy;I5=PC;
+c l0=P0(L1(WB),OC)+NB.xy;J5=PC;
 #ifdef I
 if(I){O3=r8(YB,j.c6);}
 #endif
 #ifdef AB
 if(AB){
 #ifndef BB
-O0=T7(L1(RB),NB.zw,l0 z5);
+O0=T7(L1(RB),NB.zw,l0 A5);
 #else
-Mc(L1(RB),NB.zw,l0 z5);
+Mc(L1(RB),NB.zw,l0 A5);
 #endif
 }
 #endif
@@ -49,7 +49,7 @@ K1=unpackUnorm4x8(XB);
 #ifdef T
 D1=a2(ZB);
 #endif
-c0(I5);
+c0(J5);
 #ifdef I
 c0(O3);
 #endif

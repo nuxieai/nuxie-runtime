@@ -31,7 +31,7 @@ struct SB {
 var GC: texture_2d<f32>;
 @group(1) @binding(13)
 var W5_: sampler;
-var<private> I5_1: vec2<f32>;
+var<private> J5_1: vec2<f32>;
 @group(0) @binding(0)
 var<uniform> j: SB;
 var<private> K1_1: vec4<f32>;
@@ -45,7 +45,7 @@ var XD: texture_2d<f32>;
 fn main_1() {
     var phi_206_: vec3<f32>;
 
-    let _e18 = I5_1;
+    let _e18 = J5_1;
     let _e20 = j.Ed;
     let _e21 = textureSampleBias(GC, W5_, _e18, _e20);
     let _e22 = K1_1;
@@ -67,8 +67,8 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(0) I5_: vec2<f32>, @location(3) @interpolate(flat, either) K1_: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) O3_: f32, @location(4) @interpolate(flat, either) D1_: u32) -> @location(0) vec4<f32> {
-    I5_1 = I5_;
+fn main(@location(0) J5_: vec2<f32>, @location(3) @interpolate(flat, either) K1_: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) O3_: f32, @location(4) @interpolate(flat, either) D1_: u32) -> @location(0) vec4<f32> {
+    J5_1 = J5_;
     K1_1 = K1_;
     gl_FragCoord_1 = gl_FragCoord;
     O3_1 = O3_;

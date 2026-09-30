@@ -45,7 +45,7 @@
 #define pf 0x400u
 #define fg 0x800u
 #define h3 0
-#define g5 1
+#define h5 1
 #define K4 0
 #define Xc 1
 #define Yc 2
@@ -110,7 +110,7 @@
 #define mg float(1024)
 #define ua float(0.0009765625)
 #define va 19u
-#define m5 (1u<<(va-1u))
+#define n5 (1u<<(va-1u))
 #define wa ((1u<<va)-1u)
 #define i7 (1u<<va)
 #define ng 0

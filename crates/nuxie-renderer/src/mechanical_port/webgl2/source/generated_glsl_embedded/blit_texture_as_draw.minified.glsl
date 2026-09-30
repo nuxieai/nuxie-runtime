@@ -13,13 +13,13 @@ f X=f(r2,0,1);C1(X);}
 #ifdef EB
 I3
 #ifdef SD
-Df(g5,a4,HC);
+Df(h5,a4,HC);
 #else
-e3(g5,a4,HC);
+e3(h5,a4,HC);
 #endif
 J3
 #ifdef FD
-h5 c4(Ef)i5
+i5 c4(Ef)j5
 #endif
 f3(i,QE){i l8;
 #ifdef FD

@@ -1,14 +1,14 @@
 #ifdef EB
 #ifdef KB
-I3 e3(g5,a4,GC);
+I3 e3(h5,a4,GC);
 #ifdef T
-o5(XD);
+p5(XD);
 #endif
-J3 h5 c4(W5)i5
+J3 i5 c4(W5)j5
 #endif
 f3(i,HB){
 #ifdef KB
-q(I5,c);q(K1,i);
+q(J5,c);q(K1,i);
 #ifdef T
 q(D1,N);
 #endif
@@ -25,7 +25,7 @@ q(g1,d);
 #endif
 #endif
 #ifdef KB
-i k=A7(GC,W5,I5,j.Ed)*K1;
+i k=A7(GC,W5,J5,j.Ed)*K1;
 #else
 d o=
 #ifdef FB

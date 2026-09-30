@@ -44,6 +44,63 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
 }
 
 #[test]
+fn state_machine_selected_text_reports_the_focused_inputs_selection() {
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let focus = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+        })
+        .expect("authored FocusData");
+
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into());
+    });
+    machine.advance_and_apply(0.0);
+
+    // Nothing focused yet.
+    assert!(machine.with_instance(|machine| machine.selected_text().is_empty()));
+
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    with_input(&input, |input| input.raw_text_input().clear_selection());
+    assert!(machine.with_instance(|machine| machine.selected_text().is_empty()));
+
+    with_input(&input, |input| input.raw_text_input().select_all());
+    assert_eq!(
+        machine.with_instance(|machine| machine.selected_text()),
+        "hello world"
+    );
+
+    // A partial selection reports just that range (2nd–4th characters).
+    with_input(&input, |input| {
+        input.raw_text_input().set_cursor(Cursor::new(
+            CursorPosition::unresolved(1),
+            CursorPosition::unresolved(4),
+        ));
+    });
+    assert_eq!(
+        machine.with_instance(|machine| machine.selected_text()),
+        "ell"
+    );
+
+    // An obscured field keeps its selection off the clipboard.
+    assert!(CoreRegistry::set_bool_handle(&input, 1095, true));
+    assert!(machine.with_instance(|machine| machine.selected_text().is_empty()));
+    assert!(CoreRegistry::set_bool_handle(&input, 1095, false));
+
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(machine.with_instance(|machine| machine.selected_text().is_empty()));
+}
+
+#[test]
 fn tab_traversal_into_a_text_input_selects_all() {
     let (_file, artboard, input) = input_fixture();
     let machine = artboard

@@ -4531,6 +4531,15 @@ impl StateMachineInstance {
         })
     }
 
+    /// The selected text of the focused element, via the active focus manager.
+    /// Empty when nothing with a selection is focused.
+    pub fn selected_text(&self) -> String {
+        let Some(manager) = self.focus_manager() else {
+            return String::new();
+        };
+        manager.with_focus_manager(FocusManager::selected_text)
+    }
+
     pub fn duration_seconds(&self) -> f32 {
         -1.0
     }

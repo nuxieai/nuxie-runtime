@@ -2242,8 +2242,7 @@ impl RuntimeStateMachineInstanceHandle {
             if let Some(manager) = manager {
                 manager.with_focus_manager_mut(|manager| {
                     manager.process_pending_focus_requests(root.clone());
-                    manager.drop_focus_if_focus_target_hidden_for_root(root.clone());
-                    manager.descend_focus_to_leaf(root);
+                    manager.drop_focus_if_focus_target_hidden_for_root(root);
                 });
             }
             if self.with_instance_mut(StateMachineInstance::try_change_state) {

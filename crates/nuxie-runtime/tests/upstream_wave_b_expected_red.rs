@@ -1,6 +1,11 @@
 //! Native converter/cycle tests followed by preserved Wave B C++ cases.
 //! Remaining ignored entries retain their complete upstream action/assertion bodies.
 
+#[path = "support/upstream_focus_manager_9b.rs"]
+mod upstream_focus_manager_9b;
+#[path = "support/upstream_focus_traversal_9b.rs"]
+mod upstream_focus_traversal_9b;
+
 use nuxie_render_api::{Factory, PersistentFactory, RecordingFactory, SerializingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
@@ -3744,6 +3749,8 @@ fn wave_b_focus_test_022_direct_port_expected_red() {
     manager.with_focus_manager_mut(|manager| manager.set_focus(node2.clone()));
     manager.with_focus_manager_mut(FocusManager::focus_next);
 
+    assert!(binding_focus_is_primary(&manager, &scope));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
     assert!(binding_focus_is_primary(&manager, &node1));
 }
 
@@ -3850,6 +3857,8 @@ fn wave_b_focus_test_026_direct_port_expected_red() {
     });
 
     manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert!(binding_focus_is_primary(&manager, &scope));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
     assert!(binding_focus_is_primary(&manager, &leaf1));
     assert!(manager.with_focus_manager(|manager| manager.has_primary_focus(&scope)) == false);
     assert!(scope.borrow().has_focus() == true);
@@ -3874,9 +3883,17 @@ fn wave_b_focus_test_027_direct_port_expected_red() {
     });
 
     manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert!(binding_focus_is_primary(&manager, &scope1));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert!(binding_focus_is_primary(&manager, &scope2));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
     assert!(binding_focus_is_primary(&manager, &leaf));
     assert!(scope1.borrow().has_focus() == true);
     assert!(scope2.borrow().has_focus() == true);
+    manager.with_focus_manager_mut(FocusManager::focus_previous);
+    assert!(binding_focus_is_primary(&manager, &scope2));
+    manager.with_focus_manager_mut(FocusManager::focus_previous);
+    assert!(binding_focus_is_primary(&manager, &scope1));
 }
 
 #[test]
@@ -4042,6 +4059,8 @@ fn wave_b_focus_test_034_direct_port_expected_red() {
     manager.with_focus_manager_mut(|manager| manager.set_focus(inner.clone()));
 
     manager.with_focus_manager_mut(FocusManager::focus_previous);
+    assert!(binding_focus_is_primary(&manager, &scope));
+    manager.with_focus_manager_mut(FocusManager::focus_previous);
     assert!(binding_focus_is_primary(&manager, &before));
 }
 
@@ -4067,6 +4086,8 @@ fn wave_b_focus_test_035_direct_port_expected_red() {
     manager.with_focus_manager_mut(|manager| manager.set_focus(node1.clone()));
     manager.with_focus_manager_mut(FocusManager::focus_previous);
 
+    assert!(binding_focus_is_primary(&manager, &scope));
+    manager.with_focus_manager_mut(FocusManager::focus_previous);
     assert!(binding_focus_is_primary(&manager, &node2));
 }
 
@@ -4078,6 +4099,7 @@ fn wave_b_focus_test_036_direct_port_expected_red() {
     let node2 = FocusNode::new(None);
 
     scope.borrow_mut().set_edge_behavior(EdgeBehavior::Stop);
+    scope.borrow_mut().set_can_focus(false);
 
     manager.with_focus_manager_mut(|manager| manager.add_child(None, scope.clone(), None));
     manager.with_focus_manager_mut(|manager| {
@@ -4549,7 +4571,7 @@ fn wave_b_focus_test_056_direct_port_expected_red() {
     });
 
     manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
-    assert!(binding_focus_is_primary(&manager, &leaf1));
+    assert!(binding_focus_is_primary(&manager, &scope));
 }
 
 #[test]
@@ -4571,24 +4593,34 @@ fn wave_b_focus_test_057_direct_port_expected_red() {
     });
 
     manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
-    assert!(binding_focus_is_primary(&manager, &leaf));
+    assert!(binding_focus_is_primary(&manager, &scope));
+    manager.with_focus_manager_mut(FocusManager::clear_focus);
+    row.borrow_mut().set_can_traverse(false);
+    leaf.borrow_mut().set_can_traverse(false);
+    sibling.borrow_mut().set_can_traverse(false);
+    manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
+    assert!(binding_focus_is_primary(&manager, &scope));
 }
 
 #[test]
 fn wave_b_focus_test_058_direct_port_expected_red() {
     let manager = RuntimeFocusManagerHandle::new(FocusManager::new());
-    let scope = FocusNode::new(None);
-    let child = FocusNode::new(None);
-
-    child.borrow_mut().set_can_traverse(false);
-
-    manager.with_focus_manager_mut(|manager| manager.add_child(None, scope.clone(), None));
+    let traversable = FocusNode::new(None);
+    let reachable_only_by_name = FocusNode::new(None);
+    reachable_only_by_name.borrow_mut().set_can_traverse(false);
     manager.with_focus_manager_mut(|manager| {
-        manager.add_child(Some(scope.clone()), child.clone(), None)
+        manager.add_child(None, traversable.clone(), None);
+        manager.add_child(None, reachable_only_by_name.clone(), None);
+        manager.set_focus(reachable_only_by_name.clone());
     });
-
-    manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
-    assert!(binding_focus_is_primary(&manager, &scope));
+    assert!(binding_focus_is_primary(&manager, &reachable_only_by_name));
+    manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+    assert!(binding_focus_is_primary(&manager, &reachable_only_by_name));
+    manager.with_focus_manager_mut(FocusManager::clear_focus);
+    manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert!(binding_focus_is_primary(&manager, &traversable));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert!(binding_primary(&manager).is_none());
 }
 
 #[test]
@@ -4643,6 +4675,8 @@ fn wave_b_focus_test_061_direct_port_expected_red() {
     });
 
     manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
+    assert!(binding_focus_is_primary(&manager, &scope));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
     assert!(binding_focus_is_primary(&manager, &leaf1));
 
     manager.with_focus_manager_mut(FocusManager::focus_next);
@@ -4859,6 +4893,11 @@ fn wave_b_focus_test_068_direct_port_expected_red() {
     });
     fixture.frames(1, 0.016);
     assert!(binding_primary(&manager).is_some());
+    assert!(
+        fixture
+            .machine
+            .with_instance_mut(|machine| machine.focus_next())
+    );
     assert!(
         !fixture
             .machine
@@ -5303,14 +5342,31 @@ fn wave_b_focus_test_075_direct_port_expected_red() {
         .expect("artboard focus manager");
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.advance(0.1);
+    let roots = manager.with_focus_manager(|manager| manager.root_nodes().to_vec());
+    assert_eq!(roots.len(), 3);
+    let children = roots[1].borrow().children().to_vec();
+    assert_eq!(children.len(), 3);
+    let expected = [
+        Some(roots[0].clone()),
+        Some(roots[1].clone()),
+        Some(children[0].clone()),
+        Some(children[1].clone()),
+        Some(children[2].clone()),
+        Some(roots[2].clone()),
+        None,
+    ];
     fixture.artboard.draw(&mut renderer);
-    for _ in 0..7 {
-        fixture.silver.borrow_mut().add_frame();
+    fixture.silver.borrow_mut().add_frame();
+    for (step, target) in expected.iter().enumerate() {
         manager.with_focus_manager_mut(|manager| {
             manager.focus_next();
         });
         fixture.advance(0.1);
+        assert!(binding_focus_ptr_eq(&binding_primary(&manager), target));
         fixture.artboard.draw(&mut renderer);
+        if step + 1 < expected.len() {
+            fixture.silver.borrow_mut().add_frame();
+        }
     }
     fixture.matches("focusable_element");
 }
@@ -6073,7 +6129,11 @@ fn wave_b_font_test_006_mapped_font_decodes_equivalently_to_a_copied_one() {
     let path = binding_path("assets/fonts/Inter_18pt-Regular.ttf");
     // SAFETY: the pinned fixture remains unchanged for every font/shape owner.
     let mapped = unsafe { HbFont::decode_file(Some(&path)) };
-    if !cfg!(any(target_vendor = "apple", target_os = "linux", target_os = "android")) {
+    if !cfg!(any(
+        target_vendor = "apple",
+        target_os = "linux",
+        target_os = "android"
+    )) {
         assert!(mapped.is_none());
         return;
     }
@@ -6119,7 +6179,11 @@ fn wave_b_font_test_007_mapped_font_outlives_the_call_that_created_it() {
         // the file stays unchanged until the mapped font and shaping drop.
         unsafe { HbFont::decode_file(Some(&path)) }
     };
-    if !cfg!(any(target_vendor = "apple", target_os = "linux", target_os = "android")) {
+    if !cfg!(any(
+        target_vendor = "apple",
+        target_os = "linux",
+        target_os = "android"
+    )) {
         assert!(font.is_none());
         return;
     }
@@ -6151,9 +6215,8 @@ fn wave_b_font_test_008_decode_file_returns_null_rather_than_failing_hard() {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = loop {
         let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "nuxie-font-map-test-{}-{id}", std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("nuxie-font-map-test-{}-{id}", std::process::id()));
         match std::fs::create_dir(&path) {
             Ok(()) => break path,
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -6164,8 +6227,13 @@ fn wave_b_font_test_008_decode_file_returns_null_rather_than_failing_hard() {
     // SAFETY: this test exclusively owns the directory and never creates this file.
     assert!(unsafe { HbFont::decode_file(Some(&missing)) }.is_none());
     let empty = dir.join("empty_font_test_file.tmp");
-    drop(std::fs::OpenOptions::new().write(true).create_new(true).open(&empty)
-        .expect("create exclusively owned empty font"));
+    drop(
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&empty)
+            .expect("create exclusively owned empty font"),
+    );
     // SAFETY: the empty file remains unchanged through decode and its returned
     // owner drops before cleanup. Upstream rejects its zero size before mapping.
     assert!(unsafe { HbFont::decode_file(Some(&empty)) }.is_none());

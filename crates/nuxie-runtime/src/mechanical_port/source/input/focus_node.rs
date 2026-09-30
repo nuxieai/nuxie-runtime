@@ -57,6 +57,10 @@ impl FocusNode {
             is_collapsed: false,
         }))
     }
+    /// Unbacked container that is not itself a focus stop. Navigation visits
+    /// its children just as it visits children of any other non-stop. Hosts
+    /// building containers should use this: a bare node defaults to both
+    /// canFocus and canTraverse and is a stop even when it has children.
     pub fn make_structural_scope() -> FocusNodeRef {
         let n = Self::new(None);
         {
@@ -120,6 +124,8 @@ impl FocusNode {
     pub(crate) fn set_has_focus(&mut self, v: bool) {
         self.set_flag(Self::HAS_FOCUS, v)
     }
+    /// Applies only to scopes (nodes with children), when leaving their
+    /// subtree. Reading a childless node's closed loop would trap focus.
     pub fn edge_behavior(&self) -> EdgeBehavior {
         match (self.flags >> 3) & 3 {
             1 => EdgeBehavior::ClosedLoop,

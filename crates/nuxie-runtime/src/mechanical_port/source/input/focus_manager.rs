@@ -248,39 +248,47 @@ fn eligible_for_focus(node: &FocusNodeRef) -> bool {
     }
 }
 
-fn eligible_for_traversal(node: &FocusNodeRef) -> bool {
+// A container may be both a navigation stop and a scope. Its flags never
+// decide whether its children are visited.
+fn is_focus_stop(node: &FocusNodeRef) -> bool {
     node.borrow().can_traverse() && eligible_for_focus(node)
 }
 
-fn has_eligible_traversable_child(node: &FocusNodeRef) -> bool {
-    node.borrow().children().iter().any(focus_node_traversable)
+fn sorted_by_tab_index(children: &[FocusNodeRef]) -> Vec<FocusNodeRef> {
+    let mut result = children.to_vec();
+    result.sort_by_key(|node| node.borrow().tab_index());
+    result
 }
 
-fn focus_node_traversable(node: &FocusNodeRef) -> bool {
-    if eligible_for_traversal(node) {
-        return true;
+// Pre-order, without pruning non-stops (including defunct backed nodes).
+fn first_stop_in_subtree(node: &FocusNodeRef) -> Option<FocusNodeRef> {
+    if is_focus_stop(node) {
+        return Some(node.clone());
     }
-    if node.borrow().focusable.is_some() {
-        return false;
-    }
-    has_eligible_traversable_child(node)
+    first_stop_among(&sorted_by_tab_index(node.borrow().children()))
 }
 
-fn is_leaf(node: &FocusNodeRef) -> bool {
-    !node.borrow().children().iter().any(focus_node_traversable)
+fn last_stop_in_subtree(node: &FocusNodeRef) -> Option<FocusNodeRef> {
+    let children = sorted_by_tab_index(node.borrow().children());
+    last_stop_among(&children).or_else(|| is_focus_stop(node).then(|| node.clone()))
 }
 
-fn collect_all_traversable_nodes(nodes: &[FocusNodeRef], result: &mut Vec<FocusNodeRef>) {
+fn first_stop_among(siblings: &[FocusNodeRef]) -> Option<FocusNodeRef> {
+    siblings.iter().find_map(first_stop_in_subtree)
+}
+
+fn last_stop_among(siblings: &[FocusNodeRef]) -> Option<FocusNodeRef> {
+    siblings.iter().rev().find_map(last_stop_in_subtree)
+}
+
+// Spatial navigation keeps hierarchy order, including containers themselves.
+fn collect_focus_stops(nodes: &[FocusNodeRef], result: &mut Vec<FocusNodeRef>) {
     for node in nodes {
-        if node.borrow().can_focus()
-            && node.borrow().can_traverse()
-            && is_leaf(node)
-            && eligible_for_traversal(node)
-        {
+        if is_focus_stop(node) {
             result.push(node.clone());
         }
         let children = node.borrow().children().to_vec();
-        collect_all_traversable_nodes(&children, result);
+        collect_focus_stops(&children, result);
     }
 }
 
@@ -548,15 +556,19 @@ impl FocusManager {
         let Some(focus) = self.primary_focus.as_ref() else {
             return;
         };
-        if eligible_for_traversal(focus) {
+        // canTraverse only opts out of navigation, not explicitly held focus.
+        if eligible_for_focus(focus) {
             return;
         }
         // Stay in this ancestor chain; unrelated manager roots are not a
-        // fallback. Each ancestor prefers its first eligible leaf over itself.
+        // fallback. Each ancestor prefers a stop under its children over itself.
         let mut ancestor = focus.borrow().parent();
         while let Some(node) = ancestor {
-            if let Some(leaf) = self.get_first_leaf(&node) {
-                self.set_focus(leaf);
+            let children = sorted_by_tab_index(node.borrow().children());
+            let stop =
+                first_stop_among(&children).or_else(|| is_focus_stop(&node).then(|| node.clone()));
+            if let Some(stop) = stop {
+                self.set_focus(stop);
                 return;
             }
             ancestor = node.borrow().parent();
@@ -574,43 +586,12 @@ impl FocusManager {
         self.drop_focus_if_focus_target_hidden();
     }
 
-    pub fn descend_focus_to_leaf(&mut self, root: Option<CoreHandle>) {
-        self.apply_descend_focus_to_leaf(root, false);
-    }
-
-    pub fn descend_focus_to_leaf_all_roots(&mut self) {
-        self.apply_descend_focus_to_leaf(None, true);
-    }
-
-    fn apply_descend_focus_to_leaf(&mut self, root: Option<CoreHandle>, all_roots: bool) {
-        let Some(focus) = self.primary_focus.as_ref() else {
-            return;
-        };
-        if focus.borrow().children().is_empty() {
+    pub fn set_focus(&mut self, node: FocusNodeRef) {
+        // Focus lands exactly where requested, never on an unnamed descendant.
+        if !eligible_for_focus(&node) {
             return;
         }
-        let Some(leaf) = self.get_first_leaf(focus) else {
-            return;
-        };
-        if Rc::ptr_eq(&leaf, focus) {
-            return;
-        }
-        // Scope the destination, not the existing focus. Host-created nodes
-        // without an attributable artboard are never deferred.
-        if !all_roots && belongs_to_another_root(&leaf, &root) {
-            return;
-        }
-        self.set_focus(leaf);
-    }
-
-    pub fn set_focus(&mut self, mut node: FocusNodeRef) {
-        if eligible_for_focus(&node)
-            && let Some(leaf) = self.get_first_leaf(&node)
-        {
-            node = leaf;
-        }
-        if self.has_primary_focus(&node) || !node.borrow().can_focus() || !eligible_for_focus(&node)
-        {
+        if self.has_primary_focus(&node) {
             return;
         }
         let old_focus = self.primary_focus.replace(node.clone());
@@ -932,61 +913,90 @@ impl FocusManager {
         self.has_focusable_content
     }
 
+    /// Sorted children that are or contain a focus stop. A parent's own flags
+    /// never remove its children from navigation.
     pub fn get_traversable_nodes(&self, scope: Option<&FocusNodeRef>) -> Vec<FocusNodeRef> {
-        let mut result: Vec<_> = match scope {
-            Some(scope) => scope
-                .borrow()
-                .children()
-                .iter()
-                .filter(|child| focus_node_traversable(child))
-                .cloned()
-                .collect(),
-            None => self
-                .root_nodes
-                .borrow()
-                .iter()
-                .filter(|child| focus_node_traversable(child))
-                .cloned()
-                .collect(),
+        let mut children = match scope {
+            Some(scope) => sorted_by_tab_index(scope.borrow().children()),
+            None => sorted_by_tab_index(&self.root_nodes.borrow()),
         };
-        result.sort_by_key(|node| node.borrow().tab_index());
-        result
+        children.retain(|child| first_stop_in_subtree(child).is_some());
+        children
     }
 
-    fn get_first_leaf(&self, node: &FocusNodeRef) -> Option<FocusNodeRef> {
-        let children = self.get_traversable_nodes(Some(node));
-        for child in &children {
-            if let Some(leaf) = self.get_first_leaf(child) {
-                return Some(leaf);
-            }
+    fn siblings_of(&self, node: &FocusNodeRef) -> Vec<FocusNodeRef> {
+        match node.borrow().parent() {
+            Some(parent) => sorted_by_tab_index(parent.borrow().children()),
+            None => sorted_by_tab_index(&self.root_nodes.borrow()),
         }
-        (children.is_empty() && eligible_for_traversal(node)).then(|| node.clone())
     }
 
-    fn get_last_leaf(&self, node: &FocusNodeRef) -> Option<FocusNodeRef> {
-        let children = self.get_traversable_nodes(Some(node));
-        for child in children.iter().rev() {
-            if let Some(leaf) = self.get_last_leaf(child) {
-                return Some(leaf);
-            }
-        }
-        (children.is_empty() && eligible_for_traversal(node)).then(|| node.clone())
-    }
-
-    fn first_eligible_leaf_from(
+    // Pre-order forward, reverse pre-order backward. Edges govern leaving a
+    // scope's subtree, not moving between its children.
+    fn next_focus_stop(
         &self,
-        traversable: &[FocusNodeRef],
+        current: Option<&FocusNodeRef>,
         forward: bool,
     ) -> Option<FocusNodeRef> {
+        // Detached scopes retain children and focus but no longer belong to
+        // this manager. Check membership before descending or reading edges.
+        if current.is_none_or(|node| !node.borrow().manager.ptr_eq(&self.node_manager_handle())) {
+            let roots = sorted_by_tab_index(&self.root_nodes.borrow());
+            return if forward {
+                first_stop_among(&roots)
+            } else {
+                last_stop_among(&roots)
+            };
+        }
+        let current = current.expect("manager membership requires a current node");
         if forward {
-            traversable
+            let children = sorted_by_tab_index(current.borrow().children());
+            if let Some(stop) = first_stop_among(&children) {
+                return Some(stop);
+            }
+        }
+
+        let mut node = current.clone();
+        loop {
+            if node.borrow().is_scope() {
+                match node.borrow().edge_behavior() {
+                    EdgeBehavior::ClosedLoop => {
+                        return if forward {
+                            first_stop_in_subtree(&node)
+                        } else {
+                            last_stop_in_subtree(&node)
+                        };
+                    }
+                    EdgeBehavior::Stop => return Some(current.clone()),
+                    // The source switch falls through for an unknown raw bit value.
+                    EdgeBehavior::ParentScope | EdgeBehavior::Unknown => {}
+                }
+            }
+            let siblings = self.siblings_of(&node);
+            let index = siblings
                 .iter()
-                .find_map(|node| self.get_first_leaf(node))
-        } else {
-            traversable
-                .iter()
-                .rev()
-                .find_map(|node| self.get_last_leaf(node))
+                .position(|sibling| Rc::ptr_eq(sibling, &node))
+                .unwrap_or(siblings.len());
+            if forward {
+                for sibling in siblings.iter().skip(index + 1) {
+                    if let Some(stop) = first_stop_in_subtree(sibling) {
+                        return Some(stop);
+                    }
+                }
+            } else {
+                for sibling in siblings[..index].iter().rev() {
+                    if let Some(stop) = last_stop_in_subtree(sibling) {
+                        return Some(stop);
+                    }
+                }
+            }
+            // The root list has no owner and always exits, clearing focus.
+            let parent = node.borrow().parent()?;
+            if !forward && is_focus_stop(&parent) {
+                // Still inside the parent's subtree; its edge has no say yet.
+                return Some(parent);
+            }
+            node = parent;
         }
     }
 
@@ -995,64 +1005,7 @@ impl FocusManager {
         current: Option<FocusNodeRef>,
         forward: bool,
     ) -> Option<FocusNodeRef> {
-        let scope = current.as_ref().and_then(|node| node.borrow().parent());
-        let traversable = self.get_traversable_nodes(scope.as_ref());
-        if traversable.is_empty() {
-            return if scope.is_some() {
-                self.find_next_focusable(scope, forward)
-            } else {
-                None
-            };
-        }
-
-        let current_index = current.as_ref().and_then(|current| {
-            traversable
-                .iter()
-                .position(|node| Rc::ptr_eq(node, current))
-        });
-        let next = if let Some(index) = current_index {
-            let direct = if forward {
-                traversable[index + 1..]
-                    .iter()
-                    .find_map(|node| self.get_first_leaf(node))
-            } else {
-                traversable[..index]
-                    .iter()
-                    .rev()
-                    .find_map(|node| self.get_last_leaf(node))
-            };
-            if direct.is_some() {
-                direct
-            } else {
-                match scope.as_ref().map_or(EdgeBehavior::ParentScope, |scope| {
-                    scope.borrow().edge_behavior()
-                }) {
-                    EdgeBehavior::ClosedLoop => {
-                        let wrapped = if forward {
-                            traversable[..index]
-                                .iter()
-                                .find_map(|node| self.get_first_leaf(node))
-                        } else {
-                            traversable[index + 1..]
-                                .iter()
-                                .rev()
-                                .find_map(|node| self.get_last_leaf(node))
-                        };
-                        wrapped.or_else(|| self.first_eligible_leaf_from(&traversable, forward))
-                    }
-                    EdgeBehavior::Stop => current.clone(),
-                    EdgeBehavior::Unknown => None,
-                    EdgeBehavior::ParentScope => {
-                        if scope.is_some() {
-                            return self.find_next_focusable(scope, forward);
-                        }
-                        None
-                    }
-                }
-            }
-        } else {
-            self.first_eligible_leaf_from(&traversable, forward)
-        };
+        let next = self.next_focus_stop(current.as_ref(), forward);
 
         let changed = match (next.as_ref(), current.as_ref()) {
             (Some(next), Some(current)) => !Rc::ptr_eq(next, current),
@@ -1093,7 +1046,7 @@ impl FocusManager {
         direction: Direction,
     ) -> Option<FocusNodeRef> {
         let mut candidates = Vec::new();
-        collect_all_traversable_nodes(&self.root_nodes.borrow(), &mut candidates);
+        collect_focus_stops(&self.root_nodes.borrow(), &mut candidates);
         let current_bounds = root_bounds(current);
         let current_position = if current_bounds.is_none() {
             Some(root_position(current)?)

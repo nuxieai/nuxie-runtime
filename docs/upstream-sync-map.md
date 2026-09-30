@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ca3a5070113801702937d24f852b7cb2c8765673`
+- LAST_SYNCED_SHA: `9b9cd7b185398629f10ae0131e2a53322ed4a9b4`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 48 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 48 require a Rust translation.
+  There are 47 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 47 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `9b9cd7b185398629f10ae0131e2a53322ed4a9b4` | Focus can land on any eligible node, including containers. Translate stable pre-order traversal, independent parent flags, focus-versus-traversal eligibility, subtree edge behavior and detached-node re-entry; remove automatic leaf descent. Port the changed/new focus tests, exact new traversal fixture, two new Silver producers and updated source baselines. Wasm UTF-16 string ABI/transcoding and WAMR AOT compilation changes remain parked; private Dart generator/FFI changes described in the message are absent from the public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ca3a5070113801702937d24f852b7cb2c8765673` | **DEFERRED:** WAMR patch 0019 and the Wasm VM add quick native/AOT dispatch, nested entries, export lookup caching and outermost-only canvas/pass cleanup. All execution changes belong to the parked Wasm lane; upstream Luau and shared renderer owners are unchanged and receive no speculative adaptation. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `a3a7a317accdba678db7522615264e0403d6f76e` | **DEFERRED:** only WAMR patch 0018 and the private editor revision change. The AArch64 AOT far-call stub tail-branches through x16 to preserve return-stack prediction; it is wholly within parked Wasm execution, with no shared runtime, renderer or Luau delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7f4354cd0775aaabc59bfcb9892d974fd53f9f0c` | Add trusted, stable local font-file mapping on Apple/Linux/Android, retaining mapped bytes through the font and derived font lifetimes without changing ordinary byte decoding. Keep the approved Rust shaping/outline backends and their parser validation; expose the mapped-file lifetime requirement as an unsafe Rust API contract. Port all three upstream font-file tests. Private Dart/FFI editor callers described in the message are absent from the public delta. | — |

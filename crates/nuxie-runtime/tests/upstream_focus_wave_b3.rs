@@ -3,7 +3,7 @@
 //! Retained pointer identity and callback observations replace the former
 //! façade's arena IDs and synthetic event stream.
 
-// Eleven new focus_test.cpp cases from upstream 9d2e7d04. The mock observes
+// Visibility cases from upstream 9d2e7d04, updated by 9b9cd7b1. The mock observes
 // eligibility and callbacks; all traversal and root scoping use real owners.
 mod visibility_9d2e7d04 {
     use super::*;
@@ -61,9 +61,6 @@ mod visibility_9d2e7d04 {
     fn drop_hidden(manager: &RuntimeFocusManagerHandle) {
         manager.with_focus_manager_mut(|m| m.drop_focus_if_focus_target_hidden());
     }
-    fn descend(manager: &RuntimeFocusManagerHandle, root: Option<CoreHandle>) {
-        manager.with_focus_manager_mut(|m| m.descend_focus_to_leaf(root));
-    }
 
     #[test]
     fn rehomes_focus_to_a_sibling_leaf_when_target_hides() {
@@ -71,7 +68,7 @@ mod visibility_9d2e7d04 {
         let (parent, p) = node(&m, None, None);
         let (a, am) = node(&m, Some(&parent), None);
         let (b, bm) = node(&m, Some(&parent), None);
-        focus(&m, &parent);
+        focus(&m, &a);
         is_primary(&m, &a);
         am.borrow().eligible.set(false);
         drop_hidden(&m);
@@ -86,7 +83,7 @@ mod visibility_9d2e7d04 {
         let m = manager();
         let (parent, _) = node(&m, None, None);
         let (leaf, lm) = node(&m, Some(&parent), None);
-        focus(&m, &parent);
+        focus(&m, &leaf);
         is_primary(&m, &leaf);
         lm.borrow().eligible.set(false);
         drop_hidden(&m);
@@ -99,7 +96,7 @@ mod visibility_9d2e7d04 {
         let (grand, _) = node(&m, None, None);
         let (parent, pm) = node(&m, Some(&grand), None);
         let (leaf, lm) = node(&m, Some(&parent), None);
-        focus(&m, &grand);
+        focus(&m, &leaf);
         is_primary(&m, &leaf);
         lm.borrow().eligible.set(false);
         pm.borrow().eligible.set(false);
@@ -111,7 +108,7 @@ mod visibility_9d2e7d04 {
         let m = manager();
         let (parent, pm) = node(&m, None, None);
         let (leaf, lm) = node(&m, Some(&parent), None);
-        focus(&m, &parent);
+        focus(&m, &leaf);
         is_primary(&m, &leaf);
         lm.borrow().eligible.set(false);
         pm.borrow().eligible.set(false);
@@ -137,7 +134,7 @@ mod visibility_9d2e7d04 {
         let (leaf_a, la) = node(&m, Some(&root_a), None);
         let (root_b, _) = node(&m, None, None);
         let (_, lb) = node(&m, Some(&root_b), None);
-        focus(&m, &root_a);
+        focus(&m, &leaf_a);
         is_primary(&m, &leaf_a);
         la.borrow().eligible.set(false);
         ra.borrow().eligible.set(false);
@@ -158,52 +155,6 @@ mod visibility_9d2e7d04 {
         assert_eq!(rb.borrow().focused.get(), 0);
     }
     #[test]
-    fn descends_focus_to_child_that_becomes_eligible() {
-        let m = manager();
-        let (parent, pm) = node(&m, None, None);
-        let (child, cm) = node(&m, Some(&parent), None);
-        cm.borrow().eligible.set(false);
-        focus(&m, &parent);
-        is_primary(&m, &parent);
-        assert_eq!(pm.borrow().focused.get(), 1);
-        descend(&m, None);
-        is_primary(&m, &parent);
-        assert_eq!(cm.borrow().focused.get(), 0);
-        cm.borrow().eligible.set(true);
-        descend(&m, None);
-        is_primary(&m, &child);
-        assert_eq!(cm.borrow().focused.get(), 1);
-        assert_eq!(pm.borrow().blurred.get(), 0);
-        assert_eq!(pm.borrow().focused.get(), 1);
-        descend(&m, None);
-        is_primary(&m, &child);
-        assert_eq!(cm.borrow().focused.get(), 1);
-    }
-    fn root_scoped_descent(parent_has_root: bool) {
-        let arena = CoreArena::default();
-        let a = arena.insert(Artboard::default());
-        let b = arena.insert(Artboard::default());
-        let m = manager();
-        let (parent, _) = node(&m, None, parent_has_root.then(|| b.clone()));
-        let (child, cm) = node(&m, Some(&parent), Some(b.clone()));
-        cm.borrow().eligible.set(false);
-        focus(&m, &parent);
-        is_primary(&m, &parent);
-        cm.borrow().eligible.set(true);
-        descend(&m, Some(a));
-        is_primary(&m, &parent);
-        descend(&m, Some(b));
-        is_primary(&m, &child);
-    }
-    #[test]
-    fn only_descends_focus_for_root_that_just_updated() {
-        root_scoped_descent(true);
-    }
-    #[test]
-    fn scopes_descent_by_where_focus_would_land() {
-        root_scoped_descent(false);
-    }
-    #[test]
     fn only_drops_hidden_target_for_its_own_root() {
         let arena = CoreArena::default();
         let a = arena.insert(Artboard::default());
@@ -212,7 +163,7 @@ mod visibility_9d2e7d04 {
         let (parent, _) = node(&m, None, Some(b.clone()));
         let (leaf_a, la) = node(&m, Some(&parent), Some(b.clone()));
         let (leaf_b, _) = node(&m, Some(&parent), Some(b.clone()));
-        focus(&m, &parent);
+        focus(&m, &leaf_a);
         is_primary(&m, &leaf_a);
         la.borrow().eligible.set(false);
         m.with_focus_manager_mut(|m| m.drop_focus_if_focus_target_hidden_for_root(Some(a)));
@@ -522,7 +473,13 @@ fn primary_focus_accepts_text_reports_text_consuming_focus() {
     // A focusable that consumes typed text, like TextInput and its FocusData.
     struct MockTextFocusable(ObservedFocusable);
     impl Focusable for MockTextFocusable {
-        fn key_input(&mut self, key: Key, modifiers: KeyModifiers, pressed: bool, repeat: bool) -> bool {
+        fn key_input(
+            &mut self,
+            key: Key,
+            modifiers: KeyModifiers,
+            pressed: bool,
+            repeat: bool,
+        ) -> bool {
             self.0.key_input(key, modifiers, pressed, repeat)
         }
         fn text_input(&mut self, text: &str) -> bool {
@@ -1116,8 +1073,10 @@ fn wave_b3_focus_test_021_direct_port() {
 #[test]
 fn wave_b3_focus_test_022_direct_port() {
     // Pinned focus_test.cpp case 22.
-    let (manager, _, first, second) = scope_with_two(FocusEdgeBehavior::ClosedLoop);
+    let (manager, scope, first, second) = scope_with_two(FocusEdgeBehavior::ClosedLoop);
     manager.with_focus_manager_mut(|manager| manager.set_focus(second.clone()));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
     assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
     assert_eq!(primary(&manager), Some(node_key(&first)));
 }
@@ -1168,7 +1127,10 @@ fn wave_b3_focus_test_026_direct_port() {
     // Pinned focus_test.cpp case 26.
     let (manager, scope, first, second) = scope_with_two(FocusEdgeBehavior::ParentScope);
     assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
     assert_eq!(primary(&manager), Some(node_key(&first)));
+    assert!(!manager.with_focus_manager(|manager| manager.has_primary_focus(&scope)));
     assert!(manager.with_focus_manager(|manager| manager.has_focus(&scope)));
     assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
     assert_eq!(primary(&manager), Some(node_key(&second)));
@@ -1182,9 +1144,17 @@ fn wave_b3_focus_test_027_direct_port() {
     let s2 = attached(&manager, Some(&s1), FocusNode::new(None));
     let leaf = attached(&manager, Some(&s2), FocusNode::new(None));
     assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
+    assert_eq!(primary(&manager), Some(node_key(&s1)));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
+    assert_eq!(primary(&manager), Some(node_key(&s2)));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_next()));
     assert_eq!(primary(&manager), Some(node_key(&leaf)));
     assert!(manager.with_focus_manager(|manager| manager.has_focus(&s1)));
     assert!(manager.with_focus_manager(|manager| manager.has_focus(&s2)));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_previous()));
+    assert_eq!(primary(&manager), Some(node_key(&s2)));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_previous()));
+    assert_eq!(primary(&manager), Some(node_key(&s1)));
 }
 
 #[test]
@@ -1292,14 +1262,18 @@ fn wave_b3_focus_test_034_direct_port() {
     let inner = attached(&manager, Some(&scope), FocusNode::new(None));
     manager.with_focus_manager_mut(|manager| manager.set_focus(inner.clone()));
     assert!(manager.with_focus_manager_mut(|manager| manager.focus_previous()));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_previous()));
     assert_eq!(primary(&manager), Some(node_key(&before)));
 }
 
 #[test]
 fn wave_b3_focus_test_035_direct_port() {
     // Pinned focus_test.cpp case 35.
-    let (manager, _, first, second) = scope_with_two(FocusEdgeBehavior::ClosedLoop);
+    let (manager, scope, first, second) = scope_with_two(FocusEdgeBehavior::ClosedLoop);
     manager.with_focus_manager_mut(|manager| manager.set_focus(first.clone()));
+    assert!(manager.with_focus_manager_mut(|manager| manager.focus_previous()));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
     assert!(manager.with_focus_manager_mut(|manager| manager.focus_previous()));
     assert_eq!(primary(&manager), Some(node_key(&second)));
 }
@@ -1307,7 +1281,8 @@ fn wave_b3_focus_test_035_direct_port() {
 #[test]
 fn wave_b3_focus_test_036_direct_port() {
     // Pinned focus_test.cpp case 36.
-    let (manager, _, first, _second) = scope_with_two(FocusEdgeBehavior::Stop);
+    let (manager, scope, first, _second) = scope_with_two(FocusEdgeBehavior::Stop);
+    scope.borrow_mut().set_can_focus(false);
     manager.with_focus_manager_mut(|manager| manager.set_focus(first.clone()));
     assert!(!manager.with_focus_manager_mut(|manager| manager.focus_previous()));
     assert_eq!(primary(&manager), Some(node_key(&first)));
@@ -1539,10 +1514,9 @@ fn wave_b3_focus_test_055_direct_port() {
 #[test]
 fn wave_b3_focus_test_056_direct_port() {
     // Pinned focus_test.cpp case 56.
-    let (manager, _scope, first, _second) = scope_with_two(FocusEdgeBehavior::ParentScope);
-    let scope = manager.with_focus_manager(|manager| manager.root_nodes()[0].clone());
+    let (manager, scope, _first, _second) = scope_with_two(FocusEdgeBehavior::ParentScope);
     manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
-    assert_eq!(primary(&manager), Some(node_key(&first)));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
 }
 
 #[test]
@@ -1552,21 +1526,34 @@ fn wave_b3_focus_test_057_direct_port() {
     let scope = attached(&manager, None, FocusNode::new(None));
     let row = attached(&manager, Some(&scope), FocusNode::new(None));
     let leaf = attached(&manager, Some(&row), FocusNode::new(None));
-    let _sibling = attached(&manager, Some(&scope), FocusNode::new(None));
+    let sibling = attached(&manager, Some(&scope), FocusNode::new(None));
     manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
-    assert_eq!(primary(&manager), Some(node_key(&leaf)));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
+    manager.with_focus_manager_mut(FocusManager::clear_focus);
+    row.borrow_mut().set_can_traverse(false);
+    leaf.borrow_mut().set_can_traverse(false);
+    sibling.borrow_mut().set_can_traverse(false);
+    manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
 }
 
 #[test]
 fn wave_b3_focus_test_058_direct_port() {
     // Pinned focus_test.cpp case 58.
     let manager = RuntimeFocusManagerHandle::new(FocusManager::new());
-    let scope = attached(&manager, None, FocusNode::new(None));
-    let child = FocusNode::new(None);
-    child.borrow_mut().set_can_traverse(false);
-    let _ = attached(&manager, Some(&scope), child);
-    manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
-    assert_eq!(primary(&manager), Some(node_key(&scope)));
+    let traversable = attached(&manager, None, FocusNode::new(None));
+    let named = FocusNode::new(None);
+    named.borrow_mut().set_can_traverse(false);
+    attached(&manager, None, named.clone());
+    manager.with_focus_manager_mut(|manager| manager.set_focus(named.clone()));
+    assert_eq!(primary(&manager), Some(node_key(&named)));
+    manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
+    assert_eq!(primary(&manager), Some(node_key(&named)));
+    manager.with_focus_manager_mut(FocusManager::clear_focus);
+    manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert_eq!(primary(&manager), Some(node_key(&traversable)));
+    manager.with_focus_manager_mut(FocusManager::focus_next);
+    assert_eq!(primary(&manager), None);
 }
 
 #[test]
@@ -1595,6 +1582,8 @@ fn wave_b3_focus_test_061_direct_port() {
     // Pinned focus_test.cpp case 61.
     let (manager, scope, first, second) = scope_with_two(FocusEdgeBehavior::ParentScope);
     manager.with_focus_manager_mut(|manager| manager.set_focus(scope.clone()));
+    assert_eq!(primary(&manager), Some(node_key(&scope)));
+    manager.with_focus_manager_mut(|manager| manager.focus_next());
     assert_eq!(primary(&manager), Some(node_key(&first)));
     manager.with_focus_manager_mut(|manager| manager.focus_next());
     assert_eq!(primary(&manager), Some(node_key(&second)));
@@ -1668,19 +1657,23 @@ fn wave_b3_focus_test_067_direct_port() {
 #[test]
 fn wave_b3_focus_test_068_direct_port() {
     // Pinned focus_test.cpp case 68.
-    let mut fixture = StatefulFocusFixture::load("assets/bindable_focus_tree_swap.riv", None);
+    let mut fixture =
+        StatefulFocusFixture::load_before_frames("assets/bindable_focus_tree_swap.riv", None);
+    fixture.frames(1, 0.016);
     assert!(
         fixture
             .machine
             .with_instance(|machine| machine.has_focus_nodes())
     );
     assert!(focus_manager(&fixture.machine).with_focus_manager_mut(|manager| manager.focus_next()));
+    fixture.frames(1, 0.016);
     assert!(
         fixture
             .machine
             .with_instance(|machine| machine.focus_state())
             .has_focus
     );
+    assert!(focus_manager(&fixture.machine).with_focus_manager_mut(|manager| manager.focus_next()));
     assert!(
         !focus_manager(&fixture.machine).with_focus_manager_mut(|manager| manager.focus_next())
     );
@@ -1880,25 +1873,34 @@ fn wave_b3_focus_test_074_direct_port() {
 
 #[test]
 fn wave_b3_focus_test_075_direct_port() {
-    // Pinned focus_test.cpp case 75.
-    let (_file, _artboard, machine) = real_focus_fixture("assets/focusable_element.riv", None);
-    assert!(
-        machine.with_instance(|machine| machine.has_focus_nodes()),
-        "pinned fixture must build authored focus data"
-    );
-    let before = focus_manager(&machine).with_focus_manager(|manager| manager.primary_focus());
-    let moved = focus_manager(&machine).with_focus_manager_mut(|manager| manager.focus_next());
-    assert!(moved, "pinned fixture must expose its first focus stop");
-    assert!(
-        machine
-            .with_instance(|machine| machine.focus_state())
-            .has_focus
-    );
-    if before.is_some() {
-        assert_ne!(
-            primary(&focus_manager(&machine)),
-            before.as_ref().map(node_key)
-        );
+    // Exact state assertions accompanying the upstream Silver frames. The
+    // rendered comparison is also covered by the Wave B expected-red owner.
+    let file = import_fixture("assets/focusable_element.riv");
+    let artboard = instance(&file, None);
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    let view_model = file
+        .with_file_mut(|file| file.create_view_model_instance_for_artboard(artboard.core_handle()))
+        .expect("artboard view model");
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(view_model));
+    machine.advance_and_apply(0.1);
+    let manager = focus_manager(&machine);
+    let roots = manager.with_focus_manager(|manager| manager.root_nodes().to_vec());
+    assert_eq!(roots.len(), 3);
+    let children = roots[1].borrow().children().to_vec();
+    assert_eq!(children.len(), 3);
+    let expected = [
+        Some(node_key(&roots[0])),
+        Some(node_key(&roots[1])),
+        Some(node_key(&children[0])),
+        Some(node_key(&children[1])),
+        Some(node_key(&children[2])),
+        Some(node_key(&roots[2])),
+        None,
+    ];
+    for target in expected {
+        manager.with_focus_manager_mut(FocusManager::focus_next);
+        machine.advance_and_apply(0.1);
+        assert_eq!(primary(&manager), target);
     }
 }
 

@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "ca3a5070113801702937d24f852b7cb2c8765673"
+UPSTREAM_REF = "9b9cd7b185398629f10ae0131e2a53322ed4a9b4"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,8 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "focus_traversal_click_to_focus",
+    "focus_traversal_data_bound",
     "layout_text_match",
     "layout_text_match_7_3",
     "text_layout_pre_7_3",
@@ -766,6 +768,123 @@ def repeated_frames(count: int, seconds: float) -> list[dict[str, object]]:
             action("draw"),
         )
     ]
+
+
+def focus_flags_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
+    """Literal 9b9cd7b1 focus producers, including focus-mutating assertion walks."""
+    if silver_id not in ("focus_traversal_click_to_focus", "focus_traversal_data_bound"):
+        return None
+    advance = action("advance", target="state-machine", seconds=0.016)
+    draw = action("draw")
+    frame = action("frame")
+    clear = action("clear-focus")
+    nested = [0, 0]
+    parents = [[1, 0, row, 0] for row in range(3)]
+    children = [nested + [0], nested + [1]] + [p + [i] for p in parents for i in range(2)]
+    actions = [action("bind-default-view-model")]
+
+    def boolean(path: str, value: bool, row: int | None = None) -> None:
+        if row is None:
+            actions.append(action("set-view-model-boolean", property=path, value=value))
+        else:
+            actions.append(action("set-view-model-list-item-boolean", list="layoutChildren", index=row, property=path, value=value))
+
+    def leaf(child: str, focusable: bool, traversable: bool, row: int | None = None) -> None:
+        boolean(child + "/focusable", focusable, row)
+        boolean(child + "/traversable", traversable, row)
+
+    def settle() -> None:
+        actions.extend([advance, advance, draw, frame])
+
+    def expect(path: list[int] | None) -> None:
+        actions.append(action("assert-focus-node", **({"path": path} if path is not None else {})))
+
+    def select(path: list[int]) -> None:
+        actions.append(action("set-focus-node", path=path))
+
+    def click(path: list[int], expected: list[int]) -> None:
+        actions.append(action("click-focus-node", path=path))
+        settle()
+        expect(expected)
+
+    def order(paths: list[list[int]], reverse: bool = False) -> None:
+        actions.append(action("assert-focus-order", paths=list(reversed(paths)) if reverse else paths, reverse=reverse))
+
+    if silver_id == "focus_traversal_click_to_focus":
+        for child in ("node/child1", "node/child2"):
+            leaf(child, True, True)
+        for row in range(3):
+            for child in ("child1", "child2"):
+                leaf(child, True, True, row)
+        actions.extend([advance, advance])
+        for child in children:
+            actions.append(clear)
+            click(child, child)
+        leaf("node/child2", False, True)
+        actions.extend([advance, clear])
+        select(children[1])
+        expect(children[1])
+        click(children[0], children[1])
+        leaf("node/child2", True, True)
+        actions.append(advance)
+        click(children[0], children[0])
+        leaf("child1", False, True, 1)
+        actions.extend([advance, clear])
+        select(children[7])
+        click(children[5], children[7])
+        click(children[3], children[3])
+        leaf("child1", True, True, 1)
+        actions.append(advance)
+        click(children[5], children[5])
+        leaf("node/child1", True, False)
+        actions.extend([advance, clear])
+        click(children[1], children[1])
+        leaf("node/child1", False, False)
+        actions.extend([advance, clear])
+        select(children[0])
+        click(children[1], children[0])
+    else:
+        actions.append(advance)
+        baseline = [nested, *parents]
+        settle()
+        order(baseline)
+        order(baseline, True)
+        boolean("node/child1/focusable", True)
+        settle()
+        order(baseline)
+        select(children[1])
+        expect(children[1])
+        boolean("node/child1/focusable", False)
+        boolean("node/child1/traversable", True)
+        settle()
+        order(baseline)
+        actions.append(clear)
+        select(children[1])
+        expect(None)
+        boolean("node/child1/focusable", True)
+        settle()
+        order([nested, children[1], *parents])
+        leaf("node/child2", True, True)
+        settle()
+        order([nested, *children[:2], *parents])
+        order([nested, *children[:2], *parents], True)
+        for child in ("child2", "child1"):
+            leaf(child, True, True, 1)
+        settle()
+        order([nested, *children[:2], parents[0], parents[1], *children[4:6], parents[2]])
+        for row in range(3):
+            for child in ("child1", "child2"):
+                leaf(child, True, True, row)
+        settle()
+        all_nodes = [nested, *children[:2]] + [n for row, p in enumerate(parents) for n in (p, *children[2 + row * 2:4 + row * 2])]
+        order(all_nodes)
+        order(all_nodes, True)
+        for child in ("child1", "child2"):
+            leaf(child, False, False, 0)
+        settle()
+        order([n for n in all_nodes if n not in children[2:4]])
+    actions.extend([advance, draw])
+    return tuple(actions)
 
 
 def p1q_view_model_actions(
@@ -1692,9 +1811,10 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         )
 
     if silver_id == "focusable_element":
-        actions = [bind, advance(0.1), draw]
-        for _ in range(7):
-            actions += [frame, action("focus-next"), advance(0.1), draw]
+        actions = [action("bind-fresh-view-model"), advance(0.1), draw]
+        for path in ([0], [1], [1, 0], [1, 1], [1, 2], [2], None):
+            actions += [frame, action("focus-next"), advance(0.1)]
+            actions += [action("assert-focus-node", **({"path": path} if path is not None else {})), draw]
         return tuple(actions)
 
     if silver_id == "keyboard_listener":
@@ -2638,6 +2758,8 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     )
                 if lane == "runtime":
                     actions, blocker = executable_actions(chunk, state_machine, animation)
+                    if (ported_actions := focus_flags_actions(silver_id)) is not None:
+                        actions, blocker = ported_actions, None
                     if (ported_actions := fl_d4_actions(silver_id)) is not None:
                         actions, blocker = ported_actions, None
                     if (ported_actions := p1q_view_model_actions(silver_id)) is not None:
@@ -2697,11 +2819,14 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         )
                         blocker = None
                     if silver_id == "gamepad_inputs_test":
-                        # focus_test.cpp at 9cb2205f: four draws, announcing
+                        # focus_test.cpp at 9b9cd7b1: four draws, announcing
                         # device 0 before right-shoulder press/release batches.
                         actions = (
                             action("bind-fresh-view-model"),
                             action("advance", target="state-machine", seconds=0.0),
+                            action("assert-focus-child-count", path=[], count=1),
+                            action("assert-focus-child-count", path=[0], count=1),
+                            action("assert-focus-child-count", path=[0, 0], count=3),
                             action("draw"),
                             action("frame"),
                             action("advance", target="state-machine", seconds=0.016),
@@ -2855,10 +2980,15 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         "Rust renderer stream is operation-exact with the pinned C++ silver "
                         "baseline after replaying the TEST_CASE actions."
                     )
+                    if silver_id in ("focus_traversal_click_to_focus", "focus_traversal_data_bound", "focusable_element"):
+                        note = (
+                            "Exact comparison contract for the 9b9cd7b1 focus producer, including explicit focus walks and bound list-item mutations. "
+                            "Enrollment alone is not a validation result."
+                        )
                     if silver_id in ("gamepad_inputs_test", "gamepad_inputs_test-collapsing"):
                         note = (
                             "Exact comparison contract for the literal gamepad/focus "
-                            "producer at 9cb2205f. Enrollment alone is not a validation result."
+                            "producer at 9b9cd7b1. Enrollment alone is not a validation result."
                         )
                     if silver_id == "layout_animation_transition_test":
                         note = (
@@ -3318,7 +3448,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (275, 227, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (277, 229, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3331,8 +3461,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 275",
-        "expected_runtime = 227",
+        "expected_entries = 277",
+        "expected_runtime = 229",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

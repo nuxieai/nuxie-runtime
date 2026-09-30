@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8f3690df4346c8b8b9072bc5c3de6f3ab0c37203`
+- LAST_SYNCED_SHA: `f3e99df8ea3c9460ca1fd8f64e26115f1979742a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 25 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 25 require a Rust translation.
+  There are 24 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 24 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f3e99df8ea3c9460ca1fd8f64e26115f1979742a` | Subtract the probe shape's vertical trim from content height when fitting into a non-fixed text box, preserving authored fixed-box sizing and the existing integer-size search. Translate the full short-run hug regression, checking actual fitted glyph-run size and both layout heights against upstream expectations. Existing Rust shaping/Taffy boundaries are unchanged; private editor changes are absent from the public delta. | — |
 | `8f3690df4346c8b8b9072bc5c3de6f3ab0c37203` | Skip hidden nested artboards and component lists in all three positional hit/event paths, retaining collapsed/paused gates and unchanged gamepad behavior. Translate both overlapping-target regressions with the exact upstream fixture and lifecycle order. The public delta contains no Dart editor implementation; no private editor change is claimed imported. | — |
 | `fa3f6f307179dcfff9ff34142e1697c837ca1704` | **ALREADY-EQUIVALENT RUNTIME / NEW REGRESSIONS:** the four directional StateMachineInstance focus methods already forward to the active manager and return false without one in both Rust runtime and host owners. Port all three added upstream cases, including the three independent position-test sections, edge retention, external-manager identity and absent-manager behavior. The public delta contains no JS binding or key/text-input implementation change despite the title; no absent private change is claimed imported. | — |
 | `3ae88a8257e44c5d6239e6181240560f9137c681` | **DEFERRED WASM EXECUTION:** restores WAMR libc-wasi sources, include paths and feature flag so guest Luau constructors remain host-controlled instead of also running at instantiation. This reverses the parked 8daed0a3 build change. Only the WAMR build owner and private revision pointer change; no native Rust Luau, shared runtime or browser renderer change is imported. | UNIV-3728 |

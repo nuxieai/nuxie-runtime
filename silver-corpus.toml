@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "8f3690df4346c8b8b9072bc5c3de6f3ab0c37203"
+upstream_ref = "f3e99df8ea3c9460ca1fd8f64e26115f1979742a"
 expected_entries = 278
 expected_runtime = 230
 expected_scripted = 45
@@ -1460,7 +1460,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_test.cpp"
 provenance_test = "Text with fit font size correctly resizes its text box"
-producer_line = 1197
+producer_line = 1278
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

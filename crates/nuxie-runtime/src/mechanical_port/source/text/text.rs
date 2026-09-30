@@ -1221,6 +1221,8 @@ impl Text {
     }
 
     fn fit_font_scale_in_box(&mut self, box_width: f32, box_height: f32) -> f32 {
+        // A non-fixed layout offer already excludes the vertical trim band.
+        let box_is_trimmed = self.effective_sizing() != TextSizing::Fixed;
         let mut max_size = 0.0f32;
         for value_run in &self.all_runs {
             let Some((style, has_text)) =
@@ -1284,7 +1286,17 @@ impl Text {
                 }
                 y += this.base.paragraph_spacing() * scale;
             }
-            measured_width <= box_width && y <= box_height
+            let (top_trim, bottom_trim) = if box_is_trimmed {
+                compute_vertical_trim(
+                    &lines,
+                    &shape,
+                    this.vertical_trim_top(),
+                    this.vertical_trim_bottom(),
+                )
+            } else {
+                (0.0, 0.0)
+            };
+            measured_width <= box_width && y - top_trim - bottom_trim <= box_height
         };
         let mut low = 1i32;
         let mut high = (max_size as i32).max(1);

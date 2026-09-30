@@ -1642,7 +1642,8 @@
 //              uint32_t clipID,
 //              bool hasClipRect,
 //              bool hasImage,
-//              BlendMode);
+//              BlendMode,
+//              bool solidUnmultiplied);
 //
 // private:
 //     WRITEONLY uint32_t m_params; // [clipID, flags, paintType]
@@ -3451,7 +3452,8 @@ pub struct PaintData {
 impl PaintData {
     pub const kBufferStructure: StorageBufferStructure = StorageBufferStructure::uint32x2;
     // void set(DrawContents, PaintType, SimplePaintValue, GradTextureLayout,
-    //          uint32_t clipID, bool hasClipRect, bool hasImage, BlendMode);
+    //          uint32_t clipID, bool hasClipRect, bool hasImage, BlendMode,
+    //          bool solidUnmultiplied);
 }
 pub const kPaintBufferAlignmentInElements: usize = 256 / core::mem::size_of::<PaintData>();
 

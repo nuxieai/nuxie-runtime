@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_mesh.frag.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_mesh.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c5e85eb53d7d5885d9074e3c595ca9690f8b68290c637f3545ae1042f03b14ec";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 233;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 7162;
+    "6171a7ee41ed358ae9915a35c17e97d7fb694597e6aca2045f3023dbd66df721";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 221;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 6615;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_MESH_FRAG_SOURCE: &str = r###"/*
@@ -106,11 +106,14 @@ PLS_MAIN(@drawFragmentMain)
 #endif
 
 #ifdef @FEATHER_ATLAS_BLIT
-    half4 color = find_paint_color(v_paint,
+    half4 color = find_paint_color(
 #ifdef @ENABLE_MODULATED_IMAGE
-                                   v_image,
+        v_image,
 #endif
-                                   1. FRAGMENT_CONTEXT_UNPACK);
+#ifdef @ENABLE_ADVANCED_BLEND
+        cast_half_to_ushort(v_blendMode),
+#endif
+        v_paint FRAGMENT_CONTEXT_UNPACK);
     half coverage = clamp(TEXTURE_SAMPLE_LOD(@featherAtlasTexture,
                                              featherAtlasSampler,
                                              v_atlasCoord,
@@ -167,38 +170,23 @@ PLS_MAIN(@drawFragmentMain)
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT)
     half4 dstColorPremul = PLS_LOAD4F(colorBuffer);
 #ifdef @ENABLE_ADVANCED_BLEND
-    if (@ENABLE_ADVANCED_BLEND)
-    {
 #ifdef @FEATHER_ATLAS_BLIT
-        // GENERATE_PREMULTIPLIED_PAINT_COLORS is false in this case for
-        // find_paint_color() because advanced blend needs unmultiplied colors.
-        ushort blendMode = cast_half_to_ushort(v_blendMode);
+    ushort blendMode = cast_half_to_ushort(v_blendMode);
 #endif
-
 #ifdef @DRAW_IMAGE_MESH
-        // Unmultiply the image for advanced blend. Images are always
-        // premultiplied so that the filtering works correctly.
-        // TODO: This unmultiply technically isn't necessary with srcOver blend.
-        // We may want to experiment with dynamically not premultiplying here
-        // and in find_paint_color() when the blend mode is srcOver.
-        color.rgb = unmultiply_rgb(color);
-        ushort blendMode = v_imageBlendMode;
+    ushort blendMode = v_imageBlendMode;
 #endif
-
-        if (blendMode != BLEND_SRC_OVER)
-        {
-            color.rgb =
-                advanced_color_blend(color.rgb, dstColorPremul, blendMode);
-        }
-        // Premultiply alpha now.
-        color.a *= coverage;
-        color.rgb *= color.a;
-    }
-    else
-#endif // @ENABLE_ADVANCED_BLEND
+    if (@ENABLE_ADVANCED_BLEND && blendMode != BLEND_SRC_OVER)
     {
-        color *= coverage;
+        // Advanced-blend draws operate on unmultiplied color.
+#ifdef @DRAW_IMAGE_MESH
+        color.rgb = unmultiply_rgb(color);
+#endif
+        color.rgb = advanced_color_blend(color.rgb, dstColorPremul, blendMode) *
+                    color.a;
     }
+#endif // @ENABLE_ADVANCED_BLEND
+    color *= coverage;
 
     // Certain platforms give us less control of the format of what we are
     // rendering too. Specifically, we are auto converted from linear -> sRGB on

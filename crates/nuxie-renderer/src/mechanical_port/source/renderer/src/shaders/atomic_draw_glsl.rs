@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: 7732f41ef93e4cb74286934ee596e1041d0a0ba7
+ * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "7732f41ef93e4cb74286934ee596e1041d0a0ba7";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "65732d116a16d4c560fc565b54d06a50408d4e37c12c039c89180427742d5ad6";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1160;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 39896;
+    "6e55d8b08cc536b5a0c74e52332367d57507b753482543ceb61c6321fdfd6bc3";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1173;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 40640;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -649,6 +649,13 @@ INLINE void resolve_paint(uint pathID,
     }
 #endif // ENABLE_CLIP_RECT
     uint paintType = paintData.x & 0xfu;
+    ushort blendMode = cast_uint_to_ushort((paintData.x >> 4) & 0xfu);
+#ifdef @ENABLE_ADVANCED_BLEND
+    bool paintHasAdvancedBlend =
+        @ENABLE_ADVANCED_BLEND && blendMode != BLEND_SRC_OVER;
+#else
+    const bool paintHasAdvancedBlend = false;
+#endif
     if (paintType <= SOLID_COLOR_PAINT_TYPE) // CLIP_UPDATE_PAINT_TYPE or
                                              // SOLID_COLOR_PAINT_TYPE
     {
@@ -690,21 +697,29 @@ INLINE void resolve_paint(uint pathID,
         float y = uintBitsToFloat(paintData.y);
         fragColorOut =
             TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, y), .0);
+        if (!paintHasAdvancedBlend) // If not advanced blend then premultiply.
+            fragColorOut.rgb *= fragColorOut.a;
     }
-    fragColorOut.a *= coverage;
-
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT) && defined(@ENABLE_ADVANCED_BLEND)
-    // Apply the advanced blend mode, if applicable.
-    ushort blendMode;
-    if (@ENABLE_ADVANCED_BLEND && fragColorOut.a != .0 &&
-        (blendMode = cast_uint_to_ushort((paintData.x >> 4) & 0xfu)) !=
-            BLEND_SRC_OVER)
+    // NOTE: fixedFunctionColorOutput is never selected for a flush that
+    // contains advanced-blend draws, so paintHasAdvancedBlend is always false
+    // in FIXED_FUNCTION_COLOR_OUTPUT variants and this branch can compile out.
+    if (paintHasAdvancedBlend)
     {
-        half4 dstColorPremul = PLS_LOAD4F(colorBuffer);
-        fragColorOut.rgb =
-            advanced_color_blend(fragColorOut.rgb, dstColorPremul, blendMode);
+        // Apply the advanced blend mode, if applicable.
+        if (fragColorOut.a * coverage != .0)
+        {
+            half4 dstColorPremul = PLS_LOAD4F(colorBuffer);
+            fragColorOut.rgb = advanced_color_blend(fragColorOut.rgb,
+                                                    dstColorPremul,
+                                                    blendMode);
+        }
+        // Premultiply before gamma correction so both paths gamma-correct a
+        // premultiplied color.
+        fragColorOut.rgb *= fragColorOut.a;
     }
 #endif // !FIXED_FUNCTION_COLOR_OUTPUT && ENABLE_ADVANCED_BLEND
+    fragColorOut *= coverage;
 
 // Certain platforms give us less control of the format of what we are
 // rendering too. Specifically, we are auto converted from linear -> sRGB on
@@ -714,8 +729,6 @@ INLINE void resolve_paint(uint pathID,
     (defined(@FIXED_FUNCTION_COLOR_OUTPUT) || defined(@RESOLVE_PLS))
     fragColorOut = gamma_to_linear(fragColorOut);
 #endif
-
-    fragColorOut.rgb *= fragColorOut.a;
 }
 
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT) &&                                  \

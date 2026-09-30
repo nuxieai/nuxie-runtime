@@ -1110,6 +1110,7 @@ impl AtomicPathUploadData {
             0,
             FillRule::NonZero,
             BlendMode::SrcOver,
+            false,
         ));
         paints.extend_from_slice(&flush.paints);
         let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
@@ -1167,6 +1168,7 @@ impl AtlasUploadData {
             0,
             FillRule::NonZero,
             BlendMode::SrcOver,
+            false,
         ));
         paints.extend_from_slice(&flush.paints);
         let mut paint_aux = Vec::with_capacity(flush.paint_aux.len() + 1);
@@ -1210,7 +1212,7 @@ impl GradientUploadData {
             flush_uniforms,
             paths: [gpu::PathData::zeroed(), draw.tessellation.path],
             paints: [
-                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver),
+                gpu::PaintData::solid(0, FillRule::NonZero, BlendMode::SrcOver, false),
                 gpu::PaintData::gradient(
                     draw.gradient.paint_type,
                     draw.gradient.texture_y,

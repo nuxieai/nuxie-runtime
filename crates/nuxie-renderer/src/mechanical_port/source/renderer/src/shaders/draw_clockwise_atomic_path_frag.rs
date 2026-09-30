@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_clockwise_atomic_path.frag.
  *
- * Upstream source revision: 5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555
+ * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_clockwise_atomic_path.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "3e3c1563d680fb4287ed03672d1277ca7f8e763318100d07109ddd69565cf396";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 387;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14839;
+    "233479d666b090dd93cb66451db5b8d8f8878745553afaaf30f80b9f13adbaee";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 402;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 15409;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_CLOCKWISE_ATOMIC_PATH_FRAG_SOURCE: &str = r###"/*
@@ -239,11 +239,14 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
     VARYING_UNPACK(v_coveragePlacement, uint2);
     VARYING_UNPACK(v_coverageCoord, float2);
 
-    half4 paintColor = find_paint_color(v_paint,
+    half4 paintColor = find_paint_color(
 #ifdef @ENABLE_MODULATED_IMAGE
-                                        v_image,
+        v_image,
 #endif
-                                        1. FRAGMENT_CONTEXT_UNPACK);
+#ifdef @ENABLE_ADVANCED_BLEND
+        cast_half_to_ushort(v_blendMode),
+#endif
+        v_paint FRAGMENT_CONTEXT_UNPACK);
 
 #ifndef @FIXED_FUNCTION_COLOR_OUTPUT
     // Fetch the framebuffer BEFORE any atomic operations on the coverage
@@ -337,60 +340,72 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
 #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
     paintColor *= incrementalCoverage;
 #else
-    paintColor.a *= incrementalCoverage;
-    if (paintColor.a > .0)
+    if (@ENABLE_ADVANCED_BLEND &&
+        cast_half_to_ushort(v_blendMode) != BLEND_SRC_OVER)
     {
-        bool wasBlendColorValid =
-            preexistingCoverageValue >= uniforms.coverageBufferPrefix &&
-            (preexistingCoverageValue & BLEND_COLOR_VALID_BIT) != 0u;
-        if (!wasBlendColorValid)
+        // Advanced-blend draws operate on unmultiplied color.
+        paintColor.a *= incrementalCoverage;
+        if (paintColor.a > .0)
         {
-            // If the saved blend color was not yet valid after we fetched
-            // dstColor, we are guaranteed that dstColor is valid because the
-            // BLEND_COLOR_VALID_BIT gets set before any color outputs that
-            // might overwrite the framebuffer.
-            // Calculate a blendColor based on dstColor.
-            paintColor.rgb =
-                advanced_color_blend(paintColor.rgb,
-                                     dstColor,
-                                     cast_half_to_ushort(v_blendMode));
-
-            // Anybody who updated, or will update, the coverage buffer before
-            // we overwrite the framebuffer is guaranteed to have a dstColor
-            // that is unaffected by our color output. They already have it.
-            // But if 0 < coverage < 1 after our fragment, we have to save out
-            // the blend color we just found for any future fragments that may
-            // need to blend, before we overwrite the contents of the
-            // framebuffer.
-            if (newCoverage < 1.)
+            bool wasBlendColorValid =
+                preexistingCoverageValue >= uniforms.coverageBufferPrefix &&
+                (preexistingCoverageValue & BLEND_COLOR_VALID_BIT) != 0u;
+            if (!wasBlendColorValid)
             {
-                half3 blendRGBToSave = paintColor.rgb;
-#ifdef @ENABLE_DITHER
-                if (@ENABLE_DITHER)
-                {
-                    blendRGBToSave += dither * uniforms.ditherConversionToRGB10;
-                }
-#endif
-                PLS_STORE4F_UAV(blendColorBuffer,
-                                make_half4(blendRGBToSave, .0));
+                // If the saved blend color was not yet valid after we fetched
+                // dstColor, we are guaranteed that dstColor is valid because
+                // the BLEND_COLOR_VALID_BIT gets set before any color outputs
+                // that might overwrite the framebuffer. Calculate a blendColor
+                // based on dstColor.
+                paintColor.rgb =
+                    advanced_color_blend(paintColor.rgb,
+                                         dstColor,
+                                         cast_half_to_ushort(v_blendMode));
 
-                // Mark this pixel as having a valid blendColor, AFTER writing
-                // out the blendColor, but BEFORE updating the framebuffer.
-                memoryBarrier();
-                STORAGE_BUFFER_ATOMIC_OR(coverageBuffer,
-                                         coverageIndex,
-                                         BLEND_COLOR_VALID_BIT);
+                // Anybody who updated, or will update, the coverage buffer
+                // before we overwrite the framebuffer is guaranteed to have a
+                // dstColor that is unaffected by our color output. They already
+                // have it. But if 0 < coverage < 1 after our fragment, we have
+                // to save out the blend color we just found for any future
+                // fragments that may need to blend, before we overwrite the
+                // contents of the framebuffer.
+                if (newCoverage < 1.)
+                {
+                    half3 blendRGBToSave = paintColor.rgb;
+#ifdef @ENABLE_DITHER
+                    if (@ENABLE_DITHER)
+                    {
+                        blendRGBToSave +=
+                            dither * uniforms.ditherConversionToRGB10;
+                    }
+#endif
+                    PLS_STORE4F_UAV(blendColorBuffer,
+                                    make_half4(blendRGBToSave, .0));
+
+                    // Mark this pixel as having a valid blendColor, AFTER
+                    // writing out the blendColor, but BEFORE updating the
+                    // framebuffer.
+                    memoryBarrier();
+                    STORAGE_BUFFER_ATOMIC_OR(coverageBuffer,
+                                             coverageIndex,
+                                             BLEND_COLOR_VALID_BIT);
+                }
+            }
+            else
+            {
+                // Use the saved blendColor whenever it's valid, because shortly
+                // after that point the framebuffer can be overwritten,
+                // invalidating the dstColor.
+                paintColor.rgb = PLS_LOAD4F_UAV(blendColorBuffer).rgb;
             }
         }
-        else
-        {
-            // Use the saved blendColor whenever it's valid, because shortly
-            // after that point the framebuffer can be overwritten, invalidating
-            // the dstColor.
-            paintColor.rgb = PLS_LOAD4F_UAV(blendColorBuffer).rgb;
-        }
+        paintColor.rgb *= paintColor.a;
     }
-    paintColor.rgb *= paintColor.a;
+    else
+    {
+        // srcOver draws are premultiplied; coverage scales all channels.
+        paintColor *= incrementalCoverage;
+    }
 #endif
 
 #ifdef @ENABLE_DITHER

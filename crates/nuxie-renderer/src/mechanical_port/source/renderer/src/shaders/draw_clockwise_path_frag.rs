@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_clockwise_path.frag.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_clockwise_path.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ea0dda57a43955db747aad0a802dc8f3cc41e42613083122674cd596addcecba";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 258;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 9896;
+    "c0bfa42c9d7c6fd5bb7d2b85b93e19bb747a3e52b2aa7938052355fed24749c0";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 259;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 9734;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_CLOCKWISE_PATH_FRAG_SOURCE: &str = r###"/*
@@ -76,11 +76,14 @@ PLS_MAIN(@drawFragmentMain)
 #endif
     {
         // Calculate the paint color before entering the interlock.
-        paintColor = find_paint_color(v_paint,
+        paintColor = find_paint_color(
 #ifdef @ENABLE_MODULATED_IMAGE
-                                      v_image,
+            v_image,
 #endif
-                                      1. FRAGMENT_CONTEXT_UNPACK);
+#ifdef @ENABLE_ADVANCED_BLEND
+            cast_half_to_ushort(v_blendMode),
+#endif
+            v_paint FRAGMENT_CONTEXT_UNPACK);
 
         maxCoverage = 1.;
 #ifdef @ENABLE_CLIP_RECT
@@ -153,11 +156,12 @@ PLS_MAIN(@drawFragmentMain)
 #ifndef @FIXED_FUNCTION_COLOR_OUTPUT
         half4 dstColorPremul = PLS_LOAD4F(colorBuffer);
 #ifdef @ENABLE_ADVANCED_BLEND
-        if (@ENABLE_ADVANCED_BLEND)
+        if (@ENABLE_ADVANCED_BLEND &&
+            v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
         {
-            // Don't bother with advanced blend until coverage becomes > 0. This
-            // way, cutout regions don't pay the cost of advanced blend.
-            if (v_blendMode != cast_uint_to_half(BLEND_SRC_OVER) && c1 != .0)
+            // Don't bother with advanced blend until coverage becomes > 0.
+            // This way, cutout regions don't pay the cost of advanced blend.
+            if (c1 != .0)
             {
                 if (c0 == .0)
                 {
@@ -215,9 +219,6 @@ PLS_MAIN(@drawFragmentMain)
                     PLS_PRESERVE_4F(blendColorBuffer);
                 }
             }
-            // GENERATE_PREMULTIPLIED_PAINT_COLORS is false when
-            // @ENABLE_ADVANCED_BLEND is defined because advanced blend needs
-            // unmultiplied colors. Premultiply alpha now.
             paintColor.rgb *= paintColor.a;
         }
 #endif // @ENABLE_ADVANCED_BLEND

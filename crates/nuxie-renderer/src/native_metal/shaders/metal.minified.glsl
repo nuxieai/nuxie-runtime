@@ -5,158 +5,158 @@
 #define i half4
 #define L ushort
 #define c float2
-#define Q float3
-#define O3 packed_float3
+#define R float3
+#define R3 packed_float3
 #define f float4
-#define F4 bool2
-#define p6 bool3
-#define z7 bool4
-#define a1 uint2
-#define X uint4
-#define Y int2
-#define e6 int4
+#define I4 bool2
+#define r6 bool3
+#define A7 bool4
+#define c1 uint2
+#define Y uint4
+#define Z int2
+#define g6 int4
 #define L ushort
-#define d0 float2x2
-#define a7 half3x3
-#define c7 half2x3
-#define G4 half4x4
+#define e0 float2x2
+#define c7 half3x3
+#define d7 half2x3
+#define J4 half4x4
 #endif
 #define e inline
-#define Z0(n2) thread n2&
-#define L6(n2) thread n2&
+#define a1(o2) thread o2&
+#define M6(o2) thread o2&
 #define equal(C,H) ((C)==(H))
 #define notEqual(C,H) ((C)!=(H))
 #define lessThan(C,H) ((C)<(H))
 #define greaterThan(C,H) ((C)>(H))
-#define N0(C,H) ((C)*(H))
+#define O0(C,H) ((C)*(H))
 #define inversesqrt rsqrt
-#define y7(g,a) struct a{
-#define N8(a) };
-#define f1(a) struct a{
-#define J(g,Z,a) Z a
-#define g1 };
-#define K(Q8,F,a,Z) Z a=F[Q8].a
-#define p2 struct o0{
-#define V(g,Z,a) Z a
-#define S2 [[flat]]
-#define H0 [[center_no_perspective]]
+#define z7(g,a) struct a{
+#define P8(a) };
+#define h1(a) struct a{
+#define J(g,a0,a) a0 a
+#define i1 };
+#define K(S8,F,a,a0) a0 a=F[S8].a
+#define q2 struct p0{
+#define W(g,a0,a) a0 a
+#define T2 [[flat]]
+#define I0 [[center_no_perspective]]
 #ifndef OPTIONALLY_FLAT
 #define OPTIONALLY_FLAT
 #endif
-#define h2 f P0[[position]][[invariant]];};
-#define T(a,Z) thread Z&a=e0.a
-#define a0(a)
-#define r(a,Z) Z a=e0.a
-#define B4 struct V8{
-#define C4 };
-#define Q3 struct W8{
-#define R3 };
-#define M5(g,v1,a) constant a1*a[[buffer(O1(g))]]
-#define J4(g,v1,a) constant X*a[[buffer(O1(g))]]
-#define N5(g,v1,a) constant f*a[[buffer(O1(g))]]
-#define K0(a,B0) v3.a[B0]
-#define P5(a,B0) v3.a[B0]
-#define V3 struct X8{
-#define W3 };
-#define F3 struct C5{
-#define G3 };
-#define d5 struct cb{
-#define e5 };
-#define E4(U,g,a) [[texture(g)]]texture2d<uint>a
-#define g5(U,g,a) [[texture(g)]]texture2d<float>a
-#define a3(U,g,a) [[texture(g)]]texture2d<d>a
-#define l5(U,g,a) [[texture(g)]]texture2d<d>a
-#define i6(U,g,a) [[texture(g)]]texture1d_array<d>a
-#define d4(A7,a) constexpr sampler a(filter::linear,mip_filter::none);
-#define q6(U,g,a) [[sampler(g)]]sampler a;
-#define Y3(a) [[sampler(X3)]]sampler a;
-#define p1(l0,n) W0.l0.read(a1(n))
-#define v5(l0,p,n) W0.l0.sample(p,n)
-#define i2(l0,p,n,S0) W0.l0.sample(p,n,level(S0))
-#define w5(l0,p,n,R1) W0.l0.sample(p,n,bias(R1))
-#define h8(l0,p,n) W0.l0.sample(y6.p,n)
-#define V6(l0,p,n,S0) W0.l0.sample(y6.p,n,level(S0))
-#define B7(l0,p,n,R1) W0.l0.sample(y6.p,n,bias(R1))
-#define Z6(l0,p,q,r6,S8,S0) W0.l0.sample(p,q,r6)
-#define l6 ,constant BC&l,X8 W0,V8 v3
-#define x3 ,l,W0,v3
+#define i2 f Q0[[position]][[invariant]];};
+#define U(a,a0) thread a0&a=f0.a
+#define c0(a)
+#define r(a,a0) a0 a=f0.a
+#define E4 struct X8{
+#define F4 };
+#define T3 struct Y8{
+#define U3 };
+#define Q5(g,x1,a) constant c1*a[[buffer(Q1(g))]]
+#define M4(g,x1,a) constant Y*a[[buffer(Q1(g))]]
+#define R5(g,x1,a) constant f*a[[buffer(Q1(g))]]
+#define L0(a,C0) y3.a[C0]
+#define T5(a,C0) y3.a[C0]
+#define X3 struct Z8{
+#define Y3 };
+#define I3 struct G5{
+#define J3 };
+#define h5 struct db{
+#define i5 };
+#define H4(V,g,a) [[texture(g)]]texture2d<uint>a
+#define k5(V,g,a) [[texture(g)]]texture2d<float>a
+#define c3(V,g,a) [[texture(g)]]texture2d<d>a
+#define p5(V,g,a) [[texture(g)]]texture2d<d>a
+#define k6(V,g,a) [[texture(g)]]texture1d_array<d>a
+#define f4(B7,a) constexpr sampler a(filter::linear,mip_filter::none);
+#define v6(V,g,a) [[sampler(g)]]sampler a;
+#define a4(a) [[sampler(Z3)]]sampler a;
+#define r1(m0,l) X0.m0.read(c1(l))
+#define z5(m0,p,l) X0.m0.sample(p,l)
+#define j2(m0,p,l,T0) X0.m0.sample(p,l,level(T0))
+#define A5(m0,p,l,T1) X0.m0.sample(p,l,bias(T1))
+#define j8(m0,p,l) X0.m0.sample(A6.p,l)
+#define W6(m0,p,l,T0) X0.m0.sample(A6.p,l,level(T0))
+#define C7(m0,p,l,T1) X0.m0.sample(A6.p,l,bias(T1))
+#define a7(m0,p,q,w6,U8,T0) X0.m0.sample(p,q,w6)
+#define n6 ,constant AC&j,Z8 X0,X8 y3
+#define A3 ,j,X0,y3
 #ifdef ENABLE_INSTANCE_INDEX
-#define y1(a,f0,F,B,v) __attribute__((visibility("default")))o0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant uint&qh[[buffer(O1(Xc))]],constant BC&l[[buffer(O1(I4))]],constant f0*F[[buffer(0)]],X8 W0,V8 v3){v+=qh;o0 e0;
+#define A1(a,g0,F,B,v) __attribute__((visibility("default")))p0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant uint&rh[[buffer(Q1(Yc))]],constant AC&j[[buffer(Q1(L4))]],constant g0*F[[buffer(0)]],Z8 X0,X8 y3){v+=rh;p0 f0;
 #else
-#define y1(a,f0,F,B,v) __attribute__((visibility("default")))o0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant BC&l[[buffer(O1(I4))]],constant f0*F[[buffer(0)]],X8 W0,V8 v3){o0 e0;
+#define A1(a,g0,F,B,v) __attribute__((visibility("default")))p0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant AC&j[[buffer(Q1(L4))]],constant g0*F[[buffer(0)]],Z8 X0,X8 y3){p0 f0;
 #endif
-#define T7(a,f0,F,m1,g0,B,v) __attribute__((visibility("default")))o0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant BC&l[[buffer(O1(I4))]],constant f0*F[[buffer(0)]],const device m1*g0[[buffer(2)]],X8 W0,V8 v3){o0 e0;
-#define J6(a,j3,k3,z3,A3,m1,g0,B) __attribute__((visibility("default")))o0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant BC&l[[buffer(O1(I4))]],constant j3*k3[[buffer(0)]],constant z3*A3[[buffer(1)]],const device m1*g0[[buffer(2)]]){o0 e0;
-#define z1(B5) e0.P0=B5;}return e0;
-#define c3(w1,a) w1 __attribute__((visibility("default")))fragment a(o0 e0[[stage_in]],C5 W0){
-#define v6(w1,a) w1 __attribute__((visibility("default")))fragment a(o0 e0[[stage_in]],C5 W0,bool w6[[front_facing]]){
-#define K2(D) return D;}
-#define M6 ,c c0,C5 W0,W8 v3,cb y6
-#define V2 ,c0,W0,v3,y6
-#define I3 ,C5 W0
-#define d1 ,W0
-#define g7
-#define x5
+#define V7(a,g0,F,o1,h0,B,v) __attribute__((visibility("default")))p0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant AC&j[[buffer(Q1(L4))]],constant g0*F[[buffer(0)]],const device o1*h0[[buffer(2)]],Z8 X0,X8 y3){p0 f0;
+#define K6(a,l3,m3,C3,D3,o1,h0,B) __attribute__((visibility("default")))p0 vertex a(uint B[[vertex_id]],uint v[[instance_id]],constant AC&j[[buffer(Q1(L4))]],constant l3*m3[[buffer(0)]],constant C3*D3[[buffer(1)]],const device o1*h0[[buffer(2)]]){p0 f0;
+#define B1(F5) f0.Q0=F5;}return f0;
+#define d3(y1,a) y1 __attribute__((visibility("default")))fragment a(p0 f0[[stage_in]],G5 X0){
+#define x6(y1,a) y1 __attribute__((visibility("default")))fragment a(p0 f0[[stage_in]],G5 X0,bool y6[[front_facing]]){
+#define L2(D) return D;}
+#define N6 ,c d0,G5 X0,Y8 y3,db A6
+#define W2 ,d0,X0,y3,A6
+#define L3 ,G5 X0
+#define e1 ,X0
+#define h7
+#define B5
 #ifdef PLS_IMPL_DEVICE_BUFFER
-#define J1 struct S1{
+#define L1 struct U1{
 #ifdef PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED
-#define y0(g,a) device uint*a[[buffer(O1(g+f6)),raster_order_group(0)]]
-#define i1(g,a) device uint*a[[buffer(O1(g+f6)),raster_order_group(0)]]
-#define G2(g,a) device atomic_uint*a[[buffer(O1(g+f6)),raster_order_group(0)]]
+#define z0(g,a) device uint*a[[buffer(Q1(g+h6)),raster_order_group(0)]]
+#define k1(g,a) device uint*a[[buffer(Q1(g+h6)),raster_order_group(0)]]
+#define H2(g,a) device atomic_uint*a[[buffer(Q1(g+h6)),raster_order_group(0)]]
 #else
-#define y0(g,a) device uint*a[[buffer(O1(g+f6))]]
-#define i1(g,a) device uint*a[[buffer(O1(g+f6))]]
-#define G2(g,a) device atomic_uint*a[[buffer(O1(g+f6))]]
+#define z0(g,a) device uint*a[[buffer(Q1(g+h6))]]
+#define k1(g,a) device uint*a[[buffer(Q1(g+h6))]]
+#define H2(g,a) device atomic_uint*a[[buffer(Q1(g+h6))]]
 #endif
-#define K1 };
-#define S3 ,S1 T0,uint F0
-#define N1 ,T0,F0
-#define J0(h) unpackUnorm4x8(T0.h[F0])
-#define Y0(h) T0.h[F0]
-#define W2(h) atomic_load_explicit(&T0.h[F0],memory_order::memory_order_relaxed)
-#define z0(h,D) T0.h[F0]=packUnorm4x8(D)
-#define c1(h,D) T0.h[F0]=(D)
-#define X2(h,D) atomic_store_explicit(&T0.h[F0],D,memory_order::memory_order_relaxed)
-#define x2(h)
-#define f2(h)
-#define Y4(h,q) atomic_fetch_max_explicit(&T0.h[F0],q,memory_order::memory_order_relaxed)
-#define Z4(h,q) atomic_fetch_add_explicit(&T0.h[F0],q,memory_order::memory_order_relaxed)
-#define y2
+#define M1 };
+#define V3 ,U1 U0,uint G0
+#define P1 ,U0,G0
+#define K0(h) unpackUnorm4x8(U0.h[G0])
+#define Z0(h) U0.h[G0]
+#define X2(h) atomic_load_explicit(&U0.h[G0],memory_order::memory_order_relaxed)
+#define A0(h,D) U0.h[G0]=packUnorm4x8(D)
+#define d1(h,D) U0.h[G0]=(D)
+#define Y2(h,D) atomic_store_explicit(&U0.h[G0],D,memory_order::memory_order_relaxed)
+#define y2(h)
+#define h2(h)
+#define d5(h,q) atomic_fetch_max_explicit(&U0.h[G0],q,memory_order::memory_order_relaxed)
+#define e5(h,q) atomic_fetch_add_explicit(&U0.h[G0],q,memory_order::memory_order_relaxed)
 #define z2
-#define Y8(a) __attribute__((visibility("default")))fragment a(S1 T0,constant BC&l[[buffer(O1(I4))]],o0 e0[[stage_in]],C5 W0,cb y6,W8 v3){c c0=e0.P0.xy;a1 G=a1(metal::floor(c0));uint F0=G.y*l.o6+G.x;
-#define M1(a) void Y8(a)
-#define a2 }
-#define r2(a) i Y8(a){i C1;
-#define m3 }return C1;a2
+#define A2
+#define a9(a) __attribute__((visibility("default")))fragment a(U1 U0,constant AC&j[[buffer(Q1(L4))]],p0 f0[[stage_in]],G5 X0,db A6,Y8 y3){c d0=f0.Q0.xy;c1 G=c1(metal::floor(d0));uint G0=G.y*j.q6+G.x;
+#define O1(a) void a9(a)
+#define d2 }
+#define v2(a) i a9(a){i E1;
+#define p3 }return E1;d2
 #else
-#define J1 struct S1{
-#define y0(g,a) [[color(g)]]i a
-#define i1(g,a) [[color(g)]]uint a
-#define G2 i1
-#define K1 };
-#define S3 ,thread S1&D5,thread S1&T0
-#define N1 ,D5,T0
-#define J0(h) D5.h
-#define Y0(h) D5.h
-#define W2(h) Y0
-#define z0(h,D) T0.h=(D)
-#define c1(h,D) T0.h=(D)
-#define X2(h) c1
-#define x2(h) T0.h=D5.h
-#define f2(h) T0.h=D5.h
-e uint z5(thread uint&v0,uint x){uint V0=v0;v0=metal::max(V0,x);return V0;}
-#define Y4(h,q) z5(T0.h,q)
-e uint A5(thread uint&v0,uint x){uint V0=v0;v0=V0+x;return V0;}
-#define Z4(h,q) A5(T0.h,q)
-#define y2
+#define L1 struct U1{
+#define z0(g,a) [[color(g)]]i a
+#define k1(g,a) [[color(g)]]uint a
+#define H2 k1
+#define M1 };
+#define V3 ,thread U1&H5,thread U1&U0
+#define P1 ,H5,U0
+#define K0(h) H5.h
+#define Z0(h) H5.h
+#define X2(h) Z0
+#define A0(h,D) U0.h=(D)
+#define d1(h,D) U0.h=(D)
+#define Y2(h) d1
+#define y2(h) U0.h=H5.h
+#define h2(h) U0.h=H5.h
+e uint D5(thread uint&w0,uint x){uint W0=w0;w0=metal::max(W0,x);return W0;}
+#define d5(h,q) D5(U0.h,q)
+e uint E5(thread uint&w0,uint x){uint W0=w0;w0=W0+x;return W0;}
+#define e5(h,q) E5(U0.h,q)
 #define z2
-#define Y8(a,...) S1 __attribute__((visibility("default")))fragment a(__VA_ARGS__){c c0[[maybe_unused]]=e0.P0.xy;S1 T0;
-#define M1(a,...) Y8(a,S1 D5,constant BC&l[[buffer(O1(I4))]],o0 e0[[stage_in]],cb y6,C5 W0,W8 v3)
-#define a2 }return T0;
-#define th(a,...) struct rh{i sh[[j(0)]];S1 T0;};rh __attribute__((visibility("default")))fragment a(__VA_ARGS__){c c0[[maybe_unused]]=e0.P0.xy;i C1;S1 T0;
-#define r2(a) th(a,S1 D5,constant BC&l[[buffer(O1(I4))]],o0 e0[[stage_in]],C5 W0,W8 v3)
-#define m3 }return{.sh=C1,.T0=T0};
+#define A2
+#define a9(a,...) U1 __attribute__((visibility("default")))fragment a(__VA_ARGS__){c d0[[maybe_unused]]=f0.Q0.xy;U1 U0;
+#define O1(a,...) a9(a,U1 H5,constant AC&j[[buffer(Q1(L4))]],p0 f0[[stage_in]],db A6,G5 X0,Y8 y3)
+#define d2 }return U0;
+#define uh(a,...) struct sh{i th[[k(0)]];U1 U0;};sh __attribute__((visibility("default")))fragment a(__VA_ARGS__){c d0[[maybe_unused]]=f0.Q0.xy;i E1;U1 U0;
+#define v2(a) uh(a,U1 H5,constant AC&j[[buffer(Q1(L4))]],p0 f0[[stage_in]],G5 X0,Y8 y3)
+#define p3 }return{.th=E1,.U0=U0};
 #endif
-#define v4 y0
+#define x4 z0
 #define discard discard_fragment()
-using namespace metal;template<int Q1>e vec<uint,Q1>floatBitsToUint(vec<float,Q1>x){return as_type<vec<uint,Q1>>(x);}template<int Q1>e vec<int,Q1>floatBitsToInt(vec<float,Q1>x){return as_type<vec<int,Q1>>(x);}e uint floatBitsToUint(float x){return as_type<uint>(x);}e int floatBitsToInt(float x){return as_type<int>(x);}template<int Q1>e vec<float,Q1>uintBitsToFloat(vec<uint,Q1>x){return as_type<vec<float,Q1>>(x);}e float uintBitsToFloat(uint x){return as_type<float>(x);}e E unpackHalf2x16(uint x){return as_type<E>(x);}e uint packHalf2x16(E x){return as_type<uint>(x);}e i unpackUnorm4x8(uint x){return unpack_unorm4x8_to_half(x);}e uint packUnorm4x8(i x){return pack_half_to_unorm4x8(x);}e d0 inverse(d0 k1){d0 db=d0(k1[1][1],-k1[0][1],-k1[1][0],k1[0][0]);float uh=(db[0][0]*k1[0][0])+(db[0][1]*k1[1][0]);return db*(1/uh);}e A mix(A m,A b,p6 G1){A G7;for(int G0=0;G0<3;++G0)G7[G0]=G1[G0]?b[G0]:m[G0];return G7;}e c mix(c m,c b,F4 G1){c G7;for(int G0=0;G0<2;++G0)G7[G0]=G1[G0]?b[G0]:m[G0];return G7;}e c mix(c m,c b,float t){return mix(m,b,c(t));}e float mod(float x,float y){return fmod(x,y);}
+using namespace metal;template<int S1>e vec<uint,S1>floatBitsToUint(vec<float,S1>x){return as_type<vec<uint,S1>>(x);}template<int S1>e vec<int,S1>floatBitsToInt(vec<float,S1>x){return as_type<vec<int,S1>>(x);}e uint floatBitsToUint(float x){return as_type<uint>(x);}e int floatBitsToInt(float x){return as_type<int>(x);}template<int S1>e vec<float,S1>uintBitsToFloat(vec<uint,S1>x){return as_type<vec<float,S1>>(x);}e float uintBitsToFloat(uint x){return as_type<float>(x);}e E unpackHalf2x16(uint x){return as_type<E>(x);}e uint packHalf2x16(E x){return as_type<uint>(x);}e i unpackUnorm4x8(uint x){return unpack_unorm4x8_to_half(x);}e uint packUnorm4x8(i x){return pack_half_to_unorm4x8(x);}e e0 inverse(e0 m1){e0 eb=e0(m1[1][1],-m1[0][1],-m1[1][0],m1[0][0]);float vh=(eb[0][0]*m1[0][0])+(eb[0][1]*m1[1][0]);return eb*(1/vh);}e A mix(A n,A b,r6 I1){A H7;for(int H0=0;H0<3;++H0)H7[H0]=I1[H0]?b[H0]:n[H0];return H7;}e c mix(c n,c b,I4 I1){c H7;for(int H0=0;H0<2;++H0)H7[H0]=I1[H0]?b[H0]:n[H0];return H7;}e c mix(c n,c b,float t){return mix(n,b,c(t));}e float mod(float x,float y){return fmod(x,y);}

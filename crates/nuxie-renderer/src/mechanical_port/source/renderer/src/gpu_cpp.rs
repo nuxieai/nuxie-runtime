@@ -783,7 +783,7 @@
 //     uint4 rgba = (rive::uint4(riveColor) >> uint4{16, 8, 0, 24}) & 0xffu;
 //     uint32_t alpha = rgba.w;
 //     rgba.w = 255;
-//     uint4 premul = rgba * alpha / 255;
+//     uint4 premul = (rgba * alpha + 127) / 255;
 //     return simd::reduce_or(premul << uint4{0, 8, 16, 24});
 // }
 //
@@ -920,7 +920,8 @@
 //                     uint32_t clipID,
 //                     bool hasClipRect,
 //                     bool hasImage,
-//                     BlendMode blendMode)
+//                     BlendMode blendMode,
+//                     bool solidUnmultiplied)
 // {
 //     uint32_t shiftedClipID = clipID << 16;
 //     uint32_t shiftedBlendMode = ConvertBlendModeToPLSBlendMode(blendMode) << 4;
@@ -930,8 +931,11 @@
 //         case PaintType::solidColor:
 //         {
 //             // Swizzle the riveColor to little-endian RGBA (the order expected
-//             // by GLSL).
-//             m_color = SwizzleRiveColorToRGBA(simplePaintValue.color);
+//             // by GLSL). Advanced blend draws take unmultiplied color, srcOver
+//             // draws and KHR fixed-function blend path are premult
+//             m_color = solidUnmultiplied
+//                           ? SwizzleRiveColorToRGBA(simplePaintValue.color)
+//                           : SwizzleRiveColorToRGBAPremul(simplePaintValue.color);
 //             localParams |= shiftedClipID | shiftedBlendMode;
 //             break;
 //         }
@@ -3163,9 +3167,9 @@ pub fn SwizzleRiveColorToRGBAPremul(riveColor: ColorInt) -> u32 {
     let red = (riveColor >> 16) & 0xff;
     let green = (riveColor >> 8) & 0xff;
     let blue = riveColor & 0xff;
-    ((red * alpha / 255) & 0xff)
-        | (((green * alpha / 255) & 0xff) << 8)
-        | (((blue * alpha / 255) & 0xff) << 16)
+    (((red * alpha + 127) / 255) & 0xff)
+        | ((((green * alpha + 127) / 255) & 0xff) << 8)
+        | ((((blue * alpha + 127) / 255) & 0xff) << 16)
         | (alpha << 24)
 }
 
@@ -3220,6 +3224,7 @@ impl PaintData {
         hasClipRect: bool,
         hasImage: bool,
         blendMode: BlendMode,
+        solidUnmultiplied: bool,
     ) {
         let shiftedClipID = clipID << 16;
         let shiftedBlendMode = ConvertBlendModeToPLSBlendMode(blendMode) << 4;
@@ -3227,7 +3232,11 @@ impl PaintData {
         unsafe {
             match paintType {
                 PaintType::solidColor => {
-                    self.value.m_color = SwizzleRiveColorToRGBA(simplePaintValue.color);
+                    self.value.m_color = if solidUnmultiplied {
+                        SwizzleRiveColorToRGBA(simplePaintValue.color)
+                    } else {
+                        SwizzleRiveColorToRGBAPremul(simplePaintValue.color)
+                    };
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::linearGradient | PaintType::radialGradient => {

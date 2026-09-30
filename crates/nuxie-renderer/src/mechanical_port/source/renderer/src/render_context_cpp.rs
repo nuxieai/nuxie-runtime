@@ -1568,7 +1568,8 @@
 //                                 /*clipID =*/0,
 //                                 /*hasClipRect =*/false,
 //                                 /*hasImage =*/false,
-//                                 BlendMode::srcOver);
+//                                 BlendMode::srcOver,
+//                                 /*solidUnmultiplied =*/false);
 //     m_ctx->m_paintAuxData.skip_back();
 //
 //     // Render padding vertices in the tessellation texture.
@@ -3112,7 +3113,10 @@
 //                                 draw->clipID(),
 //                                 draw->hasClipRect(),
 //                                 draw->hasImageTexture(),
-//                                 draw->blendMode());
+//                                 draw->blendMode(),
+//                                 draw->blendMode() != BlendMode::srcOver &&
+//                                     !(m_ctx->frameInterlockMode() == gpu::InterlockMode::depthStencil &&
+//                                       m_ctx->platformFeatures().supportsBlendAdvancedKHR));
 //     m_ctx->m_paintAuxData.set_back(draw->paintMatrix(),
 //                                    draw->imageMatrix(),
 //                                    draw->paintType(),
@@ -6306,6 +6310,11 @@ impl LogicalFlush {
             draw.hasClipRect(),
             draw.hasImageTexture(),
             draw.blendMode(),
+            // Advanced blends use unmultiplied solids, except depthStencil's
+            // KHR fixed-function blend path.
+            draw.blendMode() != nuxie_render_api::BlendMode::SrcOver
+                && !(context.frameInterlockMode() == gpu::InterlockMode::depthStencil
+                    && context.platformFeatures().supportsBlendAdvancedKHR),
         );
         unsafe { context.m_paint_data.emplace_back(paint) };
         let gradient_coeffs = if draw.gradient().is_null() {
@@ -6996,6 +7005,7 @@ impl LogicalFlush {
             false,
             false,
             nuxie_render_api::BlendMode::SrcOver,
+            false, // solidUnmultiplied
         );
         unsafe {
             context.m_paint_data.emplace_back(clear_paint);

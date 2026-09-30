@@ -1,88 +1,88 @@
-struct BC {
-    sc: f32,
-    Cd: f32,
-    Gf: f32,
+struct AC {
+    tc: f32,
+    Dd: f32,
     Hf: f32,
-    o6_: u32,
-    Pb: u32,
-    sf: u32,
+    If: f32,
+    q6_: u32,
+    Qb: u32,
     tf: u32,
-    V7_: vec4<i32>,
-    dh: vec2<f32>,
-    Dd: vec2<f32>,
-    d2_: u32,
-    hh: f32,
-    d6_: u32,
-    T2_: f32,
-    Ed: f32,
-    nf: u32,
-    C3_: f32,
-    D3_: f32,
+    uf: u32,
+    X7_: vec4<i32>,
+    eh: vec2<f32>,
+    Ed: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    f6_: u32,
+    U2_: f32,
     Fd: f32,
-    ah: u32,
-    Ob: u32,
+    of_: u32,
+    F3_: f32,
+    G3_: f32,
+    Gd: f32,
+    bh: u32,
+    Pb: u32,
 }
 
-struct Ae {
-    e2_: array<u32>,
+struct Be {
+    g2_: array<u32>,
 }
 
-struct Ae_1 {
-    e2_: array<atomic<u32>>,
+struct Be_1 {
+    g2_: array<atomic<u32>>,
 }
 
-var<private> h1_1: f32;
-var<private> p4_1: vec2<f32>;
-var<private> g3_1: vec2<u32>;
+var<private> j1_1: f32;
+var<private> r4_1: vec2<f32>;
+var<private> i3_1: vec2<u32>;
 @group(0) @binding(0)
-var<uniform> l: BC;
+var<uniform> j: AC;
 @group(0) @binding(6)
-var<storage, read_write> Q0_: Ae_1;
+var<storage, read_write> R0_: Be_1;
 @group(3) @binding(9)
-var fa: sampler;
+var ga: sampler;
 @group(0) @binding(8)
-var ED: texture_2d<f32>;
+var DD: texture_2d<f32>;
 @group(0) @binding(9)
-var YC: texture_2d<f32>;
+var XC: texture_2d<f32>;
 @group(1) @binding(11)
-var HC: texture_2d<f32>;
+var GC: texture_2d<f32>;
 @group(3) @binding(8)
-var O9_: sampler;
+var P9_: sampler;
 @group(1) @binding(13)
-var V5_: sampler;
-var<private> V1_1: vec4<f32>;
-var<private> C0_1: f32;
-var<private> W1_1: vec2<f32>;
-var<private> M0_1: vec4<f32>;
-var<private> g2_1: f32;
-var<private> B2_1: vec3<f32>;
+var Y5_: sampler;
+var<private> X1_1: vec4<f32>;
+var<private> D0_1: f32;
+var<private> Y1_1: vec2<f32>;
+var<private> N0_1: vec4<f32>;
+var<private> g1_1: f32;
+var<private> C2_1: vec3<f32>;
 
 fn main_1() {
-    let _e29 = h1_1;
-    let _e30 = p4_1;
+    let _e29 = j1_1;
+    let _e30 = r4_1;
     let _e32 = vec2<u32>(floor(_e30));
-    let _e34 = g3_1[1u];
-    let _e36 = g3_1[0u];
+    let _e34 = i3_1[1u];
+    let _e36 = i3_1[0u];
     let _e67 = u32(((abs(_e29) * 1024f) + 0.5f));
-    let _e69 = l.d2_;
+    let _e69 = j.f2_;
     let _e71 = (_e69 | (262144u - _e67));
-    let _e74 = atomicMax((&Q0_.e2_[(_e36 + (((((_e32.y >> bitcast<u32>(5u)) * (_e34 << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))))]), _e71);
+    let _e74 = atomicMax((&R0_.g2_[(_e36 + (((((_e32.y >> bitcast<u32>(5u)) * (_e34 << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))))]), _e71);
     if (_e74 >= _e69) {
-        let _e79 = atomicAdd((&Q0_.e2_[(_e36 + (((((_e32.y >> bitcast<u32>(5u)) * (_e34 << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))))]), ((_e74 - max(_e74, _e71)) - _e67));
+        let _e79 = atomicAdd((&R0_.g2_[(_e36 + (((((_e32.y >> bitcast<u32>(5u)) * (_e34 << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))))]), ((_e74 - max(_e74, _e71)) - _e67));
     }
     return;
 }
 
 @fragment
-fn main(@location(1) @interpolate(flat, either) h1_: f32, @location(8) p4_: vec2<f32>, @location(7) @interpolate(flat, either) g3_: vec2<u32>, @location(0) V1_: vec4<f32>, @location(3) @interpolate(flat, either) C0_: f32, @location(4) @interpolate(flat, either) W1_: vec2<f32>, @location(5) M0_: vec4<f32>, @location(6) @interpolate(flat, either) g2_: f32, @location(9) B2_: vec3<f32>) {
-    h1_1 = h1_;
-    p4_1 = p4_;
-    g3_1 = g3_;
-    V1_1 = V1_;
-    C0_1 = C0_;
-    W1_1 = W1_;
-    M0_1 = M0_;
-    g2_1 = g2_;
-    B2_1 = B2_;
+fn main(@location(1) @interpolate(flat, either) j1_: f32, @location(8) r4_: vec2<f32>, @location(7) @interpolate(flat, either) i3_: vec2<u32>, @location(0) X1_: vec4<f32>, @location(3) @interpolate(flat, either) D0_: f32, @location(4) @interpolate(flat, either) Y1_: vec2<f32>, @location(5) N0_: vec4<f32>, @location(6) @interpolate(flat, either) g1_: f32, @location(9) C2_: vec3<f32>) {
+    j1_1 = j1_;
+    r4_1 = r4_;
+    i3_1 = i3_;
+    X1_1 = X1_;
+    D0_1 = D0_;
+    Y1_1 = Y1_;
+    N0_1 = N0_;
+    g1_1 = g1_;
+    C2_1 = C2_;
     main_1();
 }

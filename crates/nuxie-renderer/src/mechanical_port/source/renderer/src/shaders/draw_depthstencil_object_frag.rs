@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_depthstencil_object.frag.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_object.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "57319713f93ac14ddb22d6a6ea13ea2cfa727648645edd02c9ed7250689297c8";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 110;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 3631;
+    "38469362a3888c5c70d042e3b9929e3e3cc8732ad0fb8099ef4dcf6e760510a5";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 112;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 3403;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE: &str = r###"/*
@@ -79,11 +79,15 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 #else
         1.;
 #endif
-    half4 color = find_paint_color(v_paint,
+
+    half4 color = find_paint_color(
 #ifdef @ENABLE_MODULATED_IMAGE
-                                   v_image,
+        v_image,
 #endif
-                                   coverage FRAGMENT_CONTEXT_UNPACK);
+#ifdef @ENABLE_ADVANCED_BLEND
+        cast_half_to_ushort(v_blendMode),
+#endif
+        v_paint FRAGMENT_CONTEXT_UNPACK);
 #endif
 
 // Need to check both flags here because in GL when KHR_blend_equation_advanced
@@ -94,17 +98,15 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
     color.rgb = unmultiply_rgb(color);
     ushort blendMode = v_imageBlendMode;
 #else
-    // NOTE: for non-image-meshes, "color" is already unmultiplied because
-    // GENERATE_PREMULTIPLIED_PAINT_COLORS is false when using advanced
-    // blend.
     ushort blendMode = cast_half_to_ushort(v_blendMode);
 #endif
     half4 dstColorPremul = DST_COLOR_FETCH(@dstColorTexture);
-    color.rgb = advanced_color_blend(color.rgb, dstColorPremul, blendMode);
+    color.rgb =
+        advanced_color_blend(color.rgb, dstColorPremul, blendMode) * color.a;
+#endif
 
-    // Src-over blending is enabled, so just premultiply and let the HW
-    // finish the the the alpha portion of the blend mode.
-    color.rgb *= color.a;
+#ifndef @DRAW_IMAGE_MESH
+    color *= coverage;
 #endif
 
     // Certain platforms give us less control of the format of what we are

@@ -16,7 +16,7 @@
 
 // Mechanical translation of the complete pinned source header
 // renderer/include/rive/renderer/ore/ore_shader_module.hpp.
-// Upstream source revision: 675703b9fd71e982eaf97c034b313eba9bde63f4
+// Upstream source revision: 330e78b69a7b5b68e7235aa9da2e932433fff492
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -29,9 +29,9 @@ use core::ops::{Deref, DerefMut};
 use super::super::gpu_resource_hpp::{GPUResource, GpuResourcePayload};
 
 // `ShaderModuleDesc<'_>` is the sibling source-shaped snapshot from
-// ore_types_hpp.rs. Its checked `bindingMapSize()` / `glFixupSize()` accessors
-// stand in for the C++ descriptor's authored size fields without widening
-// either borrowed byte-span lifetime.
+// ore_types_hpp.rs. Its checked `bindingMapSize()` accessor and the checked
+// span in `parseGLFixup` preserve the C++ descriptor's authored size fields
+// without widening either borrowed byte-span lifetime.
 
 // namespace rive::ore
 // {
@@ -260,46 +260,71 @@ impl ShaderModule {
     // `glUniformBlockBinding` / `glUniform1i` without parsing the
     // emitted GLSL names at runtime.
 
-    // Helper: parse `desc.glFixupBytes` (RSTB GL fixup blob format)
-    // into `m_glFixup`. No-op when the sidecar is absent or malformed.
-    // void applyGLFixupFromDesc(const ShaderModuleDesc& desc)
-    pub fn applyGLFixupFromDesc(&mut self, desc: &ShaderModuleDesc<'_>) {
-        let Some(bytes) = desc.glFixupBytes else {
-            return;
+    // The RSTB GL fixup blob: version(u8) = 1, count(u16), then per entry
+    // kind(u8), slot(u8), name_len(u16), name. Rows already decoded stay
+    // in `out` when the blob ends early.
+    // static bool parseGLFixup(const uint8_t* bytes, uint32_t size,
+    //                          std::vector<GLFixupEntry>& out)
+    pub fn parseGLFixup(bytes: Option<&[u8]>, size: u32, out: &mut Vec<GLFixupEntry>) -> bool {
+        let Some(bytes) = bytes else {
+            return false;
         };
-        let Ok(gl_fixup_size) = desc.glFixupSize() else {
-            return;
-        };
-        if gl_fixup_size < 3 {
-            return;
+        if size < 3 {
+            return false;
         }
-        let Some(bytes) = bytes.get(..gl_fixup_size as usize) else {
-            return;
+        // Preserve the checked backing-span boundary of the descriptor parser.
+        let Some(bytes) = bytes.get(..size as usize) else {
+            return false;
         };
         let mut p = bytes;
         if p[0] != 1 {
             // version
-            return;
+            return false;
         }
         p = &p[1..];
         let count = u16::from_le_bytes([p[0], p[1]]);
         p = &p[2..];
-        self.m_glFixup.reserve(usize::from(count));
+        out.reserve(usize::from(count));
         for _ in 0..count {
             if p.len() < 4 {
-                return;
+                return false;
             }
             let kind = GLFixupKind(p[0]);
             let slot = p[1];
             let name_len = usize::from(u16::from_le_bytes([p[2], p[3]]));
             p = &p[4..];
             if p.len() < name_len {
-                return;
+                return false;
             }
             let name = p[..name_len].to_vec();
             p = &p[name_len..];
-            self.m_glFixup.push(GLFixupEntry { kind, slot, name });
+            out.push(GLFixupEntry { kind, slot, name });
         }
+        true
+    }
+
+    // static std::vector<uint8_t> encodeGLFixup(
+    //     const std::vector<GLFixupEntry>& entries)
+    pub fn encodeGLFixup(entries: &[GLFixupEntry]) -> Vec<u8> {
+        let mut blob = Vec::new();
+        blob.push(1); // version
+        let count = entries.len() as u16;
+        blob.extend_from_slice(&count.to_le_bytes());
+        for e in entries {
+            blob.push(e.kind.0);
+            blob.push(e.slot);
+            let name_len = e.name.len() as u16;
+            blob.extend_from_slice(&name_len.to_le_bytes());
+            blob.extend_from_slice(&e.name);
+        }
+        blob
+    }
+
+    // Helper: parse `desc.glFixupBytes` into `m_glFixup`. No-op when the
+    // sidecar is absent or malformed.
+    // void applyGLFixupFromDesc(const ShaderModuleDesc& desc)
+    pub fn applyGLFixupFromDesc(&mut self, desc: &ShaderModuleDesc<'_>) {
+        Self::parseGLFixup(desc.glFixupBytes, desc.glFixupSize, &mut self.m_glFixup);
     }
 
     // virtual ~ShaderModule() = default;
@@ -439,6 +464,95 @@ mod tests {
             ..ShaderModuleDesc::default()
         });
         assert_eq!(module.m_glFixup[0].name, [0xff, 0x00, 0x80]);
+    }
+
+    // Supplemental Rust coverage for the public header's static codec branches.
+    #[test]
+    fn gl_fixup_codec_preserves_raw_rows_and_ignores_trailing_bytes() {
+        let entries = vec![
+            GLFixupEntry {
+                kind: GLFixupKind(0xfe),
+                slot: 0xff,
+                name: vec![0xff, 0, 0x80],
+            },
+            GLFixupEntry {
+                kind: GLFixupKind::UBOBlock,
+                slot: 3,
+                name: Vec::new(),
+            },
+        ];
+        let mut blob = ShaderModule::encodeGLFixup(&entries);
+        assert_eq!(blob, [1, 2, 0, 0xfe, 0xff, 3, 0, 0xff, 0, 0x80, 0, 3, 0, 0]);
+        blob.extend_from_slice(&[0xaa, 0xbb]);
+        let mut out = vec![entries[0].clone()];
+        assert!(ShaderModule::parseGLFixup(
+            Some(&blob),
+            blob.len() as u32,
+            &mut out
+        ));
+        assert_eq!(&out[1..], entries.as_slice());
+        assert_eq!(out[0], entries[0]);
+        assert_eq!(ShaderModule::encodeGLFixup(&[]), [1, 0, 0]);
+        assert!(ShaderModule::parseGLFixup(Some(&[1, 0, 0]), 3, &mut out));
+        assert_eq!(out.len(), 3);
+    }
+
+    #[test]
+    fn gl_fixup_parser_rejects_invalid_headers_without_clearing_output() {
+        let seed = GLFixupEntry {
+            kind: GLFixupKind::SamplerUniform,
+            slot: 7,
+            name: b"existing".to_vec(),
+        };
+        let mut out = vec![seed.clone()];
+        for (bytes, size) in [
+            (None, 3),
+            (Some(&[1, 0][..]), 2),
+            (Some(&[2, 0, 0][..]), 3),
+            (Some(&[1, 0, 0][..]), 4),
+        ] {
+            assert!(!ShaderModule::parseGLFixup(bytes, size, &mut out));
+            assert_eq!(out, [seed.clone()]);
+        }
+    }
+
+    #[test]
+    fn gl_fixup_parser_retains_complete_rows_before_each_truncation_branch() {
+        let blob = fixup_blob(&[(0, 2, b"first"), (1, 4, b"second")]);
+        // The first row ends at byte 12; the second header ends at byte 16.
+        for size in [12, 15, 16, blob.len() - 1] {
+            let mut out = Vec::new();
+            assert!(!ShaderModule::parseGLFixup(
+                Some(&blob),
+                size as u32,
+                &mut out
+            ));
+            assert_eq!(out.len(), 1);
+            assert_eq!(out[0].name, b"first");
+        }
+    }
+
+    #[test]
+    fn gl_fixup_encoder_truncates_u16_fields_but_writes_all_rows_and_name_bytes() {
+        let entry = GLFixupEntry {
+            kind: GLFixupKind::SamplerUniform,
+            slot: 9,
+            name: Vec::new(),
+        };
+        let entries = vec![entry; usize::from(u16::MAX) + 2];
+        let blob = ShaderModule::encodeGLFixup(&entries);
+        assert_eq!(&blob[..3], &[1, 1, 0]);
+        assert_eq!(blob.len(), 3 + entries.len() * 4);
+        assert!(blob[3..].chunks_exact(4).all(|row| row == [1, 9, 0, 0]));
+
+        let long_name = GLFixupEntry {
+            kind: GLFixupKind::UBOBlock,
+            slot: 5,
+            name: vec![0x80; usize::from(u16::MAX) + 2],
+        };
+        let blob = ShaderModule::encodeGLFixup(core::slice::from_ref(&long_name));
+        assert_eq!(&blob[..7], &[1, 1, 0, 0, 5, 1, 0]);
+        assert_eq!(&blob[7..], long_name.name.as_slice());
     }
 
     #[test]

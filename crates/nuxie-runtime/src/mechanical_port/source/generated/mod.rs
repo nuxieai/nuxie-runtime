@@ -45,6 +45,7 @@ pub mod script_input_string_base;
 pub mod script_input_trigger_base;
 pub mod script_input_viewmodel_property_base;
 pub mod scripted;
+pub mod selection_style_base;
 pub mod semantic;
 pub mod shapes;
 pub mod solo_base;

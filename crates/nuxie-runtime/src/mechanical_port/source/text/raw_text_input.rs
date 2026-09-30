@@ -414,7 +414,7 @@ impl RawTextInput {
     }
 
     pub fn cursor_visual_position_at(&self, position: CursorPosition) -> CursorVisualPosition {
-        position.visual_position(&self.shape)
+        position.visual_position(&self.shape.layout_view())
     }
 
     pub fn cursor_visual_position(&self) -> CursorVisualPosition {
@@ -512,11 +512,12 @@ impl RawTextInput {
             if self.flagged(Flags::SeparateSelectionText as u8) {
                 update_text_path = true;
             }
-            self.cursor.resolve_line_positions(&self.shape);
+            self.cursor
+                .resolve_line_positions(&self.shape.layout_view());
             self.compute_visual_position_from_cursor();
             self.selection_rects.clear();
             self.cursor
-                .selection_rects(&mut self.selection_rects, &self.shape);
+                .selection_rects(&mut self.selection_rects, &self.shape.layout_view());
             self.selection_path
                 .update(&self.selection_rects, self.selection_corner_radius);
             self.cursor_path.rewind();
@@ -702,8 +703,8 @@ impl RawTextInput {
     pub fn select_all(&mut self) {
         self.ensure_shape();
         self.ideal_cursor_x = -1.0;
-        let start = CursorPosition::at_index(0, &self.shape);
-        let end = CursorPosition::at_index(self.length() as u32, &self.shape);
+        let start = CursorPosition::at_index(0, &self.shape.layout_view());
+        let end = CursorPosition::at_index(self.length() as u32, &self.shape.layout_view());
         self.cursor = Cursor::new(start, end);
         self.flag(Flags::SelectionDirty as u8);
     }
@@ -712,7 +713,7 @@ impl RawTextInput {
         self.ensure_shape();
         self.ideal_cursor_x = -1.0;
         let mut cursor = self.cursor.start();
-        cursor.resolve_line(&self.shape);
+        cursor.resolve_line(&self.shape.layout_view());
         let Some(line) = self.ordered_line(cursor) else {
             return;
         };
@@ -770,7 +771,7 @@ impl RawTextInput {
                         next_index -= 1;
                     }
                 }
-                position = CursorPosition::at_index(next_index, &self.shape);
+                position = CursorPosition::at_index(next_index, &self.shape.layout_view());
             }
             CursorBoundary::Line => {
                 if let Some(line) = self.ordered_line(end) {
@@ -935,7 +936,7 @@ impl RawTextInput {
             CursorPosition::from_line_x(
                 self.cursor.end().line_index_offset(-1),
                 self.ideal_cursor_x,
-                &self.shape,
+                &self.shape.layout_view(),
             )
         };
         self.cursor = if select {
@@ -961,7 +962,11 @@ impl RawTextInput {
                 self.text.len() as u32 - 1,
             )
         } else {
-            CursorPosition::from_line_x(next_line_index, self.ideal_cursor_x, &self.shape)
+            CursorPosition::from_line_x(
+                next_line_index,
+                self.ideal_cursor_x,
+                &self.shape.layout_view(),
+            )
         };
         self.cursor = if select {
             Cursor::new(self.cursor.start(), position)
@@ -974,7 +979,7 @@ impl RawTextInput {
     pub fn move_cursor_to(&mut self, translation: Vec2D, select: bool) {
         self.ensure_shape();
         self.ideal_cursor_x = -1.0;
-        let position = CursorPosition::from_translation(translation, &self.shape);
+        let position = CursorPosition::from_translation(translation, &self.shape.layout_view());
         self.cursor = if select {
             Cursor::new(self.cursor.start(), position)
         } else {

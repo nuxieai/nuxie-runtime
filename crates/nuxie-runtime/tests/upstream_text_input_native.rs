@@ -210,7 +210,7 @@ fn empty_shaped_text_has_no_selection_rectangles() {
         Cursor::zero(),
         Cursor::new(CursorPosition::new(3, 9), CursorPosition::unresolved(40)),
     ] {
-        cursor.selection_rects(&mut rectangles, &shape);
+        cursor.selection_rects(&mut rectangles, &shape.layout_view());
     }
     assert_eq!(
         rectangles,

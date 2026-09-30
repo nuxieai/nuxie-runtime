@@ -3756,6 +3756,7 @@ pub enum CoreConcreteType {
     LayoutComponent,
     Artboard,
     Joystick,
+    SelectionStyle,
     Backboard,
     OpenUrlEvent,
     SemanticData,
@@ -3848,6 +3849,8 @@ pub enum CoreConcreteType {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CoreField {
+    SelectionStyleHighlightColor,
+    SelectionStyleCornerRadius,
     AdvanceableStateSpeed,
     AnimationName,
     AnimationStateAnimationId,
@@ -7929,6 +7932,7 @@ impl CoreRegistry {
             409 => CoreConcreteType::LayoutComponent,
             1 => CoreConcreteType::Artboard,
             148 => CoreConcreteType::Joystick,
+            153 => CoreConcreteType::SelectionStyle,
             23 => CoreConcreteType::Backboard,
             131 => CoreConcreteType::OpenUrlEvent,
             668 => CoreConcreteType::SemanticData,
@@ -8455,6 +8459,7 @@ impl CoreRegistry {
         value: i32,
     ) {
         let field = match property_key {
+            447 => CoreField::SelectionStyleHighlightColor,
             555 => CoreField::ViewModelInstanceColorPropertyValue,
             836 => CoreField::CustomPropertyColorPropertyValue,
             88 => CoreField::KeyFrameColorValue,
@@ -8559,6 +8564,7 @@ impl CoreRegistry {
         value: f32,
     ) {
         let field = match property_key {
+            448 => CoreField::SelectionStyleCornerRadius,
             416 => CoreField::PaintImageImageScaleX,
             368 => CoreField::PaintImageImageScaleY,
             369 => CoreField::PaintImageImageOffsetX,
@@ -9230,6 +9236,7 @@ impl CoreRegistry {
     }
     pub fn get_color<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> i32 {
         let field = match property_key {
+            447 => CoreField::SelectionStyleHighlightColor,
             555 => CoreField::ViewModelInstanceColorPropertyValue,
             836 => CoreField::CustomPropertyColorPropertyValue,
             88 => CoreField::KeyFrameColorValue,
@@ -9328,6 +9335,7 @@ impl CoreRegistry {
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
         let field = match property_key {
+            448 => CoreField::SelectionStyleCornerRadius,
             416 => CoreField::PaintImageImageScaleX,
             368 => CoreField::PaintImageImageScaleY,
             369 => CoreField::PaintImageImageOffsetX,
@@ -9981,6 +9989,8 @@ impl CoreRegistry {
             287 => 0,
             377 => 0,
             683 => 0,
+            447 => 3,
+            448 => 2,
             446 => 0,
             685 => 0,
             932 => 0,
@@ -10625,6 +10635,7 @@ impl CoreRegistry {
             287 => 134,
             377 => 134,
             683 => 134,
+            447 | 448 => 153,
             446 => 134,
             685 => 134,
             932 => 134,
@@ -42251,6 +42262,96 @@ impl crate::mechanical_port::source::core::CoreObject
         result
     }
 }
+impl CoreRegistryObject for crate::mechanical_port::source::selection_style::SelectionStyle {
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::selection_style_base::SelectionStyleBase::is_type_of(
+            type_key,
+        )
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        let _ = (field, value);
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        let _ = (field, value);
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        if field == CoreField::SelectionStyleHighlightColor { self.set_highlight_color(value); }
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        let _ = (field, value);
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        if field == CoreField::SelectionStyleCornerRadius { self.set_corner_radius(value); }
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        let _ = field;
+        0
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        let _ = field;
+        String::new()
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        if field == CoreField::SelectionStyleHighlightColor { self.highlight_color() } else { 0 }
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        if field == CoreField::SelectionStyleCornerRadius { self.corner_radius() } else { 0.0 }
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::selection_style::SelectionStyle
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::selection_style_base::SelectionStyleBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::selection_style_base::SelectionStyleBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::selection_style_base::SelectionStyleBase::is_type_of(
+            type_key,
+        )
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        Some(Box::new(self.base.clone_into()))
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader);
+        self.base = base;
+        result
+    }
+}
 impl CoreRegistryObject for crate::mechanical_port::source::backboard::Backboard {
     fn as_registry_any(&self) -> &dyn Any {
         self
@@ -65919,6 +66020,8 @@ impl CoreCapabilities for crate::mechanical_port::source::joystick::Joystick {
         Some(&mut self.base.base)
     }
 }
+impl CoreCapabilities for crate::mechanical_port::source::selection_style::SelectionStyle {}
+impl crate::mechanical_port::source::core::CoreType for crate::mechanical_port::source::selection_style::SelectionStyle { const TYPE_KEY: u16 = 153; }
 impl CoreCapabilities for crate::mechanical_port::source::backboard::Backboard {}
 impl CoreCapabilities for crate::mechanical_port::source::open_url_event::OpenUrlEvent {
     fn lifecycle_validate(
@@ -77529,6 +77632,7 @@ impl CoreRegistry {
             409 => Some(Box::new(<crate::mechanical_port::source::layout_component::LayoutComponent>::default())),
             1 => Some(Box::new(<crate::mechanical_port::source::artboard::Artboard>::default())),
             148 => Some(Box::new(<crate::mechanical_port::source::joystick::Joystick>::default())),
+            153 => Some(Box::new(crate::mechanical_port::source::selection_style::SelectionStyle::default())),
             23 => Some(Box::new(<crate::mechanical_port::source::backboard::Backboard>::default())),
             131 => Some(Box::new(<crate::mechanical_port::source::open_url_event::OpenUrlEvent>::default())),
             668 => Some(Box::new(<crate::mechanical_port::source::semantic::semantic_data::SemanticData>::default())),

@@ -2,7 +2,8 @@
 use crate::deferred::cmd::{deferred_replayer::DeferredFrameSink, render_replay::RendererOwner};
 use crate::{
     native_metal::{
-        NativeMetalContextOptions, NativeMetalFactory, NativeMetalFrame, ShaderCompilationMode,
+        NativeMetalContextOptions, NativeMetalFactory, NativeMetalFrame, NativeMetalTestingWindow,
+        ShaderCompilationMode,
     },
     RenderMode,
 };
@@ -30,8 +31,8 @@ pub(super) fn assert_pixels_equal(name: &str, variant: usize, a: &[u8], b: &[u8]
             if pixels.len() != SIZE as usize * SIZE as usize * 4 {
                 return;
             }
-            let image = pixel_compare::RgbaImage::new(SIZE, SIZE, pixels.to_vec())
-                .expect("GM dimensions");
+            let image =
+                pixel_compare::RgbaImage::new(SIZE, SIZE, pixels.to_vec()).expect("GM dimensions");
             let path = std::env::temp_dir().join(format!("nuxie-{name}{suffix}.png"));
             if let Err(error) = image.write_png(&path) {
                 eprintln!("could not save GM diagnostic {}: {error}", path.display());
@@ -231,6 +232,8 @@ pub(super) struct GmHost {
     pub ore: OreContextHandle,
     screen: Rc<RefCell<Option<Frame>>>,
     canvas: Rc<RefCell<Option<Frame>>>,
+    active_canvas: Option<RenderCanvasHandle>,
+    window: NativeMetalTestingWindow,
     clear: u32,
     screen_initialized: bool,
     // Offscreen frames opened while replaying, i.e. how many times content
@@ -260,6 +263,7 @@ impl GmHost {
         // Upstream gmmain.cpp and goldens.cpp disable time-budgeted
         // triangulation for every comparison frame.
         native_factory.use_deterministic_validation_thresholds();
+        let window = native_factory.testing_window().expect("GM Metal window");
         let mut factory = PersistentFactory::new(native_factory);
         let ore = factory.ore().expect("live Metal ORE context");
         let frame = open.then(|| {
@@ -275,6 +279,8 @@ impl GmHost {
             ore,
             screen: Rc::new(RefCell::new(frame)),
             canvas: Rc::new(RefCell::new(None)),
+            active_canvas: None,
+            window,
             clear,
             screen_initialized: open,
             canvas_frames: 0,
@@ -319,7 +325,9 @@ impl GmHost {
             .expect("GM screen was drawn");
         self.screen_initialized = false;
         match frame {
-            Frame::Screen(frame) => frame.finish().expect("GM Metal readback"),
+            Frame::Screen(frame) => frame
+                .finish_testing_window(&mut self.window)
+                .expect("GM Metal readback"),
             Frame::Canvas(_) => unreachable!(),
         }
     }
@@ -327,7 +335,9 @@ impl GmHost {
     fn flush_screen(&mut self) {
         let frame = self.screen.borrow_mut().take();
         if let Some(Frame::Screen(frame)) = frame {
-            frame.finish_without_readback().expect("GM screen flush");
+            frame
+                .flush_testing_window(&mut self.window)
+                .expect("GM screen flush");
         }
     }
 }
@@ -372,15 +382,42 @@ impl DeferredFrameSink for GmHost {
                 .begin_frame(clear)
                 .expect("GM canvas frame"),
         ));
+        self.active_canvas = Some(canvas);
         Some(Rc::new(RefCell::new(Box::new(FrameRenderer(
             self.canvas.clone(),
         )))))
     }
     fn end_canvas_content(&mut self) {
-        if let Some(Frame::Canvas(frame)) = self.canvas.borrow_mut().take() {
-            frame.finish().expect("GM canvas flush");
-        }
+        let Some(canvas) = self.active_canvas.as_ref() else {
+            return;
+        };
+        self.window
+            .flush_canvas(canvas)
+            .expect("GM window canvas flush");
+        self.canvas.borrow_mut().take();
+        self.active_canvas = None;
     }
+}
+
+#[test]
+fn canvas_first_window_flush_is_lazy_and_survives_screen_begin() {
+    let expected = GmHost::new(0xff203040).finish();
+    let mut host = GmHost::with_screen(0xff203040, false);
+    assert_eq!(host.window.pending_command_identity(), None);
+    // Multiple canvas flushes must each commit; otherwise the second one
+    // blocks forever on the render-context buffer ring.
+    for _ in 0..3 {
+        let canvas = host.canvas(32, 32);
+        host.begin_canvas_content(canvas, 0xff00ff00).unwrap();
+        host.end_canvas_content();
+        assert!(host.window.pending_command_identity().is_some());
+    }
+    let pending = host.window.pending_command_identity();
+    host.begin_screen_frame(0).unwrap();
+    assert_eq!(host.window.pending_command_identity(), pending);
+    let actual = host.finish_frame();
+    assert_eq!(host.window.pending_command_identity(), None);
+    assert_pixels_equal("canvas_first_window_flush", 1, &expected, &actual);
 }
 
 #[test]

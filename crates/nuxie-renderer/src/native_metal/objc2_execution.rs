@@ -828,6 +828,14 @@ impl Objc2MetalExecution {
         self.insert(buffer, MetalObjectKind::Buffer)
     }
 
+    #[cfg(test)]
+    pub(crate) fn insert_window_command_buffer(
+        &mut self,
+        command: Retained<ProtocolObject<dyn MTLCommandBuffer>>,
+    ) -> Handle {
+        self.insert(command, MetalObjectKind::CommandBuffer)
+    }
+
     pub(crate) fn insert_texture(
         &mut self,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,

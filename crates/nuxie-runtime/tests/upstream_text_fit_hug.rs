@@ -142,6 +142,58 @@ fn fit_font_size_hug_slot_honors_resizes_box_at_7_4() {
     check(4, false, 423.49, 439.49);
 }
 
+#[test]
+fn fit_font_size_measure_returns_for_a_huge_font_size() {
+    use nuxie_runtime::source::{
+        generated::text::text_style_base::TextStyleBase,
+        layout::layout_measure_mode::LayoutMeasureMode, text::text_style::TextStyle,
+    };
+    let file = import_text_with_minor_version(4);
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let title = artboard
+        .with_artboard(|board| board.find_all_handles::<Text>())
+        .into_iter()
+        .find(|text| {
+            text.with_downcast::<Text, _>(|text| {
+                text.runs().first().is_some_and(|run| match run {
+                    TextValueRunHandle::Core(run) => run
+                        .with(|run| !run.as_text_value_run().unwrap().base.text().is_empty())
+                        .unwrap(),
+                    TextValueRunHandle::Runtime(run) => !run.borrow().base.text().is_empty(),
+                })
+            })
+            .unwrap()
+        })
+        .expect("nonempty title");
+    assert!(CoreRegistry::set_bool_handle(
+        &title,
+        i32::from(TextBase::FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY),
+        true
+    ));
+    for size in [f32::INFINITY, f32::NAN, 3e9] {
+        for style in artboard.with_artboard(|board| board.find_all_handles::<TextStyle>()) {
+            assert!(CoreRegistry::set_double_handle(
+                &style,
+                i32::from(TextStyleBase::FONT_SIZE_PROPERTY_KEY),
+                size
+            ));
+        }
+        title
+            .with_downcast_mut::<Text, _>(|title| {
+                title.measure_layout(
+                    1e38,
+                    LayoutMeasureMode::AtMost,
+                    1e38,
+                    LayoutMeasureMode::AtMost,
+                );
+            })
+            .unwrap();
+        artboard.advance_default(0.0);
+    }
+}
+
 fn check_trimmed_hug_fit(top: TextTrimTop, bottom: TextTrimBottom) -> (f32, f32) {
     let file = import_text_with_minor_version(4);
     let artboard = file

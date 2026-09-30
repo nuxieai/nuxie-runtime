@@ -7,17 +7,17 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9aea75996f4d199e97a1bdbb33bcbcec6d4ded6f`
+- LAST_SYNCED_SHA: `02989e8f70ffebff16977de5ce281327debbb45b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` (refreshed 2026-09-30 after PR #872 merged).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 4 upstream commits after the checkpoint at this fetched target.
-  All 164 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (186 after `5892bb05`); this
+  There are 3 upstream commits after the checkpoint at this fetched target.
+  All 165 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (187 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
-  is green. Continue oldest-first with `02989e8f`, then refresh again at catch-up.
+  is green. Continue oldest-first with `35e41934`, then refresh again at catch-up.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -43,6 +43,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `02989e8f70ffebff16977de5ce281327debbb45b` | Preserve eligible infinite font sizes, retain source NaN selection behavior, and cap the integer fitting search at 2^24 to prevent overflow/nontermination. Port all three regressions including nonfinite shaped-run results, capped huge fitting, and sequential infinity/NaN/huge layout measurement. Independent source and separate Rust-integration reviews are clean. All 11 text-fitting tests pass; five fitting/vertical-trim/path-trim Silver cases compare operation-exact within existing epsilon; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted. Corpus changes only pin/source-line metadata. Full Golden/Silver and GPU/hardware suites were not rerun for this delta. | — |
 | `9aea75996f4d199e97a1bdbb33bcbcec6d4ded6f` | Add StateMachineInstance::selected_text through the active focus manager, returning empty without a manager. Port the full unfocused/empty/full/partial/obscured/cleared-selection regression. Independent source and separate Rust-integration reviews are clean. All 71 text-input/raw-input/focus-lifetime/semantic-focus tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; corpus classifications unchanged. The JS overlay/proxy implementation described in the commit message is absent from the public C++ delta and is not claimed imported. Full Golden/Silver and GPU/hardware suites were not rerun for this accessor delta. | — |
 | `43aa10256cc06a3e2183cfddd1cd22ee16984e17` | Preserve coincident controls during trimming with endpoint-stable exact interpolation and upstream's two-cut cubic helper; remove superseded public subdivision APIs. Port all 999 head/tail iterations of the upstream regression. Independent source and separate Rust-integration reviews are clean, including the source-backed update of two stale generic-lerp expected bits (confirmed against C++; assertions remain bit-exact). All 12 contour/trim/raw-path integration tests pass. Library tests: 90 pass, two ignored, known native-hydration failure UNIV-3788 remains. wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests 26 and correspondence tests seven pass; structural correspondence remains 1,054 mirrored/ten adapted. Corpus classifications unchanged. Full Golden/Silver and GPU/hardware suites were not rerun for this delta. | — |
 | `d0a12883db7bf49918be4ab5fbc21c6bcead930b` | Share exact analytic winding measurement across authored bind vertices and deformed positions/controls; apply bind orientation at reference initialization and remove the coarse RawPath fallback. Port the complete small-curved-pose regression for both winding directions. Independent source and separate Rust-integration reviews are clean. All 21 winding/paint/trim/nested-opacity tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; corpus classifications unchanged. Full Golden/Silver and GPU/hardware suites were not rerun. C++ test-player --present parsing and BackendParams presentation modes remain upstream oracle-only: there is no shipped Rust Artemis/player CLI counterpart, and headless recording/offscreen Metal harnesses do not present a window. | — |

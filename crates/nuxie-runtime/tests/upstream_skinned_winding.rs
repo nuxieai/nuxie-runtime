@@ -1,4 +1,4 @@
-//! Complete skinned_winding_test.cpp at upstream 1f7efd6c.
+//! Complete skinned_winding_test.cpp at upstream 8ff564a3.
 use nuxie_render_api::{FillRule, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
@@ -74,6 +74,9 @@ struct QuadRig {
 }
 impl QuadRig {
     fn new(clockwise: bool) -> Self {
+        Self::with_top_start_y(clockwise, 0.0)
+    }
+    fn with_top_start_y(clockwise: bool, top_start_y: f32) -> Self {
         let arena = CoreArena::default();
         let mut factory = PersistentFactory::new(RecordingFactory::new());
         let factory = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
@@ -158,6 +161,7 @@ impl QuadRig {
             );
             add(&tendon, &skin);
         }
+        number(&top, RootBoneBase::Y_PROPERTY_KEY, top_start_y);
         assert_eq!(Artboard::initialize_handle(&artboard), StatusCode::Ok);
         Self {
             _arena: arena,
@@ -277,6 +281,20 @@ fn fold_without_mirroring_keeps_measured_winding() {
     assert_eq!(winding(&rig.skin), 1);
     assert!(rig.deformed_area() < 0.0);
     assert!(composed < 0.0);
+}
+
+#[test]
+fn folded_first_frame_is_not_cached_as_winding() {
+    for clockwise in [true, false] {
+        let rig = QuadRig::with_top_start_y(clockwise, 200.0);
+        let folded = rig.composed_area();
+        assert_eq!(winding(&rig.skin), 1);
+        assert_eq!(rig.deformed_area() < 0.0, clockwise);
+        assert!(folded < 0.0);
+        number(&rig.top, RootBoneBase::Y_PROPERTY_KEY, 0.0);
+        assert!(rig.composed_area() > 0.0);
+        assert_eq!(rig.deformed_area() > 0.0, clockwise);
+    }
 }
 
 fn parent(node: &CoreHandle) -> Option<CoreHandle> {

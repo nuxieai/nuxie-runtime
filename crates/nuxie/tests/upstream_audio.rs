@@ -177,6 +177,46 @@ fn upstream_audio_case_07_artboard_has_direct_audio() {
     assert_named_audio_artboard("child", 1, true);
 }
 
+// 0211d9ee: playback and teardown must both resolve the runtime engine when
+// the artboard has no assigned engine (including newly instanced list items).
+#[test]
+fn audio_sounds_stop_when_the_artboard_has_no_engine_assigned() {
+    let engine = NativeAudioEngine::make_and_store(2, 44_100).expect("runtime audio engine");
+    assert!(Arc::ptr_eq(
+        &NativeAudioEngine::runtime_engine(false).expect("stored runtime engine"),
+        &engine
+    ));
+    let file = import("sound.riv");
+    let artboard = file
+        .with_file(|file| file.artboard_default())
+        .expect("default artboard instance");
+    // Deliberately do not assign an audio engine to the artboard.
+    assert!(artboard.with_artboard(|artboard| artboard.audio_engine().is_none()));
+    let event = artboard
+        .with_artboard(|artboard| artboard.object_handle_at::<AudioEvent>(0))
+        .expect("AudioEvent");
+    let asset = event
+        .with_mut(|event| {
+            event
+                .as_file_asset_referencer_mut()
+                .and_then(|referencer| referencer.asset())
+        })
+        .flatten()
+        .expect("AudioEvent asset");
+    assert!(asset
+        .with_downcast::<AudioAsset, _>(AudioAsset::has_audio_source)
+        .expect("AudioAsset"));
+    event
+        .with_downcast_mut::<AudioEvent, _>(AudioEvent::play)
+        .expect("AudioEvent");
+    event
+        .with_downcast_mut::<AudioEvent, _>(AudioEvent::play)
+        .expect("AudioEvent");
+    assert_eq!(engine.playing_sound_count(), 2);
+    drop(artboard);
+    assert_eq!(engine.playing_sound_count(), 0);
+}
+
 #[test]
 fn upstream_audio_case_08_artboard_has_nested_audio() {
     assert_named_audio_artboard("grand-parent", 0, true);

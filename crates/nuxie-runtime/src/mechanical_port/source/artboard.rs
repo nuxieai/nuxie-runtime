@@ -4771,7 +4771,9 @@ impl Drop for Artboard {
             );
         }
         if let (Some(engine), Some(identity)) = (
-            self.audio_engine.as_ref(),
+            self.audio_engine.clone().or_else(|| {
+                crate::mechanical_port::source::audio::audio_engine::AudioEngine::runtime_engine(false)
+            }),
             self.runtime_self.audio_identity(),
         ) {
             engine.stop_artboard(identity);

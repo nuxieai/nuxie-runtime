@@ -214,6 +214,9 @@ impl StrokeEffect for ScriptedPathEffect {
         let Some(instance) = self.scripted.runtime_instance() else {
             return;
         };
+        if !instance.borrow_mut().script_lifetime_valid() {
+            return;
+        }
         self.scripted.set_in_update_phase(true);
         let node = crate::scripting::ScriptNode::from_path_effect(paint);
         let mut host = ScriptUpdateRequestHost::default();
@@ -222,12 +225,12 @@ impl StrokeEffect for ScriptedPathEffect {
             node,
             &mut host,
         ) {
-            Ok(output) => {
+            Ok(Some(output)) => {
                 // Through ShapePaintPath, which prunes what the script returned.
                 path.borrow_mut()
                     .add_path(&from_render_raw_path(&output), None);
             }
-            Err(_) => eprintln!("update function failed"),
+            Ok(None) | Err(_) => eprintln!("update function failed"),
         }
         if host.take_requested() {
             // Callback is still in update phase: upstream suppresses this request.

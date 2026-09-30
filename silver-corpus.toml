@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "1371150d929cf8d282d782cb9e5b7fc7783799b1"
+upstream_ref = "2914b0817b6e6749f4f183bb7b03df38ea04dc77"
 expected_entries = 275
 expected_runtime = 227
 expected_scripted = 45
@@ -4106,7 +4106,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"
 provenance_test = "Reusing a path in multiple passes works correctly"
-producer_line = 30
+producer_line = 31
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4546,7 +4546,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "scripted string converter"
-producer_line = 465
+producer_line = 517
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4656,7 +4656,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "Data converter with bound inputs in artboard and state machine"
-producer_line = 495
+producer_line = 547
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4722,7 +4722,7 @@ status = "exact"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_path_effect_test.cpp"
 provenance_test = "A clip follows the path effect on its source's fill"
-producer_line = 58
+producer_line = 59
 note = "The literal upstream initial draw plus 60 frame advances is ported in crates/nuxie-runtime/tests/upstream_scripting_path_effect.rs (a_clip_follows_the_path_effect_on_its_sources_fill) and passes the pinned SRIV comparison, including cached fill-effect clip updates."
 
 [[case]]

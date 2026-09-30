@@ -11,9 +11,82 @@ use super::script_value_to_lua;
 
 const DATA_VALUE_METATABLE_PATCHER: &str = "rive_data_value_metatable_patcher";
 
+#[cfg(test)]
+mod upstream_checked_data_value_tests {
+    use super::*;
+    use crate::vm::{
+        ScriptVm,
+        lua_path::{ScriptedPath, create_scripted_path},
+    };
+
+    #[test]
+    fn lua_todatavalue_accepts_the_four_data_value_kinds_only() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        let lua = vm.lua();
+        let mut state = std::ptr::null_mut();
+        // SAFETY: capture only; inspect after the protected frame unwinds,
+        // while this test retains the VM. No raw stack writes are performed.
+        unsafe {
+            lua.exec_raw::<(), _>((), |pointer| {
+                state = pointer;
+                Ok(())
+            })
+            .unwrap();
+        }
+        let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) };
+        for expected in [
+            ScriptValue::Number(3.0),
+            ScriptValue::String("hi".into()),
+            ScriptValue::Bool(true),
+            ScriptValue::Color(0xFF00FF00),
+        ] {
+            let value = Value::UserData(create_data_value(lua, expected.clone()).unwrap());
+            let accepted = lua_todatavalue(&value)
+                .unwrap()
+                .expect("DataValue accepted");
+            assert_eq!(accepted, expected);
+        }
+        assert!(lua_todatavalue(&Value::Nil).unwrap().is_none());
+        assert!(lua_todatavalue(&Value::Number(42.0)).unwrap().is_none());
+        let mut source = nuxie_render_api::RawPath::new();
+        source.move_to(0.0, 0.0);
+        let path_data = Value::UserData(
+            create_scripted_path(lua, ScriptedPath::from_render_raw_path(source)).unwrap(),
+        );
+        assert!(matches!(&path_data, Value::UserData(_)));
+        assert!(lua_todatavalue(&path_data).unwrap().is_none());
+        // SAFETY: the VM remains alive and no protected frame is active.
+        assert_eq!(
+            unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) },
+            top
+        );
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(super) struct ScriptedDataValue {
     value: ScriptValue,
+}
+
+/// Checked counterpart of lua_todatavalue. The approved Rust wrapper unifies
+/// the four concrete C++ userdata classes, so check both its type and value kind.
+pub(super) fn lua_todatavalue(value: &Value) -> Result<Option<ScriptValue>> {
+    let Value::UserData(value) = value else {
+        return Ok(None);
+    };
+    if !value.is::<ScriptedDataValue>() {
+        return Ok(None);
+    }
+    let value = value.borrow::<ScriptedDataValue>()?;
+    Ok(match value.value() {
+        ScriptValue::Number(_)
+        | ScriptValue::String(_)
+        | ScriptValue::CoreString(_)
+        | ScriptValue::Bool(_)
+        | ScriptValue::Color(_) => Some(value.value().clone()),
+        _ => None,
+    })
 }
 
 impl ScriptedDataValue {

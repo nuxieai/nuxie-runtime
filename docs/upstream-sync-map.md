@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1371150d929cf8d282d782cb9e5b7fc7783799b1`
+- LAST_SYNCED_SHA: `2914b0817b6e6749f4f183bb7b03df38ea04dc77`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 58 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 58 require a Rust translation.
+  There are 57 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 57 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `2914b0817b6e6749f4f183bb7b03df38ea04dc77` | Release nested linear animation instances before their mounted artboard, including data-bound keyframe cleanup. Validate script-authored converter and path-effect return values: accept only the four DataValue kinds and Path/PathData respectively; invalid converter returns produce a successful no-value backend result (empty initial converter value; existing cache preserved), while invalid path returns retain the failure branch and contribute no geometry. Port the two nested-lifetime cases and all three scripting-return cases. Private Dart/WebAssembly BigInt binding changes described in the message are absent from the public delta and are not claimed imported. | — |
 | `1371150d929cf8d282d782cb9e5b7fc7783799b1` | Reconcile ScriptedInterpolator's owned ScriptInput disposal: the existing Rust destructor already clears backlinks and retires only owned ScriptInput occurrences; expose the explicit source-shaped disposal method and route Drop through it. Preserve per-animation clone ownership and avoid a wider disposal refactor. Add the exact upstream data_bound_keyframe_test fixture retrieval and import regression, with supplemental Rust ownership checks. Upstream's C++ sanitizer/leak measurements are not claimed as local results. | — |
 | `def2e241b80f6118a1d3bda8d3689e3f8bfcd430` | **OUTSIDE THE ENABLED RUNTIME PROFILE:** resolve the Luau dependency bump from rive_0_734 (`fb6ff089`) to rive_0_734_ice (`c1c57894`). The complete dependency-tree delta changes only Analysis/src/Frontend.cpp, giving concurrent type-check operations local internal-error reporters. No VM, parser, bytecode compiler or bytecode format changes occur. Static analysis is not in the shipped luaur dependency graph; record the editor-tools relevance in luau-fork.md without claiming that analyzer fix implemented. | — |
 | `576282493a805993d4ca6379e425f105fe0d03d5` | Guard missing view-model IDs/properties, visit authored property graphs once, and memoize active instance copies as null before completing them: active back-edges are dropped, while completed copies remain shared. Route root/default/runtime creation through the copy entry point. Reject null import factories before parsing and missing paint-mutator artboards/factories before paint initialization. Live Rust File factories remain nonnull retained handles. Port all four cycle/ID tests and the null-factory import regression. Private editor pickers, Dart/native plugin and Windows wrapper changes described in the message are absent from the public delta and are not claimed imported. | — |

@@ -1397,14 +1397,12 @@ impl LuaScriptInstance {
         };
         let lua = table.lua();
         let input = lua_data_value::create_data_value(&lua, value).map_err(&conversion_error)?;
-        let output: AnyUserData = function
+        let output: Value = function
             .protected_call((table, input))
             .map_err(&conversion_error)?;
-        let output = output
-            .borrow::<lua_data_value::ScriptedDataValue>()
-            .map_err(&conversion_error)?;
+        let output = lua_data_value::lua_todatavalue(&output).map_err(&conversion_error)?;
         Ok(ScriptDataConverterOptionalCall::Returned(
-            output.value().clone(),
+            output.unwrap_or(ScriptValue::Nil),
         ))
     }
 }
@@ -3360,13 +3358,13 @@ impl ScriptInstance for LuaScriptInstance {
         source: nuxie_render_api::RawPath,
         node: nuxie_runtime::ScriptNode,
         _host: &mut dyn ScriptHost,
-    ) -> std::result::Result<nuxie_render_api::RawPath, ScriptError> {
+    ) -> std::result::Result<Option<nuxie_render_api::RawPath>, ScriptError> {
         self.reset_execution_budget();
         if self.table.is_none() {
             // ScriptedPathEffect rewinds its retained output before checking
             // for a live Lua state. A missing state therefore exposes an
-            // empty effect path, not the input path.
-            return Ok(nuxie_render_api::RawPath::new());
+            // rejected result, not the input path.
+            return Ok(None);
         }
         let table = self.live_table()?;
         renderer::call_path_effect_update(&table, source, node)

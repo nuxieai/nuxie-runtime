@@ -2414,7 +2414,7 @@ pub trait ScriptInstance {
         source: RawPath,
         node: ScriptNode,
         host: &mut dyn ScriptHost,
-    ) -> Result<RawPath, ScriptError> {
+    ) -> Result<Option<RawPath>, ScriptError> {
         let _ = (source, node, host);
         Err(ScriptError::new(
             "script path effects require backend path userdata support",

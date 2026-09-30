@@ -18,6 +18,75 @@ fn converter(source: &str) -> LuaScriptInstance {
 }
 
 #[test]
+fn scripted_converter_returning_a_non_data_value_does_not_crash() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    let factory: Function = vm
+        .eval(
+            r#"type BadConverter = {}
+function convert(self: BadConverter, input: any): any
+  -- Falls off the end: Luau returns nil.
+end
+function reverseConvert(self: BadConverter, input: any): any
+  return 42
+end
+return function(): any
+  return { convert = convert, reverseConvert = reverseConvert }
+end
+"#,
+        )
+        .unwrap();
+    let table: Table = factory.call(()).unwrap();
+    let mut converter = LuaScriptInstance::new(table);
+    assert!(
+        converter
+            .has_data_converter_method(ScriptDataConverterMethod::Convert)
+            .unwrap()
+    );
+    assert!(
+        converter
+            .has_data_converter_method(ScriptDataConverterMethod::ReverseConvert)
+            .unwrap()
+    );
+    let mut state = std::ptr::null_mut();
+    // SAFETY: capture the live state without changing its stack. Read its top
+    // only after exec_raw's protected frame has returned; vm stays alive.
+    unsafe {
+        vm.lua()
+            .exec_raw::<(), _>((), |pointer| {
+                state = pointer;
+                Ok(())
+            })
+            .unwrap();
+    }
+    let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) };
+    let forward = converter
+        .call_data_converter(ScriptDataConverterMethod::Convert, ScriptValue::Number(7.0))
+        .unwrap();
+    assert!(!matches!(
+        forward,
+        ScriptValue::Number(_) | ScriptValue::String(_)
+    ));
+    assert_eq!(forward, ScriptValue::Nil);
+    let reverse = converter
+        .call_data_converter(
+            ScriptDataConverterMethod::ReverseConvert,
+            ScriptValue::String("9".into()),
+        )
+        .unwrap();
+    assert!(!matches!(
+        reverse,
+        ScriptValue::Number(_) | ScriptValue::String(_)
+    ));
+    assert_eq!(reverse, ScriptValue::Nil);
+    // SAFETY: the same retained VM owns this state for the whole test.
+    assert_eq!(
+        unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) },
+        top
+    );
+}
+
+#[test]
 fn scripted_string_converter_support_data_types() {
     let mut converter = converter(
         r#"type InputTypes = DataValueString | DataValueBoolean | DataValueNumber

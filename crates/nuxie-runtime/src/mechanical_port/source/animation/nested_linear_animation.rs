@@ -35,10 +35,11 @@ impl NestedLinearAnimation {
             animation.map(|animation| LinearAnimationInstance::new(animation, artboard, 1.0));
     }
 
-    /// Pinned `NestedLinearAnimation::releaseDependencies` is intentionally a
-    /// no-op. The occurrence retains its animation instance until it is
-    /// initialized again or destroyed.
-    pub fn release_dependencies(&mut self) {}
+    /// Release cloned data binds while the mounted artboard is still alive;
+    /// NestedArtboard destroys that artboard immediately after this hook.
+    pub fn release_dependencies(&mut self) {
+        self.animation_instance = None;
+    }
 
     pub fn animation_instance(&self) -> Option<&LinearAnimationInstance> {
         self.animation_instance.as_ref()

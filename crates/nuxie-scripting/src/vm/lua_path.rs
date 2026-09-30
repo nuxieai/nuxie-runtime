@@ -422,18 +422,32 @@ fn bool_arg_or(value: Option<&Value>, fallback: bool) -> Result<bool> {
     }
 }
 
+/// Checked counterpart of lua_topathdata. Path.new() and the PathData passed
+/// to update() share ScriptedPath in the approved Rust userdata representation.
+pub(super) fn lua_topathdata(value: &Value) -> Result<Option<RenderRawPath>> {
+    let Value::UserData(value) = value else {
+        return Ok(None);
+    };
+    if !value.is::<ScriptedPath>() {
+        return Ok(None);
+    }
+    let path = value.borrow::<ScriptedPath>()?;
+    Ok(Some(to_render_raw_path(&path.raw_path)))
+}
+
 pub(super) fn call_path_effect_update(
     table: &Table,
     source: RenderRawPath,
     node: ScriptNode,
-) -> Result<RenderRawPath> {
+) -> Result<Option<RenderRawPath>> {
     let lua = table.lua();
     let function: luaur_rt::Function = table.get("update")?;
     let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
     let node = lua.create_userdata(LuaScriptedNode::new(node))?;
-    let output: AnyUserData = function.protected_call((table.clone(), source, node))?;
-    let output = output.borrow::<ScriptedPath>()?;
-    Ok(to_render_raw_path(&output.raw_path))
+    let output: Value = function.protected_call((table.clone(), source, node))?;
+    // None is upstream's false result, distinct from a valid empty Path.
+    // Rejection itself is not a Lua execution error.
+    lua_topathdata(&output)
 }
 
 pub(super) fn install_path_global(lua: &Lua) -> Result<()> {
@@ -452,6 +466,153 @@ mod upstream_scripted_path_tests {
     use super::*;
     use crate::vm::ScriptVm;
     use luaur_rt::FromLuaMulti;
+
+    #[test]
+    fn lua_topathdata_accepts_path_and_path_data_and_rejects_the_rest() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        let lua = vm.lua();
+        let mut state = std::ptr::null_mut();
+        // SAFETY: capture only, then observe the caller stack after exec_raw
+        // returns. This test retains vm until after the final observation.
+        unsafe {
+            lua.exec_raw::<(), _>((), |pointer| {
+                state = pointer;
+                Ok(())
+            })
+            .unwrap();
+        }
+        let top = unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) };
+        let mut source = RenderRawPath::new();
+        source.move_to(0.0, 0.0);
+        source.line_to(10.0, 0.0);
+        // The approved Rust wrapper uses ScriptedPath for both the PathData
+        // callback input and script-constructed Path. Exercise both routes.
+        let path_data = Value::UserData(
+            create_scripted_path(lua, ScriptedPath::from_render_raw_path(source)).unwrap(),
+        );
+        assert_eq!(
+            lua_topathdata(&path_data)
+                .unwrap()
+                .expect("PathData accepted")
+                .verbs()
+                .len(),
+            2
+        );
+        let path: Value = vm.eval_bytecode("path_return_type", &compile_source("local p = Path.new(); p:moveTo(Vector(0, 0)); p:lineTo(Vector(10, 0)); return p")).unwrap();
+        assert_eq!(
+            lua_topathdata(&path)
+                .unwrap()
+                .expect("Path accepted")
+                .verbs()
+                .len(),
+            2
+        );
+        assert!(lua_topathdata(&Value::Nil).unwrap().is_none());
+        assert!(lua_topathdata(&Value::Number(42.0)).unwrap().is_none());
+        assert!(
+            lua_topathdata(&Value::Table(lua.create_table()))
+                .unwrap()
+                .is_none()
+        );
+        let unrelated = Value::UserData(
+            super::super::lua_data_value::create_data_value(
+                lua,
+                nuxie_runtime::ScriptValue::Number(1.0),
+            )
+            .unwrap(),
+        );
+        assert!(matches!(&unrelated, Value::UserData(_)));
+        assert!(lua_topathdata(&unrelated).unwrap().is_none());
+        // SAFETY: same retained VM, no active protected callback frame.
+        assert_eq!(
+            unsafe { luaur_vm::functions::lua_gettop::lua_gettop(state) },
+            top
+        );
+    }
+
+    // Supplemental seam regression: invalid returns must not take the valid
+    // empty-path branch, while actual Lua failures remain callback errors.
+    #[test]
+    fn path_effect_return_rejection_is_distinct_from_empty_geometry_and_errors() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        for body in ["return nil", "return 42", "return DataValue.number()"] {
+            let table: Table = vm
+                .eval_bytecode(
+                    "rejected_effect",
+                    &compile_source(&format!(
+                        "return {{update = function(self, path, node) {body} end}}"
+                    )),
+                )
+                .unwrap();
+            assert!(
+                call_path_effect_update(
+                    &table,
+                    RenderRawPath::new(),
+                    ScriptNode::snapshot(None, None),
+                )
+                .unwrap()
+                .is_none()
+            );
+        }
+        let empty: Table = vm
+            .eval_bytecode(
+                "empty_effect",
+                &compile_source(
+                    "return {update = function(self, path, node) return Path.new() end}",
+                ),
+            )
+            .unwrap();
+        assert!(
+            call_path_effect_update(
+                &empty,
+                RenderRawPath::new(),
+                ScriptNode::snapshot(None, None),
+            )
+            .unwrap()
+            .expect("valid empty Path")
+            .verbs()
+            .is_empty()
+        );
+
+        let identity: Table = vm
+            .eval_bytecode(
+                "identity_effect",
+                &compile_source("return {update = function(self, path, node) return path end}"),
+            )
+            .unwrap();
+        let mut source = RenderRawPath::new();
+        source.move_to(0.0, 0.0);
+        source.line_to(10.0, 0.0);
+        assert_eq!(
+            call_path_effect_update(&identity, source, ScriptNode::snapshot(None, None),)
+                .unwrap()
+                .expect("valid input PathData")
+                .verbs()
+                .len(),
+            2
+        );
+
+        let throwing: Table = vm
+            .eval_bytecode(
+                "throwing_effect",
+                &compile_source(
+                    "return {update = function(self, path, node) error('path update failed') end}",
+                ),
+            )
+            .unwrap();
+        assert!(
+            call_path_effect_update(
+                &throwing,
+                RenderRawPath::new(),
+                ScriptNode::snapshot(None, None),
+            )
+            .unwrap_err()
+            .to_string()
+            .contains("path update failed")
+        );
+    }
 
     fn compile_source(source: &str) -> Vec<u8> {
         use luaur_compiler::functions::luau_compile::luau_compile;

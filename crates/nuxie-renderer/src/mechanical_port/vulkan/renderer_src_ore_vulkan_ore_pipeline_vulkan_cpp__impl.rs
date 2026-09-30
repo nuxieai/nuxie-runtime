@@ -322,9 +322,13 @@ pub(crate) fn makePipeline(
 
     let hasDepthStencil = desc.depthStencil.format != TextureFormat::rgba8unorm;
     let stencilTestEnabled = hasDepthStencil && hasStencilLocal(desc.depthStencil.format);
+    // Vulkan drops depth writes whenever the test is off, so a write with
+    // an always compare still needs the test enabled.
     let depthStencil = vk::PipelineDepthStencilStateCreateInfo::default()
         .depth_test_enable(
-            hasDepthStencil && desc.depthStencil.depthCompare != CompareFunction::always,
+            hasDepthStencil
+                && (desc.depthStencil.depthCompare != CompareFunction::always
+                    || desc.depthStencil.depthWriteEnabled),
         )
         .depth_write_enable(hasDepthStencil && desc.depthStencil.depthWriteEnabled)
         .depth_compare_op(oreCompareFuncToVk(desc.depthStencil.depthCompare))

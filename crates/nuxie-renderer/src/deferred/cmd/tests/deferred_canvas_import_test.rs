@@ -1,4 +1,4 @@
-//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 7732f41e.
+//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 0515bfec.
 //! Image:view() records a sample view; the consumer performs the real wrap at
 //! replay, after the canvas content that wrote the source, including when a
 //! script writes and samples the same canvas in one frame.
@@ -6,8 +6,7 @@ use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::*;
 use nuxie_ore_metal::{
     context::{
-        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor,
-        ShaderTarget,
+        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor, ShaderTarget,
     },
     gpu_resource::AnyResourceHandle,
     render_pass::RenderPassApi,
@@ -110,6 +109,7 @@ impl ContextApi for RecordingOreContext {
 }
 
 struct ImportOrderSink {
+    foreign_preps: Vec<usize>,
     open_screen: bool,
     ore_frame_ends: u32,
     ore_frame_afters: u32,
@@ -128,6 +128,7 @@ impl ImportOrderSink {
 
     fn with_steps(steps: Rc<RefCell<Vec<&'static str>>>) -> Self {
         Self {
+            foreign_preps: Vec::new(),
             open_screen: true,
             ore_frame_ends: 0,
             ore_frame_afters: 0,
@@ -142,6 +143,10 @@ impl ImportOrderSink {
 }
 
 impl DeferredFrameSink for ImportOrderSink {
+    fn prep_foreign_image(&mut self, image: Rc<dyn RenderImage>) -> Option<Rc<dyn RenderImage>> {
+        self.foreign_preps.push(image.image_identity());
+        Some(image)
+    }
     fn render_context(&mut self) -> Option<PersistentFactoryContext> {
         self.replay_context.clone()
     }
@@ -199,18 +204,75 @@ fn record_canvas_write_and_sample(
     let path = session.make_empty_render_path();
     renderer.draw_path(path.as_ref(), paint.as_ref());
     nuxie_render_api::DeferredCanvasHost::end_canvas_content(session, canvas);
-    let image = canvas.borrow().render_image();
-    let info = CanvasImageInfo {
-        identity: image.image_identity(),
-        width: canvas.borrow().width(),
-        height: canvas.borrow().height(),
-        owner: Rc::new(image) as Rc<dyn Any>,
-    };
     assert!(session
         .ore_context
         .borrow_mut()
-        .recordWrapCanvasImage(info)
+        .recordWrapCanvasImage(nuxie_render_api::canvas_texture_info(canvas))
         .is_some());
+}
+
+// A file asset without a recorder mint id or GPU texture, matching upstream's
+// deliberately non-RiveRenderImage test double.
+#[derive(Clone)]
+struct FakeForeignImage(Rc<()>);
+impl RenderImage for FakeForeignImage {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
+    fn width(&self) -> u32 {
+        8
+    }
+    fn height(&self) -> u32 {
+        8
+    }
+}
+
+#[test]
+fn foreign_image_view_resolves_through_registry_not_canvas_table() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    let image: Rc<dyn RenderImage> = Rc::new(FakeForeignImage(Rc::new(())));
+    assert!(session
+        .ore_context
+        .borrow_mut()
+        .recordWrapForeignImageView(CanvasImageInfo {
+            identity: image.image_identity(),
+            width: 8,
+            height: 8,
+            owner: Rc::new(image.clone()),
+        })
+        .is_some());
+    session.close_open_range();
+    let frame = snapshot_frame(&mut session);
+    let mut sink = ImportOrderSink::new();
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+    assert_eq!(sink.foreign_preps, [image.image_identity()]);
+    assert!(sink.ore.borrow().sample_wraps.is_empty());
+}
+
+#[test]
+fn canvas_sampled_without_opening_it_this_frame_still_resolves() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    let canvas = fake_canvas();
+    assert!(session
+        .ore_context
+        .borrow_mut()
+        .recordWrapCanvasImage(nuxie_render_api::canvas_texture_info(&canvas))
+        .is_some());
+    session.close_open_range();
+    let frame = snapshot_frame(&mut session);
+    let mut sink = ImportOrderSink::new();
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+    assert_eq!(
+        sink.ore.borrow().sample_wraps,
+        [Rc::as_ptr(&canvas) as *const () as usize]
+    );
+    assert!(sink.foreign_preps.is_empty());
 }
 
 #[test]

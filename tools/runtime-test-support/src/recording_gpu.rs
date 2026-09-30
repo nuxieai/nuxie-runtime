@@ -219,8 +219,11 @@ impl ContextApi for ObservedContext {
     ) -> Option<AnyResourceHandle> {
         unsafe { self.inner.wrapRiveTexture(value, w, h) }
     }
-    fn recordWrapCanvasImage(&mut self, value: CanvasImageInfo) -> Option<AnyResourceHandle> {
+    fn recordWrapCanvasImage(&mut self, value: CanvasTextureInfo) -> Option<AnyResourceHandle> {
         self.inner.recordWrapCanvasImage(value)
+    }
+    fn recordWrapForeignImageView(&mut self, value: CanvasImageInfo) -> Option<AnyResourceHandle> {
+        self.inner.recordWrapForeignImageView(value)
     }
     fn recordWrapImageView(&mut self, id: u32, w: u32, h: u32) -> Option<AnyResourceHandle> {
         self.inner.recordWrapImageView(id, w, h)

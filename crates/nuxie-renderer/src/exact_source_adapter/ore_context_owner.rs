@@ -86,8 +86,11 @@ impl ContextApi for OwnedContext {
     fn pendingFrame(&self) -> SharedOreCommandBuffer {
         self.context.borrow().pendingFrame()
     }
-    fn recordWrapCanvasImage(&mut self, image: CanvasImageInfo) -> Option<AnyResourceHandle> {
-        self.context.borrow_mut().recordWrapCanvasImage(image)
+    fn recordWrapCanvasImage(&mut self, canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        self.context.borrow_mut().recordWrapCanvasImage(canvas)
+    }
+    fn recordWrapForeignImageView(&mut self, image: CanvasImageInfo) -> Option<AnyResourceHandle> {
+        self.context.borrow_mut().recordWrapForeignImageView(image)
     }
     fn recordWrapImageView(
         &mut self,

@@ -4,7 +4,7 @@ use super::{
     deferred_cmd::replay_render_commands_with_optional_factory,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
     gpu_census::{take_gpu_census, GpuCensus},
-    render_handle::INVALID_RENDER_HANDLE,
+    render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE},
     render_replay::*,
 };
 use crate::deferred::ore::{ore_make_replay::OreResident, ore_replay::replayOreStream};
@@ -56,6 +56,11 @@ pub trait DeferredFrameSink {
         None
     }
     fn end_canvas_content(&mut self) {}
+    /// Prepare a foreign image for sampling on this replay device. Returning
+    /// None drops its dependent make when a lazy upload is not ready.
+    fn prep_foreign_image(&mut self, image: Rc<dyn RenderImage>) -> Option<Rc<dyn RenderImage>> {
+        Some(image)
+    }
 }
 #[derive(Default)]
 pub struct DeferredFrame {
@@ -203,11 +208,12 @@ impl DeferredReplayer {
         // sink callbacks free to access the same retained concrete factory.
         let mut factory = sink.factory();
         let sink = RefCell::new(sink);
+        let canvas_image = RefCell::new(canvas_image);
         let content_canvas = RefCell::new(content_canvas);
         let open_content = RefCell::new((INVALID_RENDER_HANDLE, None::<RendererOwner>));
         let mut hooks = ReplayHooks {
             filter: ReplayFilter::Resources,
-            canvas_image: Some(Box::new(canvas_image)),
+            canvas_image: Some(Box::new(|id| canvas_image.borrow_mut()(id))),
             stats: Some(&mut self.stats),
             begin_canvas_content: Some(Box::new(|id, clear_color| {
                 let mut open = open_content.borrow_mut();
@@ -280,6 +286,7 @@ impl DeferredReplayer {
                 &self.table,
                 ore_reals,
                 &content_canvas,
+                &canvas_image,
                 ore_caps,
             );
             if let Some(screen) = screen {
@@ -315,6 +322,7 @@ impl DeferredReplayer {
                 &self.table,
                 ore_reals,
                 &content_canvas,
+                &canvas_image,
                 ore_caps,
             );
         }
@@ -356,6 +364,7 @@ fn open_screen_and_ore(
     table: &ResourceTable,
     reals: &[AnyResourceHandle],
     content_canvas: &RefCell<&mut dyn FnMut(u32) -> Option<RenderCanvasHandle>>,
+    canvas_image: &RefCell<&mut dyn FnMut(u32) -> Option<Rc<dyn RenderImage>>>,
     ore_caps: &ReplayCaps,
 ) -> Option<RendererOwner> {
     let screen = screens
@@ -386,6 +395,13 @@ fn open_screen_and_ore(
                             .map(|canvas| canvas_texture_info(&canvas))
                     },
                     &mut |id| {
+                        if id & CANVAS_HANDLE_FLAG != 0 {
+                            let foreign = canvas_image.borrow_mut()(id & CANVAS_HANDLE_MASK)?;
+                            return sink
+                                .borrow_mut()
+                                .prep_foreign_image(foreign)
+                                .and_then(|image| image.ore_texture_info());
+                        }
                         table
                             .images
                             .get(id)

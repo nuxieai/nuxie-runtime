@@ -308,7 +308,10 @@ pub trait ContextApi {
     fn pendingFrame(&self) -> crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer {
         self.contextBase().pendingFrame()
     }
-    fn recordWrapCanvasImage(&mut self, _image: CanvasImageInfo) -> Option<AnyResourceHandle> {
+    fn recordWrapCanvasImage(&mut self, _canvas: CanvasTextureInfo) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn recordWrapForeignImageView(&mut self, _image: CanvasImageInfo) -> Option<AnyResourceHandle> {
         None
     }
     fn recordWrapImageView(

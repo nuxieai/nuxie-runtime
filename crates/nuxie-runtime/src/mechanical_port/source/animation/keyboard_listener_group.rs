@@ -177,6 +177,9 @@ impl KeyboardListenerGroup {
                     ListenerInvocation::keyboard(key.raw(), modifiers.bits(), pressed, repeat),
                 );
             });
+            // The matching listener consumes this key after its changes run.
+            // FocusData still offers it to peers before reporting the claim up.
+            return true;
         }
         false
     }

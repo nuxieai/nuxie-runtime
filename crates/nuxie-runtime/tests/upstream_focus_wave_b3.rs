@@ -252,6 +252,70 @@ use std::{
     rc::Rc,
 };
 
+// Upstream 1cdd96e3: a claim stops ancestor propagation, not peer delivery.
+mod keyboard_listener_claims_1cdd96e3 {
+    use super::*;
+    use nuxie_runtime::source::{
+        core::CoreArena, focus_data::RuntimeKeyboardListenerHandle,
+        input::keyboard_listener::KeyboardListener,
+    };
+
+    struct RecordingKeyboardListener {
+        claims: bool,
+        calls: Rc<Cell<usize>>,
+    }
+
+    impl KeyboardListener<Key, KeyModifiers> for RecordingKeyboardListener {
+        fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+            self.calls.set(self.calls.get() + 1);
+            self.claims
+        }
+
+        fn text_input(&mut self, _: &str) -> bool {
+            false
+        }
+    }
+
+    fn check_peers(first_claims: bool, expected_claim: bool) {
+        let arena = CoreArena::default();
+        let focus_data = arena.insert(FocusData::default());
+        let first_calls = Rc::new(Cell::new(0));
+        let second_calls = Rc::new(Cell::new(0));
+        let first: Rc<RefCell<dyn KeyboardListener<Key, KeyModifiers>>> =
+            Rc::new(RefCell::new(RecordingKeyboardListener {
+                claims: first_claims,
+                calls: first_calls.clone(),
+            }));
+        let second: Rc<RefCell<dyn KeyboardListener<Key, KeyModifiers>>> =
+            Rc::new(RefCell::new(RecordingKeyboardListener {
+                claims: false,
+                calls: second_calls.clone(),
+            }));
+        focus_data
+            .with_downcast_mut::<FocusData, _>(|data| {
+                data.add_keyboard_listener(RuntimeKeyboardListenerHandle::from_listener(&first));
+                data.add_keyboard_listener(RuntimeKeyboardListenerHandle::from_listener(&second));
+            })
+            .expect("FocusData");
+        assert_eq!(
+            FocusData::key_input_occurrence(&focus_data, Key::A, KeyModifiers::NONE, true, false),
+            expected_claim
+        );
+        assert_eq!(first_calls.get(), 1);
+        assert_eq!(second_calls.get(), 1);
+    }
+
+    #[test]
+    fn a_claiming_keyboard_listener_does_not_cut_off_its_peers() {
+        check_peers(true, true);
+    }
+
+    #[test]
+    fn a_focus_data_with_no_claiming_listener_reports_unhandled() {
+        check_peers(false, false);
+    }
+}
+
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
     loop {
         let mut byte = (value & 0x7f) as u8;

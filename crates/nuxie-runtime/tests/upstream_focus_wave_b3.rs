@@ -3,6 +3,131 @@
 //! Retained pointer identity and callback observations replace the former
 //! façade's arena IDs and synthetic event stream.
 
+// Upstream fa3f6f30: all three directional-focus cases, with independent
+// executions for each SECTION of the position case.
+mod directional_fa3f6f30 {
+    use super::*;
+    use nuxie_runtime::source::{
+        animation::{state_machine::StateMachine, state_machine_instance::StateMachineInstance},
+        artboard::Artboard,
+        core::CoreArena,
+        semantic::semantic_snapshot::Bounds,
+    };
+
+    fn empty_machine(
+        with_focus: bool,
+    ) -> (
+        CoreArena,
+        RuntimeArtboardInstanceHandle,
+        RuntimeStateMachineInstanceHandle,
+    ) {
+        let arena = CoreArena::default();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let mut artboard = Artboard::default();
+        artboard.set_factory(
+            RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
+        );
+        artboard.base.base.set_clip(true);
+        let source = arena.insert(artboard);
+        let instance = Artboard::instance_from_handle(&source).expect("empty artboard instance");
+        if with_focus {
+            instance.ensure_focus_manager();
+        }
+        let definition = arena.insert(StateMachine::default());
+        let machine = StateMachineInstance::new(definition, instance.downgrade());
+        (arena, instance, machine)
+    }
+
+    fn node(manager: &RuntimeFocusManagerHandle, x: f32, y: f32) -> FocusNodeRef {
+        let node = observed_node(&Rc::new(RefCell::new(Vec::new())));
+        node.borrow_mut().world_bounds = Bounds {
+            min_x: x,
+            min_y: y,
+            max_x: x + 10.0,
+            max_y: y + 10.0,
+        };
+        attached(manager, None, node)
+    }
+
+    fn position_section(section: u8) {
+        let (_arena, _instance, machine) = empty_machine(true);
+        let manager = focus_manager(&machine);
+        let center = node(&manager, 100.0, 100.0);
+        let left = node(&manager, 0.0, 100.0);
+        let right = node(&manager, 200.0, 100.0);
+        let up = node(&manager, 100.0, 0.0);
+        let down = node(&manager, 100.0, 200.0);
+        match section {
+            0 => {
+                assert!(!machine.with_instance_mut(|smi| smi.focus_left()));
+                assert!(!machine.with_instance_mut(|smi| smi.focus_right()));
+                assert!(!machine.with_instance_mut(|smi| smi.focus_up()));
+                assert!(!machine.with_instance_mut(|smi| smi.focus_down()));
+                assert_eq!(primary(&manager), None);
+            }
+            1 => {
+                manager.with_focus_manager_mut(|fm| fm.set_focus(center.clone()));
+                assert!(machine.with_instance_mut(|smi| smi.focus_left()));
+                assert_eq!(primary(&manager), Some(node_key(&left)));
+                manager.with_focus_manager_mut(|fm| fm.set_focus(center.clone()));
+                assert!(machine.with_instance_mut(|smi| smi.focus_right()));
+                assert_eq!(primary(&manager), Some(node_key(&right)));
+                manager.with_focus_manager_mut(|fm| fm.set_focus(center.clone()));
+                assert!(machine.with_instance_mut(|smi| smi.focus_up()));
+                assert_eq!(primary(&manager), Some(node_key(&up)));
+                manager.with_focus_manager_mut(|fm| fm.set_focus(center));
+                assert!(machine.with_instance_mut(|smi| smi.focus_down()));
+                assert_eq!(primary(&manager), Some(node_key(&down)));
+            }
+            2 => {
+                manager.with_focus_manager_mut(|fm| fm.set_focus(left.clone()));
+                assert!(!machine.with_instance_mut(|smi| smi.focus_left()));
+                assert_eq!(primary(&manager), Some(node_key(&left)));
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn nothing_focused() {
+        position_section(0);
+    }
+
+    #[test]
+    fn each_direction_from_center() {
+        position_section(1);
+    }
+
+    #[test]
+    fn edge_keeps_focus() {
+        position_section(2);
+    }
+
+    #[test]
+    fn uses_external_focus_manager() {
+        let (_arena, _instance, machine) = empty_machine(true);
+        let external = RuntimeFocusManagerHandle::new(FocusManager::new());
+        let a = node(&external, 0.0, 0.0);
+        let b = node(&external, 100.0, 0.0);
+        external.with_focus_manager_mut(|fm| fm.set_focus(a.clone()));
+        machine.with_instance_mut(|smi| smi.set_external_focus_manager(Some(external.clone())));
+        assert!(machine.with_instance_mut(|smi| smi.focus_right()));
+        assert_eq!(primary(&external), Some(node_key(&b)));
+        assert!(machine.with_instance_mut(|smi| smi.focus_left()));
+        assert_eq!(primary(&external), Some(node_key(&a)));
+    }
+
+    #[test]
+    fn without_manager_returns_false() {
+        let (_arena, _instance, machine) = empty_machine(false);
+        assert!(machine.with_instance(|smi| smi.focus_manager()).is_none());
+        assert!(!machine.with_instance_mut(|smi| smi.focus_left()));
+        assert!(!machine.with_instance_mut(|smi| smi.focus_right()));
+        assert!(!machine.with_instance_mut(|smi| smi.focus_up()));
+        assert!(!machine.with_instance_mut(|smi| smi.focus_down()));
+    }
+}
+
 // Visibility cases from upstream 9d2e7d04, updated by 9b9cd7b1. The mock observes
 // eligibility and callbacks; all traversal and root scoping use real owners.
 mod visibility_9d2e7d04 {

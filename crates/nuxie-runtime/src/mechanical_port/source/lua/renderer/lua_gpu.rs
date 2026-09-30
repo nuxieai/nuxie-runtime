@@ -1,6 +1,8 @@
 // Upstream 9f1d2ed1: the executable Lua GPU layout path lives in
 // crates/nuxie-scripting/src/gpu_canvas_ore/shader.rs and delegates reflection to
-// nuxie_ore_metal::bind_group_layout::makeBindGroupLayoutFromShader. This retained
+// nuxie_ore_metal::bind_group_layout::makeBindGroupLayoutFromBindingMap, including
+// both stage pair sources for depth-only non-filtering samplers (50ba2f5a).
+// The legacy live adapter uses the same builder in exact_gpu_canvas.rs. This retained
 // mechanical file is not compiled; its older local derivation is not the live owner.
 use crate::mechanical_port::source::{
     assets::{script_asset::ScriptAsset, shader_asset::ShaderAsset},

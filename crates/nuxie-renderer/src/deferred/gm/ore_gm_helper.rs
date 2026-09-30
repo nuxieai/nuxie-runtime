@@ -54,9 +54,14 @@ pub(super) fn assert_pixels_equal(name: &str, variant: usize, a: &[u8], b: &[u8]
 }
 
 pub(super) fn assert_cpp_gm_pixels(name: &str, pixels: Vec<u8>) {
-    let actual = pixel_compare::RgbaImage::new(SIZE, SIZE, pixels).expect("GM dimensions");
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../fixtures/renderer/reference/metal/gm/{name}.png"));
+    assert_cpp_gm_pixels_with_size(name, SIZE, SIZE, pixels);
+}
+
+pub(super) fn assert_cpp_gm_pixels_with_size(name: &str, width: u32, height: u32, pixels: Vec<u8>) {
+    let actual = pixel_compare::RgbaImage::new(width, height, pixels).expect("GM dimensions");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+        "../../fixtures/renderer/reference/metal/gm/{name}.png"
+    ));
     let expected = pixel_compare::RgbaImage::read_png(path).expect("pinned C++ GM capture");
     let result = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
         .expect("same GM dimensions");
@@ -68,8 +73,7 @@ pub(super) fn assert_cpp_gm_pixels(name: &str, pixels: Vec<u8>) {
     assert!(
         result.within_tolerance,
         "{name}: {} differing pixels, max channel delta {}",
-        result.different_pixels,
-        result.max_channel_delta
+        result.different_pixels, result.max_channel_delta
     );
 }
 
@@ -432,12 +436,14 @@ pub(super) fn vertex_buffer(ctx: &mut dyn ContextApi, label: &str) -> AnyResourc
     })
     .expect("GM vertex buffer")
 }
+pub(super) const K_DEPTH_SAMPLE_WITNESS: u32 = 13;
+
 pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
     use nuxie_runtime::source::{assets::shader_asset::ShaderAsset, factory::RuntimeFactoryHandle};
     let header = fixture("gm/ore_gm_shaders.rstb.hpp");
     assert_eq!(
         format!("{:x}", Sha256::digest(&header)),
-        "47acb8487b4e252705531a62ce97f3c7a2eaaefef231f57b2e15e45b2490b51c"
+        "9e575fc2d477f07195f6016446a13f2d830aed0ff12c4f4a9d3a8f2eefef45cf"
     );
     let header = String::from_utf8(header).unwrap();
     let data = header
@@ -456,8 +462,10 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
         .filter(|s| !s.is_empty())
         .map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).unwrap())
         .collect();
-    const OFFSETS: [usize; 14] = [
-        0, 5058, 10075, 17557, 29566, 37399, 44090, 49771, 55766, 61447, 69484, 77869, 83422, 91967,
+    // Exact kShaderOffsets in the 50ba2f5a source header; not the older .rstb.
+    const OFFSETS: [usize; 15] = [
+        0, 5058, 10075, 17597, 29646, 37479, 44210, 49931, 55986, 61707, 69844, 78289, 83882,
+        92467, 99060,
     ];
     let mut envelope = vec![0];
     envelope.extend_from_slice(&bytes[OFFSETS[id as usize]..OFFSETS[id as usize + 1]]);

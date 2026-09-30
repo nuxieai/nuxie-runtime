@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6a717fa59880458141ac955bc00f86e80da54189`
+- LAST_SYNCED_SHA: `50ba2f5a581089e93592393d00b61da4ba46473e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 53 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 53 require a Rust translation.
+  There are 52 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 52 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `50ba2f5a581089e93592393d00b61da4ba46473e` | Preserve complete compiler diagnostics and labeled replay failure notes, clearing notes on resource reuse/destruction. Carry depth-only non-filtering sampler flags through reflected layouts, per-binding intern IDs, native Lua and WebGPU. Existing live Rust hosts already carry full frame descriptors; upstream's HostFrameSink convenience class is unshipped. Import the regenerated upstream GM shader fixture and port the complete depth-sampling scene and both new layout scenarios. D3D-only implementations and the upstream-only golden CLI's optional allow-new flag are outside the shipped profile; Wasm trap-detail and layout-POD changes remain deferred. Private shader compiler and Unreal CI changes named in the message are absent from the public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `6a717fa59880458141ac955bc00f86e80da54189` | Re-sync borrowed Rive Vulkan textures each frame, retaining their source texture and unregistering/detaching weak context links at destruction. Advertise only host-enabled Vulkan capabilities; enable supported anisotropy and depth-bias clamp in the Rust device owner. Save both valid-sized images on GM parity failure. Wasm image views, console time-zone handling, WAMR AOT extraction and Windows WAMR links remain deferred. Private Artemis window/host changes described in the message are absent from the public delta and are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `14bdbfaf603065435cd8393cef3ca5a47b4cf80b` | Centralize texture upload and view-range validation, normalize zero extents/counts, and carry explicit upload byte sizes through native Lua and deferred recording/replay. Render into nonzero mips using view extents and Vulkan subresource ranges with pre-batch layout tracking. Port all six GPU-free range cases and the complete mip-render-target scene. The live Rust Vulkan swapchain already handles successful suboptimal results. Unshipped D3D implementations are not imported; Wasm scripting GPU proxy/VM changes remain deferred. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `bb2903fafe88ce68976eb5a4448c5542d6823e5d` | Retain failed-import occurrences through importer resolution, with cleanup on every return path, and register NestedArtboard/ScriptInputArtboard referencers only after successful import. Expose the tools registrar getter; the Rust backboard importer already initializes its file reference to None. Share the upstream RivBytes test builder and port both malformed-stream regressions. Private rive_native registrar-map ownership changes are absent from the public delta; no native binding or C++ sanitizer result is claimed imported. | — |

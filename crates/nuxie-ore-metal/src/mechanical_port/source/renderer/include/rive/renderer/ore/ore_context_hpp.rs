@@ -263,15 +263,7 @@ impl ContextState {
     }
 
     pub fn setLastError(&self, message: impl Into<String>) {
-        let mut message = message.into();
-        if message.len() > 1023 {
-            let mut end = 1023;
-            while !message.is_char_boundary(end) {
-                end -= 1;
-            }
-            message.truncate(end);
-        }
-        *self.lockLastError() = message;
+        *self.lockLastError() = message.into();
     }
 }
 
@@ -595,15 +587,20 @@ impl Context {
     // {
     //     va_list args;
     //     va_start(args, fmt);
-    //     char buf[1024];
-    //     vsnprintf(buf, sizeof(buf), fmt, args);
+    //     va_list sizing;
+    //     va_copy(sizing, args);
+    //     int size = vsnprintf(nullptr, 0, fmt, sizing);
+    //     va_end(sizing);
+    //     if (size < 0) { va_end(args); m_lastError = fmt; return; }
+    //     std::vector<char> buf(static_cast<size_t>(size) + 1);
+    //     vsnprintf(buf.data(), buf.size(), fmt, args);
     //     va_end(args);
-    //     m_lastError = buf;
+    //     m_lastError.assign(buf.data(), static_cast<size_t>(size));
     // }
     //
     // C variadic formatting has no direct Rust ABI. The source-shaped
     // translation receives the already formatted message; callers preserve
-    // the source format string, truncation bound, and publication order at
+    // the full formatted source message and publication order at
     // their concrete backend boundary.
     pub fn setLastError(&self, message: impl Into<String>) {
         self.state.setLastError(message);
@@ -955,6 +952,9 @@ mod tests {
         assert_eq!(state.lastError(), "previous failure");
         state.setLastError("next failure");
         assert_eq!(state.lastError(), "next failure");
+        let compiler_log = "compiler output λ\n".repeat(200);
+        state.setLastError(compiler_log.clone());
+        assert_eq!(state.lastError(), compiler_log);
         state.clearLastError();
         assert_eq!(state.lastError(), "");
         let manager = state.manager().expect("manager");

@@ -9,6 +9,7 @@ use crate::{
     gpu_resource::AnyResourceHandle,
     types::*,
 };
+use std::collections::HashMap;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -29,9 +30,17 @@ pub struct OreResident {
     pub objects: Vec<Option<AnyResourceHandle>>,
     pub generations: Vec<u32>,
     pub kinds: Vec<OreKind>,
+    pub failureNotes: HashMap<u32, String>,
 }
 impl OreResident {
+    pub fn noteFailure(&mut self, id: u32, note: String) {
+        self.failureNotes.insert(id, note);
+    }
+    pub fn failureNote(&self, id: u32) -> Option<&str> {
+        self.failureNotes.get(&id).map(String::as_str)
+    }
     pub fn set(&mut self, id: u32, obj: Option<AnyResourceHandle>, generation: u32, kind: OreKind) {
+        self.failureNotes.remove(&id);
         let id = id as usize;
         if id > self.objects.len() {
             debug_assert!(false, "non-dense ORE resource id");
@@ -51,6 +60,7 @@ impl OreResident {
         let id = id as usize;
         if id < self.objects.len() && self.generations[id] == generation {
             self.objects[id] = None;
+            self.failureNotes.remove(&(id as u32));
         }
     }
     pub fn get(&self, id: u32) -> Option<AnyResourceHandle> {
@@ -115,15 +125,50 @@ fn req(
     }
     r
 }
-fn skipUnresolvedMake(table: &mut OreResident, id: u32, generation: u32, what: &str) -> bool {
+fn describeMake(what: &str, label: Option<&str>) -> String {
+    format!("{what} '{}'", label.unwrap_or(""))
+}
+fn skipUnresolvedMake(
+    table: &mut OreResident,
+    id: u32,
+    generation: u32,
+    what: &str,
+    label: Option<&str>,
+) -> bool {
+    let description = describeMake(what, label);
     warn_throttled!(
         "rive ore replay: skip make {} id={} gen={} (unresolved dep, churn)",
-        what,
+        description,
         id,
         generation
     );
     table.set(id, None, generation, OreKind::none);
+    table.noteFailure(id, format!("{description} skipped, unresolved dependency"));
     true
+}
+fn setMade(
+    table: &mut OreResident,
+    id: u32,
+    generation: u32,
+    kind: OreKind,
+    object: Option<AnyResourceHandle>,
+    what: &str,
+    label: Option<&str>,
+    why: &str,
+) {
+    let failed = object.is_none();
+    table.set(id, object, generation, kind);
+    if failed {
+        let description = describeMake(what, label);
+        warn_throttled!(
+            "rive ore replay: make {} id={} gen={} failed: {}",
+            description,
+            id,
+            generation,
+            why
+        );
+        table.noteFailure(id, format!("{description} failed: {why}"));
+    }
 }
 
 pub fn replayOreLifecycle(
@@ -223,11 +268,17 @@ pub fn replayOreLifecycle(
                 glFixupSize: fixups.map_or(0, |b| b.len() as u32),
                 shaderAssetId: p.shaderAssetId,
             };
-            table.set(
+            ctx.clearLastError();
+            let module = ctx.makeShaderModule(&d);
+            setMade(
+                table,
                 m.id,
-                ctx.makeShaderModule(&d),
                 m.generation,
                 OreKind::shaderModule,
+                module,
+                "shader module",
+                d.label,
+                &ctx.lastError(),
             );
         }
         CommandType::makeBindGroupLayout => {
@@ -270,7 +321,7 @@ pub fn replayOreLifecycle(
                 layerCount: p.layerCount,
             };
             if unresolved {
-                return skipUnresolvedMake(table, m.id, m.generation, "textureView");
+                return skipUnresolvedMake(table, m.id, m.generation, "textureView", None);
             }
             table.set(
                 m.id,
@@ -355,19 +406,20 @@ pub fn replayOreLifecycle(
                 label: cstr(reader, p.label),
             };
             if unresolved {
-                return skipUnresolvedMake(table, m.id, m.generation, "pipeline");
+                return skipUnresolvedMake(table, m.id, m.generation, "pipeline", d.label);
             }
             let mut error = String::new();
             let pipeline = ctx.makePipeline(&d, Some(&mut error));
-            if pipeline.is_none() {
-                warn_throttled!(
-                    "rive ore replay: makePipeline id={} gen={} failed: {}",
-                    m.id,
-                    m.generation,
-                    error
-                );
-            }
-            table.set(m.id, pipeline, m.generation, OreKind::pipeline);
+            setMade(
+                table,
+                m.id,
+                m.generation,
+                OreKind::pipeline,
+                pipeline,
+                "pipeline",
+                d.label,
+                &error,
+            );
         }
         CommandType::makeBindGroup => {
             let m: MakeResourcePOD = reader.read();
@@ -436,17 +488,20 @@ pub fn replayOreLifecycle(
                 label: cstr(reader, p.label),
             };
             if unresolved {
-                return skipUnresolvedMake(table, m.id, m.generation, "bindGroup");
+                return skipUnresolvedMake(table, m.id, m.generation, "bindGroup", d.label);
             }
+            ctx.clearLastError();
             let group = ctx.makeBindGroup(&d);
-            if group.is_none() {
-                warn_throttled!(
-                    "rive ore replay: makeBindGroup id={} gen={} returned null",
-                    m.id,
-                    m.generation
-                );
-            }
-            table.set(m.id, group, m.generation, OreKind::bindGroup);
+            setMade(
+                table,
+                m.id,
+                m.generation,
+                OreKind::bindGroup,
+                group,
+                "bind group",
+                d.label,
+                &ctx.lastError(),
+            );
         }
         CommandType::bufferUpdate => {
             let p: BufferUpdatePOD = reader.read();
@@ -486,8 +541,7 @@ pub fn replayOreLifecycle(
                 let wrapped = if let Some(image) = image.filter(|i| !i.texture.is_null()) {
                     unsafe { ctx.wrapRiveTexture(image.texture, image.width, image.height) }
                 } else {
-                    skipUnresolvedMake(table, p.id, p.generation, "wrapImageView");
-                    None
+                    return skipUnresolvedMake(table, p.id, p.generation, "wrapImageView", None);
                 };
                 table.set(p.id, wrapped, p.generation, OreKind::textureView);
                 return true;
@@ -513,4 +567,47 @@ pub fn replayOreLifecycle(
 }
 pub fn skipOreCommand(kind: CommandType, reader: &mut OreCommandReader<'_>) {
     reader.skip(ore_payload_size_of(kind));
+}
+
+#[cfg(test)]
+mod failure_note_tests {
+    use super::*;
+
+    #[test]
+    fn failure_notes_follow_slot_generation_lifecycle() {
+        let mut table = OreResident::default();
+        skipUnresolvedMake(&mut table, 0, 4, "pipeline", Some("test pipeline"));
+        assert_eq!(
+            table.failureNote(0),
+            Some("pipeline 'test pipeline' skipped, unresolved dependency")
+        );
+        table.destroy(0, 3);
+        assert!(table.failureNote(0).is_some());
+        table.destroy(0, 4);
+        assert_eq!(table.failureNote(0), None);
+        table.noteFailure(0, "stale failure".into());
+        table.set(0, None, 5, OreKind::shaderModule);
+        assert_eq!(table.failureNote(0), None);
+    }
+
+    #[test]
+    fn failed_make_keeps_complete_compiler_diagnostic() {
+        let mut table = OreResident::default();
+        let reason = "compiler diagnostic λ\n".repeat(200);
+        setMade(
+            &mut table,
+            0,
+            1,
+            OreKind::shaderModule,
+            None,
+            "shader module",
+            Some("large shader"),
+            &reason,
+        );
+        assert_eq!(
+            table.failureNote(0),
+            Some(format!("shader module 'large shader' failed: {reason}").as_str())
+        );
+        assert_eq!(table.kinds[0], OreKind::shaderModule);
+    }
 }

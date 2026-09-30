@@ -181,6 +181,24 @@ fn descriptor_size(s: &mut LuaState) -> (u32, u32) {
     s.pop(1);
     (w, h)
 }
+fn find_file_asset(
+    reference: &ScopedAssetReference,
+    file: &File,
+    mut accept: impl FnMut(&CoreHandle) -> Option<String>,
+) -> Option<CoreHandle> {
+    let mut found = None;
+    let mut best_rank = 0;
+    for asset in file.assets() {
+        let Some(name) = accept(asset) else { continue };
+        let rank = reference.rank(&name, &name);
+        if rank > best_rank {
+            best_rank = rank;
+            found = Some(asset.clone());
+        }
+    }
+    found
+}
+
 fn context_namecall(s: &mut LuaState) -> i32 {
     let (name, atom) = s.namecall_atom();
     let name = name.unwrap_or_default();
@@ -210,58 +228,40 @@ fn context_namecall(s: &mut LuaState) -> i32 {
         }
         LuaAtoms::GlobalViewModelNames => context.push_global_viewmodel_names(s),
         LuaAtoms::DataContext => context.push_data_context(s),
-        LuaAtoms::Image => {
+        LuaAtoms::Image | LuaAtoms::Blob | LuaAtoms::Font => {
             let wanted = s.check_string(2);
+            let reference = ScopedAssetReference::new(Some(s), &wanted);
             let file = scripted_object_file().and_then(|file| file.upgrade());
-            if let Some(image) = file.as_ref().and_then(|file| {
-                file.with_file(|file| {
-                    file.assets().iter().find_map(|asset| {
-                        asset
-                            .with(|asset| {
-                                let image = asset.as_image_asset()?;
-                                (image.base.name() == wanted)
-                                    .then(|| image.render_image().cloned())
-                                    .flatten()
-                            })
-                            .flatten()
-                    })
+            let found = file.as_ref().and_then(|file| file.with_file(|file| {
+                find_file_asset(&reference, file, |asset| {
+                    match atom {
+                        LuaAtoms::Image => asset.with_downcast::<ImageAsset, _>(|asset| {
+                            asset.render_image().is_some().then(|| asset.base.name().to_owned())
+                        }).flatten(),
+                        LuaAtoms::Blob => asset.with_downcast::<BlobAsset, _>(|asset| {
+                            (!asset.bytes().is_empty()).then(|| asset.base.name().to_owned())
+                        }).flatten(),
+                        LuaAtoms::Font => asset.with_downcast::<FontAsset, _>(|asset| {
+                            asset.font().is_some().then(|| asset.base.name().to_owned())
+                        }).flatten(),
+                        _ => unreachable!(),
+                    }
                 })
-            }) {
-                s.new_rive(ScriptedImage { image: Some(image) });
-                return 1;
+            }));
+            let Some(found) = found else { return 0 };
+            match atom {
+                LuaAtoms::Image => {
+                    let image = found.with_downcast::<ImageAsset, _>(|asset| asset.render_image().cloned()).flatten();
+                    s.new_rive(ScriptedImage { image });
+                }
+                LuaAtoms::Blob => { s.new_rive(ScriptedBlob { asset: Some(found) }); }
+                LuaAtoms::Font => {
+                    let font = found.with_downcast::<FontAsset, _>(FontAsset::font).flatten().unwrap();
+                    lua_pushfont(s, font);
+                }
+                _ => unreachable!(),
             }
-            0
-        }
-        LuaAtoms::Blob => {
-            let wanted = s.check_string(2);
-            let reference = ScopedAssetReference::new(s, &wanted);
-            let file = scripted_object_file().and_then(|file| file.upgrade());
-            if let Some(blob) = file.as_ref().and_then(|file| {
-                file.with_file(|file| {
-                    file.assets()
-                        .iter()
-                        .filter_map(|asset_handle| {
-                            asset_handle
-                                .with(|asset| {
-                                    let blob = asset.as_blob_asset()?;
-                                    (!blob.bytes().is_empty()).then(|| {
-                                        (
-                                            reference
-                                                .match_name(blob.base.name(), blob.base.name()),
-                                            asset_handle.clone(),
-                                        )
-                                    })
-                                })
-                                .flatten()
-                        })
-                        .max_by_key(|(rank, _)| *rank)
-                        .and_then(|(_, asset)| asset)
-                })
-            }) {
-                s.new_rive(ScriptedBlob { asset: Some(blob) });
-                return 1;
-            }
-            0
+            1
         }
         LuaAtoms::Audio => {
             let wanted = s.check_string(2);

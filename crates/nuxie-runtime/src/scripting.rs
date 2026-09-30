@@ -1008,6 +1008,14 @@ impl std::fmt::Debug for ScriptFont {
 
 impl ScriptFont {
     #[doc(hidden)]
+    pub fn from_native_font(font: crate::mechanical_port::source::text_engine::FontRef) -> Self {
+        Self { asset_global_id: None, live_font_bytes: None, native_font: Some(font) }
+    }
+    #[doc(hidden)]
+    pub fn native_font(&self) -> Option<crate::mechanical_port::source::text_engine::FontRef> {
+        self.native_font.clone()
+    }
+    #[doc(hidden)]
     pub fn with_native_font(
         mut self,
         font: crate::mechanical_port::source::text_engine::FontRef,
@@ -1792,7 +1800,8 @@ impl ScriptedContextSource {
         }
     }
 
-    fn current_file(&self) -> Option<crate::mechanical_port::source::file::RuntimeFileWeakHandle> {
+    #[doc(hidden)]
+    pub fn current_file(&self) -> Option<crate::mechanical_port::source::file::RuntimeFileWeakHandle> {
         match &self.projection {
             ScriptedContextProjection::Snapshot { file, .. } => Some(file.clone()),
             ScriptedContextProjection::Occurrence(owner) => {

@@ -20,6 +20,8 @@ pub(crate) mod lua_canvas;
 mod lua_color;
 mod lua_data_value;
 mod lua_font;
+mod lua_text;
+mod lua_scripted_context;
 pub(crate) mod lua_image;
 mod lua_image_decode;
 mod lua_mat4;
@@ -557,7 +559,97 @@ const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"boolean", 278),
     (b"string", 279),
     (b"properties", 280),
+    (b"append", 281),
+    (b"line", 282),
+    (b"lines", 283),
+    (b"hitTest", 284),
+    (b"caret", 285),
+    (b"selectionRects", 286),
+    (b"glyph", 287),
+    (b"glyphs", 288),
+    (b"path", 289),
+    (b"glyphPath", 290),
+    (b"withOptions", 291),
+    (b"hasGlyph", 292),
+    (b"axisValue", 293),
+    (b"lineHeight", 294),
+    (b"decode", 295),
+    (b"font", 296),
+    (b"ascent", 297),
+    (b"descent", 298),
+    (b"capHeight", 299),
+    (b"xHeight", 300),
+    (b"weight", 301),
+    (b"isItalic", 302),
+    (b"sizing", 303),
+    (b"overflow", 304),
+    (b"align", 305),
+    (b"wrap", 306),
+    (b"wordBreak", 307),
+    (b"origin", 308),
+    (b"direction", 309),
+    (b"maxWidth", 310),
+    (b"maxHeight", 311),
+    (b"paragraphSpacing", 312),
+    (b"lineCount", 313),
+    (b"glyphCount", 314),
+    (b"baseline", 315),
+    (b"bottom", 316),
+    (b"top", 317),
+    (b"textIndex", 318),
+    (b"firstIndex", 319),
+    (b"lastIndex", 320),
+    (b"x", 321),
+    (b"y", 322),
+    (b"isEmpty", 323),
+    (b"index", 324),
+    (b"ltr", 325),
+    (b"rtl", 326),
+    (b"auto", 327),
+    (b"left", 328),
+    (b"right", 329),
+    (b"center", 330),
+    (b"end", 331),
+    (b"autoWidth", 332),
+    (b"autoHeight", 333),
+    (b"fixed", 334),
+    (b"visible", 335),
+    (b"hidden", 336),
+    (b"clipped", 337),
+    (b"ellipsis", 338),
+    (b"noWrap", 339),
+    (b"breakWord", 340),
+    (b"normal", 341),
+    (b"breakAll", 342),
+    (b"letterSpacing", 343),
+    (b"foregroundColor", 344),
+    (b"min", 345),
+    (b"max", 346),
+    (b"default", 347),
 ];
+
+const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
+    let mut atom = first;
+    while atom <= last {
+        let mut index = 0;
+        let mut found = false;
+        while index < RIVE_LUA_ATOMS.len() {
+            if RIVE_LUA_ATOMS[index].1 == atom {
+                found = true;
+                break;
+            }
+            index += 1;
+        }
+        if !found {
+            return false;
+        }
+        atom += 1;
+    }
+    true
+}
+
+const _: () = assert!(has_rive_lua_atom_range(281, 347),
+    "text atoms must register in every build");
 
 const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
 

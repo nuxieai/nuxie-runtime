@@ -565,6 +565,21 @@ TEST_CASE("renders selected board", "[silver]")
         if not runtime_dir.is_dir() or not manifest.is_file():
             self.skipTest("pinned upstream or checked-in manifest is unavailable")
         producers = generate_manifest.discover(runtime_dir)
+        for silver_id in (
+            "scripted_text_wrapped", "scripted_text_bidi", "scripted_text_glyphs",
+        ):
+            text = next(item for item in producers if item.id == silver_id)
+            self.assertEqual(text.source, "inline-script")
+            self.assertEqual(text.lane, "scripted")
+            self.assertEqual(text.status, "exact")
+            self.assertEqual(text.producer_class, "scripted-literal")
+            self.assertEqual(text.dependencies, (
+                "fonts/Inter_18pt-Regular.ttf", "IBMPlexSansArabic-Regular.ttf",
+            ))
+            self.assertEqual(
+                text.provenance_file,
+                "tests/unit_tests/runtime/scripting/scripting_text_test.cpp",
+            )
         additive = next(item for item in producers if item.id == "additive_blendmode_test")
         self.assertEqual(additive.source, "additive_blendmode_test.riv")
         self.assertEqual(additive.artboard, "default")

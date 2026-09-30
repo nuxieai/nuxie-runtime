@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "955d6a05f960be0b6003d6856656231973eafa94"
+UPSTREAM_REF = "db31ea87714cf6a4cba56dd5de030f941f7e35f8"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -392,6 +392,21 @@ EXACT = (
 )
 
 SCRIPTED_EXACT_NOTES = {
+    "scripted_text_wrapped": (
+        "The literal native Luau text layout/draw case in "
+        "crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the "
+        "pinned SRIV comparison and renderer balance assertion."
+    ),
+    "scripted_text_bidi": (
+        "The literal native Luau mixed-direction text case in "
+        "crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the "
+        "pinned SRIV comparison, visual-order assertions and renderer balance."
+    ),
+    "scripted_text_glyphs": (
+        "The literal native Luau placed-glyph outline case in "
+        "crates/nuxie-scripting/tests/upstream_scripting_text.rs passes the "
+        "pinned SRIV comparison and renderer balance assertion."
+    ),
     "scripted_path_effect_clip": (
         "The literal upstream initial draw plus 60 frame advances is ported in "
         "crates/nuxie-runtime/tests/upstream_scripting_path_effect.rs "
@@ -3101,6 +3116,15 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                     # dependency, not the producer source.
                     primary = "inline-script"
                     dependencies = riv_sources
+                if silver_id in {
+                    "scripted_text_wrapped", "scripted_text_bidi", "scripted_text_glyphs",
+                }:
+                    # TextTest installs both fonts before executing the literal
+                    # script, including scenes that draw with only one font.
+                    primary = "inline-script"
+                    dependencies = (
+                        "fonts/Inter_18pt-Regular.ttf", "IBMPlexSansArabic-Regular.ttf",
+                    )
                 producers.append(
                     Producer(
                         id=silver_id,
@@ -3472,7 +3496,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (279, 231, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (282, 231, 48, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3485,9 +3509,9 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 279",
+        "expected_entries = 282",
         "expected_runtime = 231",
-        "expected_scripted = 45",
+        "expected_scripted = 48",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",
         "cpp_rust_exact_ids = ["

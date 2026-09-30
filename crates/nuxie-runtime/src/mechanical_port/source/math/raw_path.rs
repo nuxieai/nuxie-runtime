@@ -291,6 +291,12 @@ impl RawPath {
         }
         dst
     }
+    /// Safe-Rust entry for upstream's `addPath(*this, matrix)` aliasing branch.
+    /// The source must be copied before extending either backing vector.
+    pub fn add_self_path(&mut self, matrix: Option<&Mat2D>) -> RawPathCursor {
+        let copy = self.clone();
+        self.add_path(&copy, matrix)
+    }
     pub fn add_path(&mut self, source: &Self, matrix: Option<&Mat2D>) -> RawPathCursor {
         let initial_verb_count = self.verbs.len();
         let initial_point_count = self.points.len();

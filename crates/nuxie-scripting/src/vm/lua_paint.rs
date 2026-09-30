@@ -1,6 +1,6 @@
 // Translated from:
 // /Users/levi/dev/oss/rive-runtime/src/lua/renderer/lua_paint.cpp
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use luaur_rt::{Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{
@@ -63,7 +63,7 @@ impl UserData for ScriptedPaintData {
 
 pub(super) struct ScriptedPaint {
     context: RendererBindings,
-    pub(super) render_paint: Box<dyn RenderPaintTrait>,
+    pub(super) render_paint: Rc<RefCell<Box<dyn RenderPaintTrait>>>,
     style: RenderPaintStyle,
     color: ColorInt,
     thickness: f32,
@@ -78,7 +78,7 @@ impl ScriptedPaint {
     fn new(factory: &mut dyn RenderFactory) -> Self {
         Self {
             context: RendererBindings::default(),
-            render_paint: factory.make_render_paint(),
+            render_paint: Rc::new(RefCell::new(factory.make_render_paint())),
             style: RenderPaintStyle::Fill,
             color: 0xff000000,
             thickness: 1.0,
@@ -133,45 +133,45 @@ impl ScriptedPaint {
 
     fn set_style(&mut self, style: RenderPaintStyle) {
         self.style = style;
-        self.render_paint.style(style);
+        self.render_paint.borrow_mut().style(style);
     }
 
     fn set_color(&mut self, color: ColorInt) {
         self.color = color;
-        self.render_paint.color(color);
+        self.render_paint.borrow_mut().color(color);
     }
 
     fn set_thickness(&mut self, thickness: f32) {
         self.thickness = thickness;
-        self.render_paint.thickness(thickness);
+        self.render_paint.borrow_mut().thickness(thickness);
     }
 
     fn set_join(&mut self, join: StrokeJoin) {
         self.join = join;
-        self.render_paint.join(join);
+        self.render_paint.borrow_mut().join(join);
     }
 
     fn set_cap(&mut self, cap: StrokeCap) {
         self.cap = cap;
-        self.render_paint.cap(cap);
+        self.render_paint.borrow_mut().cap(cap);
     }
 
     fn set_feather(&mut self, feather: f32) {
         self.feather = feather;
-        self.render_paint.feather(feather);
+        self.render_paint.borrow_mut().feather(feather);
     }
 
     fn set_blend_mode(&mut self, blend_mode: BlendMode) {
         self.blend_mode = blend_mode;
-        self.render_paint.blend_mode(blend_mode);
-        self.render_paint.additiveness(
+        self.render_paint.borrow_mut().blend_mode(blend_mode);
+        self.render_paint.borrow_mut().additiveness(
             nuxie_runtime::source::shapes::paint::blend_mode::additiveness_for(blend_mode, 255),
         );
     }
 
     fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
         self.gradient = gradient;
-        self.render_paint.shader(self.gradient.as_deref());
+        self.render_paint.borrow_mut().shader(self.gradient.as_deref());
     }
 
     fn set_gradient_value(&mut self, value: Value) -> Result<()> {
@@ -461,12 +461,10 @@ mod upstream_blend_mode_tests {
         }
     }
 
-    fn recorded(paint: &ScriptedPaint) -> &RecordingPaint {
-        paint
-            .render_paint
-            .as_any()
-            .downcast_ref::<RecordingPaint>()
-            .expect("recording render paint")
+    fn recorded(paint: &ScriptedPaint) -> std::cell::Ref<'_, RecordingPaint> {
+        std::cell::Ref::map(paint.render_paint.borrow(), |paint| {
+            paint.as_any().downcast_ref::<RecordingPaint>().expect("recording render paint")
+        })
     }
 
     // tests/unit_tests/runtime/blend_mode_test.cpp at 3d0d3f56.

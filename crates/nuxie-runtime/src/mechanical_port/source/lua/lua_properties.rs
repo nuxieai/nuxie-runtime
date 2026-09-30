@@ -1849,7 +1849,6 @@ pub fn luaopen_rive_properties(state: &mut LuaState) -> i32 {
         Some(property_image_newindex),
         Some(property_namecall),
     );
-    state.register_rive::<ScriptedFont>();
     register_property::<ScriptedPropertyFont>(
         state,
         Some(property_font_index),

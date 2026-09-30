@@ -397,7 +397,7 @@ impl UserData for ScriptedRenderer {
                 this.bindings.with_factory(|factory| {
                     let render_path = path.render_path(factory);
                     this.with_renderer_mut(|renderer| {
-                        renderer.draw_path(render_path, paint.render_paint.as_ref());
+                        renderer.draw_path(render_path, paint.render_paint.borrow().as_ref());
                         Ok(())
                     })
                 })

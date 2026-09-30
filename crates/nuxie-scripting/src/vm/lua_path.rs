@@ -273,11 +273,10 @@ impl UserData for ScriptedPath {
             this.mark_dirty();
             Ok(())
         });
-        methods.add_method_mut("add", |_, this, args: MultiValue| {
+        methods.add_function("add", |_, (userdata, args): (AnyUserData, MultiValue)| {
             let Some(Value::UserData(path)) = args.front() else {
                 return Err(Error::runtime("Path.add expects a Path"));
             };
-            let path = path.borrow::<ScriptedPath>()?;
             let transform = match args.get(1) {
                 Some(Value::UserData(matrix)) => {
                     let [a, b, c, d, x, y] = matrix.borrow::<ScriptedMat2D>()?.0.0;
@@ -286,7 +285,13 @@ impl UserData for ScriptedPath {
                 None => None,
                 _ => return Err(Error::runtime("Path.add transform must be a Mat2D")),
             };
-            this.raw_path.add_path(&path.raw_path, transform.as_ref());
+            let mut this = userdata.borrow_mut::<ScriptedPath>()?;
+            if userdata.to_pointer() == path.to_pointer() {
+                this.raw_path.add_self_path(transform.as_ref());
+            } else {
+                let path = path.borrow::<ScriptedPath>()?;
+                this.raw_path.add_path(&path.raw_path, transform.as_ref());
+            }
             this.mark_dirty();
             Ok(())
         });

@@ -15,6 +15,25 @@ struct BoneChainLink {
     angle: f32,
     transform_components: TransformComponents,
     parent_world_inverse: Mat2D,
+    // The angle before our write, and the local transform we left behind.
+    base_rotation: f32,
+    solved_local: Mat2D,
+    solved: bool,
+    ours: bool,
+}
+
+impl BoneChainLink {
+    fn holds_our_solve(&self) -> bool {
+        self.solved
+            && IKConstraint::with_bone(&self.bone, |bone| {
+                get_parent_world(bone) * self.solved_local == *bone.world_transform()
+            })
+    }
+
+    fn record_solve(&mut self) {
+        self.solved_local = IKConstraint::with_bone(&self.bone, |bone| *bone.transform());
+        self.solved = true;
+    }
 }
 
 /// Pinned C++ `IKConstraint`; `IkConstraint` remains as the generated Rust
@@ -99,15 +118,25 @@ impl IKConstraint {
         }
 
         let num_bones = bones.len();
-        self.fk_chain.clear();
-        self.fk_chain.reserve(num_bones);
+        self.fk_chain.truncate(num_bones);
         for (index, bone) in bones.iter().rev().cloned().enumerate() {
+            // C++ resize preserves existing links and their solve history.
+            if let Some(link) = self.fk_chain.get_mut(index) {
+                link.index = index as i32;
+                link.bone = bone;
+                link.angle = 0.0;
+                continue;
+            }
             self.fk_chain.push(BoneChainLink {
                 index: index as i32,
                 bone,
                 angle: 0.0,
                 transform_components: TransformComponents::default(),
                 parent_world_inverse: Mat2D::default(),
+                base_rotation: 0.0,
+                solved_local: Mat2D::default(),
+                solved: false,
+                ours: false,
             });
         }
 
@@ -175,10 +204,12 @@ impl IKConstraint {
         let b = bv.length();
         let c = cv.length();
         let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c))
-            .clamp(-1.0, 1.0)
+            .min(1.0)
+            .max(-1.0)
             .acos();
         let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b))
-            .clamp(-1.0, 1.0)
+            .min(1.0)
+            .max(-1.0)
             .acos();
         let b2_parent = b2.with(|bone| bone.component_parent_handle()).flatten();
         let (r1, r2) = if b2_parent.as_ref() != Some(&b1) {
@@ -257,9 +288,7 @@ impl IKConstraint {
         if target_collapsed {
             return;
         }
-        // Decompose the chain where it currently stands, before rebuilding any
-        // of it, so no bone is measured against a parent we already rebuilt. A
-        // constraint that ran before us left its work here and nowhere else.
+        // The pose to blend from: whatever ran before us leaves its work here.
         for link in &mut self.fk_chain {
             let (parent_world_inverse, transform_components) =
                 Self::with_bone(&link.bone, |bone| {
@@ -271,32 +300,28 @@ impl IKConstraint {
                 });
             link.parent_world_inverse = parent_world_inverse;
             link.transform_components = transform_components;
+            link.ours = link.holds_our_solve();
+            if link.ours {
+                // Blending from our own angle would creep toward a full solve.
+                link.transform_components.set_rotation(link.base_rotation);
+            }
+            link.base_rotation = link.transform_components.rotation();
         }
 
-        // Take the angle back from the FK base. Rotation is the only component
-        // we write, so reading ours back would blend from the pose we solved
-        // last pass; translation, scale and skew we merely carry, so they stay
-        // as whatever constrained the bone left them.
+        // Longer chains solve from the pose they stand in, so put ours back first.
+        let mut rebuilt = false;
         for index in 0..self.fk_chain.len() {
-            let bone = self.fk_chain[index].bone.clone();
-            let (rotation, parent_world_inverse) = bone
-                .with_mut(|owner| {
-                    // Preserve virtual x/y dispatch, including RootBone's
-                    // authored translation, when rebuilding the FK transform.
-                    let translation = owner.transform_component_translation();
-                    let bone = owner.as_bone_mut().expect("IK chain remains Bone-derived");
-                    bone.update_transform_state(translation.x, translation.y);
-                    (
-                        bone.transform().decompose().rotation(),
-                        get_parent_world(bone).invert_or_identity(),
-                    )
-                })
-                .expect("IKConstraint chain retains live Bones");
-            self.fk_chain[index]
-                .transform_components
-                .set_rotation(rotation);
-            self.fk_chain[index].parent_world_inverse = parent_world_inverse;
-            self.constrain_rotation(index, rotation);
+            rebuilt = rebuilt || self.fk_chain[index].ours;
+            if rebuilt {
+                self.fk_chain[index].parent_world_inverse =
+                    Self::with_bone(&self.fk_chain[index].bone, |bone| {
+                        get_parent_world(bone).invert_or_identity()
+                    });
+                self.constrain_rotation(
+                    index,
+                    self.fk_chain[index].transform_components.rotation(),
+                );
+            }
         }
         let count = self.fk_chain.len();
         assert!(
@@ -334,6 +359,10 @@ impl IKConstraint {
                 let angle = from_angle + diff * self.base.strength();
                 self.constrain_rotation(index, angle);
             }
+        }
+        // Distinguish our output from a rebuilt pose on the next solve.
+        for link in &mut self.fk_chain {
+            link.record_solve();
         }
     }
 }

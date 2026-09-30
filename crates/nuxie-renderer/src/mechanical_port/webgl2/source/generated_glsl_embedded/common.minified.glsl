@@ -7,20 +7,20 @@
 #define x4 float(.0)
 #endif
 #define Q3(m) o8(m,j.Hf,j.If)
-#define Jf(a,m,q8) v1(a,Y(m)+Y(-1,0))q8,v1(a,Y(m)+Y(0,0))q8,v1(a,Y(m)+Y(0,-1))q8,v1(a,Y(m)+Y(-1,-1))q8
+#define Jf(a,m,q8) v1(a,Y(m)+Y(-1,0)) q8,v1(a,Y(m)+Y(0,0)) q8,v1(a,Y(m)+Y(0,-1)) q8,v1(a,Y(m)+Y(-1,-1)) q8
 #define l5(E) Y6(XC,ca,E,xc,float(xc),.0).x
 #define zc(E) Y6(XC,ca,E,yc,float(yc),.0).x
 #ifdef Ac
 e d S3(float x){return x;}e d Z5(uint x){return float(x);}e d Kf(N x){return float(x);}e d da(int x){return float(x);}e i g5(f xyzw){return xyzw;}e D R7(c xy){return xy;}e i sc(R xyzw){return vec4(xyzw);}e N g3(d x){return uint(x);}e N a2(uint x){return x;}
 #else
-e d S3(float x){return(d)x;}e d Z5(uint x){return(d)x;}e d Kf(N x){return(d)x;}e d da(int x){return(d)x;}e i g5(f xyzw){return(i)xyzw;}e D R7(c xy){return(D)xy;}e i sc(R xyzw){return(i)xyzw;}e N g3(d x){return(N)x;}e N a2(uint x){return(N)x;}
+e d S3(float x){return(d) x;}e d Z5(uint x){return(d) x;}e d Kf(N x){return(d) x;}e d da(int x){return(d) x;}e i g5(f xyzw){return(i) xyzw;}e D R7(c xy){return(D) xy;}e i sc(R xyzw){return(i) xyzw;}e N g3(d x){return(N) x;}e N a2(uint x){return(N) x;}
 #endif
 e d J0(d x){return x;}e D D2(D xy){return xy;}e D D2(d x,d y){D U;U.x=x,U.y=y;return U;}e D D2(d x){D U;U.x=x,U.y=x;return U;}e c N6(float x){return c(x,x);}e v T0(d x,d y,d z){v U;U.x=x,U.y=y,U.z=z;return U;}e v T0(d x){v U;U.x=x,U.y=x,U.z=x;return U;}e i E0(d x,d y,d z,d w){i U;U.x=x,U.y=y,U.z=z,U.w=w;return U;}e i E0(v xyz,d w){i U;U.xyz=xyz;U.w=w;return U;}e i E0(d x){i U;U.x=x,U.y=x,U.z=x,U.w=x;return U;}e i E0(i x){return x;}e H4 Lf(bool b){return H4(b,b);}e Z6 zi(v l,v b,v J1){Z6 U;U[0]=l;U[1]=b;U[2]=J1;return U;}e a7 Ai(v l,v b){a7 U;U[0]=l;U[1]=b;return U;}e I4 Bi(i l,i b,i J1,i Mf){I4 U;U[0]=l;U[1]=b;U[2]=J1;U[3]=Mf;return U;}e e0 L1(f x){return e0(x.xy,x.zw);}e uint ec(N x){return x;}e c a6(c l,c b,float t){return(b-l)*t+l;}e d r8(uint Bc,uint c6){return Bc==0u?.0:unpackHalf2x16((Bc+Nf)*c6).x;}e float Cc(c m2){m2=normalize(m2);float f1=acos(clamp(m2.x,-1.,1.));return m2.y>=.0?f1:-f1;}e i Ci(i k){return E0(k.xyz*k.w,k.w);}e v F6(i ea){return ea.xyz*(ea.w!=.0?1./ea.w:.0);}e d m3(D c7){return min(c7.x,c7.y);}e d m3(v Dc){return min(m3(Dc.xy),Dc.z);}e d m3(i Ec){D c7=min(Ec.xy,Ec.zw);d Of=min(c7.x,c7.y);return Of;}e d N5(D d7){return max(d7.x,d7.y);}e d N5(v Fc){return max(N5(Fc.xy),Fc.z);}e d N5(i Gc){D d7=max(Gc.xy,Gc.zw);d Pf=max(d7.x,d7.y);return Pf;}e float E9(c x){return abs(x.x)+abs(x.y);}e d fa(d x,d ga,d ha){
 #if defined(NF)||defined(GD)
 #ifdef GD
 if(GD)
 #endif
-{if(x<ha)if(x>ga)return x;else return ga;else return ha;}
+{if(x<ha) if(x>ga) return x;else return ga;else return ha;}
 #endif
 return clamp(x,ga,ha);}e d Hc(c v0,d E2,d v3){d Qf=fract(0.06711056*v0.x+0.00583715*v0.y);d Rf=fract(52.9829189*Qf);return(Rf*E2)+v3;}
 #if 0

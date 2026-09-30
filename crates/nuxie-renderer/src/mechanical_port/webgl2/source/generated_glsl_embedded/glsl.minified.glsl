@@ -53,27 +53,27 @@
 #endif
 #endif
 #if KC>=310
-#define x7(g,a) layout(binding=g,std140)uniform a{
+#define x7(g,a) layout(binding=g,std140) uniform a{
 #else
-#define x7(g,a) layout(std140)uniform a{
+#define x7(g,a) layout(std140) uniform a{
 #endif
 #define M8(a) }a;
-#define Ld(a) layout(push_constant)uniform a{
+#define Ld(a) layout(push_constant) uniform a{
 #define Md(Z,a) Z a;
 #define Nd(a) }a;
 #define h1(a)
-#define K(g,Z,a) layout(location=g)in Z a
+#define K(g,Z,a) layout(location=g) in Z a
 #define i1
 #define L(P8,F,a,Z)
 #ifdef CB
 #if KC>=310
-#define W(g,Z,a) layout(location=g)out Z a
+#define W(g,Z,a) layout(location=g) out Z a
 #else
 #define W(g,Z,a) out Z a
 #endif
 #else
 #if KC>=310
-#define W(g,Z,a) layout(location=g)in Z a
+#define W(g,Z,a) layout(location=g) in Z a
 #else
 #define W(g,Z,a) in Z a
 #endif
@@ -102,17 +102,17 @@
 #define i5
 #define j5
 #ifdef BC
-#define L4(a0,g,a) layout(set=a0,binding=g)uniform highp utexture2D a
-#define p6(a0,g,a) layout(set=a0,binding=g)uniform highp texture2D a
-#define e3(a0,g,a) layout(set=a0,binding=g)uniform mediump texture2D a
-#define o5(a0,g,a) layout(binding=g)uniform mediump texture2D a
+#define L4(a0,g,a) layout(set=a0,binding=g) uniform highp utexture2D a
+#define p6(a0,g,a) layout(set=a0,binding=g) uniform highp texture2D a
+#define e3(a0,g,a) layout(set=a0,binding=g) uniform mediump texture2D a
+#define o5(a0,g,a) layout(binding=g) uniform mediump texture2D a
 #if defined(EB)&&defined(BB)
 #endif
 #elif KC>=310
-#define L4(a0,g,a) layout(binding=g)uniform highp usampler2D a
-#define p6(a0,g,a) layout(binding=g)uniform highp sampler2D a
-#define e3(a0,g,a) layout(binding=g)uniform mediump sampler2D a
-#define o5(a0,g,a) layout(binding=g)uniform mediump sampler2D a
+#define L4(a0,g,a) layout(binding=g) uniform highp usampler2D a
+#define p6(a0,g,a) layout(binding=g) uniform highp sampler2D a
+#define e3(a0,g,a) layout(binding=g) uniform mediump sampler2D a
+#define o5(a0,g,a) layout(binding=g) uniform mediump sampler2D a
 #else
 #define L4(a0,g,a) uniform highp usampler2D a
 #define p6(a0,g,a) uniform highp sampler2D a
@@ -120,12 +120,12 @@
 #define o5(a0,g,a) uniform mediump sampler2D a
 #endif
 #ifdef BC
-#define q6(a0,g,a) layout(set=a0,binding=g)uniform mediump sampler a;
+#define q6(a0,g,a) layout(set=a0,binding=g) uniform mediump sampler a;
 #ifdef OF
-#define g4(z7,a) layout(set=jg,binding=z7)uniform mediump sampler a;
+#define g4(z7,a) layout(set=jg,binding=z7) uniform mediump sampler a;
 #define c4(a) q6(h5,ig,a)
 #else
-#define g4(z7,a) layout(set=h3,binding=z7)uniform mediump sampler a;
+#define g4(z7,a) layout(set=h3,binding=z7) uniform mediump sampler a;
 #define c4(a) q6(h5,a4,a)
 #endif
 #define y5(a,p,m) texture(sampler2D(a,p),m)
@@ -169,10 +169,10 @@
 #ifdef GL_ARB_shader_storage_buffer_object
 #extension GL_ARB_shader_storage_buffer_object:require
 #endif
-#define O5(g,y1,a) layout(std430,binding=g)readonly buffer y1{N0 g2[];}a
-#define M4(g,y1,a) layout(std430,binding=g)readonly buffer y1{R g2[];}a
-#define P5(g,y1,a) layout(std430,binding=g)readonly buffer y1{f g2[];}a
-#define Sa(g,y1,a) layout(std430,binding=g)buffer y1{uint g2[];}a
+#define O5(g,y1,a) layout(std430,binding=g) readonly buffer y1{N0 g2[];}a
+#define M4(g,y1,a) layout(std430,binding=g) readonly buffer y1{R g2[];}a
+#define P5(g,y1,a) layout(std430,binding=g) readonly buffer y1{f g2[];}a
+#define Sa(g,y1,a) layout(std430,binding=g) buffer y1{uint g2[];}a
 #define L0(a,C0) a.g2[C0]
 #define R5(a,C0) a.g2[C0]
 #define Rd(a,C0) a.g2[C0]
@@ -186,11 +186,11 @@
 #define W3 ,int G0
 #define Q1 ,G0
 #ifdef BE
-#define H2(g,a) layout(std430,set=w3,binding=g)buffer a##Sd{uint g2[];}a
+#define H2(g,a) layout(std430,set=w3,binding=g) buffer a##Sd{uint g2[];}a
 #elif defined(BC)
-#define H2(g,a) layout(std430,set=w3,binding=g)coherent buffer a##Sd{uint g2[];}a
+#define H2(g,a) layout(std430,set=w3,binding=g) coherent buffer a##Sd{uint g2[];}a
 #else
-#define H2(g,a) layout(std430,binding=g)coherent buffer a##Sd{uint g2[];}a
+#define H2(g,a) layout(std430,binding=g) coherent buffer a##Sd{uint g2[];}a
 #endif
 #define Ua H2
 #define Z2(h) h.g2[G0]
@@ -208,13 +208,13 @@
 #define W3 ,Y G
 #define Q1 ,G
 #ifdef BC
-#define Ua(g,a) layout(set=w3,binding=g,rgba8)uniform mediump coherent image2D a
-#define H2(g,a) layout(set=w3,binding=g,r32ui)uniform highp coherent uimage2D a
-#define Xa(g,a) layout(set=w3,binding=g,rgb10_a2)uniform mediump coherent image2D a
+#define Ua(g,a) layout(set=w3,binding=g,rgba8) uniform mediump coherent image2D a
+#define H2(g,a) layout(set=w3,binding=g,r32ui) uniform highp coherent uimage2D a
+#define Xa(g,a) layout(set=w3,binding=g,rgb10_a2) uniform mediump coherent image2D a
 #else
-#define Ua(g,a) layout(binding=g,rgba8)uniform mediump coherent image2D a
-#define H2(g,a) layout(binding=g,r32ui)uniform highp coherent uimage2D a
-#define Xa(g,a) layout(binding=g,rgb10_a2)uniform mediump coherent image2D a;
+#define Ua(g,a) layout(binding=g,rgba8) uniform mediump coherent image2D a
+#define H2(g,a) layout(binding=g,r32ui) uniform highp coherent uimage2D a
+#define Xa(g,a) layout(binding=g,rgb10_a2) uniform mediump coherent image2D a;
 #endif
 #define Z2(h) imageLoad(h,G).x
 #define a3(h,C) imageStore(h,G,uvec4(C))
@@ -231,8 +231,8 @@
 #ifdef EXPORTED_PLS_IMPL_ANGLE
 #extension GL_ANGLE_shader_pixel_local_storage:require
 #define M1
-#define z0(g,a) layout(binding=g,rgba8)uniform mediump pixelLocalANGLE a
-#define k1(g,a) layout(binding=g,r32ui)uniform highp upixelLocalANGLE a
+#define z0(g,a) layout(binding=g,rgba8) uniform mediump pixelLocalANGLE a
+#define k1(g,a) layout(binding=g,r32ui) uniform highp upixelLocalANGLE a
 #define N1
 #define K0(h) pixelLocalLoadANGLE(h)
 #define a1(h) pixelLocalLoadANGLE(h).x
@@ -250,9 +250,9 @@
 #extension GL_EXT_shader_pixel_local_storage:require
 #endif
 #define M1 __pixel_localEXT V1{
-#define z0(g,a) layout(rgba8)mediump vec4 a
-#define Ya(g,a) layout(rgb10_a2)mediump vec4 a
-#define k1(g,a) layout(r32ui)highp uint a
+#define z0(g,a) layout(rgba8) mediump vec4 a
+#define Ya(g,a) layout(rgb10_a2) mediump vec4 a
+#define k1(g,a) layout(r32ui) highp uint a
 #define N1 };
 #define K0(h) h
 #define a1(h) h
@@ -263,7 +263,7 @@
 #define z2
 #define A2
 #ifdef Q
-#define v2(a) layout(location=0,rgba8)out i F1;P1(a)
+#define v2(a) layout(location=0,rgba8) out i F1;P1(a)
 #endif
 #endif
 #if defined(CE)||defined(ID)
@@ -293,10 +293,10 @@
 #endif
 #ifdef SF
 #define M1
-#define y4(g,a) layout(input_attachment_index=g,binding=g,set=w3)uniform mediump subpassInput D7##a
-#define Td(g,a) layout(location=g)out mediump vec4 a
+#define y4(g,a) layout(input_attachment_index=g,binding=g,set=w3) uniform mediump subpassInput D7##a
+#define Td(g,a) layout(location=g) out mediump vec4 a
 #define z0(g,a) y4(g,a);Td(g,a)
-#define k1(g,a) layout(input_attachment_index=g,binding=g,set=w3)uniform highp usubpassInput D7##a;layout(location=g)out highp uvec4 a
+#define k1(g,a) layout(input_attachment_index=g,binding=g,set=w3) uniform highp usubpassInput D7##a;layout(location=g) out highp uvec4 a
 #define N1
 #define K0(h) subpassLoad(D7##h)
 #define a1(h) subpassLoad(D7##h).x
@@ -309,8 +309,8 @@
 #endif
 #ifdef TF
 #define M1
-#define z0(g,a) layout(location=g)out mediump vec4 a
-#define k1(g,a) layout(location=g)out highp uvec4 a
+#define z0(g,a) layout(location=g) out mediump vec4 a
+#define k1(g,a) layout(location=g) out highp uvec4 a
 #define N1
 #define K0(h) vec4(0)
 #define a1(h) 0u
@@ -352,7 +352,7 @@ uniform highp int DE;
 #define c0(a)
 #define q(a,Z)
 #define C1(R0) gl_Position=R0;}
-#define f3(z1,a) layout(location=0)out z1 lh;void main()
+#define f3(z1,a) layout(location=0) out z1 lh;void main()
 #define v6(z1,a) f3(z1,a)
 #define w6 gl_FrontFacing
 #define M2(C) lh=C
@@ -367,15 +367,15 @@ uniform highp int DE;
 #define Vd(E7,h,C) d1(h,C);
 #endif
 #ifndef v2
-#define v2(a) layout(location=0)out i F1;P1(a)
+#define v2(a) layout(location=0) out i F1;P1(a)
 #endif
 #define r3 d2
 #if defined(BC)&&!defined(BE)
 #ifdef SE
-#define p5(a) layout(input_attachment_index=0,binding=G2,set=w3)uniform mediump subpassInputMS a
+#define p5(a) layout(input_attachment_index=0,binding=G2,set=w3) uniform mediump subpassInputMS a
 #define x6(a) na(mat4(subpassLoad(a,0),subpassLoad(a,1),subpassLoad(a,2),subpassLoad(a,3)),gl_SampleMaskIn[0])
 #else
-#define p5(a) layout(input_attachment_index=0,binding=G2,set=w3)uniform mediump subpassInput a
+#define p5(a) layout(input_attachment_index=0,binding=G2,set=w3) uniform mediump subpassInput a
 #define x6(a) subpassLoad(a)
 #endif
 #else

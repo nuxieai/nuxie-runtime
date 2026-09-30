@@ -1,5 +1,5 @@
 #ifdef CB
-h1(g0)K(0,f,UB);K(1,f,VB);i1
+h1(g0) K(0,f,UB);K(1,f,VB);i1
 #endif
 q2 I0 W(0,f,O);i2
 #ifdef CB
@@ -11,10 +11,10 @@ X.y=-X.y;
 #endif
 #ifdef EB
 #ifdef MC
-e d z6(f P,bool zh L3){d o=d8(P e1);if(!zh)o=-o;return o;}
+e d z6(f P,bool zh L3){d o=d8(P e1);if(!zh) o=-o;return o;}
 #endif
 #ifdef YD
-layout(location=0)inout R r0;
+layout(location=0) inout R r0;
 #ifdef MC
 void main(){float o=uintBitsToFloat(r0.x);o+=z6(O,gl_FrontFacing e1);r0.x=floatBitsToUint(o);}
 #endif
@@ -22,7 +22,7 @@ void main(){float o=uintBitsToFloat(r0.x);o+=z6(O,gl_FrontFacing e1);r0.x=floatB
 void main(){float o=uintBitsToFloat(r0.x);o=max(o,C4(O));r0.x=floatBitsToUint(o);}
 #endif
 #elif defined(ZD)
-__pixel_localEXT V1{layout(r32f)float r0;};
+__pixel_localEXT V1{layout(r32f) float r0;};
 #ifdef MC
 void main(){r0+=z6(O,gl_FrontFacing e1);}
 #endif
@@ -30,7 +30,7 @@ void main(){r0+=z6(O,gl_FrontFacing e1);}
 void main(){r0=max(r0,C4(O));}
 #endif
 #elif defined(EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
-layout(binding=0,r32ui)uniform highp upixelLocalANGLE r0;
+layout(binding=0,r32ui) uniform highp upixelLocalANGLE r0;
 #ifdef MC
 void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(r0).x);o+=z6(O,gl_FrontFacing e1);pixelLocalStoreANGLE(r0,R(floatBitsToUint(o)));}
 #endif
@@ -38,7 +38,7 @@ void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(r0).x);o+=z6(O,gl_FrontF
 void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(r0).x);o=max(o,C4(O));pixelLocalStoreANGLE(r0,R(floatBitsToUint(o)));}
 #endif
 #elif defined(AE)
-layout(binding=0,r32i)uniform highp coherent iimage2D Y8;ivec2 ce(){return ivec2(floor(d0));}int de(float o){return int(o*dd);}
+layout(binding=0,r32i) uniform highp coherent iimage2D Y8;ivec2 ce(){return ivec2(floor(d0));}int de(float o){return int(o*dd);}
 #ifdef MC
 void main(){int o=de(z6(O,gl_FrontFacing e1));imageAtomicAdd(Y8,ce(),o);}
 #endif

@@ -19,7 +19,7 @@ z0(X2,i0);
 #endif
 N1
 #ifdef KB
-I3 e3(h5,a4,GC);J3 i5 c4(W5)j5 U3 V3
+I3 e3(h5,a4,GC);J3 i5 c4(W5) j5 U3 V3
 #endif
 #ifdef Q
 #ifdef KB

@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `836a74261a9e843f37ccb4a29a9d8567915d4598`
+- LAST_SYNCED_SHA: `696345630f860112d0496e0d1844e9d7087250d8`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 14 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 14 require a Rust translation.
+  There are 13 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 13 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `696345630f860112d0496e0d1844e9d7087250d8` | Preserve a separating space before an identifier after a closing parenthesis in the shader minifier, matching upstream for compact and human-readable output. Update the executable Rust generator and pinned Python source authority, regenerate affected backend artifacts and retain build-time generation for Metal. This is generator behavior, not a runtime shader compiler dependency. | — |
 | `836a74261a9e843f37ccb4a29a9d8567915d4598` | Resolve non-virtualized list-row artboards directly and return empty bounds when absent, preserving the existing Rust null-safe behavior while matching upstream lookup order. Port the complete orphan-row regression: replace Buttons with three unbound view-model items, retain three layout/scroll rows with empty bounds, and resolve a scroll index without moving either offset. | — |
 | `27e2adac5ddc23422f7a9ba4ebea187198b218c8` | **DEFERRED WASM EXECUTION:** adds modulate_opacity to the Wasm scripting ABI/IDL, native and web wrappers, and guest import table, forwarding resolved renderer handles to existing modulation. The complete public delta changes no native Luau or shared renderer implementation. Private translator/gamepad/custom-property changes named in the message are absent from the public delta; neither those nor the parked execution bindings are claimed implemented. | UNIV-3728 |
 | `a7efbbe733cf9975fec6e614818ea80e02f7e234` | **INAPPLICABLE TEST-PLAYER HOST:** introduces a one-frame render-thread slot, draining/joining and gated --threaded option in upstream's interactive Player, plus a default-false TestingWindow capability. Rust render-only GM/window adapters do not ship that Player or input/presentation scheduler. The complete public delta changes no shared deferred replay/runtime algorithm, fixture or assertion. Do not impose this test-host scheduling policy on application-owned renderers or claim new threaded player functionality. | — |

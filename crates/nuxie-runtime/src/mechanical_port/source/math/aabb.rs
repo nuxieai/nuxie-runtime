@@ -357,9 +357,11 @@ impl Aabb {
     pub fn is_empty_or_nan(self) -> bool {
         !(self.width() > 0.0 && self.height() > 0.0)
     }
+    #[must_use]
     pub fn pad(self, amount: f32) -> Self {
         self.outset(amount, amount)
     }
+    #[must_use]
     pub fn inset(self, dx: f32, dy: f32) -> Self {
         let result = Self::new(
             self.min_x + dx,
@@ -371,9 +373,11 @@ impl Aabb {
         assert!(result.height() >= 0.0);
         result
     }
+    #[must_use]
     pub fn outset(self, dx: f32, dy: f32) -> Self {
         self.inset(-dx, -dy)
     }
+    #[must_use]
     pub fn offset(self, dx: f32, dy: f32) -> Self {
         Self::new(
             self.min_x + dx,
@@ -382,6 +386,7 @@ impl Aabb {
             self.max_y + dy,
         )
     }
+    #[must_use]
     pub fn round(self) -> IAabb {
         TAabb {
             left: graphics_round(self.left()),
@@ -390,6 +395,7 @@ impl Aabb {
             bottom: graphics_round(self.bottom()),
         }
     }
+    #[must_use]
     pub fn round_out(self) -> IAabb {
         TAabb {
             left: self.left().floor() as i32,

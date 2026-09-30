@@ -340,10 +340,12 @@ impl Aabb {
         !(self.width() > 0.0 && self.height() > 0.0)
     }
 
+    #[must_use]
     pub fn pad(self, amount: f32) -> Self {
         self.outset(amount, amount)
     }
 
+    #[must_use]
     pub fn inset(self, dx: f32, dy: f32) -> Self {
         let result = Self::new(
             self.min_x + dx,
@@ -356,10 +358,12 @@ impl Aabb {
         result
     }
 
+    #[must_use]
     pub fn outset(self, dx: f32, dy: f32) -> Self {
         self.inset(-dx, -dy)
     }
 
+    #[must_use]
     pub fn offset(self, dx: f32, dy: f32) -> Self {
         Self::new(
             self.min_x + dx,
@@ -369,6 +373,7 @@ impl Aabb {
         )
     }
 
+    #[must_use]
     pub fn round(self) -> IntegerAabb {
         IntegerAabb::new(
             aabb_graphics_round(self.min_x),
@@ -378,6 +383,7 @@ impl Aabb {
         )
     }
 
+    #[must_use]
     pub fn round_out(self) -> IntegerAabb {
         IntegerAabb::new(
             self.min_x.floor() as i32,

@@ -538,6 +538,8 @@ impl ScriptedObject {
         method: RuntimeScriptMethod,
         pointer_id: i32,
         local_position: crate::mechanical_port::source::math::vec2d::Vec2D,
+        hit_type: crate::mechanical_port::source::listener_type::ListenerType,
+        timestamp: f32,
         host: &mut dyn crate::scripting::ScriptHost,
     ) -> crate::scripting::ScriptedDrawablePointerResult {
         let instance = owner
@@ -557,6 +559,8 @@ impl ScriptedObject {
                 pointer_id,
                 local_position.x,
                 local_position.y,
+                hit_type,
+                timestamp,
                 host,
             )
             .unwrap_or_default()

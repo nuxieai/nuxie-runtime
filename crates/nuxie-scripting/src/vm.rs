@@ -20,8 +20,6 @@ pub(crate) mod lua_canvas;
 mod lua_color;
 mod lua_data_value;
 mod lua_font;
-mod lua_text;
-mod lua_scripted_context;
 pub(crate) mod lua_image;
 mod lua_image_decode;
 mod lua_mat4;
@@ -29,6 +27,8 @@ mod lua_math;
 mod lua_mesh;
 mod lua_promise;
 mod lua_rive_base;
+mod lua_scripted_context;
+mod lua_text;
 mod lua_vec2d;
 mod native_registration;
 mod renderer;
@@ -108,7 +108,10 @@ pub(crate) struct RoutedTestFactory<F> {
 
 #[cfg(test)]
 impl<F: RenderFactory> RenderFactory for RoutedTestFactory<F> {
-    fn make_image_mesh_instances(&mut self, count: usize) -> nuxie_render_api::ImageMeshInstancesHandle {
+    fn make_image_mesh_instances(
+        &mut self,
+        count: usize,
+    ) -> nuxie_render_api::ImageMeshInstancesHandle {
         self.inner.make_image_mesh_instances(count)
     }
     fn is_render_context(&self) -> bool {
@@ -648,8 +651,10 @@ const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
     true
 }
 
-const _: () = assert!(has_rive_lua_atom_range(281, 347),
-    "text atoms must register in every build");
+const _: () = assert!(
+    has_rive_lua_atom_range(281, 347),
+    "text atoms must register in every build"
+);
 
 const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
 
@@ -1064,6 +1069,26 @@ impl ScriptProgram {
     /// in the Rust host or exposing the environment to runtime consumers.
     #[doc(hidden)]
     pub fn upstream_test_module_i32_getter(&self, getter: &str) -> Result<i32> {
+        let environment = self
+            .generator
+            .environment()
+            .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
+        let getter: Function = environment.get(getter)?;
+        getter.protected_call(())
+    }
+
+    #[doc(hidden)]
+    pub fn upstream_test_module_f32_getter(&self, getter: &str) -> Result<f32> {
+        let environment = self
+            .generator
+            .environment()
+            .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
+        let getter: Function = environment.get(getter)?;
+        getter.protected_call(())
+    }
+
+    #[doc(hidden)]
+    pub fn upstream_test_module_string_getter(&self, getter: &str) -> Result<String> {
         let environment = self
             .generator
             .environment()
@@ -3433,6 +3458,8 @@ impl ScriptInstance for LuaScriptInstance {
         pointer_id: i32,
         local_x: f32,
         local_y: f32,
+        hit_type: nuxie_runtime::source::listener_type::ListenerType,
+        timestamp: f32,
         _host: &mut dyn ScriptHost,
     ) -> std::result::Result<nuxie_runtime::ScriptedDrawablePointerResult, ScriptError> {
         self.reset_execution_budget();
@@ -3447,7 +3474,7 @@ impl ScriptInstance for LuaScriptInstance {
         };
         let lua = table.lua();
         let (argument, hit_result) = listener_invocation::scripted_drawable_pointer_argument(
-            &lua, pointer_id, local_x, local_y,
+            &lua, pointer_id, local_x, local_y, hit_type, timestamp,
         )
         .map_err(|error| self.script_error(error))?;
 

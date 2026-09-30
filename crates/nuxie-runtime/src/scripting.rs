@@ -1009,7 +1009,11 @@ impl std::fmt::Debug for ScriptFont {
 impl ScriptFont {
     #[doc(hidden)]
     pub fn from_native_font(font: crate::mechanical_port::source::text_engine::FontRef) -> Self {
-        Self { asset_global_id: None, live_font_bytes: None, native_font: Some(font) }
+        Self {
+            asset_global_id: None,
+            live_font_bytes: None,
+            native_font: Some(font),
+        }
     }
     #[doc(hidden)]
     pub fn native_font(&self) -> Option<crate::mechanical_port::source::text_engine::FontRef> {
@@ -1801,7 +1805,9 @@ impl ScriptedContextSource {
     }
 
     #[doc(hidden)]
-    pub fn current_file(&self) -> Option<crate::mechanical_port::source::file::RuntimeFileWeakHandle> {
+    pub fn current_file(
+        &self,
+    ) -> Option<crate::mechanical_port::source::file::RuntimeFileWeakHandle> {
         match &self.projection {
             ScriptedContextProjection::Snapshot { file, .. } => Some(file.clone()),
             ScriptedContextProjection::Occurrence(owner) => {
@@ -2387,7 +2393,8 @@ pub trait ScriptInstance {
     ///
     /// The owner has already transformed the world position into the
     /// drawable's local coordinates. Concrete VMs create a fresh
-    /// `PointerEvent` with the pinned constructor defaults and return the
+    /// `PointerEvent` with the event type, host timestamp and zero previous
+    /// position, and return the
     /// tri-state mutation after the callback completes.
     fn call_scripted_drawable_pointer(
         &mut self,
@@ -2395,6 +2402,8 @@ pub trait ScriptInstance {
         _pointer_id: i32,
         _local_x: f32,
         _local_y: f32,
+        _hit_type: crate::source::listener_type::ListenerType,
+        _timestamp: f32,
         _host: &mut dyn ScriptHost,
     ) -> Result<ScriptedDrawablePointerResult, ScriptError> {
         Ok(ScriptedDrawablePointerResult::default())

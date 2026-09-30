@@ -88,6 +88,8 @@ fn scripted_drawable_pointer_callback_returns_the_lua_hit_result() {
             260,
             11.0,
             12.0,
+            nuxie_runtime::source::listener_type::ListenerType::Down,
+            1.5,
             &mut NoopScriptHost,
         )
         .unwrap();
@@ -103,11 +105,11 @@ fn scripted_drawable_pointer_callback_returns_the_lua_hit_result() {
     );
     assert_eq!(
         instance.get_input("eventType").unwrap(),
-        ScriptValue::String("pointerEnter".to_owned())
+        ScriptValue::String("pointerDown".to_owned())
     );
     assert_eq!(
         instance.get_input("timeStamp").unwrap(),
-        ScriptValue::Number(0.0)
+        ScriptValue::Number(1.5)
     );
 }
 

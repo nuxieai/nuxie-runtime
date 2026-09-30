@@ -1,4 +1,6 @@
-//! `tests/gm/image_paint.cpp` at `3ed35ee0ded0d58fb8d380930a156041a4624a2f`.
+//! `tests/gm/image_paint.cpp` at `2579994c59cff57ac04d3a38401fa37ad1315425`.
+//! The C++ reference applies the approved Metal blend-FMA adaptation; its
+//! provenance also retains the pristine upstream capture and measured difference.
 
 use crate::{
     native_metal::{NativeMetalContextOptions, NativeMetalFactory, ShaderCompilationMode},
@@ -176,14 +178,14 @@ fn render_image_paint() -> Vec<u8> {
 #[test]
 fn image_paint() {
     let expected = pixel_compare::RgbaImage::read_png(IMAGE_PAINT_REFERENCE_PNG)
-        .expect("authoritative upstream C++ image_paint reference");
+        .expect("C++ image_paint reference with approved Metal FMA adaptation");
     let actual = pixel_compare::RgbaImage::new(WIDTH, HEIGHT, render_image_paint())
         .expect("live Rust Metal image_paint frame");
     let report = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
         .expect("image_paint dimensions");
     assert!(
         report.within_tolerance,
-        "image_paint differs from upstream C++ reference: {} pixels, max channel delta {}",
+        "image_paint differs from C++ reference with approved Metal FMA adaptation: {} pixels, max channel delta {}",
         report.different_pixels, report.max_channel_delta
     );
 }

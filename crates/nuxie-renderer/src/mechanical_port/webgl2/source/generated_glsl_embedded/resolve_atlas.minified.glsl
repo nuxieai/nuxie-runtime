@@ -1,28 +1,28 @@
-#ifdef DB
-y1(AG,f0,F,B,v){f W;W.x=(B!=2)?-1.:3.;W.y=(B!=1)?-1.:3.;W.zw=c(.0,1.);z1(W);}
+#ifdef CB
+A1(ZF,g0,F,B,v){f X;X.x=(B!=2)?-1.:3.;X.y=(B!=1)?-1.:3.;X.zw=c(.0,1.);B1(X);}
 #endif
-#ifdef FB
-e ivec2 ee(){return ivec2(floor(gl_FragCoord));}
-#ifdef ZD
-layout(location=0)inout X p0;layout(location=1)out i n4;void main(){n4.x=uintBitsToFloat(p0.x);}
-#elif defined(AE)
-#ifdef GE
-__pixel_local_outEXT S1{layout(r32f)float p0;};
+#ifdef EB
+e ivec2 fe(){return ivec2(floor(gl_FragCoord));}
+#ifdef YD
+layout(location=0)inout Y r0;layout(location=1)out i p4;void main(){p4.x=uintBitsToFloat(r0.x);}
+#elif defined(ZD)
+#ifdef FE
+__pixel_local_outEXT U1{layout(r32f)float r0;};
 #else
-__pixel_local_inEXT S1{layout(r32f)float p0;};layout(location=0)out i n4;
+__pixel_local_inEXT U1{layout(r32f)float r0;};layout(location=0)out i p4;
 #endif
 void main(){
-#ifdef GE
-p0=.0;
+#ifdef FE
+r0=.0;
 #else
-n4.x=p0;
+p4.x=r0;
 #endif
 }
 #elif defined(EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
-layout(binding=0,r32ui)uniform highp upixelLocalANGLE p0;layout(location=0)out i n4;void main(){n4.x=uintBitsToFloat(pixelLocalLoadANGLE(p0).x);}
-#elif defined(BE)
-layout(binding=0,r32i)uniform highp coherent iimage2D Z8;layout(location=0)out i n4;void main(){n4.x=float(imageLoad(Z8,ee()).x)*(1./dd);}
-#elif defined(AF)
-a3(d3,0,DF);layout(location=0)out i n4;void main(){i N=p1(DF,ee());n4.x=(N.x-N.y)*Aa+(N.z-N.w)*255.;}
+layout(binding=0,r32ui)uniform highp upixelLocalANGLE r0;layout(location=0)out i p4;void main(){p4.x=uintBitsToFloat(pixelLocalLoadANGLE(r0).x);}
+#elif defined(AE)
+layout(binding=0,r32i)uniform highp coherent iimage2D c9;layout(location=0)out i p4;void main(){p4.x=float(imageLoad(c9,fe()).x)*(1./ed);}
+#elif defined(ZE)
+c3(f3,0,CF);layout(location=0)out i p4;void main(){i N=r1(CF,fe());p4.x=(N.x-N.y)*Ba+(N.z-N.w)*255.;}
 #endif
 #endif

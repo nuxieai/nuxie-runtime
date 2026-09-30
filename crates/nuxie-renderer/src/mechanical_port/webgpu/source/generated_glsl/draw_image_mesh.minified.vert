@@ -1,64 +1,64 @@
 #ifdef VERTEX
-f1(j3)J(0,c,PC);g1 f1(z3)J(1,c,QC);g1 f1(m1)J(x9,f,WB);J(y9,f,SB);J(z9,f,NB);J(A9,uint,XB);J(B9,uint,YB);J(C9,uint,ZB);J(D9,uint,MC);g1
+h1(l3)J(0,c,OC);i1 h1(C3)J(1,c,PC);i1 h1(o1)J(y9,f,VB);J(z9,f,RB);J(A9,f,NB);J(B9,uint,WB);J(C9,uint,XB);J(D9,uint,YB);J(E9,uint,LC);i1
 #endif
-p2 H0 V(0,c,G5);
+q2 I0 W(0,c,K5);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT V(1,d,L3);
+OPTIONALLY_FLAT W(1,d,O3);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-H0 V(2,f,M0);
+I0 W(2,f,N0);
 #endif
-OPTIONALLY_FLAT V(3,i,H1);
+OPTIONALLY_FLAT W(3,i,J1);
 #ifdef ENABLE_ADVANCED_BLEND
-S2 V(4,L,A1);
+T2 W(4,L,C1);
 #endif
-h2
+i2
 #ifdef VERTEX
-V3 W3 J6(FC,j3,k3,z3,A3,m1,g0,B){K(B,k3,PC,c);K(B,A3,QC,c);K(v,g0,WB,f);K(v,g0,SB,f);K(v,g0,NB,f);K(v,g0,XB,uint);K(v,g0,YB,uint);K(v,g0,ZB,uint);K(v,g0,MC,uint);T(G5,c);
+X3 Y3 K6(EC,l3,m3,C3,D3,o1,h0,B){K(B,m3,OC,c);K(B,D3,PC,c);K(v,h0,VB,f);K(v,h0,RB,f);K(v,h0,NB,f);K(v,h0,WB,uint);K(v,h0,XB,uint);K(v,h0,YB,uint);K(v,h0,LC,uint);U(K5,c);
 #ifdef ENABLE_CLIPPING
-T(L3,d);
+U(O3,d);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-T(M0,f);
+U(N0,f);
 #endif
-T(H1,i);
+U(J1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-T(A1,L);
+U(C1,L);
 #endif
-c j0=N0(I1(WB),PC)+NB.xy;G5=QC;
+c k0=O0(K1(VB),OC)+NB.xy;K5=PC;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){L3=v8(YB,l.d6);}
+if(ENABLE_CLIPPING){O3=x8(XB,j.f6);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-M0=U7(I1(SB),NB.zw,j0 x5);
+N0=W7(K1(RB),NB.zw,k0 B5);
 #else
-Mc(I1(SB),NB.zw,j0 x5);
+Nc(K1(RB),NB.zw,k0 B5);
 #endif
 }
 #endif
-f W=N3(j0);
+f X=Q3(k0);
 #ifdef POST_INVERT_Y
-W.y=-W.y;
+X.y=-X.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-W.z=oa(MC);
+X.z=pa(LC);
 #endif
-H1=unpackUnorm4x8(XB);
+J1=unpackUnorm4x8(WB);
 #ifdef ENABLE_ADVANCED_BLEND
-A1=Y1(ZB);
+C1=a2(YB);
 #endif
-a0(G5);
+c0(K5);
 #ifdef ENABLE_CLIPPING
-a0(L3);
+c0(O3);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-a0(M0);
+c0(N0);
 #endif
-a0(H1);
+c0(J1);
 #ifdef ENABLE_ADVANCED_BLEND
-a0(A1);
+c0(C1);
 #endif
-z1(W);}
+B1(X);}
 #endif

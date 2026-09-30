@@ -521,19 +521,36 @@ impl PaintData {
         }
     }
 
-    pub(crate) fn solid(color: ColorInt, fill_rule: FillRule, blend_mode: BlendMode) -> Self {
+    pub(crate) fn solid(
+        color: ColorInt,
+        fill_rule: FillRule,
+        blend_mode: BlendMode,
+        solid_unmultiplied: bool,
+    ) -> Self {
         Self {
             params: PaintType::SolidColor as u32
                 | Self::fill_flag(fill_rule)
                 | blend_mode_id(blend_mode) << 4,
-            value: swizzle_rive_color_to_rgba(color),
+            value: if solid_unmultiplied {
+                swizzle_rive_color_to_rgba(color)
+            } else {
+                swizzle_rive_color_to_rgba_premul(color)
+            },
         }
     }
 
-    pub(crate) fn solid_stroke(color: ColorInt, blend_mode: BlendMode) -> Self {
+    pub(crate) fn solid_stroke(
+        color: ColorInt,
+        blend_mode: BlendMode,
+        solid_unmultiplied: bool,
+    ) -> Self {
         Self {
             params: PaintType::SolidColor as u32 | blend_mode_id(blend_mode) << 4,
-            value: swizzle_rive_color_to_rgba(color),
+            value: if solid_unmultiplied {
+                swizzle_rive_color_to_rgba(color)
+            } else {
+                swizzle_rive_color_to_rgba_premul(color)
+            },
         }
     }
 
@@ -749,7 +766,7 @@ pub(crate) const fn swizzle_rive_color_to_rgba(color: ColorInt) -> u32 {
 
 pub(crate) fn swizzle_rive_color_to_rgba_premul(color: ColorInt) -> u32 {
     let [alpha, red, green, blue] = color.to_be_bytes();
-    let premul = |channel: u8| u32::from(channel) * u32::from(alpha) / 255;
+    let premul = |channel: u8| (u32::from(channel) * u32::from(alpha) + 127) / 255;
     premul(red) | premul(green) << 8 | premul(blue) << 16 | u32::from(alpha) << 24
 }
 
@@ -872,6 +889,7 @@ mod tests {
     fn color_and_blend_helpers_match_shader_encoding() {
         assert_eq!(swizzle_rive_color_to_rgba(0x8040_2010), 0x8010_2040);
         assert_eq!(swizzle_rive_color_to_rgba_premul(0x8040_2010), 0x8008_1020);
+        assert_eq!(swizzle_rive_color_to_rgba_premul(0x8001_0101), 0x8001_0101);
         assert_eq!(blend_mode_id(BlendMode::SrcOver), 0);
         assert_eq!(blend_mode_id(BlendMode::Luminosity), 15);
     }
@@ -891,9 +909,18 @@ mod tests {
         assert_eq!(patch.mirrored_outset, -2.0);
         assert_eq!(patch.mirrored_fill_coverage, -0.5);
 
-        let paint = PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply);
+        let paint = PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply, true);
         assert_eq!(paint.params, 1 | 0x200 | 11 << 4);
         assert_eq!(paint.value, 0x8010_2040);
+        assert_eq!(
+            PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::SrcOver, false).value,
+            0x8008_1020
+        );
+        // The KHR advanced-blend path also explicitly requests premultiplied solids.
+        assert_eq!(
+            PaintData::solid(0x8040_2010, FillRule::EvenOdd, BlendMode::Multiply, false).value,
+            0x8008_1020
+        );
         assert_eq!(paint.with_clip_rect().params, 1 | 0x200 | 0x400 | 11 << 4);
         assert_eq!(paint.with_clip_id(7).params, 7 << 16 | 1 | 0x200 | 11 << 4);
         assert_eq!(
@@ -905,14 +932,14 @@ mod tests {
             7 << 16
         );
         assert_eq!(
-            PaintData::solid(0x8040_2010, FillRule::Clockwise, BlendMode::Multiply)
+            PaintData::solid(0x8040_2010, FillRule::Clockwise, BlendMode::Multiply, true)
                 .with_generic_clockwise_fill()
                 .params,
             1 | 11 << 4
         );
         for fill_rule in [FillRule::NonZero, FillRule::EvenOdd, FillRule::Clockwise] {
             assert_eq!(
-                PaintData::solid(0x8040_2010, fill_rule, BlendMode::Multiply)
+                PaintData::solid(0x8040_2010, fill_rule, BlendMode::Multiply, true)
                     .with_generic_clockwise_fill()
                     .params
                     & 0x300,
@@ -938,7 +965,7 @@ mod tests {
                 0
             );
         }
-        let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply);
+        let stroke = PaintData::solid_stroke(0x8040_2010, BlendMode::Multiply, true);
         assert_eq!(stroke.params, 1 | 11 << 4);
 
         let image_paint = PaintData::image(0.5, FillRule::NonZero, BlendMode::Screen);

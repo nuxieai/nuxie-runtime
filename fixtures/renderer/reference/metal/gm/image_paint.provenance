@@ -1,22 +1,32 @@
 provenance_schema=1
-renderer_implementation=cpp-native-metal
+renderer_implementation=cpp-native-metal-approved-fma-adaptation
 capture_tool=upstream-gms
-capture_command=MTL_DEBUG_LAYER=1 tests/out/release/gms --backend metal --headless --match image_paint --output <capture-dir> -p1 --verbose
+build_command=PREMAKE_PATH=../build premake5 gmake2 --config=release --out=out/2579-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/2579-gms-text-canvas -j12 gms
+capture_command=MTL_DEBUG_LAYER=1 tests/out/2579-gms-text-canvas/gms --backend metal --headless --match image_paint --output <capture-dir> -p1 --verbose
 backend=metal
 adapter_vendor=apple
 adapter_architecture=metal-4
 adapter_device=Apple M5 Max
-adapter_description=Metal driver on macOS 26.5.2 (Build 25F84)
+adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
 adapter_vendor_id=0x106b
 case_id=image_paint
 gm_source=tests/gm/image_paint.cpp
-gm_source_sha256=edbe08ad08526c837228df7756c3471f4a01de511035ebafa461e38984e001ec
-runtime_revision=3ed35ee0ded0d58fb8d380930a156041a4624a2f
-metal_compiler=Apple metal 32023.883 (metalfe-32023.883)
-xcode_version=26.6
-xcode_build=17F113
-capture_binary_sha256=fa7b3b33186a9f3bf23b7d9898ba64d48d71efe9fb48edf52f8a5de9be77e2d7
-png_sha256=2aedbac0604c362b218e7bbda181cebc283544549b1d46d9932bfe77680de2cd
+gm_source_sha256=37eeb394b702b8d7be75394e09d6b4ca4574de8079514a8066318ccdb70b7aec
+runtime_revision=2579994c59cff57ac04d3a38401fa37ad1315425
+metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
+xcode_version=27.0
+xcode_build=27A266a
+capture_binary_sha256=0a49e7d77fa306a70ed2adcf213cf8b4fb83d4f61d72d6942eaaf51430e2e4b0
+png_sha256=c48e7d01facf3738ca21d6399557bb31a2e48e861783d64d6bb6f11e57b1fd1c
+approved_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
+adapted_shader=renderer/src/shaders/draw_raster_order_path.frag
+adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
+upstream_shader_sha256=1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418
+adapted_shader_sha256=5e14624af99ec46b52bc655a87b90e78761681fd53277cb02768613a8e0f96ad
+pristine_capture_file=image_paint.pristine.png
+pristine_capture_binary_sha256=9682fa41788b63fa215d39c7b685c5353d76b4dbe7d2d05ca44bc7e3d0a3c7c3
+pristine_png_sha256=b6d2ab3565070d30c5d6fdadee39636aba9dca7865a24687f1ca1b91b4ee1fa4
+pristine_comparison=274 differing pixels, maximum channel delta 1; applying only the approved FMA adaptation produces exact equality
 frame=0
 frame_width=512
 frame_height=512

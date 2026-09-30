@@ -455,7 +455,7 @@ pub(crate) struct RasterPreloadSpec {
 }
 
 /// The exact seven constructor-time raster ubershaders and their metallib
-/// names. The short `FC`/`IB` exports are pinned by `DrawShaderLibrary`.
+/// names. The short `EC`/`HB` exports are pinned by `DrawShaderLibrary`.
 pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineCacheError> {
     let make =
         |draw_type, shader_features, shader_misc_flags, vertex_function, fragment_function| {
@@ -479,50 +479,50 @@ pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineC
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000100::FC",
-            "p11111111100::IB",
+            "p11110000100::EC",
+            "p11111111100::HB",
         )?,
         make(
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000100::FC",
-            "c11111111100::IB",
+            "p11110000100::EC",
+            "c11111111100::HB",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000110::FC",
-            "p11111111110::IB",
+            "p11110000110::EC",
+            "p11111111110::HB",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000110::FC",
-            "c11111111110::IB",
+            "p11110000110::EC",
+            "c11111111110::HB",
         )?,
         make(
             DrawType::AtlasBlit,
             shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::RasterOrdering)?,
             0,
-            "p11100000111::FC",
-            "p11100011111::IB",
+            "p11100000111::EC",
+            "p11100011111::HB",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             0,
-            "m11100000000::FC",
-            "m11100011000::IB",
+            "m11100000000::EC",
+            "m11100011000::HB",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             CLOCKWISE_FILL,
-            "m11100000000::FC",
-            "m11100011000::IB",
+            "m11100000000::EC",
+            "m11100011000::HB",
         )?,
     ])
 }
@@ -1288,13 +1288,13 @@ mod tests {
                 .map(|spec| (spec.vertex_function, spec.fragment_function))
                 .collect::<Vec<_>>(),
             vec![
-                ("p11110000100::FC", "p11111111100::IB"),
-                ("p11110000100::FC", "c11111111100::IB"),
-                ("p11110000110::FC", "p11111111110::IB"),
-                ("p11110000110::FC", "c11111111110::IB"),
-                ("p11100000111::FC", "p11100011111::IB"),
-                ("m11100000000::FC", "m11100011000::IB"),
-                ("m11100000000::FC", "m11100011000::IB"),
+                ("p11110000100::EC", "p11111111100::HB"),
+                ("p11110000100::EC", "c11111111100::HB"),
+                ("p11110000110::EC", "p11111111110::HB"),
+                ("p11110000110::EC", "c11111111110::HB"),
+                ("p11100000111::EC", "p11100011111::HB"),
+                ("m11100000000::EC", "m11100011000::HB"),
+                ("m11100000000::EC", "m11100011000::HB"),
             ]
         );
         assert!(state.scheduled.is_empty());

@@ -1,8 +1,8 @@
 /*
- * Exact pinned upstream source bytes and provenance for
+ * Upstream-derived shader with a local Metal blend-contraction adaptation:
  * renderer/src/shaders/draw_raster_order_path.frag.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
  */
 
 #![allow(dead_code)]
@@ -10,14 +10,14 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_raster_order_path.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "06a00d578f24dc6e0447172995f2358098bcbde350b1d0b6d2f9d4fabc454009";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 240;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 8433;
+    "1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 238;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 8258;
 
-/// Exact pinned upstream source bytes.
+/// Upstream source with the retained Metal blend-contraction adaptation.
 pub const PINNED_DRAW_RASTER_ORDER_PATH_FRAG_SOURCE: &str = r###"/*
  * Copyright 2022 Rive
  */
@@ -179,11 +179,14 @@ PLS_MAIN(@drawFragmentMain)
         }
 #endif // ENABLE_CLIP_RECT
 
-        half4 color = find_paint_color(v_paint,
+        half4 color = find_paint_color(
 #ifdef @ENABLE_MODULATED_IMAGE
-                                       v_image,
+            v_image,
 #endif
-                                       coverage FRAGMENT_CONTEXT_UNPACK);
+#ifdef @ENABLE_ADVANCED_BLEND
+            cast_half_to_ushort(v_blendMode),
+#endif
+            v_paint FRAGMENT_CONTEXT_UNPACK);
 
         half4 dstColorPremul;
         if (coverageBufferID != v_pathID)
@@ -209,21 +212,16 @@ PLS_MAIN(@drawFragmentMain)
 
         // Blend with the framebuffer color.
 #ifdef @ENABLE_ADVANCED_BLEND
-        if (@ENABLE_ADVANCED_BLEND)
+        if (@ENABLE_ADVANCED_BLEND &&
+            v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
         {
-            // GENERATE_PREMULTIPLIED_PAINT_COLORS is false in this case because
-            // advanced blend needs unmultiplied colors.
-            if (v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
-            {
-                color.rgb =
-                    advanced_color_blend(color.rgb,
-                                         dstColorPremul,
-                                         cast_half_to_ushort(v_blendMode));
-            }
-            // Premultiply alpha now.
-            color.rgb *= color.a;
+            color.rgb = advanced_color_blend(color.rgb,
+                                             dstColorPremul,
+                                             cast_half_to_ushort(v_blendMode)) *
+                        color.a;
         }
 #endif
+        color *= coverage;
 
         // Certain platforms give us less control of the format of what we are
         // rendering too. Specifically, we are auto converted from linear ->

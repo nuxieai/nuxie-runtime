@@ -1,28 +1,28 @@
 struct TB {
-    uc: f32,
-    Cd: f32,
+    tc: f32,
+    Bd: f32,
     Hf: f32,
     If: f32,
-    n6_: u32,
-    Ob: u32,
+    o6_: u32,
+    Nb: u32,
     tf: u32,
     uf: u32,
-    U7_: vec4<i32>,
-    ih: vec2<f32>,
-    Dd: vec2<f32>,
+    T7_: vec4<i32>,
+    hh: vec2<f32>,
+    Cd: vec2<f32>,
     f2_: u32,
-    mh: f32,
+    lh: f32,
     c6_: u32,
-    W2_: f32,
-    Ed: f32,
+    X2_: f32,
+    Dd: f32,
     nf: u32,
     F3_: f32,
     G3_: f32,
-    Fd: f32,
-    fh: u32,
-    Nb: u32,
+    Ed: f32,
+    eh: u32,
+    Mb: u32,
+    Zb: f32,
     ac: f32,
-    bc: f32,
 }
 
 struct Ae {
@@ -33,14 +33,14 @@ struct Ae_1 {
     g2_: array<atomic<u32>>,
 }
 
-@id(3) override Lh: bool = true;
+@id(3) override Kh: bool = true;
 
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(3) @binding(9)
-var da: sampler;
+var ca: sampler;
 var<private> O_1: vec4<f32>;
-var<private> v4_1: vec2<f32>;
+var<private> w4_1: vec2<f32>;
 var<private> k3_1: vec2<u32>;
 @group(0) @binding(0)
 var<uniform> j: TB;
@@ -57,9 +57,9 @@ var W5_: sampler;
 var<private> X1_1: vec4<f32>;
 var<private> D0_1: f32;
 var<private> Y1_1: vec2<f32>;
-var<private> O0_1: vec4<f32>;
-var<private> g1_1: f32;
-var<private> C2_1: vec3<f32>;
+var<private> P0_1: vec4<f32>;
+var<private> f1_1: f32;
+var<private> D2_1: vec3<f32>;
 
 fn main_1() {
     var phi_598_: bool;
@@ -76,14 +76,14 @@ fn main_1() {
             if (_e48.y >= 0f) {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_535_ = Lh;
-                        if Lh {
+                        phi_535_ = Kh;
+                        if Kh {
                             phi_535_ = (_e48.x < -1.5f);
                         }
                         let _e119 = phi_535_;
                         if _e119 {
-                            let _e125 = textureSampleLevel(YC, da, vec2<f32>((3f + _e48.x), 0f), 0f);
-                            let _e130 = textureSampleLevel(YC, da, vec2<f32>((1f - _e48.y), 0f), 0f);
+                            let _e125 = textureSampleLevel(YC, ca, vec2<f32>((3f + _e48.x), 0f), 0f);
+                            let _e130 = textureSampleLevel(YC, ca, vec2<f32>((1f - _e48.y), 0f), 0f);
                             phi_859_ = ((1f - _e125.x) - _e130.x);
                             break;
                         } else {
@@ -98,15 +98,15 @@ fn main_1() {
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_598_ = Lh;
-                        if Lh {
+                        phi_598_ = Kh;
+                        if Kh {
                             phi_598_ = (_e48.y < -1.5f);
                         }
                         let _e55 = phi_598_;
                         if _e55 {
                             let _e59 = max(_e48.w, 0f);
                             if (_e48.z >= 0f) {
-                                let _e62 = textureSampleLevel(YC, da, vec2<f32>(_e59, 0f), 0f);
+                                let _e62 = textureSampleLevel(YC, ca, vec2<f32>(_e59, 0f), 0f);
                                 phi_851_ = _e62.x;
                             } else {
                                 phi_851_ = 0f;
@@ -118,10 +118,10 @@ fn main_1() {
                                 let _e73 = ((_e71 - _e59) * 0.5984134f);
                                 let _e76 = (vec4(_e59) + (vec4<f32>(0.20888568f, 0.62665707f, 1.0444285f, 1.4621998f) * _e73));
                                 let _e82 = ((_e76 * -(_e48.z)) + vec4(((_e71 * _e48.z) + (abs(_e48.x) - 0.25f))));
-                                let _e85 = textureSampleLevel(YC, da, vec2<f32>(_e82.x, 0f), 0f);
-                                let _e88 = textureSampleLevel(YC, da, vec2<f32>(_e82.y, 0f), 0f);
-                                let _e91 = textureSampleLevel(YC, da, vec2<f32>(_e82.z, 0f), 0f);
-                                let _e94 = textureSampleLevel(YC, da, vec2<f32>(_e82.w, 0f), 0f);
+                                let _e85 = textureSampleLevel(YC, ca, vec2<f32>(_e82.x, 0f), 0f);
+                                let _e88 = textureSampleLevel(YC, ca, vec2<f32>(_e82.y, 0f), 0f);
+                                let _e91 = textureSampleLevel(YC, ca, vec2<f32>(_e82.z, 0f), 0f);
+                                let _e94 = textureSampleLevel(YC, ca, vec2<f32>(_e82.w, 0f), 0f);
                                 let _e100 = (_e76 * 5.0959306f);
                                 phi_857_ = (_e65 + (dot(vec4<f32>(_e85.x, _e88.x, _e91.x, _e94.x), exp2(((vec4<f32>(2.5479653f, 2.5479653f, 2.5479653f, 2.5479653f) - _e100) * (_e100 + vec4<f32>(-2.5479653f, -2.5479653f, -2.5479653f, -2.5479653f))))) * _e73));
                             }
@@ -141,7 +141,7 @@ fn main_1() {
         }
     }
     let _e136 = phi_860_;
-    let _e137 = v4_1;
+    let _e137 = w4_1;
     let _e139 = vec2<u32>(floor(_e137));
     let _e141 = k3_1[1u];
     let _e143 = k3_1[0u];
@@ -156,15 +156,15 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(2) O: vec4<f32>, @location(8) v4_: vec2<f32>, @location(7) @interpolate(flat, either) k3_: vec2<u32>, @location(0) X1_: vec4<f32>, @location(3) @interpolate(flat, either) D0_: f32, @location(4) @interpolate(flat, either) Y1_: vec2<f32>, @location(5) O0_: vec4<f32>, @location(6) @interpolate(flat, either) g1_: f32, @location(9) C2_: vec3<f32>) {
+fn main(@location(2) O: vec4<f32>, @location(8) w4_: vec2<f32>, @location(7) @interpolate(flat, either) k3_: vec2<u32>, @location(0) X1_: vec4<f32>, @location(3) @interpolate(flat, either) D0_: f32, @location(4) @interpolate(flat, either) Y1_: vec2<f32>, @location(5) P0_: vec4<f32>, @location(6) @interpolate(flat, either) f1_: f32, @location(9) D2_: vec3<f32>) {
     O_1 = O;
-    v4_1 = v4_;
+    w4_1 = w4_;
     k3_1 = k3_;
     X1_1 = X1_;
     D0_1 = D0_;
     Y1_1 = Y1_;
-    O0_1 = O0_;
-    g1_1 = g1_;
-    C2_1 = C2_;
+    P0_1 = P0_;
+    f1_1 = f1_;
+    D2_1 = D2_;
     main_1();
 }

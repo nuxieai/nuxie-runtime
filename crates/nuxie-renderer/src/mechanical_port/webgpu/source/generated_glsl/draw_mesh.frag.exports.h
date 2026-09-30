@@ -88,8 +88,8 @@
 #define GLSL_FRAGMENT_raw EB
 #define GLSL_FlushUniforms "TB"
 #define GLSL_FlushUniforms_raw TB
-#define GLSL_GLSL_VERSION "LC"
-#define GLSL_GLSL_VERSION_raw LC
+#define GLSL_GLSL_VERSION "KC"
+#define GLSL_GLSL_VERSION_raw KC
 #define GLSL_GL_RENDERER_MALI "OF"
 #define GLSL_GL_RENDERER_MALI_raw OF
 #define GLSL_INITIALIZE_PLS "PE"
@@ -190,8 +190,8 @@
 #define GLSL_a_imageDrawTranslates_raw NB
 #define GLSL_a_imageDrawViewMatrix "XB"
 #define GLSL_a_imageDrawViewMatrix_raw XB
-#define GLSL_a_imageDrawZIndex "MC"
-#define GLSL_a_imageDrawZIndex_raw MC
+#define GLSL_a_imageDrawZIndex "LC"
+#define GLSL_a_imageDrawZIndex_raw LC
 #define GLSL_a_imageMeshUVTransform "GC"
 #define GLSL_a_imageMeshUVTransform_raw GC
 #define GLSL_a_imageRectGradientMatrix "QD"
@@ -278,8 +278,8 @@
 #define GLSL_sourceTexture_raw IC
 #define GLSL_stencilVertexMain "EG"
 #define GLSL_stencilVertexMain_raw EG
-#define GLSL_tessVertexTexture "KC"
-#define GLSL_tessVertexTexture_raw KC
+#define GLSL_tessVertexTexture "MC"
+#define GLSL_tessVertexTexture_raw MC
 #define GLSL_tessellateFragmentMain "GG"
 #define GLSL_tessellateFragmentMain_raw GG
 #define GLSL_tessellateVertexMain "FG"

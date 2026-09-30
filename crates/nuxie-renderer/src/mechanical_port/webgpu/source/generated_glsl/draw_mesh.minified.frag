@@ -1,31 +1,31 @@
 #ifdef FRAGMENT
 #if(defined(FIXED_FUNCTION_COLOR_OUTPUT)&&!defined(ENABLE_CLIPPING))||defined(RENDER_MODE_CLOCKWISE_ATOMIC)
-#undef Cb
+#undef Bb
 #else
-#define Cb
+#define Bb
 #endif
 M1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-z0(G2,m0);
+z0(H2,l0);
 #endif
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
-k1(X2,i0);
+j1(Y2,i0);
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
-z0(f6,p4);
+z0(f6,q4);
 #endif
-k1(J6,S0);
+j1(K6,S0);
 #else
-z0(X2,i0);
+z0(Y2,i0);
 #endif
 N1
 #ifdef DRAW_IMAGE_MESH
-I3 e3(h5,a4,HC);J3 i5 c4(W5) j5 U3 V3
+H3 e3(i5,a4,HC);I3 j5 c4(W5) k5 T3 U3
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
 #ifdef DRAW_IMAGE_MESH
-v2(HB)
+w2(HB)
 #else
-v2(HB)
+w2(HB)
 #endif
 #else
 #ifdef DRAW_IMAGE_MESH
@@ -38,48 +38,48 @@ P1(HB)
 #ifdef FEATHER_ATLAS_BLIT
 r(X1,f);
 #if defined(ENABLE_MODULATED_IMAGE)
-r(C2,S);
+r(D2,S);
 #endif
-r(F2,c);
+r(G2,c);
 #endif
 #ifdef ENABLE_CLIPPING
-r(O3,d);
+r(N3,d);
 #endif
 #ifdef ENABLE_CLIP_RECT
-r(O0,f);
+r(P0,f);
 #endif
 #if defined(FEATHER_ATLAS_BLIT)&&defined(ENABLE_ADVANCED_BLEND)
-r(g1,d);
+r(f1,d);
 #endif
 #ifdef DRAW_IMAGE_MESH
 r(J5,c);r(K1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-r(D1,N);
+r(C1,N);
 #endif
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-i k=L7(
+i k=K7(
 #ifdef ENABLE_MODULATED_IMAGE
-C2,
+D2,
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-g3(g1),
+g3(f1),
 #endif
-X1 Y2);d o=clamp(j2(FD,S9,F2,.0).x,J0(.0),J0(1.));
+X1 Z2);d o=clamp(j2(FD,S9,G2,.0).x,J0(.0),J0(1.));
 #endif
 #ifdef DRAW_IMAGE_MESH
-i k=A7(HC,W5,J5,j.Ed);d o=1.;
+i k=z7(HC,W5,J5,j.Dd);d o=1.;
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d c5=max(m3(g5(O0)),J0(.0));o=min(c5,o);}
+if(ENABLE_CLIP_RECT){d d5=max(m3(h5(P0)),J0(.0));o=min(d5,o);}
 #endif
-#ifdef Cb
-z2;
+#ifdef Bb
+A2;
 #endif
 #if defined(ENABLE_CLIPPING)
-if(ENABLE_CLIPPING&&O3!=.0){d z3;
+if(ENABLE_CLIPPING&&N3!=.0){d z3;
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
-D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;z3=max(E6==O3?Q0.x:J0(.0),J0(.0));
+D Q0=unpackHalf2x16(a1(i0));d F6=Q0.y;z3=max(F6==N3?Q0.x:J0(.0),J0(.0));
 #else
 z3=K0(i0).x;
 #endif
@@ -89,40 +89,40 @@ z3=max(z3,J0(.0));o=min(o,z3);}
 k*=K1;
 #endif
 #if!defined(FIXED_FUNCTION_COLOR_OUTPUT)
-i O1=K0(m0);
+i O1=K0(l0);
 #ifdef ENABLE_ADVANCED_BLEND
 #ifdef FEATHER_ATLAS_BLIT
-N p3=g3(g1);
+N p3=g3(f1);
 #endif
 #ifdef DRAW_IMAGE_MESH
-N p3=D1;
+N p3=C1;
 #endif
-if(ENABLE_ADVANCED_BLEND&&p3!=B4){
+if(ENABLE_ADVANCED_BLEND&&p3!=C4){
 #ifdef DRAW_IMAGE_MESH
-k.xyz=F6(k);
+k.xyz=G6(k);
 #endif
-k.xyz=Y4(k.xyz,O1,p3)*k.w;}
+k.xyz=Z4(k.xyz,O1,p3)*k.w;}
 #endif
 k*=o;
 #ifdef NEEDS_GAMMA_CORRECTION
 if(NEEDS_GAMMA_CORRECTION){k=q3(k);}
 #endif
-k.xyz=K2(k.xyz,k.w,d0.xy,j.F3,j.G3);
+k.xyz=L2(k.xyz,k.w,e0.xy,j.F3,j.G3);
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
 k=O1*(1.-k.w)+k;
 #endif
-A0(m0,k);
+A0(l0,k);
 #endif
 #ifndef RENDER_MODE_CLOCKWISE_ATOMIC
 h2(i0);h2(S0);
 #else
 A0(i0,E0(.0));
 #endif
-#ifdef Cb
-A2;
+#ifdef Bb
+B2;
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-k=(k*o);k.xyz=K2(k.xyz,k.w,d0.xy,j.F3,j.G3);F1=k;r3
+k=(k*o);k.xyz=L2(k.xyz,k.w,e0.xy,j.F3,j.G3);E1=k;r3
 #else
 d2;
 #endif

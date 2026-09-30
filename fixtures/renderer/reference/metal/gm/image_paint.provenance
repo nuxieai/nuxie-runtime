@@ -1,32 +1,35 @@
 provenance_schema=1
-renderer_implementation=cpp-native-metal-approved-fma-adaptation
+renderer_implementation=cpp-native-metal-approved-fma-and-coverage-adaptations
 capture_tool=upstream-gms
-build_command=PREMAKE_PATH=../build premake5 gmake2 --config=release --out=out/2579-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/2579-gms-text-canvas -j12 gms
-capture_command=MTL_DEBUG_LAYER=1 tests/out/2579-gms-text-canvas/gms --backend metal --headless --match image_paint --output <capture-dir> -p1 --verbose
+build_command=PREMAKE_PATH=<upstream>/build premake5 gmake2 --config=release --out=out/3b-gms-text-canvas --with_rive_canvas --with_rive_text (from tests); make -C out/3b-gms-text-canvas -j8 gms
+capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-adapted --backend metal --headless --match image_paint --output <evidence>/adapted -p1 --verbose
 backend=metal
 adapter_vendor=apple
-adapter_architecture=metal-4
 adapter_device=Apple M5 Max
 adapter_description=Metal driver on macOS 26.6.2 (Build 25G83)
-adapter_vendor_id=0x106b
 case_id=image_paint
 gm_source=tests/gm/image_paint.cpp
 gm_source_sha256=37eeb394b702b8d7be75394e09d6b4ca4574de8079514a8066318ccdb70b7aec
-runtime_revision=2579994c59cff57ac04d3a38401fa37ad1315425
+runtime_revision=3b615b829a58b67379f9304a161b3e87119bbf04
 metal_compiler=Apple metal 32023.921 (metalfe-32023.921.6)
 xcode_version=27.0
 xcode_build=27A266a
-capture_binary_sha256=0a49e7d77fa306a70ed2adcf213cf8b4fb83d4f61d72d6942eaaf51430e2e4b0
-png_sha256=c48e7d01facf3738ca21d6399557bb31a2e48e861783d64d6bb6f11e57b1fd1c
-approved_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
-adapted_shader=renderer/src/shaders/draw_raster_order_path.frag
-adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
-upstream_shader_sha256=1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418
-adapted_shader_sha256=5e14624af99ec46b52bc655a87b90e78761681fd53277cb02768613a8e0f96ad
+capture_binary_sha256=673f674a2b7f1dc6759f93955d46f0b2224e21dcd8c17f06811253efc917601e
+png_sha256=cd4cb0fdb5159da337fd964bd67aff9fcf3df0505e6e5570ef668fd321ee2058
+shader_regeneration_command=PYTHONHASHSEED=0 make -C <isolated-shader-copy> -j8 OUT=<upstream>/tests/out/3b-gms-text-canvas/include/generated/shaders FLAGS="-p <upstream>/tests/dependencies/dabeaz_ply_3.11" rive_pls_macosx_metallib; make -C <upstream>/tests/out/3b-gms-text-canvas -j8 gms
+approved_fma_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
+fma_adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
+upstream_fragment_shader_sha256=1c2353c90198c2251730fe53c3768bfb278a93ae687759e0b92b7c84f1aca418
+adapted_fragment_shader_sha256=edd72b123bcefde6859a1537a7f8f0c6f924b26c4e9c901cf5401094056cef79
+approved_coverage_adaptation_commit=a07db8d3ec50af8eb940db4af788fbbfad74b626
+coverage_adaptation=draw_path.vert selects float4 COVERAGE_TYPE and preserves coverages before interpolation when ENABLE_FEATHER or METAL; both guards and comment match the existing Rust shader literal
+upstream_vertex_shader_sha256=eb68ec1e79af90d098b6595101bdba833d4b8cd33a965c3fa02ea5563c8babeb
+adapted_vertex_shader_sha256=489280827d15dbcdcc5ce939de5ea30a3f9d948863cad7382a66912874a14785
 pristine_capture_file=image_paint.pristine.png
-pristine_capture_binary_sha256=9682fa41788b63fa215d39c7b685c5353d76b4dbe7d2d05ca44bc7e3d0a3c7c3
-pristine_png_sha256=b6d2ab3565070d30c5d6fdadee39636aba9dca7865a24687f1ca1b91b4ee1fa4
-pristine_comparison=274 differing pixels, maximum channel delta 1; applying only the approved FMA adaptation produces exact equality
+pristine_capture_binary_sha256=f88eb08ff0bd57bb45418ba24160329e88a6681cccb9a3893c6a5e997cf66f68
+pristine_png_sha256=24415ffc383ebd072ac556db631452c738755ee17560e209f991b3093dbbb5cc
+pristine_comparison=Current upstream pristine capture preserved; no Rust diagnostic available at recapture time
+evidence_directory=/tmp/nuxie-3b-gm-oracle.A1uigO
 frame=0
 frame_width=512
 frame_height=512

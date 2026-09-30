@@ -116,7 +116,7 @@ const GLSL_paintAuxBuffer: &str = "PB";
 const GLSL_paintBuffer: &str = "DD";
 const GLSL_pathBuffer: &str = "OB";
 const GLSL_sourceTexture: &str = "IC";
-const GLSL_tessVertexTexture: &str = "KC";
+const GLSL_tessVertexTexture: &str = "MC";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");

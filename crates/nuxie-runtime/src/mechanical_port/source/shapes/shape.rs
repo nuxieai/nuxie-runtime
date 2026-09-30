@@ -443,14 +443,19 @@ impl Shape {
         self.world_bounds
     }
     pub fn mark_bounds_dirty(&mut self) {
-        self.set_drawable_flags(self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0);
+        self.mark_world_bounds_dirty();
         self.local_bounds_clean.set(false);
-        self.world_length = -1.0;
         if let Some(participant) = self.layout_participant() {
             participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
                 participant.mark_layout_node_dirty_from_host(self, false)
             });
         }
+    }
+    /// Rigid movement changes world bounds without changing the intrinsic
+    /// geometry measured by a layout participant's slot.
+    pub fn mark_world_bounds_dirty(&mut self) {
+        self.set_drawable_flags(self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0);
+        self.world_length = -1.0;
     }
 
     /// Combined path control-point hulls in world space. The optional transform
@@ -714,6 +719,11 @@ impl Shape {
     }
     pub fn is_participating_in_layout(&self) -> bool {
         self.layout_participant().is_some()
+    }
+    pub fn has_layout_participant(&self) -> bool {
+        // Runtime children are fixed; the upstream editor-only rescan is not
+        // enabled by this runtime's tools configuration.
+        self.has_layout_participant
     }
     pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {
         let participant = self.base.children().iter().find_map(|child| {

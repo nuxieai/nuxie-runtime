@@ -2,7 +2,8 @@ use crate::mechanical_port::source::{
     component::{Component, ComponentOccurrenceHandle},
     component_dirt::ComponentDirt,
     core::CoreHandle,
-    math::mat2d::Mat2D,
+    layout::layout_participant::LayoutParticipant,
+    math::{aabb::Aabb, mat2d::Mat2D},
     shapes::{paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags},
 };
 use std::{cell::RefCell, rc::Rc};
@@ -26,6 +27,8 @@ impl RuntimePathComposerHandle {
                 shape_notified: false,
                 local_inputs: Vec::new(),
                 scratch_inputs: Vec::new(),
+                reported_intrinsic_bounds: Aabb::default(),
+                has_reported_intrinsic_bounds: false,
                 built_local_flags: PathFlags::NONE,
                 has_local_inputs: false,
             })
@@ -130,11 +133,53 @@ pub struct PathComposer {
     shape_notified: bool,
     local_inputs: Vec<LocalPathInput>,
     scratch_inputs: Vec<LocalPathInput>,
+    reported_intrinsic_bounds: Aabb,
+    has_reported_intrinsic_bounds: bool,
     built_local_flags: PathFlags,
     has_local_inputs: bool,
 }
 
 impl PathComposer {
+    /// Compare to the bounds last reported to layout, not the previous frame,
+    /// so tolerated round-trip drift cannot accumulate.
+    pub fn intrinsic_bounds_changed(&mut self) -> bool {
+        fn moved_past_ulps(a: f32, b: f32) -> bool {
+            // std::max retains its first operand for unordered comparisons.
+            let mut magnitude = 1.0_f32;
+            if magnitude < a.abs() {
+                magnitude = a.abs();
+            }
+            if magnitude < b.abs() {
+                magnitude = b.abs();
+            }
+            (a - b).abs() > (16.0 * f32::EPSILON) * magnitude
+        }
+        let bounds = self
+            .shape()
+            .with(|object| {
+                let shape = object.as_shape().expect("PathComposer Shape");
+                // Collapsing a path can change measured bounds without dropping
+                // the participant's memoized host bounds. Always measure fresh.
+                if let Some(participant) = shape.layout_participant() {
+                    participant.with_downcast_mut::<LayoutParticipant, _>(
+                        LayoutParticipant::invalidate_host_bounds,
+                    );
+                }
+                shape.compute_intrinsic_bounds()
+            })
+            .expect("live PathComposer Shape");
+        let last = self.reported_intrinsic_bounds;
+        let changed = !self.has_reported_intrinsic_bounds
+            || moved_past_ulps(bounds.min_x, last.min_x)
+            || moved_past_ulps(bounds.min_y, last.min_y)
+            || moved_past_ulps(bounds.max_x, last.max_x)
+            || moved_past_ulps(bounds.max_y, last.max_y);
+        if changed {
+            self.reported_intrinsic_bounds = bounds;
+            self.has_reported_intrinsic_bounds = true;
+        }
+        changed
+    }
     pub fn local_inputs_changed(&mut self) -> bool {
         // Preserve std::max's operand selection, including unordered values.
         fn source_max(a: f32, b: f32) -> f32 {
@@ -238,7 +283,7 @@ impl PathComposer {
         }
     }
 
-    pub fn update(&mut self, value: ComponentDirt) -> Option<CoreHandle> {
+    pub fn update(&mut self, value: ComponentDirt) -> Option<(CoreHandle, bool)> {
         self.shape_notified = false;
         if !value.intersects(ComponentDirt::PATH | ComponentDirt::N_SLICER) {
             return None;
@@ -324,7 +369,18 @@ impl PathComposer {
                 });
             }
         }
-        Some(shape_handle)
+        let has_participant = shape_handle
+            .with(|object| {
+                object
+                    .as_shape()
+                    .expect("PathComposer Shape")
+                    .has_layout_participant()
+            })
+            .expect("live PathComposer Shape");
+        let measured_geometry_changed = !has_participant || self.intrinsic_bounds_changed();
+        // Carry the source's bounds-dirt choice across the existing Rust
+        // borrow handoff; notifying layout can recursively touch the composer.
+        Some((shape_handle, measured_geometry_changed))
     }
 
     pub fn local_path(&mut self) -> &mut ShapePaintPath {

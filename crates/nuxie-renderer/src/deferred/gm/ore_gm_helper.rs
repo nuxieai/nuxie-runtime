@@ -491,14 +491,9 @@ pub(super) fn draw_canvas(
     canvas: &RenderCanvasHandle,
     x: f32,
     y: f32,
-    flip: bool,
 ) {
     renderer.save();
     renderer.translate(x, y);
-    if flip {
-        renderer.translate(0.0, canvas.borrow().height() as f32);
-        renderer.scale(1.0, -1.0);
-    }
     renderer.draw_image(
         Some(canvas.borrow().render_image().as_ref()),
         ImageSampler {

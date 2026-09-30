@@ -1,25 +1,26 @@
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
 struct gl_PerVertex {
@@ -29,19 +30,19 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct Bg {
+struct Cg {
     e2_: array<vec4<u32>>,
 }
 
-struct hf {
+struct jf {
     e2_: array<vec2<u32>>,
 }
 
-struct jf {
+struct kf {
     e2_: array<vec4<f32>>,
 }
 
-struct Cg {
+struct Dg {
     e2_: array<vec4<u32>>,
 }
 
@@ -56,7 +57,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(1) override Ch: bool = true;
+@id(1) override Dh: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
@@ -76,7 +77,7 @@ var<private> YB_1: u32;
 var<private> A1_: u32;
 var<private> ZB_1: u32;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 var<private> OC_1: vec4<f32>;
 var<private> QD_1: vec4<f32>;
 var<private> N5_: vec4<f32>;
@@ -86,13 +87,13 @@ var KC: texture_2d<u32>;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> PB: Bg;
+var<storage> PB: Cg;
 @group(0) @binding(3)
-var<storage> DD: hf;
+var<storage> DD: jf;
 @group(0) @binding(4)
-var<storage> QB: jf;
+var<storage> QB: kf;
 @group(0) @binding(5)
-var<storage> ID: Cg;
+var<storage> ID: Dg;
 @group(3) @binding(9)
 var ea: sampler;
 var<private> MC_1: u32;
@@ -159,7 +160,7 @@ fn main_1() {
         phi_755_ = (_e137 + ((_e139 * ((abs(_e139.x) + abs(_e139.y)) / dot(_e139, _e139))) * 0.5f));
     }
     let _e151 = phi_755_;
-    if Ch {
+    if Dh {
         let _e152 = SB_1;
         let _e157 = vec2<f32>(_e152.x, _e152.y);
         let _e158 = vec2<f32>(_e152.z, _e152.w);
@@ -193,8 +194,8 @@ fn main_1() {
     y3_ = _e189;
     let _e190 = ZB_1;
     A1_ = _e190;
-    let _e192 = n.Ef;
-    let _e194 = n.Ff;
+    let _e192 = l.Ff;
+    let _e194 = l.Gf;
     let _e204 = OC_1[3u];
     if (_e204 != 0f) {
         let _e206 = QD_1;

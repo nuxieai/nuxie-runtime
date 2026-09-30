@@ -40,6 +40,7 @@ pub(crate) enum MSAAResolveAction {
 pub(crate) trait RenderTargetGLApi {
     fn base(&self) -> &RenderTargetGL;
     fn baseMut(&mut self) -> &mut RenderTargetGL;
+    fn bottomUp(&self) -> bool;
 
     fn bindDestinationFramebuffer(&mut self, target: GLenum);
     fn renderTexture(&mut self) -> GLuint;
@@ -72,6 +73,8 @@ pub(crate) struct RenderTargetGL {
 impl RenderTargetGL {
     pub(crate) fn newBase(width: u32, height: u32, execution: GLExecutionStamp) -> Self {
         let mut base = RenderTarget::new(width, height);
+        base.bottom_up_virtual =
+            |target, _features| unsafe { (&*target.cast::<RenderTargetGL>()).bottomUp() };
         base.install_owner_thread_execution(
             execution.domain().ownerThreadFinalReleaseRoute(),
             execution.domain().key(),
@@ -88,6 +91,16 @@ impl RenderTargetGL {
 
     pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
         &self.rust_execution
+    }
+
+    pub(crate) fn bottomUp(&self) -> bool {
+        match self.liteTypeID() {
+            TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID => unsafe {
+                (&*(self as *const Self).cast::<TextureRenderTargetGL>()).bottomUp()
+            },
+            FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID => true,
+            _ => unreachable!("RenderTargetGL requires a concrete orientation"),
+        }
     }
 
     pub(crate) fn assertSameExecution(&self, execution: &GLExecutionStamp) {
@@ -130,6 +143,7 @@ pub(crate) struct TextureRenderTargetGL {
 
     // Not owned or deleted by this target.
     pub(crate) m_externalTextureID: GLuint,
+    pub(crate) m_bottomUp: bool,
 
     pub(crate) m_framebufferID: ManuallyDrop<Framebuffer>,
     pub(crate) m_headlessFramebuffer: ManuallyDrop<Framebuffer>,
@@ -148,6 +162,13 @@ pub(crate) struct TextureRenderTargetGL {
 }
 
 impl TextureRenderTargetGL {
+    pub(crate) fn setBottomUp(&mut self, bottomUp: bool) {
+        self.m_bottomUp = bottomUp;
+    }
+
+    pub(crate) fn bottomUp(&self) -> bool {
+        self.m_bottomUp
+    }
     pub(crate) fn new(width: u32, height: u32, execution: GLExecutionStamp) -> Self {
         super::render_target_gl_impl::newTextureRenderTargetGL(width, height, execution)
     }
@@ -239,6 +260,9 @@ unsafe impl RefCntTarget for TextureRenderTargetGL {
 }
 
 impl RenderTargetGLApi for TextureRenderTargetGL {
+    fn bottomUp(&self) -> bool {
+        self.m_bottomUp
+    }
     fn base(&self) -> &RenderTargetGL {
         &self.base
     }
@@ -399,6 +423,9 @@ unsafe impl RefCntTarget for FramebufferRenderTargetGL {
 }
 
 impl RenderTargetGLApi for FramebufferRenderTargetGL {
+    fn bottomUp(&self) -> bool {
+        true
+    }
     fn base(&self) -> &RenderTargetGL {
         &self.base
     }
@@ -451,7 +478,7 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_and_execution_sidecar_are_frozen() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 233);
+        assert_eq!(PINNED_SOURCE.lines().count(), 245);
         assert_eq!(offset_of!(RenderTargetGL, base), 0);
         assert!(offset_of!(RenderTargetGL, lite_rtti) > offset_of!(RenderTargetGL, base));
         assert!(

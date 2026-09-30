@@ -21,7 +21,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
 };
 
 pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_pls_impl_webgl.cpp");
-const _: [(); 11_347] = [(); PINNED_SOURCE.len()];
+const _: [(); 11488] = [(); PINNED_SOURCE.len()];
 
 const COLOR_PLANE_IDX: GLint = 0;
 const CLIP_PLANE_IDX: GLint = 1;
@@ -168,6 +168,7 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
                             glutils::BlitFramebuffer(
                                 desc.renderTargetUpdateBounds,
                                 framebufferRenderTarget.height(),
+                                framebufferRenderTarget.bottomUp(),
                                 GL_COLOR_BUFFER_BIT,
                             );
                         }
@@ -240,6 +241,7 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
                         glutils::BlitFramebuffer(
                             desc.renderTargetUpdateBounds,
                             framebufferRenderTarget.height(),
+                            framebufferRenderTarget.bottomUp(),
                             GL_COLOR_BUFFER_BIT,
                         );
                     }
@@ -562,8 +564,8 @@ mod tests {
 
     #[test]
     fn source_denominator_and_load_op_mapping_are_exact() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 337);
-        assert_eq!(PINNED_SOURCE.len(), 11_347);
+        assert_eq!(PINNED_SOURCE.lines().count(), 339);
+        assert_eq!(PINNED_SOURCE.len(), 11488);
         assert_eq!(webgl_load_op(LoadAction::clear), GL_LOAD_OP_CLEAR_ANGLE);
         assert_eq!(
             webgl_load_op(LoadAction::preserveRenderTarget),

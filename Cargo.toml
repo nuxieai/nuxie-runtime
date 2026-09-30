@@ -111,6 +111,14 @@ unwrap_used = "warn"
 indexing_slicing = "warn"
 arithmetic_side_effects = "warn"
 
+[profile.dev]
+debug = "line-tables-only"
+incremental = false
+
+[profile.test]
+debug = "line-tables-only"
+incremental = false
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

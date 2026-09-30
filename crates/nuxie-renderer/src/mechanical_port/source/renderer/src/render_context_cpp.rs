@@ -6325,7 +6325,7 @@ impl LogicalFlush {
         } else {
             Some(*unsafe { (*draw.clipRectInverseMatrix()).inverseMatrix() })
         };
-        let target_height = unsafe { self.m_flush_desc.renderTarget.unwrap().as_ref().height() };
+        let render_target = unsafe { self.m_flush_desc.renderTarget.unwrap().as_ref() };
         let mut aux: gpu::PaintAuxData = unsafe { core::mem::zeroed() };
         aux.set(
             *draw.paintMatrix(),
@@ -6335,8 +6335,8 @@ impl LogicalFlush {
             gradient_coeffs,
             image_size,
             clip_matrix,
-            context.platformFeatures().framebufferBottomUp,
-            target_height,
+            render_target,
+            context.platformFeatures(),
         );
         unsafe { context.m_paint_aux_data.emplace_back(aux) };
         debug_assert_eq!(
@@ -6518,8 +6518,8 @@ impl LogicalFlush {
                 [coeffs[0], coeffs[1], coeffs[2]],
                 unsafe { (*draw).rampLocation() },
                 unsafe { *(*draw).gradientMatrix() },
-                context.platformFeatures().framebufferBottomUp,
-                context.frameDescriptor().renderTargetHeight,
+                unsafe { self.m_flush_desc.renderTarget.unwrap().as_ref() },
+                context.platformFeatures(),
             );
             gradient_y = gpu_cpp::getGradientY(
                 unsafe { (*draw).rampLocation() },

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 7732f41ef93e4cb74286934ee596e1041d0a0ba7
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "7732f41ef93e4cb74286934ee596e1041d0a0ba7";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "86290485b3b05e6dd04c47585cd15d08adaa542644620cfa52ad2ae68acb7533";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1156;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 39754;
+    "65732d116a16d4c560fc565b54d06a50408d4e37c12c039c89180427742d5ad6";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1160;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 39896;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -303,11 +303,15 @@ IMAGE_RECT_VERTEX_MAIN(@drawVertexMain,
 
     float4 pos = RENDER_TARGET_COORD_TO_CLIP_COORD(vertexPosition);
 
-    // Paint matrices operate on the fragment shader's "_fragCoord", which is
-    // bottom-up in GL.
+    // Paint matrices operate on the fragment shader's "_fragCoord", which
+    // counts from memory row 0. A bottom up target needs it flipped into Rive
+    // pixel space.
     float2 fragCoord = vertexPosition;
-#ifdef @FRAMEBUFFER_BOTTOM_UP
-    fragCoord.y = float(uniforms.renderTargetHeight) - fragCoord.y;
+#ifdef @ENABLE_RENDER_TARGET_BOTTOM_UP
+    if (uniforms.renderTargetBottomUp != 0u)
+    {
+        fragCoord.y = float(uniforms.renderTargetHeight) - fragCoord.y;
+    }
 #endif
 
     // @a_imageRectPackedGradientData contains:

@@ -1,40 +1,41 @@
+struct Dg {
+    e2_: array<vec4<u32>>,
+}
+
 struct Cg {
     e2_: array<vec4<u32>>,
 }
 
-struct Bg {
-    e2_: array<vec4<u32>>,
-}
-
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
-}
-
-struct hf {
-    e2_: array<vec2<u32>>,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
 struct jf {
+    e2_: array<vec2<u32>>,
+}
+
+struct kf {
     e2_: array<vec4<f32>>,
 }
 
@@ -58,31 +59,31 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Bh: bool = true;
-@id(2) override Dh: bool = true;
-@id(1) override Ch: bool = true;
-@id(8) override Jh: bool = true;
+@id(0) override Ch: bool = true;
+@id(2) override Eh: bool = true;
+@id(1) override Dh: bool = true;
+@id(8) override Kh: bool = true;
 
 @group(0) @binding(7)
 var KC: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> ID: Cg;
+var<storage> ID: Dg;
 @group(0) @binding(2)
-var<storage> PB: Bg;
+var<storage> PB: Cg;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> UB_1: vec4<f32>;
 var<private> VB_1: vec4<f32>;
 var<private> M: vec4<f32>;
 @group(0) @binding(3)
-var<storage> DD: hf;
+var<storage> DD: jf;
 var<private> C0_: f32;
 var<private> W1_: vec2<f32>;
 var<private> g2_: f32;
 @group(0) @binding(4)
-var<storage> QB: jf;
+var<storage> QB: kf;
 var<private> M0_: vec4<f32>;
 var<private> V1_: vec4<f32>;
 var<private> C2_: vec3<f32>;
@@ -515,7 +516,7 @@ fn main_1() {
             let _e609 = phi_3122_;
             let _e611 = phi_3118_;
             let _e613 = phi_3094_;
-            let _e619 = n.Yg;
+            let _e619 = l.Zg;
             let _e622 = select(_e609.xy, vec2<f32>(1f, -1f), vec2((_e619 != 0u)));
             let _e628 = vec4<f32>(_e622.x, _e609.y, _e609.z, _e609.w);
             phi_3165_ = vec4<f32>(_e628.x, _e622.y, _e628.z, _e628.w);
@@ -530,7 +531,7 @@ fn main_1() {
     M = _e636;
     let _e643 = local;
     let _e645 = DD.e2_[_e643];
-    let _e647 = n.f6_;
+    let _e647 = l.f6_;
     let _e649 = local_1;
     if (_e649 == 0u) {
         phi_3166_ = 0f;
@@ -545,7 +546,7 @@ fn main_1() {
         C0_ = -(_e662);
     }
     let _e664 = (_e645.x & 15u);
-    if Bh {
+    if Ch {
         let _e665 = (_e664 == 0u);
         if _e665 {
             phi_3167_ = _e645.y;
@@ -567,10 +568,10 @@ fn main_1() {
         let _e680 = phi_3169_;
         W1_[0u] = _e680;
     }
-    if Dh {
+    if Eh {
         g2_ = f32(((_e645.x >> bitcast<u32>(4i)) & 15u));
     }
-    if Ch {
+    if Dh {
         let _e687 = local_3;
         let _e688 = (_e687 * 8u);
         let _e692 = QB.e2_[(_e688 + 2u)];
@@ -604,7 +605,7 @@ fn main_1() {
     if (_e664 == 1u) {
         V1_ = unpack4x8unorm(_e645.y);
     } else {
-        if (Bh && (_e664 == 0u)) {
+        if (Ch && (_e664 == 0u)) {
             let _e814 = (_e645.x >> bitcast<u32>(16i));
             if (_e814 == 0u) {
                 phi_3221_ = 0f;
@@ -640,8 +641,8 @@ fn main_1() {
             V1_[3u] = -(_e811);
         }
     }
-    phi_1407_ = Jh;
-    if Jh {
+    phi_1407_ = Kh;
+    if Kh {
         phi_1407_ = ((_e645.x & 2048u) != 0u);
     }
     let _e828 = phi_1407_;
@@ -656,15 +657,15 @@ fn main_1() {
         C2_ = vec3<f32>(0f, 0f, 0f);
     }
     if _e640 {
-        let _e859 = n.Ef;
-        let _e861 = n.Ff;
+        let _e859 = l.Ff;
+        let _e861 = l.Gf;
         let _e871 = local_6;
         let _e875 = PB.e2_[(_e871 + 3u)];
         g3_ = _e875.xy;
         p4_ = (_e638 + bitcast<vec2<f32>>(_e875.zw));
         phi_3239_ = vec4<f32>(((_e638.x * _e859) - 1f), ((_e638.y * _e861) - sign(_e861)), 0f, 1f);
     } else {
-        let _e856 = n.U2_;
+        let _e856 = l.U2_;
         phi_3239_ = vec4(_e856);
     }
     let _e881 = phi_3239_;

@@ -3372,7 +3372,8 @@ pub struct FlushUniforms {
     pub m_ditherBias: f32,
     pub m_ditherConversionToRGB10: f32,
     pub m_wireframeEnabled: u32,
-    pub m_padTo256Bytes: [u8; 256 - 104],
+    pub m_renderTargetBottomUp: u32,
+    pub m_padTo256Bytes: [u8; 256 - 108],
 }
 
 impl FlushUniforms {

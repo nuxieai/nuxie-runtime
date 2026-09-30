@@ -1,4 +1,7 @@
-//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 39afeca4.
+//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 7732f41e.
+//! Image:view() records a sample view; the consumer performs the real wrap at
+//! replay, after the canvas content that wrote the source, including when a
+//! script writes and samples the same canvas in one frame.
 use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::*;
 use nuxie_ore_metal::{

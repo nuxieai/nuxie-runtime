@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 159204] = [(); PINNED_SOURCE.len()];
+const _: [(); 151486] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -99,7 +99,7 @@ const GLSL_ENABLE_INSTANCE_INDEX: &str = "UE";
 const GLSL_ENABLE_KHR_BLEND: &str = "ME";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "GB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "O";
-const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "NE";
+const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "NE";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "RC";
@@ -262,87 +262,6 @@ impl Drop for TextureGLImpl {
             ManuallyDrop::drop(&mut self.base);
             ManuallyDrop::drop(&mut self.rust_execution);
         }
-    }
-}
-
-impl CanvasSourceTextureGLImpl {
-    fn new(
-        width: u32,
-        height: u32,
-        textureID: GLuint,
-        execution: GLExecutionStamp,
-        owner: *mut RenderContextGLImpl,
-        canvasRegistry: WeakCanvasMirrorRegistry,
-    ) -> Self {
-        let mut base = TextureGLImpl::new(width, height, textureID, execution);
-        base.base.destroy_complete =
-            |base| unsafe { drop(Box::from_raw(base.cast::<CanvasSourceTextureGLImpl>())) };
-        Self {
-            base: ManuallyDrop::new(base),
-            m_owner: owner,
-            m_glID: textureID,
-            rust_canvas_registry: canvasRegistry,
-            rust_has_released_canvas_targets: if owner.is_null() {
-                std::sync::Weak::new()
-            } else {
-                unsafe { std::sync::Arc::downgrade(&(*owner).m_hasReleasedCanvasTargets) }
-            },
-            rust_released_canvas_targets: if owner.is_null() {
-                std::sync::Weak::new()
-            } else {
-                unsafe { std::sync::Arc::downgrade(&(*owner).m_releasedCanvasTargets) }
-            },
-        }
-    }
-}
-
-unsafe impl RefCntTarget for CanvasSourceTextureGLImpl {
-    fn r#ref(&self) {
-        self.base.base.r#ref();
-    }
-    unsafe fn unref(&self) {
-        unsafe { self.base.base.unref() }
-    }
-    unsafe fn onRefCntReachedZero(ptr: *const Self) {
-        unsafe { drop(Box::from_raw(ptr.cast_mut())) }
-    }
-}
-
-impl Drop for CanvasSourceTextureGLImpl {
-    fn drop(&mut self) {
-        if self.m_glID != 0
-            && super::gles3_decl::currentGLExecutionIdentity()
-                != Some((
-                    self.base.rust_execution.domain().key(),
-                    self.base.rust_execution.generation(),
-                ))
-        {
-            if let Some(queue) = self.rust_released_canvas_targets.upgrade() {
-                let mut queue = queue.lock().unwrap();
-                queue.push(self.m_glID);
-                if let Some(flag) = self.rust_has_released_canvas_targets.upgrade() {
-                    flag.store(true, std::sync::atomic::Ordering::Release);
-                }
-            }
-            unsafe { ManuallyDrop::drop(&mut self.base) };
-            return;
-        }
-        let entry = self.rust_canvas_registry.upgrade().and_then(|registry| {
-            let entry = registry.borrow_mut().remove(&self.m_glID);
-            entry
-        });
-        if let Some(entry) = entry {
-            let execution = (&*self.base.rust_execution).clone();
-            let _ = execution.withDeleteCurrent(|| {
-                if entry.readFBO != 0 {
-                    recordGLCommand(GLCommand::DeleteFramebuffer(entry.readFBO));
-                }
-                if entry.drawFBO != 0 {
-                    recordGLCommand(GLCommand::DeleteFramebuffer(entry.drawFBO));
-                }
-            });
-        }
-        unsafe { ManuallyDrop::drop(&mut self.base) };
     }
 }
 
@@ -666,9 +585,6 @@ fn newContextOwner(
         m_blitAsDrawProgram: ManuallyDrop::new(Program::Zero()),
         m_state: ManuallyDrop::new(state),
         m_testForAdvancedBlendError: false,
-        m_canvasMirrors: ManuallyDrop::new(Rc::new(RefCell::new(BTreeMap::new()))),
-        m_releasedCanvasTargets: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
-        m_hasReleasedCanvasTargets: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         rust_execution: ManuallyDrop::new(execution.clone()),
         rust_source_renderer_string: ManuallyDrop::new(rendererString),
     });
@@ -1202,207 +1118,28 @@ pub(crate) unsafe fn ensureCanvasBacking(
             height,
         });
         recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
-        let source = make_rcp(|| {
-            CanvasSourceTextureGLImpl::new(
-                width,
-                height,
-                textureID,
-                execution.clone(),
-                context,
-                Rc::downgrade(&context.m_canvasMirrors),
-            )
-        });
+        let source = make_rcp(|| TextureGLImpl::new(width, height, textureID, execution.clone()));
         let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
         let target = make_rcp(|| TextureRenderTargetGL::new(width, height, execution.clone()));
-        unsafe { (&mut *target.get()).setTargetTexture(textureID) };
+        unsafe {
+            (&mut *target.get()).setTargetTexture(textureID);
+            (&mut *target.get()).setBottomUp(false);
+        };
         let target: rcp<RenderTarget> = unsafe { static_rcp_cast(target) };
         canvas.setBacking(source, target);
-        registerCanvasTarget(context, textureID);
     });
 }
 
 pub(crate) fn makeOreContext(
     context: &mut RenderContextGLImpl,
 ) -> Option<Box<crate::mechanical_port::source::include::rive::factory_hpp::OreContext>> {
-    super::ore_context_gl_decl::ContextGL::Make(
-        (&*context.rust_execution).clone(),
-        context as *mut _ as *mut std::ffi::c_void,
-    )
-    .map(|context| {
+    super::ore_context_gl_decl::ContextGL::Make((&*context.rust_execution).clone()).map(|context| {
         Box::new(
             crate::mechanical_port::source::include::rive::factory_hpp::OreContext::GL(
                 std::rc::Rc::new(std::cell::RefCell::new(*context)),
             ),
         )
     })
-}
-
-pub(crate) fn registerCanvasTarget(context: &mut RenderContextGLImpl, sourceTex: GLuint) {
-    unregisterCanvasTarget(context, sourceTex);
-    context
-        .m_canvasMirrors
-        .borrow_mut()
-        .insert(sourceTex, CanvasMirrorEntry::default());
-}
-
-pub(crate) unsafe fn getCanvasImportMirror(
-    context: &mut RenderContextGLImpl,
-    sourceTex: *mut RiveTexture,
-    width: u32,
-    height: u32,
-) -> rcp<RiveRenderImage> {
-    if sourceTex.is_null() {
-        return rcp::new();
-    }
-    let execution = (&*context.rust_execution).clone();
-    if !unsafe { &*sourceTex }
-        .belongs_to_owner_thread_execution(execution.domain().key(), execution.generation())
-    {
-        return rcp::new();
-    }
-    let glID = unsafe { (&*sourceTex).nativeHandle() } as usize as GLuint;
-    if glID == 0 {
-        return rcp::new();
-    }
-    getOrCreateCanvasMirror(context, glID, width, height)
-}
-
-pub(crate) fn unregisterCanvasTarget(context: &mut RenderContextGLImpl, sourceTex: GLuint) {
-    let entry = context.m_canvasMirrors.borrow_mut().remove(&sourceTex);
-    let Some(entry) = entry else {
-        return;
-    };
-    let execution = (&*context.rust_execution).clone();
-    execution.withCurrent(|| {
-        if entry.readFBO != 0 {
-            recordGLCommand(GLCommand::DeleteFramebuffer(entry.readFBO));
-        }
-        if entry.drawFBO != 0 {
-            recordGLCommand(GLCommand::DeleteFramebuffer(entry.drawFBO));
-        }
-    });
-}
-
-pub(crate) fn getOrCreateCanvasMirror(
-    context: &mut RenderContextGLImpl,
-    sourceTex: GLuint,
-    width: u32,
-    height: u32,
-) -> rcp<RiveRenderImage> {
-    let execution = (&*context.rust_execution).clone();
-    let canvasRegistry = (&*context.m_canvasMirrors).clone();
-    execution.withCurrent(|| {
-        let existing = canvasRegistry.borrow().get(&sourceTex).and_then(|entry| {
-            (!entry.mirrorImage.get().is_null()).then(|| entry.mirrorImage.clone())
-        });
-        if let Some(existing) = existing {
-            return existing;
-        }
-        if !canvasRegistry.borrow().contains_key(&sourceTex) {
-            return rcp::new();
-        }
-
-        let mirrorTex = generateGLObject(GLObjectKind::Texture);
-        recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
-        recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, mirrorTex));
-        recordGLCommand(GLCommand::TexStorage2D {
-            target: GL_TEXTURE_2D,
-            levels: 1,
-            internal_format: GL_RGBA8,
-            width,
-            height,
-        });
-        let readFBO = generateGLObject(GLObjectKind::Framebuffer);
-        let drawFBO = generateGLObject(GLObjectKind::Framebuffer);
-        recordGLCommand(GLCommand::BindFramebuffer(GL_READ_FRAMEBUFFER, readFBO));
-        recordGLCommand(GLCommand::FramebufferTexture2D {
-            target: GL_READ_FRAMEBUFFER,
-            attachment: GL_COLOR_ATTACHMENT0,
-            texture_target: GL_TEXTURE_2D,
-            texture: sourceTex,
-            level: 0,
-        });
-        recordGLCommand(GLCommand::BindFramebuffer(GL_DRAW_FRAMEBUFFER, drawFBO));
-        recordGLCommand(GLCommand::FramebufferTexture2D {
-            target: GL_DRAW_FRAMEBUFFER,
-            attachment: GL_COLOR_ATTACHMENT0,
-            texture_target: GL_TEXTURE_2D,
-            texture: mirrorTex,
-            level: 0,
-        });
-        recordGLCommand(GLCommand::BindFramebuffer(GL_READ_FRAMEBUFFER, 0));
-        recordGLCommand(GLCommand::BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
-        let registered = {
-            let mut registry = canvasRegistry.borrow_mut();
-            match registry.get_mut(&sourceTex) {
-                Some(entry) if entry.mirrorImage.get().is_null() => {
-                    entry.width = width;
-                    entry.height = height;
-                    entry.readFBO = readFBO;
-                    entry.drawFBO = drawFBO;
-                    true
-                }
-                _ => false,
-            }
-        };
-        if !registered {
-            // A source finalizer can arrive from a worker while provider calls
-            // are in flight. It removes the logical entry before these owned
-            // names are retired, so no stale mirror is published.
-            recordGLCommand(GLCommand::DeleteFramebuffer(readFBO));
-            recordGLCommand(GLCommand::DeleteFramebuffer(drawFBO));
-            recordGLCommand(GLCommand::DeleteTexture(mirrorTex));
-            context.m_state.borrow_mut().invalidate();
-            return rcp::new();
-        }
-        let texture = make_rcp(|| TextureGLImpl::new(width, height, mirrorTex, execution.clone()));
-        let texture: rcp<RiveTexture> = unsafe { static_rcp_cast(texture) };
-        let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
-        canvasRegistry
-            .borrow_mut()
-            .get_mut(&sourceTex)
-            .expect("registered canvas mirror")
-            .mirrorImage = image.clone();
-        context.m_state.borrow_mut().invalidate();
-        blitMirrorIfRegistered(context, sourceTex);
-        image
-    })
-}
-
-pub(crate) fn blitMirrorIfRegistered(context: &mut RenderContextGLImpl, targetTex: GLuint) {
-    let execution = (&*context.rust_execution).clone();
-    let canvasRegistry = (&*context.m_canvasMirrors).clone();
-    execution.withCurrent(|| {
-        let entry = canvasRegistry.borrow().get(&targetTex).cloned();
-        let Some(entry) = entry.filter(|entry| !entry.mirrorImage.get().is_null()) else {
-            return;
-        };
-        recordGLCommand(GLCommand::BindFramebuffer(
-            GL_READ_FRAMEBUFFER,
-            entry.readFBO,
-        ));
-        recordGLCommand(GLCommand::BindFramebuffer(
-            GL_DRAW_FRAMEBUFFER,
-            entry.drawFBO,
-        ));
-        recordGLCommand(GLCommand::BlitFramebuffer(
-            [
-                0,
-                0,
-                entry.width as i32,
-                entry.height as i32,
-                0,
-                entry.height as i32,
-                entry.width as i32,
-                0,
-            ],
-            GL_COLOR_BUFFER_BIT,
-            GL_NEAREST,
-        ));
-        recordGLCommand(GLCommand::BindFramebuffer(GL_READ_FRAMEBUFFER, 0));
-        recordGLCommand(GLCommand::BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
-        context.m_state.borrow_mut().invalidate();
-    });
 }
 
 fn makeUniformBufferRing(
@@ -1962,7 +1699,7 @@ fn newDrawShader(
         defines.push(GLSL_RENDER_MODE_DEPTH_STENCIL);
     }
     assert!(context.platformFeatures().framebufferBottomUp);
-    defines.push(GLSL_FRAMEBUFFER_BOTTOM_UP);
+    defines.push(GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP);
     if !context.m_capabilities.ARB_shader_storage_buffer_object() {
         defines.push(GLSL_DISABLE_SHADER_STORAGE_BUFFERS);
     }
@@ -2832,6 +2569,7 @@ pub(crate) fn blitTextureToFramebufferAsDraw(
     textureID: GLuint,
     bounds: &gpu::IAABB,
     renderTargetHeight: u32,
+    bottomUp: bool,
 ) {
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
@@ -2864,7 +2602,7 @@ pub(crate) fn blitTextureToFramebufferAsDraw(
         }
         let mut state = context.m_state.borrow_mut();
         state.setPipelineState(&gpu::COLOR_ONLY_PIPELINE_STATE, ScissorAction::ignore);
-        state.setScissor(*bounds, renderTargetHeight);
+        state.setScissor(*bounds, renderTargetHeight, bottomUp);
         state.bindProgram(context.m_blitAsDrawProgram.id());
         state.bindVAO(context.m_emptyVAO.id());
         drop(state);
@@ -3082,15 +2820,6 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             .base()
             .assertSameExecution(&execution);
 
-        if context.m_hasReleasedCanvasTargets.load(std::sync::atomic::Ordering::Acquire) {
-            let released = {
-                let mut queue = context.m_releasedCanvasTargets.lock().unwrap();
-                let released = std::mem::take(&mut *queue);
-                context.m_hasReleasedCanvasTargets.store(false, std::sync::atomic::Ordering::Release);
-                released
-            };
-            for sourceTex in released { unregisterCanvasTarget(context, sourceTex); }
-        }
         super::gl_utils_impl::ReclaimAbandonedNames();
 
         recordGLCommand(GLCommand::BindBufferRange {
@@ -3555,10 +3284,12 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             }
         }
 
+        let targetBottomUp = renderTargetGL(renderTargetHandle, &execution).bottomUp();
         let fullUpdateScissorRect = desc
             .renderTargetUpdateBounds
             .lossless_numeric_cast::<u16>()
             .expect("pinned lossless_numeric_cast requires update bounds to fit u16");
+        recordGLCommand(GLCommand::FrontFace(if targetBottomUp { GL_CW } else { GL_CCW }));
         let drawList = desc
             .drawList
             .expect("flush descriptor carries a draw list")
@@ -3671,6 +3402,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         glutils::BlitFramebuffer(
                             gpu::IAABB::MakeWH(targetWidth, targetHeight),
                             targetHeight,
+                            targetBottomUp,
                             GL_COLOR_BUFFER_BIT,
                         );
                     } else {
@@ -3683,6 +3415,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                                 desc.renderTargetUpdateBounds
                                     .intersect(*(*draw).pixelBounds()),
                                 targetHeight,
+                                targetBottomUp,
                                 GL_COLOR_BUFFER_BIT,
                             );
                             draw = (*draw).nextDstRead();
@@ -3697,7 +3430,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 let scissor = fullUpdateScissorRect.intersectOrEmpty(scissor);
                 let mut state = context.m_state.borrow_mut();
                 state.setPipelineState(&pipelineState, ScissorAction::ignore);
-                state.setScissorU16(scissor, targetHeight);
+                state.setScissorU16(scissor, targetHeight, targetBottomUp);
             } else {
                 context
                     .m_state
@@ -3981,6 +3714,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 glutils::BlitFramebuffer(
                     desc.renderTargetUpdateBounds,
                     targetHeight,
+                    targetBottomUp,
                     GL_COLOR_BUFFER_BIT,
                 );
                 recordGLCommand(GLCommand::InvalidateFramebuffer {
@@ -4008,8 +3742,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
         }
 
         recordGLCommand(GLCommand::Flush);
-        let targetTexture = renderTargetGL(renderTargetHandle, &execution).renderTexture();
-        blitMirrorIfRegistered(context, targetTexture);
+        recordGLCommand(GLCommand::FrontFace(GL_CW));
     });
 }
 
@@ -4465,33 +4198,15 @@ fn preparePipelineManagerForDrop(manager: &mut GLPipelineManager, currentGenerat
 }
 
 unsafe fn destroyContextSourceFields(context: &mut RenderContextGLImpl, currentGeneration: bool) {
-    // Detach the logical registry before the first provider boundary. Any
-    // queued or outliving canvas callback now observes an empty map and cannot
-    // race this teardown's ownership of the remaining FBO names.
-    let canvasMirrors = {
-        let mut registry = context.m_canvasMirrors.borrow_mut();
-        std::mem::take(&mut *registry)
-    };
     if currentGeneration {
         recordGLCommand(GLCommand::DeleteTexture(context.m_gradientTexture));
         recordGLCommand(GLCommand::DeleteTexture(context.m_tessVertexTexture));
-        // Canvas owners may legally outlive the context. Release the detached
-        // registry-owned FBOs while their creating generation is current.
-        for entry in canvasMirrors.values() {
-            if entry.readFBO != 0 {
-                recordGLCommand(GLCommand::DeleteFramebuffer(entry.readFBO));
-            }
-            if entry.drawFBO != 0 {
-                recordGLCommand(GLCommand::DeleteFramebuffer(entry.drawFBO));
-            }
-        }
         context.m_state.borrow_mut().invalidate();
     }
     context.m_gradientTexture = 0;
     context.m_tessVertexTexture = 0;
 
     // Exact reverse declaration order for every nontrivial source field.
-    unsafe { ManuallyDrop::drop(&mut context.m_canvasMirrors) };
     unsafe { ManuallyDrop::drop(&mut context.m_state) };
     unsafe { dropProgram(&mut context.m_blitAsDrawProgram, currentGeneration) };
     unsafe { dropVAO(&mut context.m_emptyVAO, currentGeneration) };
@@ -4742,8 +4457,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4099);
-        assert_eq!(PINNED_SOURCE.len(), 159204);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3882);
+        assert_eq!(PINNED_SOURCE.len(), 151486);
     }
 
     #[test]
@@ -4800,7 +4515,10 @@ mod tests {
                 "FIXED_FUNCTION_COLOR_OUTPUT",
                 GLSL_FIXED_FUNCTION_COLOR_OUTPUT,
             ),
-            ("FRAMEBUFFER_BOTTOM_UP", GLSL_FRAMEBUFFER_BOTTOM_UP),
+            (
+                "ENABLE_RENDER_TARGET_BOTTOM_UP",
+                GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP,
+            ),
             ("OPTIONALLY_FLAT", GLSL_OPTIONALLY_FLAT),
             ("RENDER_MODE_DEPTH_STENCIL", GLSL_RENDER_MODE_DEPTH_STENCIL),
             ("RESOLVE_PLS", GLSL_RESOLVE_PLS),
@@ -4872,7 +4590,7 @@ mod tests {
     }
 
     #[test]
-    fn worker_queued_canvas_finalizers_update_registry_before_method_body() {
+    fn worker_queued_canvas_texture_finalizer_runs_on_its_execution_owner() {
         let commands = Rc::new(RefCell::new(Vec::new()));
         let finalReleaseIngress = Rc::new(RefCell::new(None));
         let finalReleaseWake = std::sync::Arc::new(TestFinalReleaseWake::default());
@@ -4883,46 +4601,19 @@ mod tests {
             finalReleaseWake: std::sync::Arc::clone(&finalReleaseWake),
         }));
         let execution = domain.stamp();
-        let mirror = make_rcp(|| TextureGLImpl::new(32, 24, 17, execution.clone()));
-        let mirror: rcp<RiveTexture> = unsafe { static_rcp_cast(mirror) };
-        let mirrorImage = make_rcp(|| unsafe { RiveRenderImage::new(mirror) });
-        let canvasRegistry: CanvasMirrorRegistry = Rc::new(RefCell::new(BTreeMap::from([(
-            11,
-            CanvasMirrorEntry {
-                mirrorImage,
-                width: 32,
-                height: 24,
-                readFBO: 41,
-                drawFBO: 43,
-            },
-        )])));
-
-        let source = make_rcp(|| {
-            CanvasSourceTextureGLImpl::new(
-                32,
-                24,
-                11,
-                execution.clone(),
-                std::ptr::null_mut(),
-                Rc::downgrade(&canvasRegistry),
-            )
-        });
+        let source = make_rcp(|| TextureGLImpl::new(32, 24, 11, execution.clone()));
         let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
         std::thread::spawn(move || drop(source)).join().unwrap();
-
         assert_eq!(finalReleaseWake.takePosts(), 1);
-        assert!(canvasRegistry.borrow().contains_key(&11));
-        execution.withCurrent(|| {
-            assert!(!canvasRegistry.borrow().contains_key(&11));
-        });
-
-        let commands = commands.borrow();
-        assert!(commands.contains(&GLCommand::DeleteFramebuffer(41)));
-        assert!(commands.contains(&GLCommand::DeleteFramebuffer(43)));
-        assert!(commands.contains(&GLCommand::DeleteTexture(17)));
-        assert!(commands.contains(&GLCommand::DeleteTexture(11)));
-        drop(commands);
-
+        assert!(!commands.borrow().contains(&GLCommand::DeleteTexture(11)));
+        execution.withCurrent(|| {});
+        assert!(commands.borrow().contains(&GLCommand::DeleteTexture(11)));
+        assert!(
+            !commands
+                .borrow()
+                .iter()
+                .any(|command| matches!(command, GLCommand::DeleteFramebuffer(_)))
+        );
         drop(execution);
         domain.shutdown();
         assert!(finalReleaseIngress.borrow().is_some());

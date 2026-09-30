@@ -65,7 +65,7 @@ y2(k0);
 #endif
 }else
 #endif
-{E R4=unpackHalf2x16(Y0(Q0));d k9=R4.y;d S4=k9==C0?R4.x:I0(.0);d Ee=
+{E R4=unpackHalf2x16(Y0(Q0));d k9=R4.y;d S4=k9==C0?R4.x:I0(.0);d Fe=
 #ifndef EB
 W5(M)?max(S4,w0):
 #endif
@@ -73,9 +73,9 @@ S4+w0;
 #ifdef I
 if(I&&W1.x!=.0){E O0=unpackHalf2x16(Y0(h0));d L5=O0.y;d Ab=L5==W1.x?O0.x:I0(.0);F1=min(Ab,F1);}
 #endif
-F1=max(F1,.0);d c2=ha(S4,.0,F1);d E1=ha(Ee,.0,F1);
+F1=max(F1,.0);d c2=ha(S4,.0,F1);d E1=ha(Fe,.0,F1);
 #ifdef LB
-d K5;if(LB){K5=ka(c0.xy,n.C3,n.D3);}
+d K5;if(LB){K5=ka(c0.xy,l.C3,l.D3);}
 #endif
 #ifndef O
 i L1=J0(k0);
@@ -84,7 +84,7 @@ if(AB){if(g2!=c6(S5)&&E1!=.0){if(c2==.0){x0.xyz=U4(x0.xyz,L1,d6(g2));
 #ifndef EB
 if(E1<F1){A Q7=x0.xyz;
 #ifdef LB
-if(LB){Q7+=K5*n.Dd;}
+if(LB){Q7+=K5*l.Ed;}
 #endif
 z0(F6,D0(Q7,0.0));}
 #endif
@@ -97,16 +97,16 @@ x0.xyz=J2(x0.xyz,x0.w,K5);
 #endif
 #ifndef EB
 #ifdef AB
-#define Fe (!AB||g2==c6(S5))&&x0.w>=1.
+#define Ge (!AB||g2==c6(S5))&&x0.w>=1.
 #else
-#define Fe x0.w>=1.
+#define Ge x0.w>=1.
 #endif
-Td(Fe,Q0,packHalf2x16(D2(Ee,C0)));
+Ud(Ge,Q0,packHalf2x16(D2(Fe,C0)));
 #else
 f2(Q0);
 #endif
 #ifndef O
-Sd(x0.w==.0,k0,L1*(1.-x0.w)+x0);
+Td(x0.w==.0,k0,L1*(1.-x0.w)+x0);
 #endif
 }f2(h0);A2;
 #ifdef O

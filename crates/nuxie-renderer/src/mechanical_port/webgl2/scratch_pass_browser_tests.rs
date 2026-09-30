@@ -188,7 +188,7 @@ pub fn run_scratch_pass_browser_tests(canvas: HtmlCanvasElement) -> Result<Strin
     let (provider, adapter, _) = BrowserWebGl2Provider::new(canvas, 64, 64)
         .map_err(|error| format!("WebGL2 unavailable: {error:?}"))?;
     let domain = GLExecutionDomain::new(Box::new(provider));
-    let mut ctx = ContextGL::Make(domain.stamp(), std::ptr::null_mut())
+    let mut ctx = ContextGL::Make(domain.stamp())
         .ok_or("ORE GL context unavailable")?;
     {
         let pipeline = pipeline(&mut ctx);

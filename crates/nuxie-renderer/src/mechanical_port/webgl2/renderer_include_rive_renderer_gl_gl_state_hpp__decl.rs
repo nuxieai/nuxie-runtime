@@ -5,7 +5,7 @@
 
 use super::gles3_decl::{GLCapabilities, GLExecutionDomain, GLExecutionStamp, GLenum, GLuint};
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    AABBu16, BlendEquation, PipelineState, IAABB,
+    AABBu16, BlendEquation, IAABB, PipelineState,
 };
 
 pub(crate) const PINNED_SOURCE: &str =
@@ -158,15 +158,20 @@ impl GLState {
         self.withExecutionDomain(super::gl_state_impl::invalidate)
     }
 
-    pub(crate) fn setScissor(&mut self, scissor: IAABB, renderTargetHeight: u32) {
+    pub(crate) fn setScissor(&mut self, scissor: IAABB, renderTargetHeight: u32, bottomUp: bool) {
         self.withExecutionDomain(|state| {
-            super::gl_state_impl::setScissor(state, scissor, renderTargetHeight)
+            super::gl_state_impl::setScissor(state, scissor, renderTargetHeight, bottomUp)
         })
     }
 
-    pub(crate) fn setScissorU16(&mut self, scissor: AABBu16, renderTargetHeight: u32) {
+    pub(crate) fn setScissorU16(
+        &mut self,
+        scissor: AABBu16,
+        renderTargetHeight: u32,
+        bottomUp: bool,
+    ) {
         self.withExecutionDomain(|state| {
-            super::gl_state_impl::setScissorU16(state, scissor, renderTargetHeight)
+            super::gl_state_impl::setScissorU16(state, scissor, renderTargetHeight, bottomUp)
         })
     }
 

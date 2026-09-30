@@ -6,24 +6,24 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char flush_uniforms[] = R"===(#ifndef q3
-#define q3(h4) float h4;
+#define q3(i4) float i4;
 #endif
-#ifndef i4
-#define i4(h4) uint h4;
-#endif
-#ifndef yd
-#define yd(h4) g6 h4;
-#endif
-#ifndef Qa
-#define Qa(h4) c h4;
-#endif
-#ifndef eh
-#define eh(h4) f h4;
+#ifndef J3
+#define J3(i4) uint i4;
 #endif
 #ifndef zd
-#define zd BC
+#define zd(i4) g6 i4;
 #endif
-y7(I4,zd)q3(qc)q3(Ad)q3(Ef)q3(Ff)i4(q6)i4(Nb)i4(qf)i4(rf)yd(V7)Qa(bh)Qa(Bd)i4(d2)q3(fh)i4(f6)q3(U2)q3(Cd)i4(lf)q3(C3)q3(D3)q3(Dd)i4(Yg)N8(n)
+#ifndef Qa
+#define Qa(i4) c i4;
+#endif
+#ifndef fh
+#define fh(i4) f i4;
+#endif
+#ifndef Ad
+#define Ad BC
+#endif
+y7(I4,Ad)q3(rc)q3(Bd)q3(Ff)q3(Gf)J3(q6)J3(Ob)J3(rf)J3(sf)zd(V7)Qa(ch)Qa(Cd)J3(d2)q3(gh)J3(f6)q3(U2)q3(Dd)J3(mf)q3(C3)q3(D3)q3(Ed)J3(Zg)J3(Nb)N8(l)
 )===";
 } // namespace glsl
 } // namespace gpu

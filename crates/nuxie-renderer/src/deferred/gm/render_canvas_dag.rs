@@ -1,4 +1,4 @@
-//! tests/gm/render_canvas_dag.cpp through 34f6df47; GmHost exposes its replay context.
+//! tests/gm/render_canvas_dag.cpp through 7732f41e; GmHost exposes its replay context.
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
@@ -21,9 +21,8 @@ fn replay(session: &mut DeferredSession, replayer: &mut DeferredReplayer, host: 
 }
 fn screen(session: &DeferredSession, a: &RenderCanvasHandle, b: &RenderCanvasHandle) {
     let mut renderer = session.make_screen_renderer(0);
-    // Native Metal's framebufferBottomUp is false.
-    draw_canvas(renderer.as_mut(), a, 0.0, 64.0, false);
-    draw_canvas(renderer.as_mut(), b, 128.0, 64.0, false);
+    draw_canvas(renderer.as_mut(), a, 0.0, 64.0);
+    draw_canvas(renderer.as_mut(), b, 128.0, 64.0);
 }
 fn chain(reversed: bool) -> Vec<u8> {
     let mut host = GmHost::with_screen(0xff202028, false);
@@ -42,7 +41,7 @@ fn chain(reversed: bool) -> Vec<u8> {
     };
     let record_b = |session: &mut DeferredSession| {
         let mut r = session.begin_canvas_content(b.clone(), 0xff501030).unwrap();
-        draw_canvas(r.as_mut(), &a, 0.0, 0.0, false);
+        draw_canvas(r.as_mut(), &a, 0.0, 0.0);
         r.draw_path(dot.as_ref(), orange.as_ref());
         session.end_canvas_content(&b);
     };
@@ -81,14 +80,14 @@ fn cycle() -> Vec<u8> {
         let mut r = session.begin_canvas_content(a.clone(), 0xff103050).unwrap();
         r.save();
         r.scale(0.5, 0.5);
-        draw_canvas(r.as_mut(), &b, 0.0, 0.0, false);
+        draw_canvas(r.as_mut(), &b, 0.0, 0.0);
         r.restore();
         r.draw_path(dot.as_ref(), white.as_ref());
         session.end_canvas_content(&a);
         let mut r = session.begin_canvas_content(b.clone(), 0xff501030).unwrap();
         r.save();
         r.scale(0.5, 0.5);
-        draw_canvas(r.as_mut(), &a, 0.0, 0.0, false);
+        draw_canvas(r.as_mut(), &a, 0.0, 0.0);
         r.restore();
         r.draw_path(dot.as_ref(), white.as_ref());
         session.end_canvas_content(&b);
@@ -125,7 +124,7 @@ fn cycle_immediate_reference() -> Vec<u8> {
             let mut r = r.borrow_mut();
             r.save();
             r.scale(0.5, 0.5);
-            draw_canvas(r.as_mut(), &b, 0.0, 0.0, false);
+            draw_canvas(r.as_mut(), &b, 0.0, 0.0);
             r.restore();
             r.draw_path(dot.as_ref(), white.as_ref());
         }
@@ -135,14 +134,14 @@ fn cycle_immediate_reference() -> Vec<u8> {
             let mut r = r.borrow_mut();
             r.save();
             r.scale(0.5, 0.5);
-            draw_canvas(r.as_mut(), &a, 0.0, 0.0, false);
+            draw_canvas(r.as_mut(), &a, 0.0, 0.0);
             r.restore();
             r.draw_path(dot.as_ref(), white.as_ref());
         }
         host.end_canvas_content();
         let r = host.begin_screen_frame(0).unwrap();
-        draw_canvas(r.borrow_mut().as_mut(), &a, 0.0, 64.0, false);
-        draw_canvas(r.borrow_mut().as_mut(), &b, 128.0, 64.0, false);
+        draw_canvas(r.borrow_mut().as_mut(), &a, 0.0, 64.0);
+        draw_canvas(r.borrow_mut().as_mut(), &b, 128.0, 64.0);
     }
     host.finish()
 }

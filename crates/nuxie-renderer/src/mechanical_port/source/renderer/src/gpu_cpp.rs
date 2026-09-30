@@ -3271,14 +3271,14 @@ pub fn getGradientMatrixAndSpan(
     coeffs: [f32; 3],
     location: ColorRampLocation,
     view_matrix: Mat2D,
-    framebuffer_bottom_up: bool,
-    render_target_height: u32,
+    render_target: &RenderTarget,
+    platform_features: &PlatformFeatures,
 ) -> (Mat2D, [f32; 2]) {
     let mut matrix = inverse_mat2d(view_matrix).unwrap_or(Mat2D::IDENTITY);
-    if framebuffer_bottom_up {
+    if render_target.bottomUp(platform_features) {
         matrix = multiply_mat2d(
             matrix,
-            Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, render_target_height as f32]),
+            Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, render_target.height() as f32]),
         );
     }
     if paint_type == PaintType::linearGradient {
@@ -3314,8 +3314,8 @@ pub fn set_paint_aux_data(
     gradientCoeffs: Option<[f32; 3]>,
     imageSize: Option<(u32, u32)>,
     clipRectInverseMatrix: Option<Mat2D>,
-    framebufferBottomUp: bool,
-    renderTargetHeight: u32,
+    renderTarget: &RenderTarget,
+    platformFeatures: &PlatformFeatures,
 ) {
     if matches!(
         paintType,
@@ -3327,8 +3327,8 @@ pub fn set_paint_aux_data(
             coeffs,
             unsafe { simplePaintValue.colorRampLocation },
             viewMatrix,
-            framebufferBottomUp,
-            renderTargetHeight,
+            renderTarget,
+            platformFeatures,
         );
         out.m_gradTextureHorizontalSpan = span;
         out.m_paintMatrix = paintMatrix.0;
@@ -3336,10 +3336,10 @@ pub fn set_paint_aux_data(
     if paintType != PaintType::clipUpdate {
         if let Some((width, height)) = imageSize {
             let mut matrix = inverse_mat2d(imageMatrix).unwrap_or(Mat2D::IDENTITY);
-            if framebufferBottomUp {
+            if renderTarget.bottomUp(platformFeatures) {
                 matrix = multiply_mat2d(
                     matrix,
-                    Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, renderTargetHeight as f32]),
+                    Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, renderTarget.height() as f32]),
                 );
             }
             let dudx = matrix.0[0] * width as f32;
@@ -3352,10 +3352,10 @@ pub fn set_paint_aux_data(
         }
     }
     let clip = clipRectInverseMatrix.unwrap_or(Mat2D([0.0, 0.0, 0.0, 0.0, 1.0, 1.0]));
-    let clip = if framebufferBottomUp {
+    let clip = if renderTarget.bottomUp(platformFeatures) {
         multiply_mat2d(
             clip,
-            Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, renderTargetHeight as f32]),
+            Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, renderTarget.height() as f32]),
         )
     } else {
         clip
@@ -3382,8 +3382,8 @@ impl PaintAuxData {
         gradientCoeffs: Option<[f32; 3]>,
         imageSize: Option<(u32, u32)>,
         clipRectInverseMatrix: Option<Mat2D>,
-        framebufferBottomUp: bool,
-        renderTargetHeight: u32,
+        renderTarget: &RenderTarget,
+        platformFeatures: &PlatformFeatures,
     ) {
         set_paint_aux_data(
             self,
@@ -3394,8 +3394,8 @@ impl PaintAuxData {
             gradientCoeffs,
             imageSize,
             clipRectInverseMatrix,
-            framebufferBottomUp,
-            renderTargetHeight,
+            renderTarget,
+            platformFeatures,
         );
     }
 }
@@ -3616,6 +3616,7 @@ impl InverseViewports {
         tessDataHeight: u32,
         renderTargetWidth: u32,
         renderTargetHeight: u32,
+        renderTargetBottomUp: bool,
         platformFeatures: &PlatformFeatures,
     ) -> Self {
         let mut numerators = [2.0_f32; 4];
@@ -3623,7 +3624,9 @@ impl InverseViewports {
             numerators[0] = -numerators[0];
             numerators[1] = -numerators[1];
         }
-        if platformFeatures.clipSpaceBottomUp {
+        if (platformFeatures.clipSpaceBottomUp != platformFeatures.framebufferBottomUp)
+            != renderTargetBottomUp
+        {
             numerators[3] = -numerators[3];
         }
         Self {
@@ -3652,6 +3655,7 @@ impl FlushUniforms {
             flushDesc.tessDataHeight,
             renderTargetWidth,
             renderTargetHeight,
+            renderTarget.bottomUp(platformFeatures),
             platformFeatures,
         );
         let ditherScale = if flushDesc.ditherMode == DitherMode::none {
@@ -3693,7 +3697,8 @@ impl FlushUniforms {
                 (-1.0 / 1024.0) / ditherScale
             },
             m_wireframeEnabled: flushDesc.wireframe as u32,
-            m_padTo256Bytes: [0; 256 - 104],
+            m_renderTargetBottomUp: renderTarget.bottomUp(platformFeatures) as u32,
+            m_padTo256Bytes: [0; 256 - 108],
         }
     }
 }

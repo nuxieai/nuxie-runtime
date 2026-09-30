@@ -18,8 +18,8 @@ pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_gl_u
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU32, Ordering},
         Mutex, OnceLock,
+        atomic::{AtomicU32, Ordering},
     },
 };
 static ABANDONED_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -481,23 +481,36 @@ pub(crate) fn SetTexture2DSamplingParamsFromSampler(samplingParams: ImageSampler
     }
 }
 
-pub(crate) fn BlitFramebuffer(bounds: IAABB, renderTargetHeight: u32, mask: GLbitfield) {
+pub(crate) fn BlitFramebuffer(
+    bounds: IAABB,
+    renderTargetHeight: u32,
+    bottomUp: bool,
+    mask: GLbitfield,
+) {
     assert!(bounds.left >= 0 && bounds.top >= 0);
     assert!(bounds.right >= bounds.left && bounds.bottom >= bounds.top);
     let l = bounds.left;
-    let b = i32::try_from(
-        renderTargetHeight
-            .checked_sub(bounds.bottom as u32)
-            .expect("blit bounds are inside render target"),
-    )
-    .expect("render target height fits GL coordinate");
+    let b = if bottomUp {
+        i32::try_from(
+            renderTargetHeight
+                .checked_sub(bounds.bottom as u32)
+                .expect("blit bounds are inside render target"),
+        )
+        .expect("render target height fits GL coordinate")
+    } else {
+        bounds.top
+    };
     let r = bounds.right;
-    let t = i32::try_from(
-        renderTargetHeight
-            .checked_sub(bounds.top as u32)
-            .expect("blit bounds are inside render target"),
-    )
-    .expect("render target height fits GL coordinate");
+    let t = if bottomUp {
+        i32::try_from(
+            renderTargetHeight
+                .checked_sub(bounds.top as u32)
+                .expect("blit bounds are inside render target"),
+        )
+        .expect("render target height fits GL coordinate")
+    } else {
+        bounds.bottom
+    };
     recordGLCommand(GLCommand::BlitFramebuffer(
         [l, b, r, t, l, b, r, t],
         mask,
@@ -527,9 +540,9 @@ mod tests {
     fn complete_source_and_generated_input_denominators_are_frozen() {
         assert_eq!(
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
-            289
+            290
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 501);
+        assert_eq!(PINNED_SOURCE.lines().count(), 502);
         assert_eq!(GLSL_GLSL.as_bytes().len(), 10573);
     }
 
@@ -656,6 +669,7 @@ mod tests {
                 bottom: 7,
             },
             20,
+            true,
             GL_COLOR_BUFFER_BIT,
         );
         assert_eq!(
@@ -683,6 +697,30 @@ mod tests {
                     GL_NEAREST,
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn top_down_blit_uses_unflipped_memory_rows() {
+        resetGLCommandStream();
+        BlitFramebuffer(
+            IAABB {
+                left: 1,
+                top: 2,
+                right: 5,
+                bottom: 7,
+            },
+            20,
+            false,
+            GL_COLOR_BUFFER_BIT,
+        );
+        assert_eq!(
+            takeGLCommands(),
+            vec![GLCommand::BlitFramebuffer(
+                [1, 2, 5, 7, 1, 2, 5, 7],
+                GL_COLOR_BUFFER_BIT,
+                GL_NEAREST
+            ),]
         );
     }
 }

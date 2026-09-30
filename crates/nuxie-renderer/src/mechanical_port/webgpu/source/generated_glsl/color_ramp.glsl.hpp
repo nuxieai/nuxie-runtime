@@ -16,13 +16,13 @@ g1
 #endif
 p2 H0 V(0,i,W6);h2
 #ifdef DB
-U3 V3 B4 C4 i Cf(uint j){return pc((X(j,j,j,j)>>X(16,8,0,24))&0xffu)/255.;}y1(MF,f0,F,B,v){
+V3 W3 B4 C4 i Df(uint j){return qc((X(j,j,j,j)>>X(16,8,0,24))&0xffu)/255.;}y1(MF,f0,F,B,v){
 #ifdef Z9
 K(v,F,UD,uint);K(v,F,VD,uint);K(v,F,WD,uint);K(v,F,XD,uint);X JC=X(UD,VD,WD,XD);
 #else
 K(v,F,JC,X);
 #endif
-T(W6,i);int o8=B>>1;float x=float(o8<=1?JC.x&0xffffu:JC.x>>16)/65536.;float aa=(B&1)==0?.0:1.;if(n.qc<.0){aa=1.-aa;}uint X6=JC.y;float y=float(X6&~Df)+aa;if((X6&rc)!=0u&&o8==0){if((X6&ba)!=0u)x=.0;else x-=sc;}if((X6&tc)!=0u&&o8==3){if((X6&ba)!=0u)x=1.;else x+=sc;}W6=Cf(o8<=1?JC.z:JC.w);f W=p8(c(x,y),2.,n.qc);
+T(W6,i);int o8=B>>1;float x=float(o8<=1?JC.x&0xffffu:JC.x>>16)/65536.;float aa=(B&1)==0?.0:1.;if(l.rc<.0){aa=1.-aa;}uint X6=JC.y;float y=float(X6&~Ef)+aa;if((X6&sc)!=0u&&o8==0){if((X6&ba)!=0u)x=.0;else x-=tc;}if((X6&uc)!=0u&&o8==3){if((X6&ba)!=0u)x=1.;else x+=tc;}W6=Df(o8<=1?JC.z:JC.w);f W=p8(c(x,y),2.,l.rc);
 #ifdef SC
 W.y=-W.y;
 #endif

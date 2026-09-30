@@ -454,7 +454,8 @@ pub(crate) struct FlushUniforms {
     pub dither_bias: f32,
     pub dither_conversion_to_rgb10: f32,
     pub wireframe_enabled: u32,
-    pub padding: [u8; 152],
+    pub render_target_bottom_up: u32,
+    pub padding: [u8; 148],
 }
 
 #[repr(C)]
@@ -801,7 +802,10 @@ mod tests {
         assert_eq!(offset_of!(PathData, coverage_buffer_range), 48);
         assert_eq!(offset_of!(PaintAuxData, clip_rect_inverse_matrix), 32);
         assert_eq!(offset_of!(ImageDrawInstanceBase, view_matrix), 0);
-        assert_eq!(offset_of!(ImageDrawInstanceBase, clip_rect_inverse_matrix), 16);
+        assert_eq!(
+            offset_of!(ImageDrawInstanceBase, clip_rect_inverse_matrix),
+            16
+        );
         assert_eq!(offset_of!(ImageDrawInstanceBase, translates), 32);
         assert_eq!(offset_of!(ImageDrawInstanceBase, opacity), 48);
         assert_eq!(offset_of!(ImageDrawInstanceBase, clip_id), 52);

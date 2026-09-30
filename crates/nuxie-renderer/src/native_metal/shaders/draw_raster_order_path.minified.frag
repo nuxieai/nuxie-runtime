@@ -25,7 +25,7 @@ E R4=unpackHalf2x16(Y0(H7));d k9=R4.y;d p0=k9==C0?R4.x:I0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
 p0+=h1;f2(H7);
 #else
-p0=oi(p0,M d1);c1(H7,packHalf2x16(D2(p0,C0)));
+p0=pi(p0,M d1);c1(H7,packHalf2x16(D2(p0,C0)));
 #endif
 d o;
 #ifdef CLOCKWISE_FILL
@@ -77,7 +77,7 @@ if(ENABLE_ADVANCED_BLEND){if(g2!=c6(S5)){j.xyz=U4(j.xyz,L1,d6(g2));}j.xyz*=j.w;}
 #ifdef NEEDS_GAMMA_CORRECTION
 if(NEEDS_GAMMA_CORRECTION){j=l3(j);}
 #endif
-d x2=j.w;j+=L1*(1.-x2);j.xyz=J2(j.xyz,x2,c0.xy,n.C3,n.D3);z0(k0,j);f2(h0);}
+d x2=j.w;j+=L1*(1.-x2);j.xyz=J2(j.xyz,x2,c0.xy,l.C3,l.D3);z0(k0,j);f2(h0);}
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 A2;
 #endif

@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 7732f41ef93e4cb74286934ee596e1041d0a0ba7
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "7732f41ef93e4cb74286934ee596e1041d0a0ba7";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "d47650357e849042cdaa4a74800dc6c831515d72e9c0849bee87e137a8b4c5bf";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 515;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 17520;
+    "270d5179d5d80e556587e63414c6c290cc1d3dd660106a719683f318462b0839";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 519;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17662;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -247,11 +247,15 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     }
 #endif
 
-    // Paint matrices operate on the fragment shader's "_fragCoord", which is
-    // bottom-up in GL.
+    // Paint matrices operate on the fragment shader's "_fragCoord", which
+    // counts from memory row 0. A bottom up target needs it flipped into Rive
+    // pixel space.
     float2 fragCoord = vertexPosition;
-#ifdef @FRAMEBUFFER_BOTTOM_UP
-    fragCoord.y = float(uniforms.renderTargetHeight) - fragCoord.y;
+#ifdef @ENABLE_RENDER_TARGET_BOTTOM_UP
+    if (uniforms.renderTargetBottomUp != 0u)
+    {
+        fragCoord.y = float(uniforms.renderTargetHeight) - fragCoord.y;
+    }
 #endif
 
 #ifdef @ENABLE_CLIP_RECT

@@ -7,6 +7,17 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_collapsed_databinds_keeps_only_the_three_upstream_draws(self):
+        actions = generate_manifest.p1q_view_model_actions("collapsed_databinds_test")
+        self.assertEqual([a["kind"] for a in actions[:3]],
+                         ["frame-size", "select-state-machine", "bind-default-view-model"])
+        self.assertEqual(sum(a["kind"] == "draw" for a in actions), 3)
+        self.assertEqual(sum(a["kind"] == "frame" for a in actions), 2)
+        self.assertEqual([a["seconds"] for a in actions if a["kind"] == "advance"],
+                         [0.0, 0.016] + [0.25] * 8)
+        self.assertEqual([a["kind"] for a in actions[8:-2]], ["advance"] * 8)
+        self.assertEqual([a["kind"] for a in actions[-2:]], ["frame", "draw"])
+
     def test_focus_flags_producers_keep_every_draw_and_assertion_walk(self):
         click = generate_manifest.focus_flags_actions("focus_traversal_click_to_focus")
         bound = generate_manifest.focus_flags_actions("focus_traversal_data_bound")

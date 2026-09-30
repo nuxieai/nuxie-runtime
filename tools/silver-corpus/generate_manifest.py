@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "7133967b25572642eb228f29254e64ed0b626469"
+UPSTREAM_REF = "074bfb139e5390760e04a9fd953d410f71fa6384"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -265,6 +265,7 @@ EXACT = (
     "databind_solo_to_enum",
     "layout_solos",
     "layout_solos_fit_to_layout_parent",
+    "collapsed_databinds_test",
     "solo_nested_artboard_leaf_no_solo",
     "solo_nested_artboard_leaf_fits_parent_layout",
     "solo_nested_artboard_leaf_solo",
@@ -1075,6 +1076,23 @@ def p1q_view_model_actions(
             action("frame"),
             action("set-view-model-enum", property="display_1", value=0),
             advance(0.016),
+            draw,
+        )
+
+    if silver_id == "collapsed_databinds_test":
+        # solo_test.cpp at 074bfb13: exactly three draws. The eight .25s
+        # advances are not individually drawn or announced as frames.
+        return (
+            action("frame-size"),
+            action("select-state-machine"),
+            bind,
+            advance(0.0),
+            draw,
+            action("frame"),
+            advance(0.016),
+            draw,
+            *(advance(0.25) for _ in range(8)),
+            action("frame"),
             draw,
         )
 
@@ -3448,7 +3466,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (277, 229, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (278, 230, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3461,8 +3479,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 277",
-        "expected_runtime = 229",
+        "expected_entries = 278",
+        "expected_runtime = 230",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

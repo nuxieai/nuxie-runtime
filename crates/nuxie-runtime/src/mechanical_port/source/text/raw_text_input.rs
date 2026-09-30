@@ -754,12 +754,17 @@ impl RawTextInput {
     fn cursor_horizontal(&mut self, offset: i32, boundary: CursorBoundary, select: bool) {
         self.ensure_shape();
         self.ideal_cursor_x = -1.0;
-        let end = self.cursor.end();
-        let mut position = end;
+        // A non-selecting leftward move starts at the selection's leading edge.
+        let base_position = if !select && offset < 0 && self.cursor.has_selection() {
+            self.cursor.first()
+        } else {
+            self.cursor.end()
+        };
+        let mut position = base_position;
         match boundary {
             CursorBoundary::Character => {
                 let glyph_lookup = self.shape.glyph_lookup();
-                let mut next_index = end.code_point_index_offset(offset);
+                let mut next_index = base_position.code_point_index_offset(offset);
                 if offset > 0 {
                     while (next_index as usize) < self.text.len() - 1
                         && !glyph_lookup.is_glyph_boundary(next_index)
@@ -774,13 +779,13 @@ impl RawTextInput {
                 position = CursorPosition::at_index(next_index, &self.shape.layout_view());
             }
             CursorBoundary::Line => {
-                if let Some(line) = self.ordered_line(end) {
+                if let Some(line) = self.ordered_line(base_position) {
                     let code_point_index = if offset < 0 {
                         line.first_code_point_index(self.shape.glyph_lookup())
                     } else {
                         line.last_code_point_index(self.shape.glyph_lookup())
                     };
-                    position = CursorPosition::new(end.line_index(), code_point_index);
+                    position = CursorPosition::new(base_position.line_index(), code_point_index);
                 }
             }
             CursorBoundary::Word | CursorBoundary::SubWord => {

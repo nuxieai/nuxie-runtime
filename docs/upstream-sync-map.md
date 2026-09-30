@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `abf676e79e616e003893dc941471c90ccbaf5c6e`
+- LAST_SYNCED_SHA: `0d504972edf5253a9bd6e172facc9483719496f1`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 3 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 3 require a Rust translation.
+  There are 2 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 2 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0d504972edf5253a9bd6e172facc9483719496f1` | **DEFERRED WASM EXECUTION:** Wasm host-string/name caches, missing-data initialization retry, zero-backed guest canvases, matrix natives, WAMR direct/leaf calls and interpreter fusion, bounded-module watchdog/trap handling and AOT interrupt capability/cache updates. All public changes are in guest execution, its ABI or engine tooling; shared runtime, Luau and browser renderer owners are unchanged. Private rasc compiler/tests mentioned in the message are absent from the public delta and are not claimed imported. | UNIV-3728 |
 | `abf676e79e616e003893dc941471c90ccbaf5c6e` | Feed listener invocation values into the action's typed bindable property before the existing source-binding/converter path. Preserve pointer positions/deltas, key/text/focus values, complete gamepad snapshots, zero for missing indices, button-mask bounds, changed-value selection and skip-on-type/event mismatch. Add serialized uint8 properties 453/454 with zero defaults and schema/registry dispatch. Port all seven upstream input-value regressions and retain the exact binary fixture and RML source provenance. | — |
 | `6916d763f75dfb7a297c4ad9624943839f7263b0` | **DEFERRED WASM EXECUTION:** distinguish byte counts from element counts in the guest ABI generator, validate the full native element-counted buffer through WAMR, and correct six web guest-buffer staging sizes. The complete public delta changes no shared runtime, Luau or browser renderer implementation. Do not claim these guest-execution safety fixes as implemented in the Rust runtime. | UNIV-3728 |
 | `73d678e2f61cf0182eb2faef18d5a44728fd0480` | Avoid re-solving participant layout when rebuilt paths leave intrinsic bounds unchanged: invalidate cached host bounds before measuring, compare against the last reported bounds with upstream's 16-ULP-scaled tolerance, and dirty only world bounds for rigid movement. Retain Taffy and carry this decision through Rust's existing borrow-release handoff. Defer paint-path bounds computation until a PaintImage child exists; preserve existing reference-based straight-vertex access. Port the five frame-probe cases, including two hidden reporting sweeps, with test-only layout-pass counting. The new standalone C++ allocation-counting frame benchmark and beforeRun host hook remain available in the upstream oracle, not claimed as a newly shipped Rust benchmark runner. | — |

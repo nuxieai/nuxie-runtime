@@ -40,6 +40,9 @@ impl RenderCommandBuffer {
     pub fn bind_recording_thread(&mut self) {
         self.recording_thread.bind();
     }
+    pub fn check_recording_thread(&self) {
+        self.recording_thread.check();
+    }
     pub fn append<P: WirePod>(&mut self, command: RenderCmd, pod: &P) {
         self.recording_thread.check();
         self.stream.write(&(command as u8));

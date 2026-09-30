@@ -29,6 +29,7 @@ mod deferred_path_geometry_test;
 mod deferred_path_query_test;
 mod deferred_replay_order_test;
 mod deferred_segment_test;
+mod deferred_session_attachment_test;
 mod deferred_source_equivalence_test;
 mod deferred_transform_shadow_test;
 mod foreign_image_registry_test;

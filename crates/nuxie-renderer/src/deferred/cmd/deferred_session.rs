@@ -9,7 +9,11 @@ use crate::deferred::ore::ore_deferred_context::DeferredOreContext;
 use nuxie_ore_metal::context::ContextApi;
 pub use nuxie_ore_metal::context::ReplayCaps;
 use nuxie_render_api::*;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::{Rc, Weak},
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SegmentTarget {
@@ -22,6 +26,18 @@ pub struct DeferredSegment {
     pub target_id: u64,
     pub begin: u32,
     pub end: u32,
+}
+
+/// A non-owning host attachment notified when its session dies.
+pub trait DeferredSessionAttachment {
+    fn deferred_session_destroyed(&self);
+}
+
+#[derive(Default)]
+struct SessionAttachments {
+    // Weak keeps the source's non-owning registration without exposing a
+    // dangling raw pointer when a Rust host is dropped without detaching.
+    hosts: RefCell<Vec<Weak<dyn DeferredSessionAttachment>>>,
 }
 
 // The source session's route fields have a separate interior owner so calling
@@ -180,6 +196,9 @@ struct SessionTargets {
 }
 #[derive(Clone)]
 pub struct DeferredSession {
+    // Shared only by session handles, not renderers/resources. A clone keeps
+    // the session alive; dropping the last handle sends the source notice.
+    attachments: Rc<SessionAttachments>,
     pub factory: Rc<RefCell<DeferredFactory>>,
     pub ore_context: Rc<RefCell<DeferredOreContext>>,
     pub routing: Rc<RefCell<SessionRouting>>,
@@ -190,6 +209,21 @@ pub struct DeferredSession {
     // boundary. Held beside the owner because the owner is type-erased.
     screen_transforms: Rc<RefCell<HashMap<u64, TransformShadow>>>,
     targets: Rc<RefCell<SessionTargets>>,
+}
+impl Drop for DeferredSession {
+    fn drop(&mut self) {
+        if Rc::strong_count(&self.attachments) != 1 {
+            return;
+        }
+        // Release the registry borrow before callbacks, mirroring the source
+        // move-out so a callback may detach without editing this walk.
+        let attachments = std::mem::take(&mut *self.attachments.hosts.borrow_mut());
+        for attachment in attachments {
+            if let Some(attachment) = attachment.upgrade() {
+                attachment.deferred_session_destroyed();
+            }
+        }
+    }
 }
 impl DeferredSession {
     // Recording holds no device. Web can bind initially unknown caps later.
@@ -203,6 +237,7 @@ impl DeferredSession {
         )));
         let ore = DeferredOreContext::new(caps);
         let mut out = Self {
+            attachments: Rc::new(SessionAttachments::default()),
             factory,
             ore_context: Rc::new(RefCell::new(ore)),
             routing,
@@ -214,6 +249,24 @@ impl DeferredSession {
         };
         out.wire_ore_canvases();
         out
+    }
+    pub fn attach(&self, attachment: Weak<dyn DeferredSessionAttachment>) {
+        let mut attachments = self.attachments.hosts.borrow_mut();
+        if !attachments.iter().any(|entry| entry.ptr_eq(&attachment)) {
+            attachments.push(attachment);
+        }
+    }
+    pub fn detach(&self, attachment: &Weak<dyn DeferredSessionAttachment>) {
+        let mut attachments = self.attachments.hosts.borrow_mut();
+        if let Some(index) = attachments
+            .iter()
+            .position(|entry| entry.ptr_eq(attachment))
+        {
+            attachments.remove(index);
+        }
+    }
+    pub fn attachment_count(&self) -> usize {
+        self.attachments.hosts.borrow().len()
     }
     pub fn bind_replay_caps(&mut self, caps: ReplayCaps) {
         self.ore_context.borrow_mut().bindCaps(caps);
@@ -236,6 +289,10 @@ impl DeferredSession {
         ))
     }
     pub fn screen_renderer(&self, target: u64) -> RendererOwner {
+        self.command_buffer()
+            .lock()
+            .unwrap()
+            .check_recording_thread();
         self.screen_renderers
             .borrow_mut()
             .entry(target)

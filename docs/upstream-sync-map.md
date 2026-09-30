@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3ae88a8257e44c5d6239e6181240560f9137c681`
+- LAST_SYNCED_SHA: `fa3f6f307179dcfff9ff34142e1697c837ca1704`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 27 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 27 require a Rust translation.
+  There are 26 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 26 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `fa3f6f307179dcfff9ff34142e1697c837ca1704` | **ALREADY-EQUIVALENT RUNTIME / NEW REGRESSIONS:** the four directional StateMachineInstance focus methods already forward to the active manager and return false without one in both Rust runtime and host owners. Port all three added upstream cases, including the three independent position-test sections, edge retention, external-manager identity and absent-manager behavior. The public delta contains no JS binding or key/text-input implementation change despite the title; no absent private change is claimed imported. | — |
 | `3ae88a8257e44c5d6239e6181240560f9137c681` | **DEFERRED WASM EXECUTION:** restores WAMR libc-wasi sources, include paths and feature flag so guest Luau constructors remain host-controlled instead of also running at instantiation. This reverses the parked 8daed0a3 build change. Only the WAMR build owner and private revision pointer change; no native Rust Luau, shared runtime or browser renderer change is imported. | UNIV-3728 |
 | `80e2e555349e88f21977c429d5e29c6e57454302` | **UPSTREAM PATHFIDDLE HOST ONLY:** adds Shift+R context recreation, resets cached window dimensions, releases/waits on the D3D12 host at teardown, and makes its GPU-based validation opt-in. No PathFiddle or D3D12 host ships in the Rust workspace; the full delta changes no shared renderer algorithms, supported Rust backend owners, shaders, tests or fixtures. Do not transplant test-host context reset policy into application-owned renderers. | — |
 | `17a44957bcdbc471e96fd979d8770271da2ffb43` | **DEFERRED WASM EXECUTION:** supplies environ_sizes_get, environ_get and fd_close imports to the WAMR host, validating both output pointers before writing environment counts. The Luau blob here runs inside the guest Wasm module; this does not change the native Rust Luau backend, shared runtime or browser renderers. The complete public delta remains within parked execution. | UNIV-3728 |

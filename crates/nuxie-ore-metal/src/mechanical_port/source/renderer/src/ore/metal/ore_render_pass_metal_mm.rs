@@ -593,11 +593,7 @@ impl RenderPassMetalState {
             encoder.endEncoding();
             // m_mtlEncoder = nil;
         }
-        // for (auto& bg : m_boundGroups)
-        //     bg.reset();
-        for bg in &mut self.base.m_boundGroups {
-            bg.take();
-        }
+        self.base.releaseBoundResources();
         // m_currentPipeline.reset();
         *self.m_currentPipeline = None;
     }

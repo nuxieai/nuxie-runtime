@@ -78,8 +78,7 @@ fn scratch_resolve_is_reused_detached_and_vao_arrays_are_scrubbed() {
             // teardown, while the browser scenarios exercise real attachments.
             let gl = pass.asAny().downcast_ref::<RenderPassGL>().unwrap();
             let mut state = gl.inner.borrowState();
-            state.m_usedAttribs = true;
-            state.m_maxAttribSlot = 2;
+            state.m_enabledAttribs = 0b111;
             state.m_glResolveCount = 1;
             state.m_glResolves[0] = GLResolveEntry {
                 colorIndex: 0,

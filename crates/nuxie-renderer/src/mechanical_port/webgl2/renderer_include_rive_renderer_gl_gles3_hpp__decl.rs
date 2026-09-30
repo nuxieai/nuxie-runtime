@@ -1648,7 +1648,6 @@ pub(crate) struct GLCapabilities {
     pub(crate) vendorDriverVersionMinor: u32,
     pub(crate) adrenoSeries: u32,
     pub(crate) maxSupportedInstancesPerFlush: u32,
-    pub(crate) needsFloatingPointTessellationTexture: bool,
     pub(crate) usePixelLocalStorage2AsWorkaround: bool,
     pub(crate) avoidTexture2DArrayWithWebGLPLS: bool,
     pub(crate) avoidPartialFramebufferBlits: bool,
@@ -2140,7 +2139,7 @@ mod tests {
 
     #[test]
     fn webgl2_constants_and_version_comparison_match_the_header() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 278);
+        assert_eq!(PINNED_SOURCE.lines().count(), 272);
         assert_eq!(GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE, 0x96E0);
         assert_eq!(GL_PIXEL_LOCAL_CLEAR_VALUE_UNSIGNED_INT_ANGLE, 0x96ED);
         assert_eq!(GL_BLEND_ADVANCED_COHERENT_KHR, 0x9285);

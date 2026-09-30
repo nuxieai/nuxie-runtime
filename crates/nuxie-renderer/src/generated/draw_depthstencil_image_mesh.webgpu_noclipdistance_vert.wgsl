@@ -1,28 +1,28 @@
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
 struct gl_PerVertex {
@@ -40,13 +40,13 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Kh: bool = true;
+@id(0) override Eh: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> OC_1: vec2<f32>;
 var<private> NB_1: vec4<f32>;
-var<private> L5_: vec2<f32>;
+var<private> I5_: vec2<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> O3_: f32;
 var<private> YB_1: u32;
@@ -68,10 +68,10 @@ fn main_1() {
     let _e37 = NB_1;
     let _e39 = ((mat2x2<f32>(vec2<f32>(_e27.x, _e27.y), vec2<f32>(_e27.z, _e27.w)) * _e35) + _e37.xy);
     let _e40 = PC_1;
-    L5_ = _e40;
-    if Kh {
+    I5_ = _e40;
+    if Eh {
         let _e41 = YB_1;
-        let _e43 = j.g6_;
+        let _e43 = j.c6_;
         if (_e41 == 0u) {
             phi_291_ = 0f;
         } else {
@@ -80,8 +80,8 @@ fn main_1() {
         let _e50 = phi_291_;
         O3_ = _e50;
     }
-    let _e52 = j.Nf;
-    let _e54 = j.Of;
+    let _e52 = j.Hf;
+    let _e54 = j.If;
     let _e62 = vec4<f32>(((_e39.x * _e52) - 1f), ((_e39.y * _e54) - sign(_e54)), 0f, 1f);
     let _e63 = LC_1;
     let _e72 = XB_1;
@@ -105,7 +105,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) WB: vec4<f32>, 
     XB_1 = XB;
     ZB_1 = ZB;
     main_1();
-    let _e27 = L5_;
+    let _e27 = I5_;
     let _e28 = O3_;
     let _e29 = K1_;
     let _e30 = D1_;

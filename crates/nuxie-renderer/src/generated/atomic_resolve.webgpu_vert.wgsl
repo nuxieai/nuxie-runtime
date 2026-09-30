@@ -1,28 +1,28 @@
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
 struct gl_PerVertex {
@@ -32,19 +32,19 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct Kg {
+struct Eg {
     g2_: array<vec4<u32>>,
 }
 
-struct qf {
+struct kf {
     g2_: array<vec2<u32>>,
 }
 
-struct rf {
+struct lf {
     g2_: array<vec4<f32>>,
 }
 
-struct Lg {
+struct Fg {
     g2_: array<vec4<u32>>,
 }
 
@@ -58,15 +58,15 @@ var JC: texture_2d<u32>;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> OB: Kg;
+var<storage> OB: Eg;
 @group(0) @binding(3)
-var<storage> CD: qf;
+var<storage> CD: kf;
 @group(0) @binding(4)
-var<storage> PB: rf;
+var<storage> PB: lf;
 @group(0) @binding(5)
-var<storage> HD: Lg;
+var<storage> HD: Fg;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 
 fn main_1() {
     var phi_172_: i32;
@@ -74,24 +74,24 @@ fn main_1() {
 
     let _e22 = gl_VertexIndex_1;
     if ((_e22 & 1i) == 0i) {
-        let _e27 = j.X7_[0u];
+        let _e27 = j.U7_[0u];
         phi_172_ = _e27;
     } else {
-        let _e30 = j.X7_[2u];
+        let _e30 = j.U7_[2u];
         phi_172_ = _e30;
     }
     let _e32 = phi_172_;
     if ((_e22 & 2i) == 0i) {
-        let _e37 = j.X7_[1u];
+        let _e37 = j.U7_[1u];
         phi_175_ = _e37;
     } else {
-        let _e40 = j.X7_[3u];
+        let _e40 = j.U7_[3u];
         phi_175_ = _e40;
     }
     let _e42 = phi_175_;
     let _e44 = vec2<f32>(vec2<i32>(_e32, _e42));
-    let _e46 = j.Nf;
-    let _e48 = j.Of;
+    let _e46 = j.Hf;
+    let _e48 = j.If;
     unnamed.gl_Position = vec4<f32>(((_e44.x * _e46) - 1f), ((_e44.y * _e48) - sign(_e48)), 0f, 1f);
     return;
 }

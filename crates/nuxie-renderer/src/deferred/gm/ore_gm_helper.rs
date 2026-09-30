@@ -34,6 +34,26 @@ pub(super) fn assert_pixels_equal(a: &[u8], b: &[u8]) {
     );
 }
 
+pub(super) fn assert_cpp_gm_pixels(name: &str, pixels: Vec<u8>) {
+    let actual = pixel_compare::RgbaImage::new(SIZE, SIZE, pixels).expect("GM dimensions");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("../../fixtures/renderer/reference/metal/gm/{name}.png"));
+    let expected = pixel_compare::RgbaImage::read_png(path).expect("pinned C++ GM capture");
+    let result = pixel_compare::compare(&expected, &actual, pixel_compare::Tolerance::EXACT)
+        .expect("same GM dimensions");
+    if !result.within_tolerance {
+        let diagnostic = std::env::temp_dir().join(format!("nuxie-{name}-actual.png"));
+        actual.write_png(&diagnostic).expect("GM diagnostic PNG");
+        eprintln!("actual GM pixels: {}", diagnostic.display());
+    }
+    assert!(
+        result.within_tolerance,
+        "{name}: {} differing pixels, max channel delta {}",
+        result.different_pixels,
+        result.max_channel_delta
+    );
+}
+
 enum Frame {
     Screen(NativeMetalFrame),
     Canvas(Box<dyn RenderCanvasFrame>),
@@ -468,6 +488,15 @@ pub(super) fn triangle_pipeline(
     format: TextureFormat,
     label: &str,
 ) -> AnyResourceHandle {
+    triangle_pipeline_with_stride(ctx, module, format, label, 24)
+}
+pub(super) fn triangle_pipeline_with_stride(
+    ctx: &mut dyn ContextApi,
+    module: &AnyResourceHandle,
+    format: TextureFormat,
+    label: &str,
+    stride: u32,
+) -> AnyResourceHandle {
     let attrs = [
         VertexAttribute {
             offset: 0,
@@ -483,7 +512,7 @@ pub(super) fn triangle_pipeline(
         },
     ];
     let layouts = [VertexBufferLayout {
-        stride: 24,
+        stride,
         stepMode: VertexStepMode::vertex,
         attributes: Some(&attrs),
         attributeCount: 2,

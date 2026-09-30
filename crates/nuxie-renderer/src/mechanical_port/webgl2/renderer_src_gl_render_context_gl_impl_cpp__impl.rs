@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 151486] = [(); PINNED_SOURCE.len()];
+const _: [(); 150989] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -87,7 +87,7 @@ const GLSL_BORROWED_COVERAGE_PASS: &str = "CC";
 const GLSL_CLEAR_COVERAGE: &str = "FE";
 const GLSL_CLOCKWISE_FILL: &str = "GE";
 const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "BD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "PF";
 const GLSL_DRAW_IMAGE: &str = "NE";
 const GLSL_DRAW_IMAGE_MESH: &str = "KB";
 const GLSL_DRAW_IMAGE_RECT: &str = "ZC";
@@ -103,7 +103,7 @@ const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "ME";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "BB";
 const GLSL_RESOLVE_PLS: &str = "QC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "RF";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "QF";
 const GLSL_FlushUniforms: &str = "SB";
 const GLSL_atlasRenderTexture: &str = "CF";
 const GLSL_contourBuffer: &str = "HD";
@@ -1247,11 +1247,7 @@ pub(crate) fn resizeTessellationTexture(
             recordGLCommand(GLCommand::TexStorage2D {
                 target: GL_TEXTURE_2D,
                 levels: 1,
-                internal_format: if context.m_capabilities.needsFloatingPointTessellationTexture {
-                    GL_RGBA32F
-                } else {
-                    GL_RGBA32UI
-                },
+                internal_format: GL_RGBA32UI,
                 width,
                 height,
             });
@@ -1626,7 +1622,7 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
     match feature {
         gpu::ShaderFeatures::ENABLE_CLIPPING => "I",
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "AB",
-        gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "S",
+        gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "T",
         gpu::ShaderFeatures::ENABLE_FEATHER => "GB",
         gpu::ShaderFeatures::ENABLE_EVEN_ODD => "WC",
         gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "YC",
@@ -3939,8 +3935,6 @@ fn makeContextOwnerInCurrent(
         capabilities.setARB_fragment_shader_interlock(false);
         capabilities.setINTEL_fragment_shader_ordering(false);
     }
-    capabilities.needsFloatingPointTessellationTexture =
-        renderer.contains("ANGLE Metal Renderer") && capabilities.EXT_color_buffer_float();
     if capabilities.EXT_shader_pixel_local_storage2()
         && capabilities.isPowerVR()
         && !capabilities.isVendorDriverVersionAtLeast(1, 11)
@@ -4457,8 +4451,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3882);
-        assert_eq!(PINNED_SOURCE.len(), 151486);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3866);
+        assert_eq!(PINNED_SOURCE.len(), 150989);
     }
 
     #[test]
@@ -4557,7 +4551,7 @@ mod tests {
             (
                 "ENABLE_ADVANCED_BLEND",
                 gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND,
-                "S",
+                "T",
             ),
             ("ENABLE_FEATHER", gpu::ShaderFeatures::ENABLE_FEATHER, "GB"),
             (

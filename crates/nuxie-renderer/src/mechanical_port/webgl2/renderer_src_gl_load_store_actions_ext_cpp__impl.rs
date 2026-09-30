@@ -15,7 +15,7 @@ const GLSL_CLEAR_COLOR: &str = "WE";
 const GLSL_LOAD_COLOR: &str = "YE";
 const GLSL_STORE_COLOR: &str = "EE";
 const GLSL_CLEAR_COVERAGE: &str = "FE";
-const GLSL_CLEAR_CLIP: &str = "XF";
+const GLSL_CLEAR_CLIP: &str = "WF";
 const GLSL_PLS_LOAD_STORE_EXT: &str =
     include_str!("source/generated_glsl_embedded/pls_load_store_ext.minified.glsl");
 
@@ -91,7 +91,7 @@ mod tests {
                 | LoadStoreActionsEXT::clearClip.0,
         );
         BuildLoadStoreEXTGLSL(&mut shader, all);
-        assert!(shader.starts_with("#define WE\n#define YE\n#define EE\n#define FE\n#define XF\n"));
+        assert!(shader.starts_with("#define WE\n#define YE\n#define EE\n#define FE\n#define WF\n"));
         assert!(shader.ends_with(GLSL_PLS_LOAD_STORE_EXT));
     }
 }

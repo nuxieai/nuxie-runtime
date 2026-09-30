@@ -8,30 +8,30 @@ struct gl_PerVertex {
 }
 
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
 struct VertexOutput {
@@ -43,15 +43,15 @@ struct VertexOutput {
     @location(4) @interpolate(flat, either) member_3: u32,
 }
 
-@id(0) override Kh: bool = true;
-@id(1) override Lh: bool = true;
+@id(0) override Eh: bool = true;
+@id(1) override Fh: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> OC_1: vec2<f32>;
 var<private> NB_1: vec4<f32>;
-var<private> L5_: vec2<f32>;
+var<private> I5_: vec2<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> O3_: f32;
 var<private> YB_1: u32;
@@ -72,10 +72,10 @@ fn main_1() {
     let _e42 = NB_1;
     let _e44 = ((mat2x2<f32>(vec2<f32>(_e32.x, _e32.y), vec2<f32>(_e32.z, _e32.w)) * _e40) + _e42.xy);
     let _e45 = PC_1;
-    L5_ = _e45;
-    if Kh {
+    I5_ = _e45;
+    if Eh {
         let _e46 = YB_1;
-        let _e48 = j.g6_;
+        let _e48 = j.c6_;
         if (_e46 == 0u) {
             phi_382_ = 0f;
         } else {
@@ -84,7 +84,7 @@ fn main_1() {
         let _e55 = phi_382_;
         O3_ = _e55;
     }
-    if Lh {
+    if Fh {
         let _e56 = RB_1;
         if any((_e56 != vec4<f32>(0f, 0f, 0f, 0f))) {
             let _e68 = ((mat2x2<f32>(vec2<f32>(_e56.x, _e56.y), vec2<f32>(_e56.z, _e56.w)) * _e44) + _e42.zw);
@@ -100,8 +100,8 @@ fn main_1() {
             unnamed.gl_ClipDistance[0i] = _e84;
         }
     }
-    let _e94 = j.Nf;
-    let _e96 = j.Of;
+    let _e94 = j.Hf;
+    let _e96 = j.If;
     let _e104 = vec4<f32>(((_e44.x * _e94) - 1f), ((_e44.y * _e96) - sign(_e96)), 0f, 1f);
     let _e105 = LC_1;
     let _e114 = XB_1;
@@ -127,7 +127,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) WB: vec4<f32>, 
     main_1();
     let _e28 = unnamed.gl_Position;
     let _e29 = unnamed.gl_ClipDistance;
-    let _e30 = L5_;
+    let _e30 = I5_;
     let _e31 = O3_;
     let _e32 = K1_;
     let _e33 = D1_;

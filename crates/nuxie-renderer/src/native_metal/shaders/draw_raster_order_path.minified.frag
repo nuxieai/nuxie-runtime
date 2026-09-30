@@ -1,35 +1,35 @@
 #ifdef FRAGMENT
-M1 z0(G2,m0);k1(X2,i0);z0(j6,p4);k1(M6,J7);N1 P1(HB){r(X1,f);
+M1 z0(G2,m0);k1(X2,i0);z0(f6,p4);k1(J6,G7);N1 P1(HB){q(X1,f);
 #ifdef ENABLE_MODULATED_IMAGE
-r(C2,R);
+q(C2,S);
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-r(j1,d);
+q(j1,d);
 #else
-r(O,B2);
+q(O,B2);
 #endif
-r(D0,d);
+q(D0,d);
 #ifdef ENABLE_CLIPPING
-r(Y1,E);
+q(Y1,D);
 #endif
 #ifdef ENABLE_CLIP_RECT
-r(O0,f);
+q(O0,f);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-r(g1,d);
+q(g1,d);
 #endif
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 z2;
 #endif
-E V4=unpackHalf2x16(a1(J7));d m9=V4.y;d r0=m9==D0?V4.x:J0(.0);
+D U4=unpackHalf2x16(a1(G7));d j9=U4.y;d r0=j9==D0?U4.x:J0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
-r0+=j1;h2(J7);
+r0+=j1;h2(G7);
 #else
-r0=xi(r0,O e1);d1(J7,packHalf2x16(D2(r0,D0)));
+r0=ri(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
 #endif
 d o;
 #ifdef CLOCKWISE_FILL
-if(CLOCKWISE_FILL){o=ka(r0,J0(.0),J0(1.));}else
+if(CLOCKWISE_FILL){o=fa(r0,J0(.0),J0(1.));}else
 #endif
 {o=abs(r0);
 #ifdef ENABLE_EVEN_ODD
@@ -39,7 +39,7 @@ o=min(o,J0(1.));}
 #ifdef ENABLE_CLIPPING
 if(ENABLE_CLIPPING&&Y1.x<.0){d m1=-Y1.x;
 #ifdef ENABLE_NESTED_CLIPPING
-if(ENABLE_NESTED_CLIPPING){d M5=Y1.y;if(M5!=.0){E Q0=unpackHalf2x16(a1(i0));d H6=Q0.y;d w4;if(H6!=m1){w4=H6==M5?Q0.x:.0;
+if(ENABLE_NESTED_CLIPPING){d J5=Y1.y;if(J5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==J5?Q0.x:.0;
 #ifndef DRAW_INTERIOR_TRIANGLES
 A0(p4,E0(w4,.0,.0,.0));
 #endif
@@ -53,19 +53,19 @@ d1(i0,packHalf2x16(D2(o,m1)));y2(m0);}else
 #endif
 {
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){d m1=Y1.x;if(m1!=.0){E Q0=unpackHalf2x16(a1(i0));d H6=Q0.y;o=(H6==m1)?min(Q0.x,o):J0(.0);}}
+if(ENABLE_CLIPPING){d m1=Y1.x;if(m1!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;o=(E6==m1)?min(Q0.x,o):J0(.0);}}
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d c5=m3(g5(O0));o=clamp(c5,J0(.0),o);}
+if(ENABLE_CLIP_RECT){d a5=m3(f5(O0));o=clamp(a5,J0(.0),o);}
 #endif
-i k=O7(
+i k=L7(
 #ifdef ENABLE_MODULATED_IMAGE
 C2,
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
 g3(g1),
 #endif
-X1 Y2);i O1;if(m9!=D0){O1=K0(m0);
+X1 Y2);i O1;if(j9!=D0){O1=K0(m0);
 #ifndef DRAW_INTERIOR_TRIANGLES
 A0(p4,O1);
 #endif
@@ -75,7 +75,7 @@ y2(p4);
 #endif
 }
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND&&g1!=e6(B4)){k.xyz=Z4(k.xyz,O1,g3(g1))*k.w;}
+if(ENABLE_ADVANCED_BLEND&&g1!=Z5(B4)){k.xyz=Y4(k.xyz,O1,g3(g1))*k.w;}
 #endif
 k*=o;
 #ifdef NEEDS_GAMMA_CORRECTION

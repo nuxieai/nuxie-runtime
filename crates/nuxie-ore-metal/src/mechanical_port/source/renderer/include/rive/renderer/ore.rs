@@ -24,6 +24,8 @@ pub mod ore_render_pass_hpp;
 pub mod ore_rstb_entry_container_hpp;
 #[path = "ore/ore_sampler_hpp.rs"]
 pub mod ore_sampler_hpp;
+#[path = "ore/ore_script_guards_hpp.rs"]
+pub mod ore_script_guards_hpp;
 #[path = "ore/ore_shader_module_hpp.rs"]
 pub mod ore_shader_module_hpp;
 #[path = "ore/ore_texture_hpp.rs"]
@@ -42,6 +44,7 @@ pub use ore_pipeline_hpp::*;
 pub use ore_render_pass_hpp::*;
 pub use ore_rstb_entry_container_hpp::*;
 pub use ore_sampler_hpp::*;
+pub use ore_script_guards_hpp::*;
 pub use ore_shader_module_hpp::*;
 pub use ore_texture_hpp::*;
 pub use ore_types_hpp::*;

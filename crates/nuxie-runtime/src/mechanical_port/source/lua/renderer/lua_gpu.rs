@@ -11,6 +11,7 @@ use crate::mechanical_port::source::{
 };
 
 use std::{cmp::max, collections::BTreeSet};
+use nuxie_ore_metal::{script_guards::*, types::kMaxVertexBufferSlots};
 
 fn buffer_usage_from_string(state: &mut LuaState, value: &str) -> BufferUsage {
     match value {
@@ -1496,7 +1497,7 @@ fn validate_render_pass(state: &mut LuaState, pass: &ScriptedGPURenderPass) {
 
 fn validate_pipeline_set(state: &mut LuaState, pass: &ScriptedGPURenderPass) {
     if !pass.pipeline_set {
-        state.error::<()>("setPipeline must be called before draw/setVertexBuffer/setBindGroup");
+        state.error::<()>(kGuardSetPipelineBeforeDraw);
     }
 }
 
@@ -1521,13 +1522,13 @@ fn gpu_render_pass_set_pipeline(state: &mut LuaState) -> i32 {
 }
 
 fn gpu_render_pass_set_vertex_buffer(state: &mut LuaState) -> i32 {
-    let slot = state.check_unsigned(2);
-    if slot > 7 {
-        state.error::<()>(format!("setVertexBuffer: slot must be 0-7 (got {slot})"));
-    }
-    let buffer = state.to_rive::<ScriptedGPUBuffer>(3).buffer.clone();
     let pass = state.to_rive_mut::<ScriptedGPURenderPass>(1);
     validate_render_pass(state, pass);
+    let slot = state.check_unsigned(2);
+    if slot >= kMaxVertexBufferSlots {
+        state.error::<()>(vertex_slot_range_message(kMaxVertexBufferSlots - 1, slot));
+    }
+    let buffer = state.to_rive::<ScriptedGPUBuffer>(3).buffer.clone();
     pass.pass.as_mut().unwrap().set_vertex_buffer(slot, &buffer);
     0
 }
@@ -1643,16 +1644,16 @@ fn gpu_render_pass_set_blend_color(state: &mut LuaState) -> i32 {
 }
 
 fn gpu_render_pass_draw(state: &mut LuaState) -> i32 {
+    let pass = state.to_rive_mut::<ScriptedGPURenderPass>(1);
+    validate_render_pass(state, pass);
+    validate_pipeline_set(state, pass);
     let vertex_count = state.check_unsigned(2);
     let instance_count = state.number_or(3, 1.0) as u32;
     let first_vertex = state.number_or(4, 0.0) as u32;
     let first_instance = state.number_or(5, 0.0) as u32;
     if first_instance > 0 && !ore_context(state).unwrap().features().draw_base_instance {
-        state.error::<()>(format!("draw: firstInstance={first_instance} requires the drawBaseInstance feature, which the active backend does not support"));
+        state.error::<()>(first_instance_message("draw", first_instance));
     }
-    let pass = state.to_rive_mut::<ScriptedGPURenderPass>(1);
-    validate_render_pass(state, pass);
-    validate_pipeline_set(state, pass);
     pass.pass
         .as_mut()
         .unwrap()
@@ -1662,6 +1663,9 @@ fn gpu_render_pass_draw(state: &mut LuaState) -> i32 {
 }
 
 fn gpu_render_pass_draw_indexed(state: &mut LuaState) -> i32 {
+    let pass = state.to_rive_mut::<ScriptedGPURenderPass>(1);
+    validate_render_pass(state, pass);
+    validate_pipeline_set(state, pass);
     let index_count = state.check_unsigned(2);
     let instance_count = state.number_or(3, 1.0) as u32;
     let first_index = state.number_or(4, 0.0) as u32;
@@ -1669,14 +1673,11 @@ fn gpu_render_pass_draw_indexed(state: &mut LuaState) -> i32 {
     let first_instance = state.number_or(6, 0.0) as u32;
     let base_instance = ore_context(state).unwrap().features().draw_base_instance;
     if base_vertex != 0 && !base_instance {
-        state.error::<()>(format!("drawIndexed: baseVertex={base_vertex} requires the drawBaseInstance feature, which the active backend does not support"));
+        state.error::<()>(base_vertex_message("drawIndexed", base_vertex));
     }
     if first_instance > 0 && !base_instance {
-        state.error::<()>(format!("drawIndexed: firstInstance={first_instance} requires the drawBaseInstance feature, which the active backend does not support"));
+        state.error::<()>(first_instance_message("drawIndexed", first_instance));
     }
-    let pass = state.to_rive_mut::<ScriptedGPURenderPass>(1);
-    validate_render_pass(state, pass);
-    validate_pipeline_set(state, pass);
     pass.pass.as_mut().unwrap().draw_indexed(
         index_count,
         instance_count,

@@ -1,36 +1,36 @@
-struct Lg {
+struct Fg {
     g2_: array<vec4<u32>>,
 }
 
-struct Kg {
+struct Eg {
     g2_: array<vec4<u32>>,
 }
 
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
 struct gl_PerVertex {
@@ -40,11 +40,11 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct qf {
+struct kf {
     g2_: array<vec2<u32>>,
 }
 
-struct rf {
+struct lf {
     g2_: array<vec4<f32>>,
 }
 
@@ -56,9 +56,9 @@ struct VertexOutput {
 @group(0) @binding(7)
 var JC: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> HD: Lg;
+var<storage> HD: Fg;
 @group(0) @binding(2)
-var<storage> OB: Kg;
+var<storage> OB: Eg;
 @group(0) @binding(0)
 var<uniform> j: SB;
 var<private> gl_VertexIndex_1: i32;
@@ -70,11 +70,11 @@ var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f,
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(0) @binding(3)
-var<storage> CD: qf;
+var<storage> CD: kf;
 @group(0) @binding(4)
-var<storage> PB: rf;
+var<storage> PB: lf;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 
 fn main_1() {
     var phi_2284_: f32;
@@ -459,7 +459,7 @@ fn main_1() {
     let _e584 = phi_2523_;
     let _e586 = phi_2517_;
     let _e588 = phi_2491_;
-    let _e594 = j.hh;
+    let _e594 = j.bh;
     let _e597 = select(_e584.xy, vec2<f32>(1f, -1f), vec2((_e594 != 0u)));
     let _e603 = vec4<f32>(_e597.x, _e584.y, _e584.z, _e584.w);
     O = vec4<f32>(_e603.x, _e597.y, _e603.z, _e603.w);
@@ -467,8 +467,8 @@ fn main_1() {
         let _e614 = OB.g2_[(_e103 + 2u)];
         let _e616 = bitcast<vec3<f32>>(_e614.yzw);
         let _e620 = (((((_e114 * _e588) + _e586) + bitcast<vec2<f32>>(_e118.xy)) * _e616.x) + _e616.yz);
-        let _e623 = j.Jd[0u];
-        let _e626 = j.Jd[1u];
+        let _e623 = j.Dd[0u];
+        let _e626 = j.Dd[1u];
         phi_2563_ = vec4<f32>(((_e620.x * _e623) - 1f), ((_e620.y * _e626) - sign(_e626)), 0f, 1f);
     } else {
         let _e636 = j.W2_;

@@ -1,97 +1,97 @@
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
-struct m0Yd {
+struct m0Sd {
     g2_: array<u32>,
 }
 
-struct A4Yd {
+struct A4Sd {
     g2_: array<u32>,
 }
 
-struct i0Yd {
+struct i0Sd {
     g2_: array<u32>,
 }
 
-struct qf {
+struct kf {
     g2_: array<vec2<u32>>,
 }
 
-struct rf {
+struct lf {
     g2_: array<vec4<f32>>,
 }
 
-@id(13) override Xh: bool = false;
-@id(14) override Yh: bool = false;
-@id(0) override Kh: bool = true;
+@id(13) override Rh: bool = false;
+@id(14) override Sh: bool = false;
+@id(0) override Eh: bool = true;
 
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: SB;
 @group(2) @binding(0)
-var<storage, read_write> m0_: m0Yd;
+var<storage, read_write> m0_: m0Sd;
 @group(1) @binding(11)
 var GC: texture_2d<f32>;
 @group(2) @binding(3)
-var<storage, read_write> A4_: A4Yd;
+var<storage, read_write> A4_: A4Sd;
 @group(2) @binding(1)
-var<storage, read_write> i0_: i0Yd;
+var<storage, read_write> i0_: i0Sd;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(3) @binding(8)
-var P9_: sampler;
+var M9_: sampler;
 @group(1) @binding(13)
-var Z5_: sampler;
+var W5_: sampler;
 @group(0) @binding(3)
-var<storage> CD: qf;
+var<storage> CD: kf;
 @group(0) @binding(4)
-var<storage> PB: rf;
+var<storage> PB: lf;
 
 fn main_1() {
     let _e28 = gl_FragCoord_1;
     let _e31 = vec2<i32>(floor(_e28.xy));
     let _e32 = bitcast<vec2<u32>>(_e31);
-    let _e34 = j.r6_;
+    let _e34 = j.n6_;
     let _e63 = bitcast<i32>((((((_e32.y >> bitcast<u32>(5u)) * (((_e34 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))));
-    if Xh {
-        let _e65 = j.zf;
+    if Rh {
+        let _e65 = j.tf;
         m0_.g2_[_e63] = pack4x8unorm(unpack4x8unorm(_e65));
     }
-    if Yh {
+    if Sh {
         let _e70 = textureLoad(GC, _e31, 0i);
         m0_.g2_[_e63] = pack4x8unorm(_e70);
     }
-    let _e75 = j.Af;
+    let _e75 = j.uf;
     A4_.g2_[_e63] = _e75;
-    if Kh {
+    if Eh {
         i0_.g2_[_e63] = 0u;
     }
     return;

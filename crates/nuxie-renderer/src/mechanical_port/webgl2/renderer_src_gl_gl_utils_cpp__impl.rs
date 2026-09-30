@@ -75,8 +75,7 @@ const GLSL_GLSL_VERSION: &str = "KC";
 const GLSL_VERTEX: &str = "CB";
 const GLSL_FRAGMENT: &str = "EB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "DE";
-const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "NF";
-const GLSL_GL_RENDERER_MALI: &str = "OF";
+const GLSL_GL_RENDERER_MALI: &str = "NF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -292,9 +291,6 @@ pub(crate) fn CompileShaderParts(
             "#define {GLSL_BASE_INSTANCE_UNIFORM_NAME} {}\n",
             super::gl_utils_decl::BASE_INSTANCE_UNIFORM_NAME
         ));
-    }
-    if capabilities.needsFloatingPointTessellationTexture {
-        shaderSource.push_str(&format!("#define {GLSL_TESS_TEXTURE_FLOATING_POINT}\n"));
     }
     if capabilities.isMali() {
         shaderSource.push_str(&format!("#define {GLSL_GL_RENDERER_MALI}\n"));
@@ -542,8 +538,8 @@ mod tests {
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
             290
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 502);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10588);
+        assert_eq!(PINNED_SOURCE.lines().count(), 498);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10595);
     }
 
     #[test]
@@ -557,10 +553,6 @@ mod tests {
                 "BASE_INSTANCE_UNIFORM_NAME",
                 GLSL_BASE_INSTANCE_UNIFORM_NAME,
             ),
-            (
-                "TESS_TEXTURE_FLOATING_POINT",
-                GLSL_TESS_TEXTURE_FLOATING_POINT,
-            ),
             ("GL_RENDERER_MALI", GLSL_GL_RENDERER_MALI),
         ] {
             assert!(exports.contains(&format!("#define GLSL_{source_name} \"{generated_name}\"")));
@@ -573,7 +565,6 @@ mod tests {
         let mut capabilities = GLCapabilities::default();
         capabilities.contextVersionMajor = 3;
         capabilities.contextVersionMinor = 0;
-        capabilities.needsFloatingPointTessellationTexture = true;
         capabilities.setIsGLES(true);
         capabilities.setIsMali(true);
         let shader = CompileShaderParts(
@@ -595,7 +586,6 @@ mod tests {
             "#define CUSTOM true\n",
             "#define DE _baseInstance\n",
             "#define NF\n",
-            "#define OF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

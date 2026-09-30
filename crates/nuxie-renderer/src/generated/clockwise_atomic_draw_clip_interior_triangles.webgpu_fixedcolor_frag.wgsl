@@ -1,35 +1,35 @@
-struct Ge {
+struct Ae {
     g2_: array<u32>,
 }
 
 struct SB {
-    yc: f32,
-    Id: f32,
-    Nf: f32,
-    Of: f32,
-    r6_: u32,
-    Sb: u32,
-    zf: u32,
-    Af: u32,
-    X7_: vec4<i32>,
-    kh: vec2<f32>,
-    Jd: vec2<f32>,
-    f2_: u32,
-    oh: f32,
-    g6_: u32,
-    W2_: f32,
-    Kd: f32,
+    tc: f32,
+    Cd: f32,
+    Hf: f32,
+    If: f32,
+    n6_: u32,
+    Nb: u32,
     tf: u32,
+    uf: u32,
+    U7_: vec4<i32>,
+    eh: vec2<f32>,
+    Dd: vec2<f32>,
+    f2_: u32,
+    ih: f32,
+    c6_: u32,
+    W2_: f32,
+    Ed: f32,
+    nf: u32,
     F3_: f32,
     G3_: f32,
-    Ld: f32,
-    hh: u32,
-    Rb: u32,
-    ec: f32,
-    fc: f32,
+    Fd: f32,
+    bh: u32,
+    Mb: u32,
+    Zb: f32,
+    ac: f32,
 }
 
-struct Ge_1 {
+struct Ae_1 {
     g2_: array<atomic<u32>>,
 }
 
@@ -38,19 +38,19 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override Uh: bool = false;
+@id(10) override Oh: bool = false;
 
 var<private> j1_1: f32;
 var<private> k3_1: vec2<u32>;
 var<private> v4_1: vec2<f32>;
 @group(0) @binding(6)
-var<storage, read_write> S0_: Ge_1;
+var<storage, read_write> S0_: Ae_1;
 @group(0) @binding(0)
 var<uniform> j: SB;
 var<private> i0_: vec4<f32>;
 var<private> F1_: vec4<f32>;
 @group(3) @binding(9)
-var ha: sampler;
+var ca: sampler;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(0) @binding(9)
@@ -58,9 +58,9 @@ var XC: texture_2d<f32>;
 @group(1) @binding(11)
 var GC: texture_2d<f32>;
 @group(3) @binding(8)
-var P9_: sampler;
+var M9_: sampler;
 @group(1) @binding(13)
-var Z5_: sampler;
+var W5_: sampler;
 var<private> X1_1: vec4<f32>;
 var<private> D0_1: f32;
 var<private> Y1_1: vec2<f32>;
@@ -78,7 +78,7 @@ fn main_1() {
     var phi_470_: f32;
 
     let _e38 = j1_1;
-    if Uh {
+    if Oh {
         let _e40 = k3_1[1u];
         let _e42 = k3_1[0u];
         let _e43 = v4_1;

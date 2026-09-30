@@ -10,7 +10,7 @@ use super::ore_render_pass_wgpu_decl::RenderPassWGPUState;
 use super::webgpu_cpp_decl::{Buffer as WagyuBuffer, IndexFormat as WagyuIndexFormat};
 use super::webgpu_decl::WGPUColor;
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
-use nuxie_ore_metal::types::{kMaxBindGroups, IndexFormat};
+use nuxie_ore_metal::types::{IndexFormat, kMaxBindGroups};
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_ore_wgpu_ore_render_pass_wgpu.cpp");
@@ -225,11 +225,12 @@ pub(crate) fn finish(pass: &mut RenderPassWGPUState) {
     }
     pass.m_wgpuContext = std::ptr::null_mut();
     *pass.m_currentPipeline = None;
+    pass.base.releaseBoundResources();
 }
 
 pub(crate) const SOURCE_METHOD_DEFINITION_COUNT: usize = 16;
 pub(crate) const SOURCE_ENCODER_CALL_COUNT: usize = 12;
-const _: [(); 7023] = [(); PINNED_SOURCE.len()];
+const _: [(); 7052] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -237,7 +238,7 @@ mod tests {
 
     #[test]
     fn complete_implementation_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 221);
+        assert_eq!(PINNED_SOURCE.lines().count(), 222);
         assert_eq!(SOURCE_METHOD_DEFINITION_COUNT, 16);
         assert_eq!(SOURCE_ENCODER_CALL_COUNT, 12);
     }

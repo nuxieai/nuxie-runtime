@@ -3906,6 +3906,8 @@ impl ImageMeshInstance {
         blendMode: BlendMode,
         zIndex: u32,
         additiveness: f32,
+        uvTranslate: [f32; 2],
+        uvScale: [f32; 2],
     ) -> Self {
         Self {
             m_commons: image_draw_instance_base(
@@ -3917,6 +3919,7 @@ impl ImageMeshInstance {
                 zIndex,
                 additiveness,
             ),
+            m_uvTransform: [uvTranslate[0], uvTranslate[1], uvScale[0], uvScale[1]],
         }
     }
 }

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: 1988fdd490cc7a0b88992bd7bc9b27f7c567ba62
+ * Upstream source revision: 4921ab8169d2d8bfc4d2d25761b99689bc85a72d
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "1988fdd490cc7a0b88992bd7bc9b27f7c567ba62";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "44a730ff51d45fcfb679eca3b8de48cad4a0559e11d8d30b46de5156e4651451";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1190;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 41436;
+    "52c0304be74b8776c20f73d94d7925b547182712ae0f7a0fbef468905c55d275";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1193;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 41656;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -372,6 +372,7 @@ ATTR(IMAGE_MODULATED_COLOR_ATTRIB_IDX, uint, @a_imageDrawModulatedColor);
 ATTR(IMAGE_CLIP_ID_ATTRIB_IDX, uint, @a_imageDrawClipID);
 ATTR(IMAGE_BLEND_MODE_ATTRIB_IDX, uint, @a_imageDrawBlendMode);
 ATTR(IMAGE_ZINDEX_ATTRIB_IDX, uint, @a_imageDrawZIndex);
+ATTR(IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX, float4, @a_imageMeshUVTransform);
 ATTR_BLOCK_END
 #endif
 
@@ -411,6 +412,7 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawClipID, uint);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawBlendMode, uint);
     ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageDrawZIndex, uint);
+    ATTR_UNPACK(_instanceID, imageDrawAttrs, @a_imageMeshUVTransform, float4);
 
     VARYING_INIT(v_texCoord, float2);
 #ifdef @ENABLE_CLIP_RECT
@@ -426,7 +428,8 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
 
     float2x2 M = make_float2x2(@a_imageDrawViewMatrix);
     float2 vertexPosition = MUL(M, @a_position) + @a_imageDrawTranslates.xy;
-    v_texCoord = @a_texCoord;
+    v_texCoord =
+        @a_texCoord * @a_imageMeshUVTransform.zw + @a_imageMeshUVTransform.xy;
 
 #ifdef @ENABLE_CLIP_RECT
     if (@ENABLE_CLIP_RECT)

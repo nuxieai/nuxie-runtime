@@ -1379,6 +1379,12 @@ pub struct ImageMeshDraw {
     pub(crate) vertex_buffer: *mut RenderBuffer,
     pub(crate) uv_buffer: *mut RenderBuffer,
     pub(crate) index_buffer: *mut RenderBuffer,
+    pub(crate) uv_translate: [f32; 2],
+    pub(crate) uv_scale: [f32; 2],
+    // Flattened derived ImageMeshInstancedDraw state; None is ImageMeshDraw.
+    pub(crate) instances: Option<nuxie_render_api::ImageMeshInstancesHandle>,
+    pub(crate) instances_edit_count: usize,
+    pub(crate) modulated_opacity: f32,
 }
 impl ImageMeshDraw {
     pub fn modulatedColor(&self) -> u32 {

@@ -1,22 +1,22 @@
 #ifdef FRAGMENT
-M1 z0(G2,m0);k1(X2,i0);z0(f6,p4);k1(J6,G7);N1 P1(HB){q(X1,f);
+M1 z0(G2,m0);k1(X2,i0);z0(f6,p4);k1(J6,G7);N1 P1(HB){r(X1,f);
 #ifdef ENABLE_MODULATED_IMAGE
-q(C2,S);
+r(C2,S);
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-q(j1,d);
+r(j1,d);
 #else
-q(O,B2);
+r(O,B2);
 #endif
-q(D0,d);
+r(D0,d);
 #ifdef ENABLE_CLIPPING
-q(Y1,D);
+r(Y1,D);
 #endif
 #ifdef ENABLE_CLIP_RECT
-q(O0,f);
+r(O0,f);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-q(g1,d);
+r(g1,d);
 #endif
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 z2;
@@ -25,11 +25,11 @@ D U4=unpackHalf2x16(a1(G7));d j9=U4.y;d r0=j9==D0?U4.x:J0(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
 r0+=j1;h2(G7);
 #else
-r0=vi(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
+r0=wi(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
 #endif
 d o;
 #ifdef CLOCKWISE_FILL
-if(CLOCKWISE_FILL){o=ga(r0,J0(.0),J0(1.));}else
+if(CLOCKWISE_FILL){o=ha(r0,J0(.0),J0(1.));}else
 #endif
 {o=abs(r0);
 #ifdef ENABLE_EVEN_ODD

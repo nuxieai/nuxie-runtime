@@ -11,7 +11,7 @@ use nuxie_render_api::{Factory as RenderFactory, RenderCanvasFrame, Renderer};
 
 use super::lua_image::{ScriptedImage, ScriptedImageSampler};
 use super::lua_mat2d::ScriptedMat2D;
-use super::lua_mesh::{ScriptedTriangleBuffer, ScriptedVertexBuffer};
+use super::lua_mesh::{ScriptedImageMeshInstances, ScriptedTriangleBuffer, ScriptedVertexBuffer};
 use super::lua_paint::{ScriptedPaint, parse_blend_mode_name};
 use super::lua_path::ScriptedPath;
 use super::lua_renderer_library::RendererBindings;
@@ -319,6 +319,39 @@ impl ScriptedRenderer {
 
 impl UserData for ScriptedRenderer {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("drawImageMeshInstanced", |_, this,
+            (image, sampler, vertices, uvs, indices, instances):
+                (AnyUserData, AnyUserData, AnyUserData, AnyUserData, AnyUserData, AnyUserData)| {
+            let sampler = sampler.borrow::<ScriptedImageSampler>()?;
+            let instances = instances.borrow::<ScriptedImageMeshInstances>()?;
+            let vertex_count = vertices.borrow::<ScriptedVertexBuffer>()?.len();
+            let uv_count = uvs.borrow::<ScriptedVertexBuffer>()?.len();
+            let index_count = indices.borrow::<ScriptedTriangleBuffer>()?.len();
+            // Preserve the existing approved Rust host bounds boundary.
+            indices.borrow::<ScriptedTriangleBuffer>()?
+                .validate_for_vertices(vertex_count, uv_count)?;
+            let vertex_count = u32::try_from(vertex_count)
+                .map_err(|_| Error::runtime("vertex count exceeds u32"))?;
+            let index_count = u32::try_from(index_count)
+                .map_err(|_| Error::runtime("index count exceeds u32"))?;
+            this.bindings.with_factory(|factory| {
+                vertices.borrow_mut::<ScriptedVertexBuffer>()?.update(factory);
+                uvs.borrow_mut::<ScriptedVertexBuffer>()?.update(factory);
+                indices.borrow_mut::<ScriptedTriangleBuffer>()?.update(factory);
+                Ok(())
+            })?;
+            let vertices = vertices.borrow::<ScriptedVertexBuffer>()?;
+            let uvs = uvs.borrow::<ScriptedVertexBuffer>()?;
+            let indices = indices.borrow::<ScriptedTriangleBuffer>()?;
+            with_scripted_image(&image, |image| {
+                this.with_renderer_mut(|renderer| {
+                    renderer.draw_image_mesh_instanced(Some(image), sampler.0,
+                        vertices.render_buffer(), uvs.render_buffer(), indices.render_buffer(),
+                        vertex_count, index_count, Some(&instances.instances));
+                    Ok(())
+                })
+            })?
+        });
         methods.add_method("save", |_, this, ()| this.save());
         methods.add_method("modulateOpacity", |_, this, opacity: f32| {
             this.with_renderer_mut(|renderer| {
@@ -463,6 +496,49 @@ mod tests {
     use crate::vm::ScriptVm;
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_runtime::{NoopScriptHost, ScriptInstance};
+
+    #[test]
+    fn mesh_instances_luau_defaults_resize_set_and_instanced_draw() {
+        let vm = ScriptVm::new();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let image = factory.borrow_mut().decode_image(&[1]).unwrap();
+        vm.lua().globals().set("image", vm.lua().create_userdata(
+            ScriptedImage::from_render_image(image)).unwrap()).unwrap();
+        let instances: AnyUserData = vm.eval(r#"
+            instances = MeshInstances()
+            instances:resize(2)
+            instances:set(0, Mat2D.withTranslation(10, 20))
+            instances:set(1, Mat2D.identity(), 0.5, 0.25, Vector.xy(0.2, 0.3), Vector.xy(0.4, 0.6))
+            return instances
+        "#).unwrap();
+        {
+            let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap();
+            let data = instances.instances.borrow();
+            assert_eq!(data.count(), 2);
+            assert_eq!(data.instance_data()[0].opacity, 1.0);
+            assert_eq!(data.instance_data()[0].uv_scale, [1.0, 1.0]);
+            assert_eq!(data.instance_data()[1].uv_translate, [0.2, 0.3]);
+            assert_eq!(data.instance_data()[1].additiveness, 0.25);
+            assert_eq!(data.edit_count(), 3);
+        }
+        let table: Table = vm.eval(r#"
+            return {draw = function(self, renderer)
+                local pts, uv, idx = VertexBuffer(), VertexBuffer(), TriangleBuffer()
+                pts:add(Vector.xy(0,0), Vector.xy(1,0), Vector.xy(1,1))
+                uv:add(Vector.xy(0,0), Vector.xy(1,0), Vector.xy(1,1))
+                idx:add(0,1,2)
+                renderer:drawImageMeshInstanced(image, ImageSampler("clamp","clamp","bilinear"), pts,uv,idx,instances)
+            end}
+        "#).unwrap();
+        let mut renderer = factory.borrow().make_renderer();
+        vm.renderer_bindings.call_draw(&table, &mut factory, &mut renderer, None).unwrap();
+        let stream = factory.borrow().stream();
+        assert_eq!(stream.matches("drawImageMeshInstanced ").count(), 1);
+        assert!(!stream.contains("drawImageMesh "));
+        assert!(stream.contains("transform=[1,0,0,1,10,20],uvTranslate=[0,0],uvScale=[1,1],opacity=1,additiveness=0"));
+    }
 
     #[test]
     fn nested_renderer_scope_reborrows_without_unlocking_its_parent() {

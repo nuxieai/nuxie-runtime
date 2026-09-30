@@ -92,6 +92,33 @@ impl Frame {
 }
 struct FrameRenderer(Rc<RefCell<Option<Frame>>>);
 impl Renderer for FrameRenderer {
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .draw_image_mesh_instanced(
+                image,
+                sampler,
+                vertices,
+                uv_coords,
+                indices,
+                vertex_count,
+                index_count,
+                instances,
+            );
+    }
     fn save(&mut self) {
         self.0.borrow_mut().as_mut().unwrap().renderer().save();
     }

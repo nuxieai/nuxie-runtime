@@ -1206,7 +1206,7 @@ pub enum ApplyClipResult {
     fullyClipped,
 }
 
-fn mul(a: Mat2D, b: Mat2D) -> Mat2D {
+pub(crate) fn mul(a: Mat2D, b: Mat2D) -> Mat2D {
     let [a0, a1, a2, a3, a4, a5] = a.0;
     let [b0, b1, b2, b3, b4, b5] = b.0;
     Mat2D([
@@ -1902,6 +1902,105 @@ impl RiveRenderer {
 }
 
 impl RendererContract for RiveRenderer {
+    unsafe fn drawImageMeshInstanced(
+        &mut self,
+        image: *const crate::mechanical_port::source::include::rive::renderer_hpp::RenderImage,
+        sampler: ImageSampler,
+        vertices: rcp<RenderBuffer>,
+        uv: rcp<RenderBuffer>,
+        indices: rcp<RenderBuffer>,
+        _vertex_count: u32,
+        index_count: u32,
+        instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+    ) {
+        if image.is_null() {
+            return;
+        }
+        let image = unsafe { &*(image.cast::<RiveRenderImage>()) };
+        let texture = image.refTexture();
+        if texture.get().is_null() {
+            return;
+        }
+        debug_assert!(!vertices.get().is_null());
+        debug_assert!(!uv.get().is_null());
+        debug_assert!(!indices.get().is_null());
+        let Some(instances) = instances else { return };
+        if instances.borrow().count() == 0 || self.current_state().overallClipPixelBounds.empty() {
+            return;
+        }
+        let state = self.current_state();
+        let matrix = state.matrix;
+        let color = state.modulatedColor;
+        let opacity = state.modulatedOpacity;
+        if unsafe { (&*self.m_context).frameInterlockMode() } == gpu::InterlockMode::atomics {
+            let data = instances.borrow();
+            for instance in data.instance_data() {
+                let mut draw = unsafe {
+                    make_image_mesh_draw(
+                        FULLSCREEN_PIXEL_BOUNDS,
+                        mul(matrix, instance.transform),
+                        BlendMode::SrcOver,
+                        instance.additiveness,
+                        super::draw_cpp::color_modulate(
+                            0xffffffff,
+                            color,
+                            (instance.opacity * opacity).max(0.0),
+                        ),
+                        rcp::copy_ctor(&texture),
+                        sampler,
+                        gpu::DrawContents::none,
+                        0,
+                        None,
+                        crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(
+                            rcp::copy_ctor(&vertices),
+                        ),
+                        crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(
+                            rcp::copy_ctor(&uv),
+                        ),
+                        crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(
+                            rcp::copy_ctor(&indices),
+                        ),
+                        index_count,
+                    )
+                };
+                draw.draw.uv_translate = instance.uv_translate;
+                draw.draw.uv_scale = instance.uv_scale;
+                self.clipAndPushDrawSource(own_image_mesh(draw));
+            }
+        } else {
+            let mut draw = unsafe {
+                make_image_mesh_draw(
+                    FULLSCREEN_PIXEL_BOUNDS,
+                    matrix,
+                    BlendMode::SrcOver,
+                    0.0,
+                    color,
+                    texture,
+                    sampler,
+                    gpu::DrawContents::none,
+                    0,
+                    None,
+                    crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(
+                        vertices,
+                    ),
+                    crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(uv),
+                    crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(
+                        indices,
+                    ),
+                    index_count,
+                )
+            };
+            {
+                let data = instances.borrow();
+                debug_assert!(!data.is_editing());
+                draw.draw.base.resource_counts.imageMeshCount = data.count();
+                draw.draw.instances_edit_count = data.edit_count();
+            }
+            draw.draw.instances = Some(instances.clone());
+            draw.draw.modulated_opacity = opacity;
+            self.clipAndPushDrawSource(own_image_mesh(draw));
+        }
+    }
     fn save(&mut self) {
         let copy = *self.current_state();
         self.m_renderStateStack.push(copy);

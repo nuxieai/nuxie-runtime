@@ -1,9 +1,9 @@
 #ifdef VERTEX
-h1(g0) K(0,f,VB);K(1,f,WB);i1
+h1(h0) I(0,f,VB);I(1,f,WB);i1
 #endif
 q2 I0 W(0,f,O);i2
 #ifdef VERTEX
-B1(XF,g0,F,A,r){L(A,F,VB,f);L(A,F,WB,f);V(O,f);f X;uint o0;c l0;if(r9(VB,WB,r,o0,l0,O A3)){R Q4=L0(OB,o0*4u+2u);S v7=uintBitsToFloat(Q4.yzw);l0=l0*v7.x+v7.yz;X=o8(l0,j.Dd.x,j.Dd.y);
+B1(YF,h0,F,A,q){J(A,F,VB,f);J(A,F,WB,f);V(O,f);f X;uint o0;c l0;if(r9(VB,WB,q,o0,l0,O A3)){R Q4=L0(OB,o0*4u+2u);S v7=uintBitsToFloat(Q4.yzw);l0=l0*v7.x+v7.yz;X=o8(l0,j.Dd.x,j.Dd.y);
 #ifdef POST_INVERT_Y
 X.y=-X.y;
 #endif
@@ -11,7 +11,7 @@ X.y=-X.y;
 #endif
 #ifdef FRAGMENT
 #ifdef ATLAS_FEATHERED_FILL
-e d z6(f P,bool Ch L3){d o=d8(P e1);if(!Ch) o=-o;return o;}
+e d z6(f P,bool Dh L3){d o=d8(P e1);if(!Dh) o=-o;return o;}
 #endif
 #ifdef ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH
 layout(location=0) inout R r0;
@@ -47,17 +47,17 @@ void main(){int o=de(C4(O));imageAtomicMax(Y8,ce(),o);}
 #endif
 #elif defined(ATLAS_RENDER_TARGET_RGBA8_UNORM)
 #ifdef ATLAS_FEATHERED_FILL
-v6(i,AF){q(O,f);d o=z6(O,w6 e1);if(abs(o)>cg-1e-3){M2(o>.0?E0(.0,.0,1./255.,.0):E0(.0,.0,.0,1./255.));}else{o*=1./xa;M2(E0(max(o,.0),max(-o,.0),.0,.0));}}
+v6(i,BF){r(O,f);d o=z6(O,w6 e1);if(abs(o)>cg-1e-3){M2(o>.0?E0(.0,.0,1./255.,.0):E0(.0,.0,.0,1./255.));}else{o*=1./ya;M2(E0(max(o,.0),max(-o,.0),.0,.0));}}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-f3(i,BF){q(O,f);d o=C4(O e1);o*=1./xa;M2(E0(o,.0,.0,.0));}
+f3(i,CF){r(O,f);d o=C4(O e1);o*=1./ya;M2(E0(o,.0,.0,.0));}
 #endif
 #else
 #ifdef ATLAS_FEATHERED_FILL
-v6(float,AF){q(O,f);M2(z6(O,w6 e1));}
+v6(float,BF){r(O,f);M2(z6(O,w6 e1));}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-f3(float,BF){q(O,f);M2(C4(O e1));}
+f3(float,CF){r(O,f);M2(C4(O e1));}
 #endif
 #endif
 #endif

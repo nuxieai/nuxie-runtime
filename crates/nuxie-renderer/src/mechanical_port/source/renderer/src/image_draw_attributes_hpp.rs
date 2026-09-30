@@ -1,4 +1,4 @@
-//! Mechanical translation of renderer/src/image_draw_attributes.hpp at 9463ff7b.
+//! Mechanical translation of renderer/src/image_draw_attributes.hpp at 4921ab81.
 //! Semantic names come from the same ordered minifier batch as the shader owners.
 #![allow(non_upper_case_globals)]
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
@@ -10,13 +10,13 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         format: VertexElementFormat::float4,
         attributeIndex: 2,
         byteOffset: 0,
-        semanticName: "WB",
+        semanticName: "XB",
     },
     VertexAttribute {
         format: VertexElementFormat::float4,
         attributeIndex: 3,
         byteOffset: 16,
-        semanticName: "SB",
+        semanticName: "RB",
     },
     VertexAttribute {
         format: VertexElementFormat::float4,
@@ -28,19 +28,19 @@ pub const ImageDrawInstanceBaseAttributes: [VertexAttribute; 7] = [
         format: VertexElementFormat::uint32,
         attributeIndex: 5,
         byteOffset: 48,
-        semanticName: "XB",
+        semanticName: "YB",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 6,
         byteOffset: 52,
-        semanticName: "YB",
+        semanticName: "ZB",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
         attributeIndex: 7,
         byteOffset: 56,
-        semanticName: "ZB",
+        semanticName: "AC",
     },
     VertexAttribute {
         format: VertexElementFormat::uint32,
@@ -62,7 +62,13 @@ pub const ImageRectInstanceAttributes: [VertexAttribute; 11] = [
     VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 11, byteOffset: 96, semanticName: "BD" },
     VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 12, byteOffset: 112, semanticName: "OC" },
 ];
-pub const ImageMeshInstanceAttributes: [VertexAttribute; 7] = ImageDrawInstanceBaseAttributes;
+pub const ImageMeshInstanceAttributes: [VertexAttribute; 8] = [
+    ImageDrawInstanceBaseAttributes[0], ImageDrawInstanceBaseAttributes[1],
+    ImageDrawInstanceBaseAttributes[2], ImageDrawInstanceBaseAttributes[3],
+    ImageDrawInstanceBaseAttributes[4], ImageDrawInstanceBaseAttributes[5],
+    ImageDrawInstanceBaseAttributes[6],
+    VertexAttribute { format: VertexElementFormat::float4, attributeIndex: 9, byteOffset: 64, semanticName: "GC" },
+];
 
 const _: () = {
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
@@ -71,7 +77,7 @@ const _: () = {
     use core::mem::{offset_of, size_of};
     assert!(size_of::<ImageDrawInstanceBase>() == 64);
     assert!(size_of::<ImageRectInstance>() == 128);
-    assert!(size_of::<ImageMeshInstance>() == 64);
+    assert!(size_of::<ImageMeshInstance>() == 80);
     assert!(
         offset_of!(ImageDrawInstanceBase, m_viewMatrix)
             == ImageDrawInstanceBaseAttributes[0].byteOffset as usize
@@ -113,4 +119,5 @@ const _: () = {
     assert!(offset_of!(ImageRectInstance, m_gradTextureY) == 120);
     assert!(offset_of!(ImageRectInstance, m_gradientType) == 124);
     assert!(offset_of!(ImageMeshInstance, m_commons) == 0);
+    assert!(offset_of!(ImageMeshInstance, m_uvTransform) == 64);
 };

@@ -887,6 +887,7 @@ unsafe fn release_image_mesh(draw: *mut Draw) {
     owner.vertex_buffer.operator_assign_null();
     owner.uv_buffer.operator_assign_null();
     owner.index_buffer.operator_assign_null();
+    owner.draw.instances = None;
 }
 
 unsafe fn count_one_subpass(draw: *mut Draw, _: &gpu::PlatformFeatures) {
@@ -2113,6 +2114,11 @@ pub unsafe fn make_image_mesh_draw(
             vertex_buffer: vertex_buffer_ptr,
             uv_buffer: uv_buffer_ptr,
             index_buffer: index_buffer_ptr,
+            uv_translate: [0.0; 2],
+            uv_scale: [1.0; 2],
+            instances: None,
+            instances_edit_count: 0,
+            modulated_opacity: 1.0,
         },
         image_texture,
         vertex_buffer,
@@ -2134,11 +2140,13 @@ pub unsafe fn make_image_mesh_draw_from_source(
     index_buffer: rcp<MechanicalRenderBuffer>,
     index_count: u32,
     modulated_color: u32,
+    uv_translate: [f32; 2],
+    uv_scale: [f32; 2],
 ) -> Box<ImageMeshDrawAllocation> {
     debug_assert!(!vertex_buffer.get().is_null());
     debug_assert!(!uv_buffer.get().is_null());
     debug_assert!(!index_buffer.get().is_null());
-    unsafe {
+    let mut owner = unsafe {
         make_image_mesh_draw(
             pixel_bounds,
             matrix,
@@ -2155,7 +2163,10 @@ pub unsafe fn make_image_mesh_draw_from_source(
             index_buffer,
             index_count,
         )
-    }
+    };
+    owner.draw.uv_translate = uv_translate;
+    owner.draw.uv_scale = uv_scale;
+    owner
 }
 
 pub fn make_clip_reset(

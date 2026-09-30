@@ -32,6 +32,10 @@ private:
 class RecordingRenderer : public rive::Renderer
 {
 public:
+    void drawImageMeshInstanced(const rive::RenderImage*, rive::ImageSampler,
+        rive::rcp<rive::RenderBuffer>, rive::rcp<rive::RenderBuffer>,
+        rive::rcp<rive::RenderBuffer>, uint32_t, uint32_t,
+        rive::rcp<rive::ImageMeshInstances>) override;
     explicit RecordingRenderer(RecordingStream* stream);
 
     void save() override;
@@ -62,6 +66,10 @@ private:
 class NullRenderer : public rive::Renderer
 {
 public:
+    void drawImageMeshInstanced(const rive::RenderImage*, rive::ImageSampler,
+        rive::rcp<rive::RenderBuffer>, rive::rcp<rive::RenderBuffer>,
+        rive::rcp<rive::RenderBuffer>, uint32_t, uint32_t,
+        rive::rcp<rive::ImageMeshInstances>) override;
     void save() override;
     void restore() override;
     void transform(const rive::Mat2D& transform) override;

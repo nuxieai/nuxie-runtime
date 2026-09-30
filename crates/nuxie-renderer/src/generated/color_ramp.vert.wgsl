@@ -1,17 +1,17 @@
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,10 +19,10 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct gl_PerVertex {
@@ -38,7 +38,7 @@ struct VertexOutput {
 }
 
 var<private> gl_VertexIndex_1: i32;
-var<private> IC_1: vec4<u32>;
+var<private> JC_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: TB;
 var<private> V6_: vec4<f32>;
@@ -57,22 +57,22 @@ fn main_1() {
     let _e33 = (_e31 >> bitcast<u32>(1i));
     let _e34 = (_e33 <= 1i);
     if _e34 {
-        let _e36 = IC_1[0u];
+        let _e36 = JC_1[0u];
         phi_239_ = (_e36 & 65535u);
     } else {
-        let _e39 = IC_1[0u];
+        let _e39 = JC_1[0u];
         phi_239_ = (_e39 >> bitcast<u32>(16i));
     }
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = j.tc;
+    let _e50 = j.uc;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);
     }
     let _e54 = phi_240_;
-    let _e56 = IC_1[1u];
+    let _e56 = JC_1[1u];
     phi_242_ = _e45;
     if (((_e56 & 2147483648u) != 0u) && (_e33 == 0i)) {
         if ((_e56 & 536870912u) != 0u) {
@@ -96,10 +96,10 @@ fn main_1() {
     }
     let _e81 = phi_246_;
     if _e34 {
-        let _e83 = IC_1[2u];
+        let _e83 = JC_1[2u];
         phi_244_ = _e83;
     } else {
-        let _e85 = IC_1[3u];
+        let _e85 = JC_1[3u];
         phi_244_ = _e85;
     }
     let _e87 = phi_244_;
@@ -109,9 +109,9 @@ fn main_1() {
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) IC: vec4<u32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) JC: vec4<u32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
-    IC_1 = IC;
+    JC_1 = JC;
     main_1();
     let _e8 = V6_;
     let _e9 = unnamed.gl_Position;

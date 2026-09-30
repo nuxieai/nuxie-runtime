@@ -52,7 +52,10 @@ pub fn schedule_canvases(commands: &[u8], segments: &[DeferredSegment]) -> Canva
                 break;
             };
             let payload = payload_size_of(command) as u32;
-            if matches!(command, RenderCmd::DrawImage | RenderCmd::DrawImageMesh) {
+            if matches!(
+                command,
+                RenderCmd::DrawImage | RenderCmd::DrawImageMesh | RenderCmd::DrawImageMeshInstanced
+            ) {
                 let handle = drawn_image_handle(&commands[pos as usize + 1..]);
                 if handle != INVALID_RENDER_HANDLE && handle & CANVAS_HANDLE_FLAG != 0 {
                     if let Some(sampled) = node_for(u64::from(handle & CANVAS_HANDLE_MASK)) {

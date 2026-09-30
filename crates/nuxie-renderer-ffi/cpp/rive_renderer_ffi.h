@@ -17,6 +17,17 @@ typedef struct rive_ffi_render_image rive_ffi_render_image;
 typedef struct rive_ffi_decoded_bitmap rive_ffi_decoded_bitmap;
 #endif
 typedef struct rive_ffi_render_buffer rive_ffi_render_buffer;
+typedef struct rive_ffi_mesh_instances rive_ffi_mesh_instances;
+
+rive_ffi_mesh_instances* rive_ffi_mesh_instances_make(rive_ffi_context*, size_t count);
+void rive_ffi_mesh_instances_delete(rive_ffi_mesh_instances*);
+void rive_ffi_mesh_instances_edit(rive_ffi_mesh_instances*, int resize, size_t count);
+void rive_ffi_mesh_instances_end_edit(rive_ffi_mesh_instances*, const float* data);
+void rive_ffi_renderer_draw_image_mesh_instanced(
+    rive_ffi_renderer*, const rive_ffi_render_image*, uint8_t sampler,
+    const rive_ffi_render_buffer* vertices, const rive_ffi_render_buffer* uv_coords,
+    const rive_ffi_render_buffer* indices, uint32_t vertex_count, uint32_t index_count,
+    const rive_ffi_mesh_instances*);
 
 typedef struct rive_ffi_vec2d
 {

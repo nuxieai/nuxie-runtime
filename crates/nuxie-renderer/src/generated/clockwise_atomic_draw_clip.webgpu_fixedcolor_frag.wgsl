@@ -3,19 +3,19 @@ struct Ae {
 }
 
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -23,10 +23,10 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct Ae_1 {
@@ -38,7 +38,7 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override Rh: bool = false;
+@id(10) override Sh: bool = false;
 
 var<private> O_1: vec4<f32>;
 var<private> k3_1: vec2<u32>;
@@ -50,15 +50,15 @@ var<uniform> j: TB;
 var<private> i0_: vec4<f32>;
 var<private> F1_: vec4<f32>;
 @group(3) @binding(9)
-var ca: sampler;
+var da: sampler;
 @group(0) @binding(8)
-var DD: texture_2d<f32>;
+var ED: texture_2d<f32>;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(1) @binding(11)
-var GC: texture_2d<f32>;
+var HC: texture_2d<f32>;
 @group(3) @binding(8)
-var M9_: sampler;
+var N9_: sampler;
 @group(1) @binding(13)
 var W5_: sampler;
 var<private> X1_1: vec4<f32>;
@@ -78,7 +78,7 @@ fn main_1() {
     var phi_471_: f32;
 
     let _e39 = O_1[0u];
-    if Rh {
+    if Sh {
         let _e41 = k3_1[1u];
         let _e43 = k3_1[0u];
         let _e44 = v4_1;

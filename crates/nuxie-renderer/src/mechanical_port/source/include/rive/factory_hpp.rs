@@ -207,6 +207,14 @@ pub trait FactoryAccess {
 /// pointer/count ABI. Slice adapters live on concrete product owners and
 /// validate lengths before crossing this boundary.
 pub trait FactoryContract: FactoryAccess {
+    fn makeImageMeshInstances(
+        &mut self,
+        count: usize,
+    ) -> nuxie_render_api::ImageMeshInstancesHandle {
+        std::rc::Rc::new(std::cell::RefCell::new(
+            nuxie_render_api::ImageMeshInstancesStorage::new(count),
+        ))
+    }
     fn makeRenderBuffer(
         &mut self,
         bufferType: RenderBufferType,

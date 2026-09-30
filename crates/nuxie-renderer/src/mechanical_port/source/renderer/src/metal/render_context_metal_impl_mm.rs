@@ -6629,7 +6629,7 @@ pub mod source_execution {
                                 set(
                                     metal,
                                     "encoder",
-                                    "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:",
+                                    "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:",
                                     vec![
                                         h(encoder),
                                         u(MTL_PRIMITIVE_TYPE_TRIANGLE),
@@ -6638,6 +6638,7 @@ pub mod source_execution {
                                         h(index),
                                         u(batch.baseIndex as u64
                                             * core::mem::size_of::<u16>() as u64),
+                                        u(batch.elementCount),
                                     ],
                                 );
                             }

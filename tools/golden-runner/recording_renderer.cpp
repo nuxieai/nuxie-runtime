@@ -774,6 +774,37 @@ void RecordingRenderer::drawImageMesh(const rive::RenderImage* image,
     m_stream->line(out.str());
 }
 
+void RecordingRenderer::drawImageMeshInstanced(const rive::RenderImage* image,
+    rive::ImageSampler sampler, rive::rcp<rive::RenderBuffer> vertices,
+    rive::rcp<rive::RenderBuffer> uvCoords, rive::rcp<rive::RenderBuffer> indices,
+    uint32_t vertexCount, uint32_t indexCount, rive::rcp<rive::ImageMeshInstances> instances)
+{
+    std::ostringstream out;
+    out << "drawImageMeshInstanced image=" << imageId(image)
+        << " sampler=" << samplerToString(sampler)
+        << " vertices=" << bufferId(vertices) << " uvs=" << bufferId(uvCoords)
+        << " indices=" << bufferId(indices) << " vertexCount=" << vertexCount
+        << " indexCount=" << indexCount << " instances=[";
+    bool first = true;
+    if (instances != nullptr)
+    {
+        for (const auto& instance : instances->instanceData())
+        {
+            if (!first) out << ',';
+            first = false;
+            out << "{transform=" << matToString(instance.transform)
+                << ",uvTranslate=[" << floatToString(instance.uvTranslate.x)
+                << ',' << floatToString(instance.uvTranslate.y)
+                << "],uvScale=[" << floatToString(instance.uvScale.x)
+                << ',' << floatToString(instance.uvScale.y)
+                << "],opacity=" << floatToString(instance.opacity)
+                << ",additiveness=" << floatToString(instance.additiveness) << '}';
+        }
+    }
+    out << ']';
+    m_stream->line(out.str());
+}
+
 void RecordingRenderer::modulateOpacity(float opacity)
 {
     m_stream->line("modulateOpacity opacity=" + floatToString(opacity));
@@ -810,6 +841,11 @@ void NullRenderer::drawImageMesh(const rive::RenderImage*,
                                  uint32_t,
                                  rive::BlendMode,
                                  float)
+{}
+
+void NullRenderer::drawImageMeshInstanced(const rive::RenderImage*,
+    rive::ImageSampler, rive::rcp<rive::RenderBuffer>, rive::rcp<rive::RenderBuffer>,
+    rive::rcp<rive::RenderBuffer>, uint32_t, uint32_t, rive::rcp<rive::ImageMeshInstances>)
 {}
 
 void NullRenderer::modulateOpacity(float) {}

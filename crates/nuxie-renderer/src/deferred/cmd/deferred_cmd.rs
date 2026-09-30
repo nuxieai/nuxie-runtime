@@ -161,6 +161,7 @@ fn resource_kind(value: u8) -> Option<ResourceKind> {
         2 => Some(ResourceKind::Shader),
         3 => Some(ResourceKind::Image),
         4 => Some(ResourceKind::Buffer),
+        5 => Some(ResourceKind::ImageMeshInstances),
         _ => None,
     }
 }
@@ -177,6 +178,7 @@ fn filter_allows(filter: ReplayFilter, command: RenderCmd) -> bool {
         | RenderCmd::ClipStroke
         | RenderCmd::DrawImage
         | RenderCmd::DrawImageMesh
+        | RenderCmd::DrawImageMeshInstanced
         | RenderCmd::ModulateOpacity
         | RenderCmd::ModulateColor
         | RenderCmd::CanvasContentBegin
@@ -413,6 +415,40 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                     size: c.size_in_bytes,
                 };
             }
+            RenderCmd::MakeImageMeshInstances => {
+                let c: MakeImageMeshInstancesPod = reader.read();
+                table.image_mesh_instances.set(
+                    c.id,
+                    Some(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_image_mesh_instances(c.count as usize),
+                    ),
+                    c.generation,
+                );
+            }
+            RenderCmd::ImageMeshInstancesData => {
+                let c: ImageMeshInstancesDataPod = reader.read();
+                let source = reader.blob_at(c.blob_offset, c.count.wrapping_mul(48));
+                if let Some(instances) = table.image_mesh_instances.get(c.id) {
+                    if source.len() == c.count as usize * 48 {
+                        let mut instances = instances.borrow_mut();
+                        let dest = instances.edit(Some(c.count as usize));
+                        for (dst, bytes) in dest.iter_mut().zip(source.chunks_exact(48)) {
+                            let f = |i: usize| f32::decode(&bytes[i * 4..i * 4 + 4]);
+                            *dst = ImageMeshInstanceData {
+                                transform: Mat2D([f(0), f(1), f(2), f(3), f(4), f(5)]),
+                                uv_translate: [f(6), f(7)],
+                                uv_scale: [f(8), f(9)],
+                                opacity: f(10),
+                                additiveness: f(11),
+                            };
+                        }
+                        instances.end_edit();
+                    }
+                }
+            }
             RenderCmd::BufferData => {
                 let c: BufferDataPod = reader.read();
                 let source = reader.blob_at(c.blob_offset, c.size);
@@ -436,6 +472,15 @@ pub(crate) fn replay_render_commands_with_optional_factory(
             RenderCmd::ResourceNewVersion => {
                 let c: ResourceVersionPod = reader.read();
                 match resource_kind(c.kind) {
+                    Some(ResourceKind::ImageMeshInstances) => {
+                        let fresh = factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_image_mesh_instances(0);
+                        table
+                            .image_mesh_instances
+                            .new_version(c.id, c.version, Some(fresh));
+                    }
                     Some(ResourceKind::Paint) => {
                         let mut fresh = factory
                             .as_deref_mut()
@@ -755,6 +800,48 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                 });
                 if present
                     && (image.is_none() || vertices.is_none() || uv.is_none() || indices.is_none())
+                {
+                    dropped(hooks, kind, c.image, 0);
+                }
+            }
+            RenderCmd::DrawImageMeshInstanced => {
+                let c: DrawImageMeshInstancedPod = reader.read();
+                let image = if c.image & CANVAS_HANDLE_FLAG != 0 {
+                    hooks
+                        .canvas_image
+                        .as_mut()
+                        .and_then(|resolve| resolve(c.image & CANVAS_HANDLE_MASK))
+                } else {
+                    table.images.get(c.image)
+                };
+                let vertices = table.buffers.get_version(c.vertices, c.vertex_version);
+                let uv = table.buffers.get_version(c.uv_coords, c.uv_version);
+                let indices = table.buffers.get_version(c.indices, c.index_version);
+                let instances = table
+                    .image_mesh_instances
+                    .get_version(c.instances, c.instances_version);
+                let present = with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
+                    if let (Some(image), Some(vertices), Some(uv), Some(indices), Some(instances)) =
+                        (&image, &vertices, &uv, &indices, &instances)
+                    {
+                        r.draw_image_mesh_instanced(
+                            Some(image.as_ref()),
+                            sampler(c.wrap_x, c.wrap_y, c.filter),
+                            Some(vertices.borrow().as_ref()),
+                            Some(uv.borrow().as_ref()),
+                            Some(indices.borrow().as_ref()),
+                            c.vertex_count,
+                            c.index_count,
+                            Some(instances),
+                        );
+                    }
+                });
+                if present
+                    && (image.is_none()
+                        || vertices.is_none()
+                        || uv.is_none()
+                        || indices.is_none()
+                        || instances.is_none())
                 {
                     dropped(hooks, kind, c.image, 0);
                 }

@@ -1,22 +1,22 @@
 #ifdef EB
-M1 z0(G2,m0);k1(X2,i0);z0(f6,p4);k1(J6,G7);N1 P1(HB){q(X1,f);
+M1 z0(G2,m0);k1(X2,i0);z0(f6,p4);k1(J6,G7);N1 P1(HB){r(X1,f);
 #ifdef IB
-q(C2,S);
+r(C2,S);
 #endif
 #ifdef DB
-q(j1,d);
+r(j1,d);
 #else
-q(O,B2);
+r(O,B2);
 #endif
-q(D0,d);
-#ifdef I
-q(Y1,D);
+r(D0,d);
+#ifdef K
+r(Y1,D);
 #endif
 #ifdef AB
-q(O0,f);
+r(O0,f);
 #endif
 #ifdef T
-q(g1,d);
+r(g1,d);
 #endif
 #if!defined(DB)
 z2;
@@ -25,21 +25,21 @@ D U4=unpackHalf2x16(a1(G7));d j9=U4.y;d r0=j9==D0?U4.x:J0(.0);
 #ifdef DB
 r0+=j1;h2(G7);
 #else
-r0=vi(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
+r0=wi(r0,O e1);d1(G7,packHalf2x16(D2(r0,D0)));
 #endif
 d o;
-#ifdef GE
-if(GE){o=ga(r0,J0(.0),J0(1.));}else
+#ifdef HE
+if(HE){o=ha(r0,J0(.0),J0(1.));}else
 #endif
 {o=abs(r0);
-#ifdef WC
-if(WC&&D0<.0){o=1.-J0(abs(fract(o*.5)*2.+-1.));}
+#ifdef XC
+if(XC&&D0<.0){o=1.-J0(abs(fract(o*.5)*2.+-1.));}
 #endif
 o=min(o,J0(1.));}
-#ifdef I
-if(I&&Y1.x<.0){d m1=-Y1.x;
-#ifdef YC
-if(YC){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==K5?Q0.x:.0;
+#ifdef K
+if(K&&Y1.x<.0){d m1=-Y1.x;
+#ifdef ZC
+if(ZC){d K5=Y1.y;if(K5!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;d w4;if(E6!=m1){w4=E6==K5?Q0.x:.0;
 #ifndef DB
 A0(p4,E0(w4,.0,.0,.0));
 #endif
@@ -52,8 +52,8 @@ y2(p4);
 d1(i0,packHalf2x16(D2(o,m1)));y2(m0);}else
 #endif
 {
-#ifdef I
-if(I){d m1=Y1.x;if(m1!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;o=(E6==m1)?min(Q0.x,o):J0(.0);}}
+#ifdef K
+if(K){d m1=Y1.x;if(m1!=.0){D Q0=unpackHalf2x16(a1(i0));d E6=Q0.y;o=(E6==m1)?min(Q0.x,o):J0(.0);}}
 #endif
 #ifdef AB
 if(AB){d c5=m3(g5(O0));o=clamp(c5,J0(.0),o);}

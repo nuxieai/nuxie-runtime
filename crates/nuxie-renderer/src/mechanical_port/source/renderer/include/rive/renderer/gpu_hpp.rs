@@ -3601,6 +3601,7 @@ pub struct ImageRectInstance {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ImageMeshInstance {
     pub m_commons: ImageDrawInstanceBase,
+    pub m_uvTransform: [f32; 4],
 }
 
 impl ImageRectInstance {
@@ -3613,7 +3614,7 @@ impl ImageRectInstance {
 }
 impl ImageMeshInstance {
     pub const FirstAttribIdx: usize = ImageDrawInstanceBase::FirstAttribIdx;
-    pub const AttributeCount: usize = 7;
+    pub const AttributeCount: usize = 8;
     pub const LastAttribIdx: usize = Self::FirstAttribIdx + Self::AttributeCount - 1;
     pub const fn getAttributes() -> &'static [VertexAttribute; Self::AttributeCount] {
         &crate::mechanical_port::source::renderer::src::image_draw_attributes_hpp::ImageMeshInstanceAttributes

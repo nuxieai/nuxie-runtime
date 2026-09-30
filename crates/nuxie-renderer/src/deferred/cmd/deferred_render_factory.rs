@@ -27,6 +27,7 @@ pub struct DeferredFactory {
     shader_ids: SharedIdAllocator,
     image_ids: SharedIdAllocator,
     buffer_ids: SharedIdAllocator,
+    instances_ids: SharedIdAllocator,
     images: HashMap<Vec<u8>, LiveImage>,
     pub(super) canvas_registry: Option<Rc<RefCell<ForeignImageRegistry>>>,
 }
@@ -50,6 +51,7 @@ impl DeferredFactory {
             shader_ids: Arc::new(Mutex::new(IdAllocator::default())),
             image_ids: Arc::new(Mutex::new(IdAllocator::default())),
             buffer_ids: Arc::new(Mutex::new(IdAllocator::default())),
+            instances_ids: Arc::new(Mutex::new(IdAllocator::default())),
             images: HashMap::new(),
             canvas_registry: None,
         }
@@ -228,6 +230,18 @@ impl Factory for DeferredFactory {
             flags,
             size_in_bytes,
         ))
+    }
+    fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
+        let base = self.allocate(ResourceKind::ImageMeshInstances, &self.instances_ids);
+        base.append(
+            RenderCmd::MakeImageMeshInstances,
+            &MakeImageMeshInstancesPod {
+                id: base.id,
+                generation: base.generation(),
+                count: count as u32,
+            },
+        );
+        Rc::new(RefCell::new(DeferredImageMeshInstances::new(base, count)))
     }
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
         if let Some(image) = self.images.get(data) {
@@ -585,6 +599,70 @@ impl Renderer for DeferredRenderer {
             blend_mode,
             opacity,
             0.0,
+        );
+    }
+    fn draw_image_mesh_instanced(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv_coords: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
+        instances: Option<&ImageMeshInstancesHandle>,
+    ) {
+        let Some(instances) = instances else {
+            return;
+        };
+        let instances = instances.borrow();
+        if instances.count() == 0 {
+            return;
+        }
+        let image = self.image_id(image);
+        fn downcast(buffer: Option<&dyn RenderBuffer>) -> Option<&DeferredRenderBuffer> {
+            buffer.and_then(|b| b.as_any().downcast_ref::<DeferredRenderBuffer>())
+        }
+        let (Some(vertices), Some(uv_coords), Some(indices)) =
+            (downcast(vertices), downcast(uv_coords), downcast(indices))
+        else {
+            Self::warn_foreign("drawImageMeshInstanced");
+            return;
+        };
+        if image == INVALID_RENDER_HANDLE {
+            Self::warn_foreign("drawImageMeshInstanced");
+            return;
+        }
+        vertices.resource.mark_drawn();
+        uv_coords.resource.mark_drawn();
+        indices.resource.mark_drawn();
+        let Some(instances) = instances
+            .as_any()
+            .downcast_ref::<DeferredImageMeshInstances>()
+        else {
+            Self::warn_foreign("drawImageMeshInstanced");
+            return;
+        };
+        self.route();
+        instances.resource.mark_drawn();
+        self.buffer.lock().unwrap().append(
+            RenderCmd::DrawImageMeshInstanced,
+            &DrawImageMeshInstancedPod {
+                image,
+                vertices: vertices.resource.base.id,
+                uv_coords: uv_coords.resource.base.id,
+                indices: indices.resource.base.id,
+                vertex_version: vertices.resource.version(),
+                uv_version: uv_coords.resource.version(),
+                index_version: indices.resource.version(),
+                vertex_count,
+                index_count,
+                instances: instances.resource.base.id,
+                instances_version: instances.resource.version(),
+                wrap_x: sampler.wrap_x as u8,
+                wrap_y: sampler.wrap_y as u8,
+                filter: sampler.filter as u8,
+            },
         );
     }
     fn draw_image_mesh_with_additiveness(

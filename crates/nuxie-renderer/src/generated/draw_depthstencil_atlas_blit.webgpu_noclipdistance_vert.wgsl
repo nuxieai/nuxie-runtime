@@ -1,21 +1,21 @@
-struct Hg {
+struct Ig {
     g2_: array<vec4<u32>>,
 }
 
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -23,10 +23,10 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct kf {
@@ -44,7 +44,7 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct Ig {
+struct Jg {
     g2_: array<vec4<u32>>,
 }
 
@@ -57,19 +57,19 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Hh: bool = true;
-@id(2) override Jh: bool = true;
-@id(8) override Ph: bool = true;
+@id(0) override Ih: bool = true;
+@id(2) override Kh: bool = true;
+@id(8) override Qh: bool = true;
 
 @group(0) @binding(2)
-var<storage> OB: Hg;
+var<storage> OB: Ig;
 @group(0) @binding(0)
 var<uniform> j: TB;
 var<private> gl_VertexIndex_1: i32;
 var<private> JB_1: vec3<f32>;
 var<private> F2_: vec2<f32>;
 @group(0) @binding(3)
-var<storage> CD: kf;
+var<storage> DD: kf;
 var<private> O3_: f32;
 var<private> g1_: f32;
 @group(0) @binding(4)
@@ -78,13 +78,13 @@ var<private> X1_: vec4<f32>;
 var<private> C2_: vec3<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
-var JC: texture_2d<u32>;
+var KC: texture_2d<u32>;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(0) @binding(5)
-var<storage> HD: Ig;
+var<storage> ID: Jg;
 @group(3) @binding(9)
-var ca: sampler;
+var da: sampler;
 
 fn main_1() {
     var phi_709_: u32;
@@ -99,11 +99,11 @@ fn main_1() {
     let _e54 = OB.g2_[((_e49 * 4u) + 2u)];
     let _e56 = _e46.xy;
     let _e58 = bitcast<vec3<f32>>(_e54.yzw);
-    let _e64 = j.hh;
+    let _e64 = j.ih;
     F2_ = (((_e56 * _e58.x) + _e58.yz) * _e64);
-    let _e68 = CD.g2_[_e49];
+    let _e68 = DD.g2_[_e49];
     let _e70 = (_e68.x & 15u);
-    if Hh {
+    if Ih {
         let _e71 = (_e70 == 0u);
         if _e71 {
             phi_709_ = _e68.y;
@@ -126,7 +126,7 @@ fn main_1() {
         let _e88 = phi_711_;
         O3_ = _e88;
     }
-    if Jh {
+    if Kh {
         g1_ = f32(((_e68.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e70 == 1u) {
@@ -156,8 +156,8 @@ fn main_1() {
         let _e169 = X1_[3u];
         X1_[3u] = -(_e169);
     }
-    phi_404_ = Ph;
-    if Ph {
+    phi_404_ = Qh;
+    if Qh {
         phi_404_ = ((_e68.x & 2048u) != 0u);
     }
     let _e176 = phi_404_;

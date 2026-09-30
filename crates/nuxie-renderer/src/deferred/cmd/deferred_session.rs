@@ -512,6 +512,21 @@ impl Renderer for ScopedRenderer {
             .borrow_mut()
             .draw_image_mesh(i, s, v, uv, indices, vc, ic, b, o);
     }
+    fn draw_image_mesh_instanced(
+        &mut self,
+        i: Option<&dyn RenderImage>,
+        s: ImageSampler,
+        v: Option<&dyn RenderBuffer>,
+        uv: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vc: u32,
+        ic: u32,
+        instances: Option<&ImageMeshInstancesHandle>,
+    ) {
+        self.0
+            .borrow_mut()
+            .draw_image_mesh_instanced(i, s, v, uv, indices, vc, ic, instances);
+    }
     fn draw_image_mesh_with_additiveness(
         &mut self,
         i: Option<&dyn RenderImage>,
@@ -667,6 +682,9 @@ impl Factory for DeferredSession {
             ));
         }
         self.make_gpu_canvas_shader_artifact(&prepared.artifact)
+    }
+    fn make_image_mesh_instances(&mut self, count: usize) -> ImageMeshInstancesHandle {
+        self.factory.borrow_mut().make_image_mesh_instances(count)
     }
     fn make_render_buffer(
         &mut self,

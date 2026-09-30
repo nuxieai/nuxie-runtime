@@ -10,6 +10,7 @@ pub struct GpuCensus {
     pub ore_buffer_bytes: u64,
     pub images: u32,
     pub buffers: u32,
+    pub image_mesh_instances: u32,
     pub paths: u32,
     pub paints: u32,
     pub shaders: u32,
@@ -26,6 +27,7 @@ impl GpuCensus {
     pub fn live_objects(&self) -> u32 {
         self.images
             + self.buffers
+            + self.image_mesh_instances
             + self.paths
             + self.paints
             + self.shaders
@@ -66,6 +68,7 @@ pub fn take_gpu_census(table: &ResourceTable, ore: &OreResident) -> GpuCensus {
     census.shaders = count_live(&table.shaders, &mut census.slots_2d);
     census.buffers = count_live(&table.buffers, &mut census.slots_2d);
     census.images = count_live(&table.images, &mut census.slots_2d);
+    census.image_mesh_instances = count_live(&table.image_mesh_instances, &mut census.slots_2d);
     for image in table.images.objects.iter().flatten() {
         census.image_bytes += u64::from(image.width()) * u64::from(image.height()) * 4;
     }

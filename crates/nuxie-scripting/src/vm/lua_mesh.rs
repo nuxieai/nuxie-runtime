@@ -1,8 +1,9 @@
 //! Direct port of pinned `src/lua/renderer/lua_mesh.cpp`.
 
-use luaur_rt::{Error, Lua, MultiValue, Result, Table, UserData, UserDataMethods, Value};
+use luaur_rt::{AnyUserData, Error, FromLua, Lua, MultiValue, Result, Table, UserData, UserDataMethods, Value};
 use nuxie_render_api::{
     Factory as RenderFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, Vec2D,
+    ImageMeshInstancesHandle,
 };
 
 pub(super) struct ScriptedVertexBuffer {
@@ -149,6 +150,48 @@ impl UserData for ScriptedTriangleBuffer {
     }
 }
 
+pub(super) struct ScriptedImageMeshInstances {
+    pub(super) instances: ImageMeshInstancesHandle,
+}
+
+impl UserData for ScriptedImageMeshInstances {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("resize", |_, this, count: u32| {
+            let mut instances = this.instances.borrow_mut();
+            if instances.count() != count as usize {
+                instances.edit(Some(count as usize));
+                instances.end_edit();
+            }
+            Ok(())
+        });
+        methods.add_method("set", |lua, this, values: MultiValue| {
+            let value = |index| values.get(index).cloned().unwrap_or(Value::Nil);
+            let index = u32::from_lua(value(0), lua)? as usize;
+            let mut instances = this.instances.borrow_mut();
+            if index >= instances.count() {
+                return Err(Error::runtime(format!("index {index} is past the end of MeshInstances")));
+            }
+            let matrix = AnyUserData::from_lua(value(1), lua)?;
+            let matrix = matrix.borrow::<super::lua_mat2d::ScriptedMat2D>()?.0;
+            let data = &mut instances.edit(None)[index];
+            data.transform = matrix;
+            data.opacity = Option::<f32>::from_lua(value(2), lua)?.unwrap_or(1.0);
+            data.additiveness = Option::<f32>::from_lua(value(3), lua)?.unwrap_or(0.0);
+            let vector = |index, default| -> Result<[f32; 2]> {
+                if values.len() <= index { return Ok(default); }
+                match value(index) {
+                    Value::Vector(v) => Ok([v.x(), v.y()]),
+                    _ => Err(Error::runtime("expected vector")),
+                }
+            };
+            data.uv_translate = vector(4, [0.0, 0.0])?;
+            data.uv_scale = vector(5, [1.0, 1.0])?;
+            instances.end_edit();
+            Ok(())
+        });
+    }
+}
+
 fn install_callable_constructor<T: UserData + 'static>(
     lua: &Lua,
     name: &str,
@@ -170,5 +213,19 @@ fn install_callable_constructor<T: UserData + 'static>(
 
 pub(super) fn install_mesh_globals(lua: &Lua) -> Result<()> {
     install_callable_constructor(lua, "VertexBuffer", |_| Ok(ScriptedVertexBuffer::new()))?;
-    install_callable_constructor(lua, "TriangleBuffer", |_| Ok(ScriptedTriangleBuffer::new()))
+    install_callable_constructor(lua, "TriangleBuffer", |_| Ok(ScriptedTriangleBuffer::new()))?;
+    let table = lua.create_table();
+    let metatable = lua.create_table();
+    metatable.set("__call", lua.create_function(|lua, (_table, count): (Table, Option<u32>)| {
+        let bindings = super::lua_renderer_library::RendererBindings::for_lua(lua)
+            .ok_or_else(|| Error::runtime("renderer bindings are not installed"))?;
+        let instances = bindings.with_factory(|factory| {
+            Ok(factory.make_image_mesh_instances(count.unwrap_or(0) as usize))
+        })?;
+        lua.create_userdata(ScriptedImageMeshInstances { instances })
+    })?)?;
+    metatable.set_readonly(true);
+    table.set_metatable(Some(metatable))?;
+    table.set_readonly(true);
+    lua.globals().set("MeshInstances", table)
 }

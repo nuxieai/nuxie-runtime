@@ -9,6 +9,63 @@
 #include <cstring>
 #include <utility>
 
+struct rive_ffi_mesh_instances
+{
+    rive::rcp<rive::ImageMeshInstances> instances;
+    rive::Span<rive::ImageMeshInstanceData> editing;
+};
+
+extern "C" rive_ffi_mesh_instances* rive_ffi_mesh_instances_make(
+    rive_ffi_context* context, size_t count)
+{
+    return new rive_ffi_mesh_instances{context->context->makeImageMeshInstances(count), {}};
+}
+extern "C" void rive_ffi_mesh_instances_delete(rive_ffi_mesh_instances* instances)
+{
+    delete instances;
+}
+extern "C" void rive_ffi_mesh_instances_edit(
+    rive_ffi_mesh_instances* instances, int resize, size_t count)
+{
+    instances->editing = resize ? instances->instances->edit(count)
+                                : instances->instances->edit();
+}
+extern "C" void rive_ffi_mesh_instances_end_edit(
+    rive_ffi_mesh_instances* instances, const float* data)
+{
+    for (auto& instance : instances->editing)
+    {
+        instance.transform = rive::Mat2D(data[0], data[1], data[2], data[3], data[4], data[5]);
+        instance.uvTranslate = {data[6], data[7]};
+        instance.uvScale = {data[8], data[9]};
+        instance.opacity = data[10];
+        instance.additiveness = data[11];
+        data += 12;
+    }
+    instances->instances->endEdit();
+    instances->editing = {};
+}
+
+extern "C" void rive_ffi_renderer_draw_image_mesh_instanced(
+    rive_ffi_renderer* renderer, const rive_ffi_render_image* image, uint8_t sampler,
+    const rive_ffi_render_buffer* vertices, const rive_ffi_render_buffer* uvCoords,
+    const rive_ffi_render_buffer* indices, uint32_t vertexCount, uint32_t indexCount,
+    const rive_ffi_mesh_instances* instances)
+{
+    if (renderer != nullptr && renderer->context->renderer != nullptr)
+    {
+        renderer->context->renderer->drawImageMeshInstanced(
+            image == nullptr ? nullptr : image->image.get(),
+            rive::ImageSampler::SamplerFromKey(sampler),
+            vertices == nullptr ? nullptr : vertices->buffer,
+            uvCoords == nullptr ? nullptr : uvCoords->buffer,
+            indices == nullptr ? nullptr : indices->buffer,
+            vertexCount, indexCount,
+            instances == nullptr ? nullptr : instances->instances);
+        renderer->context->drawCount += 1;
+    }
+}
+
 class RenderContextTest
 {
 public:

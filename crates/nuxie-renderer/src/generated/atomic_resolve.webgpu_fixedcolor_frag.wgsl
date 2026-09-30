@@ -11,19 +11,19 @@ struct lf {
 }
 
 struct TB {
-    tc: f32,
+    uc: f32,
     Cd: f32,
     Hf: f32,
     If: f32,
     n6_: u32,
-    Nb: u32,
+    Ob: u32,
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    hh: vec2<f32>,
+    ih: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    lh: f32,
+    mh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -31,24 +31,24 @@ struct TB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    eh: u32,
-    Mb: u32,
-    Zb: f32,
+    fh: u32,
+    Nb: u32,
     ac: f32,
+    bc: f32,
 }
 
 struct A4Sd {
     g2_: array<u32>,
 }
 
-@id(7) override Oh: bool = true;
-@id(4) override Lh: bool = true;
-@id(0) override Hh: bool = true;
-@id(1) override Ih: bool = true;
-@id(2) override Jh: bool = true;
+@id(7) override Ph: bool = true;
+@id(4) override Mh: bool = true;
+@id(0) override Ih: bool = true;
+@id(1) override Jh: bool = true;
+@id(2) override Kh: bool = true;
 
 @group(0) @binding(3)
-var<storage> CD: kf;
+var<storage> DD: kf;
 @group(2) @binding(1)
 var<storage, read_write> i0_: i0Sd;
 @group(0) @binding(4)
@@ -57,18 +57,18 @@ var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: TB;
 @group(0) @binding(8)
-var DD: texture_2d<f32>;
+var ED: texture_2d<f32>;
 @group(3) @binding(8)
-var M9_: sampler;
+var N9_: sampler;
 @group(2) @binding(3)
 var<storage, read_write> A4_: A4Sd;
 var<private> F1_: vec4<f32>;
 @group(3) @binding(9)
-var ca: sampler;
+var da: sampler;
 @group(0) @binding(9)
-var XC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(1) @binding(11)
-var GC: texture_2d<f32>;
+var HC: texture_2d<f32>;
 @group(1) @binding(13)
 var W5_: sampler;
 
@@ -94,12 +94,12 @@ fn main_1() {
     let _e93 = A4_.g2_[_e90];
     let _e97 = ((f32((_e93 & 131071u)) * 0.00048828125f) + -32f);
     let _e99 = (_e93 >> bitcast<u32>(17u));
-    let _e102 = CD.g2_[_e99];
+    let _e102 = DD.g2_[_e99];
     phi_1068_ = _e97;
     if ((_e102.x & 768u) != 0u) {
         let _e106 = abs(_e97);
-        phi_725_ = Lh;
-        if Lh {
+        phi_725_ = Mh;
+        if Mh {
             phi_725_ = ((_e102.x & 512u) != 0u);
         }
         let _e110 = phi_725_;
@@ -113,7 +113,7 @@ fn main_1() {
     let _e120 = phi_1068_;
     let _e121 = clamp(_e120, 0f, 1f);
     phi_1072_ = _e121;
-    if Hh {
+    if Ih {
         let _e123 = (_e102.x >> bitcast<u32>(16u));
         phi_1073_ = _e121;
         if (_e123 != 0u) {
@@ -130,8 +130,8 @@ fn main_1() {
         phi_1072_ = _e137;
     }
     let _e139 = phi_1072_;
-    phi_762_ = Ih;
-    if Ih {
+    phi_762_ = Jh;
+    if Jh {
         phi_762_ = ((_e102.x & 1024u) != 0u);
     }
     let _e143 = phi_762_;
@@ -147,7 +147,7 @@ fn main_1() {
     let _e174 = phi_1086_;
     let _e175 = (_e102.x & 15u);
     if (_e175 <= 1u) {
-        phi_1089_ = select(unpack4x8unorm(_e102.y), vec4<f32>(0f, 0f, 0f, 0f), vec4((Hh && (_e175 == 0u))));
+        phi_1089_ = select(unpack4x8unorm(_e102.y), vec4<f32>(0f, 0f, 0f, 0f), vec4((Ih && (_e175 == 0u))));
     } else {
         let _e188 = (_e99 * 8u);
         let _e191 = PB.g2_[_e188];
@@ -160,11 +160,11 @@ fn main_1() {
         }
         let _e210 = phi_1074_;
         let _e217 = bitcast<f32>(_e102.y);
-        let _e220 = j.Zb;
-        let _e223 = j.ac;
-        let _e226 = textureSampleLevel(DD, M9_, vec2<f32>(((clamp(_e210, 0f, 1f) * _e202.z) + _e202.w), ((floor(_e217) * _e220) + _e223)), 0f);
+        let _e220 = j.ac;
+        let _e223 = j.bc;
+        let _e226 = textureSampleLevel(ED, N9_, vec2<f32>(((clamp(_e210, 0f, 1f) * _e202.z) + _e202.w), ((floor(_e217) * _e220) + _e223)), 0f);
         phi_1091_ = _e226;
-        if !((Jh && (((_e102.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
+        if !((Kh && (((_e102.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
             let _e230 = (_e226.xyz * _e226.w);
             phi_1091_ = vec4<f32>(_e230.x, _e230.y, _e230.z, (_e226.w * (fract(_e217) * 1.0039216f)));
         }
@@ -176,7 +176,7 @@ fn main_1() {
     let _e243 = _e242.xyz;
     let _e246 = j.F3_;
     let _e248 = j.G3_;
-    if (Oh && (_e242.w != 0f)) {
+    if (Ph && (_e242.w != 0f)) {
         phi_1092_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e55.x) + (0.00583715f * _e55.y))))) * _e246) + _e248)) + _e243);
     } else {
         phi_1092_ = _e243;

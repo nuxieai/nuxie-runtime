@@ -35,10 +35,11 @@ mod deferred_canvas_mode_test;
 ))]
 mod deferred_flush_parity_test;
 mod deferred_measure_test;
+mod deferred_mesh_instanced_test;
 mod deferred_path_geometry_test;
-mod deferred_pending_destroys_test;
 #[cfg(feature = "with-rive-path-query")]
 mod deferred_path_query_test;
+mod deferred_pending_destroys_test;
 mod deferred_replay_order_test;
 mod deferred_segment_test;
 mod deferred_session_attachment_test;
@@ -56,7 +57,7 @@ mod gpu_census_test;
         feature = "renderer-metal"
     )
 ))]
-mod modulate_opacity_test;
+mod mesh_instanced_batch_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(
@@ -68,6 +69,17 @@ mod modulate_opacity_test;
     )
 ))]
 mod modulate_color_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod modulate_opacity_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(

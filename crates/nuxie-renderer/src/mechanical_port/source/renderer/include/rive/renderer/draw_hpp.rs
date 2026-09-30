@@ -186,6 +186,12 @@ impl RiveRenderPaintContract for RiveRenderPaintData {
 /// Inline declarations from `ImageMeshDraw` that are not owned by
 /// `crate::draw`'s CPU geometry module.
 impl ImageMeshDraw {
+    pub fn uvTranslate(&self) -> [f32; 2] {
+        self.uv_translate
+    }
+    pub fn uvScale(&self) -> [f32; 2] {
+        self.uv_scale
+    }
     pub fn vertexBuffer(&self) -> *mut RenderBuffer {
         self.vertex_buffer
     }

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
+ * Upstream source revision: 4921ab8169d2d8bfc4d2d25761b99689bc85a72d
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "71b2fd442e85cde65c8b3a1d5c61fc13d86dcb5da70dbb45f2e242bd02b2ca9c";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 356;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14798;
+    "f3e9643c431550a677552d5248674ddb868ca206e84a84dd7ff2e57b6e918438";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 357;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14849;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -238,7 +238,8 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define IMAGE_RECT_ATTRIB_COUNT                                                \
     (IMAGE_RECT_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
-#define IMAGE_MESH_LAST_ATTRIB_IDX IMAGE_COMMON_LAST_ATTRIB_IDX
+#define IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX 9
+#define IMAGE_MESH_LAST_ATTRIB_IDX IMAGE_MESH_UV_TRANSFORM_ATTRIB_IDX
 #define IMAGE_MESH_ATTRIB_COUNT                                                \
     (IMAGE_MESH_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 

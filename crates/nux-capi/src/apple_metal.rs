@@ -818,6 +818,9 @@ impl<'a> AppleMetalFrameSink<'a> {
 }
 
 impl DeferredFrameSink for AppleMetalFrameSink<'_> {
+    fn frame_mode(&self) -> nuxie::render_api::RenderCanvasFrameMode {
+        self.native.borrow().render_mode().canvas_frame_mode()
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.native.persistent_context().unwrap()
     }
@@ -865,7 +868,8 @@ impl DeferredFrameSink for AppleMetalFrameSink<'_> {
         if self.failure.is_some() {
             return None;
         }
-        let frame = canvas.borrow_mut().begin_frame(clear_color);
+        let mode = self.canvas_mode(&canvas);
+        let frame = canvas.borrow_mut().begin_frame_with_mode(clear_color, mode);
         match frame {
             Ok(frame) => *self.canvas.borrow_mut() = Some(ReplayFrame::Canvas(frame)),
             Err(error) => {

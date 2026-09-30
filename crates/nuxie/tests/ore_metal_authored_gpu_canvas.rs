@@ -173,9 +173,10 @@ impl RenderCanvas for MetalCanvas {
     fn render_image(&self) -> Rc<dyn RenderImage> {
         self.0.retain_image()
     }
-    fn begin_frame(
+    fn begin_frame_with_mode(
         &mut self,
         _: ColorInt,
+        _mode: nuxie_render_api::RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         panic!("this GPUCanvas fixture never begins a 2D canvas frame")
     }

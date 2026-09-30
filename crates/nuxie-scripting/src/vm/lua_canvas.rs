@@ -470,9 +470,10 @@ mod tests {
             self.image.clone()
         }
 
-        fn begin_frame(
+        fn begin_frame_with_mode(
             &mut self,
             clear_color: ColorInt,
+            _mode: nuxie_render_api::RenderCanvasFrameMode,
         ) -> std::result::Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
             self.events
                 .borrow_mut()

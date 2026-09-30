@@ -18,6 +18,15 @@ use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 pub trait DeferredFrameSink {
+    /// HostFrameSink::m_screenMode: requested policy, not a previous frame's
+    /// effective (possibly fallback-adjusted) interlock mode.
+    fn frame_mode(&self) -> RenderCanvasFrameMode {
+        RenderCanvasFrameMode::default()
+    }
+    /// HostFrameSink::canvasMode: overrides replace all three fields.
+    fn canvas_mode(&self, _canvas: &RenderCanvasHandle) -> RenderCanvasFrameMode {
+        self.frame_mode()
+    }
     // A retained factory projection makes the source's factory and frame
     // operations independently borrowable while a canvas hook is executing.
     fn factory(&mut self) -> PersistentFactoryContext;

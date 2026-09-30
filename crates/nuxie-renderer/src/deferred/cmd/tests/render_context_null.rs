@@ -206,6 +206,16 @@ pub struct NullBackend {
     height: u32,
 }
 impl NullBackend {
+    pub fn frame_descriptor(&self) -> FrameDescriptor {
+        *self.context.frameDescriptor()
+    }
+
+    pub fn frame_interlock_mode(
+        &self,
+    ) -> crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockMode {
+        self.context.frameInterlockMode()
+    }
+
     pub fn new(
         width: u32,
         height: u32,

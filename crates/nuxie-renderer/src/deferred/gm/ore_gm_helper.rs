@@ -342,6 +342,9 @@ impl GmHost {
     }
 }
 impl DeferredFrameSink for GmHost {
+    fn frame_mode(&self) -> nuxie_render_api::RenderCanvasFrameMode {
+        self.factory.borrow().render_mode().canvas_frame_mode()
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
     }
@@ -376,10 +379,11 @@ impl DeferredFrameSink for GmHost {
         self.flush_screen();
         assert!(self.canvas.borrow().is_none());
         self.canvas_frames += 1;
+        let mode = self.canvas_mode(&canvas);
         *self.canvas.borrow_mut() = Some(Frame::Canvas(
             canvas
                 .borrow_mut()
-                .begin_frame(clear)
+                .begin_frame_with_mode(clear, mode)
                 .expect("GM canvas frame"),
         ));
         self.active_canvas = Some(canvas);

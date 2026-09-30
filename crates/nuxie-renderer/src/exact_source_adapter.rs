@@ -963,14 +963,15 @@ impl RenderCanvasContract for ExactSourceRenderCanvas {
         // address. Image identity remains owned independently by the shell.
         self.backing.as_ref()?.ore_texture_info()
     }
-    fn begin_frame(
+    fn begin_frame_with_mode(
         &mut self,
         clear_color: ColorInt,
+        mode: nuxie_render_api::RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         self.backing
             .as_mut()
             .ok_or_else(|| RenderCanvasError::new("RenderCanvas has no backing"))?
-            .begin_frame(clear_color)
+            .begin_frame_with_mode(clear_color, mode)
     }
 }
 
@@ -1015,9 +1016,10 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B>
         Rc::new(image)
     }
 
-    fn begin_frame(
+    fn begin_frame_with_mode(
         &mut self,
         clear_color: ColorInt,
+        mode: nuxie_render_api::RenderCanvasFrameMode,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         let renderer = {
             let mut backend = self.backend.borrow_mut();
@@ -1026,6 +1028,9 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B>
                 renderTargetWidth: self.width(),
                 renderTargetHeight: self.height(),
                 clearColor: clear_color,
+                msaaSampleCount: mode.msaa_sample_count,
+                disableRasterOrdering: mode.disable_raster_ordering,
+                clockwiseFillOverride: mode.clockwise_fill_override,
                 ..FrameDescriptor::default()
             });
             unsafe { RiveRenderer::new_from_context(context) }

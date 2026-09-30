@@ -110,9 +110,10 @@ mod tests {
                 owner: Some(Rc::new(ProjectionDrop(self.0.clone()))),
             })
         }
-        fn begin_frame(
+        fn begin_frame_with_mode(
             &mut self,
             _: ColorInt,
+            _mode: crate::RenderCanvasFrameMode,
         ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
             Err(RenderCanvasError::unsupported())
         }

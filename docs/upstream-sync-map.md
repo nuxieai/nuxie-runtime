@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `a637bc5ea397ca33a74b367db3bc09e1e6effcfc`
+- LAST_SYNCED_SHA: `5210ce97ecc67a4358908a472007b5fa63d8fdd2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 40 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 40 require a Rust translation.
+  There are 39 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 39 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `5210ce97ecc67a4358908a472007b5fa63d8fdd2` | **TEST-PLAYER INFRASTRUCTURE / ALREADY EQUIVALENT:** upstream adds a UIKit app, touch/lifecycle queue, CAMetalLayer TestingWindow and Xcode player wiring, none of which are shipped Rust runtime owners. The cross-platform player fallback (default state machine, first state machine, then first animation) already exists in nux-capi. Rust Apple hosts retain caller-owned layer/drawable/scheduling; the native Metal product-root harness already supplies an autorelease pool. No shared runtime/renderer algorithms, shaders, fixtures or regression assertions changed. | — |
 | `a637bc5ea397ca33a74b367db3bc09e1e6effcfc` | Cache Lua context/data-context wrappers by target identity, release them with their context, preserve resolved properties' owning instances across reference swaps, and distinguish untagged orphan cleanup from owner-tag and full teardown. Re-mint disposed nested view-model properties. Port all three context-cache and five property-lifetime cases. The instance-value owner getter is already available without tools. Private Dart lazy-init/transactional-claim/editor entry-point changes described in the message are absent from the public delta and are not claimed imported. | — |
 | `cb8aa75d06b0341deaf5a55171844f37bf1ac882` | Blend IK from the pose currently on its chain rather than authored bone angles. Track each link's base rotation and solved local transform, distinguish our own previous solve under the current parent from intervening constraint work, and rebuild only from the first self-owned link. Preserve link history on repeated clean lifecycle; correct the touched solver's cosine clamp NaN selection to match C++ min/max. Port both upstream stacked-IK and rotation-constraint regressions with exact fixtures. | — |
 | `2b570b9e4f519c8105fce3d3fe69558926b1aa7d` | Wait for prior vertex/fragment shader and transfer reads before Vulkan ORE attachment clears, and include late fragment tests in both attachment-stage dependencies. Preserve access masks and render-pass ownership. The live Rust hosts already separate ORE teardown from screen-frame submission/presentation; the three changed upstream fiddle/testing-window classes have no direct Rust counterpart. | — |

@@ -18,6 +18,106 @@ use nuxie_runtime::source::{
 };
 use nuxie_runtime::{Artboard, File, RuntimeFactoryHandle};
 
+// Supplemental branch coverage for 6a8cf4a3's scripted hit component. These
+// direct owners do not substitute for nested scene/state-machine coverage.
+#[test]
+fn scripted_bounded_hits_use_known_layout_size_and_inclusive_edges() {
+    use nuxie_runtime::source::core::CoreArena;
+    use nuxie_runtime::source::{
+        animation::state_machine_instance::HitComponent,
+        layout::layout_enums::{LayoutDirection, LayoutScaleType},
+        math::vec2d::Vec2D,
+        scripted::{scripted_drawable::HitScriptedDrawable, scripted_layout::ScriptedLayout},
+    };
+
+    let arena = CoreArena::default();
+    let layout = arena.insert(ScriptedLayout::default());
+    let hit = HitScriptedDrawable::new(layout.clone());
+    assert_eq!(
+        layout.with_downcast::<ScriptedLayout, _>(ScriptedLayout::layout_size),
+        Some(None)
+    );
+    assert!(!hit.hit_test_bounded(Vec2D::new(0.0, 0.0)));
+    layout
+        .with_downcast_mut::<ScriptedLayout, _>(|layout| {
+            layout.control_size(
+                Vec2D::new(20.0, 10.0),
+                LayoutScaleType::Fixed,
+                LayoutScaleType::Fixed,
+                LayoutDirection::Inherit,
+            );
+        })
+        .unwrap();
+    assert_eq!(
+        layout.with_downcast::<ScriptedLayout, _>(ScriptedLayout::layout_size),
+        Some(Some(Vec2D::new(20.0, 10.0)))
+    );
+    for position in [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(20.0, 0.0),
+        Vec2D::new(0.0, 10.0),
+        Vec2D::new(20.0, 10.0),
+        Vec2D::new(10.0, 5.0),
+    ] {
+        assert!(hit.hit_test_bounded(position));
+    }
+    for position in [
+        Vec2D::new(-0.1, 5.0),
+        Vec2D::new(20.1, 5.0),
+        Vec2D::new(10.0, -0.1),
+        Vec2D::new(10.0, 10.1),
+    ] {
+        assert!(!hit.hit_test_bounded(position));
+        assert!(hit.hit_test(position));
+    }
+    layout
+        .with_mut(|layout| {
+            layout
+                .as_world_transform_component_mut()
+                .unwrap()
+                .set_world_transform(Mat2D::new(2.0, 0.0, 0.0, 3.0, 100.0, 200.0));
+        })
+        .unwrap();
+    assert!(hit.hit_test_bounded(Vec2D::new(120.0, 215.0)));
+    assert!(!hit.hit_test_bounded(Vec2D::new(10.0, 5.0)));
+    layout
+        .with_mut(|layout| {
+            layout
+                .as_world_transform_component_mut()
+                .unwrap()
+                .set_world_transform(Mat2D::from_scale(0.0, 1.0));
+        })
+        .unwrap();
+    assert!(!hit.hit_test_bounded(Vec2D::new(0.0, 5.0)));
+    assert!(hit.hit_test(Vec2D::new(0.0, 5.0)));
+}
+
+#[test]
+fn unboxed_scripted_drawable_still_hits_everywhere() {
+    use nuxie_runtime::source::core::CoreArena;
+    use nuxie_runtime::source::{
+        animation::state_machine_instance::HitComponent,
+        math::vec2d::Vec2D,
+        scripted::scripted_drawable::{HitScriptedDrawable, ScriptedDrawable},
+    };
+
+    let arena = CoreArena::default();
+    let drawable = arena.insert(ScriptedDrawable::default());
+    drawable
+        .with_mut(|drawable| {
+            drawable
+                .as_world_transform_component_mut()
+                .unwrap()
+                .set_world_transform(Mat2D::from_scale(0.0, 0.0));
+        })
+        .unwrap();
+    let hit = HitScriptedDrawable::new(drawable);
+    for position in [Vec2D::new(-1000.0, -1000.0), Vec2D::new(1000.0, 1000.0)] {
+        assert!(hit.hit_test_bounded(position));
+        assert!(hit.hit_test(position));
+    }
+}
+
 fn add_rectangle(path: &mut HitTestCommandPath, left: f32, top: f32, right: f32, bottom: f32) {
     path.move_to(left, top);
     path.line_to(right, top);

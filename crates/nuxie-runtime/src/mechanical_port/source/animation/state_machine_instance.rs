@@ -1242,6 +1242,10 @@ pub trait HitComponent {
     ) -> HitResult;
     fn prepare_event(&self, position: Vec2D, hit_type: ListenerType, pointer_id: i32);
     fn hit_test(&self, position: Vec2D) -> bool;
+    /// Like hit_test except scripted layouts are bounded to their own box.
+    fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        self.hit_test(position)
+    }
     fn enable_pointer_events(&self, _pointer_id: i32) {}
     fn disable_pointer_events(&self, _pointer_id: i32) {}
 }
@@ -1527,6 +1531,23 @@ impl HitComponent for HitNestedArtboard {
             })
     }
 
+    fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+            return false;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return false;
+        };
+        nested_animations(&self.component)
+            .into_iter()
+            .filter(|animation| animation.is_type_of(crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::TYPE_KEY))
+            .any(|animation| {
+                nested_state_machine(&animation).is_some_and(|instance| {
+                    instance.with_instance(|nested| nested.hit_test_bounded(local))
+                })
+            })
+    }
+
     fn process_event(
         &self,
         _machine: &mut StateMachineInstance,
@@ -1620,6 +1641,24 @@ impl HitComponent for HitComponentList {
             if component_list_state_machine(&self.component, index)
                 .is_some_and(|machine| machine.with_instance(|nested| nested.hit_test(local)))
             {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) {
+            return false;
+        }
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            if component_list_state_machine(&self.component, index).is_some_and(|machine| {
+                machine.with_instance(|nested| nested.hit_test_bounded(local))
+            }) {
                 return true;
             }
         }
@@ -3301,13 +3340,28 @@ impl StateMachineInstance {
     }
 
     pub fn hit_test(&self, position: Vec2D) -> bool {
+        self.hit_test_internal(position, false)
+    }
+
+    /// Hit test for hosts deciding whether a press belongs to this scene.
+    /// Scripted layouts count only inside their own box; scripted drawables
+    /// without a box still count everywhere, as in the unbounded hit test.
+    pub fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        self.hit_test_internal(position, true)
+    }
+
+    fn hit_test_internal(&self, position: Vec2D, bounded: bool) -> bool {
         let (position, contents_collapsed) = self.normalize_pointer_position(position);
         if contents_collapsed {
             return false;
         }
-        self.hit_components
-            .iter()
-            .any(|component| component.hit_test(position))
+        self.hit_components.iter().any(|component| {
+            if bounded {
+                component.hit_test_bounded(position)
+            } else {
+                component.hit_test(position)
+            }
+        })
     }
 
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, id: i32) -> HitResult {

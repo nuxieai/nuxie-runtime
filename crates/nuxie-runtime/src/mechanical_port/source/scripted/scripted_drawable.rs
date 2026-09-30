@@ -411,6 +411,23 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
     fn hit_test(&self, _position: crate::mechanical_port::source::math::vec2d::Vec2D) -> bool {
         true
     }
+    fn hit_test_bounded(&self, position: Vec2D) -> bool {
+        self.drawable
+            .with(|drawable| {
+                let Some(layout) = drawable.as_scripted_layout() else {
+                    // A scripted node has no box of its own; everywhere, like hit_test.
+                    return true;
+                };
+                let Some(size) = layout.layout_size() else {
+                    return false;
+                };
+                let Some(local) = layout.base.base.world_to_local(position) else {
+                    return false;
+                };
+                local.x >= 0.0 && local.y >= 0.0 && local.x <= size.x && local.y <= size.y
+            })
+            .unwrap_or(false)
+    }
     fn prepare_event(
         &self,
         _position: crate::mechanical_port::source::math::vec2d::Vec2D,

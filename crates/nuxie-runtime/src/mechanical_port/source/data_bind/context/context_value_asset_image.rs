@@ -25,7 +25,7 @@ impl DataBindContextValueAssetImage {
         binding: &mut dyn ContextApplyBinding,
     ) {
         match binding.target_kind() {
-            TargetKind::Image => {
+            TargetKind::Image | TargetKind::PaintImage => {
                 let resolved = self.file_asset(binding);
                 let asset = if resolved.is_none() {
                     binding.source_image_asset()

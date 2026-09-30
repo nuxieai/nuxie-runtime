@@ -5,6 +5,7 @@ pub enum ListConsumerCoreType {
     ListPath,
     Text,
     ViewModelInstanceList,
+    ScriptedTransition,
     Other,
 }
 pub trait DataBindListItemConsumer {
@@ -21,6 +22,7 @@ pub fn from(component: &mut dyn ListConsumerCore) -> Option<&mut dyn DataBindLis
             | ListConsumerCoreType::ListPath
             | ListConsumerCoreType::Text
             | ListConsumerCoreType::ViewModelInstanceList
+            | ListConsumerCoreType::ScriptedTransition
     )
     .then(|| component.as_list_consumer())
 }

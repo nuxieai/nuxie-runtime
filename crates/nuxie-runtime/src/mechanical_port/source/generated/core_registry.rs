@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::mechanical_port::source::core::{
-    CoreHandle, field_types::core_callback_type::CallbackData,
+    CoreHandle, CoreType, field_types::core_callback_type::CallbackData,
 };
 use crate::mechanical_port::source::generated::shapes::paint::color_channels_base::ColorChannelsBase;
 
@@ -1361,6 +1361,1113 @@ impl crate::mechanical_port::source::core::CoreType
 }
 
 impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    const TYPE_KEY: u16 = crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY;
+}
+
+impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage
+{
+    const TYPE_KEY: u16 = crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY;
+}
+
+impl CoreRegistryObject
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::is_type_of(type_key)
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::ScriptedTransitionActiveComponentId => {
+                if self.base.set_active_component_id_value(value) {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBaseCallbacks>::active_component_id_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBaseCallbacks>::notify_property_changed(self, 273);
+                }
+            }
+            CoreField::ScriptedTransitionListSource => {
+                if self.base.set_list_source_value(value) {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBaseCallbacks>::list_source_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBaseCallbacks>::notify_property_changed(self, 414);
+                }
+            }
+
+            CoreField::ComponentParentId => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_parent_id_value(value)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
+                }
+            }
+            CoreField::DrawableBlendModeValue => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_blend_mode_value_value(value as u8)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
+                }
+            }
+            CoreField::DrawableDrawableFlags => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_drawable_flags_value(value as u16)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
+                }
+            }
+            CoreField::ScriptedDrawableScriptAssetId => {
+                if self.base.base.base.set_script_asset_id_value(value) {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBaseCallbacks>::script_asset_id_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::SCRIPT_ASSET_ID_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        match field {
+            CoreField::ComponentName => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_name_value(value)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        let _ = (field, value);
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        match field {
+            CoreField::WorldTransformComponentOpacity => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_opacity_value(value)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::opacity_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBase::OPACITY_PROPERTY_KEY);
+                }
+            }
+            CoreField::TransformComponentRotation => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_rotation_value(value)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::rotation_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::ROTATION_PROPERTY_KEY);
+                }
+            }
+            CoreField::TransformComponentScaleX => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_scale_x_value(value)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::scale_x_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_X_PROPERTY_KEY);
+                }
+            }
+            CoreField::TransformComponentScaleY => {
+                if self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .set_scale_y_value(value)
+                {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::scale_y_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::transform_component_base::TransformComponentBase::SCALE_Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::NodeX => {
+                if self.base.base.base.base.base.base.base.set_x_value(value) {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::x_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
+                }
+            }
+            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x(
+                &mut self.base.base.base.base.base.base,
+                value,
+            ),
+            CoreField::NodeY => {
+                if self.base.base.base.base.base.base.base.set_y_value(value) {
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
+                    <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
+                }
+            }
+            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y(
+                &mut self.base.base.base.base.base.base,
+                value,
+            ),
+            CoreField::NodeComputedLocalX => {
+                crate::mechanical_port::source::node::Node::set_computed_local_x(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedLocalY => {
+                crate::mechanical_port::source::node::Node::set_computed_local_y(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedWorldX => {
+                crate::mechanical_port::source::node::Node::set_computed_world_x(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedWorldY => {
+                crate::mechanical_port::source::node::Node::set_computed_world_y(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedRootX => {
+                crate::mechanical_port::source::node::Node::set_computed_root_x(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedRootY => {
+                crate::mechanical_port::source::node::Node::set_computed_root_y(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedWidth => {
+                crate::mechanical_port::source::node::Node::set_computed_width(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            CoreField::NodeComputedHeight => {
+                crate::mechanical_port::source::node::Node::set_computed_height(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                )
+            }
+            _ => {}
+        }
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ScriptedTransitionActiveComponentId => self.base.active_component_id(),
+            CoreField::ScriptedTransitionListSource => self.base.list_source(),
+
+            CoreField::ComponentParentId => self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .parent_id(),
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
+            CoreField::ScriptedDrawableScriptAssetId => self.base.base.base.script_asset_id(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::ComponentName => self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .name()
+                .to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        match field {
+            CoreField::WorldTransformComponentOpacity => self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .opacity(),
+            CoreField::TransformComponentRotation => {
+                self.base.base.base.base.base.base.base.base.base.rotation()
+            }
+            CoreField::TransformComponentScaleX => {
+                self.base.base.base.base.base.base.base.base.base.scale_x()
+            }
+            CoreField::TransformComponentScaleY => {
+                self.base.base.base.base.base.base.base.base.base.scale_y()
+            }
+            CoreField::NodeX => self.base.base.base.base.base.base.base.x(),
+            CoreField::NodeXArtboard => self.base.base.base.base.base.base.base.x(),
+            CoreField::NodeY => self.base.base.base.base.base.base.base.y(),
+            CoreField::NodeYArtboard => self.base.base.base.base.base.base.base.y(),
+            CoreField::NodeComputedLocalX => {
+                crate::mechanical_port::source::node::Node::computed_local_x(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedLocalY => {
+                crate::mechanical_port::source::node::Node::computed_local_y(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedWorldX => {
+                crate::mechanical_port::source::node::Node::computed_world_x(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedWorldY => {
+                crate::mechanical_port::source::node::Node::computed_world_y(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedRootX => {
+                crate::mechanical_port::source::node::Node::computed_root_x(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedRootY => {
+                crate::mechanical_port::source::node::Node::computed_root_y(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedWidth => {
+                crate::mechanical_port::source::node::Node::computed_width(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            CoreField::NodeComputedHeight => {
+                crate::mechanical_port::source::node::Node::computed_height(
+                    &mut self.base.base.base.base.base.base,
+                )
+            }
+            _ => 0.0,
+        }
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+            .base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::is_type_of(type_key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        Some(Box::new(self.clone_definition()))
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+
+impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage {
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBase::is_type_of(type_key)
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::PaintImageImageAssetId => {
+                if self.base.set_image_asset_id_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_asset_id_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 415);
+                }
+            }
+            CoreField::PaintImageImageSamplerFilter => {
+                if self.base.set_image_sampler_filter_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_sampler_filter_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 269);
+                }
+            }
+            CoreField::PaintImageImageSamplerWrapX => {
+                if self.base.set_image_sampler_wrap_x_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_sampler_wrap_x_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 270);
+                }
+            }
+            CoreField::PaintImageImageSamplerWrapY => {
+                if self.base.set_image_sampler_wrap_y_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_sampler_wrap_y_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 271);
+                }
+            }
+            CoreField::PaintImageImageSizeMode => {
+                if self.base.set_image_size_mode_value(value as u8) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_size_mode_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 412);
+                }
+            }
+
+            CoreField::ComponentParentId => {
+                if self.base.base.base.set_parent_id_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        match field {
+            CoreField::ComponentName => {
+                if self.base.base.base.set_name_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        let _ = (field, value);
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        match field {
+            CoreField::PaintImageImageScaleX => {
+                if self.base.set_image_scale_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_scale_x_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 416);
+                }
+            }
+            CoreField::PaintImageImageScaleY => {
+                if self.base.set_image_scale_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_scale_y_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 368);
+                }
+            }
+            CoreField::PaintImageImageOffsetX => {
+                if self.base.set_image_offset_x_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_offset_x_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 369);
+                }
+            }
+            CoreField::PaintImageImageOffsetY => {
+                if self.base.set_image_offset_y_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_offset_y_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 410);
+                }
+            }
+            CoreField::PaintImageImageRotation => {
+                if self.base.set_image_rotation_value(value) {
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_rotation_changed(self);
+                    <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::notify_property_changed(self, 411);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::PaintImageImageAssetId => self.base.image_asset_id(),
+            CoreField::PaintImageImageSamplerFilter => self.base.image_sampler_filter() as u32,
+            CoreField::PaintImageImageSamplerWrapX => self.base.image_sampler_wrap_x() as u32,
+            CoreField::PaintImageImageSamplerWrapY => self.base.image_sampler_wrap_y() as u32,
+            CoreField::PaintImageImageSizeMode => self.base.image_size_mode() as u32,
+
+            CoreField::ComponentParentId => self.base.base.base.parent_id(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::ComponentName => self.base.base.base.name().to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        match field {
+            CoreField::PaintImageImageScaleX => self.base.image_scale_x(),
+            CoreField::PaintImageImageScaleY => self.base.image_scale_y(),
+            CoreField::PaintImageImageOffsetX => self.base.image_offset_x(),
+            CoreField::PaintImageImageOffsetY => self.base.image_offset_y(),
+            CoreField::PaintImageImageRotation => self.base.image_rotation(),
+            _ => 0.0,
+        }
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBase::is_type_of(type_key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        Some(Box::new(self.clone_definition()))
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+
+impl CoreCapabilities
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    fn as_scripted_drawable(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        Some(&self.base.base)
+    }
+    fn as_scripted_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
+    {
+        Some(&mut self.base.base)
+    }
+
+    fn drawable_will_draw(&self) -> bool {
+        self.will_draw()
+    }
+    fn component_build_dependencies(&mut self) -> bool {
+        crate::mechanical_port::source::transform_component::TransformComponent::build_dependencies(
+            &mut self.base.base.base.base.base.base.base.base,
+        );
+        true
+    }
+    fn as_node(&self) -> Option<&crate::mechanical_port::source::node::Node> {
+        Some(&self.base.base.base.base.base.base)
+    }
+    fn as_node_mut(&mut self) -> Option<&mut crate::mechanical_port::source::node::Node> {
+        Some(&mut self.base.base.base.base.base.base)
+    }
+    fn as_scripted_object(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::scripted::scripted_object::ScriptedObject> {
+        Some(&self.base.base.scripted)
+    }
+    fn as_scripted_object_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::scripted::scripted_object::ScriptedObject>
+    {
+        Some(&mut self.base.base.scripted)
+    }
+    fn scripted_object_add_property(
+        &mut self,
+        property: crate::mechanical_port::source::core::CoreHandle,
+    ) -> bool {
+        self.base.base.add_property(property);
+        true
+    }
+    fn scripted_object_add_property_from_input(
+        &mut self,
+        property: crate::mechanical_port::source::core::CoreHandle,
+        input: &mut crate::mechanical_port::source::assets::script_asset::ScriptInput,
+    ) -> bool {
+        self.base.base.add_property_from_input(property, input);
+        true
+    }
+    fn scripted_object_remove_property(
+        &mut self,
+        property: &crate::mechanical_port::source::core::CoreHandle,
+    ) -> bool {
+        self.base.base.remove_property(property);
+        true
+    }
+    fn as_drawable(&self) -> Option<&crate::mechanical_port::source::drawable::Drawable> {
+        Some(&self.base.base.base.base)
+    }
+    fn as_drawable_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::drawable::Drawable> {
+        Some(&mut self.base.base.base.base)
+    }
+    fn as_transform_component(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::transform_component::TransformComponent> {
+        Some(&self.base.base.base.base.base.base.base.base)
+    }
+    fn as_transform_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::transform_component::TransformComponent> {
+        Some(&mut self.base.base.base.base.base.base.base.base)
+    }
+
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(
+            crate::mechanical_port::source::component::Component::validate(
+                &mut self
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base
+                    .base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_on_added_dirty(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.base.base.on_added_dirty(context))
+    }
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::transform_component::TransformComponent::on_added_clean(
+                &mut self.base.base.base.base.base.base.base.base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.base.base.import(stack))
+    }
+
+    fn as_file_asset_referencer_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::assets::file_asset_referencer::FileAssetReferencer,
+    > {
+        Some(self.base.base.scripted.file_asset_referencer_mut())
+    }
+    fn file_asset_referencer_asset_updated(&mut self) -> bool {
+        self.base
+            .base
+            .scripted
+            .file_asset_referencer_mut()
+            .asset_updated();
+        true
+    }
+    fn file_asset_referencer_asset_id(&self) -> Option<u32> {
+        Some(self.base.base.asset_id())
+    }
+    fn file_asset_referencer_set_asset(
+        &mut self,
+        asset: crate::mechanical_port::source::core::CoreHandle,
+    ) -> bool {
+        let Some(owner) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
+        else {
+            return false;
+        };
+        self.base.base.scripted.set_asset(owner, Some(asset));
+        true
+    }
+    fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
+        Some(
+            &self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base,
+        )
+    }
+    fn as_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::component::Component> {
+        Some(
+            &mut self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base,
+        )
+    }
+    fn as_container_component(
+        &self,
+    ) -> Option<&crate::mechanical_port::source::container_component::ContainerComponent> {
+        Some(
+            &self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base,
+        )
+    }
+    fn as_container_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::container_component::ContainerComponent> {
+        Some(
+            &mut self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base,
+        )
+    }
+    fn is_advancing_component(&self) -> bool {
+        true
+    }
+}
+
+impl crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBaseCallbacks for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
+    }
+}
+
+impl crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
+    }
+}
+
+impl crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    fn x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::transform_component::TransformComponent as crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
+    }
+    fn set_computed_local_x(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_local_x(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_local_x(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_local_x(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_local_y(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_local_y(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_local_y(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_local_y(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_world_x(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_world_x(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_world_x(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_world_x(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_world_y(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_world_y(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_world_y(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_world_y(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_root_x(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_root_x(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_root_x(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_root_x(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_root_y(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_root_y(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_root_y(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_root_y(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_width(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_width(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_width(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_width(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+    fn set_computed_height(&mut self, value: f32) {
+        crate::mechanical_port::source::node::Node::set_computed_height(
+            &mut self.base.base.base.base.base.base,
+            value,
+        )
+    }
+    fn computed_height(&mut self) -> f32 {
+        crate::mechanical_port::source::node::Node::computed_height(
+            &mut self.base.base.base.base.base.base,
+        )
+    }
+}
+
+impl crate::mechanical_port::source::generated::transform_component_base::TransformComponentBaseCallbacks for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition {
+    fn rotation_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_x_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn scale_y_changed(&mut self) {
+        CoreCapabilities::transform_mark_dirty(self);
+    }
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::world_transform_component::WorldTransformComponent as crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base, property_key)
+    }
+}
+
+impl crate::mechanical_port::source::generated::world_transform_component_base::WorldTransformComponentBaseCallbacks for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition {
+    fn opacity_changed(&mut self) {
+        CoreCapabilities::world_transform_opacity_changed(self);
+    }
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base.base.base.base.base.base.base, property_key)
+    }
+}
+
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base
+                .base,
+            property_key,
+        )
+    }
+}
+
+impl crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBaseCallbacks for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition {
+    fn active_component_id_changed(&mut self) { self.active_component_id_changed(); }
+    fn list_source_changed(&mut self) { self.list_source_changed(); }
+    fn notify_property_changed(&mut self, property_key:u16) {
+        // These two callbacks traverse other occurrences and may execute script.
+        // Their notifications follow the callback at the released-borrow boundary.
+        if matches!(property_key, 273 | 414) { return; }
+        <Self as crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBaseCallbacks>::notify_property_changed(self,property_key);
+    }
+}
+
+impl crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
+    }
+}
+
+impl crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
+    for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base.base,
+            property_key,
+        )
+    }
+}
+
+impl crate::mechanical_port::source::core::CoreType
     for crate::mechanical_port::source::scripted::scripted_path_effect::ScriptedPathEffect
 {
     const TYPE_KEY: u16 = crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::TYPE_KEY;
@@ -1948,10 +3055,42 @@ pub fn data_bind_update_view_model_handle(target: &CoreHandle, value: Option<Cor
     }
 }
 
+/// Complete transition property callbacks outside the owning arena borrow,
+/// preserving callback-before-notification ordering.
+pub fn flush_scripted_transition_property_changes(handle: &CoreHandle) {
+    use crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition;
+    let Some((active, list)) = handle
+        .with_mut(|object| {
+            object
+                .as_any_mut()
+                .downcast_mut::<ScriptedTransition>()
+                .map(ScriptedTransition::take_pending_property_changes)
+        })
+        .flatten()
+    else {
+        return;
+    };
+    for (changed, key) in [(active, 273u16), (list, 414u16)] {
+        if !changed {
+            continue;
+        }
+        if key == 273 {
+            ScriptedTransition::active_component_id_changed_occurrence(handle);
+        } else {
+            ScriptedTransition::list_source_changed_occurrence(handle);
+        }
+        handle.with_mut(|object| object.core_mut().notify_property_changed(key));
+    }
+}
+
 pub fn drawable_draw_handle(
     handle: &CoreHandle,
     renderer: &mut crate::mechanical_port::source::renderer::Renderer,
 ) -> bool {
+    if handle.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
+        crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::draw_occurrence(handle, renderer);
+        return true;
+    }
     if handle.core_type() == Some(crate::video::Video::TYPE_KEY) {
         crate::video::Video::draw_occurrence(handle, renderer);
         return true;
@@ -2004,7 +3143,10 @@ pub fn artboard_referencer_update_artboard_handle(
 }
 
 pub fn data_bind_update_list_handle(owner: &CoreHandle, list: &[CoreHandle]) -> bool {
-    if owner.core_type() == Some(crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::TYPE_KEY) {
+    if owner.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
+        crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::update_list_occurrence(owner, list);
+        true
+    } else if owner.core_type() == Some(crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::TYPE_KEY) {
         crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::update_list_occurrence(owner, list);
         true
     } else {
@@ -2041,6 +3183,9 @@ pub fn advancing_component_advance_handle(
     elapsed_seconds: f32,
     flags: crate::mechanical_port::source::advance_flags::AdvanceFlags,
 ) -> Option<bool> {
+    if handle.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
+        return Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::advance_occurrence(handle, elapsed_seconds, flags));
+    }
     if handle.is_type_of(crate::mechanical_port::source::generated::layout::layout_participant_base::LayoutParticipantBase::TYPE_KEY) {
         Some(crate::mechanical_port::source::layout::layout_participant::LayoutParticipant::advance_component_occurrence(handle, elapsed_seconds, flags))
     } else if handle.is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY) {
@@ -2259,6 +3404,9 @@ pub fn component_update_handle(
     {
         crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::update_after_super_occurrence(handle, dirt);
     }
+    if handle.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
+        crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::update_after_super_occurrence(handle, dirt);
+    }
     true
 }
 
@@ -2472,6 +3620,8 @@ pub enum CoreConcreteType {
     ScriptedDataConverter,
     ScriptedInterpolator,
     ScriptedLayout,
+    ScriptedTransition,
+    PaintImage,
     ScriptedPathEffect,
     ScriptInputNumber,
     NestedArtboardLayout,
@@ -3148,6 +4298,18 @@ pub enum CoreField {
     SkinYx,
     SkinYy,
     SolidColorColorValue,
+    ScriptedTransitionActiveComponentId,
+    ScriptedTransitionListSource,
+    PaintImageImageAssetId,
+    PaintImageImageSamplerFilter,
+    PaintImageImageSamplerWrapX,
+    PaintImageImageSamplerWrapY,
+    PaintImageImageScaleX,
+    PaintImageImageScaleY,
+    PaintImageImageOffsetX,
+    PaintImageImageOffsetY,
+    PaintImageImageRotation,
+    PaintImageImageSizeMode,
     SoloActiveComponentId,
     StarInnerRadius,
     StateMachineBoolValue,
@@ -6548,6 +7710,9 @@ pub trait CoreRegistryFactory {
 pub struct CoreRegistry;
 
 impl CoreRegistry {
+    pub fn flush_scripted_transition_property_changes(handle: &CoreHandle) {
+        flush_scripted_transition_property_changes(handle);
+    }
     pub fn make_core_instance<F: CoreRegistryFactory>(
         factory: &mut F,
         type_key: i32,
@@ -6620,6 +7785,8 @@ impl CoreRegistry {
             629 => CoreConcreteType::ScriptedDataConverter,
             972 => CoreConcreteType::ScriptedInterpolator,
             637 => CoreConcreteType::ScriptedLayout,
+            110 => CoreConcreteType::ScriptedTransition,
+            113 => CoreConcreteType::PaintImage,
             640 => CoreConcreteType::ScriptedPathEffect,
             611 => CoreConcreteType::ScriptInputNumber,
             452 => CoreConcreteType::NestedArtboardLayout,
@@ -6848,6 +8015,9 @@ impl CoreRegistry {
     }
     pub fn set_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            273 => CoreField::ScriptedTransitionActiveComponentId,
+            414 => CoreField::ScriptedTransitionListSource,
+            415 => CoreField::PaintImageImageAssetId,
             549 => CoreField::ViewModelInstanceListItemViewModelId,
             550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
             5 => CoreField::ComponentParentId,
@@ -6937,6 +8107,13 @@ impl CoreRegistry {
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            273 => CoreField::ScriptedTransitionActiveComponentId,
+            414 => CoreField::ScriptedTransitionListSource,
+            415 => CoreField::PaintImageImageAssetId,
+            269 => CoreField::PaintImageImageSamplerFilter,
+            270 => CoreField::PaintImageImageSamplerWrapX,
+            271 => CoreField::PaintImageImageSamplerWrapY,
+            412 => CoreField::PaintImageImageSizeMode,
             118 => {
                 if let Some(color) = ColorChannelsBase::from_mut(object) {
                     color.set_color_red(value);
@@ -7373,6 +8550,11 @@ impl CoreRegistry {
         value: f32,
     ) {
         let field = match property_key {
+            416 => CoreField::PaintImageImageScaleX,
+            368 => CoreField::PaintImageImageScaleY,
+            369 => CoreField::PaintImageImageOffsetX,
+            410 => CoreField::PaintImageImageOffsetY,
+            411 => CoreField::PaintImageImageRotation,
             575 => CoreField::ViewModelInstanceNumberPropertyValue,
             243 => CoreField::CustomPropertyNumberPropertyValue,
             172 => CoreField::ConstraintStrength,
@@ -7635,6 +8817,9 @@ impl CoreRegistry {
     }
     pub fn get_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            273 => CoreField::ScriptedTransitionActiveComponentId,
+            414 => CoreField::ScriptedTransitionListSource,
+            415 => CoreField::PaintImageImageAssetId,
             549 => CoreField::ViewModelInstanceListItemViewModelId,
             550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
             5 => CoreField::ComponentParentId,
@@ -7724,6 +8909,13 @@ impl CoreRegistry {
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            273 => CoreField::ScriptedTransitionActiveComponentId,
+            414 => CoreField::ScriptedTransitionListSource,
+            415 => CoreField::PaintImageImageAssetId,
+            269 => CoreField::PaintImageImageSamplerFilter,
+            270 => CoreField::PaintImageImageSamplerWrapX,
+            271 => CoreField::PaintImageImageSamplerWrapY,
+            412 => CoreField::PaintImageImageSizeMode,
             118 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_red()),
             136 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_green()),
             210 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_blue()),
@@ -8126,6 +9318,11 @@ impl CoreRegistry {
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
         let field = match property_key {
+            416 => CoreField::PaintImageImageScaleX,
+            368 => CoreField::PaintImageImageScaleY,
+            369 => CoreField::PaintImageImageOffsetX,
+            410 => CoreField::PaintImageImageOffsetY,
+            411 => CoreField::PaintImageImageRotation,
             575 => CoreField::ViewModelInstanceNumberPropertyValue,
             243 => CoreField::CustomPropertyNumberPropertyValue,
             172 => CoreField::ConstraintStrength,
@@ -8376,9 +9573,13 @@ impl CoreRegistry {
     /// Dispatch a generated unsigned property write through a stable object
     /// occurrence. A stale or currently borrowed occurrence is not writable.
     pub fn set_id_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
-        handle
+        let written = handle
             .with_mut(|object| Self::set_id(object, property_key, value))
-            .is_some()
+            .is_some();
+        if written {
+            flush_scripted_transition_property_changes(handle);
+        }
+        written
     }
 
     pub fn get_id_handle(handle: &CoreHandle, property_key: i32) -> Option<u32> {
@@ -8386,9 +9587,13 @@ impl CoreRegistry {
     }
 
     pub fn set_uint_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
-        handle
+        let written = handle
             .with_mut(|object| Self::set_uint(object, property_key, value))
-            .is_some()
+            .is_some();
+        if written {
+            flush_scripted_transition_property_changes(handle);
+        }
+        written
     }
 
     pub fn set_string_handle(handle: &CoreHandle, property_key: i32, value: String) -> bool {
@@ -8513,6 +9718,18 @@ impl CoreRegistry {
 
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
+            273 => 0,
+            414 => 0,
+            415 => 0,
+            269 => 0,
+            270 => 0,
+            271 => 0,
+            416 => 1,
+            368 => 1,
+            369 => 1,
+            410 => 1,
+            411 => 1,
+            412 => 0,
             118 => 0,
             136 => 0,
             210 => 0,
@@ -9147,6 +10364,18 @@ impl CoreRegistry {
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
         let owner_type = match property_key {
+            273 => 110,
+            414 => 110,
+            415 => 113,
+            269 => 113,
+            270 => 113,
+            271 => 113,
+            416 => 113,
+            368 => 113,
+            369 => 113,
+            410 => 113,
+            411 => 113,
+            412 => 113,
             118 | 136 | 210 | 218 => return ColorChannelsBase::from(object).is_some(),
             549 => 427,
             550 => 427,
@@ -60336,6 +61565,58 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::group_e
         Some(&mut self.base.base)
     }
 }
+impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage {
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(self.validate(context))
+    }
+    fn lifecycle_on_added_dirty(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.base.base.on_added_dirty(context))
+    }
+    fn lifecycle_on_added_clean(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.base.base.on_added_clean(context))
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(self.import(stack))
+    }
+    fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
+        Some(&self.base.base)
+    }
+    fn as_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::component::Component> {
+        Some(&mut self.base.base)
+    }
+    fn as_file_asset_referencer_mut(
+        &mut self,
+    ) -> Option<
+        &mut crate::mechanical_port::source::assets::file_asset_referencer::FileAssetReferencer,
+    > {
+        Some(&mut self.asset_referencer)
+    }
+    fn file_asset_referencer_asset_id(&self) -> Option<u32> {
+        Some(self.asset_id())
+    }
+    fn file_asset_referencer_set_asset(&mut self, asset: CoreHandle) -> bool {
+        self.set_asset(Some(asset));
+        true
+    }
+    fn file_asset_referencer_asset_updated(&mut self) -> bool {
+        self.asset_updated();
+        true
+    }
+}
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::target_effect::TargetEffect
 {
@@ -76101,6 +77382,8 @@ impl CoreRegistry {
             629 => Some(Box::new(<crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter>::default())),
             972 => Some(Box::new(<crate::mechanical_port::source::scripted::scripted_interpolator::ScriptedInterpolator>::default())),
             637 => Some(Box::new(<crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout>::default())),
+            110 => Some(Box::new(<crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition>::default())),
+            113 => Some(Box::new(<crate::mechanical_port::source::shapes::paint::paint_image::PaintImage>::default())),
             640 => Some(Box::new(<crate::mechanical_port::source::scripted::scripted_path_effect::ScriptedPathEffect>::default())),
             611 => Some(Box::new(<crate::mechanical_port::source::script_input_number::ScriptInputNumber>::default())),
             452 => Some(Box::new(<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>::default())),

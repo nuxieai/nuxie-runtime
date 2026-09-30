@@ -109,6 +109,44 @@ pub fn replay_serialized_commands(
                 // ID zero also spells nullptr: an existing shader zero wins.
                 paint.shader(shaders.get(&shader).map(|shader| shader.as_ref()));
             }
+            PAINT_MODULATED_IMAGE => {
+                let id = reader.read_var_uint();
+                let raw_image_id = reader.read_var_uint();
+                let filter = match reader.read_var_uint() {
+                    0 => ImageFilter::Bilinear,
+                    1 => ImageFilter::Nearest,
+                    _ => return false,
+                };
+                let mut read_wrap = || match reader.read_var_uint() {
+                    0 => Some(ImageWrap::Clamp),
+                    1 => Some(ImageWrap::Repeat),
+                    2 => Some(ImageWrap::Mirror),
+                    _ => None,
+                };
+                let Some(wrap_x) = read_wrap() else {
+                    return false;
+                };
+                let Some(wrap_y) = read_wrap() else {
+                    return false;
+                };
+                let matrix = Mat2D(std::array::from_fn(|_| reader.read_float32()));
+                let Some(paint) = paints.get_mut(&id) else {
+                    return false;
+                };
+                let image = raw_image_id
+                    .checked_sub(1)
+                    .and_then(|id| images.get(&id))
+                    .and_then(|image| image.as_deref());
+                paint.modulated_image(
+                    image,
+                    ImageSampler {
+                        filter,
+                        wrap_x,
+                        wrap_y,
+                    },
+                    matrix,
+                );
+            }
             MAKE_LINEAR_GRADIENT | MAKE_RADIAL_GRADIENT => {
                 let id = reader.read_var_uint();
                 let count = reader.read_var_uint() as usize;

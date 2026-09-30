@@ -908,6 +908,9 @@ impl Artboard {
             if !can_continue(code) {
                 return code;
             }
+            if code == StatusCode::Ok && object.is_type_of(crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY) {
+                crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::on_added_clean_occurrence(&object);
+            }
             if object
                 .with(|object| object.is_resetting_component())
                 .unwrap_or(false)

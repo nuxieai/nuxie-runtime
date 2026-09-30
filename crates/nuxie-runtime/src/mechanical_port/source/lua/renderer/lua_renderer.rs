@@ -35,6 +35,9 @@ impl ScriptedRenderer {
         let render = path.render_path(state);
         self.validate(state).clip_path(render);
     }
+    pub fn modulate_opacity(&mut self, state: &mut LuaState, opacity: f32) {
+        self.validate(state).modulate_opacity(opacity);
+    }
     pub fn validate(&mut self, state: &mut LuaState) -> &mut Renderer {
         if self.renderer.is_none() {
             state.error::<()>(format!("{} is no longer valid.", Self::LUA_NAME));
@@ -68,6 +71,11 @@ fn namecall(s: &mut LuaState) -> i32 {
         LuaAtoms::Transform => {
             let (r, m) = s.rive2_mut::<ScriptedRenderer, ScriptedMat2D>();
             r.transform(s, m.value);
+            0
+        }
+        LuaAtoms::ModulateOpacity => {
+            let opacity = s.check_number(2) as f32;
+            s.to_rive_mut::<ScriptedRenderer>(1).modulate_opacity(s, opacity);
             0
         }
         LuaAtoms::DrawImage => {

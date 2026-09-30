@@ -28,6 +28,8 @@ impl DataBindContextValueString {
         if binding.field_type() == FieldType::Uint {
             if binding.target_is_solo() {
                 binding.solo_update_by_name(value);
+            } else if binding.target_is_scripted_transition() {
+                binding.transition_update_by_name(value);
             }
         } else {
             binding.set_string(property_key, value);

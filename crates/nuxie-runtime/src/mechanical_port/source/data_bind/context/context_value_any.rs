@@ -34,6 +34,15 @@ impl DataBindContextValueAny {
                 if let Some(value) = value.as_any().downcast_ref::<DataValueNumber>() {
                     if binding.target_is_solo() {
                         binding.solo_update_by_index(value.value().round() as usize)
+                    } else if binding.target_is_scripted_transition() {
+                        // Preserve upstream's rejection of negative indices,
+                        // rather than Rust's saturating conversion to zero.
+                        let rounded = value.value().round();
+                        binding.transition_update_by_index(if rounded < 0.0 {
+                            usize::MAX
+                        } else {
+                            rounded as usize
+                        })
                     } else if crate::source::generated::core_registry::CoreRegistry::is_signed_int(
                         property_key,
                     ) {
@@ -51,6 +60,8 @@ impl DataBindContextValueAny {
                 } else if let Some(value) = value.as_any().downcast_ref::<DataValueString>() {
                     if binding.target_is_solo() {
                         binding.solo_update_by_name(value.value().to_owned())
+                    } else if binding.target_is_scripted_transition() {
+                        binding.transition_update_by_name(value.value().to_owned())
                     }
                 }
             }

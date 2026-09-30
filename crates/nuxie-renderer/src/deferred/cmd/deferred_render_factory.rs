@@ -15,8 +15,8 @@ use std::{
     collections::HashMap,
     rc::{Rc, Weak},
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -28,6 +28,7 @@ pub struct DeferredFactory {
     image_ids: SharedIdAllocator,
     buffer_ids: SharedIdAllocator,
     images: HashMap<Vec<u8>, LiveImage>,
+    pub(super) canvas_registry: Option<Rc<RefCell<ForeignImageRegistry>>>,
 }
 
 struct LiveImage {
@@ -50,6 +51,7 @@ impl DeferredFactory {
             image_ids: Arc::new(Mutex::new(IdAllocator::default())),
             buffer_ids: Arc::new(Mutex::new(IdAllocator::default())),
             images: HashMap::new(),
+            canvas_registry: None,
         }
     }
     pub fn make_renderer(
@@ -141,7 +143,10 @@ impl Factory for DeferredFactory {
                 generation: base.generation(),
             },
         );
-        Box::new(DeferredRenderPaint::new(base))
+        Box::new(DeferredRenderPaint::with_canvases(
+            base,
+            self.canvas_registry.clone(),
+        ))
     }
     fn make_linear_gradient(
         &mut self,

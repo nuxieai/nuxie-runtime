@@ -538,6 +538,7 @@ impl ListenerGroupProvider {
             crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::TYPE_KEY => Some(Self::ScrollConstraint(component.clone())),
             crate::mechanical_port::source::generated::constraints::scrolling::scroll_bar_constraint_base::ScrollBarConstraintBase::TYPE_KEY => Some(Self::ScrollBarConstraint(component.clone())),
             crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::TYPE_KEY |
+            crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY |
             crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY => Some(Self::ScriptedDrawable(component.clone())),
             _ => None,
         }

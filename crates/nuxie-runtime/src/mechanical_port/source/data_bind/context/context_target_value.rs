@@ -30,6 +30,8 @@ pub enum SourceKind {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TargetKind {
+    ScriptedTransition,
+    PaintImage,
     Solo,
     BindableAsset,
     BindableViewModel,

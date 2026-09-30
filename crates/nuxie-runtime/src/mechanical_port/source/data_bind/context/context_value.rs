@@ -115,6 +115,11 @@ pub trait ContextApplyBinding: ContextBinding {
     fn target_is_solo(&self) -> bool;
     fn solo_update_by_index(&mut self, index: usize);
     fn solo_update_by_name(&mut self, name: String);
+    fn target_is_scripted_transition(&self) -> bool {
+        self.target_kind() == super::context_target_value::TargetKind::ScriptedTransition
+    }
+    fn transition_update_by_index(&mut self, index: usize);
+    fn transition_update_by_name(&mut self, name: String);
     fn update_list(&mut self, items: &[CoreHandle]);
     fn update_view_model(&mut self, value: Option<CoreHandle>);
     fn target_is_bindable_view_model(&self) -> bool;

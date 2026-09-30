@@ -41,6 +41,7 @@ operations! {
     FRAME = frame = 28,
     FRAME_SIZE = frameSize = 29,
     MODULATE_OPACITY = modulateOpacity = 30,
+    PAINT_MODULATED_IMAGE = paintModulatedImage = 31,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {

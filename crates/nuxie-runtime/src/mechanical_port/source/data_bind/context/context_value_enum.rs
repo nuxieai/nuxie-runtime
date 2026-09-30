@@ -24,9 +24,15 @@ impl DataBindContextValueEnum {
         let Some(value) = calculated.as_any().downcast_ref::<DataValueEnum>() else {
             return;
         };
-        if binding.field_type() == FieldType::Uint && binding.target_is_solo() {
+        if binding.field_type() == FieldType::Uint
+            && (binding.target_is_solo() || binding.target_is_scripted_transition())
+        {
             if let Some(data_enum) = value.data_enum() {
-                binding.solo_update_by_name(data_enum.value(value.value()));
+                if binding.target_is_solo() {
+                    binding.solo_update_by_name(data_enum.value(value.value()));
+                } else {
+                    binding.transition_update_by_name(data_enum.value(value.value()));
+                }
             }
         } else {
             binding.set_uint(property_key, value.value());

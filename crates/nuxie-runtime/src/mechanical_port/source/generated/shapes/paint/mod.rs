@@ -6,6 +6,7 @@ pub mod fill_base;
 pub mod gradient_stop_base;
 pub mod group_effect_base;
 pub mod linear_gradient_base;
+pub mod paint_image_base;
 pub mod radial_gradient_base;
 pub mod shape_paint_base;
 pub mod solid_color_base;

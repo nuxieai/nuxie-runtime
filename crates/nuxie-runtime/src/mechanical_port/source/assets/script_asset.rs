@@ -26,6 +26,7 @@ pub enum ScriptProtocol {
     ListenerAction,
     TransitionCondition,
     Interpolator,
+    Transition,
 }
 
 pub struct ScriptInput {

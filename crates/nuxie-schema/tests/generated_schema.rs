@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    // d4fe removes Folder; the forward text/cache and Nuxie video definitions remain.
-    assert_eq!(DEFINITIONS.len(), 353);
+    // d974 adds ScriptedTransition and PaintImage; forward overlays remain.
+    assert_eq!(DEFINITIONS.len(), 355);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -34,7 +34,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 638);
+    assert_eq!(runtime_property_count, 650);
 
     let animatable_property_count = DEFINITIONS
         .iter()

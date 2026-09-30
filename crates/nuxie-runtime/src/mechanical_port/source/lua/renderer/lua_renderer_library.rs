@@ -7,6 +7,7 @@ use super::{
 };
 
 use super::lua_gpu::luaopen_rive_gpu;
+use crate::mechanical_port::source::lua::lua_transition::luaopen_rive_transition;
 
 pub fn luaopen_rive_renderer_library(state: &mut LuaState) -> i32 {
     let mut renderer_types: Vec<LuaFunction> = vec![
@@ -17,6 +18,7 @@ pub fn luaopen_rive_renderer_library(state: &mut LuaState) -> i32 {
         luaopen_rive_blob,
         luaopen_rive_paint,
         luaopen_rive_renderer,
+        luaopen_rive_transition,
     ];
     renderer_types.push(luaopen_rive_gpu);
     renderer_types.into_iter().map(|open| open(state)).sum()

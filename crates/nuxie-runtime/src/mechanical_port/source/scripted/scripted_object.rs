@@ -21,6 +21,7 @@ pub enum ScriptProtocol {
     ListenerAction = 5,
     TransitionCondition = 6,
     Interpolator = 7,
+    Transition = 8,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum ScriptValue {
@@ -216,6 +217,7 @@ impl ScriptedObject {
         use crate::mechanical_port::source::scripted::{
             scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
             scripted_path_effect::ScriptedPathEffect,
+            scripted_transition::ScriptedTransition,
         };
         owner.with_mut(|owner| {
             if let Some(drawable) = owner.as_any_mut().downcast_mut::<ScriptedDrawable>() {
@@ -224,6 +226,8 @@ impl ScriptedObject {
                 layout.base.base.mark_needs_update();
             } else if let Some(effect) = owner.as_any_mut().downcast_mut::<ScriptedPathEffect>() {
                 effect.mark_needs_update();
+            } else if let Some(transition) = owner.as_any_mut().downcast_mut::<ScriptedTransition>() {
+                transition.base.base.mark_needs_update();
             }
             // Other scripted owners inherit ScriptedObject::markNeedsUpdate,
             // whose pinned implementation is intentionally empty.
@@ -402,6 +406,7 @@ impl ScriptedObject {
                 scripted_data_converter::ScriptedDataConverter,
                 scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
                 scripted_path_effect::ScriptedPathEffect,
+                scripted_transition::ScriptedTransition,
             };
             if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedDataConverter>() {
                 value.did_hydrate_script_inputs();
@@ -411,6 +416,8 @@ impl ScriptedObject {
                 value.did_hydrate_script_inputs();
             } else if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedPathEffect>() {
                 value.did_hydrate_script_inputs();
+            } else if let Some(value) = owner.as_any_mut().downcast_mut::<ScriptedTransition>() {
+                value.base.base.did_hydrate_script_inputs();
             }
         });
         true
@@ -465,6 +472,9 @@ impl ScriptedObject {
                     return value.properties.clone();
                 }
                 if let Some(value) = owner.as_any().downcast_ref::<ScriptedLayout>() {
+                    return value.base.base.properties.clone();
+                }
+                if let Some(value) = owner.as_any().downcast_ref::<crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition>() {
                     return value.base.base.properties.clone();
                 }
                 if let Some(value) = owner.as_any().downcast_ref::<ScriptedDataConverter>() {

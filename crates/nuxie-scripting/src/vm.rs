@@ -42,6 +42,7 @@ mod lua_paint;
 mod lua_path;
 mod lua_renderer;
 mod lua_renderer_library;
+mod lua_transition;
 mod lua_video;
 mod resource_limits;
 mod view_model;
@@ -3395,6 +3396,79 @@ impl ScriptInstance for LuaScriptInstance {
                     Ok(())
                 }
             }
+        }
+    }
+
+    fn transition_manages_to(&self) -> bool {
+        let Some(table) = &self.table else {
+            return true;
+        };
+        match table.get::<Value>("managesTo") {
+            Ok(Value::Boolean(false)) => false,
+            Ok(_) => true,
+            Err(error) => {
+                self.script_error(error);
+                true
+            }
+        }
+    }
+
+    fn call_transition_changed(
+        &mut self,
+        from: &nuxie_runtime::ScriptTransitionChildRef,
+        to: &nuxie_runtime::ScriptTransitionChildRef,
+        direction: i32,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        let Some(table) = self.table.clone() else {
+            return Ok(());
+        };
+        self.reset_execution_budget();
+        self.context_mark_needs_update_requested.set(false);
+        let result = lua_transition::call_changed(&table, from, to, direction);
+        let result = result.map_err(|error| self.script_error(error));
+        if self.context_mark_needs_update_requested.replace(false)
+            && (result.is_ok() || !host.requires_atomic_script_callbacks())
+        {
+            host.mark_script_update();
+        }
+        match result {
+            Err(error)
+                if error.resource_code().is_none() && !host.requires_atomic_script_callbacks() =>
+            {
+                Ok(())
+            }
+            result => result,
+        }
+    }
+
+    fn call_transition_draw(
+        &mut self,
+        _factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        from: &nuxie_runtime::ScriptTransitionChildRef,
+        to: &nuxie_runtime::ScriptTransitionChildRef,
+        host: &mut dyn ScriptHost,
+    ) -> std::result::Result<(), ScriptError> {
+        let Some(table) = self.table.clone() else {
+            return Ok(());
+        };
+        self.reset_execution_budget();
+        self.context_mark_needs_update_requested.set(false);
+        let result = lua_transition::call_draw(&self.renderer_bindings, &table, renderer, from, to);
+        let result = result.map_err(|error| self.script_error(error));
+        if self.context_mark_needs_update_requested.replace(false)
+            && (result.is_ok() || !host.requires_atomic_script_callbacks())
+        {
+            host.mark_script_update();
+        }
+        match result {
+            Err(error)
+                if error.resource_code().is_none() && !host.requires_atomic_script_callbacks() =>
+            {
+                Ok(())
+            }
+            result => result,
         }
     }
 

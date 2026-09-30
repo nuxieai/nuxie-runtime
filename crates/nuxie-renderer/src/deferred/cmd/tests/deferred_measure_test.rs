@@ -6,7 +6,7 @@ use super::super::{
     deferred_session::DeferredSession,
     render_command_buffer::RenderCommandBuffer,
     render_commands::*,
-    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
+    render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
 };
 use super::*;
 use std::{path::PathBuf, time::Instant};
@@ -258,7 +258,7 @@ impl DeferredFrameSink for MSink {
     }
 }
 struct Census {
-    count: [u64; 33],
+    count: [u64; 34],
     geom_bytes: u64,
     command_bytes: u64,
     blob_bytes: u64,
@@ -268,7 +268,7 @@ struct Census {
 impl Default for Census {
     fn default() -> Self {
         Self {
-            count: [0; 33],
+            count: [0; 34],
             geom_bytes: 0,
             command_bytes: 0,
             blob_bytes: 0,
@@ -317,7 +317,7 @@ struct Phase {
 fn row(riv: &str, phase: &str, metric: &str, value: f64) {
     println!("MEASURE,{riv},{phase},{metric},{value:.6}");
 }
-const COMMAND_NAMES: [&str; 33] = [
+const COMMAND_NAMES: [&str; 34] = [
     "makePath",
     "makeEmptyPath",
     "makePaint",
@@ -339,6 +339,7 @@ const COMMAND_NAMES: [&str; 33] = [
     "paintFeather",
     "paintBlendMode",
     "paintShader",
+    "paintModulatedImage",
     "paintInvalidateStroke",
     "save",
     "restore",

@@ -408,6 +408,15 @@ pub struct CommandServer {
 }
 
 impl CommandServer {
+    /// Post opaque runtime-owned data, including from run_once or draw work.
+    /// The queue forwards it when process_messages runs without interpreting it.
+    pub fn post_runtime_message(&self, tag: u32, payload: Vec<u8>) {
+        let mut messages = self.command_queue.message_lock();
+        messages.write(Message::RuntimeMessage);
+        messages.write(tag);
+        messages.write_byte_vector(payload);
+    }
+
     /// Execute commands with the supplied resource factory. The optional
     /// internal loader runs first and should return true for assets it owns;
     /// those assets are excluded from command-queue global registrations.

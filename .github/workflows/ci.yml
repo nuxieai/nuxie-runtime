@@ -31,7 +31,7 @@ concurrency:
 
 env:
   # Current sync-pin runtime/golden/perf candidate.
-  RIVE_RUNTIME_REF: 2914b0817b6e6749f4f183bb7b03df38ea04dc77
+  RIVE_RUNTIME_REF: 407f9a359256420d922badcbe492c76c5b4a4ba5
   RIVE_RUNTIME_DIR: ${{ github.workspace }}/rive-runtime
   RIVE_PREMAKE_TAG: v5.0.0-beta7
 

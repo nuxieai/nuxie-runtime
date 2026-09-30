@@ -63,12 +63,25 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.5 release candidate
+## Immutable v0.4.10 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.5 candidate enumerates root, nested, and materialized list videos.
+The v0.4.10 candidate adds `nux_player_video_present_android_hardware_buffer`,
+which presents a decoded video frame without a GPU readback or CPU copy. Hosts
+that decode into an `ImageReader` or `AImageReader` with GPU sampled usage pass
+the frame's `AHardwareBuffer` with its crop, rotation, display size and Y'CbCr
+matrix and range. The Vulkan renderer imports the buffer and converts it to
+RGBA on the GPU before the call returns, so the host can return the buffer to
+the decoder right away. The display size stretches video with non-square
+pixels. Hosts should pass the matrix and range because drivers' own
+suggestions are not reliable. Devices without
+`VK_ANDROID_external_memory_android_hardware_buffer` and sampler Y'CbCr
+conversion return `RuntimeError`. ABI v4 and the existing size ceilings are
+retained; SDKs using the new symbol must adopt this release.
+
+The inherited v0.4.5 behavior enumerates root, nested, and materialized list videos.
 `NuxVideoInfo` appends `source_artboard_index` and `source_component_id` while
 preserving existing field offsets and ABI v4. Hosts check `struct_size` before
 reading the tail. The source coordinates identify the binary definition;
@@ -113,9 +126,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.5 <full-source-sha>
-git push origin android-runtime-v0.4.5
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.5
+git tag android-runtime-v0.4.10 <full-source-sha>
+git push origin android-runtime-v0.4.10
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.10
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

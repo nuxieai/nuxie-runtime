@@ -86,6 +86,17 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.12 candidate adds `nux_player_video_present_metal_pixel_buffer`, which
+presents a decoded video frame without a CPU copy. Hosts pass an
+IOSurface-backed 32BGRA `CVPixelBuffer`, such as `AVPlayerItemVideoOutput` vends
+when Metal compatibility is requested; the renderer samples that surface in
+place and keeps the buffer until GPU work reading it completes. Other formats
+and memory-backed buffers are rejected. Generation, renderer-domain and 64 MiB
+rules match `nux_player_video_present_metal`, and colors are identical to that
+byte path. The renderer now calls Core Video, so both module maps link
+`CoreVideo` and SDK targets must link it too. ABI v4 and the existing size
+ceilings are retained; SDKs using the new symbol must adopt this release.
+
 The v0.10.11 candidate adds `nux_player_text_input_content_offset_set` for
 native editors to synchronize their content displacement with an authored
 TextInput's existing ScrollConstraint. The stationary field viewport remains

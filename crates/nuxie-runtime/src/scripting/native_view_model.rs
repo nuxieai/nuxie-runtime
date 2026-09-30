@@ -269,10 +269,11 @@ impl NativeScriptViewModel {
             })
     }
     pub fn fire_trigger(&self, name: &str) -> bool {
-        self.mutate::<ViewModelInstanceTrigger>(name, |owner| {
-            owner.trigger();
-            true
-        })
+        let Some(property) = self.property(name) else { return false; };
+        let notifications = RuntimeHostMutationNotifications::begin();
+        let changed = ViewModelInstanceTrigger::trigger_handle(&property);
+        if let Some(notifications) = notifications { notifications.commit(); }
+        changed
     }
 
     fn data_enum(&self, name: &str) -> Option<CoreHandle> {
@@ -680,28 +681,27 @@ impl NativeScriptViewModel {
         let Some(instance) = &self.instance else {
             return false;
         };
-        let Some(value_count) =
-            instance.with_downcast::<ViewModelInstance, _>(|owner| owner.property_values().len())
-        else {
+        if instance
+            .with_downcast::<ViewModelInstance, _>(|_| ())
+            .is_none()
+        {
             return false;
-        };
+        }
         let mut changed = false;
-        for index in 0..value_count {
-            let value = instance
-                .with_downcast::<ViewModelInstance, _>(|owner| {
-                    owner.property_values().get(index).cloned()
-                })
-                .flatten()
-                .expect("ViewModel property topology remains stable during advance");
-            value.with_mut(|value| {
+        let mut index = 0;
+        while let Some(value) = instance
+            .with_downcast::<ViewModelInstance, _>(|owner| {
+                owner.property_values().get(index).cloned()
+            })
+            .flatten()
+        {
+            value.with(|value| {
                 changed |= value
                     .as_view_model_instance_value()
                     .is_some_and(|value| value.has_changed());
-                assert!(
-                    value.view_model_instance_value_advanced(),
-                    "ViewModel property value advance capability"
-                );
             });
+            ViewModelInstance::advanced_value_handle(&value);
+            index += 1;
         }
         changed
     }

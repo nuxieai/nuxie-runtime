@@ -11,11 +11,7 @@ impl ViewModelInstanceTriggerRuntime {
     }
 
     pub fn trigger(&self) {
-        self.base.handle().with_mut(|property| {
-            if let Some(property) = property.as_view_model_instance_trigger_mut() {
-                property.trigger();
-            }
-        });
+        crate::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::trigger_handle(&self.base.handle());
     }
 
     pub fn data_type(&self) -> DataType {

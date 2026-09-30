@@ -195,7 +195,7 @@ where
 
     pub fn apply<R: AnimationResetTarget>(&mut self, artboard: &mut R, mix: f32) {
         if let Some(animation_reset) = &self.animation_reset {
-            animation_reset.apply(artboard);
+            animation_reset.seed(artboard, &mut self.base.accumulator.borrow_mut());
         }
         self.base.apply(mix);
     }

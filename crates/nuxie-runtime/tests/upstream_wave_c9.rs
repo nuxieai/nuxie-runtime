@@ -514,8 +514,7 @@ fn wave_c9_event_011_view_model_listener_event_is_host_visible() {
         })
         .flatten()
         .unwrap();
-    go.with_downcast_mut::<ViewModelInstanceTrigger, _>(ViewModelInstanceTrigger::trigger)
-        .unwrap();
+    assert!(ViewModelInstanceTrigger::trigger_handle(&go));
     f.machine.advance_and_apply(0.016);
     assert_eq!(f.event_count(), 1);
     assert_eq!(f.event_name(0), "ding");

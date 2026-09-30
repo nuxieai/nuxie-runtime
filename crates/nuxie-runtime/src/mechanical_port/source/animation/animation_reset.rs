@@ -1,4 +1,8 @@
+use super::blend_accumulator::BlendAccumulator;
+use crate::mechanical_port::source::core::CoreHandle;
+
 pub trait AnimationResetTarget {
+    fn resolve(&self, object_id: u32) -> Option<CoreHandle>;
     fn resolves(&self, object_id: u32) -> bool;
     fn property_field_id(property_key: u32) -> u32;
     fn set_double(&mut self, object_id: u32, property_key: u32, value: f32) -> bool;
@@ -68,7 +72,7 @@ impl AnimationReset {
         f32::from_le_bytes(encoded.try_into().unwrap())
     }
 
-    pub fn apply<T: AnimationResetTarget>(&self, artboard: &mut T) {
+    fn for_each_value(&self, mut visit: impl FnMut(u32, u32, f32)) {
         if self.write_buffer.is_empty() {
             return;
         }
@@ -84,19 +88,38 @@ impl AnimationReset {
             for _ in 0..property_count {
                 let property_key = Self::read_var_uint(&self.write_buffer, &mut position);
                 let value = Self::read_float32(&self.write_buffer[..end], &mut position);
-                let field_id = T::property_field_id(property_key);
-                assert!(
-                    artboard.resolves(object_id),
-                    "AnimationReset resolved a missing object"
-                );
-                if field_id == 2 {
-                    artboard.set_double(object_id, property_key, value);
-                } else if field_id == 3 {
-                    // CoreRegistry::setColor accepts a signed C++ int. Preserve
-                    // that conversion before returning the packed color bits.
-                    artboard.set_color(object_id, property_key, value as i32 as u32);
-                }
+                visit(object_id, property_key, value);
             }
         }
+    }
+
+    pub fn apply<T: AnimationResetTarget>(&self, artboard: &mut T) {
+        self.for_each_value(|object_id, property_key, value| {
+            let field_id = T::property_field_id(property_key);
+            assert!(
+                artboard.resolves(object_id),
+                "AnimationReset resolved a missing object"
+            );
+            if field_id == 2 {
+                artboard.set_double(object_id, property_key, value);
+            } else if field_id == 3 {
+                // CoreRegistry::setColor accepts a signed C++ int. Preserve
+                // that conversion before returning the packed color bits.
+                artboard.set_color(object_id, property_key, value as i32 as u32);
+            }
+        });
+    }
+
+    pub fn seed<T: AnimationResetTarget>(&self, artboard: &T, accumulator: &mut BlendAccumulator) {
+        self.for_each_value(|object_id, property_key, value| {
+            let object = artboard
+                .resolve(object_id)
+                .expect("AnimationReset resolved a missing object");
+            match T::property_field_id(property_key) {
+                2 => accumulator.seed_double(&object, property_key as i32, value),
+                3 => accumulator.seed_color(&object, property_key as i32, value as i32 as u32),
+                _ => (),
+            }
+        });
     }
 }

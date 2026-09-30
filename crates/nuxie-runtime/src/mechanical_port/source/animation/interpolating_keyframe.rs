@@ -8,6 +8,11 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 pub trait KeyFrameValueContext {
+    fn blend_accumulator(
+        &self,
+    ) -> Option<std::rc::Rc<std::cell::RefCell<super::blend_accumulator::BlendAccumulator>>> {
+        None
+    }
     fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool>;
     fn string_value(&self, keyframe: &CoreHandle) -> Option<String>;
     fn color_value(&self, keyframe: &CoreHandle) -> Option<i32>;

@@ -108,11 +108,7 @@ impl ViewModelInstanceViewModel {
 
     pub fn advanced(&mut self) {
         if let Some(instance) = &self.reference_view_model_instance {
-            instance.with_mut(|instance| {
-                if let Some(instance) = instance.as_view_model_instance_mut() {
-                    instance.advanced();
-                }
-            });
+            super::viewmodel_instance::ViewModelInstance::advanced_handle(instance);
         }
     }
 

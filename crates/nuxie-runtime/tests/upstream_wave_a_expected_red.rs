@@ -109,6 +109,80 @@ fn assert_items(f: &Fixture) {
         assert!(machine.with_instance(|machine| machine.artboard().ptr_eq(&artboard.downgrade())));
     }
 }
+
+// runtime/component_list_test.cpp at 75a22f94: both new virtualized-row cases.
+fn first_list_property(f: &Fixture) -> CoreHandle {
+    let values = read::<ViewModelInstance, _>(&f.instance, |instance| instance.property_values().to_vec());
+    values.into_iter().find(|value| value.is_type_of(ViewModelInstanceList::TYPE_KEY))
+        .expect("list property")
+}
+
+#[test]
+fn component_list_virtualized_rows_follow_their_items() {
+    let f = Fixture::new("component_list_virtualized.riv");
+    assert!(read::<ArtboardComponentList, _>(&f.list, ArtboardComponentList::virtualization_enabled));
+    let scroll = f.artboard.with_artboard(|artboard| artboard.find_all_handles::<ScrollConstraint>())[0].clone();
+    let items = first_list_property(&f);
+    f.advance();
+    let first = f.item_artboard(0).expect("first row");
+    let second = f.item_artboard(1).expect("second row");
+    let first_machine = f.machine(0);
+    let second_machine = f.machine(1);
+    assert!(!first.downgrade().ptr_eq(&second.downgrade()));
+    write::<ViewModelInstanceList, _>(&items, |items| items.swap(0, 1));
+    f.advance();
+    assert!(f.item_artboard(0).unwrap().downgrade().ptr_eq(&second.downgrade()));
+    assert!(f.item_artboard(1).unwrap().downgrade().ptr_eq(&first.downgrade()));
+    let same_machine = |left: Option<RuntimeStateMachineInstanceHandle>, right: &Option<RuntimeStateMachineInstanceHandle>| {
+        match (left, right) {
+            (Some(left), Some(right)) => left.downgrade().ptr_eq(&right.downgrade()),
+            (None, None) => true,
+            _ => false,
+        }
+    };
+    assert!(same_machine(f.machine(0), &second_machine));
+    assert!(same_machine(f.machine(1), &first_machine));
+    let shared = f.item_artboard(3).expect("shared row");
+    let shared_item = read::<ViewModelInstanceList, _>(&items, |items| items.list_items()[3].clone());
+    write::<ViewModelInstanceList, _>(&items, |items| items.add_item_at(shared_item, 2));
+    f.advance();
+    assert!(f.item_artboard(2).unwrap().downgrade().ptr_eq(&shared.downgrade()));
+    assert!(f.item_artboard(4).unwrap().downgrade().ptr_eq(&shared.downgrade()));
+    assert!(f.machine(2).is_some());
+    assert!(same_machine(f.machine(2), &f.machine(4)));
+    write::<ScrollConstraint, _>(&scroll, |scroll| scroll.set_scroll_index(10.0));
+    f.advance();
+    for index in 0..5 {
+        assert!(f.item_artboard(index).is_none());
+        assert!(f.machine(index).is_none());
+    }
+}
+
+#[test]
+fn component_list_virtualized_keeps_one_focus_row_per_item() {
+    let f = Fixture::new("component_list_virtualized.riv");
+    let machine = f.artboard.state_machine_at(0).expect("state machine");
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(f.instance.clone()));
+    machine.advance_and_apply(0.016);
+    assert!(read::<ArtboardComponentList, _>(&f.list, ArtboardComponentList::virtualization_enabled));
+    let scope = read::<ArtboardComponentList, _>(&f.list, ArtboardComponentList::list_scope_focus_node)
+        .expect("list scope");
+    assert_eq!(scope.borrow().children().len(), f.count());
+    let items = first_list_property(&f);
+    let first_item = read::<ViewModelInstanceList, _>(&items, |items| items.list_items()[0].clone());
+    let instance = read::<ViewModelInstanceListItem, _>(&first_item, ViewModelInstanceListItem::view_model_instance).unwrap();
+    let view_model = read::<ViewModelInstance, _>(&instance, ViewModelInstance::get_view_model).unwrap();
+    for _ in 0..3 {
+        let instance = f._file.with_file(|file| file.create_default_view_model_instance(view_model.clone())).unwrap();
+        let mut item = ViewModelInstanceListItem::default();
+        item.set_view_model_instance(Some(instance));
+        let item = items.insert_sibling(item).expect("new list item");
+        write::<ViewModelInstanceList, _>(&items, |items| items.add_item_at(item, 0));
+    }
+    machine.advance_and_apply(0.016);
+    assert_eq!(f.count(), 23);
+    assert_eq!(scope.borrow().children().len(), 23);
+}
 fn assert_layout_nodes(f: &Fixture) {
     for i in 0..f.count() {
         assert!(

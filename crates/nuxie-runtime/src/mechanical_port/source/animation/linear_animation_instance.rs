@@ -47,6 +47,7 @@ impl KeyedCallbackReporter for PendingKeyedCallbacks {
     }
 }
 pub struct LinearAnimationInstance {
+    blend_accumulator: std::rc::Weak<RefCell<super::blend_accumulator::BlendAccumulator>>,
     animation: LinearAnimationOwner,
     artboard: RuntimeArtboardInstanceWeakHandle,
     nested_event_notifier: NestedEventNotifier,
@@ -113,6 +114,7 @@ impl LinearAnimationInstance {
         };
         Self {
             animation,
+            blend_accumulator: std::rc::Weak::new(),
             artboard,
             nested_event_notifier: NestedEventNotifier::default(),
             time,
@@ -129,6 +131,13 @@ impl LinearAnimationInstance {
 
     pub fn set_nested_artboard(&mut self, artboard: CoreHandle) {
         self.nested_event_notifier.set_nested_artboard(artboard);
+    }
+
+    pub fn set_blend_accumulator(
+        &mut self,
+        accumulator: &Rc<RefCell<super::blend_accumulator::BlendAccumulator>>,
+    ) {
+        self.blend_accumulator = Rc::downgrade(accumulator);
     }
 
     pub fn add_nested_event_listener(
@@ -611,6 +620,9 @@ impl LinearAnimationInstance {
 }
 impl CallbackContext for LinearAnimationInstance {}
 impl KeyFrameValueContext for LinearAnimationInstance {
+    fn blend_accumulator(&self) -> Option<Rc<RefCell<super::blend_accumulator::BlendAccumulator>>> {
+        self.blend_accumulator.upgrade()
+    }
     fn bool_value(&self, keyframe: &CoreHandle) -> Option<bool> {
         self.keyframe_value_holder(keyframe)?
             .with_downcast::<BindablePropertyBoolean, _>(|holder| holder.base.property_value())
@@ -674,6 +686,8 @@ impl Clone for LinearAnimationInstance {
     fn clone(&self) -> Self {
         Self {
             animation: self.animation.clone(),
+            // Upstream's explicit copy constructor leaves this pointer null.
+            blend_accumulator: std::rc::Weak::new(),
             artboard: self.artboard.clone(),
             nested_event_notifier: self.nested_event_notifier.clone(),
             time: self.time,

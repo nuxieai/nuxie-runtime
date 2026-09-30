@@ -224,8 +224,10 @@ pub fn lua_register_rive_type<T: LuaRive>(
 ) {
     state.register_rive::<T>();
     for (name, function) in [
-        ("__index", index), ("__namecall", namecall),
-        ("__newindex", newindex), ("__iter", iter),
+        ("__index", index),
+        ("__namecall", namecall),
+        ("__newindex", newindex),
+        ("__iter", iter),
     ] {
         if let Some(function) = function {
             state.push_function(function);
@@ -2715,13 +2717,19 @@ pub trait ScriptingContext {
 
     fn advance_detached_view_models(&mut self) {
         for tracked in self.data_mut().tracked_view_model_instances.values_mut() {
-            tracked.instance.with_mut(|instance| {
-                if let Some(instance) = instance.as_view_model_instance_mut()
-                    && !instance.has_parents()
-                {
-                    instance.advanced();
-                }
-            });
+            if tracked
+                .instance
+                .with(|object| {
+                    object
+                        .as_view_model_instance()
+                        .is_some_and(|instance| !instance.has_parents())
+                })
+                .unwrap_or(false)
+            {
+                crate::source::viewmodel::viewmodel_instance::ViewModelInstance::advanced_handle(
+                    &tracked.instance,
+                );
+            }
         }
     }
 

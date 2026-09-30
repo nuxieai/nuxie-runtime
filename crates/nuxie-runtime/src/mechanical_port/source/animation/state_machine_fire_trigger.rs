@@ -25,8 +25,7 @@ impl StateMachineFireTrigger {
         else {
             return;
         };
-        let _ =
-            trigger.with_downcast_mut::<ViewModelInstanceTrigger, _>(|trigger| trigger.trigger());
+        ViewModelInstanceTrigger::trigger_handle(&trigger);
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {

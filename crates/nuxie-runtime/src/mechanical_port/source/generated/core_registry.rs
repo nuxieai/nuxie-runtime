@@ -9705,6 +9705,12 @@ impl CoreRegistry {
     }
 
     pub fn set_uint_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
+        use crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase;
+        if property_key == i32::from(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
+            && handle.is_type_of(ViewModelInstanceTriggerBase::TYPE_KEY)
+        {
+            return crate::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::set_property_value_handle(handle, value);
+        }
         let written = handle
             .with_mut(|object| Self::set_uint(object, property_key, value))
             .is_some();
@@ -9799,6 +9805,12 @@ impl CoreRegistry {
         property_key: i32,
         value: CallbackData<'_>,
     ) -> bool {
+        use crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase;
+        if property_key == i32::from(ViewModelInstanceTriggerBase::FIRE_PROPERTY_KEY)
+            && handle.is_type_of(ViewModelInstanceTriggerBase::TYPE_KEY)
+        {
+            return crate::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::trigger_handle(handle);
+        }
         handle
             .with_mut(|object| Self::set_callback(object, property_key, value))
             .is_some()
@@ -59171,6 +59183,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
+        // Trigger counts are non-interpolatable uints. Publish their tools
+        // callbacks through the occurrence boundary, not a borrowed object.
+        if key == i32::from(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
+            && object.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY)
+        {
+            return CoreRegistry::set_uint_handle(&object, key, self.base.value());
+        }
         object
             .with_mut(|object| {
                 self.apply(object, key, mix, context);
@@ -59187,6 +59206,11 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
+        if key == i32::from(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
+            && object.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY)
+        {
+            return CoreRegistry::set_uint_handle(&object, key, self.base.value());
+        }
         next.with(|next| {
             next.as_key_frame().is_some_and(|next| {
                 object
@@ -60884,12 +60908,8 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_co
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        object
-            .with_mut(|object| {
-                self.apply(object, key, mix, context);
-                true
-            })
-            .unwrap_or(false)
+        self.apply(&object, key, mix, context);
+        true
     }
     fn keyframe_interpolate(
         &self,
@@ -60900,7 +60920,7 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_co
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        next.with_downcast::<crate::mechanical_port::source::animation::keyframe_color::KeyFrameColor, _>(|next| object.with_mut(|object| { self.apply_interpolation(object, key, time, next, mix, context); true }).unwrap_or(false)).unwrap_or(false)
+        next.with_downcast::<crate::mechanical_port::source::animation::keyframe_color::KeyFrameColor, _>(|next| { self.apply_interpolation(&object, key, time, next, mix, context); true }).unwrap_or(false)
     }
     fn lifecycle_import(
         &mut self,

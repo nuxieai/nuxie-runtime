@@ -3,6 +3,8 @@ use crate::mechanical_port::source::{
     semantic::semantic_snapshot::Bounds,
 };
 
+// KeyboardInput.modifiers uses these numeric bit values as a raw RML bitmask.
+// Adding or renumbering them requires updating that property's description.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct KeyModifiers(pub u8);
@@ -35,6 +37,9 @@ impl core::ops::BitAnd for KeyModifiers {
         Self(self.0 & rhs.0)
     }
 }
+// Mirrored as keyType's enumValues in upstream dev/defs/inputs/keyboard_input.json,
+// which is what RML authors write. Adding or renumbering here means editing
+// that too; nothing checks the two against each other.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u16)]
 enum KnownKey {

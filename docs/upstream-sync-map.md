@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `be0935d3ce4998dd1216ddaf83638901732a4c80`
+- LAST_SYNCED_SHA: `aeb29dde6845b6f31f8bb986dee0857408271922`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 77 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 77 require a Rust translation.
+  There are 76 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 76 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `aeb29dde6845b6f31f8bb986dee0857408271922` | Preserve upstream's documentation that keyboard modifier bits are a raw RML bitmask and key enum values mirror the editor's keyboard-input definition. The published runtime delta is comments plus private editor revision metadata; no executable CLI/runtime behavior or numeric values changed. | — |
 | `be0935d3ce4998dd1216ddaf83638901732a4c80` | Translate dependency sorting's append-then-reverse ordering and borrowed per-component dependent traversal. Preserve root ordering, cycle detection and partial output on failure, including the Rust active-root adapter. No change to authored dependency semantics or graph identity. | — |
 | `0211d9ee727fd66473d2f073fec9c788539607c4` | Translate artboard teardown's fallback to the existing runtime audio engine when no explicit engine is assigned, matching AudioEvent playback resolution without allocating an engine. Port the upstream regression that plays two sounds without assigning an engine and requires both to stop when the artboard is destroyed. Preserve the approved Rust audio backend. | — |
 | `02bea09bc68eb923498a3fe77da257a96e48d2e9` | Translate Unicode line breaking and exact generated Unicode 17 property data, glyph-cluster-safe line fitting, whitespace and shaped-run annotation changes, upstream rule tests and conformance data. Share the translated rule owner beneath the existing render-api/runtime crate boundary without replacing the approved Rust shaping engine. Active Silver inputs use this checkpoint's four changed upstream captures; historical renderer artifacts retain their true provenance. | — |

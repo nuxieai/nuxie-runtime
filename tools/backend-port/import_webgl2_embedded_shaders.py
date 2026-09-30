@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 
-PINNED_UPSTREAM = "def2e241b80f6118a1d3bda8d3689e3f8bfcd430"
+PINNED_UPSTREAM = "1371150d929cf8d282d782cb9e5b7fc7783799b1"
 GENERATED_INPUTS = (
     "advanced_blend.minified.glsl",
     "atomic_draw.minified.glsl",

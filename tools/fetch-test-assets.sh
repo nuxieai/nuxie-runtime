@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-5705446d6aeb0dad34a63d8ddadbb79fbe327a37}
+ref=${RIVE_RUNTIME_REF:-7db8b61f747b24553bc4783df50cff997610e17c}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -12,14 +12,14 @@ assets=(
   "semantic/zero_area_semantics.riv|7f53903646eb07548f68d349fd31833c81aa0ccb623d4665f530829ec6a5f2b8|293eaf002cdda1ab6ec20316ee2d67ebd2854775|semantic/zero_area_semantics.riv"
   "sync/layout/matrix/matrix.expect|6ae71099b8a03f18e3002d934d39abc1735157ad11d47a81c89cfa45ae82f09c|3b2c51e2dd957722fd3061112667d884b1ec60c3|layout/matrix/matrix.expect"
   "sync/layout/matrix/matrix.riv|4d00f48241a5963854c37c01acf28796a7ddf696ce1d9df935388b4e53589bc3|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix.riv"
-  "sync/layout/matrix/matrix_font.expect|664ba0749c57d6f36af76f1ed582252d4675c813af66be1f6a40e3b5830ccf3c|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_font.expect"
-  "sync/layout/matrix/matrix_font.riv|6ffa960c660fa5f28f0f15e46741e027cb5f366cfed74a14be6754794f5cf7ca|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_font.riv"
+  "sync/layout/matrix/matrix_font.expect|8765f35841bb4a6fd1d5b3e3d1606961660ef6a13bf7837e3f1a9f1a17ebca74|7db8b61f747b24553bc4783df50cff997610e17c|layout/matrix/matrix_font.expect"
+  "sync/layout/matrix/matrix_font.riv|24c0efa0429ec7f727ca9bda080d29a4356bed21074112e933717685903dceb1|7db8b61f747b24553bc4783df50cff997610e17c|layout/matrix/matrix_font.riv"
   "sync/layout/matrix/matrix_image.expect|175bf6c4e9539bd698f13007bb82969323da8b6b1efc9d5339acd8d071178d1c|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_image.expect"
   "sync/layout/matrix/matrix_image.riv|bd8940cfc111c1565928cf11ce46307cbf1750ac4d9c22f39482d497abeaa0bb|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_image.riv"
   "sync/layout/matrix/matrix_legacy.expect|62068a77f1e4b4883a145ae0118310aee7620b4c6125a178d32e9764f57788a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.expect"
   "sync/layout/matrix/matrix_legacy.riv|0f788e1abe9d074b348a7cca55f077325f4a8242ce8758324518daa1ba154716|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.riv"
   "sync/layout/matrix/README.md|36e3afa7769913e9a3d0a0420d6b3115e81e67b8a9ee1230883e9039829bd0a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/README.md"
-  "sync/layout/matrix/CORPUS.md|5308fedcc113cb2237c332318089949b4d68db02950a2af31fe2ce7d93e6c3e3|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/CORPUS.md"
+  "sync/layout/matrix/CORPUS.md|880fe8392d12178c58b5046634b7d353b4010300ccde24022747eabea3f70713|7db8b61f747b24553bc4783df50cff997610e17c|layout/matrix/CORPUS.md"
   "sync/fit_font_size_hug_test.riv|7b3c156ce6d6e9455ff42745a102f00709ecc163ba87cebf713f43c9c03b8f49|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|fit_font_size_hug_test.riv"
   "sync/layout/assets/Montserrat.ttf|a4fe82b4bfd40c71320ab0f1daca8ba2f230b55a56ffa94d5d1b349675b70d73|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|Montserrat.ttf"
   "sync/layout/assets/batdude.png|32c86d18c059d4338cca1771faf9b43a80827ae8ea30d6cc10d64f681bfeec01|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|batdude.png"

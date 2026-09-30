@@ -229,6 +229,7 @@ impl RawText {
             },
             self.align,
             self.wrap,
+            crate::mechanical_port::source::text_engine::TextWordBreak::BreakWord,
         );
         self.ellipsis_run = GlyphRun::default();
         if self.shape.is_empty() {

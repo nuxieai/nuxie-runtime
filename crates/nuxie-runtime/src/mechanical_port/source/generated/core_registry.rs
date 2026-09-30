@@ -4406,6 +4406,7 @@ pub enum CoreField {
     TextVerticalTrimValue,
     TextWidth,
     TextWrapValue,
+    TextWordBreakValue,
     TransformComponentConstraintCopyFactor,
     TransformComponentConstraintDoesCopy,
     TransformComponentConstraintMax,
@@ -7250,6 +7251,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::WRAP_VALUE_PROPERTY_KEY);
                 }
             }
+            CoreField::TextWordBreakValue => {
+                if self.base.set_word_break_value_value(value as u8) {
+                    <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::word_break_value_changed(self);
+                    <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_base::TextBase::WORD_BREAK_VALUE_PROPERTY_KEY);
+                }
+            }
             CoreField::TextVerticalAlignValue => {
                 if self.base.set_vertical_align_value_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks>::vertical_align_value_changed(self);
@@ -7528,6 +7535,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
             CoreField::TextOverflowValue => self.base.overflow_value() as u32,
             CoreField::TextOriginValue => self.base.origin_value() as u32,
             CoreField::TextWrapValue => self.base.wrap_value() as u32,
+            CoreField::TextWordBreakValue => self.base.word_break_value() as u32,
             CoreField::TextVerticalAlignValue => self.base.vertical_align_value() as u32,
             CoreField::TextTextRunListSource => self.base.text_run_list_source(),
             CoreField::TextVerticalTrimValue => self.base.vertical_trim_value() as u32,
@@ -8375,6 +8383,7 @@ impl CoreRegistry {
             287 => CoreField::TextOverflowValue,
             377 => CoreField::TextOriginValue,
             683 => CoreField::TextWrapValue,
+            446 => CoreField::TextWordBreakValue,
             685 => CoreField::TextVerticalAlignValue,
             932 => CoreField::TextTextRunListSource,
             1026 => CoreField::TextVerticalTrimValue,
@@ -9157,6 +9166,7 @@ impl CoreRegistry {
             287 => CoreField::TextOverflowValue,
             377 => CoreField::TextOriginValue,
             683 => CoreField::TextWrapValue,
+            446 => CoreField::TextWordBreakValue,
             685 => CoreField::TextVerticalAlignValue,
             932 => CoreField::TextTextRunListSource,
             1026 => CoreField::TextVerticalTrimValue,
@@ -9971,6 +9981,7 @@ impl CoreRegistry {
             287 => 0,
             377 => 0,
             683 => 0,
+            446 => 0,
             685 => 0,
             932 => 0,
             1026 => 0,
@@ -10614,6 +10625,7 @@ impl CoreRegistry {
             287 => 134,
             377 => 134,
             683 => 134,
+            446 => 134,
             685 => 134,
             932 => 134,
             1026 => 134,
@@ -76839,7 +76851,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_base::TextBaseCallbacks
     for crate::mechanical_port::source::text::text::Text
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text::Text; align_value_changed, height_changed, origin_value_changed, origin_x_changed, origin_y_changed, overflow_value_changed, paragraph_spacing_changed, sizing_value_changed, vertical_trim_value_changed, width_changed, fit_font_size_resizes_box_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text::Text; align_value_changed, height_changed, origin_value_changed, origin_x_changed, origin_y_changed, overflow_value_changed, paragraph_spacing_changed, sizing_value_changed, vertical_trim_value_changed, width_changed, fit_font_size_resizes_box_changed, word_break_value_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
     }

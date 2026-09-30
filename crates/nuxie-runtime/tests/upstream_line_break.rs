@@ -1,9 +1,9 @@
-//! Direct ports of all twelve pinned line_break_test.cpp cases.
+//! Direct ports of all twenty pinned line_break_test.cpp cases.
 //! Both shaping and line breaking run through translated production owners.
 
 use nuxie_runtime::source::{
     text::font_hb::HbFont,
-    text_engine::{FontRef, GlyphLine, TextDirection, TextRun},
+    text_engine::{FontRef, GlyphLine, Paragraph, TextDirection, TextRun, TextWordBreak},
 };
 use std::path::PathBuf;
 
@@ -38,6 +38,202 @@ fn assert_line(line: &GlyphLine, start_run: u32, start_glyph: u32, end_run: u32,
     assert_eq!(line.start_glyph_index, start_glyph);
     assert_eq!(line.end_run_index, end_run);
     assert_eq!(line.end_glyph_index, end_glyph);
+}
+
+// Upstream shapeOneRun: shape one 32pt run through the production font.
+fn shape_one_run(font: &FontRef, text: &str) -> Vec<Paragraph> {
+    let mut unichars = Vec::new();
+    let mut runs = Vec::new();
+    append(&mut unichars, &mut runs, font, 32.0, text);
+    font.shape_text(&unichars, &runs, -1)
+}
+
+#[test]
+fn word_break_normal_never_splits_a_word() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "ab");
+    assert_eq!(paragraphs.len(), 1);
+    for width in [17.0, 1.0, 0.0] {
+        let lines = GlyphLine::break_lines_with_word_break(
+            &paragraphs[0].runs,
+            width,
+            TextWordBreak::Normal,
+        );
+        assert_eq!(lines.len(), 1);
+        assert_line(&lines[0], 0, 0, 0, 2);
+    }
+}
+
+#[test]
+fn word_break_normal_still_wraps_between_words() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "one two three");
+    assert_eq!(paragraphs.len(), 1);
+    let runs = &paragraphs[0].runs;
+    let run = &runs[0];
+    let width = (run.xpos[3] + run.xpos[4]) / 2.0;
+    let lines = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::Normal);
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0].start_glyph_index, 0);
+    assert_eq!(lines[0].end_glyph_index, 3);
+    assert_eq!(lines[1].start_glyph_index, 4);
+    assert_eq!(lines[1].end_glyph_index, 7);
+    assert_eq!(lines[2].start_glyph_index, 8);
+    assert_eq!(lines[2].end_glyph_index, 13);
+    let broken = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakWord);
+    assert!(broken.len() > lines.len());
+}
+
+#[test]
+fn word_break_all_fills_the_line_it_is_already_on() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "one two three");
+    assert_eq!(paragraphs.len(), 1);
+    let runs = &paragraphs[0].runs;
+    let run = &runs[0];
+    let width = (run.xpos[9] + run.xpos[10]) / 2.0;
+    let lines = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakAll);
+    assert!(lines.len() >= 2);
+    assert_eq!(lines[0].start_glyph_index, 0);
+    assert_eq!(lines[0].end_glyph_index, 9);
+    assert_eq!(lines[1].start_glyph_index, 9);
+    let broken = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakWord);
+    assert_eq!(broken[0].end_glyph_index, 7);
+}
+
+#[test]
+fn word_break_all_never_cuts_inside_the_space_before_a_word() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "one two three");
+    assert_eq!(paragraphs.len(), 1);
+    let runs = &paragraphs[0].runs;
+    let run = &runs[0];
+    for width in [
+        (run.xpos[8] + run.xpos[9]) / 2.0,
+        (run.xpos[7] + run.xpos[8]) / 2.0,
+    ] {
+        let lines = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakAll);
+        assert!(lines.len() >= 2);
+        assert_eq!(lines[0].end_glyph_index, 7);
+        assert_eq!(lines[1].start_glyph_index, 8);
+    }
+}
+
+#[test]
+fn word_break_all_matches_break_word_for_a_lone_word() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "ab");
+    assert_eq!(paragraphs.len(), 1);
+    let runs = &paragraphs[0].runs;
+    for width in [17.0, 1.0, 0.0] {
+        let all = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakAll);
+        let word = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakWord);
+        assert_eq!(all.len(), word.len());
+        for i in 0..all.len() {
+            assert_eq!(all[i], word[i]);
+        }
+    }
+}
+
+#[test]
+fn word_break_all_honors_word_joiners() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "xx abc\u{2060}def");
+    assert_eq!(paragraphs.len(), 1);
+    let runs = &paragraphs[0].runs;
+    let run = &runs[0];
+    for i in 3..run.glyphs.len() {
+        let lines = GlyphLine::break_lines_with_word_break(
+            runs,
+            (run.xpos[i] + run.xpos[i + 1]) / 2.0,
+            TextWordBreak::BreakAll,
+        );
+        for line in lines {
+            for &joiner in &run.joiners {
+                if (line.start_glyph_index as usize) < run.text_indices.len() {
+                    assert_ne!(run.text_indices[line.start_glyph_index as usize], joiner);
+                }
+                if (line.end_glyph_index as usize) < run.text_indices.len() {
+                    assert_ne!(run.text_indices[line.end_glyph_index as usize], joiner);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn word_break_modes_hold_the_line_invariants() {
+    let font = load_font("RobotoFlex.ttf");
+    let samples = [
+        "one two three",
+        "  hello world  ",
+        "supercalifragilisticexpialidocious",
+        "foo-bar-baz",
+        "ab\u{2060}cd ef",
+        "auto\u{ad}mobile",
+        "a",
+        " ",
+    ];
+    let widths = [-1.0, 0.0, 1.0, 5.0, 17.0, 50.0, 97.0, 191.0, 194.0, 1000.0];
+    let modes = [
+        TextWordBreak::BreakWord,
+        TextWordBreak::Normal,
+        TextWordBreak::BreakAll,
+    ];
+    for sample in samples {
+        for paragraph in shape_one_run(&font, sample) {
+            let total_glyphs: usize = paragraph.runs.iter().map(|run| run.glyphs.len()).sum();
+            for width in widths {
+                for mode in modes {
+                    let lines =
+                        GlyphLine::break_lines_with_word_break(&paragraph.runs, width, mode);
+                    assert!(lines.len() <= total_glyphs + 2);
+                    let mut previous: Option<&GlyphLine> = None;
+                    for line in &lines {
+                        assert!(line.end_run_index >= line.start_run_index);
+                        let start_run = &paragraph.runs[line.start_run_index as usize];
+                        let end_run = &paragraph.runs[line.end_run_index as usize];
+                        assert!(line.start_glyph_index as usize <= start_run.xpos.len());
+                        assert!(line.end_glyph_index as usize <= end_run.xpos.len());
+                        let from = start_run.xpos[line.start_glyph_index as usize];
+                        let to = end_run.xpos[line.end_glyph_index as usize];
+                        assert!(to >= from);
+                        if let Some(previous) = previous {
+                            assert!(line.start_run_index >= previous.end_run_index);
+                            if line.start_run_index == previous.end_run_index {
+                                assert!(line.start_glyph_index >= previous.end_glyph_index);
+                            }
+                        }
+                        if width >= 0.0
+                            && mode != TextWordBreak::Normal
+                            && line.end_glyph_index > line.start_glyph_index + 1
+                        {
+                            assert!(to - from <= width);
+                        }
+                        previous = Some(line);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn word_break_modes_agree_when_there_is_nothing_to_break() {
+    let font = load_font("RobotoFlex.ttf");
+    let paragraphs = shape_one_run(&font, "one two three");
+    assert_eq!(paragraphs.len(), 1);
+    let runs = &paragraphs[0].runs;
+    for width in [-1.0, 1000.0] {
+        let word = GlyphLine::break_lines_with_word_break(runs, width, TextWordBreak::BreakWord);
+        for mode in [TextWordBreak::Normal, TextWordBreak::BreakAll] {
+            let other = GlyphLine::break_lines_with_word_break(runs, width, mode);
+            assert_eq!(other.len(), word.len());
+            for i in 0..word.len() {
+                assert_eq!(other[i], word[i]);
+            }
+        }
+    }
 }
 
 #[test]

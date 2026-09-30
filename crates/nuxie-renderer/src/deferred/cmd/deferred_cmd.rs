@@ -218,6 +218,26 @@ fn dropped(hooks: &mut ReplayHooks<'_>, kind: u8, a: u32, b: u32) {
 
 pub fn replay_render_commands(
     factory: &mut dyn Factory,
+    renderer: Option<&mut dyn Renderer>,
+    commands: &[u8],
+    blobs: &[u8],
+    table: &mut ResourceTable,
+    hooks: &mut ReplayHooks<'_>,
+) {
+    replay_render_commands_with_optional_factory(
+        Some(factory),
+        renderer,
+        commands,
+        blobs,
+        table,
+        hooks,
+    );
+}
+
+// Upstream accepts a null Factory for walks whose filter never creates
+// resources. Keep the same command decoder and side-effect filter for both.
+pub(crate) fn replay_render_commands_with_optional_factory(
+    mut factory: Option<&mut dyn Factory>,
     mut renderer: Option<&mut dyn Renderer>,
     commands: &[u8],
     blobs: &[u8],
@@ -255,7 +275,10 @@ pub fn replay_render_commands(
                 table.paths.set(
                     c.id,
                     Some(Rc::new(RefCell::new(
-                        factory.make_render_path(raw, fill_rule(c.fill_rule as u8)),
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_render_path(raw, fill_rule(c.fill_rule as u8)),
                     ))),
                     c.generation,
                 );
@@ -268,7 +291,12 @@ pub fn replay_render_commands(
                 let c: MakeIdPod = reader.read();
                 table.paths.set(
                     c.id,
-                    Some(Rc::new(RefCell::new(factory.make_empty_render_path()))),
+                    Some(Rc::new(RefCell::new(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_empty_render_path(),
+                    ))),
                     c.generation,
                 );
                 table
@@ -280,7 +308,12 @@ pub fn replay_render_commands(
                 let c: MakeIdPod = reader.read();
                 table.paints.set(
                     c.id,
-                    Some(Rc::new(RefCell::new(factory.make_render_paint()))),
+                    Some(Rc::new(RefCell::new(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_render_paint(),
+                    ))),
                     c.generation,
                 );
                 table.paint_shadows.resize(
@@ -299,14 +332,19 @@ pub fn replay_render_commands(
                 }
                 table.shaders.set(
                     c.id,
-                    Some(Rc::from(factory.make_linear_gradient(
-                        c.sx,
-                        c.sy,
-                        c.ex,
-                        c.ey,
-                        &scalars::<u32>(colors),
-                        &scalars::<f32>(stops),
-                    ))),
+                    Some(Rc::from(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_linear_gradient(
+                                c.sx,
+                                c.sy,
+                                c.ex,
+                                c.ey,
+                                &scalars::<u32>(colors),
+                                &scalars::<f32>(stops),
+                            ),
+                    )),
                     c.generation,
                 );
             }
@@ -320,13 +358,18 @@ pub fn replay_render_commands(
                 }
                 table.shaders.set(
                     c.id,
-                    Some(Rc::from(factory.make_radial_gradient(
-                        c.cx,
-                        c.cy,
-                        c.radius,
-                        &scalars::<u32>(colors),
-                        &scalars::<f32>(stops),
-                    ))),
+                    Some(Rc::from(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_radial_gradient(
+                                c.cx,
+                                c.cy,
+                                c.radius,
+                                &scalars::<u32>(colors),
+                                &scalars::<f32>(stops),
+                            ),
+                    )),
                     c.generation,
                 );
             }
@@ -335,6 +378,8 @@ pub fn replay_render_commands(
                 table.images.set(
                     c.id,
                     factory
+                        .as_deref_mut()
+                        .expect("resource creation requires a factory")
                         .decode_image(reader.blob_at(c.blob_offset, c.byte_count))
                         .ok()
                         .map(Rc::from),
@@ -345,11 +390,16 @@ pub fn replay_render_commands(
                 let c: MakeBufferPod = reader.read();
                 table.buffers.set(
                     c.id,
-                    Some(Rc::new(RefCell::new(factory.make_render_buffer(
-                        buffer_type(c.buffer_type),
-                        buffer_flags(c.flags as u16),
-                        c.size_in_bytes as usize,
-                    )))),
+                    Some(Rc::new(RefCell::new(
+                        factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_render_buffer(
+                                buffer_type(c.buffer_type),
+                                buffer_flags(c.flags as u16),
+                                c.size_in_bytes as usize,
+                            ),
+                    ))),
                     c.generation,
                 );
                 table.buffer_shadows.resize(
@@ -386,7 +436,10 @@ pub fn replay_render_commands(
                 let c: ResourceVersionPod = reader.read();
                 match resource_kind(c.kind) {
                     Some(ResourceKind::Paint) => {
-                        let mut fresh = factory.make_render_paint();
+                        let mut fresh = factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_render_paint();
                         if let Some(shadow) = table.paint_shadows.get(c.id as usize) {
                             fresh.style(style(shadow.style));
                             fresh.color(shadow.color);
@@ -421,7 +474,10 @@ pub fn replay_render_commands(
                         );
                     }
                     Some(ResourceKind::Path) => {
-                        let mut fresh = factory.make_empty_render_path();
+                        let mut fresh = factory
+                            .as_deref_mut()
+                            .expect("resource creation requires a factory")
+                            .make_empty_render_path();
                         if let Some(outgoing) = table.paths.get(c.id) {
                             fresh.add_render_path(outgoing.borrow().as_ref(), Mat2D::IDENTITY);
                         }
@@ -436,11 +492,16 @@ pub fn replay_render_commands(
                     }
                     Some(ResourceKind::Buffer) => {
                         let fresh = table.buffer_shadows.get(c.id as usize).map(|shadow| {
-                            Rc::new(RefCell::new(factory.make_render_buffer(
-                                buffer_type(shadow.buffer_type),
-                                buffer_flags(shadow.flags),
-                                shadow.size as usize,
-                            )))
+                            Rc::new(RefCell::new(
+                                factory
+                                    .as_deref_mut()
+                                    .expect("resource creation requires a factory")
+                                    .make_render_buffer(
+                                        buffer_type(shadow.buffer_type),
+                                        buffer_flags(shadow.flags),
+                                        shadow.size as usize,
+                                    ),
+                            ))
                         });
                         table.buffers.new_version(c.id, c.version, fresh);
                     }

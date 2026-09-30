@@ -1,14 +1,19 @@
 //! renderer/cmd/deferred_replayer.hpp through 39afeca4.
 use super::{
     canvas_schedule::schedule_canvases,
+    deferred_cmd::replay_render_commands_with_optional_factory,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{take_gpu_census, GpuCensus},
+    gpu_census::{GpuCensus, take_gpu_census},
     render_handle::INVALID_RENDER_HANDLE,
     render_replay::*,
 };
 use crate::deferred::ore::{ore_make_replay::OreResident, ore_replay::replayOreStream};
 use nuxie_ore_metal::context::ReplayCaps;
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
+use nuxie_ore_metal::ore_cmd::{
+    ore_command_buffer::OreCommandReader,
+    ore_commands::{CommandType, DestroyResourcePOD},
+};
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
@@ -90,6 +95,31 @@ pub struct DeferredReplayer {
     stats: ReplayStats,
 }
 impl DeferredReplayer {
+    /// Replay pending destroys outside a frame on this replayer's thread.
+    /// Neither stream needs a factory, renderer, or frame sink.
+    pub fn replay_destroys(&mut self, commands: &[u8], ore_commands: &[u8]) {
+        let mut hooks = ReplayHooks {
+            filter: ReplayFilter::Destroys,
+            ..Default::default()
+        };
+        replay_render_commands_with_optional_factory(
+            None,
+            None,
+            commands,
+            &[],
+            &mut self.table,
+            &mut hooks,
+        );
+        let mut reader = OreCommandReader::new(ore_commands, &[]);
+        while let Some(kind) = reader.next::<u32>() {
+            if kind != CommandType::destroyResource as u32 {
+                debug_assert!(false, "pending Ore stream contains a non-destroy command");
+                break;
+            }
+            let pod: DestroyResourcePOD = reader.read();
+            self.ore.destroy(pod.handle, pod.generation);
+        }
+    }
     pub fn reset(&mut self) {
         self.table = ResourceTable::default();
         self.ore = OreResident::default();

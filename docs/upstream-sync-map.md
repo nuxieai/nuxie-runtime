@@ -7,17 +7,17 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3f612e3e2180cd74d2ecd2deec4fc86acd858a18`
+- LAST_SYNCED_SHA: `d0a12883db7bf49918be4ab5fbc21c6bcead930b`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` (refreshed 2026-09-30 after PR #872 merged).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 7 upstream commits after the checkpoint at this fetched target.
-  All 161 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (183 after `5892bb05`); this
+  There are 6 upstream commits after the checkpoint at this fetched target.
+  All 162 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (184 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
-  is green. Continue oldest-first with `d0a12883`, then refresh again at catch-up.
+  is green. Continue oldest-first with `43aa1025`, then refresh again at catch-up.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -43,6 +43,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d0a12883db7bf49918be4ab5fbc21c6bcead930b` | Share exact analytic winding measurement across authored bind vertices and deformed positions/controls; apply bind orientation at reference initialization and remove the coarse RawPath fallback. Port the complete small-curved-pose regression for both winding directions. Independent source and separate Rust-integration reviews are clean. All 21 winding/paint/trim/nested-opacity tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; corpus classifications unchanged. Full Golden/Silver and GPU/hardware suites were not rerun. C++ test-player --present parsing and BackendParams presentation modes remain upstream oracle-only: there is no shipped Rust Artemis/player CLI counterpart, and headless recording/offscreen Metal harnesses do not present a window. | — |
 | `3f612e3e2180cd74d2ecd2deec4fc86acd858a18` | **DEFERRED:** WAMR iOS/Darwin build selection, universal per-slice invoke/relocation shims and ModuleTierLadder popen/pclose compiler probe remain with parked execution. **NOT APPLICABLE TO RUST:** the universal Premake archive freshness rule belongs to upstream C++ builds; our Apple framework builds use per-target Cargo archives then separate lipo outputs, not in-place ar on a fat archive. Native Luau/shared runtime/renderers have no public semantic delta. EVI touch, rotation, simulator and Android page-alignment changes described by the message have no corresponding player source in this public delta and are not claimed imported. Active source/validation pins remain ea030d1b; no new executable validation claim. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ea030d1b10a1ff3fa153c976d59729dd25959d38` | Rename Skin's accessor to bind_transform without an alias; share the source orientation test and measure exact cubic area in local bind space with determinant orientation. Preserve source arithmetic order, unordered min/max behavior and pose fallback. Port the lens/CubicWeight/size fixture and both new curved-path regressions, retaining both winding directions and existing assertions. Independent source and separate Rust-integration reviews are clean. All 20 winding/paint/trim/nested-opacity tests pass; wasm32 WebGPU/WebGL2/scripting compilation passes; manifest tests pass 26. Structural correspondence remains 1,054 mirrored/ten adapted; corpus classifications unchanged. Full Golden/Silver and GPU/hardware suites were not rerun. Private Dart/editor changes mentioned in the message are absent from the public delta and are not claimed imported. | — |
 | `167932b72bc6e08791057dfa04d3c18aa51c7f32` | Carry actual listener type and host timestamp through the scripted drawable/native Luau pointer dispatch; force Exit for an occluded target while preserving zero previous-position, pointer narrowing, hit result and wake behavior. Port the complete upstream script/four-event regression through the live owner route, retaining the exact pointer-only method mask. Independent source and separate Rust-integration reviews are clean. Scripting library: 324 pass/one existing ignored; 17 listener/wake integration tests pass including the new case; wasm32 WebGPU/WebGL2/scripting compilation passes. Manifest tests pass 26; structural correspondence remains 1,054 mirrored/ten adapted; no corpus classification changes. Full Golden/Silver and hardware/pixel suites were not rerun. Wasm VM signature acceptance (upstream still discards the new fields at its guest ABI) remains deferred with execution. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

@@ -1,4 +1,4 @@
-//! Complete skinned_winding_test.cpp at upstream ea030d1b.
+//! Complete skinned_winding_test.cpp at upstream d0a12883.
 use nuxie_render_api::{FillRule, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     advance_flags::AdvanceFlags,
@@ -386,6 +386,22 @@ fn small_curved_path_follows_mirroring_from_its_handles() {
                 .with_downcast_mut::<PointsPath, _>(PointsPath::winding)
                 .unwrap(),
             -authored
+        );
+    }
+}
+
+#[test]
+fn small_curved_path_measures_its_pose_from_its_handles() {
+    for clockwise in [true, false] {
+        let rig = QuadRig::with_options(clockwise, 8.0, true, 4.0);
+        scale(&rig.top, 1.0, -1.0);
+        advance(&rig.artboard);
+        assert_eq!(winding(&rig.skin), 0);
+        assert_eq!(
+            rig.path
+                .with_downcast_mut::<PointsPath, _>(PointsPath::winding)
+                .unwrap(),
+            if clockwise { -1 } else { 1 }
         );
     }
 }

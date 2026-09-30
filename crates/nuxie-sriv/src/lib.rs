@@ -56,6 +56,9 @@ pub enum OpKind {
     FrameSize = 29,
     ModulateOpacity = 30,
     PaintModulatedImage = 31,
+    MakeRenderCanvas = 32,
+    CanvasContentBegin = 33,
+    CanvasContentEnd = 34,
 }
 
 impl OpKind {
@@ -91,6 +94,9 @@ impl OpKind {
             29 => Self::FrameSize,
             30 => Self::ModulateOpacity,
             31 => Self::PaintModulatedImage,
+            32 => Self::MakeRenderCanvas,
+            33 => Self::CanvasContentBegin,
+            34 => Self::CanvasContentEnd,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -134,6 +140,9 @@ impl Display for OpKind {
             Self::FrameSize => "frameSize",
             Self::ModulateOpacity => "modulateOpacity",
             Self::PaintModulatedImage => "paintModulatedImage",
+            Self::MakeRenderCanvas => "makeRenderCanvas",
+            Self::CanvasContentBegin => "canvasContentBegin",
+            Self::CanvasContentEnd => "canvasContentEnd",
         })
     }
 }
@@ -565,6 +574,18 @@ fn parse_fields(
             for name in ["xx", "xy", "yx", "yy", "tx", "ty"] {
                 push_float(reader, fields, name)?;
             }
+        }
+        OpKind::MakeRenderCanvas => {
+            for name in ["id", "width", "height"] {
+                push_uint(reader, fields, name)?;
+            }
+        }
+        OpKind::CanvasContentBegin => {
+            push_uint(reader, fields, "id")?;
+            push_uint(reader, fields, "clear_color")?;
+        }
+        OpKind::CanvasContentEnd => {
+            push_uint(reader, fields, "id")?;
         }
     }
     Ok(())

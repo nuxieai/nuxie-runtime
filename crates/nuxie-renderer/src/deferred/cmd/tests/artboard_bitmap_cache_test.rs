@@ -13,10 +13,8 @@
 //! reads the same facts off the recorded frame: its content canvases (one per
 //! offscreen bracket) and its canvas segments (the bracket's stream bytes).
 //!
-//! Not ported: "a silver factory drives the cache only once enabled", which
-//! exercises SerializingFactory::enableBitmapCache. The serializing utility
-//! half of a4dbc3ff depends on the unported paintModulatedImage op and is out
-//! of scope for this out-of-order port; see docs/cache-as-bitmap-port.md.
+//! All 24 upstream cases are represented, including the opt-in serializing
+//! factory path that became available at the ordered a4dbc3ff checkpoint.
 use super::super::{
     command_stream::CommandReader,
     deferred_replayer::*,
@@ -1029,6 +1027,45 @@ fn the_cache_engages_through_the_real_nested_artboard_path() {
     assert_eq!(count, before);
 }
 
+#[test]
+fn a_silver_factory_drives_the_cache_only_once_enabled() {
+    // Both hooks are opt-in: a bare silver factory only exercises vectors,
+    // regardless of the BitmapCache authored on the artboard.
+    for enabled in [false, true] {
+        let (render_context, _, _) = observing_factory(1, 1);
+        let mut silver = PersistentFactory::new(SerializingFactory::new());
+        if enabled {
+            silver
+                .borrow_mut()
+                .enable_bitmap_cache(Some(render_context.persistent_context().unwrap()));
+        }
+        assert_eq!(silver.borrow_mut().render_context().is_some(), enabled);
+        assert_eq!(silver.borrow_mut().deferred_canvas_host().is_some(), enabled);
+
+        let file = nuxie_runtime::File::import(
+            &fixture(),
+            nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut silver).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("fixture imports");
+        let artboard = cached_artboard_of(&file).expect("cached artboard");
+        assert!(artboard.with_artboard(|a| a.bitmap_cache().is_some()));
+        let mut renderer = silver.borrow().make_renderer();
+        let (width, height) = artboard.with_artboard(|a| (a.width(), a.height()));
+        silver.borrow_mut().frame_size(width as u32, height as u32);
+        artboard.advance_default(0.0);
+        let before = silver.borrow().bytes().len();
+        artboard.draw_internal(&mut renderer);
+        if enabled {
+            assert!(silver.borrow().bytes().len() > before);
+        } else {
+            assert!(!silver.borrow().bytes().is_empty());
+        }
+    }
+}
+
 fn assert_raster_covers_bounds(h: &mut Harness, label: &str) {
     h.frame(0.0);
     assert_eq!(h.raster_count(), 1, "{label}");
@@ -1127,6 +1164,7 @@ fn what_in_the_offscreen_raster_scales_with_resolution() {
         samples.push(work);
     }
 
+    assert_eq!(samples.len(), 4);
     for sample in &samples {
         assert!(sample.path_count > 0);
         assert!(sample.target_pixels > 0);

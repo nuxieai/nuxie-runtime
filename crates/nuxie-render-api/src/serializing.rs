@@ -4,8 +4,12 @@ use super::{
     RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
     encoded_image_dimensions,
 };
+use crate::{
+    DeferredCanvasHost, DeferredCanvasHostHandle, PersistentFactoryContext, RenderCanvasHandle,
+};
 use std::any::Any;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::serialize_ops::*;
@@ -47,18 +51,91 @@ impl Writer {
 
 pub struct SerializingFactory {
     writer: Rc<RefCell<Writer>>,
-    next_image_id: u64,
+    canvases: Rc<RefCell<SerializingCanvases>>,
     next_paint_id: u64,
     next_path_id: u64,
     next_buffer_id: u64,
     next_shader_id: u64,
 }
 
+#[derive(Default)]
+struct SerializingCanvases {
+    next_image_id: u64,
+    bitmap_cache_context: Option<PersistentFactoryContext>,
+    image_ids: HashMap<usize, u64>,
+    // Retain all registered canvases so recycled allocations never inherit IDs.
+    retained: Vec<RenderCanvasHandle>,
+}
+
+#[derive(Clone)]
+struct SerializingCanvasHost {
+    writer: Rc<RefCell<Writer>>,
+    canvases: Rc<RefCell<SerializingCanvases>>,
+}
+
+impl SerializingCanvasHost {
+    fn canvas_id(&self, canvas: &RenderCanvasHandle) -> u64 {
+        let (image, width, height) = {
+            let canvas = canvas.borrow();
+            (canvas.render_image(), canvas.width(), canvas.height())
+        };
+        let identity = image.image_identity();
+        let mut canvases = self.canvases.borrow_mut();
+        if let Some(id) = canvases.image_ids.get(&identity) {
+            return *id;
+        }
+        let id = canvases.next_image_id;
+        canvases.next_image_id += 1;
+        canvases.image_ids.insert(identity, id);
+        canvases.retained.push(canvas.clone());
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(MAKE_RENDER_CANVAS);
+        writer.varuint(id);
+        writer.varuint(u64::from(width));
+        writer.varuint(u64::from(height));
+        id
+    }
+}
+
+impl DeferredCanvasHost for SerializingCanvasHost {
+    fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
+        let mut context = self.canvases.borrow().bitmap_cache_context.clone()?;
+        let canvas = context.make_deferred_render_canvas(width, height).ok()?;
+        Some(Rc::new(RefCell::new(canvas)))
+    }
+    fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>> {
+        Some(canvas.borrow().render_image())
+    }
+    fn begin_canvas_content(
+        &mut self,
+        canvas: RenderCanvasHandle,
+        clear_color: ColorInt,
+    ) -> Option<Box<dyn Renderer>> {
+        let id = self.canvas_id(&canvas);
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(CANVAS_CONTENT_BEGIN);
+        writer.varuint(id);
+        writer.varuint(u64::from(clear_color));
+        // Each owned proxy targets the same stateless recorder. Ending a nested
+        // bracket cannot invalidate the outer proxy or release its writer.
+        Some(Box::new(SerializingRenderer {
+            writer: self.writer.clone(),
+            canvases: self.canvases.clone(),
+        }))
+    }
+    fn end_canvas_content(&mut self, canvas: &RenderCanvasHandle) {
+        // Match source ordering, including malformed use of an undeclared end.
+        self.writer.borrow_mut().varuint(CANVAS_CONTENT_END);
+        let id = self.canvas_id(canvas);
+        self.writer.borrow_mut().varuint(id);
+    }
+}
+
 impl SerializingFactory {
     pub fn new() -> Self {
         Self {
             writer: Rc::new(RefCell::new(Writer::new())),
-            next_image_id: 0,
+            canvases: Rc::new(RefCell::new(SerializingCanvases::default())),
             next_paint_id: 0,
             next_path_id: 0,
             next_buffer_id: 0,
@@ -69,7 +146,45 @@ impl SerializingFactory {
     pub fn make_renderer(&self) -> SerializingRenderer {
         SerializingRenderer {
             writer: Rc::clone(&self.writer),
+            canvases: self.canvases.clone(),
         }
+    }
+
+    pub fn enable_bitmap_cache(&mut self, render_context: Option<PersistentFactoryContext>) {
+        self.canvases.borrow_mut().bitmap_cache_context = render_context;
+    }
+
+    fn canvas_host(&self) -> SerializingCanvasHost {
+        SerializingCanvasHost {
+            writer: self.writer.clone(),
+            canvases: self.canvases.clone(),
+        }
+    }
+
+    pub fn begin_canvas_content(
+        &mut self,
+        canvas: Option<RenderCanvasHandle>,
+        clear_color: ColorInt,
+    ) -> Option<Box<dyn Renderer>> {
+        self.canvas_host()
+            .begin_canvas_content(canvas?, clear_color)
+    }
+
+    pub fn end_canvas_content(&mut self, canvas: Option<&RenderCanvasHandle>) {
+        if let Some(canvas) = canvas {
+            self.canvas_host().end_canvas_content(canvas);
+        }
+    }
+
+    pub fn content_canvas_image(
+        &self,
+        canvas: Option<&RenderCanvasHandle>,
+    ) -> Option<Rc<dyn RenderImage>> {
+        Some(canvas?.borrow().render_image())
+    }
+
+    pub fn image_id(&self, image: &dyn RenderImage) -> u64 {
+        image_id(&self.canvases.borrow(), image)
     }
 
     pub fn frame_size(&mut self, width: u32, height: u32) {
@@ -95,7 +210,36 @@ impl Default for SerializingFactory {
     }
 }
 
+impl DeferredCanvasHost for SerializingFactory {
+    fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
+        self.canvas_host().make_content_canvas(width, height)
+    }
+    fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>> {
+        SerializingFactory::content_canvas_image(self, Some(canvas))
+    }
+    fn begin_canvas_content(
+        &mut self,
+        canvas: RenderCanvasHandle,
+        clear_color: ColorInt,
+    ) -> Option<Box<dyn Renderer>> {
+        SerializingFactory::begin_canvas_content(self, Some(canvas), clear_color)
+    }
+    fn end_canvas_content(&mut self, canvas: &RenderCanvasHandle) {
+        SerializingFactory::end_canvas_content(self, Some(canvas))
+    }
+}
+
 impl Factory for SerializingFactory {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        self.canvases.borrow().bitmap_cache_context.clone()
+    }
+    fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.canvases.borrow().bitmap_cache_context.as_ref()?;
+        Some(Rc::new(RefCell::new(self.canvas_host())))
+    }
+    fn canvas_content_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.deferred_canvas_host()
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -216,8 +360,12 @@ impl Factory for SerializingFactory {
     }
 
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        let id = self.next_image_id;
-        self.next_image_id += 1;
+        let id = {
+            let mut canvases = self.canvases.borrow_mut();
+            let id = canvases.next_image_id;
+            canvases.next_image_id += 1;
+            id
+        };
         {
             let mut writer = self.writer.borrow_mut();
             writer.varuint(DECODE_IMAGE);
@@ -592,6 +740,7 @@ impl RenderBuffer for SerializingRenderBuffer {
 
 pub struct SerializingRenderer {
     writer: Rc<RefCell<Writer>>,
+    canvases: Rc<RefCell<SerializingCanvases>>,
 }
 
 impl Renderer for SerializingRenderer {
@@ -637,10 +786,13 @@ impl Renderer for SerializingRenderer {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
-        let image = serializing_image(image);
+        let id = image_id(
+            &self.canvases.borrow(),
+            image.expect("non-null serialized image"),
+        );
         let mut writer = self.writer.borrow_mut();
         writer.varuint(DRAW_IMAGE);
-        writer.varuint(image.id);
+        writer.varuint(id);
         writer.varuint(blend_mode as u64);
         writer.float(opacity);
     }
@@ -657,10 +809,13 @@ impl Renderer for SerializingRenderer {
         blend_mode: BlendMode,
         opacity: f32,
     ) {
-        let image = serializing_image(image);
+        let id = image_id(
+            &self.canvases.borrow(),
+            image.expect("non-null serialized image"),
+        );
         let mut writer = self.writer.borrow_mut();
         writer.varuint(DRAW_IMAGE_MESH);
-        writer.varuint(image.id);
+        writer.varuint(id);
         writer.varuint(blend_mode as u64);
         writer.float(opacity);
         for buffer in [vertices, uv_coords, indices] {
@@ -681,10 +836,20 @@ fn serializing_path(path: &dyn RenderPath) -> &SerializingRenderPath {
         .expect("SerializingFactory requires SerializingRenderPath")
 }
 
-fn serializing_image(image: Option<&dyn RenderImage>) -> &SerializingRenderImage {
-    image
-        .and_then(|image| image.as_any().downcast_ref::<SerializingRenderImage>())
-        .expect("SerializingFactory requires a non-null SerializingRenderImage")
+fn image_id(canvases: &SerializingCanvases, image: &dyn RenderImage) -> u64 {
+    canvases
+        .image_ids
+        .get(&image.image_identity())
+        .copied()
+        .unwrap_or_else(|| {
+            image
+                .as_any()
+                .downcast_ref::<SerializingRenderImage>()
+                .expect(
+                    "SerializingFactory requires its decoded image or a registered canvas image",
+                )
+                .id
+        })
 }
 
 fn serializing_buffer(buffer: Option<&dyn RenderBuffer>) -> &SerializingRenderBuffer {

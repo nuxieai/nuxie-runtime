@@ -1,4 +1,5 @@
-//! tests/gm/render_canvas_dag.cpp through 7732f41e; GmHost exposes its replay context.
+//! tests/gm/render_canvas_dag.cpp through a4dbc3ff; the shared GmHost is this
+//! port's TestingWindowFrameSink. Canvas draws apply no backend-specific flip.
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},

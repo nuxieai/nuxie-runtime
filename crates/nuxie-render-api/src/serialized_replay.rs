@@ -2,11 +2,38 @@
 use crate::serialize_ops::*;
 use crate::*;
 use std::collections::HashMap;
+use std::rc::Rc;
+
+/// Owned renderer proxies preserve the upstream callback's renderer identity
+/// without extending a borrowed host renderer's lifetime.
+pub type CanvasContentBeginHook<'a> = dyn FnMut(u64, u32, u32, u32, &mut Option<Rc<dyn RenderImage>>) -> Option<Box<dyn Renderer + 'a>>
+    + 'a;
 
 #[derive(Default)]
 pub struct SerializedReplayHooks<'a> {
     pub on_frame: Option<Box<dyn FnMut() + 'a>>,
     pub on_frame_size: Option<Box<dyn FnMut(u32, u32) + 'a>>,
+    pub on_canvas_content_begin: Option<Box<CanvasContentBeginHook<'a>>>,
+    pub on_canvas_content_end: Option<Box<dyn FnMut(u64) + 'a>>,
+}
+
+enum ReplayTarget<'a> {
+    Screen,
+    Content(Box<dyn Renderer + 'a>),
+    Dropped,
+}
+impl ReplayTarget<'_> {
+    fn renderer<'r>(
+        &'r mut self,
+        screen: &'r mut dyn Renderer,
+        dropped: &'r mut dyn Renderer,
+    ) -> &'r mut dyn Renderer {
+        match self {
+            Self::Screen => screen,
+            Self::Content(renderer) => renderer.as_mut(),
+            Self::Dropped => dropped,
+        }
+    }
 }
 
 /// Replay through the Factory/Renderer seam. Failure retains all effects that
@@ -31,8 +58,12 @@ pub fn replay_serialized_commands(
     let mut paths: HashMap<u64, Box<dyn RenderPath>> = HashMap::new();
     let mut paints: HashMap<u64, Box<dyn RenderPaint>> = HashMap::new();
     let mut shaders: HashMap<u64, Box<dyn RenderShader>> = HashMap::new();
-    let mut images: HashMap<u64, Option<Box<dyn RenderImage>>> = HashMap::new();
+    let mut images: HashMap<u64, Option<Rc<dyn RenderImage>>> = HashMap::new();
     let mut buffers: HashMap<u64, Box<dyn RenderBuffer>> = HashMap::new();
+    let mut canvas_sizes = HashMap::new();
+    let mut dropped_content = NullFactory::new().make_renderer();
+    let mut active = ReplayTarget::Screen;
+    let mut interrupted = Vec::new();
     while !reader.is_eof() && !reader.did_overflow() {
         let op = reader.read_var_uint() as u32 as u64;
         if reader.did_overflow() {
@@ -171,7 +202,7 @@ pub fn replay_serialized_commands(
                 // BinaryDataReader's length-prefixed bytes preserve C++'s
                 // empty span and sticky overflow when the payload truncates.
                 let data = reader.read_string();
-                images.insert(id, factory.decode_image(&data).ok());
+                images.insert(id, factory.decode_image(&data).ok().map(Rc::from));
             }
             MAKE_RENDER_BUFFER => {
                 let id = reader.read_var_uint();
@@ -208,24 +239,32 @@ pub fn replay_serialized_commands(
                 }
                 buffer.unmap();
             }
-            SAVE => renderer.save(),
-            RESTORE => renderer.restore(),
-            TRANSFORM => renderer.transform(Mat2D(std::array::from_fn(|_| reader.read_float32()))),
-            MODULATE_OPACITY => renderer.modulate_opacity(reader.read_float32()),
+            SAVE => active.renderer(renderer, &mut dropped_content).save(),
+            RESTORE => active.renderer(renderer, &mut dropped_content).restore(),
+            TRANSFORM => active
+                .renderer(renderer, &mut dropped_content)
+                .transform(Mat2D(std::array::from_fn(|_| reader.read_float32()))),
+            MODULATE_OPACITY => active
+                .renderer(renderer, &mut dropped_content)
+                .modulate_opacity(reader.read_float32()),
             DRAW_PATH => {
                 let path = reader.read_var_uint();
                 let paint = reader.read_var_uint();
                 let (Some(path), Some(paint)) = (paths.get(&path), paints.get(&paint)) else {
                     return false;
                 };
-                renderer.draw_path(path.as_ref(), paint.as_ref());
+                active
+                    .renderer(renderer, &mut dropped_content)
+                    .draw_path(path.as_ref(), paint.as_ref());
             }
             CLIP_PATH => {
                 let id = reader.read_var_uint();
                 let Some(path) = paths.get(&id) else {
                     return false;
                 };
-                renderer.clip_path(path.as_ref());
+                active
+                    .renderer(renderer, &mut dropped_content)
+                    .clip_path(path.as_ref());
             }
             DRAW_IMAGE | DRAW_IMAGE_MESH => {
                 let id = reader.read_var_uint();
@@ -235,7 +274,14 @@ pub fn replay_serialized_commands(
                 let opacity = reader.read_float32();
                 let image = images.get(&id).and_then(|image| image.as_deref());
                 if op == DRAW_IMAGE {
-                    renderer.draw_image(image, ImageSampler::LINEAR_CLAMP, mode, opacity);
+                    if let Some(image) = image {
+                        active.renderer(renderer, &mut dropped_content).draw_image(
+                            Some(image),
+                            ImageSampler::LINEAR_CLAMP,
+                            mode,
+                            opacity,
+                        );
+                    }
                 } else {
                     let pos = reader.read_var_uint();
                     let uv = reader.read_var_uint();
@@ -245,18 +291,59 @@ pub fn replay_serialized_commands(
                     let idx = buffers.get(&idx).map(|value| value.as_ref());
                     let vertices = pos.map_or(0, |value| (value.size_in_bytes() / 8) as u32);
                     let indices = idx.map_or(0, |value| (value.size_in_bytes() / 2) as u32);
-                    renderer.draw_image_mesh(
-                        image,
-                        ImageSampler::LINEAR_CLAMP,
-                        pos,
-                        uv,
-                        idx,
-                        vertices,
-                        indices,
-                        mode,
-                        opacity,
-                    );
+                    if let Some(image) = image {
+                        active
+                            .renderer(renderer, &mut dropped_content)
+                            .draw_image_mesh(
+                                Some(image),
+                                ImageSampler::LINEAR_CLAMP,
+                                pos,
+                                uv,
+                                idx,
+                                vertices,
+                                indices,
+                                mode,
+                                opacity,
+                            );
+                    }
                 }
+            }
+            MAKE_RENDER_CANVAS => {
+                let id = reader.read_var_uint();
+                let width = reader.read_var_uint() as u32;
+                let height = reader.read_var_uint() as u32;
+                canvas_sizes.insert(id, (width, height));
+            }
+            CANVAS_CONTENT_BEGIN => {
+                let id = reader.read_var_uint();
+                let clear_color = reader.read_var_uint() as u32;
+                let Some(&(width, height)) = canvas_sizes.get(&id) else {
+                    return false;
+                };
+                interrupted.push((id, std::mem::replace(&mut active, ReplayTarget::Dropped)));
+                let mut image = None;
+                let content = hooks
+                    .on_canvas_content_begin
+                    .as_mut()
+                    .and_then(|begin| begin(id, width, height, clear_color, &mut image));
+                if let Some(content) = content {
+                    images.insert(id, image);
+                    active = ReplayTarget::Content(content);
+                } else {
+                    // A declined frame must erase any image from a prior frame,
+                    // including an output image supplied by the declining host.
+                    images.remove(&id);
+                }
+            }
+            CANVAS_CONTENT_END => {
+                let id = reader.read_var_uint();
+                if interrupted.last().map(|(open, _)| *open) != Some(id) {
+                    return false;
+                }
+                if let Some(end) = &mut hooks.on_canvas_content_end {
+                    end(id);
+                }
+                active = interrupted.pop().expect("checked canvas bracket").1;
             }
             FRAME => {
                 if let Some(callback) = &mut hooks.on_frame {
@@ -276,7 +363,7 @@ pub fn replay_serialized_commands(
             return false;
         }
     }
-    true
+    interrupted.is_empty()
 }
 
 fn blend(value: u64) -> Option<BlendMode> {

@@ -1561,11 +1561,23 @@ fn assert_cpp_passthrough_getter_declaration(
 fn cpp_zero_declarations(header: &Path) -> BTreeSet<String> {
     let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
+    cpp_zero_declarations_from_source(&source)
+}
+
+fn cpp_zero_declarations_from_source(source: &str) -> BTreeSet<String> {
     let mut declarations = BTreeSet::new();
     let mut current = Vec::<String>::new();
 
     for line in source.lines().map(str::trim) {
         if line.is_empty() || line.starts_with('#') || line.starts_with("//") {
+            continue;
+        }
+
+        // A multiline function signature followed by a body is not a pure
+        // virtual declaration. In particular, BitmapCache's first body line
+        // ends in `!= 0;`, which otherwise looks like a trailing `= 0;`.
+        if line.contains('{') {
+            current.clear();
             continue;
         }
 
@@ -1591,6 +1603,23 @@ fn cpp_zero_declarations(header: &Path) -> BTreeSet<String> {
     }
 
     declarations
+}
+
+#[test]
+fn cpp_zero_declarations_do_not_consume_bitmask_setter_bodies() {
+    let declarations = cpp_zero_declarations_from_source(
+        "void cacheEnabled(bool value)\n\
+         {\n\
+             const bool prev = (m_CacheFlags & cacheEnabledBitmask) != 0;\n\
+         }\n\
+         virtual void actualHook(\n\
+             bool value) = 0;\n\
+         void overriddenHook(bool value) override = 0;",
+    );
+    assert!(cpp_zero_declaration(&declarations, "cacheEnabled").is_none());
+    assert!(cpp_zero_declaration(&declarations, "actualHook").is_some());
+    assert!(cpp_zero_declaration(&declarations, "overriddenHook").is_some());
+    assert_eq!(declarations.len(), 2);
 }
 
 fn cpp_zero_declaration(declarations: &BTreeSet<String>, method_name: &str) -> Option<String> {

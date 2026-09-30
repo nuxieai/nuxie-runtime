@@ -57,7 +57,7 @@ pub use nuxie_render_api::{
     ImageWrap, PersistentFactory, PersistentFactoryContext, RecordingFactory, RenderBuffer,
     RenderBufferFlags, RenderBufferType, RenderCanvas, RenderCanvasError, RenderCanvasFrame,
     RenderGpuCanvasShader, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader,
-    Renderer, StrokeCap, StrokeJoin,
+    Renderer, StrokeCap, StrokeJoin, StrokePosition,
 };
 #[cfg(all(
     feature = "renderer-metal",

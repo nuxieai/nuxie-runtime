@@ -19,5 +19,6 @@ pub mod stroke;
 pub mod stroke_cap;
 pub mod stroke_effect;
 pub mod stroke_join;
+pub mod stroke_position;
 pub mod target_effect;
 pub mod trim_path;

@@ -1,6 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
+ * Upstream source revision: ee60b7014f1a28fa6bb5f2588cb274c273080f32
  * The literal source is retained below in declaration/order form.
  */
 
@@ -20,6 +20,11 @@
 //
 // namespace rive
 // {
+// static rcp<RiveRenderPath> invertClockwisePath(const RiveRenderPath* path,
+//                                                FillRule pathFillRule,
+//                                                const Mat2D& viewMatrix,
+//                                                IAABB bounds);
+//
 // bool RiveRenderer::IsAABB(const RawPath& path, AABB* result)
 // {
 //     RIVE_PROF_SCOPE_L(3)
@@ -66,9 +71,16 @@
 //                                        FillRule fillRule_,
 //                                        IAABB pixelBounds_,
 //                                        std::optional<StrokeParams> stroke_,
-//                                        float feather_)
+//                                        float feather_,
+//                                        bool forceClosed_)
 // {
-//     reset(matrix_, path_, fillRule_, pixelBounds_, stroke_, feather_);
+//     reset(matrix_,
+//           path_,
+//           fillRule_,
+//           pixelBounds_,
+//           stroke_,
+//           feather_,
+//           forceClosed_);
 // }
 //
 // RiveRenderer::ClipElement::~ClipElement() {}
@@ -78,7 +90,8 @@
 //                                       FillRule fillRule_,
 //                                       IAABB pixelBounds_,
 //                                       std::optional<StrokeParams> stroke_,
-//                                       float feather_)
+//                                       float feather_,
+//                                       bool forceClosed_)
 // {
 //     matrix = matrix_;
 //     rawPathMutationID = path_->getRawPathMutationID();
@@ -89,14 +102,32 @@
 //     pixelBounds = pixelBounds_;
 //     stroke = stroke_;
 //     feather = feather_;
+//     forceClosed = forceClosed_;
 // }
 //
-// bool RiveRenderer::ClipElement::isEquivalent(const Mat2D& matrix_,
-//                                              const RiveRenderPath* path_) const
+// bool RiveRenderer::ClipElement::isEquivalent(
+//     const Mat2D& matrix_,
+//     const RiveRenderPath* path_,
+//     std::optional<StrokeParams> stroke_,
+//     float feather_,
+//     bool forceClosed_) const
 // {
+//     if (stroke.has_value())
+//     {
+//         if (!stroke_.has_value() || *stroke != *stroke_)
+//         {
+//             return false;
+//         }
+//     }
+//     else if (stroke_.has_value())
+//     {
+//         return false;
+//     }
+//
 //     return matrix_ == matrix &&
 //            path_->getRawPathMutationID() == rawPathMutationID &&
-//            path_->getFillRule() == fillRule;
+//            path_->getFillRule() == fillRule && feather == feather_ &&
+//            forceClosed == forceClosed_;
 // }
 //
 // RiveRenderer::RiveRenderer(gpu::RenderContext* context) : m_context(context) {}
@@ -166,6 +197,88 @@
 //         return;
 //     }
 //
+//     if (paint->getIsStroked() &&
+//         paint->getStrokePosition() != StrokePosition::center)
+//     {
+//         save();
+//
+//         auto stroke = paint->getStrokeParams();
+//         stroke.thickness *= 2.0f;
+//         stroke.position = StrokePosition::center;
+//
+//         if (paint->getFeather() == 0.0f)
+//         {
+//             // Without a feather, we can clip by the stroke, with double its
+//             // current thickness, then draw path into it.
+//
+//             IAABB pixelBounds;
+//             clipPathImpl(path,
+//                          stroke,
+//                          paint->getFeather(),
+//                          ForceClosed::yes,
+//                          &pixelBounds);
+//
+//             // Make a version of the paint that is the same as the current one,
+//             // except as a fill instead of stroke.
+//             auto fillPaint = paint->clone();
+//             fillPaint->style(RenderPaintStyle::fill);
+//
+//             if (paint->getStrokePosition() == StrokePosition::inside)
+//             {
+//                 drawPath(renderPath, fillPaint.get());
+//             }
+//             else
+//             {
+//                 assert(paint->getStrokePosition() == StrokePosition::outside);
+//
+//                 // For outside strokes we need to fill the *inverse* of the
+//                 // path.
+//                 auto fillPath =
+//                     invertClockwisePath(path,
+//                                         path->getFillRule(),
+//                                         m_renderStateStack.back().matrix,
+//                                         pixelBounds);
+//                 drawPath(fillPath.get(), fillPaint.get());
+//             }
+//         }
+//         else
+//         {
+//             // For a feathered stroke we need to invert this: clip by the path
+//             // (inverted for outer), then draw the (feathered) stroke
+//
+//             // TODO: A possible optimization here when we have stencil is to
+//             // start with drawing the stroke, expanded by the feather amount (as
+//             // thickness) into stencil. For large paths this would eliminate a
+//             // lot of fill rate through the middle.
+//             if (paint->getStrokePosition() == StrokePosition::inside)
+//             {
+//                 clipPathImpl(path);
+//             }
+//             else
+//             {
+//                 auto strokeBounds =
+//                     path->calculatePixelBounds(m_renderStateStack.back().matrix,
+//                                                stroke,
+//                                                paint->getFeather());
+//                 auto clip =
+//                     invertClockwisePath(path,
+//                                         path->getFillRule(),
+//                                         m_renderStateStack.back().matrix,
+//                                         strokeBounds);
+//                 clipPathImpl(clip.get());
+//             }
+//
+//             // Make a paint that has a centered stroke that's twice as thick,
+//             // and force it to draw the stroke as closed.
+//             auto thickenedCenteredStrokePaint = paint->clone();
+//             thickenedCenteredStrokePaint->stroke(stroke);
+//             thickenedCenteredStrokePaint->forceClosed(true);
+//             drawPath(path, thickenedCenteredStrokePaint.get());
+//         }
+//         restore();
+//         return;
+//     }
+//
 //     Mat2D imageMatrix;
 //     Mat2D* imageMatrixPtr = nullptr;
 //     if (paint->getImageTexture() != nullptr)
@@ -188,6 +301,11 @@
 //                 std::optional<StrokeParams> stroke;
 //                 if (paint->getIsStroked())
 //                 {
+//                     // We should only be here with centered strokes, since
+//                     // inner/outer strokes are handled above (with an early
+//                     // return)
+//                     assert(paint->getStrokePosition() ==
+//                            StrokePosition::center);
 //                     stroke = {
 //                         .thickness = paint->getThickness(),
 //                         .join = paint->getJoin(),
@@ -326,15 +444,19 @@
 // {
 //     RIVE_PROF_SCOPE_L(2)
 //     LITE_RTTI_CAST_OR_RETURN(path, RiveRenderPath*, renderPath);
+//
 //     if (m_renderStateStack.back().overallClipPixelBounds.empty())
 //     {
 //         return;
 //     }
+//
 //     if (path->getRawPath().empty())
 //     {
 //         m_renderStateStack.back().overallClipPixelBounds = {};
 //         return;
 //     }
+//
+//     // For centered strokes we can just clip against the path.
 //     clipPathImpl(path, params);
 // }
 //
@@ -433,15 +555,61 @@
 //
 // void RiveRenderer::clipPathImpl(const RiveRenderPath* path,
 //                                 std::optional<StrokeParams> stroke,
-//                                 float feather)
+//                                 float feather,
+//                                 ForceClosed forceClosed,
+//                                 IAABB* boundsOut)
 // {
 //     RIVE_PROF_SCOPE_L(3)
 //     auto& renderState = m_renderStateStack.back();
 //     if (path->getBounds().isEmptyOrNaN())
 //     {
+//         if (boundsOut != nullptr)
+//         {
+//             *boundsOut = IAABB{};
+//         }
+//
 //         renderState.overallClipPixelBounds = {};
 //         return;
 //     }
+//
+//     if (stroke.has_value() && stroke->position != StrokePosition::center)
+//     {
+//         // To handle an inner or outer stroke it's actually two clips: we need
+//         // to clip by the stroke then *additionally* the path by itself (which
+//         // needs to be inverted for outside strokes)
+//         auto clipStroke = *stroke;
+//         clipStroke.thickness *= 2.0f;
+//         clipStroke.position = StrokePosition::center;
+//         IAABB outerBounds;
+//         clipPathImpl(path, clipStroke, 0.0f, ForceClosed::yes, &outerBounds);
+//
+//         if (boundsOut != nullptr)
+//         {
+//             *boundsOut = outerBounds;
+//         }
+//
+//         if (stroke->position == StrokePosition::inside)
+//         {
+//             clipPathImpl(path);
+//         }
+//         else
+//         {
+//             // TODO: There's an optimization that could be done here in some
+//             // render modes where instead of inverting the path we could instead
+//             // render them "subtractively" (in depthStencil this would be
+//             // rendering with a "clear the upper bit" flag)
+//             assert(stroke->position == StrokePosition::outside);
+//             auto inverted =
+//                 invertClockwisePath(path,
+//                                     path->getFillRule(),
+//                                     m_renderStateStack.back().matrix,
+//                                     outerBounds);
+//             clipPath(inverted.get());
+//         }
+//
+//         return;
+//     }
+//
 //     // Only write a new clip element if this path isn't already on the stack
 //     // from before. e.g.:
 //     //
@@ -454,7 +622,11 @@
 //     const size_t clipStackHeight = renderState.clipStackHeight;
 //     assert(m_clipStack.size() >= clipStackHeight);
 //     if (m_clipStack.size() == clipStackHeight ||
-//         !m_clipStack[clipStackHeight].isEquivalent(renderState.matrix, path))
+//         !m_clipStack[clipStackHeight].isEquivalent(renderState.matrix,
+//                                                    path,
+//                                                    stroke,
+//                                                    feather,
+//                                                    bool(forceClosed)))
 //     {
 //         // Calculate the pixel bounds for this clip path before we push it into
 //         // the stack to ensure that we even need to do so
@@ -462,6 +634,11 @@
 //             path->calculatePixelBounds(renderState.matrix, stroke, feather);
 //         renderState.overallClipPixelBounds =
 //             renderState.overallClipPixelBounds.intersect(pixelBounds);
+//
+//         if (boundsOut != nullptr)
+//         {
+//             *boundsOut = pixelBounds;
+//         }
 //         if (renderState.overallClipPixelBounds.empty())
 //         {
 //             // Nothing can draw under this, so no need to add to the stack.
@@ -474,15 +651,22 @@
 //                                  path->getFillRule(),
 //                                  pixelBounds,
 //                                  stroke,
-//                                  feather);
+//                                  feather,
+//                                  bool(forceClosed));
 //     }
 //     else
 //     {
+//         if (boundsOut != nullptr)
+//         {
+//             *boundsOut = m_clipStack[clipStackHeight].pixelBounds;
+//         }
+//
 //         // We are going to reuse the element that is already in the clip stack,
 //         // but need to re-update the overall clip pixel bounds.
 //         renderState.overallClipPixelBounds =
 //             renderState.overallClipPixelBounds.intersect(
 //                 m_clipStack[clipStackHeight].pixelBounds);
+//
 //         if (renderState.overallClipPixelBounds.empty())
 //         {
 //             // Nothing can draw under this, so no need to increment the stack
@@ -859,11 +1043,10 @@
 //         clipUpdatePaint.feather(clip.feather);
 //         if (clip.stroke.has_value())
 //         {
-//             clipUpdatePaint.style(RenderPaintStyle::stroke);
-//             clipUpdatePaint.thickness(clip.stroke->thickness);
-//             clipUpdatePaint.join(clip.stroke->join);
-//             clipUpdatePaint.cap(clip.stroke->cap);
+//             clipUpdatePaint.stroke(*clip.stroke);
 //         }
+//
+//         clipUpdatePaint.forceClosed(clip.forceClosed);
 //
 //         rcp clipPath = clip.path;
 //         FillRule clipFillRule = clip.fillRule;
@@ -992,7 +1175,7 @@ use super::rive_render_paint_hpp::RiveRenderPaint;
 use super::rive_render_path_hpp::RiveRenderPath;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, ref_rcp};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
-    RenderBuffer, RenderImage, RenderPaint, RenderPath, RendererContract,
+    RenderBuffer, RenderImage, RenderPaint, RenderPaintContract, RenderPath, RendererContract,
 };
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
 use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp::RiveRenderPaintContract;
@@ -1008,7 +1191,8 @@ use crate::mechanical_port::source::renderer::src::draw_cpp::{
     make_clip_reset, make_image_mesh_draw, make_image_rect_draw, make_path_draw_from_source,
 };
 use nuxie_render_api::{
-    Aabb, BlendMode, FillRule, Mat2D, RawPath, RenderPaintStyle, RenderPath as ApiRenderPath, Vec2D,
+    Aabb, BlendMode, FillRule, Mat2D, RawPath, RenderPaintStyle, RenderPath as ApiRenderPath,
+    StrokePosition, Vec2D,
 };
 
 mod gpu {
@@ -1424,7 +1608,7 @@ impl RiveRenderer {
         }
         if !state.clipRectInverseMatrix.is_null() {
             if !transform_rect_to_new_space(&mut rect, state.matrix, state.clipRectMatrix) {
-                unsafe { self.clipPathImplSource(original_path, None, 0.0) };
+                unsafe { self.clipPathImplSource(original_path, None, 0.0, false, None) };
                 return;
             }
         }
@@ -1463,20 +1647,59 @@ impl RiveRenderer {
         path: &RiveRenderPath,
         stroke: Option<StrokeParams>,
         feather: f32,
+        force_closed: bool,
+        bounds_out: Option<&mut gpu::IAABB>,
     ) {
         if path.getBounds().is_empty_or_nan() {
+            if let Some(bounds) = bounds_out {
+                *bounds = gpu::IAABB::default();
+            }
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
+            return;
+        }
+        if let Some(stroke) = stroke.filter(|stroke| stroke.position != StrokePosition::Center) {
+            let mut clip_stroke = stroke;
+            clip_stroke.thickness *= 2.0;
+            clip_stroke.position = StrokePosition::Center;
+            let mut outer_bounds = gpu::IAABB::default();
+            unsafe {
+                self.clipPathImplSource(path, Some(clip_stroke), 0.0, true, Some(&mut outer_bounds))
+            };
+            if let Some(bounds) = bounds_out {
+                *bounds = outer_bounds;
+            }
+            if stroke.position == StrokePosition::Inside {
+                unsafe { self.clipPathImplSource(path, None, 0.0, false, None) };
+            } else {
+                assert_eq!(stroke.position, StrokePosition::Outside);
+                let inverted = invert_clockwise_path(
+                    path,
+                    path.getFillRule(),
+                    self.current_state().matrix,
+                    outer_bounds,
+                );
+                unsafe { self.clipPath(inverted.get().cast::<RenderPath>()) };
+            }
             return;
         }
         let state = self.current_state().clone();
         let height = state.clipStackHeight;
         debug_assert!(self.m_clipStack.len() >= height);
         if self.m_clipStack.len() == height
-            || !self.m_clipStack[height].isEquivalent(state.matrix, path)
+            || !self.m_clipStack[height].isEquivalent(
+                state.matrix,
+                path,
+                stroke,
+                feather,
+                force_closed,
+            )
         {
             let pixel = path.calculatePixelBounds(state.matrix, stroke.as_ref(), feather);
             let combined = state.overallClipPixelBounds.intersect(pixel);
             self.current_state_mut().overallClipPixelBounds = combined;
+            if let Some(bounds) = bounds_out {
+                *bounds = pixel;
+            }
             if combined.empty() {
                 return;
             }
@@ -1489,9 +1712,13 @@ impl RiveRenderer {
                     pixel,
                     stroke,
                     feather,
+                    force_closed,
                 )
             });
         } else {
+            if let Some(bounds) = bounds_out {
+                *bounds = self.m_clipStack[height].pixelBounds;
+            }
             let combined = state
                 .overallClipPixelBounds
                 .intersect(self.m_clipStack[height].pixelBounds);
@@ -1592,11 +1819,9 @@ impl RiveRenderer {
             paint.clipUpdate(current);
             paint.feather(clip.feather);
             if let Some(stroke) = clip.stroke {
-                paint.style(RenderPaintStyle::Stroke);
-                paint.thickness(stroke.thickness);
-                paint.join(stroke.join);
-                paint.cap(stroke.cap);
+                paint.stroke(&stroke);
             }
+            paint.forceClosed(clip.forceClosed);
             let Some(mut clip_path) = clip.path.clone() else {
                 return ApplyClipResult::failure;
             };
@@ -1714,6 +1939,68 @@ impl RendererContract for RiveRenderer {
         {
             return;
         }
+        if q.getIsStroked() && q.getStrokePosition() != StrokePosition::Center {
+            self.save();
+            let mut stroke = q.getStrokeParams();
+            stroke.thickness *= 2.0;
+            stroke.position = StrokePosition::Center;
+            if q.getFeather() == 0.0 {
+                let mut pixel_bounds = gpu::IAABB::default();
+                unsafe {
+                    self.clipPathImplSource(
+                        p,
+                        Some(stroke),
+                        q.getFeather(),
+                        true,
+                        Some(&mut pixel_bounds),
+                    )
+                };
+                let fill_paint = q.clone();
+                unsafe { (&mut *fill_paint.get()).style(RenderPaintStyle::Fill) };
+                if q.getStrokePosition() == StrokePosition::Inside {
+                    unsafe { self.drawPath(path, fill_paint.get().cast::<RenderPaint>()) };
+                } else {
+                    assert_eq!(q.getStrokePosition(), StrokePosition::Outside);
+                    let fill_path = invert_clockwise_path(
+                        p,
+                        p.getFillRule(),
+                        self.current_state().matrix,
+                        pixel_bounds,
+                    );
+                    unsafe {
+                        self.drawPath(
+                            fill_path.get().cast::<RenderPath>(),
+                            fill_paint.get().cast::<RenderPaint>(),
+                        )
+                    };
+                }
+            } else {
+                if q.getStrokePosition() == StrokePosition::Inside {
+                    unsafe { self.clipPathImplSource(p, None, 0.0, false, None) };
+                } else {
+                    let stroke_bounds = p.calculatePixelBounds(
+                        self.current_state().matrix,
+                        Some(&stroke),
+                        q.getFeather(),
+                    );
+                    let clip = invert_clockwise_path(
+                        p,
+                        p.getFillRule(),
+                        self.current_state().matrix,
+                        stroke_bounds,
+                    );
+                    unsafe { self.clipPathImplSource(&*clip.get(), None, 0.0, false, None) };
+                }
+                let thickened_paint = q.clone();
+                unsafe {
+                    (&mut *thickened_paint.get()).stroke(&stroke);
+                    (&mut *thickened_paint.get()).forceClosed(true);
+                    self.drawPath(path, thickened_paint.get().cast::<RenderPaint>());
+                }
+            }
+            self.restore();
+            return;
+        }
         if !q.getImageTexture().is_null()
             && !unsafe { (&*self.m_context).frameSupportsImagePaintForPathsExecutable() }
         {
@@ -1724,10 +2011,14 @@ impl RendererContract for RiveRenderer {
                 || q.getFeather() != 0.0
             {
                 bounds = p.getBounds();
-                let stroke = q.getIsStroked().then(|| StrokeParams {
-                    thickness: q.getThickness(),
-                    join: q.getJoin(),
-                    cap: q.getCap(),
+                let stroke = q.getIsStroked().then(|| {
+                    assert_eq!(q.getStrokePosition(), StrokePosition::Center);
+                    StrokeParams {
+                        thickness: q.getThickness(),
+                        join: q.getJoin(),
+                        cap: q.getCap(),
+                        position: StrokePosition::Center,
+                    }
                 });
                 let outset = RiveRenderPath::calculateBoundsOutset(stroke.as_ref(), q.getFeather());
                 bounds = Aabb::new(
@@ -1736,7 +2027,7 @@ impl RendererContract for RiveRenderer {
                     bounds.max_x + outset,
                     bounds.max_y + outset,
                 );
-                unsafe { self.clipPathImplSource(p, stroke, q.getFeather()) };
+                unsafe { self.clipPathImplSource(p, stroke, q.getFeather(), false, None) };
             }
             let gradient_matrix = self.current_state().matrix;
             let adjust = Mat2D([
@@ -1843,7 +2134,7 @@ impl RendererContract for RiveRenderer {
         {
             unsafe { self.clipRectImplSource(candidate, p) }
         } else {
-            unsafe { self.clipPathImplSource(p, None, 0.0) }
+            unsafe { self.clipPathImplSource(p, None, 0.0, false, None) }
         }
     }
     unsafe fn clipStroke(&mut self, path: *mut RenderPath, params: &StrokeParams) {
@@ -1860,7 +2151,7 @@ impl RendererContract for RiveRenderer {
             self.current_state_mut().overallClipPixelBounds = gpu::IAABB::default();
             return;
         }
-        unsafe { self.clipPathImplSource(path, Some(*params), 0.0) };
+        unsafe { self.clipPathImplSource(path, Some(*params), 0.0, false, None) };
     }
     unsafe fn drawImage(
         &mut self,

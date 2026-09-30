@@ -23,6 +23,7 @@ mod render_canvas_dag;
 mod render_deferred_2d;
 mod runtime_deferred_import;
 mod serialized_replay_2d;
+mod strokes;
 #[cfg(feature = "with-rive-tools")]
 mod uber_gm_helper;
 #[cfg(feature = "with-rive-tools")]

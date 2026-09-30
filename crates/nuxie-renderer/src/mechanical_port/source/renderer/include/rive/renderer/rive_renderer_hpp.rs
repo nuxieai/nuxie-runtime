@@ -1,6 +1,6 @@
 /*
  * Mechanical translation of the complete pinned source file.
- * Upstream source revision: 0d8bb5a342f84a53119a6817c46ad1739cb7b696
+ * Upstream source revision: ee60b7014f1a28fa6bb5f2588cb274c273080f32
  * The literal source is retained below in declaration/order form.
  */
 
@@ -40,7 +40,6 @@
 //     void transform(const Mat2D& matrix) override;
 //     void drawPath(RenderPath*, RenderPaint*) override;
 //     void clipPath(RenderPath*) override;
-//     void clipStroke(RenderPath*, const StrokeParams&) override;
 //     void drawImage(const RenderImage*,
 //                    ImageSampler,
 //                    BlendMode,
@@ -50,6 +49,7 @@
 //                    BlendMode,
 //                    float opacity,
 //                    float additiveness) override;
+//     void clipStroke(RenderPath*, const StrokeParams&) override;
 //     void drawImageMesh(const RenderImage*,
 //                        ImageSampler,
 //                        rcp<RenderBuffer> vertices_f32,
@@ -70,6 +70,18 @@
 //                        float opacity,
 //                        float additiveness) override;
 //     void modulateOpacity(float opacity) override;
+//
+//     bool currentTransform(Mat2D* out) const override
+//     {
+//         *out = m_renderStateStack.back().matrix;
+//         return true;
+//     }
+//
+//     bool currentModulatedOpacity(float* out) const override
+//     {
+//         *out = m_renderStateStack.back().modulatedOpacity;
+//         return true;
+//     }
 //
 //     // Determines if a path is an axis-aligned rectangle that can be represented
 //     // by rive::AABB.
@@ -95,10 +107,18 @@
 // #endif
 //
 // private:
+//     enum class ForceClosed : bool
+//     {
+//         no,
+//         yes,
+//     };
+//
 //     void clipRectImpl(AABB, const RiveRenderPath* originalPath);
 //     void clipPathImpl(const RiveRenderPath*,
 //                       std::optional<StrokeParams> = {},
-//                       float feather = 0.0f);
+//                       float feather = 0.0f,
+//                       ForceClosed forceClosed = ForceClosed::no,
+//                       IAABB* boundsOut = nullptr);
 //
 //     // Clips and pushes the given draw to m_context. If the clipped draw is too
 //     // complex to be supported by the GPU buffers, even after a logical flush,
@@ -141,7 +161,8 @@
 //                     FillRule,
 //                     IAABB pixelBounds,
 //                     std::optional<StrokeParams>,
-//                     float feather);
+//                     float feather,
+//                     bool forceClosed);
 //         ~ClipElement();
 //
 //         void reset(const Mat2D&,
@@ -149,8 +170,13 @@
 //                    FillRule,
 //                    IAABB pixelBounds,
 //                    std::optional<StrokeParams>,
-//                    float feather);
-//         bool isEquivalent(const Mat2D&, const RiveRenderPath*) const;
+//                    float feather,
+//                    bool forceClosed);
+//         bool isEquivalent(const Mat2D&,
+//                           const RiveRenderPath*,
+//                           std::optional<StrokeParams>,
+//                           float feather,
+//                           bool forceClosed) const;
 //
 //         Mat2D matrix;
 //         uint64_t rawPathMutationID;
@@ -163,6 +189,7 @@
 //
 //         std::optional<StrokeParams> stroke;
 //         float feather;
+//         bool forceClosed;
 //     };
 //     std::vector<ClipElement> m_clipStack;
 //
@@ -185,8 +212,8 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp a
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DrawUniquePtr;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
-use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath};
 pub use nuxie_render_api::StrokeParams;
+use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath};
 use std::mem::ManuallyDrop;
 
 #[repr(C)]
@@ -226,6 +253,7 @@ pub struct ClipElement {
     pub clipID: u32,
     pub stroke: Option<StrokeParams>,
     pub feather: f32,
+    pub forceClosed: bool,
 }
 impl ClipElement {
     pub unsafe fn new(
@@ -235,6 +263,7 @@ impl ClipElement {
         pixel_bounds: gpu::IAABB,
         stroke: Option<StrokeParams>,
         feather: f32,
+        force_closed: bool,
     ) -> Self {
         let mut value = Self {
             matrix,
@@ -252,8 +281,19 @@ impl ClipElement {
             clipID: 0,
             stroke,
             feather,
+            forceClosed: force_closed,
         };
-        unsafe { value.reset(matrix, path, fill_rule, pixel_bounds, stroke, feather) };
+        unsafe {
+            value.reset(
+                matrix,
+                path,
+                fill_rule,
+                pixel_bounds,
+                stroke,
+                feather,
+                force_closed,
+            )
+        };
         value
     }
     pub unsafe fn reset(
@@ -264,6 +304,7 @@ impl ClipElement {
         pixel_bounds: gpu::IAABB,
         stroke: Option<StrokeParams>,
         feather: f32,
+        force_closed: bool,
     ) {
         self.matrix = matrix;
         self.rawPathMutationID = path.getRawPathMutationID();
@@ -280,11 +321,22 @@ impl ClipElement {
         self.clipID = 0;
         self.stroke = stroke;
         self.feather = feather;
+        self.forceClosed = force_closed;
     }
-    pub fn isEquivalent(&self, matrix: Mat2D, path: &RiveRenderPath) -> bool {
-        self.matrix == matrix
+    pub fn isEquivalent(
+        &self,
+        matrix: Mat2D,
+        path: &RiveRenderPath,
+        stroke: Option<StrokeParams>,
+        feather: f32,
+        force_closed: bool,
+    ) -> bool {
+        self.stroke == stroke
+            && self.matrix == matrix
             && self.rawPathMutationID == path.getRawPathMutationID()
             && self.fillRule == path.getFillRule()
+            && self.feather == feather
+            && self.forceClosed == force_closed
     }
 }
 

@@ -22,6 +22,7 @@ pub enum RenderCmd {
     PaintThickness,
     PaintJoin,
     PaintCap,
+    PaintStrokePosition,
     PaintFeather,
     PaintBlendMode,
     PaintShader,
@@ -42,7 +43,7 @@ pub enum RenderCmd {
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 35] = [
+        const COMMANDS: [RenderCmd; 36] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -61,6 +62,7 @@ impl RenderCmd {
             RenderCmd::PaintThickness,
             RenderCmd::PaintJoin,
             RenderCmd::PaintCap,
+            RenderCmd::PaintStrokePosition,
             RenderCmd::PaintFeather,
             RenderCmd::PaintBlendMode,
             RenderCmd::PaintShader,
@@ -213,7 +215,8 @@ wire_pod!(ClipStrokePod {
     version: u32,
     thickness: f32,
     join: u8,
-    cap: u8
+    cap: u8,
+    position: u8
 });
 wire_pod!(DecodeImagePod {
     id: u32,
@@ -285,6 +288,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::PaintStyle
         | RenderCmd::PaintJoin
         | RenderCmd::PaintCap
+        | RenderCmd::PaintStrokePosition
         | RenderCmd::PaintBlendMode => PaintU8Pod::SIZE,
         RenderCmd::PaintColor => PaintColorPod::SIZE,
         RenderCmd::PaintThickness | RenderCmd::PaintFeather => PaintFloatPod::SIZE,

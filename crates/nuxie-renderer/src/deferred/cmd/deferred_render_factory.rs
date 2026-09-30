@@ -505,6 +505,7 @@ impl Renderer for DeferredRenderer {
                 thickness: params.thickness,
                 join: params.join as u8,
                 cap: params.cap as u8,
+                position: params.position as u8,
             },
         );
     }

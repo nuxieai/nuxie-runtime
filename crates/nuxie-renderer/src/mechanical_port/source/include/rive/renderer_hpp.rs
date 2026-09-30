@@ -29,6 +29,7 @@
 // #include "rive/shapes/paint/image_sampler.hpp"
 // #include "rive/shapes/paint/stroke_cap.hpp"
 // #include "rive/shapes/paint/stroke_join.hpp"
+// #include "rive/shapes/paint/stroke_position.hpp"
 // #include "utils/lite_rtti.hpp"
 // #include "rive/math/raw_path.hpp"
 // #include <stdio.h>
@@ -52,6 +53,17 @@
 //     float thickness = 1.0f;
 //     StrokeJoin join = StrokeJoin::miter;
 //     StrokeCap cap = StrokeCap::butt;
+//     StrokePosition position = StrokePosition::center;
+//
+//     bool operator==(const StrokeParams& other) const
+//     {
+//         return memcmp(this, &other, sizeof(StrokeParams)) == 0;
+//     }
+//
+//     bool operator!=(const StrokeParams& other) const
+//     {
+//         return !(*this == other);
+//     }
 // };
 //
 // enum class RenderBufferType
@@ -142,6 +154,8 @@
 //     virtual void thickness(float value) = 0;
 //     virtual void join(StrokeJoin value) = 0;
 //     virtual void cap(StrokeCap value) = 0;
+//     // TODO: implement on other backends besides Rive Renderer
+//     virtual void strokePosition(StrokePosition value) {}
 //     virtual void feather(float value) {} // Not supported on all renderers.
 //     virtual void blendMode(BlendMode value) = 0;
 //     virtual void shader(rcp<RenderShader>) = 0;
@@ -152,6 +166,7 @@
 //         thickness(params.thickness);
 //         join(params.join);
 //         cap(params.cap);
+//         strokePosition(params.position);
 //     }
 // };
 //
@@ -296,7 +311,7 @@ use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalRel
 use nuxie_render_api::{
     Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D,
 };
-pub use nuxie_render_api::StrokeParams;
+pub use nuxie_render_api::{StrokeParams, StrokePosition};
 
 pub type Alignment = Vec2D;
 
@@ -623,18 +638,22 @@ impl RenderPaint {
 // virtual void thickness(float value) = 0;
 // virtual void join(StrokeJoin value) = 0;
 // virtual void cap(StrokeCap value) = 0;
+// TODO: implement on other backends besides Rive Renderer
+// virtual void strokePosition(StrokePosition value) {}
 // virtual void feather(float value) {}      // Not supported on all renderers.
 // virtual void additiveness(float value) {} // Only used for srcOver
 // virtual void blendMode(BlendMode value) = 0;
 // virtual void shader(rcp<RenderShader>) = 0;
 // virtual void invalidateStroke() = 0;
 // virtual void modulatedImage(const RenderImage*, ImageSampler, const Mat2D&) {}
+// TODO: Implement on other backends besides Rive Renderer.
 pub trait RenderPaintContract {
     fn style(&mut self, style: RenderPaintStyle);
     fn color(&mut self, value: ColorInt);
     fn thickness(&mut self, value: f32);
     fn join(&mut self, value: StrokeJoin);
     fn cap(&mut self, value: StrokeCap);
+    fn strokePosition(&mut self, _value: StrokePosition) {}
     fn feather(&mut self, value: f32) {}
     fn additiveness(&mut self, _value: f32) {}
     fn blendMode(&mut self, value: BlendMode);
@@ -646,6 +665,7 @@ pub trait RenderPaintContract {
         self.thickness(params.thickness);
         self.join(params.join);
         self.cap(params.cap);
+        self.strokePosition(params.position);
     }
     fn modulatedImage(
         &mut self,

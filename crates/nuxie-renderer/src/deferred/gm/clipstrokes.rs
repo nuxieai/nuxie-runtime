@@ -1,8 +1,8 @@
-//! tests/gm/clipstrokes.cpp at 51c02b50. Geometry uses gmutils.cpp's circle constant.
+//! tests/gm/clipstrokes.cpp at ee60b701. Geometry follows gmutils.cpp.
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_render_factory::DeferredFactory,
-    render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
+    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
 };
 
 const DIM: u32 = 1200;
@@ -13,7 +13,7 @@ const COLORS: [[u32; 3]; 3] = [
     [0xffcc6666, 0xff3366bb, 0xff22ccbb],
 ];
 
-fn rect(l: f32, t: f32, r: f32, b: f32) -> RawPath {
+pub(super) fn rect(l: f32, t: f32, r: f32, b: f32) -> RawPath {
     let mut p = RawPath::new();
     p.move_to(l, t);
     p.line_to(r, t);
@@ -22,7 +22,7 @@ fn rect(l: f32, t: f32, r: f32, b: f32) -> RawPath {
     p.close();
     p
 }
-fn circle(x: f32, y: f32, radius: f32) -> RawPath {
+pub(super) fn circle(x: f32, y: f32, radius: f32) -> RawPath {
     let points = [
         (1., 0.),
         (1., C),
@@ -61,7 +61,9 @@ fn rounded_cell(x: usize, y: usize) -> RawPath {
     let t = (400 * y + 25) as f32;
     let r = (400 * (x + 1) - 25) as f32;
     let b = (400 * (y + 1) - 25) as f32;
-    let rad = 50.;
+    rounded_rect(l, t, r, b, 50.)
+}
+pub(super) fn rounded_rect(l: f32, t: f32, r: f32, b: f32, rad: f32) -> RawPath {
     let mut p = RawPath::new();
     p.move_to(l + rad, t);
     p.line_to(r - rad, t);
@@ -75,11 +77,11 @@ fn rounded_cell(x: usize, y: usize) -> RawPath {
     p.close();
     p
 }
-fn background(f: &mut dyn Factory, r: &mut dyn Renderer) {
+pub(super) fn background(f: &mut dyn Factory, r: &mut dyn Renderer, dim: u32) {
     {
         let mut paint = f.make_render_paint();
         paint.color(0xff000000);
-        let path = f.make_render_path(rect(0., 0., DIM as f32, DIM as f32), FillRule::NonZero);
+        let path = f.make_render_path(rect(0., 0., dim as f32, dim as f32), FillRule::NonZero);
         r.draw_path(path.as_ref(), paint.as_ref());
     }
     let mut paint = f.make_render_paint();
@@ -87,9 +89,9 @@ fn background(f: &mut dyn Factory, r: &mut dyn Renderer) {
     paint.feather(10.);
     let mut y_step = 40.;
     let mut y = 20.;
-    while y < DIM as f32 {
+    while y < dim as f32 {
         let path = f.make_render_path(
-            rect(-100., y, DIM as f32 + 100., y + y_step * 0.3),
+            rect(-100., y, dim as f32 + 100., y + y_step * 0.3),
             FillRule::Clockwise,
         );
         r.draw_path(path.as_ref(), paint.as_ref());
@@ -119,7 +121,7 @@ fn draw_scene(f: &mut dyn Factory, r: &mut dyn Renderer, scene: Scene) {
     } else {
         None
     };
-    background(f, r);
+    background(f, r, DIM);
     if matches!(scene, Scene::Basic | Scene::Open) {
         for y in 0..3 {
             for x in 0..3 {
@@ -137,6 +139,7 @@ fn draw_scene(f: &mut dyn Factory, r: &mut dyn Renderer, scene: Scene) {
                             thickness: 50.,
                             join: [StrokeJoin::Miter, StrokeJoin::Round, StrokeJoin::Bevel][x],
                             cap: [StrokeCap::Butt, StrokeCap::Round, StrokeCap::Square][y],
+                            ..StrokeParams::default()
                         },
                     );
                 } else {
@@ -272,4 +275,55 @@ fn clip_stroke_nested_c() {
 #[test]
 fn clip_stroke_open() {
     check(Scene::Open);
+}
+
+#[test]
+fn clip_stroke_position() {
+    super::strokes::check_position_scene("clip_stroke_position", |f, r| {
+        background(f, r, 768);
+        let path = f.make_render_path(circle(128., 128., 100.), FillRule::Clockwise);
+        let mut polygon = RawPath::new();
+        polygon.move_to(-30., 226.);
+        polygon.line_to(226., -30.);
+        polygon.line_to(286., 30.);
+        polygon.line_to(30., 286.);
+        polygon.close();
+        let other_clip = f.make_render_path(polygon, FillRule::Clockwise);
+        let fill_a = f.make_render_path(rounded_rect(30., 30., 226., 226., 50.), FillRule::NonZero);
+        let fill_b = f.make_render_path(rounded_rect(40., 40., 216., 216., 50.), FillRule::NonZero);
+        for nest in 0..3 {
+            r.save();
+            r.translate(0., nest as f32 * 256.);
+            for position in [
+                StrokePosition::Inside,
+                StrokePosition::Center,
+                StrokePosition::Outside,
+            ] {
+                r.save();
+                if nest == 1 {
+                    r.clip_path(other_clip.as_ref());
+                }
+                r.clip_stroke(
+                    path.as_ref(),
+                    &StrokeParams {
+                        thickness: 20.,
+                        position,
+                        ..StrokeParams::default()
+                    },
+                );
+                if nest == 2 {
+                    r.clip_path(other_clip.as_ref());
+                }
+                let mut paint = f.make_render_paint();
+                paint.color(0xffaa3355);
+                paint.style(RenderPaintStyle::Fill);
+                r.draw_path(fill_a.as_ref(), paint.as_ref());
+                paint.color(0xff00bbcc);
+                r.draw_path(fill_b.as_ref(), paint.as_ref());
+                r.restore();
+                r.translate(256., 0.);
+            }
+            r.restore();
+        }
+    });
 }

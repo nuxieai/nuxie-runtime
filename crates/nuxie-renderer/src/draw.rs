@@ -269,6 +269,25 @@ pub(crate) fn build_stroke_tessellation_with_layout(
     )
 }
 
+pub(crate) fn build_stroke_tessellation_with_layout_forced_closed(
+    path: &RawPath,
+    transform: Mat2D,
+    thickness: f32,
+    join: StrokeJoin,
+    cap: StrokeCap,
+    force_closed: bool,
+) -> Option<StrokeTessellation> {
+    build_stroke_or_feather_tessellation_using_scratch(
+        path,
+        transform,
+        Some((thickness, join, cap)),
+        0.0,
+        false,
+        force_closed,
+        &mut StrokePreparationScratch::default(),
+    )
+}
+
 pub(crate) fn build_stroke_tessellation_with_layout_using_scratch(
     path: &RawPath,
     transform: Mat2D,
@@ -282,6 +301,7 @@ pub(crate) fn build_stroke_tessellation_with_layout_using_scratch(
         transform,
         Some((thickness, join, cap)),
         0.0,
+        false,
         false,
         scratch,
     )
@@ -335,6 +355,7 @@ pub(crate) fn build_feather_tessellation_with_direction(
         stroke,
         fill_direction,
         true,
+        false,
     )
 }
 
@@ -367,6 +388,7 @@ pub(crate) fn build_prepared_feather_tessellation_with_direction(
     paint_feather: f32,
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     fill_direction: FeatherFillDirection,
+    force_closed: bool,
 ) -> Option<StrokeTessellation> {
     build_feather_tessellation_with_direction_impl(
         path,
@@ -375,6 +397,7 @@ pub(crate) fn build_prepared_feather_tessellation_with_direction(
         stroke,
         fill_direction,
         false,
+        force_closed,
     )
 }
 
@@ -385,6 +408,7 @@ fn build_feather_tessellation_with_direction_impl(
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     fill_direction: FeatherFillDirection,
     soften_feather_fill: bool,
+    force_closed: bool,
 ) -> Option<StrokeTessellation> {
     #[cfg(test)]
     FEATHER_TESSELLATION_BUILD_COUNT.with(|count| count.set(count.get() + 1));
@@ -398,6 +422,7 @@ fn build_feather_tessellation_with_direction_impl(
         stroke,
         paint_feather,
         soften_feather_fill,
+        force_closed,
     )?;
     if stroke.is_none() {
         match fill_direction {
@@ -568,6 +593,7 @@ fn build_stroke_or_feather_tessellation(
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     paint_feather: f32,
     soften_feather_fill: bool,
+    force_closed: bool,
 ) -> Option<StrokeTessellation> {
     let mut scratch = StrokePreparationScratch::default();
     build_stroke_or_feather_tessellation_using_scratch(
@@ -576,6 +602,7 @@ fn build_stroke_or_feather_tessellation(
         stroke,
         paint_feather,
         soften_feather_fill,
+        force_closed,
         &mut scratch,
     )
 }
@@ -586,6 +613,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     stroke: Option<(f32, StrokeJoin, StrokeCap)>,
     paint_feather: f32,
     soften_feather_fill: bool,
+    force_closed: bool,
     scratch: &mut StrokePreparationScratch,
 ) -> Option<StrokeTessellation> {
     let matrix_scale = max_matrix_scale(transform);
@@ -617,7 +645,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     let contour_capacity_grew = contours.capacity() != contour_capacity_before;
     let contours = &mut contours[..contour_count];
     let is_stroke = stroke.is_some();
-    if !is_stroke {
+    if !is_stroke || force_closed {
         for contour in &mut *contours {
             contour.closed = true;
         }
@@ -4163,6 +4191,7 @@ mod tests {
             feather,
             None,
             FeatherFillDirection::Forward,
+            false,
         )
         .unwrap();
 
@@ -4178,6 +4207,7 @@ mod tests {
             feather,
             None,
             FeatherFillDirection::Forward,
+            false,
         )
         .unwrap();
         assert_ne!(

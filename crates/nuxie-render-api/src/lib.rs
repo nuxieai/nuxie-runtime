@@ -1381,12 +1381,33 @@ pub enum StrokeCap {
 }
 
 /// Common parameters describing a path's stroke.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub struct StrokeParams {
     pub thickness: f32,
     pub join: StrokeJoin,
     pub cap: StrokeCap,
+    pub position: StrokePosition,
 }
+
+/// Style used for stroke positioning.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum StrokePosition {
+    Inside = 0,
+    #[default]
+    Center = 1,
+    Outside = 2,
+}
+
+impl PartialEq for StrokeParams {
+    fn eq(&self, other: &Self) -> bool {
+        self.thickness.to_bits() == other.thickness.to_bits()
+            && self.join == other.join
+            && self.cap == other.cap
+            && self.position == other.position
+    }
+}
+impl Eq for StrokeParams {}
 
 impl Default for StrokeParams {
     fn default() -> Self {
@@ -1394,6 +1415,7 @@ impl Default for StrokeParams {
             thickness: 1.0,
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
+            position: StrokePosition::Center,
         }
     }
 }
@@ -2513,6 +2535,8 @@ pub trait RenderPaint: Any {
     fn thickness(&mut self, value: f32);
     fn join(&mut self, value: StrokeJoin);
     fn cap(&mut self, value: StrokeCap);
+    /// Unsupported backends retain the upstream default no-op.
+    fn stroke_position(&mut self, _value: StrokePosition) {}
     fn feather(&mut self, value: f32);
     /// Only used with srcOver. Unsupported paints retain the source no-op.
     fn additiveness(&mut self, _value: f32) {}
@@ -2524,6 +2548,7 @@ pub trait RenderPaint: Any {
         self.thickness(params.thickness);
         self.join(params.join);
         self.cap(params.cap);
+        self.stroke_position(params.position);
     }
     fn modulated_image(
         &mut self,

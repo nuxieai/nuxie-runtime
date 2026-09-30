@@ -31,16 +31,13 @@ pub fn resolve_path_pixel_bounds(
     matrix: Mat2D,
     precomputed_pixel_bounds: Option<IAABB>,
     paint_feather: f32,
-    stroke: Option<(f32, StrokeJoin, StrokeCap)>,
+    stroke: Option<nuxie_render_api::StrokeParams>,
 ) -> Option<IAABB> {
     #[cfg(not(debug_assertions))]
     if let Some(pixel_bounds) = precomputed_pixel_bounds {
         return Some(pixel_bounds);
     }
 
-    let stroke = stroke.map(|(thickness, join, cap)| {
-        crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::StrokeParams { thickness, join, cap }
-    });
     let pixel_bounds = path.calculatePixelBounds(matrix, stroke.as_ref(), paint_feather);
     #[cfg(debug_assertions)]
     if let Some(precomputed) = precomputed_pixel_bounds {
@@ -1604,9 +1601,7 @@ pub unsafe fn make_path_draw_from_source(
         paint_matrix,
         precomputed_pixel_bounds,
         paint.getFeather(),
-        paint
-            .getIsStroked()
-            .then_some((paint.getThickness(), paint.getJoin(), paint.getCap())),
+        paint.getIsStroked().then_some(paint.getStrokeParams()),
     )?;
     if context.isOutsideCurrentFrameExecutable(&pixel_bounds) {
         debug_assert!(precomputed_pixel_bounds.is_none());
@@ -1675,16 +1670,20 @@ pub unsafe fn make_path_draw_from_source(
                     paint.getCap(),
                 )),
                 direction,
+                paint.getForceClosed(),
             )?,
         )
     } else if paint.getIsStroked() {
-        PreparedPathGeometry::Stroke(crate::draw::build_stroke_tessellation_with_layout(
-            path,
-            paint_matrix,
-            paint.getThickness(),
-            paint.getJoin(),
-            paint.getCap(),
-        )?)
+        PreparedPathGeometry::Stroke(
+            crate::draw::build_stroke_tessellation_with_layout_forced_closed(
+                path,
+                paint_matrix,
+                paint.getThickness(),
+                paint.getJoin(),
+                paint.getCap(),
+                paint.getForceClosed(),
+            )?,
+        )
     } else {
         let mut fill = build_source_fill_tessellation(path, paint_matrix)?;
         apply_fill_directions(&mut fill, directions);

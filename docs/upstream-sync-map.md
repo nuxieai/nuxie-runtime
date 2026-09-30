@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1988fdd490cc7a0b88992bd7bc9b27f7c567ba62`
+- LAST_SYNCED_SHA: `1a360ac87346e89cff18335a140bc8c686a54896`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 20 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 20 require a Rust translation.
+  There are 19 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 19 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1a360ac87346e89cff18335a140bc8c686a54896` | **INAPPLICABLE TEST-PLAYER HOST:** the public delta adds gamepad event payloads and dispatch/encoding to upstream's interactive TestingWindow/Player. The Rust GM/window adapters are render-only and have no matching input loop. Keep the existing runtime wire receiver and Silver encoder unchanged; this is not a claim of new device polling or product gamepad integration. The private Artemis polling implementation named in the message is absent from the public delta. | — |
 | `1988fdd490cc7a0b88992bd7bc9b27f7c567ba62` | Always initialize the atomic image-rectangle gradient varying to zero when no gradient is present. Translate the exact shared shader branch and regenerate its supported backend artifacts; retain existing shader/compiler boundaries and a Naga-free runtime. The public delta contains no Unity host implementation change. | — |
 | `36c52f14b18c20c44c45b96b6ea13218f874bf3c` | Route GM-host canvas flushes through the host-owned Metal command buffer, preserving lazy creation before a screen frame, asynchronous per-flush commit and successor ownership across frame begins. Keep generic canvas completion and ORE frame behavior unchanged. Terminal readback retains the existing Rust shared-texture completion/getBytes adapter, not upstream's private-texture blit implementation; the host still commits and releases its successor. The private Artemis frame-number/swapchain changes described in the message are absent from the public delta and are not claimed imported. | — |
 | `ed2c2dcb81d03ecfaef83962b6bdbf4572d1356c` | **ALREADY-EQUIVALENT PARITY TESTS:** upstream applies deterministic triangulation thresholds to immediate and deferred test frames. Both Rust paths already reach the shared observing NullBackend frame descriptor with an infinite frame budget and matching default geometry guards. No production policy, assertions or fixtures change; interactive rendering keeps its own budgeting policy. | — |

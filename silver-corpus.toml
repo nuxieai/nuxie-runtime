@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "fa3f6f307179dcfff9ff34142e1697c837ca1704"
+upstream_ref = "8f3690df4346c8b8b9072bc5c3de6f3ab0c37203"
 expected_entries = 278
 expected_runtime = 230
 expected_scripted = 45
@@ -2054,7 +2054,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent layout"
-producer_line = 429
+producer_line = 430
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2076,7 +2076,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent and grand-parent artboard"
-producer_line = 512
+producer_line = 513
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2098,7 +2098,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Shape clipped by parent artboard"
-producer_line = 468
+producer_line = 469
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2120,7 +2120,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Artboard list component with scrolling behavior"
-producer_line = 591
+producer_line = 592
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2142,7 +2142,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Artboard list component with scrolling behavior virtualized and carousel"
-producer_line = 673
+producer_line = 674
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2164,7 +2164,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing shapes in layouts"
-producer_line = 773
+producer_line = 774
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2186,7 +2186,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing text in multiple layouts rotated and scaled"
-producer_line = 723
+producer_line = 724
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2208,7 +2208,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit test leaves in collapsed layouts"
-producer_line = 1187
+producer_line = 1188
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2230,7 +2230,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing objects inside shapes"
-producer_line = 816
+producer_line = 817
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3512,7 +3512,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Hit testing multi touch events"
-producer_line = 953
+producer_line = 954
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3556,7 +3556,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with nested artboard and pointer exit event"
-producer_line = 1040
+producer_line = 1041
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3578,7 +3578,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with list and pointer exit event"
-producer_line = 1115
+producer_line = 1116
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3600,7 +3600,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Multitouch with multi scroll"
-producer_line = 1152
+producer_line = 1153
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3842,7 +3842,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/hittest_test.cpp"
 provenance_test = "Pointer exit works correctly"
-producer_line = 876
+producer_line = 877
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

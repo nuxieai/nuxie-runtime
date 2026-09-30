@@ -1211,13 +1211,20 @@ impl RenderContextVulkanImpl {
         let mut base = RenderContextImpl::default();
         base.m_platformFeatures.supportsRasterOrderingMode =
             !options.forceAtomicMode && vk_context.features.rasterizationOrderColorAttachmentAccess;
-        base.m_platformFeatures.supportsAtomicMode = vk_context.features.fragmentStoresAndAtomics;
-        #[cfg(target_os = "android")]
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
         {
-            base.m_platformFeatures.supportsAtomicMode &= options.forceAtomicMode;
+            // The atomic and clockwiseAtomic SPIR-V is not compiled in.
+            base.m_platformFeatures.supportsAtomicMode = false;
+        }
+        #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
+        {
+            base.m_platformFeatures.supportsAtomicMode =
+                vk_context.features.fragmentStoresAndAtomics && options.forceAtomicMode;
         }
         #[cfg(not(target_os = "android"))]
         {
+            base.m_platformFeatures.supportsAtomicMode =
+                vk_context.features.fragmentStoresAndAtomics;
             base.m_platformFeatures.supportsClockwiseMode =
                 vk_context.features.fragmentShaderPixelInterlock
                     && !options.forceAtomicMode
@@ -1225,11 +1232,6 @@ impl RenderContextVulkanImpl {
             base.m_platformFeatures.supportsClockwiseFixedFunctionMode =
                 base.m_platformFeatures.supportsClockwiseMode
                     && !options.disableClockwiseFixedFunctionMode;
-        }
-        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        {
-            // Neither atomic mode has compiled-in SPIR-V in this configuration.
-            base.m_platformFeatures.supportsAtomicMode = false;
         }
         base.m_platformFeatures.supportsClockwiseAtomicMode =
             base.m_platformFeatures.supportsAtomicMode;
@@ -4874,8 +4876,13 @@ pub(crate) unsafe fn MakeContext(
     }
     let mut implementation = Box::new(RenderContextVulkanImpl::new(vk_context, options));
     if options.forceAtomicMode && !implementation.platformFeatures().supportsAtomicMode {
+        #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         print_error_line(
             "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform."
+        );
+        #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
+        print_error_line(
+            "ERROR: Requested \"atomic\" mode but Rive was not compiled with atomic support (--with_android_vulkan_atomics)."
         );
         return None;
     }

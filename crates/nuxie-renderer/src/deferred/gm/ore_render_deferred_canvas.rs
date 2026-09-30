@@ -29,7 +29,7 @@ fn scene(deferred: bool) -> Vec<u8> {
         record_clear(&mut *session.ore_context.borrow_mut(), &view);
         session.record_ore_replay_marker();
         let mut renderer = session.make_screen_renderer(0);
-        draw_canvas(renderer.as_mut(), &canvas, 28.0, 28.0, false);
+        draw_canvas(renderer.as_mut(), &canvas, 28.0, 28.0);
         let frame = snapshot_frame(&mut session);
         assert!(
             !canvas.borrow().is_backed(),
@@ -45,13 +45,7 @@ fn scene(deferred: bool) -> Vec<u8> {
         host.begin_ore();
         record_clear(&mut *host.ore.borrow_mut(), &view);
         host.end_ore();
-        draw_canvas(
-            host.screen().borrow_mut().as_mut(),
-            &canvas,
-            28.0,
-            28.0,
-            false,
-        );
+        draw_canvas(host.screen().borrow_mut().as_mut(), &canvas, 28.0, 28.0);
     }
     host.finish()
 }

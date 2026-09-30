@@ -6,7 +6,7 @@
 use super::gl_state_decl::{GLState, ScissorAction, ValidState};
 use super::gles3_decl::*;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    BlendEquation, CullFace, IAABB, PipelineState, StencilCompareOp, StencilOp, AABBu16,
+    AABBu16, BlendEquation, CullFace, IAABB, PipelineState, StencilCompareOp, StencilOp,
 };
 
 pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_gl_state.cpp");
@@ -37,13 +37,16 @@ pub(crate) fn invalidate(state: &mut GLState) {
     }
     recordGLCommand(GLCommand::BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0));
     if state.m_capabilities.ANGLE_provoking_vertex() {
-        recordGLCommand(GLCommand::ProvokingVertex(
-            GL_FIRST_VERTEX_CONVENTION_ANGLE,
-        ));
+        recordGLCommand(GLCommand::ProvokingVertex(GL_FIRST_VERTEX_CONVENTION_ANGLE));
     }
 }
 
-pub(crate) fn setScissor(state: &mut GLState, scissor: IAABB, renderTargetHeight: u32) {
+pub(crate) fn setScissor(
+    state: &mut GLState,
+    scissor: IAABB,
+    renderTargetHeight: u32,
+    bottomUp: bool,
+) {
     assert!(scissor.left >= 0);
     assert!(scissor.right >= scissor.left);
     assert!(scissor.top >= 0);
@@ -52,9 +55,13 @@ pub(crate) fn setScissor(state: &mut GLState, scissor: IAABB, renderTargetHeight
     setScissorRaw(
         state,
         scissor.left as u32,
-        renderTargetHeight
-            .checked_sub(bottom)
-            .expect("scissor is inside render target"),
+        if bottomUp {
+            renderTargetHeight
+                .checked_sub(bottom)
+                .expect("scissor is inside render target")
+        } else {
+            scissor.top as u32
+        },
         (scissor.right - scissor.left) as u32,
         (scissor.bottom - scissor.top) as u32,
     );
@@ -64,27 +71,26 @@ pub(crate) fn setScissorU16(
     state: &mut GLState,
     scissor: AABBu16,
     renderTargetHeight: u32,
+    bottomUp: bool,
 ) {
     assert!(scissor.right >= scissor.left);
     assert!(scissor.bottom >= scissor.top);
     setScissorRaw(
         state,
         scissor.left as u32,
-        renderTargetHeight
-            .checked_sub(scissor.bottom as u32)
-            .expect("scissor is inside render target"),
+        if bottomUp {
+            renderTargetHeight
+                .checked_sub(scissor.bottom as u32)
+                .expect("scissor is inside render target")
+        } else {
+            scissor.top as u32
+        },
         (scissor.right - scissor.left) as u32,
         (scissor.bottom - scissor.top) as u32,
     );
 }
 
-pub(crate) fn setScissorRaw(
-    state: &mut GLState,
-    left: u32,
-    top: u32,
-    width: u32,
-    height: u32,
-) {
+pub(crate) fn setScissorRaw(state: &mut GLState, left: u32, top: u32, width: u32, height: u32) {
     let box_ = [left, top, width, height];
     if !state.m_validState.scissorBox() || state.m_scissorBox != box_ {
         recordGLCommand(GLCommand::Scissor(left, top, width, height));
@@ -346,7 +352,9 @@ pub(crate) fn bindBuffer(state: &mut GLState, target: GLenum, bufferID: GLuint) 
             }
         }
         GL_UNIFORM_BUFFER => {
-            if !state.m_validState.boundUniformBufferID() || bufferID != state.m_boundUniformBufferID {
+            if !state.m_validState.boundUniformBufferID()
+                || bufferID != state.m_boundUniformBufferID
+            {
                 recordGLCommand(GLCommand::BindBuffer(GL_UNIFORM_BUFFER, bufferID));
                 state.m_boundUniformBufferID = bufferID;
                 state.m_validState.setBoundUniformBufferID(true);
@@ -385,6 +393,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scissor_uses_the_target_row_orientation() {
+        resetGLCommandStream();
+        let mut state = GLState::new(GLCapabilities::default());
+        takeGLCommands();
+        let bounds = IAABB {
+            left: 1,
+            top: 2,
+            right: 5,
+            bottom: 7,
+        };
+        state.setScissor(bounds, 20, true);
+        state.setScissor(bounds, 20, false);
+        assert_eq!(
+            takeGLCommands(),
+            vec![
+                GLCommand::Scissor(1, 13, 4, 5),
+                GLCommand::Enable(GL_SCISSOR_TEST),
+                GLCommand::Scissor(1, 2, 4, 5),
+            ]
+        );
+    }
+
+    #[test]
     fn redundant_scissor_program_and_buffer_state_is_suppressed_exactly() {
         resetGLCommandStream();
         let mut state = GLState::new(GLCapabilities::default());
@@ -408,7 +439,10 @@ mod tests {
 
     #[test]
     fn complete_source_line_denominators_are_frozen() {
-        assert_eq!(super::super::gl_state_decl::PINNED_SOURCE.lines().count(), 95);
-        assert_eq!(PINNED_SOURCE.lines().count(), 491);
+        assert_eq!(
+            super::super::gl_state_decl::PINNED_SOURCE.lines().count(),
+            94
+        );
+        assert_eq!(PINNED_SOURCE.lines().count(), 495);
     }
 }

@@ -1,32 +1,33 @@
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
-struct ye {
+struct ze {
     e2_: array<u32>,
 }
 
-struct ye_1 {
+struct ze_1 {
     e2_: array<atomic<u32>>,
 }
 
@@ -34,9 +35,9 @@ var<private> h1_1: f32;
 var<private> p4_1: vec2<f32>;
 var<private> g3_1: vec2<u32>;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 @group(0) @binding(6)
-var<storage, read_write> Q0_: ye_1;
+var<storage, read_write> Q0_: ze_1;
 @group(3) @binding(9)
 var ea: sampler;
 @group(0) @binding(8)
@@ -63,7 +64,7 @@ fn main_1() {
     let _e34 = g3_1[1u];
     let _e36 = g3_1[0u];
     let _e67 = u32(((abs(_e29) * 1024f) + 0.5f));
-    let _e69 = n.d2_;
+    let _e69 = l.d2_;
     let _e71 = (_e69 | (262144u - _e67));
     let _e74 = atomicMax((&Q0_.e2_[(_e36 + (((((_e32.y >> bitcast<u32>(5u)) * (_e34 << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))))]), _e71);
     if (_e74 >= _e69) {

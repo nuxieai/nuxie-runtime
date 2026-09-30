@@ -3,15 +3,15 @@ f1(f0)J(0,f,UB);J(1,f,VB);g1
 #endif
 p2 H0 V(0,f,M);h2
 #ifdef DB
-y1(ZF,f0,F,B,v){K(B,F,UB,f);K(B,F,VB,f);T(M,f);f W;uint m0;c j0;if(v9(UB,VB,v,m0,j0,M x3)){X N4=K0(PB,m0*4u+2u);Q w7=uintBitsToFloat(N4.yzw);j0=j0*w7.x+w7.yz;W=p8(j0,n.Bd.x,n.Bd.y);
+y1(ZF,f0,F,B,v){K(B,F,UB,f);K(B,F,VB,f);T(M,f);f W;uint m0;c j0;if(v9(UB,VB,v,m0,j0,M x3)){X N4=K0(PB,m0*4u+2u);Q w7=uintBitsToFloat(N4.yzw);j0=j0*w7.x+w7.yz;W=p8(j0,l.Cd.x,l.Cd.y);
 #ifdef SC
 W.y=-W.y;
 #endif
-}else{W=f(n.U2,n.U2,n.U2,n.U2);}a0(M);z1(W);}
+}else{W=f(l.U2,l.U2,l.U2,l.U2);}a0(M);z1(W);}
 #endif
 #ifdef FB
 #ifdef NC
-e d B6(f N,bool wh I3){d o=e8(N d1);if(!wh)o=-o;return o;}
+e d B6(f N,bool xh I3){d o=e8(N d1);if(!xh)o=-o;return o;}
 #endif
 #ifdef ZD
 layout(location=0)inout X p0;
@@ -38,16 +38,16 @@ void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(p0).x);o+=B6(M,gl_FrontF
 void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(p0).x);o=max(o,y4(M));pixelLocalStoreANGLE(p0,X(floatBitsToUint(o)));}
 #endif
 #elif defined(BE)
-layout(binding=0,r32i)uniform highp coherent iimage2D Z8;ivec2 ae(){return ivec2(floor(c0));}int be(float o){return int(o*bd);}
+layout(binding=0,r32i)uniform highp coherent iimage2D Z8;ivec2 be(){return ivec2(floor(c0));}int ce(float o){return int(o*cd);}
 #ifdef NC
-void main(){int o=be(B6(M,gl_FrontFacing d1));imageAtomicAdd(Z8,ae(),o);}
+void main(){int o=ce(B6(M,gl_FrontFacing d1));imageAtomicAdd(Z8,be(),o);}
 #endif
 #ifdef UC
-void main(){int o=be(y4(M));imageAtomicMax(Z8,ae(),o);}
+void main(){int o=ce(y4(M));imageAtomicMax(Z8,be(),o);}
 #endif
 #elif defined(AF)
 #ifdef NC
-x6(i,BF){r(M,f);d o=B6(M,y6 d1);if(abs(o)>Wf-1e-3){L2(o>.0?D0(.0,.0,1./255.,.0):D0(.0,.0,.0,1./255.));}else{o*=1./za;L2(D0(max(o,.0),max(-o,.0),.0,.0));}}
+x6(i,BF){r(M,f);d o=B6(M,y6 d1);if(abs(o)>Xf-1e-3){L2(o>.0?D0(.0,.0,1./255.,.0):D0(.0,.0,.0,1./255.));}else{o*=1./za;L2(D0(max(o,.0),max(-o,.0),.0,.0));}}
 #endif
 #ifdef UC
 d3(i,CF){r(M,f);d o=y4(M d1);o*=1./za;L2(D0(o,.0,.0,.0));}

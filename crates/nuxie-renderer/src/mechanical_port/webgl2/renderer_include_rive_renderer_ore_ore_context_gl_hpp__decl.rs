@@ -53,7 +53,6 @@ impl Drop for ScratchPassObjects {
 #[repr(C)]
 pub(crate) struct ContextGL {
     pub(super) base: ManuallyDrop<Context>,
-    pub(super) m_renderContextImpl: *mut std::ffi::c_void,
     pub(super) m_savedState: GLSavedState,
     pub(super) m_executionStamp: ManuallyDrop<GLExecutionStamp>,
     pub(super) rust_scratch: Option<Rc<ScratchPassObjects>>,
@@ -63,7 +62,6 @@ impl ContextGL {
     pub(crate) fn newBase(
         features: Features,
         executionStamp: GLExecutionStamp,
-        renderContextImpl: *mut std::ffi::c_void,
     ) -> Self {
         let base = nuxie_ore_metal::new_context_backend_base_with_final_release_drain(
             features,
@@ -73,7 +71,6 @@ impl ContextGL {
         Self {
             base: ManuallyDrop::new(base),
             m_savedState: GLSavedState::default(),
-            m_renderContextImpl: renderContextImpl,
             rust_scratch: Some(Rc::new(ScratchPassObjects {
                 state: RefCell::new(ScratchPassState::default()),
                 execution: executionStamp.clone(),
@@ -85,9 +82,8 @@ impl ContextGL {
     /// Source `Make()` plus the shared current-context execution authority.
     pub(crate) fn Make(
         executionStamp: GLExecutionStamp,
-        renderContextImpl: *mut std::ffi::c_void,
     ) -> Option<Box<Self>> {
-        super::ore_context_gl_impl::Make(executionStamp, renderContextImpl)
+        super::ore_context_gl_impl::Make(executionStamp)
     }
 
     pub(crate) fn executionStamp(&self) -> &GLExecutionStamp {
@@ -149,7 +145,7 @@ pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
 pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 14;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
 pub(crate) const RUST_EXECUTION_SIDECAR_COUNT: usize = 1;
-const _: [(); 5105] = [(); PINNED_SOURCE.len()];
+const _: [(); 4637] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -158,7 +154,7 @@ mod tests {
 
     #[test]
     fn complete_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 129);
+        assert_eq!(PINNED_SOURCE.lines().count(), 121);
         assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 20);
         assert_eq!(SOURCE_FRIEND_COUNT, 3);
         assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 14);

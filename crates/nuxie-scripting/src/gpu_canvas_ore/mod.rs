@@ -163,6 +163,7 @@ pub(crate) fn image_view(
             };
             view.ok_or_else(|| Error::runtime("Image:view() recording failed"))?
         } else if let Some(source_canvas) = source_canvas {
+            // A canvas imports through the backend's own sampling wrap.
             unsafe {
                 ctx.wrapCanvasSampleView(nuxie_render_api::canvas_texture_info(source_canvas))
             }

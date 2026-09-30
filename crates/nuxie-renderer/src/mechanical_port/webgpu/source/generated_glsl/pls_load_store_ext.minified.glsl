@@ -14,7 +14,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140)uniform ij{uniform highp vec4 th;}uh;
+layout(binding=0,std140)uniform jj{uniform highp vec4 uh;}vh;
 #else
 uniform mediump vec4 YE;
 #endif
@@ -37,7 +37,7 @@ layout(location=0)out mediump vec4 db;
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-k0=uh.th;
+k0=vh.uh;
 #else
 k0=YE;
 #endif
@@ -60,6 +60,6 @@ db=k0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 vh;void main(){vh=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 wh;void main(){wh=vec4(0,1,0,1);}
 #endif
 #endif

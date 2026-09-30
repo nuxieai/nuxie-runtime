@@ -1,36 +1,37 @@
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
-struct ye {
+struct ze {
     e2_: array<u32>,
 }
 
-struct ye_1 {
+struct ze_1 {
     e2_: array<atomic<u32>>,
 }
 
-@id(3) override Eh: bool = true;
+@id(3) override Fh: bool = true;
 
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
@@ -40,9 +41,9 @@ var<private> M_1: vec4<f32>;
 var<private> p4_1: vec2<f32>;
 var<private> g3_1: vec2<u32>;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 @group(0) @binding(6)
-var<storage, read_write> Q0_: ye_1;
+var<storage, read_write> Q0_: ze_1;
 @group(0) @binding(8)
 var ED: texture_2d<f32>;
 @group(1) @binding(11)
@@ -73,8 +74,8 @@ fn main_1() {
             if (_e48.y >= 0f) {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_535_ = Eh;
-                        if Eh {
+                        phi_535_ = Fh;
+                        if Fh {
                             phi_535_ = (_e48.x < -1.5f);
                         }
                         let _e119 = phi_535_;
@@ -95,8 +96,8 @@ fn main_1() {
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_598_ = Eh;
-                        if Eh {
+                        phi_598_ = Fh;
+                        if Fh {
                             phi_598_ = (_e48.y < -1.5f);
                         }
                         let _e55 = phi_598_;
@@ -143,7 +144,7 @@ fn main_1() {
     let _e141 = g3_1[1u];
     let _e143 = g3_1[0u];
     let _e174 = u32(((abs(_e136) * 1024f) + 0.5f));
-    let _e176 = n.d2_;
+    let _e176 = l.d2_;
     let _e178 = (_e176 | (262144u - _e174));
     let _e181 = atomicMax((&Q0_.e2_[(_e143 + (((((_e139.y >> bitcast<u32>(5u)) * (_e141 << bitcast<u32>(5u))) + ((_e139.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e139.x & 28u) << bitcast<u32>(5u)) + ((_e139.y & 28u) << bitcast<u32>(2i)))) + (((_e139.y & 3u) << bitcast<u32>(2i)) + (_e139.x & 3u))))]), _e178);
     if (_e181 >= _e176) {

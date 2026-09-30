@@ -1,31 +1,32 @@
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
-@id(7) override Ih: bool = true;
-@id(6) override Hh: bool = true;
-@id(2) override Dh: bool = true;
-@id(8) override Jh: bool = true;
+@id(7) override Jh: bool = true;
+@id(6) override Ih: bool = true;
+@id(2) override Eh: bool = true;
+@id(8) override Kh: bool = true;
 
 @group(0) @binding(8)
 var ED: texture_2d<f32>;
@@ -47,13 +48,13 @@ var<private> g2_1: f32;
 var YD: texture_2d<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
-var<uniform> n: BC;
-var<private> ih: vec4<f32>;
+var<uniform> l: BC;
+var<private> jh: vec4<f32>;
 @group(3) @binding(9)
 var ea: sampler;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
-var<private> K3_1: f32;
+var<private> L3_1: f32;
 
 fn main_1() {
     var local: vec3<f32>;
@@ -79,7 +80,7 @@ fn main_1() {
     let _e57 = V1_1;
     let _e58 = C2_1;
     if (_e57.w >= 0f) {
-        if Dh {
+        if Eh {
             phi_2868_ = vec4<f32>(_e57.x, _e57.y, _e57.z, (_e57.w * _e56));
         } else {
             phi_2868_ = (_e57 * _e56);
@@ -104,7 +105,7 @@ fn main_1() {
         let _e89 = textureSampleLevel(ED, N9_, vec2<f32>(_e87, -(_e57.w)), 0f);
         let _e91 = (_e89.w * _e56);
         let _e96 = vec4<f32>(_e89.x, _e89.y, _e89.z, _e91);
-        if Dh {
+        if Eh {
             phi_2869_ = _e96;
         } else {
             let _e98 = (_e96.xyz * _e91);
@@ -114,8 +115,8 @@ fn main_1() {
         phi_2867_ = _e104;
     }
     let _e106 = phi_2867_;
-    phi_1046_ = Jh;
-    if Jh {
+    phi_1046_ = Kh;
+    if Kh {
         phi_1046_ = (_e58.z > 0f);
     }
     let _e110 = phi_1046_;
@@ -123,7 +124,7 @@ fn main_1() {
     if _e110 {
         let _e114 = textureSampleLevel(HC, X5_, _e58.xy, (_e58.z - 1f));
         phi_2864_ = _e114;
-        if Dh {
+        if Eh {
             if (_e114.w != 0f) {
                 phi_2854_ = (1f / _e114.w);
             } else {
@@ -254,7 +255,7 @@ fn main_1() {
             break;
         }
         case 12: {
-            if Hh {
+            if Ih {
                 let _e281 = local_2;
                 let _e282 = clamp(_e281, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e282;
@@ -268,7 +269,7 @@ fn main_1() {
             break;
         }
         case 13: {
-            if Hh {
+            if Ih {
                 let _e330 = local_2;
                 let _e331 = clamp(_e330, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e331;
@@ -282,7 +283,7 @@ fn main_1() {
             break;
         }
         case 14: {
-            if Hh {
+            if Ih {
                 let _e379 = local_2;
                 let _e380 = clamp(_e379, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e380;
@@ -294,7 +295,7 @@ fn main_1() {
             break;
         }
         case 15: {
-            if Hh {
+            if Ih {
                 let _e405 = local_2;
                 let _e406 = clamp(_e405, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e406;
@@ -319,9 +320,9 @@ fn main_1() {
     let _e472 = vec4<f32>(_e466.x, _e466.y, _e454.z, _e466.w);
     let _e473 = _e472.xyz;
     let _e474 = gl_FragCoord_1;
-    let _e476 = n.C3_;
-    let _e478 = n.D3_;
-    if (Ih && (_e130.w != 0f)) {
+    let _e476 = l.C3_;
+    let _e478 = l.D3_;
+    if (Jh && (_e130.w != 0f)) {
         phi_3311_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e474.x) + (0.00583715f * _e474.y))))) * _e476) + _e478)) + _e473);
     } else {
         phi_3311_ = _e473;
@@ -329,19 +330,19 @@ fn main_1() {
     let _e494 = phi_3311_;
     let _e500 = vec4<f32>(_e494.x, _e472.y, _e472.z, _e472.w);
     let _e506 = vec4<f32>(_e500.x, _e494.y, _e500.z, _e500.w);
-    ih = vec4<f32>(_e506.x, _e506.y, _e494.z, _e506.w);
+    jh = vec4<f32>(_e506.x, _e506.y, _e494.z, _e506.w);
     return;
 }
 
 @fragment
-fn main(@location(1) F2_: vec2<f32>, @location(0) V1_: vec4<f32>, @location(9) C2_: vec3<f32>, @location(6) @interpolate(flat, either) g2_: f32, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) K3_: f32) -> @location(0) vec4<f32> {
+fn main(@location(1) F2_: vec2<f32>, @location(0) V1_: vec4<f32>, @location(9) C2_: vec3<f32>, @location(6) @interpolate(flat, either) g2_: f32, @builtin(position) gl_FragCoord: vec4<f32>, @location(4) @interpolate(flat, either) L3_: f32) -> @location(0) vec4<f32> {
     F2_1 = F2_;
     V1_1 = V1_;
     C2_1 = C2_;
     g2_1 = g2_;
     gl_FragCoord_1 = gl_FragCoord;
-    K3_1 = K3_;
+    L3_1 = L3_;
     main_1();
-    let _e13 = ih;
+    let _e13 = jh;
     return _e13;
 }

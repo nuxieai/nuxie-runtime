@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/flush_uniforms.glsl.
  *
- * Upstream source revision: 4ac7b32798da0482e441ef09304dc3b480ed3ee5
+ * Upstream source revision: 7732f41ef93e4cb74286934ee596e1041d0a0ba7
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "7732f41ef93e4cb74286934ee596e1041d0a0ba7";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/flush_uniforms.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "1c22659c0e40233b0b06515287e122e06b73a4428d8e78721ca71e3419db961e";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 58;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2454;
+    "d8ff851857239ab10ecf81cb55009e672097435c30b006bb1ccc667b874585ed";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 60;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2573;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_FLUSH_UNIFORMS_GLSL_SOURCE: &str = r###"#ifndef DECLARE_UNIFORM_FLOAT
@@ -75,6 +75,8 @@ DECLARE_UNIFORM_FLOAT(ditherBias)
 DECLARE_UNIFORM_FLOAT(ditherConversionToRGB10)
 // Debugging.
 DECLARE_UNIFORM_UINT(wireframeEnabled)
+// Whether _fragCoord.y counts from the visual bottom of the render target.
+DECLARE_UNIFORM_UINT(renderTargetBottomUp)
 UNIFORM_BLOCK_END(uniforms)"###;
 
 /// Stable source aliases.

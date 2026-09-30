@@ -328,7 +328,7 @@ pub trait ContextApi {
         None
     }
     /// The source canvas' image/texture fields supplied across the opaque
-    /// host seam; GL overrides this operation to build its sampling mirror.
+    /// host seam for the canvas sampling wrap.
     unsafe fn wrapCanvasSampleView(
         &mut self,
         canvas: CanvasTextureInfo,
@@ -341,8 +341,7 @@ pub trait ContextApi {
     ) -> Option<AnyResourceHandle> {
         unsafe { self.wrapCanvasTexture(canvas.canvas) }
     }
-    /// Immediate Image:view sampling boundary. GL substitutes its retained
-    /// canvas import mirror; other backends wrap the projected image texture.
+    /// Immediate Image:view sampling boundary, wrapping the projected image texture.
     unsafe fn wrapImageSampleView(
         &mut self,
         image: CanvasTextureInfo,

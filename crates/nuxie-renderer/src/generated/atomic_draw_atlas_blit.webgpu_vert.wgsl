@@ -1,29 +1,30 @@
-struct Bg {
+struct Cg {
     e2_: array<vec4<u32>>,
 }
 
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
 struct gl_PerVertex {
@@ -33,15 +34,15 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct hf {
+struct jf {
     e2_: array<vec2<u32>>,
 }
 
-struct jf {
+struct kf {
     e2_: array<vec4<f32>>,
 }
 
-struct Cg {
+struct Dg {
     e2_: array<vec4<u32>>,
 }
 
@@ -52,9 +53,9 @@ struct VertexOutput {
 }
 
 @group(0) @binding(2)
-var<storage> PB: Bg;
+var<storage> PB: Cg;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> KB_1: vec3<f32>;
@@ -66,11 +67,11 @@ var KC: texture_2d<u32>;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(0) @binding(3)
-var<storage> DD: hf;
+var<storage> DD: jf;
 @group(0) @binding(4)
-var<storage> QB: jf;
+var<storage> QB: kf;
 @group(0) @binding(5)
-var<storage> ID: Cg;
+var<storage> ID: Dg;
 @group(3) @binding(9)
 var ea: sampler;
 
@@ -79,11 +80,11 @@ fn main_1() {
     let _e27 = (bitcast<u32>(_e24.z) & 65535u);
     let _e32 = PB.e2_[((_e27 * 4u) + 2u)];
     let _e35 = bitcast<vec3<f32>>(_e32.yzw);
-    let _e41 = n.bh;
+    let _e41 = l.ch;
     F2_ = (((_e24.xy * _e35.x) + _e35.yz) * _e41);
     C0_ = _e27;
-    let _e44 = n.Ef;
-    let _e46 = n.Ff;
+    let _e44 = l.Ff;
+    let _e46 = l.Gf;
     unnamed.gl_Position = vec4<f32>(((_e24.x * _e44) - 1f), ((_e24.y * _e46) - sign(_e46)), 0f, 1f);
     return;
 }

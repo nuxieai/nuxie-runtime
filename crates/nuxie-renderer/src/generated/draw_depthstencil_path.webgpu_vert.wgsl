@@ -7,43 +7,44 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
+struct Dg {
+    e2_: array<vec4<u32>>,
+}
+
 struct Cg {
     e2_: array<vec4<u32>>,
 }
 
-struct Bg {
-    e2_: array<vec4<u32>>,
-}
-
-struct hf {
+struct jf {
     e2_: array<vec2<u32>>,
 }
 
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
-struct jf {
+struct kf {
     e2_: array<vec4<f32>>,
 }
 
@@ -56,30 +57,30 @@ struct VertexOutput {
     @location(9) member_3: vec3<f32>,
 }
 
-@id(0) override Bh: bool = true;
-@id(2) override Dh: bool = true;
-@id(1) override Ch: bool = true;
-@id(8) override Jh: bool = true;
+@id(0) override Ch: bool = true;
+@id(2) override Eh: bool = true;
+@id(1) override Dh: bool = true;
+@id(8) override Kh: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 @group(0) @binding(7)
 var KC: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> ID: Cg;
+var<storage> ID: Dg;
 @group(0) @binding(2)
-var<storage> PB: Bg;
+var<storage> PB: Cg;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> UB_1: vec4<f32>;
 var<private> VB_1: vec4<f32>;
 @group(0) @binding(3)
-var<storage> DD: hf;
+var<storage> DD: jf;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 var<private> W1_: vec2<f32>;
 var<private> g2_: f32;
 @group(0) @binding(4)
-var<storage> QB: jf;
+var<storage> QB: kf;
 var<private> V1_: vec4<f32>;
 var<private> C2_: vec3<f32>;
 @group(0) @binding(9)
@@ -390,7 +391,7 @@ fn main_1() {
     let _e438 = local;
     let _e440 = DD.e2_[_e438];
     let _e442 = (_e440.x & 15u);
-    if Bh {
+    if Ch {
         let _e443 = (_e442 == 0u);
         if _e443 {
             phi_2481_ = _e440.y;
@@ -399,7 +400,7 @@ fn main_1() {
         }
         let _e446 = phi_2481_;
         let _e448 = (_e446 >> bitcast<u32>(16i));
-        let _e450 = n.f6_;
+        let _e450 = l.f6_;
         if (_e448 == 0u) {
             phi_2482_ = 0f;
         } else {
@@ -413,10 +414,10 @@ fn main_1() {
         let _e460 = phi_2483_;
         W1_[0u] = _e460;
     }
-    if Dh {
+    if Eh {
         g2_ = f32(((_e440.x >> bitcast<u32>(4i)) & 15u));
     }
-    if Ch {
+    if Dh {
         let _e467 = local_1;
         let _e468 = (_e467 * 8u);
         let _e472 = QB.e2_[(_e468 + 2u)];
@@ -437,7 +438,7 @@ fn main_1() {
     }
     if (_e442 == 1u) {
         let _e515 = unpack4x8unorm(_e440.y);
-        if Dh {
+        if Eh {
             phi_2524_ = _e515;
         } else {
             let _e518 = (_e515.xyz * _e515.w);
@@ -448,9 +449,9 @@ fn main_1() {
         let _e538 = phi_2524_;
         V1_ = _e538;
     } else {
-        if (Bh && (_e442 == 0u)) {
+        if (Ch && (_e442 == 0u)) {
             let _e542 = (_e440.x >> bitcast<u32>(16i));
-            let _e544 = n.f6_;
+            let _e544 = l.f6_;
             if (_e542 == 0u) {
                 phi_2523_ = 0f;
             } else {
@@ -485,8 +486,8 @@ fn main_1() {
             V1_[3u] = -(_e630);
         }
     }
-    phi_1155_ = Jh;
-    if Jh {
+    phi_1155_ = Kh;
+    if Kh {
         phi_1155_ = ((_e440.x & 2048u) != 0u);
     }
     let _e635 = phi_1155_;
@@ -501,12 +502,12 @@ fn main_1() {
         C2_ = vec3<f32>(0f, 0f, 0f);
     }
     if _e435 {
-        let _e663 = n.Ef;
-        let _e665 = n.Ff;
+        let _e663 = l.Ff;
+        let _e665 = l.Gf;
         let _e673 = vec4<f32>(((_e433.x * _e663) - 1f), ((_e433.y * _e665) - sign(_e665)), 0f, 1f);
         phi_2540_ = vec4<f32>(_e673.x, _e673.y, (1f - (f32(_e431) * 0.000061035156f)), _e673.w);
     } else {
-        let _e683 = n.U2_;
+        let _e683 = l.U2_;
         phi_2540_ = vec4(_e683);
     }
     let _e686 = phi_2540_;

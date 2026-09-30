@@ -233,13 +233,11 @@ fn queriedFeatures(executionDomain: &GLExecutionDomain) -> Features {
 
 pub(crate) fn Make(
     executionStamp: GLExecutionStamp,
-    renderContextImpl: *mut c_void,
 ) -> Option<Box<ContextGL>> {
     let features = executionStamp.withCurrent(|| queriedFeatures(executionStamp.domain()));
     Some(Box::new(ContextGL::newBase(
         features,
         executionStamp,
-        renderContextImpl,
     )))
 }
 
@@ -1996,57 +1994,6 @@ pub(crate) unsafe fn wrapRiveTexture(
     })
 }
 
-pub(crate) unsafe fn wrapCanvasSampleView(
-    context: &mut ContextGL,
-    canvas: *mut c_void,
-) -> Option<AnyResourceHandle> {
-    withCurrentContext(context, |context| unsafe {
-        debug_assert!(!canvas.is_null());
-        let canvas = canvas.cast::<RenderCanvas>().as_mut()?;
-        let source = (*canvas.renderImage()).getTexture();
-        wrapImageSampleViewCurrent(context, source, canvas.width(), canvas.height())
-    })
-}
-
-// Both the deferred canvas sampling virtual and immediate lua_gpu.cpp's
-// Image:view import boundary sample the same retained Y-flipped companion.
-unsafe fn wrapImageSampleViewCurrent(
-    context: &mut ContextGL,
-    source: *mut RiveTexture,
-    width: u32,
-    height: u32,
-) -> Option<AnyResourceHandle> {
-    let mut texture = source;
-    let mut mirror = crate::mechanical_port::source::include::rive::refcnt_hpp::rcp::new();
-    if !context.m_renderContextImpl.is_null() {
-        mirror = unsafe {
-            super::render_context_gl_impl::getCanvasImportMirror(
-                &mut *context.m_renderContextImpl.cast(),
-                source,
-                width,
-                height,
-            )
-        };
-        if !mirror.get().is_null() {
-            let mirror_texture = unsafe { (*mirror.get()).getTexture() };
-            if !mirror_texture.is_null() {
-                texture = mirror_texture;
-            }
-        }
-    }
-    let view = unsafe { wrapRiveTextureCurrent(context, texture.cast(), width, height) };
-    if !mirror.get().is_null() {
-        if let Some(view) = &view {
-            *view
-                .downcast_ref::<TextureViewGL>()
-                .unwrap()
-                .m_retainedCanvasMirror
-                .borrow_mut() = mirror;
-        }
-    }
-    view
-}
-
 impl ContextApi for ContextGL {
     fn usesDeferredFrameReplay(&self) -> bool {
         false
@@ -2130,22 +2077,6 @@ impl ContextApi for ContextGL {
         unsafe { wrapCanvasTexture(self, canvas) }
     }
 
-    unsafe fn wrapCanvasSampleView(
-        &mut self,
-        canvas: nuxie_ore_metal::context::CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        unsafe { wrapCanvasSampleView(self, canvas.canvas) }
-    }
-
-    unsafe fn wrapImageSampleView(
-        &mut self,
-        image: nuxie_ore_metal::context::CanvasTextureInfo,
-    ) -> Option<AnyResourceHandle> {
-        withCurrentContext(self, |context| unsafe {
-            wrapImageSampleViewCurrent(context, image.texture.cast(), image.width, image.height)
-        })
-    }
-
     unsafe fn wrapRiveTexture(
         &mut self,
         texture: *mut c_void,
@@ -2163,7 +2094,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 52195] = [(); PINNED_SOURCE.len()];
+const _: [(); 50793] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2324,7 +2255,7 @@ mod tests {
     }
 
     fn context(domain: &GLExecutionDomain) -> Box<ContextGL> {
-        ContextGL::Make(domain.stamp(), std::ptr::null_mut())
+        ContextGL::Make(domain.stamp())
             .expect("fake WebGL2 context is constructible")
     }
 
@@ -2371,7 +2302,7 @@ mod tests {
     }
 
     #[test]
-    fn deferred_canvas_dispatch_stays_lazy_and_immediate_image_sampling_retains_mirror() {
+    fn deferred_canvas_dispatch_stays_lazy_and_immediate_image_sampling_wraps_source() {
         use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
 
         let (domain, state) = execution(1..=512);
@@ -2394,7 +2325,7 @@ mod tests {
         }
         assert!(unsafe { &*canvas.get() }.isBacked());
         assert_eq!(unsafe { &mut *canvas.get() }.renderImage(), image);
-        let mut context = ContextGL::Make(domain.stamp(), std::ptr::from_mut(&mut *owner).cast())
+        let mut context = ContextGL::Make(domain.stamp())
             .expect("ORE context on the same GL owner");
         let color_view = unsafe { context.wrapCanvasTexture(canvas.get().cast()) }.unwrap();
         let source = unsafe { (*(*canvas.get()).renderImage()).getTexture() };
@@ -2410,23 +2341,11 @@ mod tests {
         let sampled =
             unsafe { context.wrapImageSampleView(info) }.expect("immediate sampling view");
         let sampled = sampled.downcast_ref::<TextureViewGL>().unwrap();
-        let mirror = sampled.m_retainedCanvasMirror.borrow();
-        assert!(
-            !mirror.get().is_null(),
-            "sampling view must retain its mirror owner"
-        );
-        let mirror_name =
-            unsafe { (*(*mirror.get()).getTexture()).nativeHandle() } as usize as GLuint;
-        assert_ne!(source_name, mirror_name);
         assert_eq!(
-            sampled
-                .texture()
-                .downcast_ref::<TextureGL>()
-                .unwrap()
-                .m_glTexture,
-            mirror_name
+            sampled.texture().downcast_ref::<TextureGL>().unwrap().m_glTexture,
+            source_name,
+            "canvas sampling wraps the same top-down source texture directly"
         );
-        drop(mirror);
         drop(color_view);
         // sampled's handle drops before the context and implementation owners.
     }
@@ -2663,7 +2582,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1445);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1407);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 22);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);

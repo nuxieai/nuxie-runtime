@@ -46,6 +46,7 @@ pub(crate) fn newTextureRenderTargetGL(
     TextureRenderTargetGL {
         base: ManuallyDrop::new(base),
         m_externalTextureID: 0,
+        m_bottomUp: true,
         m_framebufferID: ManuallyDrop::new(Framebuffer::Zero()),
         m_headlessFramebuffer: ManuallyDrop::new(Framebuffer::Zero()),
         m_externalTextureAttachmentDirty: false,
@@ -369,6 +370,7 @@ fn bindTextureFramebufferForDepthStencilModeCurrent(
                 renderTarget.m_externalTextureID,
                 preserveBounds,
                 renderTarget.height(),
+                renderTarget.bottomUp(),
             );
         }
         MSAAResolveAction::framebufferBlit
@@ -634,6 +636,7 @@ fn bindFramebufferForDepthStencilModeCurrent(
             super::gl_utils_impl::BlitFramebuffer(
                 *preserveBounds,
                 renderTarget.height(),
+                renderTarget.bottomUp(),
                 GL_COLOR_BUFFER_BIT,
             );
         } else if renderContextImpl
@@ -898,6 +901,20 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn orientation_is_per_target_and_reaches_the_source_base_virtual() {
+        let (domain, _) = domain(101);
+        let mut texture = TextureRenderTargetGL::new(8, 6, domain.stamp());
+        let framebuffer = FramebufferRenderTargetGL::new(8, 6, 0, 1, domain.stamp());
+        let features = crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PlatformFeatures::default();
+        assert!(texture.bottomUp());
+        assert!(texture.base.base.bottomUp(&features));
+        texture.setBottomUp(false);
+        assert!(!texture.bottomUp());
+        assert!(!texture.base.base.bottomUp(&features));
+        assert!(framebuffer.base.base.bottomUp(&features));
     }
 
     #[test]

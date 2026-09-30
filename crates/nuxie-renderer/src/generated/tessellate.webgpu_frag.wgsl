@@ -1,25 +1,26 @@
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
 var<private> C6_1: vec4<f32>;
@@ -27,9 +28,9 @@ var<private> D6_1: vec4<f32>;
 var<private> O4_1: vec4<f32>;
 var<private> I7_1: u32;
 var<private> P4_1: vec3<f32>;
-var<private> ih: vec4<u32>;
+var<private> jh: vec4<u32>;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 
 fn main_1() {
     var phi_837_: vec2<f32>;
@@ -315,7 +316,7 @@ fn main_1() {
         phi_1058_ = vec4<u32>(_e337.x, _e337.y, bitcast<u32>((_e322 - (floor((_e322 / 6.2831855f)) * 6.2831855f))), _e337.w);
     }
     let _e361 = phi_1058_;
-    ih = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
+    jh = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
     return;
 }
 
@@ -327,6 +328,6 @@ fn main(@location(0) C6_: vec4<f32>, @location(1) D6_: vec4<f32>, @location(2) O
     I7_1 = I7_;
     P4_1 = P4_;
     main_1();
-    let _e11 = ih;
+    let _e11 = jh;
     return _e11;
 }

@@ -25,13 +25,12 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_ca
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_helper_impl_hpp::RenderContextHelperImpl;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::RenderContext;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
-use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
 use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture;
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::ManuallyDrop;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 use std::sync::{Condvar, Mutex};
 use std::thread::JoinHandle;
 
@@ -372,34 +371,6 @@ impl GLFlushInjector {
     }
 }
 
-#[repr(C)]
-#[derive(Clone)]
-pub(crate) struct CanvasMirrorEntry {
-    pub(crate) mirrorImage: rcp<RiveRenderImage>,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
-    pub(crate) readFBO: GLuint,
-    pub(crate) drawFBO: GLuint,
-}
-
-impl Default for CanvasMirrorEntry {
-    fn default() -> Self {
-        Self {
-            mirrorImage: rcp::new(),
-            width: 0,
-            height: 0,
-            readFBO: 0,
-            drawFBO: 0,
-        }
-    }
-}
-
-/// Shared logical owner for the source canvas-mirror map. Canvas textures keep
-/// only a weak sidecar, so their final-release callbacks never need to
-/// dereference the source-authored raw `m_owner` pointer.
-pub(crate) type CanvasMirrorRegistry = Rc<RefCell<BTreeMap<GLuint, CanvasMirrorEntry>>>;
-pub(crate) type WeakCanvasMirrorRegistry = Weak<RefCell<BTreeMap<GLuint, CanvasMirrorEntry>>>;
-
 /// Offset-zero Texture base plus the source's sole GL texture member. The
 /// execution owner follows the complete source prefix as a Rust-only lifetime
 /// sidecar.
@@ -408,16 +379,6 @@ pub(crate) struct TextureGLImpl {
     pub(crate) base: ManuallyDrop<Texture>,
     pub(crate) m_texture: ManuallyDrop<GLTexture>,
     pub(crate) rust_execution: ManuallyDrop<GLExecutionStamp>,
-}
-
-#[repr(C)]
-pub(crate) struct CanvasSourceTextureGLImpl {
-    pub(crate) base: ManuallyDrop<TextureGLImpl>,
-    pub(crate) m_owner: *mut RenderContextGLImpl,
-    pub(crate) m_glID: GLuint,
-    pub(crate) rust_canvas_registry: WeakCanvasMirrorRegistry,
-    pub(crate) rust_released_canvas_targets: std::sync::Weak<Mutex<Vec<GLuint>>>,
-    pub(crate) rust_has_released_canvas_targets: std::sync::Weak<std::sync::atomic::AtomicBool>,
 }
 
 #[repr(C)]
@@ -489,9 +450,6 @@ pub(crate) struct RenderContextGLImpl {
     pub(crate) m_blitAsDrawProgram: ManuallyDrop<Program>,
     pub(crate) m_state: ManuallyDrop<GLStateOwner>,
     pub(crate) m_testForAdvancedBlendError: bool,
-    pub(crate) m_canvasMirrors: ManuallyDrop<CanvasMirrorRegistry>,
-    pub(crate) m_releasedCanvasTargets: std::sync::Arc<Mutex<Vec<GLuint>>>,
-    pub(crate) m_hasReleasedCanvasTargets: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     pub(crate) rust_execution: ManuallyDrop<GLExecutionStamp>,
     pub(crate) rust_source_renderer_string: ManuallyDrop<Vec<u8>>,
@@ -524,12 +482,14 @@ impl RenderContextGLImpl {
         textureID: GLuint,
         bounds: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB,
         renderTargetHeight: u32,
+        bottomUp: bool,
     ) {
         super::render_context_gl_impl::blitTextureToFramebufferAsDraw(
             self,
             textureID,
             bounds,
             renderTargetHeight,
+            bottomUp,
         )
     }
     pub(crate) fn adoptImageTexture(
@@ -540,34 +500,6 @@ impl RenderContextGLImpl {
     ) -> rcp<Texture> {
         super::render_context_gl_impl::adoptImageTexture(self, width, height, textureID)
     }
-    pub(crate) fn registerCanvasTarget(&mut self, sourceTex: GLuint) {
-        super::render_context_gl_impl::registerCanvasTarget(self, sourceTex)
-    }
-    pub(crate) unsafe fn getCanvasImportMirror(
-        &mut self,
-        sourceTex: *mut Texture,
-        width: u32,
-        height: u32,
-    ) -> rcp<RiveRenderImage> {
-        unsafe {
-            super::render_context_gl_impl::getCanvasImportMirror(self, sourceTex, width, height)
-        }
-    }
-    pub(crate) fn unregisterCanvasTarget(&mut self, sourceTex: GLuint) {
-        super::render_context_gl_impl::unregisterCanvasTarget(self, sourceTex)
-    }
-    pub(crate) fn getOrCreateCanvasMirror(
-        &mut self,
-        sourceTex: GLuint,
-        width: u32,
-        height: u32,
-    ) -> rcp<RiveRenderImage> {
-        super::render_context_gl_impl::getOrCreateCanvasMirror(self, sourceTex, width, height)
-    }
-    pub(crate) fn blitMirrorIfRegistered(&mut self, targetTex: GLuint) {
-        super::render_context_gl_impl::blitMirrorIfRegistered(self, targetTex)
-    }
-
     #[cfg(feature = "with-rive-tools")]
     pub(crate) fn testingOnly_resetFeatherAtlasDesiredRenderType(
         &mut self,
@@ -611,17 +543,16 @@ pub(crate) fn MakeContextDefault(
 }
 
 pub(crate) const SOURCE_CONTEXT_OPTION_FIELD_COUNT: usize = 3;
-pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 43;
-pub(crate) const SOURCE_CANVAS_MIRROR_ENTRY_FIELD_COUNT: usize = 6;
+pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 39;
 pub(crate) const SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_DRAW_SHADER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_DRAW_PROGRAM_FIELD_COUNT: usize = 7;
 pub(crate) const SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT: usize = 2;
 pub(crate) const SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT: usize = 1;
 pub(crate) const SOURCE_PLS_IMPL_FIELD_COUNT: usize = 1;
-pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 66;
+pub(crate) const SOURCE_FIELD_DENOMINATOR: usize = 56;
 pub(crate) const RUST_RENDER_CONTEXT_SIDECAR_COUNT: usize = 2;
-const _: [(); 22172] = [(); PINNED_SOURCE.len()];
+const _: [(); 18446] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -635,9 +566,18 @@ mod tests {
         manager.m_currentThreadPipelineKey = Some(17);
         manager.m_activePipelineCreationCount = 1;
         for (old, new) in [
-            (ShaderCompilationMode::standard, ShaderCompilationMode::onlyUbershaders),
-            (ShaderCompilationMode::onlyUbershaders, ShaderCompilationMode::alwaysSynchronous),
-            (ShaderCompilationMode::alwaysSynchronous, ShaderCompilationMode::standard),
+            (
+                ShaderCompilationMode::standard,
+                ShaderCompilationMode::onlyUbershaders,
+            ),
+            (
+                ShaderCompilationMode::onlyUbershaders,
+                ShaderCompilationMode::alwaysSynchronous,
+            ),
+            (
+                ShaderCompilationMode::alwaysSynchronous,
+                ShaderCompilationMode::standard,
+            ),
         ] {
             assert_eq!(manager.testingOnly_setShaderCompilationMode(new), old);
             assert_eq!(manager.shaderCompilationMode(), new);
@@ -649,21 +589,20 @@ mod tests {
 
     #[test]
     fn frozen_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 591);
+        assert_eq!(PINNED_SOURCE.lines().count(), 516);
         assert_eq!(SOURCE_CONTEXT_OPTION_FIELD_COUNT, 3);
-        assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 43);
-        assert_eq!(SOURCE_CANVAS_MIRROR_ENTRY_FIELD_COUNT, 6);
+        assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 39);
         assert_eq!(SOURCE_FEATHER_ATLAS_PROGRAM_FIELD_COUNT, 2);
         assert_eq!(SOURCE_DRAW_SHADER_FIELD_COUNT, 1);
         assert_eq!(SOURCE_DRAW_PROGRAM_FIELD_COUNT, 7);
         assert_eq!(SOURCE_GL_FLUSH_INJECTOR_FIELD_COUNT, 2);
         assert_eq!(SOURCE_GL_PIPELINE_MANAGER_FIELD_COUNT, 1);
         assert_eq!(SOURCE_PLS_IMPL_FIELD_COUNT, 1);
-        assert_eq!(SOURCE_FIELD_DENOMINATOR, 66);
+        assert_eq!(SOURCE_FIELD_DENOMINATOR, 56);
         assert_eq!(std::mem::offset_of!(RenderContextGLImpl, base), 0);
         assert!(
             std::mem::offset_of!(RenderContextGLImpl, rust_execution)
-                > std::mem::offset_of!(RenderContextGLImpl, m_canvasMirrors)
+                > std::mem::offset_of!(RenderContextGLImpl, m_state)
         );
     }
 }

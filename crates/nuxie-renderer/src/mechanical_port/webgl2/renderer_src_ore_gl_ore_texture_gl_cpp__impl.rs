@@ -309,8 +309,6 @@ impl Drop for TextureViewGL {
                 recordGLCommand(GLCommand::DeleteTexture(self.m_glTextureView));
             }
         });
-        *self.m_retainedCanvasMirror.get_mut() =
-            crate::mechanical_port::source::include::rive::refcnt_hpp::rcp::new();
         unsafe { ManuallyDrop::drop(&mut self.base) };
     }
 }

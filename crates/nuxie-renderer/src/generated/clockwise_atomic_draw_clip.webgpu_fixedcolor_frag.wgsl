@@ -1,32 +1,33 @@
-struct ye {
+struct ze {
     e2_: array<u32>,
 }
 
 struct BC {
-    qc: f32,
-    Ad: f32,
-    Ef: f32,
+    rc: f32,
+    Bd: f32,
     Ff: f32,
+    Gf: f32,
     q6_: u32,
-    Nb: u32,
-    qf: u32,
+    Ob: u32,
     rf: u32,
+    sf: u32,
     V7_: vec4<i32>,
-    bh: vec2<f32>,
-    Bd: vec2<f32>,
+    ch: vec2<f32>,
+    Cd: vec2<f32>,
     d2_: u32,
-    fh: f32,
+    gh: f32,
     f6_: u32,
     U2_: f32,
-    Cd: f32,
-    lf: u32,
+    Dd: f32,
+    mf: u32,
     C3_: f32,
     D3_: f32,
-    Dd: f32,
-    Yg: u32,
+    Ed: f32,
+    Zg: u32,
+    Nb: u32,
 }
 
-struct ye_1 {
+struct ze_1 {
     e2_: array<atomic<u32>>,
 }
 
@@ -35,15 +36,15 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override Lh: bool = false;
+@id(10) override Mh: bool = false;
 
 var<private> M_1: vec4<f32>;
 var<private> g3_1: vec2<u32>;
 var<private> p4_1: vec2<f32>;
 @group(0) @binding(6)
-var<storage, read_write> Q0_: ye_1;
+var<storage, read_write> Q0_: ze_1;
 @group(0) @binding(0)
-var<uniform> n: BC;
+var<uniform> l: BC;
 var<private> h0_: vec4<f32>;
 var<private> C1_: vec4<f32>;
 @group(3) @binding(9)
@@ -75,7 +76,7 @@ fn main_1() {
     var phi_471_: f32;
 
     let _e39 = M_1[0u];
-    if Lh {
+    if Mh {
         let _e41 = g3_1[1u];
         let _e43 = g3_1[0u];
         let _e44 = p4_1;
@@ -84,7 +85,7 @@ fn main_1() {
         let _e77 = (_e39 >= 1f);
         phi_184_ = _e77;
         if _e77 {
-            let _e79 = n.d2_;
+            let _e79 = l.d2_;
             let _e80 = (_e76 < _e79);
             phi_183_ = _e80;
             if !(_e80) {
@@ -97,7 +98,7 @@ fn main_1() {
         if _e87 {
             phi_471_ = 0f;
         } else {
-            let _e89 = n.d2_;
+            let _e89 = l.d2_;
             phi_464_ = _e39;
             if (_e76 < _e89) {
                 let _e96 = (_e89 | (262144u + u32(((abs(_e39) * 1024f) + 0.5f))));

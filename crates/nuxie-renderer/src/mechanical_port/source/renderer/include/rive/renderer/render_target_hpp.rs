@@ -18,6 +18,7 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
+use super::gpu_hpp::PlatformFeatures;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCnt, RefCntTarget};
 #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
 use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
@@ -68,6 +69,7 @@ pub struct RenderTarget {
     // public RefCnt<RenderTarget> base class
     pub(crate) base: RefCnt<RenderTarget>,
     pub(crate) destroy_complete: unsafe fn(*mut RenderTarget),
+    pub(crate) bottom_up_virtual: unsafe fn(*const RenderTarget, &PlatformFeatures) -> bool,
 
     // uint32_t m_width;
     m_width: u32,
@@ -117,6 +119,11 @@ unsafe impl RefCntTarget for RenderTarget {
 }
 
 impl RenderTarget {
+    /// Source virtual target orientation; backends may override the framebuffer default.
+    pub fn bottomUp(&self, platform_features: &PlatformFeatures) -> bool {
+        unsafe { (self.bottom_up_virtual)(self, platform_features) }
+    }
+
     // virtual ~RenderTarget() {}
     // The empty virtual destructor is represented by Rust's default drop glue;
     // the intrusive base remains the owner of reference-counted deletion.
@@ -164,6 +171,7 @@ impl RenderTarget {
         Self {
             base: RefCnt::new(),
             destroy_complete: |ptr| unsafe { drop(Box::from_raw(ptr)) },
+            bottom_up_virtual: |_, features| features.framebufferBottomUp,
             m_width: width,
             m_height: height,
             #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]

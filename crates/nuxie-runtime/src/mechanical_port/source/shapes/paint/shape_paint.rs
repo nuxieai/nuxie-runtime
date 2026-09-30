@@ -66,6 +66,9 @@ pub struct ShapePaint {
     path_provider: PathProvider,
     render_paint: Option<RuntimeRenderPaintHandle>,
     paint_mutator: Option<CoreHandle>,
+    // update skipped measuring the effects while fully transparent. Showing
+    // this paint again owes them a run.
+    effects_deferred: bool,
     feather: Option<CoreHandle>,
     has_modulated_image: bool,
     script_paint_scope: Option<Rc<crate::scripting::ScriptPaint>>,
@@ -79,6 +82,7 @@ impl Default for ShapePaint {
             path_provider: PathProvider::default(),
             render_paint: None,
             paint_mutator: None,
+            effects_deferred: false,
             feather: None,
             has_modulated_image: false,
             script_paint_scope: None,
@@ -142,8 +146,9 @@ impl ShapePaint {
     ) {
         if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects.is_empty() {
             let parent = self.base.parent_handle().expect("ShapePaint container");
-            // Hidden paints are invalidated again when shown. Clip sources
-            // still consume their effect geometry while hidden.
+            // Hidden paints are invalidated again when shown (see
+            // set_render_opacity). Clip sources still consume their effect
+            // geometry while hidden.
             if self.render_opacity() == 0.0
                 && parent
                     .with(|container| {
@@ -164,8 +169,10 @@ impl ShapePaint {
                     })
                     .expect("live ShapePaint container")
             {
+                self.effects_deferred = true;
                 return;
             }
+            self.effects_deferred = false;
             let mut source = None;
             parent.with_mut(|container| {
                 container.with_shape_paint_path_mut(kind, &mut |path| {
@@ -561,6 +568,12 @@ impl ShapePaint {
                     mutator.set_render_opacity(value);
                 }
             });
+        }
+        // A transparent shape usually defers its path, whose rebuild sends
+        // Path dirt back here when shown. Skinned/follow-path shapes never
+        // defer, so this paint must re-run any effects it skipped itself.
+        if self.effects_deferred && value != 0.0 {
+            self.base.add_dirt(ComponentDirt::PATH, false);
         }
     }
 

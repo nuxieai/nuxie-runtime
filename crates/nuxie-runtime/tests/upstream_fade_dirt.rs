@@ -1,7 +1,8 @@
-//! Both cases from runtime/fade_dirt_test.cpp at upstream 955d6a05.
+//! All three cases from runtime/fade_dirt_test.cpp at upstream 02e99cf4.
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     bones::skin::Skin,
+    bones::skinnable::SkinnableBehavior,
     component::{ComponentDirt, ComponentOccurrenceHandle},
     constraints::{constraint::Constraint, targeted_constraint::TargetedConstraint},
     core::CoreType,
@@ -10,17 +11,27 @@ use nuxie_runtime::source::{
         transform_component_base::TransformComponentBase,
         world_transform_component_base::WorldTransformComponentBase,
     },
+    math::vec2d::Vec2D,
+    shapes::{
+        paint::{stroke::Stroke, trim_path::TrimPath},
+        shape::Shape,
+    },
     transform_component::TransformComponent,
 };
 use nuxie_runtime::{CoreHandle, File, RuntimeFactoryHandle, RuntimeFileHandle};
 
 fn file() -> RuntimeFileHandle {
+    read_file("zombie_skins.riv")
+}
+fn read_file(asset: &str) -> RuntimeFileHandle {
     let upstream = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
     let bytes = std::fs::read(
-        std::path::PathBuf::from(upstream).join("tests/unit_tests/assets/zombie_skins.riv"),
+        std::path::PathBuf::from(upstream)
+            .join("tests/unit_tests/assets")
+            .join(asset),
     )
-    .expect("zombie fixture");
+    .expect("pinned fade fixture");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     File::import(
         &bytes,
@@ -29,7 +40,7 @@ fn file() -> RuntimeFileHandle {
         None,
         None,
     )
-    .expect("zombie imports")
+    .expect("fade fixture imports")
 }
 fn parent(object: &CoreHandle) -> CoreHandle {
     object
@@ -136,5 +147,78 @@ fn constrained_parts_hidden_during_a_fade_come_back_constrained() {
                 .unwrap()
         };
         assert_eq!(world(&constrained), world(&reference));
+    }
+}
+
+fn has_skinned_path(shape: &CoreHandle) -> bool {
+    let paths = shape.with_downcast::<Shape, _>(Shape::paths).unwrap();
+    paths.iter().any(|path| {
+        path.with(|object| {
+            object
+                .as_points_path()
+                .is_some_and(|path| path.skin().is_some())
+        })
+        .unwrap_or(false)
+    })
+}
+
+#[test]
+fn a_skinned_shape_measures_its_trim_path_when_it_fades_in() {
+    // This fixture hides skinned shapes stroked with animated trim paths at
+    // zero opacity and fades them in on hover. Showing must invalidate the
+    // paint even when the skin no longer gets dirtied by an opacity change.
+    let file = read_file("electrified_button_simple.riv");
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let machine = artboard
+        .state_machine_named("button")
+        .expect("button state machine");
+    machine.advance_and_apply(0.0);
+
+    let mut hidden = Vec::new();
+    for trim in artboard.with_artboard(|artboard| artboard.find_all_handles::<TrimPath>()) {
+        let parent = trim
+            .with(|object| object.as_component().unwrap().parent_handle())
+            .flatten();
+        let Some(stroke) = parent.filter(|parent| parent.is_type_of(Stroke::TYPE_KEY)) else {
+            continue;
+        };
+        let shape = stroke
+            .with(|object| object.as_component().unwrap().parent_handle())
+            .flatten();
+        if let Some(shape) = shape.filter(|shape| shape.is_type_of(Shape::TYPE_KEY)) {
+            if has_skinned_path(&shape)
+                && stroke
+                    .with_downcast::<Stroke, _>(|stroke| stroke.base.base.render_opacity())
+                    .unwrap()
+                    == 0.0
+            {
+                hidden.push((trim, stroke));
+            }
+        }
+    }
+    assert!(!hidden.is_empty());
+
+    machine.with_instance_mut(|machine| machine.pointer_move(Vec2D::new(250.0, 250.0), 0.0, 0));
+    machine.advance_and_apply(0.0);
+
+    for (trim, stroke) in hidden {
+        let provider = stroke
+            .with_downcast::<Stroke, _>(|stroke| {
+                assert_ne!(stroke.base.base.render_opacity(), 0.0);
+                *stroke.base.base.path_provider()
+            })
+            .unwrap();
+        let effect_path = trim
+            .with_mut(|object| {
+                object
+                    .as_stroke_effect_mut()
+                    .unwrap()
+                    .effect_path(&provider)
+            })
+            .flatten()
+            .expect("trim effect path");
+        assert!(!effect_path.borrow().raw_path().empty());
     }
 }

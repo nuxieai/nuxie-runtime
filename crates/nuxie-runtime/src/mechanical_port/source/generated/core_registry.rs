@@ -4202,6 +4202,8 @@ pub enum CoreField {
     ListFollowPathConstraintDistanceOffset,
     ListPathListSource,
     ListenerActionFlags,
+    ListenerViewModelChangeInputValue,
+    ListenerViewModelChangeInputValueIndex,
     ListenerAlignTargetPreserveOffset,
     ListenerAlignTargetTargetId,
     ListenerBoolChangeValue,
@@ -8177,6 +8179,8 @@ impl CoreRegistry {
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            453 => CoreField::ListenerViewModelChangeInputValue,
+            454 => CoreField::ListenerViewModelChangeInputValueIndex,
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
@@ -8986,6 +8990,8 @@ impl CoreRegistry {
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            453 => CoreField::ListenerViewModelChangeInputValue,
+            454 => CoreField::ListenerViewModelChangeInputValueIndex,
             273 => CoreField::ScriptedTransitionActiveComponentId,
             414 => CoreField::ScriptedTransitionListSource,
             415 => CoreField::PaintImageImageAssetId,
@@ -9802,6 +9808,7 @@ impl CoreRegistry {
 
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
+            453 | 454 => 0,
             273 => 0,
             414 => 0,
             415 => 0,
@@ -10455,6 +10462,7 @@ impl CoreRegistry {
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
         let owner_type = match property_key {
+            453 | 454 => 487,
             273 => 110,
             414 => 110,
             415 => 113,
@@ -31028,6 +31036,18 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::listener_
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBase::is_type_of(type_key) }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::ListenerViewModelChangeInputValue => {
+                if self.base.set_input_value_value(value as u8) {
+                    <Self as crate::mechanical_port::source::generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBaseCallbacks>::input_value_changed(self);
+                    <Self as crate::mechanical_port::source::generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBaseCallbacks>::notify_property_changed(self, 453);
+                }
+            },
+            CoreField::ListenerViewModelChangeInputValueIndex => {
+                if self.base.set_input_value_index_value(value as u8) {
+                    <Self as crate::mechanical_port::source::generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBaseCallbacks>::input_value_index_changed(self);
+                    <Self as crate::mechanical_port::source::generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBaseCallbacks>::notify_property_changed(self, 454);
+                }
+            },
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.set_flags_value(value) {
                     <crate::mechanical_port::source::animation::listener_viewmodel_change::ListenerViewModelChange as crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks>::flags_changed(self);
@@ -31057,6 +31077,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::listener_
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::ListenerViewModelChangeInputValue => self.base.input_value() as u32,
+            CoreField::ListenerViewModelChangeInputValueIndex => self.base.input_value_index() as u32,
             CoreField::ListenerActionFlags => self.base.base.base.flags(),
             _ => 0,
         }
@@ -31090,7 +31112,7 @@ impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port
     }
     fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
         let mut base = std::mem::take(&mut self.base);
-        let result = base.base.base.deserialize(property_key, reader, self);
+        let result = base.deserialize(property_key, reader, self);
         self.base = base;
         result
     }
@@ -73535,6 +73557,11 @@ impl crate::mechanical_port::source::generated::animation::layer_state_base::Lay
     }
 }
 impl crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks for crate::mechanical_port::source::animation::listener_viewmodel_change::ListenerViewModelChange {
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(&mut self.base.base, property_key)
+    }
+}
+impl crate::mechanical_port::source::generated::animation::listener_viewmodel_change_base::ListenerViewModelChangeBaseCallbacks for crate::mechanical_port::source::animation::listener_viewmodel_change::ListenerViewModelChange {
     fn notify_property_changed(&mut self, property_key: u16) {
         crate::mechanical_port::source::core::Core::notify_property_changed(&mut self.base.base, property_key)
     }

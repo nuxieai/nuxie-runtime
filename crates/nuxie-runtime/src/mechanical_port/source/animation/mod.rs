@@ -67,6 +67,7 @@ pub mod listener_number_change;
 pub mod listener_trigger_change;
 pub mod listener_types;
 pub mod listener_viewmodel_change;
+pub mod listener_input_value;
 pub mod r#loop;
 pub mod nested_animation;
 pub mod nested_bool;

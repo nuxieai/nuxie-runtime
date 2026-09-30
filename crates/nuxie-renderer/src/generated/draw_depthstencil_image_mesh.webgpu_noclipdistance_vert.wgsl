@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -43,7 +43,7 @@ var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> NB_1: vec4<f32>;
-var<private> G5_: vec2<f32>;
+var<private> H5_: vec2<f32>;
 var<private> QC_1: vec2<f32>;
 var<private> K3_: f32;
 var<private> YB_1: u32;
@@ -65,10 +65,10 @@ fn main_1() {
     let _e37 = NB_1;
     let _e39 = ((mat2x2<f32>(vec2<f32>(_e27.x, _e27.y), vec2<f32>(_e27.z, _e27.w)) * _e35) + _e37.xy);
     let _e40 = QC_1;
-    G5_ = _e40;
+    H5_ = _e40;
     if Bh {
         let _e41 = YB_1;
-        let _e43 = n.e6_;
+        let _e43 = n.f6_;
         if (_e41 == 0u) {
             phi_291_ = 0f;
         } else {
@@ -102,7 +102,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) WB: vec4<f32>, 
     XB_1 = XB;
     ZB_1 = ZB;
     main_1();
-    let _e27 = G5_;
+    let _e27 = H5_;
     let _e28 = K3_;
     let _e29 = H1_;
     let _e30 = A1_;

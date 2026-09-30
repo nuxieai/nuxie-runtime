@@ -8,8 +8,8 @@ use super::gl_utils_decl::{Framebuffer, Renderbuffer, Texture};
 use super::gles3_decl::*;
 use super::render_context_gl_decl::RenderContextGLImpl;
 use super::render_target_gl_decl::{
-    FramebufferRenderTargetGL, MSAAResolveAction, RenderTargetGL, TextureRenderTargetGL,
-    FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
+    FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, FramebufferRenderTargetGL, MSAAResolveAction,
+    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
@@ -48,15 +48,16 @@ pub(crate) fn newTextureRenderTargetGL(
         m_externalTextureID: 0,
         m_framebufferID: ManuallyDrop::new(Framebuffer::Zero()),
         m_headlessFramebuffer: ManuallyDrop::new(Framebuffer::Zero()),
-        m_framebufferTargetAttachmentDirty: false,
+        m_externalTextureAttachmentDirty: false,
         m_webglPLSBackingR32UI: ManuallyDrop::new(Texture::Zero()),
         m_webglPLSBackingR32UIFallback: ManuallyDrop::new(Texture::Zero()),
         m_webglPLSBackingRGBA8: ManuallyDrop::new(Texture::Zero()),
         m_webglPLSBindingsDirty: false,
-        m_msaaFramebuffer: ManuallyDrop::new(Framebuffer::Zero()),
-        m_msaaColorBuffer: ManuallyDrop::new(Renderbuffer::Zero()),
-        m_msaaDepthStencilBuffer: ManuallyDrop::new(Renderbuffer::Zero()),
-        m_msaaFramebufferSampleCount: 0,
+        m_dsFBO: ManuallyDrop::new(Framebuffer::Zero()),
+        m_dsFBOColorBuffer: ManuallyDrop::new(Renderbuffer::Zero()),
+        m_dsFBODepthStencilBuffer: ManuallyDrop::new(Renderbuffer::Zero()),
+        m_dsFBOSampleCount: 0,
+        m_dsFBOExternalTextureAttachmentDirty: false,
     }
 }
 
@@ -74,6 +75,7 @@ pub(crate) fn newFramebufferRenderTargetGL(
         base: ManuallyDrop::new(base),
         m_externalFramebufferID: externalFramebufferID,
         m_sampleCount: sampleCount,
+        m_didValidateDepthStencilPrecision: false,
         m_textureRenderTarget: ManuallyDrop::new(TextureRenderTargetGL::new(
             width, height, execution,
         )),
@@ -149,7 +151,7 @@ fn bindTextureFramebufferCurrent(renderTarget: &mut TextureRenderTargetGL, targe
         renderTarget.m_framebufferID.id(),
     ));
 
-    if renderTarget.m_framebufferTargetAttachmentDirty {
+    if renderTarget.m_externalTextureAttachmentDirty {
         recordGLCommand(GLCommand::FramebufferTexture2D {
             target,
             attachment: GL_COLOR_ATTACHMENT0 + COLOR_PLANE_IDX as GLenum,
@@ -157,7 +159,7 @@ fn bindTextureFramebufferCurrent(renderTarget: &mut TextureRenderTargetGL, targe
             texture: renderTarget.m_externalTextureID,
             level: 0,
         });
-        renderTarget.m_framebufferTargetAttachmentDirty = false;
+        renderTarget.m_externalTextureAttachmentDirty = false;
     }
 }
 
@@ -237,7 +239,7 @@ fn bindHeadlessFramebufferCurrent(
     }
 }
 
-pub(crate) fn bindTextureMSAAFramebuffer(
+pub(crate) fn bindTextureFramebufferForDepthStencilMode(
     renderTarget: &mut TextureRenderTargetGL,
     renderContextImpl: &mut RenderContextGLImpl,
     sampleCount: i32,
@@ -247,7 +249,7 @@ pub(crate) fn bindTextureMSAAFramebuffer(
     renderTarget.assertSameExecution(&renderContextImpl.rust_execution);
     let execution = renderTarget.executionStamp().clone();
     execution.withCurrent(|| {
-        bindTextureMSAAFramebufferCurrent(
+        bindTextureFramebufferForDepthStencilModeCurrent(
             renderTarget,
             renderContextImpl,
             sampleCount,
@@ -257,7 +259,7 @@ pub(crate) fn bindTextureMSAAFramebuffer(
     })
 }
 
-fn bindTextureMSAAFramebufferCurrent(
+fn bindTextureFramebufferForDepthStencilModeCurrent(
     renderTarget: &mut TextureRenderTargetGL,
     renderContextImpl: &mut RenderContextGLImpl,
     mut sampleCount: i32,
@@ -265,10 +267,8 @@ fn bindTextureMSAAFramebufferCurrent(
     isFBO0: Option<&mut bool>,
 ) -> MSAAResolveAction {
     debug_assert!(sampleCount > 0);
-    if renderTarget.m_msaaFramebuffer.id() == 0 {
-        renderTarget
-            .m_msaaFramebuffer
-            .moveAssign(Framebuffer::new());
+    if renderTarget.m_dsFBO.id() == 0 {
+        renderTarget.m_dsFBO.moveAssign(Framebuffer::new());
     }
 
     if let Some(isFBO0) = isFBO0 {
@@ -276,74 +276,93 @@ fn bindTextureMSAAFramebufferCurrent(
     }
 
     sampleCount = sampleCount.max(1);
-    if renderTarget.m_msaaFramebufferSampleCount != sampleCount {
+    recordGLCommand(GLCommand::BindFramebuffer(
+        GL_FRAMEBUFFER,
+        renderTarget.m_dsFBO.id(),
+    ));
+    if renderTarget.m_dsFBOExternalTextureAttachmentDirty
+        || renderTarget.m_dsFBOSampleCount != sampleCount
+    {
+        if sampleCount == 1 {
+            recordGLCommand(GLCommand::FramebufferTexture2D {
+                target: GL_FRAMEBUFFER,
+                attachment: GL_COLOR_ATTACHMENT0,
+                texture_target: GL_TEXTURE_2D,
+                texture: renderTarget.m_externalTextureID,
+                level: 0,
+            });
+        }
+        // EXT_multisampled_render_to_texture is excluded by RIVE_WEBGL.
+        renderTarget.m_dsFBOExternalTextureAttachmentDirty = false;
+    }
+    if renderTarget.m_dsFBOSampleCount != sampleCount {
+        renderTarget
+            .m_dsFBOColorBuffer
+            .moveAssign(Renderbuffer::Zero());
         // Move assignment is source-significant: generate the replacement
         // name, then delete the previous renderbuffer before binding the new
         // one.
         renderTarget
-            .m_msaaDepthStencilBuffer
+            .m_dsFBODepthStencilBuffer
             .moveAssign(Renderbuffer::new());
         recordGLCommand(GLCommand::BindRenderbuffer(
             GL_RENDERBUFFER,
-            renderTarget.m_msaaDepthStencilBuffer.id(),
+            renderTarget.m_dsFBODepthStencilBuffer.id(),
         ));
 
-        recordGLCommand(GLCommand::BindFramebuffer(
-            GL_FRAMEBUFFER,
-            renderTarget.m_msaaFramebuffer.id(),
-        ));
+        if sampleCount == 1 {
+            recordGLCommand(GLCommand::RenderbufferStorage {
+                target: GL_RENDERBUFFER,
+                internal_format: GL_DEPTH24_STENCIL8,
+                width: renderTarget.width(),
+                height: renderTarget.height(),
+            });
+        } else {
+            recordGLCommand(GLCommand::RenderbufferStorageMultisample {
+                target: GL_RENDERBUFFER,
+                samples: sampleCount,
+                internal_format: GL_DEPTH24_STENCIL8,
+                width: renderTarget.width(),
+                height: renderTarget.height(),
+            });
 
-        // The native EXT_multisampled_render_to_texture attachment branch is
-        // excluded by RIVE_WEBGL. WebGL always allocates the offscreen core
-        // multisample renderbuffers here.
-        recordGLCommand(GLCommand::RenderbufferStorageMultisample {
-            target: GL_RENDERBUFFER,
-            samples: sampleCount,
-            internal_format: GL_DEPTH24_STENCIL8,
-            width: renderTarget.width(),
-            height: renderTarget.height(),
-        });
-
-        renderTarget
-            .m_msaaColorBuffer
-            .moveAssign(Renderbuffer::new());
-        recordGLCommand(GLCommand::BindRenderbuffer(
-            GL_RENDERBUFFER,
-            renderTarget.m_msaaColorBuffer.id(),
-        ));
-        recordGLCommand(GLCommand::RenderbufferStorageMultisample {
-            target: GL_RENDERBUFFER,
-            samples: sampleCount,
-            internal_format: GL_RGBA8,
-            width: renderTarget.width(),
-            height: renderTarget.height(),
-        });
-        recordGLCommand(GLCommand::FramebufferRenderbuffer {
-            target: GL_FRAMEBUFFER,
-            attachment: GL_COLOR_ATTACHMENT0,
-            renderbuffer_target: GL_RENDERBUFFER,
-            renderbuffer: renderTarget.m_msaaColorBuffer.id(),
-        });
+            renderTarget
+                .m_dsFBOColorBuffer
+                .moveAssign(Renderbuffer::new());
+            recordGLCommand(GLCommand::BindRenderbuffer(
+                GL_RENDERBUFFER,
+                renderTarget.m_dsFBOColorBuffer.id(),
+            ));
+            recordGLCommand(GLCommand::RenderbufferStorageMultisample {
+                target: GL_RENDERBUFFER,
+                samples: sampleCount,
+                internal_format: GL_RGBA8,
+                width: renderTarget.width(),
+                height: renderTarget.height(),
+            });
+            recordGLCommand(GLCommand::FramebufferRenderbuffer {
+                target: GL_FRAMEBUFFER,
+                attachment: GL_COLOR_ATTACHMENT0,
+                renderbuffer_target: GL_RENDERBUFFER,
+                renderbuffer: renderTarget.m_dsFBOColorBuffer.id(),
+            });
+        }
         recordGLCommand(GLCommand::FramebufferRenderbuffer {
             target: GL_FRAMEBUFFER,
             attachment: GL_DEPTH_STENCIL_ATTACHMENT,
             renderbuffer_target: GL_RENDERBUFFER,
-            renderbuffer: renderTarget.m_msaaDepthStencilBuffer.id(),
+            renderbuffer: renderTarget.m_dsFBODepthStencilBuffer.id(),
         });
 
-        renderTarget.m_msaaFramebufferSampleCount = sampleCount;
+        renderTarget.m_dsFBOSampleCount = sampleCount;
     }
 
-    recordGLCommand(GLCommand::BindFramebuffer(
-        GL_FRAMEBUFFER,
-        renderTarget.m_msaaFramebuffer.id(),
-    ));
-
-    if renderContextImpl
-        .capabilities()
-        .EXT_multisampled_render_to_texture()
+    if sampleCount == 1
+        || renderContextImpl
+            .capabilities()
+            .EXT_multisampled_render_to_texture()
     {
-        MSAAResolveAction::automatic
+        MSAAResolveAction::none
     } else {
         if let Some(preserveBounds) = preserveBounds {
             renderContextImpl.blitTextureToFramebufferAsDraw(
@@ -515,7 +534,56 @@ pub(crate) fn bindFramebufferHeadlessFramebuffer(
     });
 }
 
-pub(crate) fn bindFramebufferMSAAFramebuffer(
+fn validateDepthStencilPrecisionOnce(renderTarget: &mut FramebufferRenderTargetGL) {
+    if renderTarget.m_didValidateDepthStencilPrecision {
+        return;
+    }
+    renderTarget.m_didValidateDepthStencilPrecision = true;
+    let execution = renderTarget.executionStamp().domain();
+    let attachmentBitSize = |attachment, parameter| {
+        if execution.getFramebufferAttachmentParameter(
+            GL_FRAMEBUFFER,
+            attachment,
+            GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
+        ) == GL_NONE as GLint
+        {
+            0
+        } else {
+            execution.getFramebufferAttachmentParameter(GL_FRAMEBUFFER, attachment, parameter)
+        }
+    };
+    let isFBO0 = renderTarget.m_externalFramebufferID == 0;
+    let depth = attachmentBitSize(
+        if isFBO0 {
+            GL_DEPTH
+        } else {
+            GL_DEPTH_ATTACHMENT
+        },
+        GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE,
+    );
+    let stencil = attachmentBitSize(
+        if isFBO0 {
+            GL_STENCIL
+        } else {
+            GL_STENCIL_ATTACHMENT
+        },
+        GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE,
+    );
+    if depth < 24 {
+        eprintln!(
+            "RIVE WARNING: Rive requires at least 24 bits of depth precision ({} provided).",
+            depth
+        );
+    }
+    if stencil < 8 {
+        eprintln!(
+            "RIVE WARNING: Rive requires at least 8 bits of stencil precision ({} provided).",
+            stencil
+        );
+    }
+}
+
+pub(crate) fn bindFramebufferForDepthStencilMode(
     renderTarget: &mut FramebufferRenderTargetGL,
     renderContextImpl: &mut RenderContextGLImpl,
     sampleCount: i32,
@@ -525,7 +593,7 @@ pub(crate) fn bindFramebufferMSAAFramebuffer(
     renderTarget.assertSameExecution(&renderContextImpl.rust_execution);
     let execution = renderTarget.executionStamp().clone();
     execution.withCurrent(|| {
-        bindFramebufferMSAAFramebufferCurrent(
+        bindFramebufferForDepthStencilModeCurrent(
             renderTarget,
             renderContextImpl,
             sampleCount,
@@ -535,7 +603,7 @@ pub(crate) fn bindFramebufferMSAAFramebuffer(
     })
 }
 
-fn bindFramebufferMSAAFramebufferCurrent(
+fn bindFramebufferForDepthStencilModeCurrent(
     renderTarget: &mut FramebufferRenderTargetGL,
     renderContextImpl: &mut RenderContextGLImpl,
     sampleCount: i32,
@@ -543,14 +611,15 @@ fn bindFramebufferMSAAFramebufferCurrent(
     isFBO0: Option<&mut bool>,
 ) -> MSAAResolveAction {
     debug_assert!(sampleCount > 0);
-    if renderTarget.m_sampleCount > 1 {
+    if sampleCount == 1 || renderTarget.m_sampleCount > 1 {
         // The external framebuffer's actual sample count is authoritative even
         // when it differs from the requested count.
         bindFramebufferDestinationFramebufferCurrent(renderTarget, GL_FRAMEBUFFER);
+        validateDepthStencilPrecisionOnce(renderTarget);
         if let Some(isFBO0) = isFBO0 {
             *isFBO0 = renderTarget.m_externalFramebufferID == 0;
         }
-        MSAAResolveAction::automatic
+        MSAAResolveAction::none
     } else {
         if let Some(preserveBounds) = preserveBounds {
             allocateOffscreenTargetTextureCurrent(renderTarget);
@@ -576,12 +645,14 @@ fn bindFramebufferMSAAFramebufferCurrent(
 
         // The nested action is deliberately ignored: rendering is offscreen
         // from the outer client's perspective, so the client always blits.
-        let _ = renderTarget.m_textureRenderTarget.bindMSAAFramebuffer(
-            renderContextImpl,
-            sampleCount,
-            preserveBounds,
-            isFBO0,
-        );
+        let _ = renderTarget
+            .m_textureRenderTarget
+            .bindFramebufferForDepthStencilMode(
+                renderContextImpl,
+                sampleCount,
+                preserveBounds,
+                isFBO0,
+            );
         MSAAResolveAction::framebufferBlit
     }
 }
@@ -611,9 +682,9 @@ unsafe fn dropTextureRenderTargetGLSourceFields(
     renderTarget: &mut TextureRenderTargetGL,
     _deleteNames: bool,
 ) {
-    unsafe { ManuallyDrop::drop(&mut renderTarget.m_msaaDepthStencilBuffer) };
-    unsafe { ManuallyDrop::drop(&mut renderTarget.m_msaaColorBuffer) };
-    unsafe { ManuallyDrop::drop(&mut renderTarget.m_msaaFramebuffer) };
+    unsafe { ManuallyDrop::drop(&mut renderTarget.m_dsFBODepthStencilBuffer) };
+    unsafe { ManuallyDrop::drop(&mut renderTarget.m_dsFBOColorBuffer) };
+    unsafe { ManuallyDrop::drop(&mut renderTarget.m_dsFBO) };
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_webglPLSBackingRGBA8) };
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_webglPLSBackingR32UIFallback) };
     unsafe { ManuallyDrop::drop(&mut renderTarget.m_webglPLSBackingR32UI) };
@@ -678,7 +749,7 @@ mod tests {
     use super::*;
     use crate::mechanical_port::source::include::rive::refcnt_hpp::RefCntTarget;
     use std::cell::RefCell;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::rc::Rc;
 
     #[derive(Default)]
@@ -737,7 +808,9 @@ mod tests {
             0
         }
 
-        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat {
+            0.0
+        }
 
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {
             None
@@ -788,7 +861,6 @@ mod tests {
         }
 
         fn contextLost(&mut self, _nextGeneration: u64) {}
-
     }
 
     fn domain(startName: GLuint) -> (GLExecutionDomain, Rc<RefCell<ProviderLog>>) {
@@ -852,10 +924,12 @@ mod tests {
             [GLCommand::Clear(GL_COLOR_BUFFER_BIT)]
         );
         let foreignStamp = foreignDomain.stamp();
-        assert!(catch_unwind(AssertUnwindSafe(
-            || target.assertSameExecution(&foreignStamp)
-        ))
-        .is_err());
+        assert!(
+            catch_unwind(AssertUnwindSafe(
+                || target.assertSameExecution(&foreignStamp)
+            ))
+            .is_err()
+        );
     }
 
     #[test]
@@ -863,7 +937,7 @@ mod tests {
         let (domain, log) = domain(301);
         let mut target = TextureRenderTargetGL::new(3, 3, domain.stamp());
         target.m_framebufferID.0.setSyntheticID(31);
-        target.m_msaaColorBuffer.0.setSyntheticID(32);
+        target.m_dsFBOColorBuffer.0.setSyntheticID(32);
         target.base.m_dstColorTexture.0.setSyntheticID(33);
 
         domain.markContextLost();
@@ -884,9 +958,9 @@ mod tests {
         target.m_webglPLSBackingR32UI.0.setSyntheticID(13);
         target.m_webglPLSBackingR32UIFallback.0.setSyntheticID(14);
         target.m_webglPLSBackingRGBA8.0.setSyntheticID(15);
-        target.m_msaaFramebuffer.0.setSyntheticID(16);
-        target.m_msaaColorBuffer.0.setSyntheticID(17);
-        target.m_msaaDepthStencilBuffer.0.setSyntheticID(18);
+        target.m_dsFBO.0.setSyntheticID(16);
+        target.m_dsFBOColorBuffer.0.setSyntheticID(17);
+        target.m_dsFBODepthStencilBuffer.0.setSyntheticID(18);
         target.base.m_dstColorTexture.0.setSyntheticID(19);
         target.base.m_dstColorFramebuffer.0.setSyntheticID(20);
 
@@ -931,8 +1005,17 @@ mod tests {
         let (domain, log) = domain(551);
         let mut target = FramebufferRenderTargetGL::new(2, 2, 900, 1, domain.stamp());
         target.m_offscreenTargetTexture.0.setSyntheticID(41);
-        target.m_textureRenderTarget.m_framebufferID.0.setSyntheticID(42);
-        target.m_textureRenderTarget.base.m_dstColorTexture.0.setSyntheticID(43);
+        target
+            .m_textureRenderTarget
+            .m_framebufferID
+            .0
+            .setSyntheticID(42);
+        target
+            .m_textureRenderTarget
+            .base
+            .m_dstColorTexture
+            .0
+            .setSyntheticID(43);
         target.base.m_dstColorFramebuffer.0.setSyntheticID(44);
 
         drop(target);
@@ -946,10 +1029,11 @@ mod tests {
                 GLCommand::DeleteFramebuffer(44),
             ]
         );
-        assert!(!log
-            .borrow()
-            .commands
-            .contains(&GLCommand::DeleteFramebuffer(900)));
+        assert!(
+            !log.borrow()
+                .commands
+                .contains(&GLCommand::DeleteFramebuffer(900))
+        );
     }
 
     #[test]

@@ -12,16 +12,15 @@ use super::render_context_gl_decl::{
 };
 use super::render_context_gl_impl::{unpackColorToRGBA32FPremul, withRenderTargetGL};
 use super::render_target_gl_decl::{
-    FramebufferRenderTargetGL, RenderTargetGL, RenderTargetGLApi,
-    FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
+    FRAMEBUFFER_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, FramebufferRenderTargetGL, RenderTargetGL,
+    RenderTargetGLApi,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
     self as gpu, FlushDescriptor, InterlockMode, LoadAction, PlatformFeatures,
 };
 
-pub(crate) const PINNED_SOURCE: &str =
-    include_str!("source/renderer_src_gl_pls_impl_webgl.cpp");
+pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_pls_impl_webgl.cpp");
 const _: [(); 11_347] = [(); PINNED_SOURCE.len()];
 
 const COLOR_PLANE_IDX: GLint = 0;
@@ -57,10 +56,7 @@ pub(crate) fn framebufferTexturePixelLocalStorageANGLE(
     });
 }
 
-pub(crate) fn framebufferPixelLocalClearValuefvANGLE(
-    plane: GLint,
-    value: [GLfloat; 4],
-) {
+pub(crate) fn framebufferPixelLocalClearValuefvANGLE(plane: GLint, value: [GLfloat; 4]) {
     recordGLCommand(GLCommand::FramebufferPixelLocalClearValuefvANGLE { plane, value });
 }
 
@@ -163,8 +159,7 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
                     {
                         framebufferRenderTarget.allocateOffscreenTargetTexture();
                         if desc.colorLoadAction == LoadAction::preserveRenderTarget {
-                            framebufferRenderTarget
-                                .bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
+                            framebufferRenderTarget.bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
                             framebufferRenderTarget.bindTextureFramebuffer(GL_DRAW_FRAMEBUFFER);
                             renderContextImpl.state().borrow_mut().setPipelineState(
                                 &gpu::COLOR_ONLY_PIPELINE_STATE,
@@ -237,8 +232,7 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
                         unsafe { framebufferRenderTargetGL(renderTarget) }
                     {
                         framebufferRenderTarget.bindTextureFramebuffer(GL_READ_FRAMEBUFFER);
-                        framebufferRenderTarget
-                            .bindDestinationFramebuffer(GL_DRAW_FRAMEBUFFER);
+                        framebufferRenderTarget.bindDestinationFramebuffer(GL_DRAW_FRAMEBUFFER);
                         renderContextImpl.state().borrow_mut().setPipelineState(
                             &gpu::COLOR_ONLY_PIPELINE_STATE,
                             ScissorAction::disable,
@@ -254,11 +248,7 @@ impl PixelLocalStorageImpl for PLSImplWebGL {
         }
     }
 
-    fn pushShaderDefines(
-        &self,
-        _interlockMode: InterlockMode,
-        defines: &mut Vec<&'static str>,
-    ) {
+    fn pushShaderDefines(&self, _interlockMode: InterlockMode, defines: &mut Vec<&'static str>) {
         defines.push(GLSL_PLS_IMPL_ANGLE);
     }
 }
@@ -350,10 +340,16 @@ mod tests {
         }
 
         fn getInteger(&mut self, parameter: GLenum) -> GLint {
-            if parameter == GL_MAX_TEXTURE_SIZE { 4096 } else { 0 }
+            if parameter == GL_MAX_TEXTURE_SIZE {
+                4096
+            } else {
+                0
+            }
         }
 
-        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat {
+            0.0
+        }
 
         fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>> {
             match parameter {
@@ -436,13 +432,7 @@ mod tests {
             0
         }
 
-        fn readPixelsRGBA8(
-            &mut self,
-            _x: i32,
-            _y: i32,
-            width: u32,
-            height: u32,
-        ) -> Vec<u8> {
+        fn readPixelsRGBA8(&mut self, _x: i32, _y: i32, width: u32, height: u32) -> Vec<u8> {
             vec![0; width as usize * height as usize * 4]
         }
 
@@ -672,8 +662,7 @@ mod tests {
                 false,
             ),
         ] {
-            let (provider, trace, coherentEnableResult, _, _) =
-                boxedProviderForRenderer(renderer);
+            let (provider, trace, coherentEnableResult, _, _) = boxedProviderForRenderer(renderer);
             coherentEnableResult.set(coherentEnableResultValue);
             let domain = GLExecutionDomain::new(provider);
             let context = newComponent097SelectedContextOwner(
@@ -712,11 +701,9 @@ mod tests {
             boxedProviderForRenderer("WebGL component097 renderer");
         coherentEnableResult.set(WebGLShaderPixelLocalStorageEnableResult::Enabled);
         let domain = GLExecutionDomain::new(provider);
-        let mut context = newComponent097SelectedContextOwner(
-            ContextOptions::default(),
-            domain.clone(),
-        )
-            .expect("coherent WebGL PLS creates a context");
+        let mut context =
+            newComponent097SelectedContextOwner(ContextOptions::default(), domain.clone())
+                .expect("coherent WebGL PLS creates a context");
         RenderContextHelperImplContract::resizeFlushUniformBuffer(
             &mut *context,
             std::mem::size_of::<gpu::FlushUniforms>(),
@@ -1017,16 +1004,34 @@ mod tests {
         let mut target = FramebufferRenderTargetGL::new(8, 6, 77, 1, execution.clone());
         target.m_offscreenTargetTexture.0.setSyntheticID(701);
         target.m_textureRenderTarget.m_externalTextureID = 701;
-        target.m_textureRenderTarget.m_framebufferID.0.setSyntheticID(902);
-        target.m_textureRenderTarget.m_headlessFramebuffer.0.setSyntheticID(901);
-        target.m_textureRenderTarget.m_framebufferTargetAttachmentDirty = false;
-        target.m_textureRenderTarget.m_webglPLSBackingR32UI.0.setSyntheticID(801);
+        target
+            .m_textureRenderTarget
+            .m_framebufferID
+            .0
+            .setSyntheticID(902);
+        target
+            .m_textureRenderTarget
+            .m_headlessFramebuffer
+            .0
+            .setSyntheticID(901);
+        target
+            .m_textureRenderTarget
+            .m_externalTextureAttachmentDirty = false;
+        target
+            .m_textureRenderTarget
+            .m_webglPLSBackingR32UI
+            .0
+            .setSyntheticID(801);
         target
             .m_textureRenderTarget
             .m_webglPLSBackingR32UIFallback
             .0
             .setSyntheticID(802);
-        target.m_textureRenderTarget.m_webglPLSBackingRGBA8.0.setSyntheticID(803);
+        target
+            .m_textureRenderTarget
+            .m_webglPLSBackingRGBA8
+            .0
+            .setSyntheticID(803);
         target.m_textureRenderTarget.m_webglPLSBindingsDirty = true;
         let renderTarget = NonNull::from(&mut *target.base.base);
         let mut desc = flushDescriptor(renderTarget);
@@ -1034,10 +1039,10 @@ mod tests {
         let mut pls = PLSImplWebGL::default();
 
         execution.withCurrent(|| {
-            context.state().borrow_mut().setPipelineState(
-                &gpu::COLOR_ONLY_PIPELINE_STATE,
-                ScissorAction::disable,
-            );
+            context
+                .state()
+                .borrow_mut()
+                .setPipelineState(&gpu::COLOR_ONLY_PIPELINE_STATE, ScissorAction::disable);
         });
         trace.borrow_mut().commands.clear();
 

@@ -8,7 +8,7 @@ use super::gles3_decl::{GLCapabilities, GLExecutionStamp, GLenum, GLuint};
 use super::render_context_gl_decl::RenderContextGLImpl;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::RefCntTarget;
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    enable_lite_rtti, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
+    CONST_ID, LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, enable_lite_rtti,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget;
@@ -30,7 +30,7 @@ pub(crate) type RenderTargetGLEnableLiteRtti =
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MSAAResolveAction {
-    automatic = 0,
+    none = 0,
     framebufferBlit = 1,
 }
 
@@ -45,7 +45,7 @@ pub(crate) trait RenderTargetGLApi {
     fn renderTexture(&mut self) -> GLuint;
     fn bindTextureFramebuffer(&mut self, target: GLenum);
     fn bindHeadlessFramebuffer(&mut self, capabilities: &GLCapabilities);
-    fn bindMSAAFramebuffer(
+    fn bindFramebufferForDepthStencilMode(
         &mut self,
         renderContextImpl: &mut RenderContextGLImpl,
         sampleCount: i32,
@@ -133,17 +133,18 @@ pub(crate) struct TextureRenderTargetGL {
 
     pub(crate) m_framebufferID: ManuallyDrop<Framebuffer>,
     pub(crate) m_headlessFramebuffer: ManuallyDrop<Framebuffer>,
-    pub(crate) m_framebufferTargetAttachmentDirty: bool,
+    pub(crate) m_externalTextureAttachmentDirty: bool,
 
     pub(crate) m_webglPLSBackingR32UI: ManuallyDrop<Texture>,
     pub(crate) m_webglPLSBackingR32UIFallback: ManuallyDrop<Texture>,
     pub(crate) m_webglPLSBackingRGBA8: ManuallyDrop<Texture>,
     pub(crate) m_webglPLSBindingsDirty: bool,
 
-    pub(crate) m_msaaFramebuffer: ManuallyDrop<Framebuffer>,
-    pub(crate) m_msaaColorBuffer: ManuallyDrop<Renderbuffer>,
-    pub(crate) m_msaaDepthStencilBuffer: ManuallyDrop<Renderbuffer>,
-    pub(crate) m_msaaFramebufferSampleCount: i32,
+    pub(crate) m_dsFBO: ManuallyDrop<Framebuffer>,
+    pub(crate) m_dsFBOColorBuffer: ManuallyDrop<Renderbuffer>,
+    pub(crate) m_dsFBODepthStencilBuffer: ManuallyDrop<Renderbuffer>,
+    pub(crate) m_dsFBOSampleCount: i32,
+    pub(crate) m_dsFBOExternalTextureAttachmentDirty: bool,
 }
 
 impl TextureRenderTargetGL {
@@ -157,7 +158,8 @@ impl TextureRenderTargetGL {
 
     pub(crate) fn setTargetTexture(&mut self, externalTextureID: GLuint) {
         self.m_externalTextureID = externalTextureID;
-        self.m_framebufferTargetAttachmentDirty = true;
+        self.m_externalTextureAttachmentDirty = true;
+        self.m_dsFBOExternalTextureAttachmentDirty = true;
         self.m_webglPLSBindingsDirty = true;
     }
 
@@ -177,14 +179,14 @@ impl TextureRenderTargetGL {
         super::render_target_gl_impl::bindHeadlessFramebuffer(self, capabilities)
     }
 
-    pub(crate) fn bindMSAAFramebuffer(
+    pub(crate) fn bindFramebufferForDepthStencilMode(
         &mut self,
         renderContextImpl: &mut RenderContextGLImpl,
         sampleCount: i32,
         preserveBounds: Option<&IAABB>,
         isFBO0: Option<&mut bool>,
     ) -> MSAAResolveAction {
-        super::render_target_gl_impl::bindTextureMSAAFramebuffer(
+        super::render_target_gl_impl::bindTextureFramebufferForDepthStencilMode(
             self,
             renderContextImpl,
             sampleCount,
@@ -261,14 +263,14 @@ impl RenderTargetGLApi for TextureRenderTargetGL {
         TextureRenderTargetGL::bindHeadlessFramebuffer(self, capabilities)
     }
 
-    fn bindMSAAFramebuffer(
+    fn bindFramebufferForDepthStencilMode(
         &mut self,
         renderContextImpl: &mut RenderContextGLImpl,
         sampleCount: i32,
         preserveBounds: Option<&IAABB>,
         isFBO0: Option<&mut bool>,
     ) -> MSAAResolveAction {
-        TextureRenderTargetGL::bindMSAAFramebuffer(
+        TextureRenderTargetGL::bindFramebufferForDepthStencilMode(
             self,
             renderContextImpl,
             sampleCount,
@@ -290,6 +292,7 @@ pub(crate) struct FramebufferRenderTargetGL {
     // borrowed for the complete owner lifetime.
     pub(crate) m_externalFramebufferID: GLuint,
     pub(crate) m_sampleCount: u32,
+    pub(crate) m_didValidateDepthStencilPrecision: bool,
 
     pub(crate) m_textureRenderTarget: ManuallyDrop<TextureRenderTargetGL>,
     pub(crate) m_offscreenTargetTexture: ManuallyDrop<Texture>,
@@ -336,14 +339,14 @@ impl FramebufferRenderTargetGL {
         super::render_target_gl_impl::bindFramebufferHeadlessFramebuffer(self, capabilities)
     }
 
-    pub(crate) fn bindMSAAFramebuffer(
+    pub(crate) fn bindFramebufferForDepthStencilMode(
         &mut self,
         renderContextImpl: &mut RenderContextGLImpl,
         sampleCount: i32,
         preserveBounds: Option<&IAABB>,
         isFBO0: Option<&mut bool>,
     ) -> MSAAResolveAction {
-        super::render_target_gl_impl::bindFramebufferMSAAFramebuffer(
+        super::render_target_gl_impl::bindFramebufferForDepthStencilMode(
             self,
             renderContextImpl,
             sampleCount,
@@ -420,14 +423,14 @@ impl RenderTargetGLApi for FramebufferRenderTargetGL {
         FramebufferRenderTargetGL::bindHeadlessFramebuffer(self, capabilities)
     }
 
-    fn bindMSAAFramebuffer(
+    fn bindFramebufferForDepthStencilMode(
         &mut self,
         renderContextImpl: &mut RenderContextGLImpl,
         sampleCount: i32,
         preserveBounds: Option<&IAABB>,
         isFBO0: Option<&mut bool>,
     ) -> MSAAResolveAction {
-        FramebufferRenderTargetGL::bindMSAAFramebuffer(
+        FramebufferRenderTargetGL::bindFramebufferForDepthStencilMode(
             self,
             renderContextImpl,
             sampleCount,
@@ -448,7 +451,7 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_and_execution_sidecar_are_frozen() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 210);
+        assert_eq!(PINNED_SOURCE.lines().count(), 233);
         assert_eq!(offset_of!(RenderTargetGL, base), 0);
         assert!(offset_of!(RenderTargetGL, lite_rtti) > offset_of!(RenderTargetGL, base));
         assert!(
@@ -469,8 +472,8 @@ mod tests {
                 > offset_of!(TextureRenderTargetGL, base)
         );
         assert!(
-            offset_of!(TextureRenderTargetGL, m_msaaFramebufferSampleCount)
-                > offset_of!(TextureRenderTargetGL, m_msaaDepthStencilBuffer)
+            offset_of!(TextureRenderTargetGL, m_dsFBOSampleCount)
+                > offset_of!(TextureRenderTargetGL, m_dsFBODepthStencilBuffer)
         );
 
         assert_eq!(offset_of!(FramebufferRenderTargetGL, base), 0);

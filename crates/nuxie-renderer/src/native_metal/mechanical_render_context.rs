@@ -60,11 +60,11 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::metal::re
 };
 use crate::{RenderMode, RendererError};
 
-use super::MechanicalMetalHost;
-use super::command_submission::{NativeMetalSubmissionCompletion, make_command_buffer_on_queue};
+use super::command_submission::{make_command_buffer_on_queue, NativeMetalSubmissionCompletion};
 use super::context_options::{NativeMetalContextOptions, ShaderCompilationMode};
 use super::objc2_execution::{ActualMetalExecutionInventory, Objc2MetalExecution};
 use super::source_capabilities::MetalCapabilitySelection;
+use super::MechanicalMetalHost;
 
 use mechanical_metal::source_execution::{
     Handle, MetalExecution, PixelFormat, RenderContextMetal, RenderTargetMetal,
@@ -789,15 +789,15 @@ fn finish_present_result(
 #[cfg(test)]
 mod committed_frame_guard_tests {
     use super::{
-        CommittedFrameWaitGuard, MechanicalCompletionToken, finish_present_result,
-        inject_panic_after_post_flush_once,
+        finish_present_result, inject_panic_after_post_flush_once, CommittedFrameWaitGuard,
+        MechanicalCompletionToken,
     };
-    use crate::RendererError;
     use crate::native_metal::NativeMetalFactory;
+    use crate::RendererError;
     use nuxie_render_api::RenderCanvas;
     use std::rc::Rc;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -950,14 +950,12 @@ mod committed_frame_guard_tests {
             result.is_err(),
             "actual canvas postFlush unwind was not injected"
         );
-        assert!(
-            factory
-                .mechanical_context()
-                .unwrap()
-                .borrow()
-                .in_flight
-                .is_empty()
-        );
+        assert!(factory
+            .mechanical_context()
+            .unwrap()
+            .borrow()
+            .in_flight
+            .is_empty());
         for _ in 0..4 {
             canvas.begin_frame(0).unwrap().finish().unwrap();
         }
@@ -1266,7 +1264,11 @@ impl MechanicalRenderContext {
         clear_color: u32,
         load_action: LoadAction,
     ) -> Result<(), RendererError> {
-        self.begin_frame_with_dither(clear_color, load_action, DitherMode::interleavedGradientNoise)
+        self.begin_frame_with_dither(
+            clear_color,
+            load_action,
+            DitherMode::interleavedGradientNoise,
+        )
     }
 
     #[cfg(all(test, feature = "with-rive-tools"))]
@@ -1275,7 +1277,10 @@ impl MechanicalRenderContext {
         mode: SourceContextShaderCompilationMode,
     ) -> SourceContextShaderCompilationMode {
         let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
-        context.m_impl.contract_mut().testingOnly_setShaderCompilationMode(mode)
+        context
+            .m_impl
+            .contract_mut()
+            .testingOnly_setShaderCompilationMode(mode)
     }
 
     pub(super) fn begin_frame_with_dither(
@@ -1304,6 +1309,10 @@ impl MechanicalRenderContext {
         match self.mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,
+            RenderMode::ClockwiseMsaa1 => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+            }
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;

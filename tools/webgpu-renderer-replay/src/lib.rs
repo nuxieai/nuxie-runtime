@@ -44,6 +44,7 @@ mod wasm {
         let clear = stream.clear_color.unwrap_or(0);
         let mode = match mode {
             "msaa" => RenderMode::Msaa,
+            "clockwise-msaa1" => RenderMode::ClockwiseMsaa1,
             "clockwise-atomic" => RenderMode::ClockwiseAtomic,
             value => {
                 return Err(JsValue::from_str(&format!(

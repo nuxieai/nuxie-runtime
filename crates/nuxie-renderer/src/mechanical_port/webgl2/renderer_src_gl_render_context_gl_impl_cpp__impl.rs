@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 158489] = [(); PINNED_SOURCE.len()];
+const _: [(); 159204] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -82,20 +82,20 @@ const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "ZD";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
 const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "AE";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "ZE";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "AF";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "DC";
 const GLSL_CLEAR_COVERAGE: &str = "GE";
 const GLSL_CLOCKWISE_FILL: &str = "HE";
 const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "CD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
 const GLSL_DRAW_IMAGE: &str = "OE";
 const GLSL_DRAW_IMAGE_MESH: &str = "OB";
 const GLSL_DRAW_IMAGE_RECT: &str = "AD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_DRAW_PATH: &str = "OD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "HF";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "IF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "TE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "UE";
 const GLSL_ENABLE_KHR_BLEND: &str = "ME";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "GB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "O";
@@ -103,9 +103,9 @@ const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "NE";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "RC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "RF";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "SF";
 const GLSL_FlushUniforms: &str = "BC";
-const GLSL_atlasRenderTexture: &str = "CF";
+const GLSL_atlasRenderTexture: &str = "DF";
 const GLSL_contourBuffer: &str = "ID";
 const GLSL_dstColorTexture: &str = "YD";
 const GLSL_featherAtlasTexture: &str = "FD";
@@ -1185,7 +1185,9 @@ pub(crate) unsafe fn ensureCanvasBacking(
     canvas: *mut RenderCanvas,
 ) {
     let canvas = unsafe { &mut *canvas };
-    if canvas.isBacked() { return; }
+    if canvas.isBacked() {
+        return;
+    }
     let (width, height) = (canvas.width(), canvas.height());
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
@@ -1193,13 +1195,23 @@ pub(crate) unsafe fn ensureCanvasBacking(
         recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
         recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, textureID));
         recordGLCommand(GLCommand::TexStorage2D {
-            target: GL_TEXTURE_2D, levels: 1, internal_format: GL_RGBA8, width, height,
+            target: GL_TEXTURE_2D,
+            levels: 1,
+            internal_format: GL_RGBA8,
+            width,
+            height,
         });
         recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
-        let source = make_rcp(|| CanvasSourceTextureGLImpl::new(
-            width, height, textureID, execution.clone(), context,
-            Rc::downgrade(&context.m_canvasMirrors),
-        ));
+        let source = make_rcp(|| {
+            CanvasSourceTextureGLImpl::new(
+                width,
+                height,
+                textureID,
+                execution.clone(),
+                context,
+                Rc::downgrade(&context.m_canvasMirrors),
+            )
+        });
         let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
         let target = make_rcp(|| TextureRenderTargetGL::new(width, height, execution.clone()));
         unsafe { (&mut *target.get()).setTargetTexture(textureID) };
@@ -1910,7 +1922,11 @@ fn newDrawShader(
         return DrawShader { m_id: 0 };
     }
     let mut defines = Vec::new();
-    if let Some(pls) = context.m_plsImpl.as_ref() {
+    if let Some(pls) = context
+        .m_plsImpl
+        .as_ref()
+        .filter(|_| interlockMode != gpu::InterlockMode::depthStencil)
+    {
         pls.pushShaderDefines(interlockMode, &mut defines);
     }
     if hasMiscFlag(
@@ -1925,7 +1941,7 @@ fn newDrawShader(
     if hasMiscFlag(shaderMiscFlags, gpu::ShaderMiscFlags::borrowedCoveragePass) {
         defines.push(GLSL_BORROWED_COVERAGE_PASS);
     }
-    for bit in 0..gpu::kShaderFeatureCount {
+    for bit in 0..gpu::ShaderFeatureCount {
         let feature = gpu::ShaderFeatures(1 << bit);
         if hasShaderFeature(shaderFeatures, feature) {
             assert!(
@@ -2071,7 +2087,10 @@ fn newDrawShader(
             }
             gpu::DrawType::clipReset => sources.push(GLSL_STENCIL_DRAW),
             gpu::DrawType::imageMesh => {
-                sources.extend([GLSL_DRAW_IMAGE_MESH_VERT, GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG]);
+                sources.extend([
+                    GLSL_DRAW_IMAGE_MESH_VERT,
+                    GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG,
+                ]);
             }
             _ => panic!("unreachable MSAA draw shader"),
         },
@@ -2576,8 +2595,16 @@ unsafe fn glBufferId(bufferRing: *mut BufferRing) -> GLuint {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum CallType { UnnormalizedFloat, NormalizedFloat, Int }
-struct GLVertexElementFormat { componentType: GLenum, componentCount: GLint, callType: CallType }
+enum CallType {
+    UnnormalizedFloat,
+    NormalizedFloat,
+    Int,
+}
+struct GLVertexElementFormat {
+    componentType: GLenum,
+    componentCount: GLint,
+    callType: CallType,
+}
 fn getGLVertexElementFormat(format: gpu::VertexElementFormat) -> GLVertexElementFormat {
     let (componentType, componentCount, callType) = match format {
         gpu::VertexElementFormat::float1 => (GL_FLOAT, 1, CallType::UnnormalizedFloat),
@@ -2598,21 +2625,37 @@ fn getGLVertexElementFormat(format: gpu::VertexElementFormat) -> GLVertexElement
         gpu::VertexElementFormat::float16x4 => (GL_HALF_FLOAT, 4, CallType::UnnormalizedFloat),
         gpu::VertexElementFormat::uint32 => (GL_UNSIGNED_INT, 1, CallType::Int),
     };
-    GLVertexElementFormat { componentType, componentCount, callType }
+    GLVertexElementFormat {
+        componentType,
+        componentCount,
+        callType,
+    }
 }
 fn setInstanceAttribs(baseByteOffset: usize, stride: GLsizei, attributes: &[gpu::VertexAttribute]) {
     for attr in attributes {
         let fmt = getGLVertexElementFormat(attr.format);
-        let offset = u32::try_from(baseByteOffset + attr.byteOffset as usize).expect("WebGL vertex attribute offset fits u32");
+        let offset = u32::try_from(baseByteOffset + attr.byteOffset as usize)
+            .expect("WebGL vertex attribute offset fits u32");
         if fmt.callType == CallType::Int {
             recordGLCommand(GLCommand::VertexAttribIPointer {
-                index: attr.attributeIndex, size: fmt.componentCount, type_: fmt.componentType, stride, offset,
+                index: attr.attributeIndex,
+                size: fmt.componentCount,
+                type_: fmt.componentType,
+                stride,
+                offset,
             });
         } else {
             recordGLCommand(GLCommand::VertexAttribPointer {
-                index: attr.attributeIndex, size: fmt.componentCount, type_: fmt.componentType,
-                normalized: if fmt.callType == CallType::NormalizedFloat { GL_TRUE } else { GL_FALSE },
-                stride, offset,
+                index: attr.attributeIndex,
+                size: fmt.componentCount,
+                type_: fmt.componentType,
+                normalized: if fmt.callType == CallType::NormalizedFloat {
+                    GL_TRUE
+                } else {
+                    GL_FALSE
+                },
+                stride,
+                offset,
             });
         }
     }
@@ -3445,7 +3488,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 mode: GL_LINE_ANGLE,
             });
         }
-        let mut msaaResolveAction = MSAAResolveAction::automatic;
+        let mut msaaResolveAction = MSAAResolveAction::none;
         let mut msaaDepthStencilColor = [GL_NONE; 3];
         let mut clipPlanesEnabled = false;
         if desc.interlockMode != gpu::InterlockMode::depthStencil {
@@ -3467,9 +3510,9 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             let preserve = desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget;
             let mut isFBO0 = false;
             msaaResolveAction = renderTargetGL(renderTargetHandle, &execution)
-                .bindMSAAFramebuffer(
+                .bindFramebufferForDepthStencilMode(
                     context,
-                    desc.msaaSampleCount,
+                    desc.msaaSampleCount as i32,
                     preserve.then_some(&desc.renderTargetUpdateBounds),
                     Some(&mut isFBO0),
                 );
@@ -3646,7 +3689,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         }
                     }
                     let _ = renderTargetGL(renderTargetHandle, &execution)
-                        .bindMSAAFramebuffer(context, desc.msaaSampleCount, None, None);
+                        .bindFramebufferForDepthStencilMode(context, desc.msaaSampleCount as i32, None, None);
                 }
             }
 
@@ -4049,6 +4092,7 @@ fn makeContextOwnerInCurrent(
     capabilities.setIsAdreno(renderer.contains("Adreno"));
     capabilities.setIsMali(renderer.contains("Mali"));
     capabilities.setIsPowerVR(renderer.contains("PowerVR"));
+    capabilities.setIsIntel(renderer.contains("Intel"));
     if capabilities.isPowerVR() {
         let (major, minor, vendorMajor, vendorMinor) = parsePowerVRVersion(glVersion);
         capabilities.contextVersionMajor = major;
@@ -4119,6 +4163,17 @@ fn makeContextOwnerInCurrent(
         executionDomain.enableWebGLExtension("WEBGL_compressed_texture_astc"),
     );
 
+    let storageBuffersAreCore = if capabilities.isGLES() {
+        capabilities.isContextVersionAtLeast(3, 1)
+    } else {
+        capabilities.isContextVersionAtLeast(4, 3)
+    };
+    if capabilities.ARB_shader_storage_buffer_object()
+        && capabilities.isIntel()
+        && !storageBuffersAreCore
+    {
+        capabilities.setARB_shader_storage_buffer_object(false);
+    }
     if capabilities.ARB_shader_storage_buffer_object()
         && executionDomain.getInteger(GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS)
             < gpu::kMaxStorageBuffers as GLint
@@ -4256,7 +4311,9 @@ impl RenderContextHelperBackendContract for RenderContextGLImpl {
         &mut self,
         mode: ShaderCompilationMode,
     ) -> ShaderCompilationMode {
-        self.m_pipelineManager.base.testingOnly_setShaderCompilationMode(mode)
+        self.m_pipelineManager
+            .base
+            .testingOnly_setShaderCompilationMode(mode)
     }
 
     fn makeRenderBuffer(
@@ -4534,10 +4591,16 @@ mod tests {
         };
         let mut uber = props;
         uber.shaderFeatures = gpu::UbershaderFeaturesMaskFor(
-            props.shaderFeatures, props.drawType, props.interlockMode,
-            props.shaderMiscFlags, context.platformFeatures(),
+            props.shaderFeatures,
+            props.drawType,
+            props.interlockMode,
+            props.shaderMiscFlags,
+            context.platformFeatures(),
         );
-        assert_ne!(props.createKey(context.platformFeatures()), uber.createKey(context.platformFeatures()));
+        assert_ne!(
+            props.createKey(context.platformFeatures()),
+            uber.createKey(context.platformFeatures())
+        );
         // Ready cache entries exercise actual selection, not driver compilation.
         for (properties, id) in [(props, 77), (uber, 78)] {
             let key = properties.createKey(context.platformFeatures());
@@ -4550,15 +4613,23 @@ mod tests {
                 m_state: ManuallyDrop::new((&*context.m_state).clone()),
                 m_synthesizedFailureType: gpu::SynthesizedFailureType::none,
             });
-            context.m_pipelineManager.base.m_pipelines.insert(key, Some(program));
+            context
+                .m_pipelineManager
+                .base
+                .m_pipelines
+                .insert(key, Some(program));
         }
         let specialized = tryGetPipeline(&mut context, &props).unwrap();
         assert_eq!(unsafe { (*specialized).id() }, 77);
         let old = RenderContextImplContract::testingOnly_setShaderCompilationMode(
-            &mut *context, ShaderCompilationMode::onlyUbershaders,
+            &mut *context,
+            ShaderCompilationMode::onlyUbershaders,
         );
         assert_eq!(old, ShaderCompilationMode::standard);
-        assert_eq!(unsafe { (*tryGetPipeline(&mut context, &props).unwrap()).id() }, 78);
+        assert_eq!(
+            unsafe { (*tryGetPipeline(&mut context, &props).unwrap()).id() },
+            78
+        );
         assert_eq!(
             RenderContextImplContract::testingOnly_setShaderCompilationMode(&mut *context, old),
             ShaderCompilationMode::onlyUbershaders,
@@ -4585,11 +4656,12 @@ mod tests {
             &mut self,
             ingress: GLFinalReleaseIngress,
         ) -> std::sync::Arc<dyn nuxie_ore_metal::gpu_resource::ResourceFinalReleaseWake> {
-            assert!(self
-                .finalReleaseIngress
-                .borrow_mut()
-                .replace(ingress)
-                .is_none());
+            assert!(
+                self.finalReleaseIngress
+                    .borrow_mut()
+                    .replace(ingress)
+                    .is_none()
+            );
             self.finalReleaseWake.clone()
         }
 
@@ -4613,7 +4685,9 @@ mod tests {
             0
         }
 
-        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat {
+            0.0
+        }
 
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {
             None
@@ -4668,8 +4742,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4084);
-        assert_eq!(PINNED_SOURCE.len(), 158489);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4099);
+        assert_eq!(PINNED_SOURCE.len(), 159204);
     }
 
     #[test]
@@ -4790,7 +4864,7 @@ mod tests {
                 "JB",
             ),
         ];
-        assert_eq!(features.len(), gpu::kShaderFeatureCount);
+        assert_eq!(features.len(), gpu::ShaderFeatureCount);
         for (source_name, feature, expected_name) in features {
             assert_eq!(shaderFeatureDefine(feature), expected_name);
             assert!(exports.contains(&format!("#define GLSL_{source_name} \"{expected_name}\"")));

@@ -2452,7 +2452,6 @@ const PAINT_FLAG_HAS_IMAGE: u32 = 0x800;
 const PAINT_AUX_ENTRY_ELEMENT_COUNT: usize = 8;
 const _: [(); PAINT_AUX_ENTRY_ELEMENT_COUNT] = [(); core::mem::size_of::<PaintAuxData>()
     / StorageBufferElementSizeInBytes(PaintAuxData::kBufferStructure) as usize];
-const BLEND_MODE_BIT_COUNT: u32 = 4;
 const STROKE_VERTEX: i32 = 0;
 const FAN_VERTEX: i32 = 1;
 const FAN_MIDPOINT_VERTEX: i32 = 2;
@@ -2583,22 +2582,73 @@ fn get_valid_shader_misc_flags(draw_type: DrawType, mode: InterlockMode) -> u32 
         }
         _ => {}
     }
-    if matches!(
-        mode,
-        InterlockMode::atomics
-            | InterlockMode::clockwise
-            | InterlockMode::clockwiseAtomic
-            | InterlockMode::depthStencil
-    ) {
-        flags |= ShaderMiscFlags::fixedFunctionColorOutput.0;
-    } else {
-        flags |= ShaderMiscFlags::clockwiseFill.0;
+    flags |= ShaderMiscFlags::fixedFunctionColorOutput.0;
+    match mode {
+        InterlockMode::rasterOrdering => flags |= ShaderMiscFlags::clockwiseFill.0,
+        InterlockMode::depthStencil => {
+            if draw_type != DrawType::renderPassInitialize {
+                flags |= ShaderMiscFlags::msaaDstRead.0;
+            }
+            if drawTypeHasPipelineDynamicState(draw_type) {
+                flags |= ShaderMiscFlags::emulateDynamicColorWriteDisable.0;
+            }
+        }
+        _ => {}
     }
     if drawTypeHasPipelineDynamicState(draw_type) {
         flags |= ShaderMiscFlags::emulateDynamicColorWriteDisable.0;
     }
     flags
 }
+
+const fn shaderMiscFlagKeyMask(mode: InterlockMode) -> u32 {
+    let fixed = ShaderMiscFlags::fixedFunctionColorOutput.0;
+    match mode {
+        // Upstream permits fixed-function output here while rive#14021 is open.
+        InterlockMode::rasterOrdering => fixed | ShaderMiscFlags::clockwiseFill.0,
+        InterlockMode::atomics => {
+            fixed
+                | ShaderMiscFlags::storeColorClear.0
+                | ShaderMiscFlags::loadColorFromDstTexture.0
+                | ShaderMiscFlags::swizzleColorBGRAToRGBA.0
+                | ShaderMiscFlags::coalescedResolveAndTransfer.0
+        }
+        InterlockMode::clockwise => {
+            fixed | ShaderMiscFlags::clipUpdateOnly.0 | ShaderMiscFlags::borrowedCoveragePass.0
+        }
+        InterlockMode::clockwiseAtomic => {
+            fixed
+                | ShaderMiscFlags::clipUpdateOnly.0
+                | ShaderMiscFlags::nestedClipUpdateOnly.0
+                | ShaderMiscFlags::borrowedCoveragePass.0
+        }
+        InterlockMode::depthStencil => {
+            fixed
+                | ShaderMiscFlags::emulateDynamicColorWriteDisable.0
+                | ShaderMiscFlags::msaaDstRead.0
+        }
+    }
+}
+
+const _: () = {
+    let modes = [
+        InterlockMode::rasterOrdering,
+        InterlockMode::atomics,
+        InterlockMode::clockwise,
+        InterlockMode::clockwiseAtomic,
+        InterlockMode::depthStencil,
+    ];
+    let mut maximum = 0;
+    let mut i = 0;
+    while i < modes.len() {
+        let bits = shaderMiscFlagKeyMask(modes[i]).count_ones();
+        if bits > maximum {
+            maximum = bits;
+        }
+        i += 1;
+    }
+    assert!(maximum as usize == ShaderMiscFlagKeyBitCount);
+};
 
 /// Complete source-order ubershader permutation walk.
 pub fn ForEachUbershaderPermutation(
@@ -2636,6 +2686,14 @@ pub fn ForEachUbershaderPermutation(
                         misc,
                         ShaderMiscFlags::clipUpdateOnly.0 | ShaderMiscFlags::nestedClipUpdateOnly.0,
                     ))
+            {
+                continue;
+            }
+            if interlockMode == InterlockMode::depthStencil
+                && misc
+                    & (ShaderMiscFlags::msaaDstRead.0 | ShaderMiscFlags::fixedFunctionColorOutput.0)
+                    == (ShaderMiscFlags::msaaDstRead.0
+                        | ShaderMiscFlags::fixedFunctionColorOutput.0)
             {
                 continue;
             }
@@ -2705,15 +2763,43 @@ pub fn ShaderUniqueKey(
         DrawType::featherAtlasBlit => 2,
         DrawType::imageRect => 3,
         DrawType::imageMesh => 4,
-        DrawType::renderPassInitialize => 5,
-        DrawType::renderPassResolve => 6,
-        DrawType::clipReset => 7,
+        DrawType::renderPassInitialize => {
+            debug_assert!(matches!(
+                interlockMode,
+                InterlockMode::atomics
+                    | InterlockMode::depthStencil
+                    | InterlockMode::clockwiseAtomic
+            ));
+            5
+        }
+        DrawType::renderPassResolve => {
+            debug_assert!(matches!(
+                interlockMode,
+                InterlockMode::rasterOrdering
+                    | InterlockMode::atomics
+                    | InterlockMode::depthStencil
+            ));
+            6
+        }
+        DrawType::clipReset => {
+            debug_assert!(matches!(
+                interlockMode,
+                InterlockMode::clockwiseAtomic | InterlockMode::depthStencil
+            ));
+            7
+        }
     };
     let mask = ShaderFeaturesMaskForDraw(drawType, interlockMode).0;
-    let mut key = miscFlags.0;
-    key = (key << INTERLOCK_MODE_BIT_COUNT) | interlockMode as u32;
-    key = (key << kShaderFeatureCount) | (shaderFeatures.0 & mask);
-    (key << 3) | draw_type_key
+    let key_mask = shaderMiscFlagKeyMask(interlockMode);
+    let valid_flags = get_valid_shader_misc_flags(drawType, interlockMode);
+    debug_assert_eq!(valid_flags & !key_mask, 0);
+    debug_assert_eq!(miscFlags.0 & !valid_flags, 0);
+    debug_assert!(key_mask.count_ones() as usize <= ShaderMiscFlagKeyBitCount);
+    let mut key = compact_bits(miscFlags.0, key_mask);
+    debug_assert!((interlockMode as u32) < 1 << InterlockModeBitCount);
+    key = (key << InterlockModeBitCount) | interlockMode as u32;
+    key = (key << ShaderFeatureCount) | (shaderFeatures.0 & mask);
+    (key << DrawTypeKeyBitCount) | draw_type_key
 }
 
 pub fn GetShaderFeatureGLSLName(feature: ShaderFeatures) -> *const c_char {
@@ -2958,7 +3044,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3433,7 +3519,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{AABB, Mat2D, find_transformed_area};
+    use super::{find_transformed_area, Mat2D, AABB};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -4099,6 +4185,30 @@ mod dynamic_color_write_tests {
     use super::*;
 
     #[test]
+    fn upstream_shader_unique_keys_do_not_collide() {
+        let platform = PlatformFeatures {
+            supportsPipelineDynamicState: true,
+            ..PlatformFeatures::default()
+        };
+        for mode in [
+            InterlockMode::rasterOrdering,
+            InterlockMode::atomics,
+            InterlockMode::clockwise,
+            InterlockMode::clockwiseAtomic,
+            InterlockMode::depthStencil,
+        ] {
+            let mut keys = std::collections::BTreeMap::new();
+            ForEachUbershaderPermutation(mode, &platform, |draw, features, misc| {
+                let key = ShaderUniqueKey(draw, features, mode, misc);
+                if let Some(previous) = keys.insert(key, misc) {
+                    assert_eq!(previous, misc, "mode {mode:?}, draw {draw:?}, key {key}");
+                }
+                true
+            });
+        }
+    }
+
+    #[test]
     fn upstream_for_each_ubershader_permutation() {
         let enumerate = |supports_dynamic_state| {
             let platform = PlatformFeatures {
@@ -4165,6 +4275,9 @@ mod dynamic_color_write_tests {
                     ShaderMiscFlags::fixedFunctionColorOutput.0,
                     ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
                     ShaderMiscFlags::fixedFunctionColorOutput.0
+                        | ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
+                    ShaderMiscFlags::msaaDstRead.0,
+                    ShaderMiscFlags::msaaDstRead.0
                         | ShaderMiscFlags::emulateDynamicColorWriteDisable.0,
                 ])
             );
@@ -4236,10 +4349,11 @@ mod dynamic_color_write_tests {
     fn shader_misc_flags_preserve_upstream_bit_positions() {
         assert_eq!(ShaderMiscFlags::borrowedCoveragePass.0, 1 << 4);
         assert_eq!(ShaderMiscFlags::emulateDynamicColorWriteDisable.0, 1 << 5);
-        assert_eq!(ShaderMiscFlags::storeColorClear.0, 1 << 6);
-        assert_eq!(ShaderMiscFlags::loadColorFromDstTexture.0, 1 << 7);
-        assert_eq!(ShaderMiscFlags::swizzleColorBGRAToRGBA.0, 1 << 8);
-        assert_eq!(ShaderMiscFlags::coalescedResolveAndTransfer.0, 1 << 9);
+        assert_eq!(ShaderMiscFlags::msaaDstRead.0, 1 << 6);
+        assert_eq!(ShaderMiscFlags::storeColorClear.0, 1 << 7);
+        assert_eq!(ShaderMiscFlags::loadColorFromDstTexture.0, 1 << 8);
+        assert_eq!(ShaderMiscFlags::swizzleColorBGRAToRGBA.0, 1 << 9);
+        assert_eq!(ShaderMiscFlags::coalescedResolveAndTransfer.0, 1 << 10);
     }
 }
 
@@ -4303,7 +4417,7 @@ fn compact_bits(value: u32, mask: u32) -> u32 {
     out
 }
 
-pub fn pipeline_unique_key(
+pub fn getPipelineUniqueKey(
     drawType: DrawType,
     shaderFeatures: ShaderFeatures,
     interlockMode: InterlockMode,
@@ -4325,7 +4439,11 @@ pub fn pipeline_unique_key(
         0
     };
     let effective = drawContents.0 & draw_contents_mask;
-    key = (key << draw_contents_mask.count_ones())
+    debug_assert_eq!(
+        draw_contents_mask & DrawContentsForDepthStencilPipelineState.0,
+        draw_contents_mask
+    );
+    key = (key << DrawContentsForDepthStencilPipelineState.0.count_ones())
         | compact_bits(effective, DrawContentsForDepthStencilPipelineState.0) as u64;
     let effective_blend = if interlockMode == InterlockMode::depthStencil
         && platformFeatures.supportsBlendAdvancedKHR
@@ -4334,8 +4452,9 @@ pub fn pipeline_unique_key(
     } else {
         BlendMode::SrcOver as u32
     };
+    debug_assert!(effective_blend < (1u32 << BLEND_MODE_BIT_COUNT));
     key = (key << BLEND_MODE_BIT_COUNT) | effective_blend as u64;
-    key = (key << STENCIL_TYPE_BIT_COUNT) | stencil_info.stencilType as u64;
+    key = (key << StencilTypeBitCount) | stencil_info.stencilType as u64;
     let color_write = get_color_write_enable(
         drawType,
         interlockMode,
@@ -4347,7 +4466,7 @@ pub fn pipeline_unique_key(
     let depth = get_depth_state(interlockMode, drawType, DrawContents(effective));
     key = (key << 1) | u64::from(depth.depthTestEnabled);
     key = (key << 1) | u64::from(depth.depthWriteEnabled);
-    (key << CULL_FACE_BIT_COUNT) | get_cull_face(drawType) as u64
+    (key << CullFaceBitCount) | get_cull_face(drawType) as u64
 }
 
 /// Exact source helper for the overload taking a DrawBatch.

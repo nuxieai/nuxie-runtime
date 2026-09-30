@@ -348,7 +348,94 @@ pub(crate) fn pipeline_key(
         InterlockMode::DepthStencil => 4,
     };
     let masked_features = shader_features & shader_features_mask_for(draw_type, interlock_mode)?;
-    let key = ((((shader_misc_flags << INTERLOCK_MODE_BIT_COUNT) | interlock_key)
+    use super::shader_compile_plan::{
+        CLIP_UPDATE_ONLY, EMULATE_DYNAMIC_COLOR_WRITE_DISABLE, LOAD_COLOR_FROM_DST_TEXTURE,
+        MSAA_DST_READ, NESTED_CLIP_UPDATE_ONLY,
+    };
+    let key_mask = match interlock_mode {
+        InterlockMode::RasterOrdering => FIXED_FUNCTION_COLOR_OUTPUT | CLOCKWISE_FILL,
+        InterlockMode::Atomics => {
+            FIXED_FUNCTION_COLOR_OUTPUT
+                | STORE_COLOR_CLEAR
+                | LOAD_COLOR_FROM_DST_TEXTURE
+                | SWIZZLE_COLOR_BGRA_TO_RGBA
+                | COALESCED_RESOLVE_AND_TRANSFER
+        }
+        InterlockMode::Clockwise => {
+            FIXED_FUNCTION_COLOR_OUTPUT | CLIP_UPDATE_ONLY | BORROWED_COVERAGE_PASS
+        }
+        InterlockMode::ClockwiseAtomic => {
+            FIXED_FUNCTION_COLOR_OUTPUT
+                | CLIP_UPDATE_ONLY
+                | NESTED_CLIP_UPDATE_ONLY
+                | BORROWED_COVERAGE_PASS
+        }
+        InterlockMode::DepthStencil => {
+            FIXED_FUNCTION_COLOR_OUTPUT | EMULATE_DYNAMIC_COLOR_WRITE_DISABLE | MSAA_DST_READ
+        }
+    };
+    debug_assert_eq!(shader_misc_flags & !key_mask, 0);
+    // Match gpu.cpp's per-draw admission assertion as well as its compact mask.
+    let mut valid_flags = FIXED_FUNCTION_COLOR_OUTPUT;
+    match draw_type {
+        DrawType::MidpointFanPatches
+        | DrawType::MidpointFanCenterAaPatches
+        | DrawType::OuterCurvePatches
+        | DrawType::InteriorTriangulation
+        | DrawType::ClipReset => {
+            if matches!(
+                interlock_mode,
+                InterlockMode::Clockwise | InterlockMode::ClockwiseAtomic
+            ) {
+                if draw_type == DrawType::InteriorTriangulation
+                    || interlock_mode == InterlockMode::ClockwiseAtomic
+                {
+                    valid_flags |= BORROWED_COVERAGE_PASS;
+                }
+                if draw_type != DrawType::MidpointFanCenterAaPatches {
+                    valid_flags |= CLIP_UPDATE_ONLY;
+                    if interlock_mode == InterlockMode::ClockwiseAtomic {
+                        valid_flags |= NESTED_CLIP_UPDATE_ONLY;
+                    }
+                }
+            }
+        }
+        DrawType::RenderPassInitialize if interlock_mode == InterlockMode::Atomics => {
+            valid_flags |=
+                STORE_COLOR_CLEAR | SWIZZLE_COLOR_BGRA_TO_RGBA | LOAD_COLOR_FROM_DST_TEXTURE;
+        }
+        DrawType::RenderPassResolve if interlock_mode == InterlockMode::Atomics => {
+            valid_flags |= COALESCED_RESOLVE_AND_TRANSFER;
+        }
+        _ => {}
+    }
+    if interlock_mode == InterlockMode::RasterOrdering {
+        valid_flags |= CLOCKWISE_FILL;
+    }
+    if interlock_mode == InterlockMode::DepthStencil && draw_type != DrawType::RenderPassInitialize
+    {
+        valid_flags |= MSAA_DST_READ;
+    }
+    if matches!(
+        draw_type,
+        DrawType::StencilDynamicMidpointFans | DrawType::StencilDynamicOuterCubics
+    ) {
+        valid_flags |= EMULATE_DYNAMIC_COLOR_WRITE_DISABLE;
+    }
+    debug_assert_eq!(valid_flags & !key_mask, 0);
+    debug_assert_eq!(shader_misc_flags & !valid_flags, 0);
+    let mut compact_flags = 0;
+    let mut remaining = key_mask;
+    let mut output_bit = 1;
+    while remaining != 0 {
+        let bit = remaining & remaining.wrapping_neg();
+        if shader_misc_flags & bit != 0 {
+            compact_flags |= output_bit;
+        }
+        remaining &= remaining - 1;
+        output_bit <<= 1;
+    }
+    let key = ((((compact_flags << INTERLOCK_MODE_BIT_COUNT) | interlock_key)
         << SHADER_FEATURE_COUNT)
         | masked_features)
         << DRAW_TYPE_KEY_BIT_COUNT
@@ -1103,9 +1190,9 @@ mod tests {
                 atomic_resolve.shader_misc_flags,
             )
             .map(PipelineKey::get),
-            // gpu.cpp::ShaderUniqueKey packs misc bit9, atomic mode1,
+            // gpu.cpp::ShaderUniqueKey compacts the atomic resolve flag to bit4,
             // advanced-blend feature bit2, and renderPassResolve draw key6.
-            Ok((1 << (9 + 3 + 9 + 3)) | (1 << (9 + 3)) | (4 << 3) | 6)
+            Ok((1 << (4 + 3 + 9 + 3)) | (1 << (9 + 3)) | (4 << 3) | 6)
         );
 
         let msaa_midpoint = PipelineRequest::new(

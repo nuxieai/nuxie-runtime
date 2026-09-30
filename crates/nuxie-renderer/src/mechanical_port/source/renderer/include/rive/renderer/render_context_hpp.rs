@@ -1995,6 +1995,8 @@ pub struct RenderContextFrameDescriptor {
     // ColorInt clearColor = 0;
     pub clearColor: ColorInt,
     // uint32_t msaaSampleCount = 0;
+    /// Zero selects the preferred interlock mode; one selects depth/stencil
+    /// without antialiasing; larger values select multisampled depth/stencil.
     pub msaaSampleCount: u32,
     // bool disableRasterOrdering = false;
     pub disableRasterOrdering: bool,

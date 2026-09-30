@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 1cc2396f0d0d3f6d9c0b16809904e85265f617eb
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1cc2396f0d0d3f6d9c0b16809904e85265f617eb";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "ac63c67f85237f430126e9defb63c0134cf129e1d916f8ee1d5e70b7b191c4d5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 345;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14425;
+    "177a54d495e6a9084b87ad3b2ef42366f058aedce92e09da789d3b701c6680f7";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 346;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14450;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -242,9 +242,10 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define IMAGE_MESH_ATTRIB_COUNT                                                \
     (IMAGE_MESH_LAST_ATTRIB_IDX + 1 - IMAGE_FIRST_ATTRIB_IDX)
 
-// MSAA attaches different resources to the framebuffer instead of PLS planes.
-#define MSAA_DEPTH_STENCIL_IDX 1u
-#define MSAA_RESOLVE_IDX 2u
+// depthStencil mode attaches different resources to the framebuffer than PLS
+// planes.
+#define DEPTH_STENCIL_BUFFER_IDX 1u
+#define DEPTH_STENCIL_FINAL_COLOR_IDX 2u
 #define MSAA_COLOR_SEED_IDX 3u
 
 // Rive has a hard-coded miter limit of 4 in the editor and all runtimes.

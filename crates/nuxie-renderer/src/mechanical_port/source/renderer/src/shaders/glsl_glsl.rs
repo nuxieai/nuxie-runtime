@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/glsl.glsl.
  *
- * Upstream source revision: 27a2876815e282c9f235def8b7c529c77d8bb105
+ * Upstream source revision: 1cc2396f0d0d3f6d9c0b16809904e85265f617eb
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "27a2876815e282c9f235def8b7c529c77d8bb105";
+pub const PINNED_UPSTREAM_COMMIT: &str = "1cc2396f0d0d3f6d9c0b16809904e85265f617eb";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/glsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "3e4d37c7f175ed6f12b3660ed3057559df88b83249f97d930e6270521267ada5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 737;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 30834;
+    "e356ed3154ba06367fafcdca8f9bac18df951973aa2f5200d2450f1a1532d8d9";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 750;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 31559;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
@@ -248,9 +248,11 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
     texture(sampler2D(NAME, SAMPLER_NAME), COORD, LODBIAS)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(sampler2D(NAME, SAMPLER_NAME), COORD, DDX, DDY)
-#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL)
+// Only the multisampled dst read uses gl_SampleMaskIn.
+#if defined(@FRAGMENT) && defined(@RENDER_MODE_DEPTH_STENCIL) &&               \
+    defined(@MSAA_DST_COLOR)
 #extension GL_OES_sample_variables : require
-#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL
+#endif // @FRAGMENT && @RENDER_MODE_DEPTH_STENCIL && @MSAA_DST_COLOR
 
 #else // @TARGET_SPIRV -> !@TARGET_SPIRV
 
@@ -722,6 +724,9 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 #define EMIT_PLS_AND_FRAG_COLOR EMIT_PLS
 
 #if defined(@TARGET_SPIRV) && !defined(@TARGET_WGSL)
+#ifdef @MSAA_DST_COLOR
+// The color attachment is multisampled, so the read has to average the samples
+// this fragment actually covers.
 #define DST_COLOR_TEXTURE(NAME)                                                \
     layout(input_attachment_index = 0,                                         \
            binding = COLOR_PLANE_IDX,                                          \
@@ -732,6 +737,14 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
                          subpassLoad(NAME, 2),                                 \
                          subpassLoad(NAME, 3)),                                \
                     gl_SampleMaskIn[0])
+#else
+// The color attachment is single-sampled, so fetch it directly.
+#define DST_COLOR_TEXTURE(NAME)                                                \
+    layout(input_attachment_index = 0,                                         \
+           binding = COLOR_PLANE_IDX,                                          \
+           set = PLS_TEXTURE_BINDINGS_SET) uniform mediump subpassInput NAME
+#define DST_COLOR_FETCH(NAME) subpassLoad(NAME)
+#endif // @MSAA_DST_COLOR
 #else
 #define DST_COLOR_TEXTURE(NAME)                                                \
     TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, DST_COLOR_TEXTURE_IDX, NAME)

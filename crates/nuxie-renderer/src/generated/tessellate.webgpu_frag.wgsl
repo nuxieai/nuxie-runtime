@@ -12,18 +12,18 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
 
-var<private> B6_1: vec4<f32>;
 var<private> C6_1: vec4<f32>;
+var<private> D6_1: vec4<f32>;
 var<private> O4_1: vec4<f32>;
 var<private> I7_1: u32;
 var<private> P4_1: vec3<f32>;
@@ -72,10 +72,10 @@ fn main_1() {
     var phi_1058_: vec4<u32>;
     var local_2: f32;
 
-    let _e43 = B6_1;
+    let _e43 = C6_1;
     let _e44 = _e43.xy;
     let _e45 = _e43.zw;
-    let _e46 = C6_1;
+    let _e46 = D6_1;
     let _e47 = _e46.xy;
     let _e48 = _e46.zw;
     if any((_e44 != _e45)) {
@@ -320,9 +320,9 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(0) B6_: vec4<f32>, @location(1) C6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
-    B6_1 = B6_;
+fn main(@location(0) C6_: vec4<f32>, @location(1) D6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
     C6_1 = C6_;
+    D6_1 = D6_;
     O4_1 = O4_;
     I7_1 = I7_;
     P4_1 = P4_;

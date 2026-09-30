@@ -16,7 +16,7 @@ gl_Position.y=-gl_Position.y;
 #if __VERSION__>=310
 layout(binding=0,std140)uniform ij{uniform highp vec4 th;}uh;
 #else
-uniform mediump vec4 XE;
+uniform mediump vec4 YE;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
@@ -39,7 +39,7 @@ void main(){
 #if __VERSION__>=310
 k0=uh.th;
 #else
-k0=XE;
+k0=YE;
 #endif
 #endif
 #ifdef LOAD_COLOR

@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -28,8 +28,8 @@ struct BC {
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var W5_: sampler;
-var<private> G5_1: vec2<f32>;
+var X5_: sampler;
+var<private> H5_1: vec2<f32>;
 @group(0) @binding(0)
 var<uniform> n: BC;
 var<private> H1_1: vec4<f32>;
@@ -50,9 +50,9 @@ fn main_1() {
     var phi_2538_: i32;
     var phi_2590_: vec3<f32>;
 
-    let _e42 = G5_1;
+    let _e42 = H5_1;
     let _e44 = n.Cd;
-    let _e45 = textureSampleBias(HC, W5_, _e42, _e44);
+    let _e45 = textureSampleBias(HC, X5_, _e42, _e44);
     let _e46 = H1_1;
     let _e47 = (_e45 * _e46);
     let _e50 = (_e47.w != 0f);
@@ -248,8 +248,8 @@ fn main_1() {
     let _e412 = vec4<f32>(_e406.x, _e406.y, _e394.z, _e406.w);
     let _e413 = _e412.xyz;
     let _e414 = gl_FragCoord_1;
-    let _e416 = n.B3_;
-    let _e418 = n.C3_;
+    let _e416 = n.C3_;
+    let _e418 = n.D3_;
     if (Ih && _e50) {
         phi_2590_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e414.x) + (0.00583715f * _e414.y))))) * _e416) + _e418)) + _e413);
     } else {
@@ -263,8 +263,8 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(0) G5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @location(4) @interpolate(flat, either) A1_: u32, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) K3_: f32) -> @location(0) vec4<f32> {
-    G5_1 = G5_;
+fn main(@location(0) H5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @location(4) @interpolate(flat, either) A1_: u32, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) K3_: f32) -> @location(0) vec4<f32> {
+    H5_1 = H5_;
     H1_1 = H1_;
     A1_1 = A1_;
     gl_FragCoord_1 = gl_FragCoord;

@@ -7,11 +7,11 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::Arc;
 
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use super::render_context_webgpu_decl::TextureWebGPUImpl;
 use super::render_context_webgpu_decl::{
     ContextOptions, RenderContextWebGPUImpl, RenderTargetWebGPU,
 };
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use super::render_context_webgpu_decl::TextureWebGPUImpl;
 use super::webgpu_cpp_decl::{
     Adapter, AdapterInfo, BackendType, Buffer, BufferUsage, CallbackMode, CommandEncoder, Device,
     ErrorType, FeatureName, Instance, InstanceFeatureName, MapAsyncStatus, MapMode,
@@ -24,25 +24,25 @@ use super::webgpu_cpp_decl::{
     SurfaceConfiguration, SurfaceTexture, TextureViewDimension,
 };
 use super::webgpu_decl::{
-    WGPU_STRLEN, WGPUBufferDescriptor, WGPUExtent3D, WGPUFeatureLevel_Undefined, WGPUFuture,
-    WGPUFutureWaitInfo, WGPUOrigin3D, WGPURequestAdapterOptions, WGPUStringView,
-    WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo,
-    WGPUTextureAspect_All, WGPUTextureDescriptor,
+    WGPUBufferDescriptor, WGPUExtent3D, WGPUFeatureLevel_Undefined, WGPUFuture, WGPUFutureWaitInfo,
+    WGPUOrigin3D, WGPURequestAdapterOptions, WGPUStringView, WGPUTexelCopyBufferInfo,
+    WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo, WGPUTextureAspect_All,
+    WGPUTextureDescriptor, WGPU_STRLEN,
 };
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_decl::{WGPUSurfaceDescriptor, WGPUTextureViewDescriptor};
 use crate::exact_gpu_canvas::ExactGpuCanvas;
 use crate::exact_source_adapter::ExactSourceBackend;
-use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::rcp;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, static_rcp_cast};
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as RiveTexture;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
     FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
 };
+use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_impl_hpp::RenderContextImplContract;
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture as RiveTexture;
 use crate::{RenderMode, RendererError};
 use nuxie_render_api::{
     GpuCanvasError, GpuCanvasPipelineShaders, GpuCanvasPlan, GpuCanvasShaderArtifact,
@@ -612,6 +612,10 @@ impl ExactSourceBackend for WebGpuProductBackend {
         match mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,
+            RenderMode::ClockwiseMsaa1 => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+            }
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
@@ -880,9 +884,7 @@ impl WebGpuProductBackend {
         }
         let destination = unsafe { (*texture.get()).nativeHandle() }.cast();
         let lent = external_image_host::import_external_image(source).map_err(|error| {
-            RendererError::InvalidImageUpload(format!(
-                "lend external image to WebGPU: {error:?}"
-            ))
+            RendererError::InvalidImageUpload(format!("lend external image to WebGPU: {error:?}"))
         })?;
         let copied = unsafe {
             external_image_host::nuxieWgpuQueueCopyExternalImageToTexture(

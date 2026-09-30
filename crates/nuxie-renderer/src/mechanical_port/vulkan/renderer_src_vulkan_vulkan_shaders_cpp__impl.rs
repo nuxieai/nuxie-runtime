@@ -108,6 +108,7 @@ embedded_shaders!(
     draw_depthstencil_path_vert,
     draw_depthstencil_path_frag,
     draw_depthstencil_path_fixedcolor_frag,
+    draw_depthstencil_path_msaa_frag,
     draw_depthstencil_path_noclipdistance_vert,
     draw_depthstencil_triangles_nocolor_vert,
     draw_depthstencil_triangles_nocolor_frag,
@@ -115,10 +116,12 @@ embedded_shaders!(
     draw_depthstencil_atlas_blit_vert,
     draw_depthstencil_atlas_blit_frag,
     draw_depthstencil_atlas_blit_fixedcolor_frag,
+    draw_depthstencil_atlas_blit_msaa_frag,
     draw_depthstencil_atlas_blit_noclipdistance_vert,
     draw_depthstencil_image_mesh_vert,
     draw_depthstencil_image_mesh_frag,
     draw_depthstencil_image_mesh_fixedcolor_frag,
+    draw_depthstencil_image_mesh_msaa_frag,
     draw_depthstencil_image_mesh_noclipdistance_vert,
     draw_fullscreen_quad_vert,
     draw_input_attachment_frag,
@@ -244,6 +247,7 @@ fn visit_hotload_shaders(
     read!(draw_depthstencil_path_noclipdistance_vert);
     read!(draw_depthstencil_path_frag);
     read!(draw_depthstencil_path_fixedcolor_frag);
+    read!(draw_depthstencil_path_msaa_frag);
     read!(draw_depthstencil_triangles_nocolor_vert);
     read!(draw_depthstencil_triangles_nocolor_frag);
     read!(draw_depthstencil_triangles_nocolor_fixedcolor_frag);
@@ -251,10 +255,12 @@ fn visit_hotload_shaders(
     read!(draw_depthstencil_atlas_blit_noclipdistance_vert);
     read!(draw_depthstencil_atlas_blit_frag);
     read!(draw_depthstencil_atlas_blit_fixedcolor_frag);
+    read!(draw_depthstencil_atlas_blit_msaa_frag);
     read!(draw_depthstencil_image_mesh_vert);
     read!(draw_depthstencil_image_mesh_noclipdistance_vert);
     read!(draw_depthstencil_image_mesh_frag);
     read!(draw_depthstencil_image_mesh_fixedcolor_frag);
+    read!(draw_depthstencil_image_mesh_msaa_frag);
     read!(draw_fullscreen_quad_vert);
     read!(draw_input_attachment_frag);
     read!(draw_msaa_color_seed_attachment_frag);
@@ -275,13 +281,13 @@ mod tests {
 
     #[test]
     fn embedded_and_declared_shader_denominators_are_exact() {
-        assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 94);
+        assert_eq!(DECLARED_SHADER_SYMBOL_COUNT, 97);
         #[cfg(not(target_os = "android"))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 94);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 97);
         #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 78);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 81);
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 34);
+        assert_eq!(TARGET_SHADER_SYMBOL_COUNT, 37);
         let color_ramp = color_ramp_vert.read().expect("embedded shader");
         assert_eq!(color_ramp.first(), Some(&0x0723_0203));
         assert!(color_ramp.len() > 4);
@@ -337,10 +343,10 @@ mod tests {
             &draw_msaa_resolve_frag,
         ));
         #[cfg(not(target_os = "android"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x105c]);
+        assert_eq!(assignments.last().unwrap().1, &[0x105f]);
         #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
-        assert_eq!(assignments.last().unwrap().1, &[0x104c]);
+        assert_eq!(assignments.last().unwrap().1, &[0x104f]);
         #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
-        assert_eq!(assignments.last().unwrap().1, &[0x1021]);
+        assert_eq!(assignments.last().unwrap().1, &[0x1024]);
     }
 }

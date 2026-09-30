@@ -65,6 +65,8 @@ pub enum RenderMode {
     /// raster-ordering renderer. WGPU does not expose this interlock.
     RasterOrdering,
     Msaa,
+    /// Upstream cwmsaa1: single-sample depth/stencil with clockwise fill.
+    ClockwiseMsaa1,
     ClockwiseAtomic,
 }
 

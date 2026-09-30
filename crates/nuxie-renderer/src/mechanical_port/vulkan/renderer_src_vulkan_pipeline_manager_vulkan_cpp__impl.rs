@@ -9,24 +9,24 @@ use super::draw_pipeline_layout_vulkan_decl::DrawPipelineLayoutVulkan;
 use super::draw_pipeline_vulkan_decl::{DrawPipelineOptions, DrawPipelineVulkan, PipelineProps};
 use super::draw_shader_vulkan_decl::{DrawShaderVulkan, DrawShaderVulkanType};
 use super::pipeline_manager_vulkan_decl::{
-    CompletedJob, JobParams, MAX_SAMPLER_PERMUTATIONS, PLSBackingType, PipelineCreateType,
-    PipelineManagerVulkan, PipelineStatus, ShaderCompilationMode,
+    CompletedJob, JobParams, PLSBackingType, PipelineCreateType, PipelineManagerVulkan,
+    PipelineStatus, ShaderCompilationMode, MAX_SAMPLER_PERMUTATIONS,
 };
 use super::render_pass_vulkan_decl::{
-    RENDER_PASS_OPTION_COUNT, RENDER_PASS_OPTIONS_LAYOUT_MASK, RenderPassOptionsVulkan,
-    RenderPassVulkan,
+    RenderPassOptionsVulkan, RenderPassVulkan, RENDER_PASS_OPTIONS_LAYOUT_MASK,
+    RENDER_PASS_OPTION_COUNT,
 };
 use super::vulkan_context_decl::VulkanContext;
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
     ImageFilter, ImageSampler, ImageWrap,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContentsForDepthStencilPipelineState, DrawContents, DrawType, InterlockMode, LoadAction,
-    PlatformFeatures, ShaderFeatures, ShaderMiscFlags, UbershaderFeaturesMaskFor,
-    kVertexShaderFeaturesMask,
+    kVertexShaderFeaturesMask, DrawContents, DrawContentsForDepthStencilPipelineState, DrawType,
+    InterlockMode, LoadAction, PlatformFeatures, ShaderFeatures, ShaderMiscFlags,
+    UbershaderFeaturesMaskFor,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp::{
-    ForEachUbershaderPermutation, ShaderUniqueKey, get_stencil_info,
+    get_stencil_info, ForEachUbershaderPermutation, ShaderUniqueKey,
 };
 use ash::vk;
 use nuxie_render_api::BlendMode;
@@ -913,6 +913,7 @@ fn forEachUbershaderPermutation(
     renderTargetUsage: vk::ImageUsageFlags,
     colorLoadAction: LoadAction,
     platformFeatures: &PlatformFeatures,
+    drawPipelineOptions: DrawPipelineOptions,
     mut func: impl FnMut(&PipelineProps) -> bool,
 ) {
     let _ = manager;
@@ -927,7 +928,7 @@ fn forEachUbershaderPermutation(
                 shaderMiscFlags,
                 drawContents: DrawContents::none,
                 blendMode: BlendMode::SrcOver,
-                drawPipelineOptions: DrawPipelineOptions::none,
+                drawPipelineOptions,
                 renderPassOptions: RenderPassOptionsVulkan::none,
                 renderTargetFormat,
                 colorLoadAction,
@@ -972,7 +973,8 @@ fn forEachUbershaderPermutation(
                 }
                 InterlockMode::depthStencil => {
                     validPassOptions |= RenderPassOptionsVulkan::manuallyResolved
-                        | RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture;
+                        | RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture
+                        | RenderPassOptionsVulkan::msaa;
                     if shaderMiscFlags.has(ShaderMiscFlags::fixedFunctionColorOutput) {
                         validPassOptions |= RenderPassOptionsVulkan::fixedFunctionColorOutput;
                     }
@@ -995,6 +997,14 @@ fn forEachUbershaderPermutation(
                             || props
                                 .renderPassOptions
                                 .has(RenderPassOptionsVulkan::rasterOrderingInterruptible))
+                    {
+                        continue;
+                    }
+                    if interlockMode == InterlockMode::depthStencil
+                        && props
+                            .renderPassOptions
+                            .has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture)
+                        && !props.renderPassOptions.has(RenderPassOptionsVulkan::msaa)
                     {
                         continue;
                     }
@@ -1056,6 +1066,7 @@ fn isValidUbershaderPipelineProps(
         },
         props.colorLoadAction,
         platformFeatures,
+        props.drawPipelineOptions,
         |validProps| {
             if validProps.createKey(platformFeatures) == currentKey {
                 found = true;
@@ -1081,6 +1092,7 @@ pub(crate) fn queueUbershaderPipelineCreation(
         renderTargetUsage,
         colorLoadAction,
         platformFeatures,
+        DrawPipelineOptions::none,
         |props| {
             queuePipelineIfNotFound(manager, props, platformFeatures);
             true

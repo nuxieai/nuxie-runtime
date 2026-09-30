@@ -167,6 +167,7 @@ pub enum FfiRenderMode {
     Default = 0,
     Msaa = 1,
     ClockwiseAtomic = 2,
+    ClockwiseMsaa1 = 3,
 }
 
 impl FfiFactory {

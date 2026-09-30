@@ -79,8 +79,9 @@ public:
         VkFormat renderTargetFormat,
         VkImageUsageFlags renderTargetUsage,
         LoadAction,
+        DrawPipelineVulkan::Options drawPipelineOptions,
         const PlatformFeatures&,
-        const std::function<bool(const PipelineProps&)>& props);
+        const std::function<bool(const PipelineProps&)>& func);
 
 #if !defined(NDEBUG)
     virtual bool isValidUbershaderPipelineProps(

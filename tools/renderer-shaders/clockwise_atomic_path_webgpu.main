@@ -27,7 +27,7 @@
     layout(set = PLS_TEXTURE_BINDINGS_SET, binding = IDX) uniform texture2D NAME
 #define PLS_LOAD4F(PLANE) texelFetch(PLANE, ivec2(floor(c0)), 0)
 #define PLS_STORE4F(PLANE, VALUE)
-#define y0(IDX, NAME) layout(set = H3, binding = IDX) uniform texture2D NAME
+#define y0(IDX, NAME) layout(set = p3, binding = IDX) uniform texture2D NAME
 #define J0(PLANE) texelFetch(PLANE, ivec2(floor(c0)), 0)
 #define z0(PLANE, VALUE)
 

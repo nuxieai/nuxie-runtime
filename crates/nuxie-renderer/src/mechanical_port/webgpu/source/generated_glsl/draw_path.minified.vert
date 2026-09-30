@@ -1,10 +1,10 @@
-#undef H5
+#undef I5
 #ifdef NEVER_GENERATE_PREMULTIPLIED_PAINT_COLORS
-#define H5 true
+#define I5 true
 #elif defined(ENABLE_ADVANCED_BLEND)
-#define H5 ENABLE_ADVANCED_BLEND
+#define I5 ENABLE_ADVANCED_BLEND
 #else
-#define H5 false
+#define I5 false
 #endif
 #undef B2
 #ifdef ENABLE_FEATHER
@@ -46,7 +46,7 @@ H0 V(5,f,M0);
 OPTIONALLY_FLAT V(6,d,g2);
 #endif
 #ifdef RENDER_MODE_CLOCKWISE_ATOMIC
-S2 V(7,a1,g3);V(8,c,p4);
+T2 V(7,a1,g3);V(8,c,p4);
 #endif
 #ifdef ENABLE_MODULATED_IMAGE
 H0 V(9,Q,C2);
@@ -101,7 +101,7 @@ j0=Kb(KB,m0,
 #ifdef RENDER_MODE_DEPTH_STENCIL
 i9,
 #endif
-F2 w3);
+F2 x3);
 #elif defined(DRAW_INTERIOR_TRIANGLES)
 j0=Lb(KB,m0
 #ifdef RENDER_MODE_DEPTH_STENCIL
@@ -109,7 +109,7 @@ j0=Lb(KB,m0
 #else
 ,h1
 #endif
-w3);
+x3);
 #else
 f N;te=!v9(UB,VB,v,m0,j0
 #ifndef RENDER_MODE_DEPTH_STENCIL
@@ -117,7 +117,7 @@ f N;te=!v9(UB,VB,v,m0,j0
 #else
 ,i9
 #endif
-w3);
+x3);
 #ifndef RENDER_MODE_DEPTH_STENCIL
 #ifdef ENABLE_FEATHER
 M=N;
@@ -126,13 +126,13 @@ M.xy=S7(N.xy);
 #endif
 #endif
 #endif
-a1 o1=Q5(DD,m0);
+a1 o1=R5(DD,m0);
 #if!defined(FEATHER_ATLAS_BLIT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-C0=v8(m0,n.e6);if((o1.x&L9)!=0u)C0=-C0;
+C0=v8(m0,n.f6);if((o1.x&L9)!=0u)C0=-C0;
 #endif
 uint S3=o1.x&0xfu;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){uint ki=(S3==a8?o1.y:o1.x)>>16;d j1=v8(ki,n.e6);if(S3==a8)j1=-j1;
+if(ENABLE_CLIPPING){uint ki=(S3==a8?o1.y:o1.x)>>16;d j1=v8(ki,n.f6);if(S3==a8)j1=-j1;
 #ifdef FEATHER_ATLAS_BLIT
 K3=j1;
 #else
@@ -148,24 +148,24 @@ c q0=j0;
 q0.y=float(n.Nb)-q0.y;
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d0 Z3=I1(K0(QB,m0*A3+2u));f H4=K0(QB,m0*A3+3u);
+if(ENABLE_CLIP_RECT){d0 Z3=I1(K0(QB,m0*B3+2u));f H4=K0(QB,m0*B3+3u);
 #ifndef RENDER_MODE_DEPTH_STENCIL
 M0=U7(Z3,H4.xy,q0);
 #else
-Kc(Z3,H4.xy,q0 x5);
+Kc(Z3,H4.xy,q0 y5);
 #endif
 }
 #endif
-if(S3==Vb){i j=unpackUnorm4x8(o1.y);if(H5){}else{j.xyz*=j.w;}V1=f(j);}
+if(S3==Vb){i j=unpackUnorm4x8(o1.y);if(I5){}else{j.xyz*=j.w;}V1=f(j);}
 #if defined(ENABLE_CLIPPING)&&!defined(FEATHER_ATLAS_BLIT)
-else if(ENABLE_CLIPPING&&S3==a8){d I5=v8(o1.x>>16,n.e6);W1.y=I5;}
+else if(ENABLE_CLIPPING&&S3==a8){d J5=v8(o1.x>>16,n.f6);W1.y=J5;}
 #endif
-else{d0 li=I1(K0(QB,m0*A3));f ue=K0(QB,m0*A3+1u);V1=Ob(q0,li,ue.xy,float(S3),ue.zw,uintBitsToFloat(o1.y));V1.w=-V1.w;}
+else{d0 li=I1(K0(QB,m0*B3));f ue=K0(QB,m0*B3+1u);V1=Ob(q0,li,ue.xy,float(S3),ue.zw,uintBitsToFloat(o1.y));V1.w=-V1.w;}
 #ifdef EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
 if(EMULATE_DYNAMIC_COLOR_WRITE_DISABLE){V1*=ji.ii;}
 #endif
 #if defined(ENABLE_MODULATED_IMAGE)
-if(ENABLE_MODULATED_IMAGE&&(o1.x&cg)!=0u){d0 mi=I1(K0(QB,m0*A3+4u));f ve=K0(QB,m0*A3+5u);c g4=N0(mi,q0)+ve.xy;C2=Q(g4.x,g4.y,1.+ve.z);}else{C2=Q(0.0,0.0,0.0);}
+if(ENABLE_MODULATED_IMAGE&&(o1.x&cg)!=0u){d0 mi=I1(K0(QB,m0*B3+4u));f ve=K0(QB,m0*B3+5u);c g4=N0(mi,q0)+ve.xy;C2=Q(g4.x,g4.y,1.+ve.z);}else{C2=Q(0.0,0.0,0.0);}
 #endif
 f W;if(!te){W=M3(j0);
 #ifdef POST_INVERT_Y
@@ -176,7 +176,7 @@ W.z=na(i9);
 #elif defined(RENDER_MODE_CLOCKWISE_ATOMIC)
 X R4=K0(PB,m0*4u+3u);g3=R4.xy;p4=j0+uintBitsToFloat(R4.zw);
 #endif
-}else{W=f(n.T2,n.T2,n.T2,n.T2);}a0(V1);
+}else{W=f(n.U2,n.U2,n.U2,n.U2);}a0(V1);
 #if defined(ENABLE_MODULATED_IMAGE)
 a0(C2);
 #endif
@@ -213,9 +213,9 @@ P3 Q3 e i M7(f N7,
 #ifdef ENABLE_MODULATED_IMAGE
 Q tb,
 #endif
-float o L6){i j;if(N7.w>=.0){j=c5(N7);if(H5)j.w*=o;else j*=o;}else{N7.w=-N7.w;c T9=cc(N7);j=i2(ED,N9,T9,.0);j.w*=o;if(H5){}else{j.xyz*=j.w;}}
+float o M6){i j;if(N7.w>=.0){j=c5(N7);if(I5)j.w*=o;else j*=o;}else{N7.w=-N7.w;c T9=cc(N7);j=i2(ED,N9,T9,.0);j.w*=o;if(I5){}else{j.xyz*=j.w;}}
 #if defined(ENABLE_MODULATED_IMAGE)
-if(ENABLE_MODULATED_IMAGE&&tb.z>0.0){d ni=tb.z-1.;i j2=U6(HC,W5,tb.xy,ni);if(H5)j2=D0(G6(j2),j2.w);j*=j2;}
+if(ENABLE_MODULATED_IMAGE&&tb.z>0.0){d ni=tb.z-1.;i j2=V6(HC,X5,tb.xy,ni);if(I5)j2=D0(H6(j2),j2.w);j*=j2;}
 #endif
 return j;}
 #if!defined(DRAW_INTERIOR_TRIANGLES)&&!defined(FEATHER_ATLAS_BLIT)
@@ -227,6 +227,6 @@ return min(N.x,N.y);}e d xe(B2 N I3){
 #if defined(ENABLE_FEATHER)
 if(ENABLE_FEATHER&&Zb(N))return e8(N d1);else
 #endif
-return N.x;}e d ub(B2 N I3){if(V5(N))return we(N d1);else return xe(N d1);}e d oi(d S4,B2 N I3){if(V5(N)){d w0=we(N d1);return max(w0,S4);}else{d w0=xe(N d1);return S4+w0;}}
+return N.x;}e d ub(B2 N I3){if(W5(N))return we(N d1);else return xe(N d1);}e d oi(d S4,B2 N I3){if(W5(N)){d w0=we(N d1);return max(w0,S4);}else{d w0=xe(N d1);return S4+w0;}}
 #endif
 #endif

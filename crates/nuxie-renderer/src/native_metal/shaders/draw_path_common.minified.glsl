@@ -1,125 +1,128 @@
-#define i7 -2.
-#define Tc -1.5
-#define Uc .25
-#define C8 1e3
-#define Vc (C8*C8)
+#define k7 -2.
+#define cd -1.5
+#define dd .25
+#define D8 1e3
+#define ed (D8*D8)
 #ifdef VERTEX
-U3 lc(d3,Kf,MC);
+U3 uc(e3,dg,KC);
 #ifdef ENABLE_FEATHER
-i6(d3,g7,YC);
+k6(e3,i7,YC);
 #endif
-V3 B4 I4(Oc,ig,QB);N5(Jb,Ne,BD);O5(Kb,Oe,RB);I4(Pc,jg,FD);C4
+V3 B4 J4(Wc,Bg,PB);O5(Qb,hf,DD);P5(Rb,jf,QB);J4(Xc,Cg,ID);C4
 #endif
 #if defined(ENABLE_FEATHER)||defined(FEATHER_ATLAS_BLIT)
-c4(g7,aa)
+c4(i7,ea)
 #endif
 #ifdef FRAGMENT
-E3 Z2(d3,Qc,MD);
+F3 c3(e3,Yc,ED);
 #if defined(ENABLE_FEATHER)||defined(FEATHER_ATLAS_BLIT)
-i6(d3,g7,YC);
+k6(e3,i7,YC);
 #endif
 #ifdef FEATHER_ATLAS_BLIT
-m5(d3,Rc,CD);
+m5(e3,Zc,FD);
 #endif
-Z2(c5,W3,JC);
+c3(d5,W3,HC);
 #if defined(RENDER_MODE_DEPTH_STENCIL)&&defined(ENABLE_ADVANCED_BLEND)&&!defined(FIXED_FUNCTION_COLOR_OUTPUT)
-j7(UD);
+n5(YD);
 #endif
-F3 c4(Qc,Pb)
+G3 c4(Yc,N9)
 #ifdef FEATHER_ATLAS_BLIT
-c4(Rc,Q9)
+c4(Zc,R9)
 #endif
-d5 X3(V5)e5
+e5 X3(X5)f5
 #endif
 #ifdef FRAGMENT
-e bool U5(g P){return P.y>=.0;}e bool U5(E P){return P.y>=.0;}
+e bool W5(f N){return N.y>=.0;}e bool W5(E N){return N.y>=.0;}
 #endif
 #if defined(FRAGMENT)&&defined(ENABLE_FEATHER)
-e bool Qb(g P){return P.x<Tc;}e bool Rb(g P){return P.y<Tc;}
+e bool Yb(f N){return N.x<cd;}e bool Zb(f N){return N.y<cd;}
 #endif
 #ifdef VERTEX
-g Wc(float va,d D8,float D1){d j6=(1.-D8*abs(D1))*.5;float d4,n5;if(abs(va-W6)<1./C8){d4=.0;n5=.0;}else{float wa=tan(va);d4=sign(W6-va)/max(abs(wa),1./Vc);n5=d4>=.0?j6.y-(1.-j6.x)*wa:j6.y+j6.x*wa;}g P;P.x=max(j6.x,.0)+Uc;P.y=-j6.y+i7;P.z=d4;P.w=n5;return P;}
+f fd(float Ba,c E8,float D1){c l6=(1.-E8*abs(D1))*.5;float d4,o5;if(abs(Ba-Y6)<1./D8){d4=.0;o5=.0;}else{float Ca=tan(Ba);d4=sign(Y6-Ba)/max(abs(Ca),1./ed);o5=d4>=.0?l6.y-(1.-l6.x)*Ca:l6.y+l6.x*Ca;}f N;N.x=max(l6.x,.0)+dd;N.y=-l6.y+k7;N.z=d4;N.w=o5;return N;}
 #endif
 #ifdef ENABLE_FEATHER
-e c d8(g P I3){c d4=P.z;c n5=max(P.w,.0);c k6=d4>=.0?i5(n5):.0;if(abs(d4)<C8){c x=abs(P.x)-Uc;c y=-P.y+i7;c X2=(y-n5)*0.5984134206;i t=n5+X2*C0(0.20888568955,0.62665706865,1.04442844776,1.46219982687);i u=t*-d4+(y*d4+x);i kg=C0(i5(u[0]),i5(u[1]),i5(u[2]),i5(u[3]));i Xc=t*5.09593080173+-2.54796540086;i lg=exp2(-Xc*Xc);k6+=dot(kg,lg)*X2;}return k6*sign(P.x);}e c y4(g P I3){float k6=1.;float mg=(1.-i7)+P.x;k6-=i5(mg);float ng=1.-P.y;k6-=i5(ng);return k6;}
+e d e8(f N I3){d d4=N.z;d o5=max(N.w,.0);d m6=d4>=.0?j5(o5):.0;if(abs(d4)<D8){d x=abs(N.x)-dd;d y=-N.y+k7;d Z2=(y-o5)*0.5984134206;i t=o5+Z2*D0(0.20888568955,0.62665706865,1.04442844776,1.46219982687);i u=t*-d4+(y*d4+x);i Dg=D0(j5(u[0]),j5(u[1]),j5(u[2]),j5(u[3]));i gd=t*5.09593080173+-2.54796540086;i Eg=exp2(-gd*gd);m6+=dot(Dg,Eg)*Z2;}return m6*sign(N.x);}e d y4(f N I3){float m6=1.;float Fg=(1.-k7)+N.x;m6-=j5(Fg);float Gg=1.-N.y;m6-=j5(Gg);return m6;}
 #endif
 #if defined(VERTEX)&&defined(DRAW_PATH)
-e Y o5(int Yc){return Y(Yc&((1<<Dc)-1),Yc>>Dc);}e float Zc(f0 U0,d og){d j2=R0(U0,og);return(abs(j2.x)+abs(j2.y))*(1./dot(j2,j2));}e bool q9(g k7,g xa,int v,Z0(uint)e3,Z0(d)pg
+e Y p5(int hd){return Y(hd&((1<<Lc)-1),hd>>Lc);}e float id(d0 U0,c Hg){c l2=N0(U0,Hg);return(abs(l2.x)+abs(l2.y))*(1./dot(l2,l2));}e bool v9(f l7,f Da,int v,Z0(uint)f3,Z0(c)Ig
 #ifndef RENDER_MODE_DEPTH_STENCIL
-,Z0(g)O1
+,Z0(f)P1
 #else
-,Z0(N)l7
+,Z0(L)m7
 #endif
-l6){int E8=int(k7.x);float D1=k7.y;float ya=k7.z;int ad=floatBitsToInt(k7.w)>>2;int m7=floatBitsToInt(k7.w)&3;int za=min(E8,ad-1);int J4=v*ad+za;D4 p5=q1(MC,o5(J4));uint i0=h5(p5.w);uint F8=max(i0&Kc,1u);G Aa=J0(FD,F8-1u);d bd=uintBitsToFloat(Aa.xy);e3=Aa.z&0xffffu;uint cd=Aa.w;f0 U0=h2(uintBitsToFloat(J0(QB,e3*4u)));G K4=J0(QB,e3*4u+1u);d k3=uintBitsToFloat(K4.xy);float J2=uintBitsToFloat(K4.z);float K2=uintBitsToFloat(K4.w);uint dd=i0&G3;if(dd!=0u){E8=int(xa.x);D1=xa.y;ya=xa.z;}if(E8!=za){int ed=J4+E8-za;D4 fd=q1(MC,o5(ed));if((h5(fd.w)&(G3|0xffffu))!=(i0&(G3|0xffffu))){bool qg=J2==.0||bd.x!=.0;if(qg){J4=int(cd);p5=q1(MC,o5(J4));}}else{J4=ed;p5=fd;}i0=(h5(p5.w)&~G3)|dd;}float e1;
+n6){int F8=int(l7.x);float D1=l7.y;float Ea=l7.z;int jd=floatBitsToInt(l7.w)>>2;int n7=floatBitsToInt(l7.w)&3;int Fa=min(F8,jd-1);int K4=v*jd+Fa;D4 q5=p1(KC,p5(K4));uint i0=i5(q5.w);uint G8=max(i0&Sc,1u);X Ga=K0(ID,G8-1u);c kd=uintBitsToFloat(Ga.xy);f3=Ga.z&0xffffu;uint ld=Ga.w;d0 U0=I1(uintBitsToFloat(K0(PB,f3*4u)));X L4=K0(PB,f3*4u+1u);c I2=uintBitsToFloat(L4.xy);float M2=uintBitsToFloat(L4.z);float N2=uintBitsToFloat(L4.w);uint md=i0&H3;if(md!=0u){F8=int(Da.x);D1=Da.y;Ea=Da.z;}if(F8!=Fa){int nd=K4+F8-Fa;D4 od=p1(KC,p5(nd));if((i5(od.w)&(H3|0xffffu))!=(i0&(H3|0xffffu))){bool Jg=M2==.0||kd.x!=.0;if(Jg){K4=int(ld);q5=p1(KC,p5(K4));}}else{K4=nd;q5=od;}i0=(i5(q5.w)&~H3)|md;}float e1;
 #ifdef ENABLE_FEATHER
-float n7;float v1;if((i0&a4)==y8&&m7==B8){uint gd=h5(p5.z);float e4=float(gd&0xffffu);float k2=float(gd>>16);Y G8=Y(-e4-1.,k2-e4+1.);if((i0&G3)!=0u)G8=-G8;D4 hd=q1(MC,o5(J4+G8.x));D4 Ba=q1(MC,o5(J4+G8.y));if((h5(Ba.w)&(G3|0xffffu))!=(h5(hd.w)&(G3|0xffffu))){Ba=q1(MC,o5(int(cd)));}n7=Y5(hd.z);float id=Y5(Ba.z);v1=id-n7;if(abs(v1)>D3)v1-=p8*sign(v1);float Ca=k2+1.-float(Ec);float jd=clamp(round(abs(v1)/D3*Ca),1.,Ca-1.);float o7=Ca-jd;if(e4<=o7){v1=-(D3*sign(v1)-v1);k2=o7;if(e4==o7)D1=-D1;}else if(e4==o7+1.){e4=.0;k2=.0;D1=.0;}else{e4-=o7+2.;k2=jd;}if(e4==k2){e1=id;}else{e1=n7+v1*(e4/k2);}}else
+float o7;float r1;if((i0&a4)==z8&&n7==C8){uint pd=i5(q5.z);float e4=float(pd&0xffffu);float m2=float(pd>>16);Y H8=Y(-e4-1.,m2-e4+1.);if((i0&H3)!=0u)H8=-H8;D4 qd=p1(KC,p5(K4+H8.x));D4 Ha=p1(KC,p5(K4+H8.y));if((i5(Ha.w)&(H3|0xffffu))!=(i5(qd.w)&(H3|0xffffu))){Ha=p1(KC,p5(int(ld)));}o7=a6(qd.z);float rd=a6(Ha.z);r1=rd-o7;if(abs(r1)>E3)r1-=q8*sign(r1);float Ia=m2+1.-float(Mc);float sd=clamp(round(abs(r1)/E3*Ia),1.,Ia-1.);float p7=Ia-sd;if(e4<=p7){r1=-(E3*sign(r1)-r1);m2=p7;if(e4==p7)D1=-D1;}else if(e4==p7+1.){e4=.0;m2=.0;D1=.0;}else{e4-=p7+2.;m2=sd;}if(e4==m2){e1=rd;}else{e1=o7+r1*(e4/m2);}}else
 #endif
-{e1=Y5(p5.z);}d Y2=d(sin(e1),-cos(e1));d kd=Y5(p5.xy);d H8=d(0,0);if(K2!=.0){K2=max(K2,(na/3.)/length(R0(U0,Y2)));}if(J2!=.0){D1*=sign(determinant(U0));if((i0&A8)!=0u)D1=min(D1,.0);if((i0&Jc)!=0u)D1=max(D1,.0);float L4=K2!=.0?K2:Zc(U0,Y2)*p4;c ld=1.;if(L4>J2&&K2==.0){ld=V4(J2)/V4(L4);J2=L4;}d q5=Y2*(J2+L4);
+{e1=a6(q5.z);}c a3=c(sin(e1),-cos(e1));c td=a6(q5.xy);c I8=c(0,0);if(N2!=.0){N2=max(N2,(sa/3.)/length(N0(U0,a3)));}if(M2!=.0){D1*=sign(determinant(U0));if((i0&B8)!=0u)D1=min(D1,.0);if((i0&Rc)!=0u)D1=max(D1,.0);float M4=N2!=.0?N2:id(U0,a3)*r4;d ud=1.;if(M4>M2&&N2==.0){ud=W4(M2)/W4(M4);M2=M4;}c r5=a3*(M2+M4);
 #ifndef RENDER_MODE_DEPTH_STENCIL
-float x=D1*(J2+L4);O1.xy=(1./(L4*2.))*(d(x,-x)+J2)+.5;O1.zw=M6(.0);
+float x=D1*(M2+M4);P1.xy=(1./(M4*2.))*(c(x,-x)+M2)+.5;P1.zw=O6(.0);
 #endif
-uint Da=i0&a4;if(Da>x8){int p7=2;if((i0&oa)==0u)p7=-p7;if((i0&G3)!=0u)p7=-p7;Y rg=o5(J4+p7);D4 sg=q1(MC,rg);float tg=Y5(sg.z);float q7=abs(tg-e1);if(q7>D3)q7=p8-q7;bool I8=(i0&oa)!=0u;bool ug=(i0&A8)!=0u;float md=q7*(I8==ug?-.5:.5)+e1;d J8=d(sin(md),-cos(md));float Ea=Zc(U0,J8);float r7=cos(q7*.5);float Fa;if((Da==Ef)||(Da==Ff&&r7>=.25)){float vg=(i0&z8)!=0u?1.:.25;Fa=J2*(1./max(r7,vg));}else{Fa=J2*r7+Ea*.5;}float Ga=Fa+Ea*p4;if((i0&Ic)!=0u){float nd=J2+L4;float wg=L4*.125;if(nd<=Ga*r7+wg){float xg=nd*(1./r7);q5=J8*xg;}else{d Ha=J8*Ga;d yg=d(dot(q5,q5),dot(Ha,Ha));q5=R0(yg,inverse(f0(q5,Ha)));}}d zg=abs(D1)*q5;float od=(Ga-dot(zg,J8))/(Ea*(p4*2.));
+uint Ja=i0&a4;if(Ja>y8){int q7=2;if((i0&ta)==0u)q7=-q7;if((i0&H3)!=0u)q7=-q7;Y Kg=p5(K4+q7);D4 Lg=p1(KC,Kg);float Mg=a6(Lg.z);float r7=abs(Mg-e1);if(r7>E3)r7=q8-r7;bool J8=(i0&ta)!=0u;bool Ng=(i0&B8)!=0u;float vd=r7*(J8==Ng?-.5:.5)+e1;c K8=c(sin(vd),-cos(vd));float Ka=id(U0,K8);float v7=cos(r7*.5);float La;if((Ja==Yf)||(Ja==Zf&&v7>=.25)){float Og=(i0&A8)!=0u?1.:.25;La=M2*(1./max(v7,Og));}else{La=M2*v7+Ka*.5;}float Ma=La+Ka*r4;if((i0&Qc)!=0u){float wd=M2+M4;float Pg=M4*.125;if(wd<=Ma*v7+Pg){float Qg=wd*(1./v7);r5=K8*Qg;}else{c Na=K8*Ma;c Rg=c(dot(r5,r5),dot(Na,Na));r5=N0(Rg,inverse(d0(r5,Na)));}}c Sg=abs(D1)*r5;float xd=(Ma-dot(Sg,K8))/(Ka*(r4*2.));
 #ifndef RENDER_MODE_DEPTH_STENCIL
-if((i0&A8)!=0u)O1.y=od;else O1.x=od;
+if((i0&B8)!=0u)P1.y=xd;else P1.x=xd;
 #endif
 }
 #ifndef RENDER_MODE_DEPTH_STENCIL
-O1.xy*=ld;O1.y=max(O1.y,1e-4);if(K2!=.0){O1.x=i7-O1.x;}
+P1.xy*=ud;P1.y=max(P1.y,1e-4);if(N2!=.0){P1.x=k7-P1.x;}
 #endif
-H8=R0(U0,D1*q5);if(m7!=B8)return false;}else{
+I8=N0(U0,D1*r5);if(n7!=C8)return false;}else{
 #ifndef RENDER_MODE_DEPTH_STENCIL
-O1=g(ya,-1.,.0,.0);
+P1=f(Ea,-1.,.0,.0);
 #ifdef ENABLE_FEATHER
-if(K2!=.0){O1.y=i7;O1.z=Vc;O1.w=ya;if((i0&a4)==y8&&m7==B8){if(v1<.0){n7+=v1;v1=-v1;}float f4=e1-n7;f4=mod(f4+W6,p8)-W6;f4=clamp(f4,.0,v1);if(f4>v1*.5){f4=v1-f4;}d D8=d(sin(f4),cos(f4));
+if(N2!=.0){P1.y=k7;P1.z=ed;P1.w=Ea;if((i0&a4)==z8&&n7==C8){if(r1<.0){o7+=r1;r1=-r1;}float f4=e1-o7;f4=mod(f4+Y6,q8)-Y6;f4=clamp(f4,.0,r1);if(f4>r1*.5){f4=r1-f4;}c E8=c(sin(f4),cos(f4));
 #if 0
-float P1=1.+.33*log2(W6/(D3-min(v1,D3-D3/16.)));g Ag=Wc(v1,D8,.5*(P1/3.));float Bg=d8(Ag d1);float Cg=oc(Bg);float Dg=(.5-Cg)*(na*2.);float Eg=P1/max(Dg,P1);D1*=Eg;
+float Q1=1.+.33*log2(Y6/(E3-min(r1,E3-E3/16.)));f Tg=fd(r1,E8,.5*(Q1/3.));float Ug=e8(Tg d1);float Vg=xc(Ug);float Wg=(.5-Vg)*(sa*2.);float Xg=Q1/max(Wg,Q1);D1*=Xg;
 #endif
-O1=Wc(v1,D8,D1);}H8=R0(U0,(D1*K2)*Y2);}else
+P1=fd(r1,E8,D1);}I8=N0(U0,(D1*N2)*a3);}else
 #endif
-{H8=sign(R0(D1*Y2,inverse(U0)))*p4;}if(bool(i0&G3)!=bool(i0&Gf)){O1*=g(-1.,+1.,+1.,+1.);}
+{I8=sign(N0(D1*a3,inverse(U0)))*r4;}if(bool(i0&H3)!=bool(i0&ag)){P1*=f(-1.,+1.,+1.,+1.);}
 #endif
-if(m7==Mc)kd=bd;if((i0&Hc)!=0u&&m7!=Lc){return false;}}pg=R0(U0,kd)+H8+k3;
+if(n7==Uc)td=kd;if((i0&Pc)!=0u&&n7!=Tc){return false;}}Ig=N0(U0,td)+I8+I2;
 #ifdef RENDER_MODE_DEPTH_STENCIL
-G M4=J0(QB,e3*4u+2u);l7=X1(M4.x);
+X N4=K0(PB,f3*4u+2u);m7=Y1(N4.x);
 #else
-O1.xy=mix(O1.xy,d(1.,-1.),of(m.Fg!=0u));
+P1.xy=mix(P1.xy,c(1.,-1.),If(n.Yg!=0u));
 #endif
 return true;}
 #endif
 #if defined(VERTEX)&&defined(DRAW_INTERIOR_TRIANGLES)
-e d Hb(R m6,Z0(uint)e3
+e c Lb(Q o6,Z0(uint)f3
 #ifdef RENDER_MODE_DEPTH_STENCIL
-,Z0(N)l7
+,Z0(L)m7
 #else
-,Z0(c)Gg
+,Z0(d)Zg
 #endif
-l6){e3=floatBitsToUint(m6.z)&0xffffu;
+n6){f3=floatBitsToUint(o6.z)&0xffffu;
 #ifdef RENDER_MODE_DEPTH_STENCIL
-G M4=J0(QB,e3*4u+2u);l7=X1(M4.x);
+X N4=K0(PB,f3*4u+2u);m7=Y1(N4.x);
 #else
-Gg=ba(floatBitsToInt(m6.z)>>16);
+Zg=fa(floatBitsToInt(o6.z)>>16);
 #endif
-d n6=m6.xy;f0 U0=h2(uintBitsToFloat(J0(QB,e3*4u)));G K4=J0(QB,e3*4u+1u);d k3=uintBitsToFloat(K4.xy);n6=R0(U0,n6)+k3;return n6;}
+c p6=o6.xy;d0 U0=I1(uintBitsToFloat(K0(PB,f3*4u)));X L4=K0(PB,f3*4u+1u);c I2=uintBitsToFloat(L4.xy);p6=N0(U0,p6)+I2;return p6;}
 #endif
 #if defined(VERTEX)&&defined(FEATHER_ATLAS_BLIT)
-e d Gb(R m6,Z0(uint)e3,
+e c Kb(Q o6,Z0(uint)f3,
 #ifdef RENDER_MODE_DEPTH_STENCIL
-Z0(N)l7,
+Z0(L)m7,
 #endif
-Z0(d)Hg l6){e3=floatBitsToUint(m6.z)&0xffffu;G M4=J0(QB,e3*4u+2u);
+Z0(c)ah n6){f3=floatBitsToUint(o6.z)&0xffffu;X N4=K0(PB,f3*4u+2u);
 #ifdef RENDER_MODE_DEPTH_STENCIL
-l7=X1(M4.x);
+m7=Y1(N4.x);
 #endif
-d n6=m6.xy;R v7=uintBitsToFloat(M4.yzw);Hg=(n6*v7.x+v7.yz)*m.Ig;return n6;}
+c p6=o6.xy;Q w7=uintBitsToFloat(N4.yzw);ah=(p6*w7.x+w7.yz)*n.bh;return p6;}
 #endif
-e c K8(c a2,c E1,c v2){return(E1-a2)/max(1.-a2*v2,o9);}e uint L8(a1 o6,uint Jg){uint Ia=(o6.y>>h6)*(Jg<<h6)+((o6.x>>h6)<<(h6<<1));Ia+=((o6.x&0x1cu)<<h6)+((o6.y&0x1cu)<<2);Ia+=((o6.y&0x3u)<<2)+(o6.x&0x3u);return Ia;}
+e d L8(d c2,d E1,d x2){return(E1-c2)/max(1.-c2*x2,q9);}
+#if defined(RENDER_MODE_CLOCKWISE_ATOMIC)||defined(PLS_IMPL_STORAGE_BUFFER)
+e uint M8(a1 g4,uint ch){uint Oa=(g4.y>>j6)*(ch<<j6)+((g4.x>>j6)<<(j6<<1));Oa+=((g4.x&0x1cu)<<j6)+((g4.y&0x1cu)<<2);Oa+=((g4.y&0x3u)<<2)+(g4.x&0x3u);return Oa;}
+#endif
 #ifdef RENDER_MODE_CLOCKWISE_ATOMIC
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-#define f5 p2
-#define Y3(r5) C1=r5;n3
+#define g5 r2
+#define Y3(v5) C1=v5;m3
 #else
-#define f5 L1
-#define Y3(r5) y0(j0,r5);Z1;
+#define g5 M1
+#define Y3(v5) z0(k0,v5);a2;
 #endif
-e c Ja(uint Kg){return ba(int((Kg&sa)-l5))*qa;}e uint w7(c n){return uint(n*Qf+.5);}
+e d Pa(uint dh){return fa(int((dh&ya)-l5))*wa;}e uint x7(d o){return uint(o*jg+.5);}
 #endif

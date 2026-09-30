@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -96,7 +96,7 @@ fn main_1() {
         }
         let _e82 = phi_773_;
         let _e84 = (_e82 >> bitcast<u32>(16i));
-        let _e86 = n.e6_;
+        let _e86 = n.f6_;
         if (_e84 == 0u) {
             phi_774_ = 0f;
         } else {

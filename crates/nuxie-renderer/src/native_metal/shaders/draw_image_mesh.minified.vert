@@ -1,67 +1,55 @@
 #ifdef VERTEX
-g1(i3)L(0,d,PC);h1 g1(y3)L(1,d,QC);h1 g1(n1)L(r9,g,XB);L(v9,g,SB);L(w9,g,OB);
-#ifdef O3
-L(x9,uint,YB);L(y9,uint,ZB);L(z9,uint,AC);L(A9,uint,BC);
-#else
-L(B9,G,IB);
+f1(j3)J(0,c,PC);g1 f1(z3)J(1,c,QC);g1 f1(m1)J(w9,f,WB);J(x9,f,SB);J(y9,f,NB);J(z9,uint,XB);J(A9,uint,YB);J(B9,uint,ZB);J(C9,uint,MC);g1
 #endif
-h1
-#endif
-m2 H0 X(0,d,G5);
+p2 H0 V(0,c,H5);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT X(1,c,K3);
+OPTIONALLY_FLAT V(1,d,K3);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-H0 X(2,g,M0);
+H0 V(2,f,M0);
 #endif
-OPTIONALLY_FLAT X(3,c,H1);
+OPTIONALLY_FLAT V(3,i,H1);
 #ifdef ENABLE_ADVANCED_BLEND
-Q2 X(4,N,A1);
+T2 V(4,L,A1);
 #endif
-g2
+h2
 #ifdef VERTEX
-U3 V3 I6(HC,i3,j3,y3,z3,n1,g0,B){M(B,j3,PC,d);M(B,z3,QC,d);M(v,g0,XB,g);M(v,g0,SB,g);M(v,g0,OB,g);
-#ifdef O3
-M(v,g0,YB,uint);M(v,g0,ZB,uint);M(v,g0,AC,uint);M(v,g0,BC,uint);G IB=G(YB,ZB,AC,BC);
-#else
-M(v,g0,IB,G);
-#endif
-V(G5,d);
+U3 V3 K6(FC,j3,k3,z3,A3,m1,g0,B){K(B,k3,PC,c);K(B,A3,QC,c);K(v,g0,WB,f);K(v,g0,SB,f);K(v,g0,NB,f);K(v,g0,XB,uint);K(v,g0,YB,uint);K(v,g0,ZB,uint);K(v,g0,MC,uint);T(H5,c);
 #ifdef ENABLE_CLIPPING
-V(K3,c);
+T(K3,d);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-V(M0,g);
+T(M0,f);
 #endif
-V(H1,c);
+T(H1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-V(A1,N);
+T(A1,L);
 #endif
-d m0=R0(h2(XB),PC)+OB.xy;G5=QC;
+c j0=N0(I1(WB),PC)+NB.xy;H5=QC;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){K3=r8(IB.y,m.d6);}
+if(ENABLE_CLIPPING){K3=v8(YB,n.f6);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-M0=T7(h2(SB),OB.zw,m0 x5);
+M0=U7(I1(SB),NB.zw,j0 y5);
 #else
-Bc(h2(SB),OB.zw,m0 x5);
+Kc(I1(SB),NB.zw,j0 y5);
 #endif
 }
 #endif
-g W=M3(m0);
+f W=M3(j0);
 #ifdef POST_INVERT_Y
 W.y=-W.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-W.z=ja(IB.w);
+W.z=na(MC);
 #endif
-H1=uintBitsToFloat(IB.x);
+H1=unpackUnorm4x8(XB);
 #ifdef ENABLE_ADVANCED_BLEND
-A1=X1(IB.z);
+A1=Y1(ZB);
 #endif
-a0(G5);
+a0(H5);
 #ifdef ENABLE_CLIPPING
 a0(K3);
 #endif

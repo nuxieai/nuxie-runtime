@@ -4,11 +4,11 @@
 #![allow(non_snake_case)]
 
 use super::render_pass_vulkan_decl::{
-    RenderPassOptionsVulkan, RenderPassVulkan, FORMAT_BIT_COUNT, KEY_BIT_COUNT,
-    KEY_NO_INTERLOCK_MODE_BIT_COUNT, LOAD_OP_BIT_COUNT, RENDER_PASS_OPTION_COUNT,
+    KEY_NO_INTERLOCK_MODE_BIT_COUNT, RenderPassOptionsVulkan, RenderPassVulkan, FORMAT_BIT_COUNT,
+    KEY_BIT_COUNT, LOAD_OP_BIT_COUNT, RENDER_PASS_OPTION_COUNT,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    InterlockMode, LoadAction, INTERLOCK_MODE_BIT_COUNT,
+    InterlockMode, InterlockModeBitCount, LoadAction,
 };
 use ash::vk;
 use std::ffi::CString;
@@ -197,12 +197,9 @@ pub(crate) fn Key(
     loadAction: LoadAction,
 ) -> u32 {
     let mut key = KeyNoInterlockMode(renderPassOptions, renderTargetFormat, loadAction);
-    assert_eq!(
-        key << INTERLOCK_MODE_BIT_COUNT >> INTERLOCK_MODE_BIT_COUNT,
-        key
-    );
-    assert!((interlockMode as u32) < 1 << INTERLOCK_MODE_BIT_COUNT);
-    key = (key << INTERLOCK_MODE_BIT_COUNT) | interlockMode as u32;
+    assert_eq!(key << InterlockModeBitCount >> InterlockModeBitCount, key);
+    assert!((interlockMode as u32) < 1 << InterlockModeBitCount);
+    key = (key << InterlockModeBitCount) | interlockMode as u32;
     assert!(key < 1 << KEY_BIT_COUNT);
     key
 }
@@ -213,20 +210,17 @@ const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const COVERAGE_PLANE_IDX: usize = 3;
 const PLS_PLANE_COUNT: usize = 4;
 const COALESCED_ATOMIC_RESOLVE_IDX: usize = SCRATCH_COLOR_PLANE_IDX;
-const MSAA_DEPTH_STENCIL_IDX: usize = 1;
-const MSAA_RESOLVE_IDX: usize = 2;
+const DEPTH_STENCIL_BUFFER_IDX: usize = 1;
+const DEPTH_STENCIL_FINAL_COLOR_IDX: usize = 2;
 const MSAA_COLOR_SEED_IDX: usize = 3;
 const MAX_RENDER_PASS_ATTACHMENTS: usize = PLS_PLANE_COUNT + 1;
 const MAX_SUBPASSES: usize = 3;
 const MAX_SUBPASS_DEPS: usize = 9;
 
-const fn vk_color_load_op(
-    loadAction: LoadAction,
-    interlockMode: InterlockMode,
-) -> vk::AttachmentLoadOp {
+const fn vk_color_load_op(loadAction: LoadAction, msaa: bool) -> vk::AttachmentLoadOp {
     match loadAction {
         LoadAction::preserveRenderTarget => {
-            if matches!(interlockMode, InterlockMode::depthStencil) {
+            if msaa {
                 vk::AttachmentLoadOp::DONT_CARE
             } else {
                 vk::AttachmentLoadOp::LOAD
@@ -282,7 +276,9 @@ impl RenderPassVulkan {
             } else {
                 vk::ImageLayout::GENERAL
             };
-        let msaaSampleCount = if interlockMode == InterlockMode::depthStencil {
+        let msaa = renderPassOptions.has(RenderPassOptionsVulkan::msaa);
+        assert!(!msaa || interlockMode == InterlockMode::depthStencil);
+        let msaaSampleCount = if msaa {
             vk::SampleCountFlags::TYPE_4
         } else {
             vk::SampleCountFlags::TYPE_1
@@ -291,6 +287,25 @@ impl RenderPassVulkan {
         let mut colorAttachmentRefs = Vec::with_capacity(PLS_PLANE_COUNT);
         let mut depthStencilAttachmentRef = None;
         let mut resolveAttachmentRef = None;
+        let pushCopyResolveAttachment =
+            |attachments: &mut Vec<vk::AttachmentDescription>,
+             resolveAttachmentRef: &mut Option<vk::AttachmentReference>,
+             attachmentIndex: usize| {
+                assert_eq!(attachments.len(), attachmentIndex);
+                attachments.push(
+                    vk::AttachmentDescription::default()
+                        .format(renderTargetFormat)
+                        .samples(vk::SampleCountFlags::TYPE_1)
+                        .load_op(vk::AttachmentLoadOp::DONT_CARE)
+                        .store_op(vk::AttachmentStoreOp::STORE)
+                        .initial_layout(vk::ImageLayout::UNDEFINED)
+                        .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
+                );
+                *resolveAttachmentRef = Some(attachment_ref(
+                    attachmentIndex,
+                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+                ));
+            };
 
         if !storageTexturePLS
             || renderPassOptions.has(RenderPassOptionsVulkan::fixedFunctionColorOutput)
@@ -301,12 +316,12 @@ impl RenderPassVulkan {
                 vk::AttachmentDescription::default()
                     .format(renderTargetFormat)
                     .samples(msaaSampleCount)
-                    .load_op(vk_color_load_op(loadAction, interlockMode))
+                    .load_op(vk_color_load_op(loadAction, msaa))
                     .store_op(
                         if renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved)
                             || renderPassOptions
                                 .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
-                            || interlockMode == InterlockMode::depthStencil
+                            || msaa
                         {
                             vk::AttachmentStoreOp::DONT_CARE
                         } else {
@@ -317,7 +332,7 @@ impl RenderPassVulkan {
                         if (renderPassOptions
                             .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
                             && loadAction != LoadAction::preserveRenderTarget)
-                            || interlockMode == InterlockMode::depthStencil
+                            || msaa
                         {
                             vk::ImageLayout::UNDEFINED
                         } else {
@@ -427,20 +442,11 @@ impl RenderPassVulkan {
             );
             colorAttachmentRefs.push(attachment_ref(COVERAGE_PLANE_IDX, vk::ImageLayout::GENERAL));
             if renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved) {
-                assert_eq!(attachments.len(), PLS_PLANE_COUNT);
-                attachments.push(
-                    vk::AttachmentDescription::default()
-                        .format(renderTargetFormat)
-                        .samples(vk::SampleCountFlags::TYPE_1)
-                        .load_op(vk::AttachmentLoadOp::DONT_CARE)
-                        .store_op(vk::AttachmentStoreOp::STORE)
-                        .initial_layout(vk::ImageLayout::UNDEFINED)
-                        .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL),
-                );
-                resolveAttachmentRef = Some(attachment_ref(
+                pushCopyResolveAttachment(
+                    &mut attachments,
+                    &mut resolveAttachmentRef,
                     PLS_PLANE_COUNT,
-                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                ));
+                );
             }
         } else if interlockMode == InterlockMode::atomics {
             #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]
@@ -471,7 +477,7 @@ impl RenderPassVulkan {
                 }
             }
         } else if interlockMode == InterlockMode::depthStencil {
-            assert_eq!(attachments.len(), MSAA_DEPTH_STENCIL_IDX);
+            assert_eq!(attachments.len(), DEPTH_STENCIL_BUFFER_IDX);
             attachments.push(
                 vk::AttachmentDescription::default()
                     .format(vkutil_decl::get_preferred_depth_stencil_format(
@@ -486,58 +492,74 @@ impl RenderPassVulkan {
                     .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL),
             );
             depthStencilAttachmentRef = Some(attachment_ref(
-                MSAA_DEPTH_STENCIL_IDX,
+                DEPTH_STENCIL_BUFFER_IDX,
                 vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             ));
-            let readsMSAAResolveAttachment = loadAction == LoadAction::preserveRenderTarget
-                && !renderPassOptions.has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture);
-            let msaaResolveLayout = if readsMSAAResolveAttachment {
-                vk::ImageLayout::GENERAL
+            if !msaa {
+                assert_eq!(colorAttachmentRefs.len(), 1);
+                assert!(resolveAttachmentRef.is_none());
+                if renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved) {
+                    pushCopyResolveAttachment(
+                        &mut attachments,
+                        &mut resolveAttachmentRef,
+                        DEPTH_STENCIL_FINAL_COLOR_IDX,
+                    );
+                }
             } else {
-                vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
-            };
-            assert_eq!(attachments.len(), MSAA_RESOLVE_IDX);
-            attachments.push(
-                vk::AttachmentDescription::default()
-                    .format(renderTargetFormat)
-                    .samples(vk::SampleCountFlags::TYPE_1)
-                    .load_op(if readsMSAAResolveAttachment {
-                        vk::AttachmentLoadOp::LOAD
-                    } else {
-                        vk::AttachmentLoadOp::DONT_CARE
-                    })
-                    .store_op(vk::AttachmentStoreOp::STORE)
-                    .initial_layout(
-                        if readsMSAAResolveAttachment
-                            || renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved)
-                        {
-                            msaaResolveLayout
-                        } else {
-                            vk::ImageLayout::UNDEFINED
-                        },
-                    )
-                    .final_layout(msaaResolveLayout),
-            );
-            resolveAttachmentRef = Some(attachment_ref(MSAA_RESOLVE_IDX, msaaResolveLayout));
-            assert_eq!(colorAttachmentRefs.len(), 1);
-            if renderPassOptions.has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture) {
-                assert_eq!(loadAction, LoadAction::preserveRenderTarget);
-                assert_eq!(attachments.len(), MSAA_COLOR_SEED_IDX);
+                let readsMSAAResolveAttachment = loadAction == LoadAction::preserveRenderTarget
+                    && !renderPassOptions
+                        .has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture);
+                let msaaResolveLayout = if readsMSAAResolveAttachment {
+                    vk::ImageLayout::GENERAL
+                } else {
+                    vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL
+                };
+                assert_eq!(attachments.len(), DEPTH_STENCIL_FINAL_COLOR_IDX);
                 attachments.push(
                     vk::AttachmentDescription::default()
                         .format(renderTargetFormat)
                         .samples(vk::SampleCountFlags::TYPE_1)
-                        .load_op(vk::AttachmentLoadOp::LOAD)
-                        .store_op(vk::AttachmentStoreOp::DONT_CARE)
-                        .initial_layout(vk::ImageLayout::GENERAL)
-                        .final_layout(vk::ImageLayout::GENERAL),
+                        .load_op(if readsMSAAResolveAttachment {
+                            vk::AttachmentLoadOp::LOAD
+                        } else {
+                            vk::AttachmentLoadOp::DONT_CARE
+                        })
+                        .store_op(vk::AttachmentStoreOp::STORE)
+                        .initial_layout(
+                            if readsMSAAResolveAttachment
+                                || renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved)
+                            {
+                                msaaResolveLayout
+                            } else {
+                                vk::ImageLayout::UNDEFINED
+                            },
+                        )
+                        .final_layout(msaaResolveLayout),
                 );
+                resolveAttachmentRef = Some(attachment_ref(
+                    DEPTH_STENCIL_FINAL_COLOR_IDX,
+                    msaaResolveLayout,
+                ));
+                assert_eq!(colorAttachmentRefs.len(), 1);
+                if renderPassOptions.has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture) {
+                    assert_eq!(loadAction, LoadAction::preserveRenderTarget);
+                    assert_eq!(attachments.len(), MSAA_COLOR_SEED_IDX);
+                    attachments.push(
+                        vk::AttachmentDescription::default()
+                            .format(renderTargetFormat)
+                            .samples(vk::SampleCountFlags::TYPE_1)
+                            .load_op(vk::AttachmentLoadOp::LOAD)
+                            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+                            .initial_layout(vk::ImageLayout::GENERAL)
+                            .final_layout(vk::ImageLayout::GENERAL),
+                    );
+                }
             }
         }
 
         assert!(attachments.len() <= MAX_RENDER_PASS_ATTACHMENTS);
         let mut inputAttachmentRefs = colorAttachmentRefs.clone();
-        let mut msaaColorSeedInputAttachmentRef = Vec::with_capacity(1);
+        let mut msaaColorSeedInputAttachmentRef = None;
         if renderPassOptions.has(RenderPassOptionsVulkan::fixedFunctionColorOutput) {
             if inputAttachmentRefs.len() > 1 {
                 inputAttachmentRefs[0].attachment = vk::ATTACHMENT_UNUSED;
@@ -545,12 +567,13 @@ impl RenderPassVulkan {
                 inputAttachmentRefs.clear();
             }
         }
-        if interlockMode == InterlockMode::depthStencil && loadAction == LoadAction::preserveRenderTarget {
-            msaaColorSeedInputAttachmentRef.push(attachment_ref(
+        if msaa && loadAction == LoadAction::preserveRenderTarget {
+            assert_eq!(interlockMode, InterlockMode::depthStencil);
+            msaaColorSeedInputAttachmentRef = Some(attachment_ref(
                 if renderPassOptions.has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture) {
                     MSAA_COLOR_SEED_IDX
                 } else {
-                    MSAA_RESOLVE_IDX
+                    DEPTH_STENCIL_FINAL_COLOR_IDX
                 },
                 vk::ImageLayout::GENERAL,
             ));
@@ -581,16 +604,14 @@ impl RenderPassVulkan {
                 ));
             };
 
-        if interlockMode == InterlockMode::depthStencil && loadAction == LoadAction::preserveRenderTarget {
-            assert_eq!(
-                msaaColorSeedInputAttachmentRef.len(),
-                colorAttachmentRefs.len()
-            );
+        if msaa && loadAction == LoadAction::preserveRenderTarget {
+            assert!(msaaColorSeedInputAttachmentRef.is_some());
+            assert_eq!(colorAttachmentRefs.len(), 1);
             assert!(subpassDescs.is_empty());
             subpassDescs.push(vk::SubpassDescription {
                 pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
-                input_attachment_count: msaaColorSeedInputAttachmentRef.len() as u32,
-                p_input_attachments: msaaColorSeedInputAttachmentRef.as_ptr(),
+                input_attachment_count: 1,
+                p_input_attachments: msaaColorSeedInputAttachmentRef.as_ref().unwrap(),
                 color_attachment_count: colorAttachmentRefs.len() as u32,
                 p_color_attachments: colorAttachmentRefs.as_ptr(),
                 ..Default::default()
@@ -677,7 +698,7 @@ impl RenderPassVulkan {
             p_input_attachments: inputAttachmentRefs.as_ptr(),
             color_attachment_count: colorAttachmentRefs.len() as u32,
             p_color_attachments: colorAttachmentRefs.as_ptr(),
-            p_resolve_attachments: if interlockMode == InterlockMode::depthStencil
+            p_resolve_attachments: if msaa
                 && !renderPassOptions.has(RenderPassOptionsVulkan::manuallyResolved)
             {
                 resolveAttachmentRef.as_ref().unwrap()
@@ -824,6 +845,18 @@ impl Drop for RenderPassVulkan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_sample_preserve_loads_color_while_msaa_seeds_separately() {
+        assert_eq!(
+            vk_color_load_op(LoadAction::preserveRenderTarget, false),
+            vk::AttachmentLoadOp::LOAD
+        );
+        assert_eq!(
+            vk_color_load_op(LoadAction::preserveRenderTarget, true),
+            vk::AttachmentLoadOp::DONT_CARE
+        );
+    }
 
     #[test]
     fn source_key_layout_and_sparse_format_holes_are_exact() {

@@ -4,8 +4,7 @@
 #![allow(non_snake_case)]
 
 use super::render_target_vulkan_decl::{
-    RenderTargetVulkan, RenderTargetVulkanApi, RenderTargetVulkanImpl,
-    RenderTargetVulkanKind,
+    RenderTargetVulkan, RenderTargetVulkanApi, RenderTargetVulkanImpl, RenderTargetVulkanKind,
 };
 use super::vkutil_decl::{ImageAccess, ImageAccessAction, Texture2D};
 use super::vulkan_context_decl::VulkanContext;
@@ -46,6 +45,7 @@ pub(crate) fn makeRenderTarget(
                 m_framebufferFormat: framebuffer_format,
                 m_targetUsageFlags: target_usage_flags,
                 m_offscreenColorTexture: ManuallyDrop::new(rcp::new()),
+                m_depthStencilTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaColorTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaDepthStencilTexture: ManuallyDrop::new(rcp::new()),
                 rust_complete_kind: RenderTargetVulkanKind::External,
@@ -217,25 +217,44 @@ pub(crate) fn msaaColorTexture(target: &mut dyn RenderTargetVulkanApi) -> *mut T
     base.m_msaaColorTexture.get()
 }
 
-pub(crate) fn msaaDepthStencilTexture(target: &mut dyn RenderTargetVulkanApi) -> *mut Texture2D {
+pub(crate) fn depthStencilTexture(
+    target: &mut dyn RenderTargetVulkanApi,
+    msaa: bool,
+) -> *mut Texture2D {
     let base = target.baseMut();
-    if base.m_msaaDepthStencilTexture.get().is_null() {
+    let width = base.width();
+    let height = base.height();
+    let texture = if msaa {
+        &mut base.m_msaaDepthStencilTexture
+    } else {
+        &mut base.m_depthStencilTexture
+    };
+    if texture.get().is_null() {
         let format =
             super::vkutil_decl::get_preferred_depth_stencil_format(base.m_vk.supportsD24S8());
         let info = vk::ImageCreateInfo::default()
             .format(format)
             .extent(vk::Extent3D {
-                width: base.width(),
-                height: base.height(),
+                width: width,
+                height: height,
                 depth: 1,
             })
-            .samples(vk::SampleCountFlags::TYPE_4)
+            .samples(if msaa {
+                vk::SampleCountFlags::TYPE_4
+            } else {
+                vk::SampleCountFlags::TYPE_1
+            })
             .usage(
                 vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT
                     | vk::ImageUsageFlags::TRANSIENT_ATTACHMENT,
             );
-        let name = CStr::from_bytes_with_nul(b"MSAA Depth/Stencil Texture\0").unwrap();
-        *base.m_msaaDepthStencilTexture = base.m_vk.makeTexture2D(info, Some(name));
+        let name = CStr::from_bytes_with_nul(if msaa {
+            b"MSAA depthStencil Texture\0"
+        } else {
+            b"depthStencil Texture\0"
+        })
+        .unwrap();
+        **texture = base.m_vk.makeTexture2D(info, Some(name));
     }
-    base.m_msaaDepthStencilTexture.get()
+    texture.get()
 }

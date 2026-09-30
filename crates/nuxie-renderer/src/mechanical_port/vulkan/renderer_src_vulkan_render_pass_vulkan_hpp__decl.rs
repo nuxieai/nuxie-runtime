@@ -23,7 +23,8 @@ impl RenderPassOptionsVulkan {
     pub(crate) const rasterOrderingInterruptible: Self = Self(1 << 2);
     pub(crate) const rasterOrderingResume: Self = Self(1 << 3);
     pub(crate) const atomicCoalescedResolveAndTransfer: Self = Self(1 << 4);
-    pub(crate) const msaaSeedFromOffscreenTexture: Self = Self(1 << 5);
+    pub(crate) const msaa: Self = Self(1 << 5);
+    pub(crate) const msaaSeedFromOffscreenTexture: Self = Self(1 << 6);
 
     pub(crate) const fn has(self, flag: Self) -> bool {
         self.0 & flag.0 != 0
@@ -54,7 +55,7 @@ impl Not for RenderPassOptionsVulkan {
     }
 }
 
-pub(crate) const RENDER_PASS_OPTION_COUNT: u64 = 6;
+pub(crate) const RENDER_PASS_OPTION_COUNT: u64 = 7;
 pub(crate) const RENDER_PASS_OPTIONS_LAYOUT_MASK: RenderPassOptionsVulkan = RenderPassOptionsVulkan(
     !(RenderPassOptionsVulkan::rasterOrderingInterruptible.0
         | RenderPassOptionsVulkan::rasterOrderingResume.0),
@@ -64,7 +65,7 @@ pub(crate) const FORMAT_BIT_COUNT: u64 = 9;
 pub(crate) const LOAD_OP_BIT_COUNT: u64 = 2;
 pub(crate) const KEY_NO_INTERLOCK_MODE_BIT_COUNT: u64 =
     FORMAT_BIT_COUNT + RENDER_PASS_OPTION_COUNT + LOAD_OP_BIT_COUNT;
-pub(crate) const KEY_BIT_COUNT: u64 = KEY_NO_INTERLOCK_MODE_BIT_COUNT + 3;
+pub(crate) const KEY_BIT_COUNT: u64 = KEY_NO_INTERLOCK_MODE_BIT_COUNT + crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockModeBitCount as u64;
 const _: () = assert!(KEY_BIT_COUNT <= 32);
 
 pub(crate) struct RenderPassVulkan {

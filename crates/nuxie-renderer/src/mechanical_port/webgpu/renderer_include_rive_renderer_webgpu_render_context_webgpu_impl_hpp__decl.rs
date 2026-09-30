@@ -388,12 +388,13 @@ pub(crate) struct RenderTargetWebGPU {
     pub(crate) m_framebufferFormat: WagyuTextureFormat,
     pub(crate) m_transientPLSUsage: TextureUsage,
     pub(crate) m_transientMSAAColorUsage: TextureUsage,
-    pub(crate) m_transientMSAADepthStencilUsage: TextureUsage,
+    pub(crate) m_transientDepthStencilUsage: TextureUsage,
     pub(crate) m_targetTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_coverageTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_clipTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_scratchColorTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_msaaColorTexture: ManuallyDrop<WagyuTexture>,
+    pub(crate) m_depthStencilTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_msaaDepthStencilTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_dstColorTexture: ManuallyDrop<WagyuTexture>,
     pub(crate) m_targetTextureView: ManuallyDrop<TextureView>,
@@ -401,6 +402,7 @@ pub(crate) struct RenderTargetWebGPU {
     pub(crate) m_clipTextureView: ManuallyDrop<TextureView>,
     pub(crate) m_scratchColorTextureView: ManuallyDrop<TextureView>,
     pub(crate) m_msaaColorTextureView: ManuallyDrop<TextureView>,
+    pub(crate) m_depthStencilTextureView: ManuallyDrop<TextureView>,
     pub(crate) m_msaaDepthStencilTextureView: ManuallyDrop<TextureView>,
     pub(crate) m_dstColorTextureView: ManuallyDrop<TextureView>,
 }
@@ -444,6 +446,7 @@ impl Drop for RenderTargetWebGPU {
         unsafe {
             ManuallyDrop::drop(&mut self.m_dstColorTextureView);
             ManuallyDrop::drop(&mut self.m_msaaDepthStencilTextureView);
+            ManuallyDrop::drop(&mut self.m_depthStencilTextureView);
             ManuallyDrop::drop(&mut self.m_msaaColorTextureView);
             ManuallyDrop::drop(&mut self.m_scratchColorTextureView);
             ManuallyDrop::drop(&mut self.m_clipTextureView);
@@ -451,6 +454,7 @@ impl Drop for RenderTargetWebGPU {
             ManuallyDrop::drop(&mut self.m_targetTextureView);
             ManuallyDrop::drop(&mut self.m_dstColorTexture);
             ManuallyDrop::drop(&mut self.m_msaaDepthStencilTexture);
+            ManuallyDrop::drop(&mut self.m_depthStencilTexture);
             ManuallyDrop::drop(&mut self.m_msaaColorTexture);
             ManuallyDrop::drop(&mut self.m_scratchColorTexture);
             ManuallyDrop::drop(&mut self.m_clipTexture);
@@ -520,8 +524,8 @@ impl Drop for TextureWebGPUImpl {
 pub(crate) const SOURCE_TOP_LEVEL_CLASS_COUNT: usize = 3;
 pub(crate) const SOURCE_NESTED_CLASS_COUNT: usize = 11;
 pub(crate) const SOURCE_RENDER_CONTEXT_FIELD_COUNT: usize = 36;
-pub(crate) const SOURCE_RENDER_TARGET_FIELD_COUNT: usize = 19;
-const _: [(); 12739] = [(); PINNED_SOURCE.len()];
+pub(crate) const SOURCE_RENDER_TARGET_FIELD_COUNT: usize = 21;
+const _: [(); 12849] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -531,11 +535,11 @@ mod tests {
 
     #[test]
     fn complete_header_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 343);
+        assert_eq!(PINNED_SOURCE.lines().count(), 346);
         assert_eq!(SOURCE_TOP_LEVEL_CLASS_COUNT, 3);
         assert_eq!(SOURCE_NESTED_CLASS_COUNT, 11);
         assert_eq!(SOURCE_RENDER_CONTEXT_FIELD_COUNT, 36);
-        assert_eq!(SOURCE_RENDER_TARGET_FIELD_COUNT, 19);
+        assert_eq!(SOURCE_RENDER_TARGET_FIELD_COUNT, 21);
     }
 
     #[test]

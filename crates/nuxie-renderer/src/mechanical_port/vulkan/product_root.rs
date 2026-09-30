@@ -2,7 +2,7 @@
 
 #[cfg(feature = "native-ore-vulkan-experimental")]
 use std::any::Any;
-use std::ffi::{CStr, CString, c_void};
+use std::ffi::{c_void, CStr, CString};
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -501,18 +501,23 @@ impl VulkanProductBackend {
         &mut self,
     ) -> Result<crate::native_vulkan::NativeVulkanSurfaceAdmission, RendererError> {
         if self.active_frame {
-            return Err(RendererError::Device("cannot admit an active Vulkan frame".into()));
+            return Err(RendererError::Device(
+                "cannot admit an active Vulkan frame".into(),
+            ));
         }
         if let Some(error) = &self.frame_recovery_error {
             return Err(RendererError::Device(format!(
                 "exact Vulkan frame synchronization is unavailable: {error}"
             )));
         }
-        let surface = self.surface.as_mut()
-            .ok_or(RendererError::Unsupported("attached Android Vulkan surface"))?;
+        let surface = self.surface.as_mut().ok_or(RendererError::Unsupported(
+            "attached Android Vulkan surface",
+        ))?;
         super::surface_swapchain::prepare_surface_frame(
-            surface.swapchain.as_mut(), &mut self.pending_surface,
-        ).map_err(|error| RendererError::Device(format!("admit Android Vulkan surface: {error:?}")))
+            surface.swapchain.as_mut(),
+            &mut self.pending_surface,
+        )
+        .map_err(|error| RendererError::Device(format!("admit Android Vulkan surface: {error:?}")))
     }
 
     /// Completes a frame with GPU transfer and presentation, reporting surface
@@ -526,7 +531,9 @@ impl VulkanProductBackend {
         use super::surface_transfer::SurfaceTransfer;
         use crate::native_vulkan::NativeVulkanPresentation;
         if self.pending_surface.is_some() {
-            return Err(RendererError::Device("poll pending surface completion before submitting another frame".into()));
+            return Err(RendererError::Device(
+                "poll pending surface completion before submitting another frame".into(),
+            ));
         }
         let config = self
             .surface
@@ -837,6 +844,10 @@ impl ExactSourceBackend for VulkanProductBackend {
         match mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,
+            RenderMode::ClockwiseMsaa1 => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+            }
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
@@ -1583,17 +1594,32 @@ mod gpu_canvas_frame_number_tests {
         use super::super::surface_swapchain::wait_pending_fence;
         let backend = VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
         let fence = backend.resources.fence;
-        unsafe { backend.device.reset_fences(&[fence]).expect("reset test fence") };
+        unsafe {
+            backend
+                .device
+                .reset_fences(&[fence])
+                .expect("reset test fence")
+        };
         let mut pending = true;
         for _ in 0..3 {
             assert!(!wait_pending_fence(&backend.device, fence, &mut pending, 0).unwrap());
             assert!(pending, "timeout must retain pending ownership");
         }
-        unsafe { backend.device.queue_submit(backend.queue, &[], fence).expect("signal test fence") };
+        unsafe {
+            backend
+                .device
+                .queue_submit(backend.queue, &[], fence)
+                .expect("signal test fence")
+        };
         assert!(wait_pending_fence(&backend.device, fence, &mut pending, u64::MAX).unwrap());
         assert!(!pending);
         // An already-retired fence is not polled or reset again.
-        unsafe { backend.device.reset_fences(&[fence]).expect("reset completed fence") };
+        unsafe {
+            backend
+                .device
+                .reset_fences(&[fence])
+                .expect("reset completed fence")
+        };
         assert!(wait_pending_fence(&backend.device, fence, &mut pending, 0).unwrap());
     }
 
@@ -1680,11 +1706,9 @@ mod gpu_canvas_frame_number_tests {
             .expect("production wrapCanvasTexture result");
 
         assert!(wrapped.belongsTo(&expected_domain));
-        assert!(
-            wrapped
-                .manager()
-                .is_some_and(|manager| manager.ptr_eq(&expected_manager))
-        );
+        assert!(wrapped
+            .manager()
+            .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
         {
             let view = wrapped
                 .downcast_ref::<TextureViewVulkan>()
@@ -1695,11 +1719,9 @@ mod gpu_canvas_frame_number_tests {
 
             let retained_texture = view.texture();
             assert!(retained_texture.belongsTo(&expected_domain));
-            assert!(
-                retained_texture
-                    .manager()
-                    .is_some_and(|manager| manager.ptr_eq(&expected_manager))
-            );
+            assert!(retained_texture
+                .manager()
+                .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
             assert_eq!(retained_texture.width(), Some(2));
             assert_eq!(retained_texture.height(), Some(2));
             assert_eq!(retained_texture.isRenderTarget(), Some(true));

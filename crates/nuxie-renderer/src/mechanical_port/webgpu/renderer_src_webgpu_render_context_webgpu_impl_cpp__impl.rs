@@ -77,7 +77,7 @@ pub(crate) const PINNED_SOURCE: &str =
 
 pub(crate) const RIVE_FRONT_FACE: super::webgpu_cpp_decl::FrontFace =
     super::webgpu_cpp_decl::FrontFace::CW;
-pub(crate) const MSAA_SAMPLE_COUNT: u32 = 4;
+pub(crate) const MSAASampleCount: u32 = 4;
 const PER_FLUSH_BINDINGS_SET: usize = 0;
 const PER_DRAW_BINDINGS_SET: usize = 1;
 const PLS_TEXTURE_BINDINGS_SET: usize = 2;
@@ -151,18 +151,18 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "FB";
 const GLSL_POST_INVERT_Y: &str = "SC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
 const GLSL_DRAW_PATH: &str = "OD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "TE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "UE";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "UC";
-const GLSL_CLEAR_COLOR: &str = "WE";
-const GLSL_LOAD_COLOR: &str = "YE";
+const GLSL_CLEAR_COLOR: &str = "XE";
+const GLSL_LOAD_COLOR: &str = "ZE";
 const GLSL_STORE_COLOR: &str = "FE";
 const GLSL_CLEAR_COVERAGE: &str = "GE";
-const GLSL_CLEAR_CLIP: &str = "XF";
+const GLSL_CLEAR_CLIP: &str = "YF";
 const GLSL_ENABLE_CLIPPING: &str = "I";
 const GLSL_ENABLE_CLIP_RECT: &str = "BB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "AB";
@@ -172,9 +172,9 @@ const GLSL_ENABLE_HSL_BLEND_MODES: &str = "EC";
 const GLSL_ENABLE_DITHER: &str = "LB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "JB";
 const GLSL_TARGET_SPIRV: &str = "CC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "SF";
-const GLSL_PLS_IMPL_NONE: &str = "UF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "TF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "TF";
+const GLSL_PLS_IMPL_NONE: &str = "VF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "UF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "EB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "GB";
 const GLSL_DRAW_IMAGE: &str = "OE";
@@ -1493,12 +1493,14 @@ pub(crate) fn makeDrawPipeline(
     vertexShaderSource: Option<&str>,
     fragmentShaderSource: Option<&str>,
     pipelineState: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState,
+    msaa: bool,
 ) -> super::webgpu_cpp_decl::RenderPipeline {
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
         BlendEquation, DrawType, ImageRectInstance, ImageMeshInstance, ImageRectVertex, InterlockMode, PatchVertex,
         ShaderFeatures, ShaderMiscFlags, TriangleVertex,
     };
 
+    assert!(!msaa || interlockMode == InterlockMode::depthStencil);
     let mut attributes = Vec::<WGPUVertexAttribute>::new();
     let mut vertexBufferLayouts = Vec::<WGPUVertexBufferLayout>::new();
     let topology;
@@ -1713,8 +1715,8 @@ pub(crate) fn makeDrawPipeline(
     descriptor.primitive.topology = topology.into();
     descriptor.primitive.frontFace = RIVE_FRONT_FACE.into();
     descriptor.primitive.cullMode = wgpuCullMode(pipelineState.cullFace);
-    descriptor.multisample.count = if interlockMode == InterlockMode::depthStencil {
-        MSAA_SAMPLE_COUNT
+    descriptor.multisample.count = if msaa {
+        MSAASampleCount
     } else {
         1
     };
@@ -1865,7 +1867,7 @@ fn compilePLSDrawShaders(
     ];
     assert_eq!(
         shaderFeatureDefines.len(),
-        crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kShaderFeatureCount
+        crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderFeatureCount
     );
     for (feature, name) in shaderFeatureDefines {
         if shaderFeatures.0 & feature.0 != 0 {
@@ -1958,6 +1960,7 @@ pub(crate) fn newDrawPipeline(
     interlockMode: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::InterlockMode,
     shaderMiscFlags: crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderMiscFlags,
     pipelineState: &crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineState,
+    msaa: bool,
     targetIsGLFBO0: bool,
 ) -> super::render_context_webgpu_decl::DrawPipeline {
     use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
@@ -2216,6 +2219,7 @@ pub(crate) fn newDrawPipeline(
             vertexSource,
             fragmentSource,
             pipelineState,
+            msaa,
         );
     }
     super::render_context_webgpu_decl::DrawPipeline {
@@ -2245,6 +2249,7 @@ fn wgpuColorPremul(color: nuxie_render_api::ColorInt) -> super::webgpu_decl::WGP
 }
 
 trait DrawRenderPassApi {
+    fn msaa(&self) -> bool;
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder;
     fn barrier(
         &mut self,
@@ -2254,6 +2259,7 @@ trait DrawRenderPassApi {
 }
 
 struct DrawRenderPassBase {
+    m_msaa: bool,
     m_impl: *mut RenderContextWebGPUImpl,
     m_desc: *const crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::FlushDescriptor,
     m_renderTarget: *mut RenderTargetWebGPU,
@@ -2277,6 +2283,7 @@ impl DrawRenderPassBase {
         Self {
             m_impl: implementation,
             m_desc: descriptor,
+            m_msaa: unsafe { (*descriptor).msaaSampleCount > 1 },
             m_renderTarget: renderTarget,
             m_commandEncoder: std::mem::ManuallyDrop::new(commandEncoder),
             m_encoder: std::mem::ManuallyDrop::new(
@@ -2443,6 +2450,7 @@ impl PLSDrawRenderPass {
 }
 
 impl DrawRenderPassApi for PLSDrawRenderPass {
+    fn msaa(&self) -> bool { self.base.m_msaa }
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -2585,6 +2593,7 @@ impl Drop for AtomicDrawRenderPass {
 }
 
 impl DrawRenderPassApi for AtomicDrawRenderPass {
+    fn msaa(&self) -> bool { self.base.m_msaa }
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -2623,7 +2632,7 @@ struct DepthStencilDrawRenderPass {
     base: std::mem::ManuallyDrop<DrawRenderPassBase>,
     m_msaaColorTextureView: std::mem::ManuallyDrop<TextureView>,
     m_targetTextureView: std::mem::ManuallyDrop<TextureView>,
-    m_msaaDepthStencilTextureView: std::mem::ManuallyDrop<TextureView>,
+    m_depthStencilTextureView: std::mem::ManuallyDrop<TextureView>,
 }
 
 impl DepthStencilDrawRenderPass {
@@ -2635,12 +2644,13 @@ impl DepthStencilDrawRenderPass {
         use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::DrawType;
         let base = unsafe { DrawRenderPassBase::new(implementation, descriptor, commandEncoder) };
         let target = unsafe { &mut *base.m_renderTarget };
+        let msaa = base.m_msaa;
         let mut pass = Self {
             base: std::mem::ManuallyDrop::new(base),
-            m_msaaColorTextureView: std::mem::ManuallyDrop::new(msaaColorTextureView(target)),
+            m_msaaColorTextureView: std::mem::ManuallyDrop::new(if msaa { msaaColorTextureView(target) } else { TextureView::default() }),
             m_targetTextureView: std::mem::ManuallyDrop::new(target.targetTextureView()),
-            m_msaaDepthStencilTextureView: std::mem::ManuallyDrop::new(
-                msaaDepthStencilTextureView(target),
+            m_depthStencilTextureView: std::mem::ManuallyDrop::new(
+                depthStencilTextureView(target, msaa),
             ),
         };
         let desc = unsafe { &*descriptor };
@@ -2678,14 +2688,27 @@ impl DepthStencilDrawRenderPass {
             super::webgpu_cpp_decl::StoreOp::Discard
         };
         let mut color = super::webgpu_decl::WGPURenderPassColorAttachment::default();
-        color.view = self.m_msaaColorTextureView.Get();
         color.depthSlice = super::webgpu_decl::WGPU_DEPTH_SLICE_UNDEFINED;
-        color.resolveTarget = self.m_targetTextureView.Get();
-        color.loadOp = loadOp.into();
-        color.storeOp = storeOp.into();
+        assert!(desc.msaaSampleCount > 0);
+        if desc.msaaSampleCount == 1 {
+            color.view = self.m_targetTextureView.Get();
+            color.loadOp = if beginType == DepthStencilBeginType::restartAfterDstCopy
+                || desc.colorLoadAction == crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::LoadAction::preserveRenderTarget
+            {
+                super::webgpu_cpp_decl::LoadOp::Load
+            } else {
+                super::webgpu_cpp_decl::LoadOp::Clear
+            }.into();
+            color.storeOp = super::webgpu_cpp_decl::StoreOp::Store.into();
+        } else {
+            color.view = self.m_msaaColorTextureView.Get();
+            color.resolveTarget = self.m_targetTextureView.Get();
+            color.loadOp = loadOp.into();
+            color.storeOp = storeOp.into();
+        }
         color.clearValue = wgpuColorPremul(desc.colorClearValue);
         let mut depthStencil = super::webgpu_decl::WGPURenderPassDepthStencilAttachment::default();
-        depthStencil.view = self.m_msaaDepthStencilTextureView.Get();
+        depthStencil.view = self.m_depthStencilTextureView.Get();
         depthStencil.depthLoadOp = loadOp.into();
         depthStencil.depthStoreOp = storeOp.into();
         depthStencil.depthClearValue = desc.depthClearValue;
@@ -2708,7 +2731,7 @@ impl DepthStencilDrawRenderPass {
 impl Drop for DepthStencilDrawRenderPass {
     fn drop(&mut self) {
         unsafe {
-            std::mem::ManuallyDrop::drop(&mut self.m_msaaDepthStencilTextureView);
+            std::mem::ManuallyDrop::drop(&mut self.m_depthStencilTextureView);
             std::mem::ManuallyDrop::drop(&mut self.m_targetTextureView);
             std::mem::ManuallyDrop::drop(&mut self.m_msaaColorTextureView);
             std::mem::ManuallyDrop::drop(&mut self.base);
@@ -2717,6 +2740,7 @@ impl Drop for DepthStencilDrawRenderPass {
 }
 
 impl DrawRenderPassApi for DepthStencilDrawRenderPass {
+    fn msaa(&self) -> bool { self.base.m_msaa }
     fn encoder(&self) -> &super::webgpu_cpp_decl::RenderPassEncoder {
         &self.base.m_encoder
     }
@@ -3383,7 +3407,7 @@ pub(crate) fn newRenderTarget(
         |base| unsafe { drop(Box::from_raw(base.cast::<RenderTargetWebGPU>())) };
     let mut transientPLSUsage = TextureUsage::RenderAttachment;
     let mut transientMSAAColorUsage = TextureUsage::RenderAttachment;
-    let mut transientMSAADepthStencilUsage = TextureUsage::RenderAttachment;
+    let mut transientDepthStencilUsage = TextureUsage::RenderAttachment;
     if capabilities.plsType == PixelLocalStorageType::VK_EXT_rasterization_order_attachment_access {
         transientPLSUsage |= TextureUsage(
             (WGPUTextureUsage_WagyuInputAttachment | WGPUTextureUsage_WagyuTransientAttachment)
@@ -3395,7 +3419,7 @@ pub(crate) fn newRenderTarget(
             (WGPUTextureUsage_WagyuTransientAttachment | WGPUTextureUsage_WagyuMSAAResolveSource)
                 as u64,
         );
-        transientMSAADepthStencilUsage |=
+        transientDepthStencilUsage |=
             TextureUsage(WGPUTextureUsage_WagyuTransientAttachment as u64);
     }
     RenderTargetWebGPU {
@@ -3404,12 +3428,13 @@ pub(crate) fn newRenderTarget(
         m_framebufferFormat: framebufferFormat,
         m_transientPLSUsage: transientPLSUsage,
         m_transientMSAAColorUsage: transientMSAAColorUsage,
-        m_transientMSAADepthStencilUsage: transientMSAADepthStencilUsage,
+        m_transientDepthStencilUsage: transientDepthStencilUsage,
         m_targetTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_coverageTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_clipTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_scratchColorTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_msaaColorTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
+        m_depthStencilTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_msaaDepthStencilTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_dstColorTexture: std::mem::ManuallyDrop::new(WagyuTexture::default()),
         m_targetTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
@@ -3417,6 +3442,7 @@ pub(crate) fn newRenderTarget(
         m_clipTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
         m_scratchColorTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
         m_msaaColorTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
+        m_depthStencilTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
         m_msaaDepthStencilTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
         m_dstColorTextureView: std::mem::ManuallyDrop::new(TextureView::default()),
     }
@@ -3493,26 +3519,34 @@ pub(crate) fn msaaColorTextureView(target: &mut RenderTargetWebGPU) -> TextureVi
             target.width(),
             target.height(),
             target.m_framebufferFormat,
-            MSAA_SAMPLE_COUNT,
+            MSAASampleCount,
         );
         *target.m_msaaColorTextureView = makeView(&target.m_msaaColorTexture);
     }
     (&*target.m_msaaColorTextureView).clone()
 }
 
-pub(crate) fn msaaDepthStencilTextureView(target: &mut RenderTargetWebGPU) -> TextureView {
-    if target.m_msaaDepthStencilTexture.Get().is_null() {
-        *target.m_msaaDepthStencilTexture = makeTexture(
+pub(crate) fn depthStencilTextureView(target: &mut RenderTargetWebGPU, msaa: bool) -> TextureView {
+    let width = target.width();
+    let height = target.height();
+    let (texture, view) = if msaa {
+        (&mut target.m_msaaDepthStencilTexture, &mut target.m_msaaDepthStencilTextureView)
+    } else {
+        (&mut target.m_depthStencilTexture, &mut target.m_depthStencilTextureView)
+    };
+    if view.Get().is_null() {
+        assert!(texture.Get().is_null());
+        **texture = makeTexture(
             &target.m_device,
-            target.m_transientMSAADepthStencilUsage,
-            target.width(),
-            target.height(),
+            target.m_transientDepthStencilUsage,
+            width,
+            height,
             TextureFormat::Depth24PlusStencil8,
-            MSAA_SAMPLE_COUNT,
+            if msaa { MSAASampleCount } else { 1 },
         );
-        *target.m_msaaDepthStencilTextureView = makeView(&target.m_msaaDepthStencilTexture);
+        **view = makeView(texture);
     }
-    (&*target.m_msaaDepthStencilTextureView).clone()
+    (&**view).clone()
 }
 
 pub(crate) fn dstColorTexture(target: &mut RenderTargetWebGPU) -> WagyuTexture {
@@ -3962,7 +3996,7 @@ unsafe fn executeDrawList(
             pipelineState.colorWriteEnabled = true;
         }
         let mut pipelineKey =
-            crate::mechanical_port::source::renderer::src::gpu_cpp::pipeline_unique_key(
+            crate::mechanical_port::source::renderer::src::gpu_cpp::getPipelineUniqueKey(
                 drawType,
                 shaderFeatures,
                 desc.interlockMode,
@@ -3972,6 +4006,7 @@ unsafe fn executeDrawList(
                 batch.firstBlendMode,
                 context.platformFeatures(),
             );
+        pipelineKey = pipelineKey << 1 | u64::from(renderPass.msaa());
         pipelineKey = pipelineKey << 1 | u64::from(targetIsGLFBO0);
         if !context.m_drawPipelines.contains_key(&pipelineKey) {
             let pipeline = newDrawPipeline(
@@ -3981,6 +4016,7 @@ unsafe fn executeDrawList(
                 desc.interlockMode,
                 shaderMiscFlags,
                 &pipelineState,
+                renderPass.msaa(),
                 targetIsGLFBO0,
             );
             context.m_drawPipelines.insert(pipelineKey, pipeline);
@@ -4636,9 +4672,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4906;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 4973;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 198035] = [(); PINNED_SOURCE.len()];
+const _: [(); 199670] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4807,7 +4843,7 @@ mod tests {
     fn minified_export_names_match_the_frozen_map() {
         let exports = include_str!("source/generated_glsl/glsl.glsl.exports.h");
         assert_eq!(
-            crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::kShaderFeatureCount,
+            crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::ShaderFeatureCount,
             9
         );
         for (sourceName, generatedName) in [

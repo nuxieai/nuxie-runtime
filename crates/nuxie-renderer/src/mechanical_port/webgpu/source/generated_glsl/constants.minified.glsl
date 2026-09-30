@@ -24,7 +24,7 @@
 #define z8 (1u<<26u)
 #define A8 (1u<<25u)
 #define ag (1u<<24u)
-#define G3 (1u<<23u)
+#define H3 (1u<<23u)
 #define ta (1u<<22u)
 #define Qc (1u<<21u)
 #define B8 (1u<<20u)
@@ -55,19 +55,19 @@
 #define ua 6
 #define dg 7
 #define Yc 8
-#define h7 9
+#define i7 9
 #define Zc 10
 #define W3 11
 #define eg 12
-#define g6 13
+#define h6 13
 #define fg 13
 #define O1(g) (3+g)
-#define H3 2
+#define p3 2
 #define gg 3
-#define U2 0
+#define G2 0
 #define V2 1
-#define h6 2
-#define K6 3
+#define i6 2
+#define L6 3
 #define va 2
 #define w9 2
 #define x9 3
@@ -85,7 +85,7 @@
 #define ig ad
 #define Kf 1023u
 #define q9 6.2e-5
-#define R5 0u
+#define S5 0u
 #define Le 1u
 #define Me 2u
 #define Ne 3u
@@ -105,14 +105,14 @@
 #define Sb float(0.00048828125)
 #define K9 float(1<<16)
 #define P9 (1u<<16)
-#define U5 17u
+#define V5 17u
 #define g8 0x1ffffu
 #define jg float(1024)
 #define wa float(0.0009765625)
 #define xa 19u
 #define l5 (1u<<(xa-1u))
 #define ya ((1u<<xa)-1u)
-#define i7 (1u<<xa)
+#define j7 (1u<<xa)
 #define kg 0
 #define lg 1
 #define mg 2
@@ -132,10 +132,10 @@
 #define bd 65536.
 #define za 8.
 #define Aa 32u
-#define i6 5u
-#define A3 8u
+#define j6 5u
+#define B3 8u
 #ifdef Ag
 #if Ag>=201703
-bj(Aa==1u<<i6);
+bj(Aa==1u<<j6);
 #endif
 #endif

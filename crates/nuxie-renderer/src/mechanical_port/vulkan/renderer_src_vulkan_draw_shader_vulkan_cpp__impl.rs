@@ -54,10 +54,7 @@ fn assert_depth_stencil_color_output_configuration(
         // Fixed function output and advanced blend are mutually exclusive and
         // the source requires exactly one for fragment draws in depthStencil mode.
         assert_ne!(
-            misc_is_set(
-                shaderMiscFlags,
-                ShaderMiscFlags::fixedFunctionColorOutput,
-            ),
+            misc_is_set(shaderMiscFlags, ShaderMiscFlags::fixedFunctionColorOutput,),
             feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_ADVANCED_BLEND)
         );
     }
@@ -69,11 +66,11 @@ fn select_shader_pair(
     interlockMode: InterlockMode,
     shaderMiscFlags: ShaderMiscFlags,
 ) -> ShaderPair {
-    let fixedFunctionColorOutput = misc_is_set(
-        shaderMiscFlags,
-        ShaderMiscFlags::fixedFunctionColorOutput,
-    );
+    let msaaDstRead = misc_is_set(shaderMiscFlags, ShaderMiscFlags::msaaDstRead);
+    let fixedFunctionColorOutput =
+        misc_is_set(shaderMiscFlags, ShaderMiscFlags::fixedFunctionColorOutput);
 
+    assert!(!msaaDstRead || !fixedFunctionColorOutput);
     match interlockMode {
         InterlockMode::rasterOrdering => match drawType {
             DrawType::midpointFanPatches
@@ -275,24 +272,18 @@ fn select_shader_pair(
 
         #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
         InterlockMode::clockwiseAtomic => {
-            let drawUsesAdvancedBlend = feature_is_set(
-                shaderFeatures,
-                ShaderFeatures::ENABLE_ADVANCED_BLEND,
-            );
+            let drawUsesAdvancedBlend =
+                feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_ADVANCED_BLEND);
             match drawType {
                 DrawType::midpointFanPatches
                 | DrawType::midpointFanCenterAAPatches
                 | DrawType::outerCurvePatches => ShaderPair {
                     vert: &spirv::draw_clockwise_atomic_path_vert,
-                    frag: if misc_is_set(
-                        shaderMiscFlags,
-                        ShaderMiscFlags::borrowedCoveragePass,
-                    ) {
+                    frag: if misc_is_set(shaderMiscFlags, ShaderMiscFlags::borrowedCoveragePass) {
                         assert!(fixedFunctionColorOutput);
                         assert!(!misc_any_set(
                             shaderMiscFlags,
-                            ShaderMiscFlags::clipUpdateOnly
-                                | ShaderMiscFlags::nestedClipUpdateOnly,
+                            ShaderMiscFlags::clipUpdateOnly | ShaderMiscFlags::nestedClipUpdateOnly,
                         ));
                         assert!(!drawUsesAdvancedBlend);
                         &spirv::draw_clockwise_atomic_borrowed_coverage_frag
@@ -313,15 +304,11 @@ fn select_shader_pair(
                 },
                 DrawType::interiorTriangulation => ShaderPair {
                     vert: &spirv::draw_clockwise_atomic_interior_triangles_vert,
-                    frag: if misc_is_set(
-                        shaderMiscFlags,
-                        ShaderMiscFlags::borrowedCoveragePass,
-                    ) {
+                    frag: if misc_is_set(shaderMiscFlags, ShaderMiscFlags::borrowedCoveragePass) {
                         assert!(fixedFunctionColorOutput);
                         assert!(!misc_any_set(
                             shaderMiscFlags,
-                            ShaderMiscFlags::clipUpdateOnly
-                                | ShaderMiscFlags::nestedClipUpdateOnly,
+                            ShaderMiscFlags::clipUpdateOnly | ShaderMiscFlags::nestedClipUpdateOnly,
                         ));
                         assert!(!drawUsesAdvancedBlend);
                         &spirv::draw_clockwise_atomic_borrowed_coverage_interior_triangles_frag
@@ -416,6 +403,8 @@ fn select_shader_pair(
                 },
                 frag: if fixedFunctionColorOutput {
                     &spirv::draw_depthstencil_path_fixedcolor_frag
+                } else if msaaDstRead {
+                    &spirv::draw_depthstencil_path_msaa_frag
                 } else {
                     &spirv::draw_depthstencil_path_frag
                 },
@@ -432,6 +421,8 @@ fn select_shader_pair(
                 },
                 frag: if fixedFunctionColorOutput {
                     &spirv::draw_depthstencil_atlas_blit_fixedcolor_frag
+                } else if msaaDstRead {
+                    &spirv::draw_depthstencil_atlas_blit_msaa_frag
                 } else {
                     &spirv::draw_depthstencil_atlas_blit_frag
                 },
@@ -444,6 +435,8 @@ fn select_shader_pair(
                 },
                 frag: if fixedFunctionColorOutput {
                     &spirv::draw_depthstencil_image_mesh_fixedcolor_frag
+                } else if msaaDstRead {
+                    &spirv::draw_depthstencil_image_mesh_msaa_frag
                 } else {
                     &spirv::draw_depthstencil_image_mesh_frag
                 },
@@ -454,7 +447,14 @@ fn select_shader_pair(
             },
             DrawType::renderPassResolve => ShaderPair {
                 vert: &spirv::draw_fullscreen_quad_vert,
-                frag: &spirv::draw_msaa_resolve_frag,
+                frag: {
+                    assert!(!fixedFunctionColorOutput);
+                    if msaaDstRead {
+                        &spirv::draw_msaa_resolve_frag
+                    } else {
+                        &spirv::draw_input_attachment_frag
+                    }
+                },
             },
         },
     }
@@ -477,12 +477,7 @@ impl DrawShaderVulkan {
             shaderMiscFlags,
         );
 
-        let pair = select_shader_pair(
-            drawType,
-            shaderFeatures,
-            interlockMode,
-            shaderMiscFlags,
-        );
+        let pair = select_shader_pair(drawType, shaderFeatures, interlockMode, shaderMiscFlags);
         let code = match shader_type {
             DrawShaderVulkanType::vertex => pair.vert.read(),
             DrawShaderVulkanType::fragment => pair.frag.read(),
@@ -514,11 +509,7 @@ impl Drop for DrawShaderVulkan {
 mod tests {
     use super::*;
 
-    fn assert_pair(
-        pair: ShaderPair,
-        vert: &'static ShaderSlot,
-        frag: &'static ShaderSlot,
-    ) {
+    fn assert_pair(pair: ShaderPair, vert: &'static ShaderSlot, frag: &'static ShaderSlot) {
         assert!(std::ptr::eq(pair.vert, vert));
         assert!(std::ptr::eq(pair.frag, frag));
     }
@@ -565,8 +556,7 @@ mod tests {
                 DrawType::interiorTriangulation,
                 no_features,
                 InterlockMode::clockwise,
-                ShaderMiscFlags::clipUpdateOnly
-                    | ShaderMiscFlags::fixedFunctionColorOutput,
+                ShaderMiscFlags::clipUpdateOnly | ShaderMiscFlags::fixedFunctionColorOutput,
             ),
             &spirv::draw_clockwise_interior_triangles_vert,
             &spirv::draw_clockwise_clip_interior_triangles_fixedcolor_frag,
@@ -577,8 +567,7 @@ mod tests {
                 DrawType::midpointFanPatches,
                 no_features,
                 InterlockMode::clockwiseAtomic,
-                ShaderMiscFlags::borrowedCoveragePass
-                    | ShaderMiscFlags::fixedFunctionColorOutput,
+                ShaderMiscFlags::borrowedCoveragePass | ShaderMiscFlags::fixedFunctionColorOutput,
             ),
             &spirv::draw_clockwise_atomic_path_vert,
             &spirv::draw_clockwise_atomic_borrowed_coverage_frag,
@@ -598,11 +587,49 @@ mod tests {
                 DrawType::renderPassResolve,
                 no_features,
                 InterlockMode::depthStencil,
-                none,
+                ShaderMiscFlags::msaaDstRead,
             ),
             &spirv::draw_fullscreen_quad_vert,
             &spirv::draw_msaa_resolve_frag,
         );
+        assert_pair(
+            select_shader_pair(
+                DrawType::renderPassResolve,
+                no_features,
+                InterlockMode::depthStencil,
+                none,
+            ),
+            &spirv::draw_fullscreen_quad_vert,
+            &spirv::draw_input_attachment_frag,
+        );
+        for (draw_type, vertex, fragment) in [
+            (
+                DrawType::depthStrokes,
+                &spirv::draw_depthstencil_path_vert,
+                &spirv::draw_depthstencil_path_msaa_frag,
+            ),
+            (
+                DrawType::featherAtlasBlit,
+                &spirv::draw_depthstencil_atlas_blit_vert,
+                &spirv::draw_depthstencil_atlas_blit_msaa_frag,
+            ),
+            (
+                DrawType::imageMesh,
+                &spirv::draw_depthstencil_image_mesh_vert,
+                &spirv::draw_depthstencil_image_mesh_msaa_frag,
+            ),
+        ] {
+            assert_pair(
+                select_shader_pair(
+                    draw_type,
+                    ShaderFeatures::ENABLE_CLIP_RECT,
+                    InterlockMode::depthStencil,
+                    ShaderMiscFlags::msaaDstRead,
+                ),
+                vertex,
+                fragment,
+            );
+        }
     }
 
     #[test]

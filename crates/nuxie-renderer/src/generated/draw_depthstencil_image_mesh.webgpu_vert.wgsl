@@ -21,12 +21,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -48,7 +48,7 @@ var<private> gl_VertexIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> PC_1: vec2<f32>;
 var<private> NB_1: vec4<f32>;
-var<private> G5_: vec2<f32>;
+var<private> H5_: vec2<f32>;
 var<private> QC_1: vec2<f32>;
 var<private> K3_: f32;
 var<private> YB_1: u32;
@@ -69,10 +69,10 @@ fn main_1() {
     let _e42 = NB_1;
     let _e44 = ((mat2x2<f32>(vec2<f32>(_e32.x, _e32.y), vec2<f32>(_e32.z, _e32.w)) * _e40) + _e42.xy);
     let _e45 = QC_1;
-    G5_ = _e45;
+    H5_ = _e45;
     if Bh {
         let _e46 = YB_1;
-        let _e48 = n.e6_;
+        let _e48 = n.f6_;
         if (_e46 == 0u) {
             phi_382_ = 0f;
         } else {
@@ -124,7 +124,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(2) WB: vec4<f32>, 
     main_1();
     let _e28 = unnamed.gl_Position;
     let _e29 = unnamed.gl_ClipDistance;
-    let _e30 = G5_;
+    let _e30 = H5_;
     let _e31 = K3_;
     let _e32 = H1_;
     let _e33 = A1_;

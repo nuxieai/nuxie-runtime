@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -480,7 +480,7 @@ fn main_1() {
         let _e651 = n.Bd[1u];
         phi_2610_ = vec4<f32>(((_e645.x * _e648) - 1f), ((_e645.y * _e651) - sign(_e651)), 0f, 1f);
     } else {
-        let _e661 = n.T2_;
+        let _e661 = n.U2_;
         phi_2610_ = vec4(_e661);
     }
     let _e664 = phi_2610_;

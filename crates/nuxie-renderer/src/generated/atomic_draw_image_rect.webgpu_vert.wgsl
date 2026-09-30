@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -71,7 +71,7 @@ var<private> M0_: vec4<f32>;
 var<private> SB_1: vec4<f32>;
 var<private> H1_: vec4<f32>;
 var<private> XB_1: u32;
-var<private> x3_: u32;
+var<private> y3_: u32;
 var<private> YB_1: u32;
 var<private> A1_: u32;
 var<private> ZB_1: u32;
@@ -79,7 +79,7 @@ var<private> ZB_1: u32;
 var<uniform> n: BC;
 var<private> OC_1: vec4<f32>;
 var<private> QD_1: vec4<f32>;
-var<private> M5_: vec4<f32>;
+var<private> N5_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(7)
 var KC: texture_2d<u32>;
@@ -190,7 +190,7 @@ fn main_1() {
     let _e187 = XB_1;
     H1_ = unpack4x8unorm(_e187);
     let _e189 = YB_1;
-    x3_ = _e189;
+    y3_ = _e189;
     let _e190 = ZB_1;
     A1_ = _e190;
     let _e192 = n.Ef;
@@ -217,7 +217,7 @@ fn main_1() {
             phi_770_ = vec4<f32>(_e253.x, _e224.y, _e253.z, _e253.w);
         }
         let _e272 = phi_770_;
-        M5_ = _e272;
+        N5_ = _e272;
     }
     unnamed.gl_Position = vec4<f32>(((_e151.x * _e192) - 1f), ((_e151.y * _e194) - sign(_e194)), 0f, 1f);
     return;
@@ -244,9 +244,9 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_
     let _e40 = Z1_;
     let _e41 = M0_;
     let _e42 = H1_;
-    let _e43 = x3_;
+    let _e43 = y3_;
     let _e44 = A1_;
-    let _e45 = M5_;
+    let _e45 = N5_;
     let _e46 = unnamed.gl_Position;
     return VertexOutput(_e39, _e40, _e41, _e42, _e43, _e44, _e45, _e46);
 }

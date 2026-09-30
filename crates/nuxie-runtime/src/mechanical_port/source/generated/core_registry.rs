@@ -4309,6 +4309,8 @@ pub enum CoreField {
     ScrollConstraintVelocityY,
     ScrollConstraintVirtualize,
     ScrollConstraintVirtualizeBuffer,
+    ScrollConstraintScrollFlags,
+    ScrollConstraintWheelInteractive,
     ScrollPhysicsConstraintId,
     SemanticDataHeadingLevel,
     SemanticDataHint,
@@ -8254,6 +8256,7 @@ impl CoreRegistry {
             727 => CoreField::ScrollConstraintPhysicsTypeValue,
             726 => CoreField::ScrollConstraintPhysicsId,
             221 => CoreField::ScrollConstraintVirtualizeBuffer,
+            466 => CoreField::ScrollConstraintScrollFlags,
             725 => CoreField::ScrollBarConstraintScrollConstraintId,
             23 => CoreField::DrawableBlendModeValue,
             450 => CoreField::DrawableAdditiveAmount,
@@ -8568,6 +8571,7 @@ impl CoreRegistry {
             850 => CoreField::ScrollConstraintVirtualize,
             851 => CoreField::ScrollConstraintInfinite,
             891 => CoreField::ScrollConstraintInteractive,
+            467 => CoreField::ScrollConstraintWheelInteractive,
             1025 => CoreField::ScrollConstraintScrollActive,
             734 => CoreField::ScrollBarConstraintAutoSize,
             895 => CoreField::NestedArtboardIsPaused,
@@ -9057,6 +9061,7 @@ impl CoreRegistry {
             727 => CoreField::ScrollConstraintPhysicsTypeValue,
             726 => CoreField::ScrollConstraintPhysicsId,
             221 => CoreField::ScrollConstraintVirtualizeBuffer,
+            466 => CoreField::ScrollConstraintScrollFlags,
             725 => CoreField::ScrollBarConstraintScrollConstraintId,
             23 => CoreField::DrawableBlendModeValue,
             450 => CoreField::DrawableAdditiveAmount,
@@ -9385,6 +9390,7 @@ impl CoreRegistry {
             850 => CoreField::ScrollConstraintVirtualize,
             851 => CoreField::ScrollConstraintInfinite,
             891 => CoreField::ScrollConstraintInteractive,
+            467 => CoreField::ScrollConstraintWheelInteractive,
             1025 => CoreField::ScrollConstraintScrollActive,
             734 => CoreField::ScrollBarConstraintAutoSize,
             895 => CoreField::NestedArtboardIsPaused,
@@ -9902,6 +9908,7 @@ impl CoreRegistry {
             727 => 0,
             726 => 0,
             221 => 0,
+            466 => 0,
             725 => 0,
             23 => 0,
             450 => 0,
@@ -10183,6 +10190,7 @@ impl CoreRegistry {
             850 => 4,
             851 => 4,
             891 => 4,
+            467 => 4,
             1025 => 4,
             734 => 4,
             895 => 4,
@@ -10554,6 +10562,7 @@ impl CoreRegistry {
             727 => 521,
             726 => 521,
             221 => 521,
+            466 => 521,
             725 => 522,
             23 => 13,
             450 => 13,
@@ -10834,6 +10843,7 @@ impl CoreRegistry {
             850 => 521,
             851 => 521,
             891 => 521,
+            467 => 521,
             1025 => 521,
             734 => 522,
             895 => 92,
@@ -17206,6 +17216,12 @@ impl CoreRegistryObject
                     <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::VIRTUALIZE_BUFFER_PROPERTY_KEY);
                 }
             }
+            CoreField::ScrollConstraintScrollFlags => {
+                if self.base.set_scroll_flags_value(value as u8) {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_flags_changed(self);
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::notify_property_changed(self, 466);
+                }
+            }
             _ => {}
         }
     }
@@ -17256,6 +17272,12 @@ impl CoreRegistryObject
                 if self.base.set_interactive_value(value) {
                     <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::interactive_changed(self);
                     <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::INTERACTIVE_PROPERTY_KEY);
+                }
+            },
+            CoreField::ScrollConstraintWheelInteractive => {
+                if self.base.set_wheel_interactive_value(value) {
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_flags_changed(self);
+                    <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::notify_property_changed(self, 466);
                 }
             },
             CoreField::ScrollConstraintScrollActive => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_active(self, value),
@@ -17317,6 +17339,7 @@ impl CoreRegistryObject
             CoreField::ScrollConstraintPhysicsTypeValue => self.base.physics_type_value(),
             CoreField::ScrollConstraintPhysicsId => self.base.physics_id(),
             CoreField::ScrollConstraintVirtualizeBuffer => self.base.virtualize_buffer() as u32,
+            CoreField::ScrollConstraintScrollFlags => self.base.scroll_flags() as u32,
             _ => 0,
         }
     }
@@ -17336,6 +17359,7 @@ impl CoreRegistryObject
             CoreField::ScrollConstraintVirtualize => self.base.virtualize(),
             CoreField::ScrollConstraintInfinite => self.base.infinite(),
             CoreField::ScrollConstraintInteractive => self.base.interactive(),
+            CoreField::ScrollConstraintWheelInteractive => self.base.wheel_interactive(),
             CoreField::ScrollConstraintScrollActive => crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint::scroll_active(self),
             _ => false,
         }

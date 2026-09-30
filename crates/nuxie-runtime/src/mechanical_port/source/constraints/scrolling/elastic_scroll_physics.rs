@@ -195,6 +195,9 @@ impl Default for ElasticScrollPhysics {
 }
 
 impl ElasticScrollPhysics {
+    pub fn is_primed(&self) -> bool {
+        self.enabled()
+    }
     pub fn enabled(&self) -> bool {
         self.physics_x.is_some() || self.physics_y.is_some()
     }
@@ -357,6 +360,9 @@ impl ElasticScrollPhysics {
 }
 
 impl ScrollPhysicsRuntime for ElasticScrollPhysics {
+    fn is_primed(&self) -> bool {
+        self.enabled()
+    }
     fn physics(&self) -> &ScrollPhysics {
         &self.base.base
     }

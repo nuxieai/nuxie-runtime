@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     ops::{Deref, DerefMut},
+    rc::Rc,
 };
 
 use crate::mechanical_port::source::{
@@ -25,6 +26,7 @@ use crate::mechanical_port::source::{
     listener_type::ListenerType,
     math::vec2d::Vec2D,
     process_event_result::ProcessEventResult,
+    scroll_event::ScrollEvent,
 };
 
 impl ComponentBaseCallbacks for DraggableConstraint {
@@ -73,6 +75,19 @@ pub trait DraggableProxy {
     fn start_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
     fn drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
     fn end_drag(&mut self, mouse_position: Vec2D, time_stamp: f32) -> bool;
+    fn wants_scroll(&mut self, _event: &ScrollEvent) -> bool {
+        false
+    }
+    fn accepts_scroll(&mut self) -> bool {
+        false
+    }
+    fn cancel_scroll(&mut self) {}
+    fn is_scroll_gesture_active(&mut self) -> bool {
+        false
+    }
+    fn scroll(&mut self, _event: &ScrollEvent, _time_stamp: f32) -> bool {
+        false
+    }
     fn hittable(&self) -> Option<RuntimeDrawableOccurrence>;
 }
 
@@ -167,7 +182,7 @@ impl DraggableConstraint {
 pub struct DraggableConstraintListenerGroup {
     base: ListenerGroup,
     constraint: CoreHandle,
-    draggable: RefCell<Box<dyn DraggableProxy>>,
+    draggable: Rc<RefCell<Box<dyn DraggableProxy>>>,
     scrolling_pointer_id: Cell<i32>,
 }
 
@@ -180,7 +195,7 @@ impl DraggableConstraintListenerGroup {
         Self {
             base: ListenerGroup::new(listener),
             constraint,
-            draggable: RefCell::new(draggable),
+            draggable: Rc::new(RefCell::new(draggable)),
             scrolling_pointer_id: Cell::new(-1),
         }
     }
@@ -219,6 +234,9 @@ impl DraggableConstraintListenerGroup {
     }
     pub fn constraint(&self) -> CoreHandle {
         self.constraint.clone()
+    }
+    pub fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn DraggableProxy>>>> {
+        Some(self.draggable.clone())
     }
     pub fn can_early_out(&self, _drawable: &Component) -> bool {
         false

@@ -41,6 +41,7 @@ use crate::mechanical_port::source::{
     artboard_component_list::ArtboardComponentList,
     audio_event::AudioEvent,
     component_dirt::ComponentDirt,
+    constraints::draggable_constraint::DraggableProxy,
     core::CoreHandle,
     data_bind::{
         bindable_property_artboard::BindablePropertyArtboard,
@@ -82,6 +83,7 @@ use crate::mechanical_port::source::{
     math::{random::RandomProvider, vec2d::Vec2D},
     process_event_result::ProcessEventResult,
     scripted::scripted_object::{ScriptUpdateRequestHost, ScriptedObject},
+    scroll_event::ScrollEvent,
     semantic::{
         semantic_data::SemanticData,
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
@@ -1248,6 +1250,22 @@ pub trait HitComponent {
     }
     fn enable_pointer_events(&self, _pointer_id: i32) {}
     fn disable_pointer_events(&self, _pointer_id: i32) {}
+    fn wants_scroll(&self, _position: Vec2D, _event: &ScrollEvent) -> bool {
+        false
+    }
+    fn scroll_gesture_active(&self) -> bool {
+        false
+    }
+    fn cancel_scroll(&self) {}
+    fn has_scroll_target(&self, _position: Vec2D) -> bool {
+        false
+    }
+    fn occludes_scroll(&self, _position: Vec2D) -> bool {
+        false
+    }
+    fn process_scroll(&self, _position: Vec2D, _event: &ScrollEvent, _timestamp: f32) -> HitResult {
+        HitResult::None
+    }
 }
 
 fn component_is_collapsed(component: &CoreHandle) -> bool {
@@ -1355,6 +1373,27 @@ type HitTextRun = HitExpandable;
 type HitLayout = HitDrawable;
 
 impl HitDrawable {
+    fn scroll_proxy_for(
+        &self,
+        event: &ScrollEvent,
+    ) -> Option<Rc<RefCell<Box<dyn DraggableProxy>>>> {
+        for listener in self.listeners.borrow().iter() {
+            if let Some(proxy) = listener.with_group(|group| group.scroll_proxy()) {
+                if proxy.borrow_mut().is_scroll_gesture_active() {
+                    return Some(proxy);
+                }
+            }
+        }
+        for listener in self.listeners.borrow().iter() {
+            if let Some(proxy) = listener.with_group(|group| group.scroll_proxy()) {
+                if proxy.borrow_mut().wants_scroll(event) {
+                    return Some(proxy);
+                }
+            }
+        }
+        None
+    }
+
     fn new(
         drawable: RuntimeDrawableOccurrence,
         component: RuntimeDrawableOccurrence,
@@ -1408,6 +1447,54 @@ impl HitDrawable {
 }
 
 impl HitComponent for HitDrawable {
+    fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
+        self.hit_test(position) && self.scroll_proxy_for(event).is_some()
+    }
+    fn has_scroll_target(&self, position: Vec2D) -> bool {
+        if !self.hit_test(position) {
+            return false;
+        }
+        self.listeners.borrow().iter().any(|listener| {
+            listener
+                .with_group(|group| group.scroll_proxy())
+                .is_some_and(|proxy| proxy.borrow_mut().accepts_scroll())
+        })
+    }
+    fn occludes_scroll(&self, position: Vec2D) -> bool {
+        for listener in self.listeners.borrow().iter() {
+            if listener.with_group(|group| group.scroll_proxy()).is_some() {
+                return false;
+            }
+        }
+        (self.is_opaque.get() || self.drawable.is_target_opaque()) && self.hit_test(position)
+    }
+    fn scroll_gesture_active(&self) -> bool {
+        self.listeners.borrow().iter().any(|listener| {
+            listener
+                .with_group(|group| group.scroll_proxy())
+                .is_some_and(|proxy| proxy.borrow_mut().is_scroll_gesture_active())
+        })
+    }
+    fn cancel_scroll(&self) {
+        for listener in self.listeners.borrow().iter() {
+            if let Some(proxy) = listener.with_group(|group| group.scroll_proxy()) {
+                proxy.borrow_mut().cancel_scroll();
+            }
+        }
+    }
+    fn process_scroll(&self, _position: Vec2D, event: &ScrollEvent, timestamp: f32) -> HitResult {
+        let Some(proxy) = self.scroll_proxy_for(event) else {
+            return HitResult::None;
+        };
+        if !proxy.borrow_mut().scroll(event, timestamp) {
+            return HitResult::None;
+        }
+        if self.is_opaque.get() {
+            HitResult::HitOpaque
+        } else {
+            HitResult::Hit
+        }
+    }
     fn component(&self) -> RuntimeDrawableOccurrence {
         self.component.clone()
     }
@@ -1518,6 +1605,114 @@ struct HitNestedArtboard {
 }
 
 impl HitComponent for HitNestedArtboard {
+    fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+            return false;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return false;
+        };
+        let Some(shifted) = nested_world_to_local(&self.component, position + event.delta) else {
+            return false;
+        };
+        let mapped = ScrollEvent {
+            delta: shifted - local,
+            ..*event
+        };
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                if machine.with_instance_mut(|machine| machine.wants_scroll(local, &mapped)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn has_scroll_target(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+            return false;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return false;
+        };
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                if machine.with_instance_mut(|machine| machine.has_scroll_target_at(local)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn occludes_scroll(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+            return false;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return false;
+        };
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                if machine.with_instance_mut(|machine| machine.scroll_occluded_at(local)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn scroll_gesture_active(&self) -> bool {
+        if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
+            for animation in nested_animations(&self.component) {
+                if let Some(machine) = nested_state_machine(&animation) {
+                    machine.with_instance_mut(StateMachineInstance::cancel_scroll);
+                }
+            }
+            return false;
+        }
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                if machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    fn process_scroll(&self, position: Vec2D, event: &ScrollEvent, timestamp: f32) -> HitResult {
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return HitResult::None;
+        };
+        let Some(shifted) = nested_world_to_local(&self.component, position + event.delta) else {
+            return HitResult::None;
+        };
+        let mapped = ScrollEvent {
+            delta: shifted - local,
+            ..*event
+        };
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                if machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
+                    return machine.with_instance_mut(|machine| {
+                        machine.pointer_scroll(local, &mapped, timestamp, 0)
+                    });
+                }
+            }
+        }
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                let result = machine.with_instance_mut(|machine| {
+                    machine.pointer_scroll(local, &mapped, timestamp, 0)
+                });
+                if result != HitResult::None {
+                    return result;
+                }
+            }
+        }
+        HitResult::None
+    }
     fn component(&self) -> RuntimeDrawableOccurrence {
         RuntimeDrawableOccurrence::Authored(self.component.clone())
     }
@@ -1641,6 +1836,139 @@ struct HitComponentList {
 }
 
 impl HitComponent for HitComponentList {
+    fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
+        if component_is_collapsed(&self.component) {
+            return false;
+        }
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            let Some(machine) = component_list_state_machine(&self.component, index) else {
+                continue;
+            };
+            let Some(shifted) =
+                component_list_world_to_local(&self.component, position + event.delta, index)
+            else {
+                continue;
+            };
+            let mapped = ScrollEvent {
+                delta: shifted - local,
+                ..*event
+            };
+            if machine.with_instance_mut(|machine| machine.wants_scroll(local, &mapped)) {
+                return true;
+            }
+            if machine.with_instance_mut(|machine| machine.scroll_occluded_at(local)) {
+                return false;
+            }
+        }
+        false
+    }
+    fn has_scroll_target(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) {
+            return false;
+        }
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            let Some(machine) = component_list_state_machine(&self.component, index) else {
+                continue;
+            };
+            if machine.with_instance_mut(|machine| machine.has_scroll_target_at(local)) {
+                return true;
+            }
+            if machine.with_instance_mut(|machine| machine.scroll_occluded_at(local)) {
+                return false;
+            }
+        }
+        false
+    }
+    fn occludes_scroll(&self, position: Vec2D) -> bool {
+        if component_is_collapsed(&self.component) {
+            return false;
+        }
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
+                continue;
+            };
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                if machine.with_instance_mut(|machine| machine.scroll_occluded_at(local)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    fn scroll_gesture_active(&self) -> bool {
+        let order = component_list_indices(&self.component);
+        if component_is_collapsed(&self.component) {
+            for index in order {
+                if let Some(machine) = component_list_state_machine(&self.component, index) {
+                    machine.with_instance_mut(StateMachineInstance::cancel_scroll);
+                }
+            }
+            return false;
+        }
+        for index in order {
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                if machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+    fn cancel_scroll(&self) {
+        for index in component_list_indices(&self.component) {
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                machine.with_instance_mut(StateMachineInstance::cancel_scroll);
+            }
+        }
+    }
+    fn process_scroll(&self, position: Vec2D, event: &ScrollEvent, timestamp: f32) -> HitResult {
+        if component_is_collapsed(&self.component) {
+            return HitResult::None;
+        }
+        let order = component_list_indices(&self.component);
+        for pass in 0..2 {
+            for &index in order.iter().rev() {
+                let Some(machine) = component_list_state_machine(&self.component, index) else {
+                    continue;
+                };
+                if pass == 0 && !machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
+                    continue;
+                }
+                let Some(local) = component_list_world_to_local(&self.component, position, index)
+                else {
+                    continue;
+                };
+                let Some(shifted) =
+                    component_list_world_to_local(&self.component, position + event.delta, index)
+                else {
+                    continue;
+                };
+                let mapped = ScrollEvent {
+                    delta: shifted - local,
+                    ..*event
+                };
+                let result = machine.with_instance_mut(|machine| {
+                    machine.pointer_scroll(local, &mapped, timestamp, 0)
+                });
+                if pass == 0 || result != HitResult::None {
+                    return result;
+                }
+                if machine.with_instance_mut(|machine| machine.scroll_occluded_at(local)) {
+                    return HitResult::None;
+                }
+            }
+        }
+        HitResult::None
+    }
     fn component(&self) -> RuntimeDrawableOccurrence {
         RuntimeDrawableOccurrence::Authored(self.component.clone())
     }
@@ -2456,6 +2784,9 @@ pub struct StateMachineInstance {
     input_instances: Vec<Option<InputInstance>>,
     layers: Vec<RuntimeStateMachineLayerInstanceHandle>,
     hit_components: Vec<Rc<dyn HitComponent>>,
+    // Retain the same hit occurrence across a gesture, including re-sorting.
+    // Re-picking on each event would hand a flick's tail to an outer view.
+    scroll_latch: Option<Rc<dyn HitComponent>>,
     listener_groups: Vec<RuntimeListenerGroupHandle>,
     parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle,
     parent_nested_artboard: Option<CoreHandle>,
@@ -2542,6 +2873,7 @@ impl StateMachineInstance {
             input_instances: Vec::new(),
             layers: Vec::new(),
             hit_components: Vec::new(),
+            scroll_latch: None,
             listener_groups: Vec::new(),
             parent_state_machine_instance: RuntimeStateMachineInstanceWeakHandle::default(),
             parent_nested_artboard: None,
@@ -3273,27 +3605,139 @@ impl StateMachineInstance {
     }
 
     fn normalize_pointer_position(&self, mut position: Vec2D) -> (Vec2D, bool) {
+        let collapsed = !self.map_to_content_space(&mut position, None);
+        (position, collapsed)
+    }
+
+    fn map_to_content_space(&self, position: &mut Vec2D, delta: Option<&mut Vec2D>) -> bool {
         self.artboard_instance
             .with_artboard(|artboard| {
                 if artboard.frame_origin() {
-                    position = Vec2D::new(
+                    *position = Vec2D::new(
                         position.x - artboard.origin_x() * artboard.layout_width(),
                         position.y - artboard.origin_y() * artboard.layout_height(),
                     );
                 }
-                let mut collapsed = false;
                 if artboard.has_self_transform() {
                     let mut inverse =
                         crate::mechanical_port::source::math::mat2d::Mat2D::identity();
-                    if artboard.self_transform().invert(&mut inverse) {
-                        position = inverse * position;
-                    } else {
-                        collapsed = true;
+                    if !artboard.self_transform().invert(&mut inverse) {
+                        return false;
+                    }
+                    *position = inverse * *position;
+                    if let Some(delta) = delta {
+                        *delta = inverse * *delta - inverse * Vec2D::default();
                     }
                 }
-                (position, collapsed)
+                true
             })
             .expect("a state machine retains its ArtboardInstance")
+    }
+
+    pub fn pointer_scroll(
+        &mut self,
+        mut position: Vec2D,
+        event: &ScrollEvent,
+        timestamp: f32,
+        _pointer_id: i32,
+    ) -> HitResult {
+        let mut mapped = *event;
+        if !self.map_to_content_space(&mut position, Some(&mut mapped.delta)) {
+            self.cancel_scroll();
+            return HitResult::None;
+        }
+        if self
+            .scroll_latch
+            .as_ref()
+            .is_some_and(|target| !target.scroll_gesture_active())
+        {
+            self.scroll_latch = None;
+        }
+        let mut target = self.scroll_latch.clone();
+        if target.is_none() {
+            for hit in &self.hit_components {
+                if hit.wants_scroll(position, &mapped) {
+                    target = Some(hit.clone());
+                    break;
+                }
+                if hit.occludes_scroll(position) {
+                    break;
+                }
+            }
+        }
+        let Some(target) = target else {
+            return HitResult::None;
+        };
+        let result = target.process_scroll(position, &mapped, timestamp);
+        self.scroll_latch = target.scroll_gesture_active().then_some(target);
+        result
+    }
+
+    pub fn wants_scroll(&mut self, mut position: Vec2D, event: &ScrollEvent) -> bool {
+        if self.has_scroll_latch() {
+            return true;
+        }
+        let mut mapped = *event;
+        if !self.map_to_content_space(&mut position, Some(&mut mapped.delta)) {
+            return false;
+        }
+        for hit in &self.hit_components {
+            if hit.wants_scroll(position, &mapped) {
+                return true;
+            }
+            if hit.occludes_scroll(position) {
+                return false;
+            }
+        }
+        false
+    }
+
+    pub fn has_scroll_target_at(&mut self, mut position: Vec2D) -> bool {
+        if self.has_scroll_latch() {
+            return true;
+        }
+        if !self.map_to_content_space(&mut position, None) {
+            return false;
+        }
+        for hit in &self.hit_components {
+            if hit.has_scroll_target(position) {
+                return true;
+            }
+            if hit.occludes_scroll(position) {
+                return false;
+            }
+        }
+        false
+    }
+
+    pub fn scroll_occluded_at(&mut self, mut position: Vec2D) -> bool {
+        if !self.map_to_content_space(&mut position, None) {
+            return false;
+        }
+        for hit in &self.hit_components {
+            if hit.occludes_scroll(position) {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn cancel_scroll(&mut self) {
+        if let Some(target) = &self.scroll_latch {
+            target.cancel_scroll();
+            self.scroll_latch = None;
+        }
+    }
+
+    pub fn has_scroll_latch(&mut self) -> bool {
+        if self
+            .scroll_latch
+            .as_ref()
+            .is_some_and(|target| !target.scroll_gesture_active())
+        {
+            self.scroll_latch = None;
+        }
+        self.scroll_latch.is_some()
     }
 
     fn update_listeners(

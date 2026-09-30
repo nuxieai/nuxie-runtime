@@ -9,6 +9,7 @@ use crate::mechanical_port::source::{
     hit_result::HitResult,
     math::{aabb::Aabb, vec2d::Vec2D},
     renderer::Renderer,
+    scroll_event::ScrollEvent,
     viewmodel::runtime::viewmodel_instance_runtime::RuntimeViewModelInstanceHandle,
 };
 
@@ -102,6 +103,16 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
     }
 
     fn pointer_exit(&mut self, _position: Vec2D, _pointer_id: i32) -> HitResult {
+        HitResult::None
+    }
+
+    fn pointer_scroll(
+        &mut self,
+        _position: Vec2D,
+        _event: &ScrollEvent,
+        _time_stamp: f32,
+        _pointer_id: i32,
+    ) -> HitResult {
         HitResult::None
     }
 

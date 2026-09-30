@@ -77,7 +77,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn line_segment_extract_matches_pinned_generic_lerp_grouping() {
+    fn line_segment_extract_matches_pinned_exact_lerp_grouping() {
         let segment = Segment {
             distance: 1.0,
             point_index: 0,
@@ -97,14 +97,14 @@ mod tests {
                 .iter()
                 .map(|point| point.x.to_bits())
                 .collect::<Vec<_>>(),
-            [0x41eb_e53b, 0x4152_996b]
+            [0x41eb_e53a, 0x4152_996b]
         );
         assert_eq!(
             path.points()
                 .iter()
                 .map(|point| point.y.to_bits())
                 .collect::<Vec<_>>(),
-            [0xc2da_38b0, 0xc335_cd98]
+            [0xc2da_38af, 0xc335_cd98]
         );
     }
 }

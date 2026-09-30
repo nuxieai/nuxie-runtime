@@ -61,9 +61,8 @@ impl SolidColor {
         let factory = self
             .base
             .with_artboard(|artboard| artboard.factory())
-            .flatten()
-            .expect("initialized paint mutator has its artboard factory");
-        code = self.init_paint_mutator(this, self.base.parent_handle(), &factory);
+            .flatten();
+        code = self.init_paint_mutator(this, self.base.parent_handle(), factory.as_ref());
         if code == StatusCode::Ok {
             self.render_opacity_changed();
         }

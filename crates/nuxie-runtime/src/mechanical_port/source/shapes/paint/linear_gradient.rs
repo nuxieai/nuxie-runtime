@@ -44,9 +44,8 @@ impl LinearGradient {
         let factory = self
             .base
             .with_artboard(|artboard| artboard.factory())
-            .flatten()
-            .expect("initialized paint mutator has its artboard factory");
-        self.init_paint_mutator(this, self.base.parent_handle(), &factory)
+            .flatten();
+        self.init_paint_mutator(this, self.base.parent_handle(), factory.as_ref())
     }
 
     pub fn build_dependencies(&mut self) {

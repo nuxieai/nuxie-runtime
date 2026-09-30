@@ -270,8 +270,8 @@ impl ViewModelInstanceValue {
         }
     }
 
-    pub fn set_view_model_property(&mut self, value: CoreHandle) {
-        self.view_model_property = Some(value);
+    pub fn set_view_model_property(&mut self, value: impl Into<Option<CoreHandle>>) {
+        self.view_model_property = value.into();
         self.register_symbol();
     }
 

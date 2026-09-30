@@ -182,15 +182,22 @@ impl RuntimeViewModelHandle {
             .0
             .view_model
             .with(|model| model.as_view_model()?.instance_at(index))??;
-        let instance = crate::mechanical_port::source::viewmodel::viewmodel_instance::ViewModelInstance::clone_instance(&source)?;
-        self.0
+        let instance = self
+            .0
             .file
-            .with_file(|file| file.complete_view_model_instance(&instance))?;
+            .with_file(|file| file.copy_view_model_instance(Some(&source)))??;
         Some(self.runtime(instance))
     }
 
     pub fn create_instance_from_name(&self, name: &str) -> Option<RuntimeViewModelInstanceHandle> {
-        let instance = crate::mechanical_port::source::viewmodel::viewmodel::ViewModel::create_from_instance_handle(&self.0.view_model, name)?;
+        let source = self
+            .0
+            .view_model
+            .with(|model| model.as_view_model()?.instance_named(name))??;
+        let instance = self
+            .0
+            .file
+            .with_file(|file| file.copy_view_model_instance(Some(&source)))??;
         Some(self.runtime(instance))
     }
 

@@ -67,3 +67,6 @@ pub use nuxie_render_api::{Mat2D, PersistentFactoryContext, Renderer};
 
 #[cfg(test)]
 mod host_public_api_tests;
+
+#[cfg(test)]
+mod frame_probe_test;

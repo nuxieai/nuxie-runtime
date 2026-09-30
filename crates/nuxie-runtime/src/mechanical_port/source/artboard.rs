@@ -4,6 +4,14 @@ use std::{
     rc::{Rc, Weak},
 };
 
+#[cfg(test)]
+thread_local! {
+    // Upstream TESTING counts every artboard's calculateLayout entry. Runtime
+    // owners are thread-local; isolate parallel Rust test threads while retaining
+    // the aggregate across all artboards on each owning thread.
+    static LAYOUT_PASS_COUNT: Cell<u64> = const { Cell::new(0) };
+}
+
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     advancing_component::{AdvancingComponent, AdvancingComponentHandle},
@@ -469,6 +477,11 @@ impl Artboard {
 
     pub fn frame_id() -> u64 {
         nuxie_render_api::artboard_draw_frame_id()
+    }
+
+    #[cfg(test)]
+    pub fn layout_pass_count() -> u64 {
+        LAYOUT_PASS_COUNT.with(Cell::get)
     }
 
     #[cfg(any(test, feature = "tools"))]
@@ -2315,6 +2328,10 @@ impl Artboard {
                     .with_downcast::<Artboard, _>(Artboard::updates_own_layout)
                     .unwrap_or(false))
         {
+            // This is the translated Artboard::calculateLayout entry, before
+            // calculateLayoutInternal delegates to the approved Taffy backend.
+            #[cfg(test)]
+            LAYOUT_PASS_COUNT.with(|count| count.set(count.get().wrapping_add(1)));
             LayoutComponent::calculate_layout_occurrence(root, f32::NAN, f32::NAN);
             LayoutComponent::update_layout_bounds_occurrence(root, true);
         }

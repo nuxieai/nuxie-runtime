@@ -426,8 +426,7 @@ impl ShapePaint {
             }
         }
 
-        let image_bounds = shape_paint_path.raw_path().bounds();
-        let mut draw_path = |path: &mut ShapePaintPath| {
+        let mut draw_path = |path: &mut ShapePaintPath, original: Option<&ShapePaintPath>| {
             let render_path = path.render_path(factory);
             if !use_path_fill_rule {
                 if let Some(fill_rule) = fill_rule {
@@ -440,8 +439,11 @@ impl ShapePaint {
                 }
             }
             if override_paint.is_none() {
-                self.apply_modulated_image(&image_bounds);
+                self.apply_modulated_image(original.unwrap_or(path));
             }
+            // Release the mutable render-path borrow while reading the
+            // original raw path, then borrow the already-built cache again.
+            let render_path = path.render_path(factory);
             if let Some(paint) = override_paint.as_deref() {
                 renderer.draw_path(render_path, paint);
             } else if let Some(paint) = self.render_paint.as_ref() {
@@ -449,11 +451,11 @@ impl ShapePaint {
             }
         };
         if let Some(inner) = inner_path {
-            draw_path(&mut inner.borrow_mut());
+            draw_path(&mut inner.borrow_mut(), Some(shape_paint_path));
         } else if let Some(effect) = path_effect {
-            draw_path(&mut effect.borrow_mut());
+            draw_path(&mut effect.borrow_mut(), Some(shape_paint_path));
         } else {
-            draw_path(shape_paint_path);
+            draw_path(shape_paint_path, None);
         }
         if saved && needs_save_operation {
             renderer.restore();
@@ -491,7 +493,7 @@ impl ShapePaint {
         self.base.add_dirt(ComponentDirt::PATH, true);
     }
 
-    fn apply_modulated_image(&mut self, bounds: &crate::source::math::aabb::Aabb) {
+    fn apply_modulated_image(&mut self, path: &ShapePaintPath) {
         use crate::source::{
             generated::shapes::paint::paint_image_base::PaintImageBase,
             shapes::paint::paint_image::PaintImage,
@@ -506,7 +508,9 @@ impl ShapePaint {
             let applied = self
                 .with_render_paint_mut(|paint| {
                     child
-                        .with_downcast::<PaintImage, _>(|image| image.apply_to(paint, bounds))
+                        .with_downcast::<PaintImage, _>(|image| {
+                            image.apply_to(paint, &path.raw_path().bounds())
+                        })
                         .unwrap_or(false)
                 })
                 .unwrap_or(false);

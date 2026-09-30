@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `0515bfec7724f34ebc674e63ad3a64b40755d4da`
+- LAST_SYNCED_SHA: `73d678e2f61cf0182eb2faef18d5a44728fd0480`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 6 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 6 require a Rust translation.
+  There are 5 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 5 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `73d678e2f61cf0182eb2faef18d5a44728fd0480` | Avoid re-solving participant layout when rebuilt paths leave intrinsic bounds unchanged: invalidate cached host bounds before measuring, compare against the last reported bounds with upstream's 16-ULP-scaled tolerance, and dirty only world bounds for rigid movement. Retain Taffy and carry this decision through Rust's existing borrow-release handoff. Defer paint-path bounds computation until a PaintImage child exists; preserve existing reference-based straight-vertex access. Port the five frame-probe cases, including two hidden reporting sweeps, with test-only layout-pass counting. The new standalone C++ allocation-counting frame benchmark and beforeRun host hook remain available in the upstream oracle, not claimed as a newly shipped Rust benchmark runner. | — |
 | `0515bfec7724f34ebc674e63ad3a64b40755d4da` | Route recording Image:view by canvas provenance first, deferred image identity second, and registered foreign image last. Register sampled canvases even when not opened in the current frame; preserve the flag on foreign image handles, resolve through the registry at replay and invoke the host preparation hook before wrapping. Translate both upstream deferred-import regressions and changed callers. Existing Rust canvas constructors already retain source-canvas provenance and are preserved. **DEFERRED:** Wasm module and scripting-VM dispatch changes remain parked with guest execution; shared ORE/deferred and Luau behavior is included. Shader artifacts remain unchanged with their actual prior provenance. | UNIV-3728 (Wasm slice only) |
 | `3b615b829a58b67379f9304a161b3e87119bbf04` | Pack tangent angle and miter ratio into tessellation output and unpack them in the shared vertex shader, replacing the extra join texture fetch and trigonometric recalculation. Preserve upstream's distinct 65536 cyclic-angle and 65535 ratio quantization, rounding and join branches. Regenerate supported backend shader artifacts. The public delta also disables two OOM-prone D3D12 factories in upstream's standalone rendering-test host; that host is not shipped, and product WebGPU/Dawn backends are not disabled. | — |
 | `4921ab8169d2d8bfc4d2d25761b99689bc85a72d` | Translate mutable image-mesh instances, per-instance transform/opacity/additiveness/UV data, retained resource lifecycle, efficient Rive draws and atomic-mode expansion. Carry instances through deferred snapshots/replay, SRIV opcodes 39–41, Luau and live renderer wrappers; retain upstream's UV limitation only for generic non-Rive fallback. Add the upstream deferred, batching, serialized replay and mesh GM cases. Regenerate supported shader artifacts and update the Metal indexed instance count. **DEFERRED:** Wasm guest bindings, IDL and execution proxies remain parked; browser renderer compilation is not deferred. Standalone C++ benchmark command walkers remain in the upstream oracle, not claimed as a new Rust benchmark host. | UNIV-3728 (Wasm slice only) |

@@ -461,12 +461,14 @@ impl ComponentOccurrenceHandle {
                 let shape = handle
                     .upgrade()
                     .and_then(|owner| owner.borrow_mut().update(dirt));
-                if let Some(shape) = shape {
+                if let Some((shape, measured_geometry_changed)) = shape {
                     shape.with_mut(|shape| {
-                        shape
-                            .as_shape_mut()
-                            .expect("PathComposer Shape")
-                            .mark_bounds_dirty()
+                        let shape = shape.as_shape_mut().expect("PathComposer Shape");
+                        if measured_geometry_changed {
+                            shape.mark_bounds_dirty();
+                        } else {
+                            shape.mark_world_bounds_dirty();
+                        }
                     });
                 }
             }

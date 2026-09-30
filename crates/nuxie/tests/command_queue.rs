@@ -7,6 +7,270 @@
 #[path = "command_queue/focus_503eab63.rs"]
 mod focus_503eab63;
 
+// Complete font-binding additions from command_queue_test.cpp at 30742b4c.
+#[cfg(feature = "test-support")]
+mod font_data_binding_30742b4c {
+    use super::*;
+    use nuxie::runtime::viewmodel::runtime::viewmodel_instance_asset_font_runtime::ViewModelInstanceAssetFontRuntime;
+
+    fn asset(name: &str) -> Vec<u8> {
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let path = std::path::PathBuf::from(root)
+            .join("tests/unit_tests/assets")
+            .join(name);
+        std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+    }
+
+    struct FontDataBindingState {
+        handle: ViewModelInstanceHandle,
+        subscription_request_id: u64,
+        received_errors: usize,
+        received_request_ids: Vec<u64>,
+        received_data: Vec<ViewModelInstanceData>,
+    }
+    struct FontDataBindingListener {
+        base: ListenerBase<ViewModelInstanceHandle>,
+        state: Arc<Mutex<FontDataBindingState>>,
+    }
+    impl ViewModelInstanceListener for FontDataBindingListener {
+        fn listener_base(&mut self) -> &mut ListenerBase<ViewModelInstanceHandle> {
+            &mut self.base
+        }
+        fn on_view_model_instance_error(
+            &mut self,
+            handle: ViewModelInstanceHandle,
+            _: u64,
+            error: String,
+        ) {
+            let mut state = self.state.lock().unwrap();
+            assert_eq!(handle, state.handle);
+            assert!(!error.is_empty());
+            state.received_errors += 1;
+        }
+        fn on_view_model_data_received(
+            &mut self,
+            handle: ViewModelInstanceHandle,
+            request_id: u64,
+            data: ViewModelInstanceData,
+        ) {
+            let mut state = self.state.lock().unwrap();
+            assert_eq!(handle, state.handle);
+            state.received_request_ids.push(request_id);
+            state.received_data.push(data);
+        }
+    }
+    struct FontPropertyDefinitionState {
+        handle: FileHandle,
+        view_model_names: Vec<String>,
+        properties: BTreeMap<String, Vec<ViewModelPropertyData>>,
+    }
+    struct FontPropertyDefinitionListener {
+        base: ListenerBase<FileHandle>,
+        state: Arc<Mutex<FontPropertyDefinitionState>>,
+    }
+    impl FileListener for FontPropertyDefinitionListener {
+        fn listener_base(&mut self) -> &mut ListenerBase<FileHandle> {
+            &mut self.base
+        }
+        fn on_view_models_listed(&mut self, handle: FileHandle, _: u64, names: Vec<String>) {
+            let mut state = self.state.lock().unwrap();
+            assert_eq!(handle, state.handle);
+            state.view_model_names = names;
+        }
+        fn on_view_model_properties_listed(
+            &mut self,
+            handle: FileHandle,
+            _: u64,
+            name: String,
+            properties: Vec<ViewModelPropertyData>,
+        ) {
+            let mut state = self.state.lock().unwrap();
+            assert_eq!(handle, state.handle);
+            assert!(state.properties.insert(name, properties).is_none());
+        }
+    }
+    struct FontDataBindingFixture {
+        queue: CommandQueue,
+        server: Box<CommandServer>,
+        _listener: ViewModelInstanceListenerHandle,
+        state: Arc<Mutex<FontDataBindingState>>,
+        handle: ViewModelInstanceHandle,
+        font: FontHandle,
+        alternate_font: FontHandle,
+    }
+    impl FontDataBindingFixture {
+        fn new() -> Self {
+            let mut queue = CommandQueue::new();
+            let server = server(&queue);
+            let state = Arc::new(Mutex::new(FontDataBindingState {
+                handle: ViewModelInstanceHandle::NULL,
+                subscription_request_id: 42,
+                received_errors: 0,
+                received_request_ids: Vec::new(),
+                received_data: Vec::new(),
+            }));
+            let listener: ViewModelInstanceListenerHandle =
+                ListenerHandle::new(Box::new(FontDataBindingListener {
+                    base: ListenerBase::new(),
+                    state: state.clone(),
+                }));
+            let file = queue.load_file(asset("data_bind_font_test.riv"), None, 0, None);
+            let artboard = queue.instantiate_default_artboard(file, None, 0);
+            let handle = queue.instantiate_default_view_model_instance_for_artboard(
+                file,
+                artboard,
+                Some(&listener),
+                0,
+            );
+            state.lock().unwrap().handle = handle;
+            let font = queue.decode_font(asset("kablammo.ttf"), None, 0);
+            let alternate_font = queue.decode_font(asset("nabla.ttf"), None, 0);
+            let mut fixture = Self {
+                queue,
+                server,
+                _listener: listener,
+                state,
+                handle,
+                font,
+                alternate_font,
+            };
+            fixture.pump();
+            fixture
+        }
+        fn property(&self) -> Option<ViewModelInstanceAssetFontRuntime> {
+            self.server
+                .get_view_model_instance(self.handle)?
+                .property_font("fontProperty")
+        }
+        fn pump(&mut self) {
+            self.server.process_commands();
+            self.queue.process_messages();
+        }
+        fn set(&mut self, font: FontHandle) {
+            self.queue
+                .set_view_model_instance_font(self.handle, "fontProperty".into(), font, 0);
+        }
+    }
+    fn same_font(
+        a: Option<nuxie::runtime::text::text_engine::FontRef>,
+        b: Option<nuxie::runtime::text::text_engine::FontRef>,
+    ) -> bool {
+        match (a, b) {
+            (Some(a), Some(b)) => Arc::ptr_eq(&a, &b),
+            (None, None) => true,
+            _ => false,
+        }
+    }
+    #[test]
+    fn setting_replacing_and_clearing_a_font_property_handles_valid_values() {
+        let mut fixture = FontDataBindingFixture::new();
+        let property = fixture.property().expect("font property");
+        fixture.set(fixture.font);
+        fixture.pump();
+        assert!(same_font(
+            property.testing_value(),
+            fixture.server.get_font(fixture.font)
+        ));
+        fixture.set(fixture.alternate_font);
+        fixture.pump();
+        assert!(same_font(
+            property.testing_value(),
+            fixture.server.get_font(fixture.alternate_font)
+        ));
+        fixture.set(FontHandle::NULL);
+        fixture.pump();
+        assert!(property.testing_value().is_none());
+    }
+    #[test]
+    fn invalid_font_handle_preserves_property_and_reports_error() {
+        let mut fixture = FontDataBindingFixture::new();
+        let property = fixture.property().expect("font property");
+        fixture.set(fixture.font);
+        fixture.pump();
+        let bound_font = property.testing_value();
+        assert!(bound_font.is_some());
+        fixture.queue.delete_font(fixture.alternate_font, 0);
+        fixture.pump();
+        assert!(fixture.server.get_font(fixture.alternate_font).is_none());
+        fixture.set(fixture.alternate_font);
+        fixture.pump();
+        assert!(same_font(property.testing_value(), bound_font));
+        assert_eq!(fixture.state.lock().unwrap().received_errors, 1);
+    }
+    #[test]
+    fn setting_missing_font_property_reports_error() {
+        let mut fixture = FontDataBindingFixture::new();
+        fixture.queue.set_view_model_instance_font(
+            fixture.handle,
+            "missingFontProperty".into(),
+            fixture.font,
+            0,
+        );
+        fixture.pump();
+        assert_eq!(fixture.state.lock().unwrap().received_errors, 1);
+    }
+    #[test]
+    fn font_subscriptions_report_asset_font_metadata() {
+        let mut fixture = FontDataBindingFixture::new();
+        let request_id = fixture.state.lock().unwrap().subscription_request_id;
+        fixture.queue.subscribe_to_view_model_property(
+            fixture.handle,
+            "fontProperty".into(),
+            DataType::AssetFont,
+            request_id,
+        );
+        fixture.set(fixture.font);
+        fixture.pump();
+        let state = fixture.state.lock().unwrap();
+        assert_eq!(state.received_data.len(), 1);
+        assert_eq!(state.received_request_ids.len(), 1);
+        assert_eq!(state.received_request_ids[0], state.subscription_request_id);
+        assert_eq!(
+            state.received_data[0].meta_data.data_type,
+            DataType::AssetFont
+        );
+        assert_eq!(state.received_data[0].meta_data.name, "fontProperty");
+    }
+    #[test]
+    fn property_definitions_report_font_properties_as_asset_font() {
+        let mut queue = CommandQueue::new();
+        let mut server = server(&queue);
+        let state = Arc::new(Mutex::new(FontPropertyDefinitionState {
+            handle: FileHandle::NULL,
+            view_model_names: Vec::new(),
+            properties: BTreeMap::new(),
+        }));
+        let listener: FileListenerHandle =
+            ListenerHandle::new(Box::new(FontPropertyDefinitionListener {
+                base: ListenerBase::new(),
+                state: state.clone(),
+            }));
+        let file = queue.load_file(asset("data_bind_font_test.riv"), Some(&listener), 0, None);
+        state.lock().unwrap().handle = file;
+        queue.request_view_model_names(file, 0);
+        server.process_commands();
+        queue.process_messages();
+        let names = state.lock().unwrap().view_model_names.clone();
+        assert!(!names.is_empty());
+        for name in names {
+            queue.request_view_model_property_definitions(file, name, 0);
+        }
+        server.process_commands();
+        queue.process_messages();
+        let mut font_property_count = 0;
+        for properties in state.lock().unwrap().properties.values() {
+            for property in properties {
+                if property.name == "fontProperty" {
+                    font_property_count += 1;
+                    assert_eq!(property.data_type, DataType::AssetFont);
+                }
+            }
+        }
+        assert_eq!(font_property_count, 1);
+    }
+}
+
 // Upstream 25db4792: live global assets across every loaded file. The existing
 // Rc-backed harness drains the same FIFO on this thread instead of spawning a
 // C++ server thread; checkpoints correspond to upstream runOnce callbacks.

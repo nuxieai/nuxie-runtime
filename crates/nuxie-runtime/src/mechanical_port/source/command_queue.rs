@@ -1577,6 +1577,19 @@ impl CommandQueue {
         self.names.write(path);
         self.notify_command();
     }
+    pub fn set_view_model_instance_font(
+        &mut self,
+        handle: ViewModelInstanceHandle,
+        path: String,
+        value: FontHandle,
+        request_id: u64,
+    ) {
+        let _lock = self.command_gate.acquire();
+        self.set_vm_prefix(handle, DataType::AssetFont, request_id);
+        self.command_stream.write(value);
+        self.names.write(path);
+        self.notify_command();
+    }
     pub fn set_view_model_instance_blob(
         &mut self,
         handle: ViewModelInstanceHandle,
@@ -2817,6 +2830,7 @@ impl CommandQueue {
                     let name = self.message_names.read();
                     let value = match data_type {
                         DataType::AssetImage
+                        | DataType::AssetFont
                         | DataType::AssetBlob
                         | DataType::List
                         | DataType::Trigger => ViewModelInstanceValue::None,

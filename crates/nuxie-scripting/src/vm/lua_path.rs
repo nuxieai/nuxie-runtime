@@ -439,11 +439,15 @@ pub(super) fn call_path_effect_update(
     table: &Table,
     source: RenderRawPath,
     node: ScriptNode,
+    owner: Option<super::view_model::ScriptedPropertyListenerOwner>,
 ) -> Result<Option<RenderRawPath>> {
     let lua = table.lua();
     let function: luaur_rt::Function = table.get("update")?;
     let source = create_scripted_path(&lua, ScriptedPath::from_render_raw_path(source))?;
     let node = lua.create_userdata(LuaScriptedNode::new(node))?;
+    let _property_owner = owner.map(|owner| {
+        super::view_model::ScriptViewModelFrameContext::for_lua(&lua).enter_owner(owner)
+    });
     let output: Value = function.protected_call((table.clone(), source, node))?;
     // None is upstream's false result, distinct from a valid empty Path.
     // Rejection itself is not a Lua execution error.
@@ -551,6 +555,7 @@ mod upstream_scripted_path_tests {
                     &table,
                     RenderRawPath::new(),
                     ScriptNode::snapshot(None, None),
+                    None,
                 )
                 .unwrap()
                 .is_none()
@@ -569,6 +574,7 @@ mod upstream_scripted_path_tests {
                 &empty,
                 RenderRawPath::new(),
                 ScriptNode::snapshot(None, None),
+                None,
             )
             .unwrap()
             .expect("valid empty Path")
@@ -586,7 +592,7 @@ mod upstream_scripted_path_tests {
         source.move_to(0.0, 0.0);
         source.line_to(10.0, 0.0);
         assert_eq!(
-            call_path_effect_update(&identity, source, ScriptNode::snapshot(None, None),)
+            call_path_effect_update(&identity, source, ScriptNode::snapshot(None, None), None)
                 .unwrap()
                 .expect("valid input PathData")
                 .verbs()
@@ -607,6 +613,7 @@ mod upstream_scripted_path_tests {
                 &throwing,
                 RenderRawPath::new(),
                 ScriptNode::snapshot(None, None),
+                None,
             )
             .unwrap_err()
             .to_string()

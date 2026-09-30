@@ -674,6 +674,7 @@ mod tests {
                 &effect,
                 RawPath::new(),
                 nuxie_runtime::ScriptNode::snapshot(None, None),
+                None,
             );
             if fail {
                 assert!(

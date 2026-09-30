@@ -12,6 +12,10 @@ pub struct RuntimeScriptingVmHandle {
 }
 
 impl RuntimeScriptingVmHandle {
+    #[cfg(feature = "tools")]
+    pub fn dispose_orphan_scripted_properties(&self, all_tags: bool) {
+        self.inner.dispose_orphan_scripted_properties(all_tags);
+    }
     pub fn display_scale(&self) -> f32 {
         self.inner.script_backend().display_scale()
     }

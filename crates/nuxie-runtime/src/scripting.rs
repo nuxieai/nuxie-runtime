@@ -1085,6 +1085,33 @@ impl ScriptViewModel {
         &self.backing
     }
 
+    /// Release a terminal scripted property's native value/owner lease.
+    #[doc(hidden)]
+    pub fn clear_scripted_property_owner(&mut self) {
+        self.backing.instance = None;
+        self.backing.model = None;
+        self.backing.file.release_lease();
+        self.properties.clear();
+        self.change_callbacks = ScriptViewModelChangeCallbacks::default();
+    }
+
+    #[doc(hidden)]
+    pub fn null_scripted_reference(
+        &self,
+        model: Option<crate::mechanical_port::source::core::CoreHandle>,
+    ) -> Self {
+        let backing = NativeScriptViewModel {
+            instance: None,
+            model,
+            file: self.backing.file.clone(),
+        };
+        Self {
+            properties: backing.properties(),
+            backing,
+            change_callbacks: ScriptViewModelChangeCallbacks::default(),
+        }
+    }
+
     pub(crate) fn from_native_file_definition(
         model: crate::mechanical_port::source::core::CoreHandle,
         file: &crate::mechanical_port::source::file::RuntimeFileHandle,
@@ -1672,6 +1699,11 @@ pub struct ScriptedDataContextSource {
 }
 
 impl ScriptedDataContextSource {
+    #[doc(hidden)]
+    pub fn same_identity(&self, other: &Self) -> bool {
+        self.data_context.ptr_eq(&other.data_context)
+    }
+
     fn new(
         data_context: crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
     ) -> Self {
@@ -1723,6 +1755,23 @@ impl std::fmt::Debug for ScriptedContextSource {
 }
 
 impl ScriptedContextSource {
+    /// Retain failed-generator properties until their actual scripted owner is
+    /// disposed or reinitialized. Snapshot contexts have no such runtime owner.
+    #[doc(hidden)]
+    pub fn retain_failed_script_cleanup(&self, cleanup: Rc<dyn Fn()>) -> bool {
+        let ScriptedContextProjection::Occurrence(owner) = &self.projection else {
+            return false;
+        };
+        owner
+            .with_mut(|owner| {
+                let Some(owner) = owner.as_scripted_object_mut() else {
+                    return false;
+                };
+                owner.retain_failed_script_property_cleanup(cleanup);
+                true
+            })
+            .unwrap_or(false)
+    }
     pub fn new(
         file: crate::mechanical_port::source::file::RuntimeFileWeakHandle,
         data_context: Option<
@@ -2107,7 +2156,9 @@ pub trait ScriptArtboard {
         _renderer: &mut dyn Renderer,
         _key: u32,
     ) -> Result<(), ScriptError> {
-        Err(ScriptError::new("artboard does not support color modulation"))
+        Err(ScriptError::new(
+            "artboard does not support color modulation",
+        ))
     }
 }
 
@@ -2714,6 +2765,10 @@ pub trait ScriptProgramAdapter: std::fmt::Debug {
 /// Runtime-owned VM seam implemented by concrete scripting backends.
 
 impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
+    #[cfg(feature = "tools")]
+    fn dispose_orphan_scripted_properties(&self, all_tags: bool) {
+        (**self).dispose_orphan_scripted_properties(all_tags)
+    }
     fn call_layout_resize(
         &self,
         instance: &mut dyn ScriptInstance,
@@ -2722,7 +2777,9 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
     ) -> Result<ScriptOptionalMethodResult, ScriptError> {
         (**self).call_layout_resize(instance, size, host)
     }
-    fn script_backend(&self) -> &crate::mechanical_port::source::scripted::script_backend::ScriptBackend {
+    fn script_backend(
+        &self,
+    ) -> &crate::mechanical_port::source::scripted::script_backend::ScriptBackend {
         (**self).script_backend()
     }
     fn route_to_import_factory(&self, factory: &mut dyn RenderFactory) {
@@ -2789,7 +2846,11 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
 }
 
 pub trait ScriptingVm {
-    fn script_backend(&self) -> &crate::mechanical_port::source::scripted::script_backend::ScriptBackend;
+    #[cfg(feature = "tools")]
+    fn dispose_orphan_scripted_properties(&self, _all_tags: bool) {}
+    fn script_backend(
+        &self,
+    ) -> &crate::mechanical_port::source::scripted::script_backend::ScriptBackend;
 
     fn call_layout_resize(
         &self,
@@ -2800,7 +2861,10 @@ pub trait ScriptingVm {
         instance.call_optional_method(
             ScriptMethod::Resize,
             &[
-                ScriptValue::Vec2 { x: size.x, y: size.y },
+                ScriptValue::Vec2 {
+                    x: size.x,
+                    y: size.y,
+                },
                 ScriptValue::Number(f64::from(self.script_backend().display_scale())),
             ],
             host,

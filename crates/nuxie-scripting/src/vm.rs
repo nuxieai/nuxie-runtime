@@ -1137,6 +1137,10 @@ impl LuaScriptInstance {
         self.call_method_value_with_current_budget(method, args)
     }
 
+    fn enter_property_owner(&self, lua: &Lua) -> view_model::ScriptedPropertyOwnerScope {
+        ScriptViewModelFrameContext::for_lua(lua).enter_owner(self.property_listener_owner.clone())
+    }
+
     fn call_method_value_with_current_budget(
         &mut self,
         method: ScriptMethod,
@@ -1170,6 +1174,7 @@ impl LuaScriptInstance {
         {
             call_args.push_back(Value::UserData(context.clone()));
         }
+        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call(call_args)
             .map_err(|error| self.script_error(error))
@@ -1196,10 +1201,17 @@ impl LuaScriptInstance {
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
-        let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&lua);
-        let result = table.call_function_truthy(ScriptMethod::Advance.as_str(), call_args);
-        exit_script_call_gpu_scope(&lua, &scope);
-        result.map_err(|error| self.script_error(error))
+        let field: Value = table
+            .get(ScriptMethod::Advance.as_str())
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = field else {
+            return Ok(false);
+        };
+        let _property_owner = self.enter_property_owner(&lua);
+        function
+            .protected_call::<Value>(call_args)
+            .map(|value| !matches!(value, Value::Nil | Value::Boolean(false)))
+            .map_err(|error| self.script_error(error))
     }
 
     fn dispose_script_lifetime(&mut self) {
@@ -1212,6 +1224,11 @@ impl LuaScriptInstance {
         self.table.take();
         if let Some(context_alive) = self.context_alive.take() {
             context_alive.set(false);
+        }
+        if let Some(context) = &self.context {
+            if let Ok(context) = context.borrow::<ScriptedContext>() {
+                context.clear_scripted_object();
+            }
         }
         self.context = None;
     }
@@ -1241,6 +1258,7 @@ impl LuaScriptInstance {
             if let Some(context) = self.context.as_ref() {
                 args.push_back(Value::UserData(context.clone()));
             }
+            let _property_owner = self.enter_property_owner(&function.lua());
             let value = function
                 .protected_call(args)
                 .map_err(|error| self.script_error(error));
@@ -1260,17 +1278,33 @@ impl LuaScriptInstance {
                 self.user_init_done = initialized;
                 self.init_retry_requires_recreation = !initialized && self.generator.is_some();
                 if !initialized {
-                    self.dispose_script_lifetime();
+                    self.release_failed_user_init();
                 }
                 Ok(initialized)
             }
             Err(error) => {
                 self.user_init_done = false;
                 self.init_retry_requires_recreation = self.generator.is_some();
-                self.dispose_script_lifetime();
+                self.release_failed_user_init();
                 Err(error)
             }
         }
+    }
+
+    fn release_failed_user_init(&mut self) {
+        // tryUserInit releases self/context and detaches the VM, but leaves
+        // tracked properties on the actual ScriptedObject until its teardown.
+        let owner = std::mem::take(&mut self.property_listener_owner);
+        let cleanup_owner = owner.clone();
+        let retained = self.context_source.borrow().as_ref().is_some_and(|source| {
+            source.retain_failed_script_cleanup(Rc::new(move || cleanup_owner.dispose()))
+        });
+        if !retained {
+            owner.dispose();
+        }
+        // The owner was transferred above. Later Drop/invalidation must not
+        // accidentally dispose that failed attempt's properties a second time.
+        self.dispose_script_lifetime();
     }
 
     fn prepare_init_retry_with_optional_factory(
@@ -1307,9 +1341,18 @@ impl LuaScriptInstance {
                 ))
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
-            let table = generator
-                .protected_call(context.clone())
-                .map_err(|error| self.script_error(error))?;
+            let _property_owner = ScriptViewModelFrameContext::for_lua(&lua).enter_owner(
+                context
+                    .borrow::<ScriptedContext>()
+                    .map_err(|error| self.script_error(error))?
+                    .listener_owner(),
+            );
+            let table = generator.protected_call(context.clone()).map_err(|error| {
+                if let Ok(context) = context.borrow::<ScriptedContext>() {
+                    context.failed_generator();
+                }
+                self.script_error(error)
+            })?;
             Ok((table, context, missing_requested_data))
         };
         if let Some(factory) = factory {
@@ -1397,6 +1440,7 @@ impl LuaScriptInstance {
         };
         let lua = table.lua();
         let input = lua_data_value::create_data_value(&lua, value).map_err(&conversion_error)?;
+        let _property_owner = self.enter_property_owner(&lua);
         let output: Value = function
             .protected_call((table, input))
             .map_err(&conversion_error)?;
@@ -1412,6 +1456,17 @@ impl Default for ScriptVm {
         Self::new()
     }
 }
+
+impl Drop for ScriptVm {
+    fn drop(&mut self) {
+        #[cfg(feature = "tools")]
+        self.view_model_frame_context
+            .dispose_orphan_scripted_properties(true);
+    }
+}
+
+#[cfg(all(test, feature = "compiler"))]
+mod context_cache_a637_tests;
 
 fn normalize_chunk_source(source: &str) -> &str {
     source
@@ -1438,6 +1493,22 @@ fn caller_chunk_source(lua: &Lua) -> Option<String> {
 }
 
 impl ScriptVm {
+    #[cfg(feature = "tools")]
+    pub fn set_orphan_owner_tag(&self, tag: u32) {
+        self.view_model_frame_context.set_orphan_owner_tag(tag);
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn dispose_orphan_scripted_properties(&self, all_tags: bool) {
+        self.view_model_frame_context
+            .dispose_orphan_scripted_properties(all_tags);
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn dispose_orphan_scripted_properties_for_tag(&self, tag: u32) {
+        self.view_model_frame_context
+            .dispose_orphan_scripted_properties_for_tag(tag);
+    }
     pub fn display_scale(&self) -> f32 {
         self.script_backend.display_scale()
     }
@@ -1627,11 +1698,20 @@ impl ScriptVm {
             ))
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
+        let _property_owner = ScriptViewModelFrameContext::for_lua(&self.lua).enter_owner(
+            context
+                .borrow::<ScriptedContext>()
+                .map_err(|error| self.script_error(error))?
+                .listener_owner(),
+        );
         let instance: Table =
             match self.track_resource_result(program.generator.protected_call(context.clone())) {
                 Ok(instance) => instance,
                 Err(error) => {
                     context_alive.set(false);
+                    if let Ok(context) = context.borrow::<ScriptedContext>() {
+                        context.failed_generator();
+                    }
                     return Err(self.script_error(error));
                 }
             };
@@ -1733,6 +1813,12 @@ impl ScriptVm {
                 ))
                 .map_err(|error| self.script_error(error))?;
             self.reset_execution_budget();
+            let _property_owner = ScriptViewModelFrameContext::for_lua(&self.lua).enter_owner(
+                context
+                    .borrow::<ScriptedContext>()
+                    .map_err(|error| self.script_error(error))?
+                    .listener_owner(),
+            );
             let generated = self
                 .track_resource_result(program.generator.protected_call::<Table>(context.clone()));
             let requested = context
@@ -1745,7 +1831,12 @@ impl ScriptVm {
                     host.mark_script_update();
                 }
             }
-            let instance = generated.map_err(|error| self.script_error(error))?;
+            let instance = generated.map_err(|error| {
+                if let Ok(context) = context.borrow::<ScriptedContext>() {
+                    context.failed_generator();
+                }
+                self.script_error(error)
+            })?;
             Ok(Box::new(LuaScriptInstance::with_renderer_bindings(
                 instance,
                 self.renderer_bindings.clone(),
@@ -2145,7 +2236,7 @@ impl ScriptVm {
     ) -> std::result::Result<bool, ScriptError> {
         self.reset_execution_budget();
         self.renderer_bindings
-            .call_draw_with_balance(table, factory, renderer)
+            .call_draw_with_balance(table, factory, renderer, None)
             .map_err(|error| self.script_error(error))
     }
 
@@ -2618,6 +2709,11 @@ pub fn validate_executable_luau_bytecode(
 }
 
 impl RuntimeScriptingVm for ScriptVm {
+    #[cfg(feature = "tools")]
+    fn dispose_orphan_scripted_properties(&self, all_tags: bool) {
+        self.view_model_frame_context
+            .dispose_orphan_scripted_properties(all_tags);
+    }
     fn script_backend(&self) -> &nuxie_runtime::source::scripted::script_backend::ScriptBackend {
         &self.script_backend
     }
@@ -2734,6 +2830,12 @@ impl RuntimeScriptingVm for ScriptVm {
             ))
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
+        let _property_owner = ScriptViewModelFrameContext::for_lua(&self.lua).enter_owner(
+            context
+                .borrow::<ScriptedContext>()
+                .map_err(|error| self.script_error(error))?
+                .listener_owner(),
+        );
         let instance: Table = match self
             .track_resource_result(generator.protected_call(context.clone()))
             .map_err(|error| self.script_error(error))
@@ -2745,6 +2847,9 @@ impl RuntimeScriptingVm for ScriptVm {
                 // even when the generator captured that userdata globally
                 // (`scripted_object.cpp:361-388`).
                 context_alive.set(false);
+                if let Ok(context) = context.borrow::<ScriptedContext>() {
+                    context.failed_generator();
+                }
                 return Err(error);
             }
         };
@@ -2979,6 +3084,7 @@ impl ScriptInstance for LuaScriptInstance {
         for arg in args {
             call_args.push_back(script_value_to_lua(&lua, arg));
         }
+        let _property_owner = self.enter_property_owner(&lua);
         let returned: Value = function
             .protected_call(call_args)
             .map_err(|error| self.script_error(error))?;
@@ -3009,6 +3115,7 @@ impl ScriptInstance for LuaScriptInstance {
         for value in args {
             call_args.push_back(Value::Number(f64::from(*value)));
         }
+        let _property_owner = self.enter_property_owner(&lua);
         let returned: Value = function
             .protected_call(call_args)
             .map_err(|error| self.script_error(error))?;
@@ -3073,6 +3180,7 @@ impl ScriptInstance for LuaScriptInstance {
         let lua = table.lua();
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
+        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call((table, invocation))
             .map_err(|error| self.script_error(error))
@@ -3113,6 +3221,7 @@ impl ScriptInstance for LuaScriptInstance {
         let lua = table.lua();
         let invocation = listener_invocation::listener_action_argument(&lua, method, invocation)
             .map_err(|error| self.script_error(error))?;
+        let _property_owner = self.enter_property_owner(&lua);
         function
             .protected_call::<()>((table, invocation))
             .map_err(|error| self.script_error(error))?;
@@ -3161,6 +3270,7 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(nuxie_runtime::ScriptedDrawableInputResult::default());
         };
 
+        let _property_owner = self.enter_property_owner(&lua);
         if gamepad {
             // `ScriptedDrawable::gamepadDispatch` consumes protected-call
             // failures and reports the drawable as dispatched whenever the
@@ -3234,6 +3344,7 @@ impl ScriptInstance for LuaScriptInstance {
         )
         .map_err(|error| self.script_error(error))?;
 
+        let _property_owner = self.enter_property_owner(&lua);
         let call_result = function.protected_call::<()>((table, argument));
         let hit = match hit_result.get() {
             listener_invocation::ScriptedPointerHitResult::None => {
@@ -3270,6 +3381,7 @@ impl ScriptInstance for LuaScriptInstance {
             host.mark_script_update();
             return Ok(());
         };
+        let _property_owner = self.enter_property_owner(&function.lua());
         let result = function
             .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));
@@ -3297,6 +3409,7 @@ impl ScriptInstance for LuaScriptInstance {
             host.mark_script_update();
             return Ok(());
         };
+        let _property_owner = self.enter_property_owner(&lua);
         let result = function
             .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));
@@ -3367,8 +3480,13 @@ impl ScriptInstance for LuaScriptInstance {
             return Ok(None);
         }
         let table = self.live_table()?;
-        renderer::call_path_effect_update(&table, source, node)
-            .map_err(|error| self.script_error(error))
+        renderer::call_path_effect_update(
+            &table,
+            source,
+            node,
+            Some(self.property_listener_owner.clone()),
+        )
+        .map_err(|error| self.script_error(error))
     }
 
     fn call_draw(
@@ -3382,7 +3500,12 @@ impl ScriptInstance for LuaScriptInstance {
         }
         let table = self.live_table()?;
         self.reset_execution_budget();
-        match self.renderer_bindings.call_draw(&table, factory, renderer) {
+        match self.renderer_bindings.call_draw(
+            &table,
+            factory,
+            renderer,
+            Some(self.property_listener_owner.clone()),
+        ) {
             Ok(()) => Ok(()),
             Err(error) => {
                 let error = self.script_error(error);
@@ -3423,7 +3546,13 @@ impl ScriptInstance for LuaScriptInstance {
         };
         self.reset_execution_budget();
         self.context_mark_needs_update_requested.set(false);
-        let result = lua_transition::call_changed(&table, from, to, direction);
+        let result = lua_transition::call_changed(
+            &table,
+            from,
+            to,
+            direction,
+            Some(self.property_listener_owner.clone()),
+        );
         let result = result.map_err(|error| self.script_error(error));
         if self.context_mark_needs_update_requested.replace(false)
             && (result.is_ok() || !host.requires_atomic_script_callbacks())
@@ -3453,7 +3582,14 @@ impl ScriptInstance for LuaScriptInstance {
         };
         self.reset_execution_budget();
         self.context_mark_needs_update_requested.set(false);
-        let result = lua_transition::call_draw(&self.renderer_bindings, &table, renderer, from, to);
+        let result = lua_transition::call_draw(
+            &self.renderer_bindings,
+            &table,
+            renderer,
+            from,
+            to,
+            Some(self.property_listener_owner.clone()),
+        );
         let result = result.map_err(|error| self.script_error(error));
         if self.context_mark_needs_update_requested.replace(false)
             && (result.is_ok() || !host.requires_atomic_script_callbacks())

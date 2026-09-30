@@ -75,23 +75,22 @@ impl ScriptInputArtboard {
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
-        let Some(backboard_importer) =
-            import_stack.latest::<BackboardImporter>(BackboardBase::TYPE_KEY)
-        else {
+        if import_stack
+            .latest::<BackboardImporter>(BackboardBase::TYPE_KEY)
+            .is_none()
+        {
             return StatusCode::MissingObject;
-        };
+        }
         let Some(this) = self.base.handle() else {
             return StatusCode::MissingObject;
         };
-        backboard_importer.add_artboard_referencer(this.clone());
-
         let Some(importer) =
             import_stack.latest::<ScriptedObjectImporter>(ScriptedDrawableBase::TYPE_KEY)
         else {
             return StatusCode::MissingObject;
         };
         importer.add_input(
-            this,
+            this.clone(),
             ScriptInputArtboardBase::TYPE_KEY.into(),
             &mut self.script_input,
         );
@@ -101,8 +100,17 @@ impl ScriptInputArtboard {
                 .with(|object| object.as_component().is_some())
                 .unwrap_or(false)
         }) {
-            return self.base.base.base.base.import(import_stack);
+            let code = self.base.base.base.base.import(import_stack);
+            if code != StatusCode::Ok {
+                return code;
+            }
         }
+        // Group attachment stays before component import; backboard registration
+        // is last for both component and non-component scripted owners.
+        import_stack
+            .latest::<BackboardImporter>(BackboardBase::TYPE_KEY)
+            .expect("super import preserves the backboard importer")
+            .add_artboard_referencer(this);
         StatusCode::Ok
     }
 

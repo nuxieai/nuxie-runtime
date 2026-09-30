@@ -467,6 +467,18 @@ impl File {
         // Core has no type key, so the most recent non-bind object remains the
         // target for an immediately following DataBind.
         let mut last_bindable_object: Option<CoreHandle> = None;
+        // Importers may already refer to a failed object. Keep its arena slot
+        // live through resolve(), then retire it on every exit, including
+        // malformed/partial-import early returns.
+        struct DiscardedImports(Vec<CoreHandle>);
+        impl Drop for DiscardedImports {
+            fn drop(&mut self) {
+                for object in &self.0 {
+                    object.remove_occurrence();
+                }
+            }
+        }
+        let mut discarded = DiscardedImports(Vec::new());
         // Host source identity is the raw file-record position. Null and
         // unknown records still consume an id, while importer-created owners
         // consume arena slots but no authored id.
@@ -602,8 +614,7 @@ impl File {
                     last_bindable_object = None;
                 }
                 eprintln!("Failed to import object of type {}", object_type);
-                // File::read deletes an object immediately when import fails.
-                drop(self.core_arena.remove(&object));
+                discarded.0.push(object);
                 continue;
             }
 
@@ -1545,6 +1556,13 @@ impl File {
         registrar: Option<ViewModelInstanceRegistrarHandle>,
     ) {
         self.view_model_instance_registrar = registrar;
+    }
+
+    /// The registrar last installed on this file. The host may retain this
+    /// handle, clear the file's registration, then release its own owner.
+    #[cfg(feature = "tools")]
+    pub fn view_model_instance_registrar(&self) -> Option<ViewModelInstanceRegistrarHandle> {
+        self.view_model_instance_registrar.clone()
     }
 
     #[cfg(feature = "tools")]

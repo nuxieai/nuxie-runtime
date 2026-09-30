@@ -851,17 +851,31 @@ impl NestedArtboard {
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         self.data_bind_path_referencer
             .import_data_bind_path(import_stack);
-        let Some(backboard_importer) = import_stack.latest::<BackboardImporter>(
-            crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
-        ) else {
+        if import_stack
+            .latest::<BackboardImporter>(
+                crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
+            )
+            .is_none()
+        {
             return StatusCode::MissingObject;
-        };
+        }
         let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle()
         else {
             return StatusCode::MissingObject;
         };
-        backboard_importer.add_artboard_referencer(this);
-        self.base.base.import(import_stack)
+        let code = self.base.base.import(import_stack);
+        if code != StatusCode::Ok {
+            return code;
+        }
+        // Register only once every failing import step has succeeded. Reborrow
+        // the already-validated importer after the superclass uses the stack.
+        import_stack
+            .latest::<BackboardImporter>(
+                crate::mechanical_port::source::generated::backboard_base::BackboardBase::TYPE_KEY,
+            )
+            .expect("super import preserves the backboard importer")
+            .add_artboard_referencer(this);
+        StatusCode::Ok
     }
 
     pub fn add_nested_animation_handle(&mut self, nested_animation: CoreHandle) {

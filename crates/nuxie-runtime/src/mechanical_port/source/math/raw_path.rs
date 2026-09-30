@@ -444,48 +444,32 @@ impl RawPath {
         self.points.reserve(points);
     }
     pub fn precise_bounds(&self) -> Aabb {
+        self.precise_bounds_with_transform(Mat2D::identity())
+    }
+
+    /// Tight bounds after applying an affine transform, without copying the path.
+    pub fn precise_bounds_with_transform(&self, xform: Mat2D) -> Aabb {
         let mut bounds = Aabb::for_expansion();
         for segment in self.segments() {
             match segment.verb {
-                PathVerb::Move => Aabb::expand_to_point(&mut bounds, segment.points[0]),
-                PathVerb::Line => Aabb::expand_to_point(&mut bounds, segment.points[1]),
+                PathVerb::Move => Aabb::expand_to_point(&mut bounds, xform * segment.points[0]),
+                PathVerb::Line => Aabb::expand_to_point(&mut bounds, xform * segment.points[1]),
                 PathVerb::Cubic => {
-                    expand_cubic_bounds_for_axis(
-                        &mut bounds,
-                        0,
-                        segment.points[0].x,
-                        segment.points[1].x,
-                        segment.points[2].x,
-                        segment.points[3].x,
-                    );
-                    expand_cubic_bounds_for_axis(
-                        &mut bounds,
-                        1,
-                        segment.points[0].y,
-                        segment.points[1].y,
-                        segment.points[2].y,
-                        segment.points[3].y,
-                    );
+                    let p0 = xform * segment.points[0];
+                    let p1 = xform * segment.points[1];
+                    let p2 = xform * segment.points[2];
+                    let p3 = xform * segment.points[3];
+                    expand_cubic_bounds_for_axis(&mut bounds, 0, p0.x, p1.x, p2.x, p3.x);
+                    expand_cubic_bounds_for_axis(&mut bounds, 1, p0.y, p1.y, p2.y, p3.y);
                 }
                 PathVerb::Quad => {
-                    let p1 = Vec2D::lerp(segment.points[0], segment.points[1], 2.0 / 3.0);
-                    let p2 = Vec2D::lerp(segment.points[2], segment.points[1], 2.0 / 3.0);
-                    expand_cubic_bounds_for_axis(
-                        &mut bounds,
-                        0,
-                        segment.points[0].x,
-                        p1.x,
-                        p2.x,
-                        segment.points[2].x,
-                    );
-                    expand_cubic_bounds_for_axis(
-                        &mut bounds,
-                        1,
-                        segment.points[0].y,
-                        p1.y,
-                        p2.y,
-                        segment.points[2].y,
-                    );
+                    let p0 = xform * segment.points[0];
+                    let p1 = xform * segment.points[1];
+                    let p2 = xform * segment.points[2];
+                    let pt1 = Vec2D::lerp(p0, p1, 2.0 / 3.0);
+                    let pt2 = Vec2D::lerp(p2, p1, 2.0 / 3.0);
+                    expand_cubic_bounds_for_axis(&mut bounds, 0, p0.x, pt1.x, pt2.x, p2.x);
+                    expand_cubic_bounds_for_axis(&mut bounds, 1, p0.y, pt1.y, pt2.y, p2.y);
                 }
                 PathVerb::Close => {}
             }

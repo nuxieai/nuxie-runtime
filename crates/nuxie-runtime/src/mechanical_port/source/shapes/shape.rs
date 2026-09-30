@@ -515,9 +515,8 @@ impl Shape {
                     return;
                 }
                 let bounds = if !path.needs_path_build() {
-                    let mut raw = path.raw_path().clone();
-                    raw.transform_in_place(*path.base.transform());
-                    raw.precise_bounds()
+                    path.raw_path()
+                        .precise_bounds_with_transform(*path.base.transform())
                 } else {
                     let mut property = Aabb::default();
                     used_pending = true;
@@ -536,8 +535,7 @@ impl Shape {
                             Path::is_path_closed_for(object),
                             self,
                         );
-                        pending.transform_in_place(*path.base.transform());
-                        pending.precise_bounds()
+                        pending.precise_bounds_with_transform(*path.base.transform())
                     }
                 };
                 if !(bounds.width() >= 0.0 && bounds.height() >= 0.0) {

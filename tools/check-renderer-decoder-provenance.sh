@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-expected_runtime_ref=074bfb139e5390760e04a9fd953d410f71fa6384
+expected_runtime_ref=af45192d7335c988bb7fe34ef2e9f8413e9b7a85
 runtime_dir=${RIVE_RUNTIME_DIR:-/Users/levi/dev/oss/rive-runtime}
 decoder_archive="$runtime_dir/renderer/out/debug/librive_decoders.a"
 

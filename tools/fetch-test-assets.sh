@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-6916d763f75dfb7a297c4ad9624943839f7263b0}
+ref=${RIVE_RUNTIME_REF:-abf676e79e616e003893dc941471c90ccbaf5c6e}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/listener_input_values.riv|0eecb1cb6fe5fc367b813c17956012a1f09f4211fc0b362f8d0065b73ce5d902|abf676e79e616e003893dc941471c90ccbaf5c6e|listener_input_values.riv"
+  "sync/listener_input_values.rml|1f8300a80d674178151bdf9d3e9788f53d56be503e9a5e3e250c4a6f91c542ed|abf676e79e616e003893dc941471c90ccbaf5c6e|rml/listener_input_values.rml"
   "sync/additive_blendmode_test.riv|b158c8ac4434208913915ac364d1597ea83f06043a79fc94c7f2918bee9ff2cf|3d0d3f56ba21caa2ae13ef64451526639d793aee|additive_blendmode_test.riv"
   "sync/hidden_hit_targets.riv|cbc906bd9c7741e8e0446d60a0e47ce14d941163bee22f07a6d51ec980ce898f|8f3690df4346c8b8b9072bc5c3de6f3ab0c37203|hidden_hit_targets.riv"
   "sync/collapsed_databinds_test.riv|ec4bbbf220b8226eabf1e836f7ff662547f4ba1babe42a225d79eebfe548a70e|074bfb139e5390760e04a9fd953d410f71fa6384|collapsed_databinds_test.riv"

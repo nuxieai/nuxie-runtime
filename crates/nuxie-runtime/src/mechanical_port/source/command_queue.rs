@@ -14,6 +14,7 @@ use crate::mechanical_port::source::{
     audio::audio_source::AudioSourceRef,
     command_server::CommandServer,
     factory::RuntimeFactoryHandle,
+    input::focusable::{Key, KeyModifiers},
     layout::{Alignment, Fit},
     lua::scripting_vm::RuntimeScriptingVmHandle,
     math::vec2d::Vec2D,
@@ -582,6 +583,23 @@ pub trait StateMachineListener: Send {
         _view_model_instance_handle: ViewModelInstanceHandle,
     ) {
     }
+    /// Reports consumption by the focused recipient or an ancestor. Invalid
+    /// handles instead report `on_state_machine_error`.
+    fn on_key_input_handled(
+        &mut self,
+        _handle: StateMachineHandle,
+        _request_id: u64,
+        _handled: bool,
+    ) {
+    }
+    /// Reports consumption of committed text, not necessarily a text change.
+    fn on_text_input_handled(
+        &mut self,
+        _handle: StateMachineHandle,
+        _request_id: u64,
+        _handled: bool,
+    ) {
+    }
     fn on_semantics_diff_received(
         &mut self,
         _handle: StateMachineHandle,
@@ -691,6 +709,8 @@ pub(crate) enum Command {
     PointerDown,
     PointerUp,
     PointerExit,
+    KeyInput,
+    TextInput,
     Disconnect,
     CommandLoopBreak,
     ListViewModelEnums,
@@ -752,6 +772,8 @@ pub(crate) enum Message {
     StateMachineDeleted,
     StateMachineSettled,
     StateMachineViewModelInstanceReceived,
+    KeyInputHandled,
+    TextInputHandled,
     SemanticsDiffReceived,
     FileAssetsListed,
     ArtboardSizeReceived,
@@ -1811,6 +1833,40 @@ impl CommandQueue {
     ) {
         self.record_pointer(Command::PointerExit, handle, event, request_id);
     }
+    /// Enqueues a key event. Printable text is sent separately with text_input.
+    pub fn key_input(
+        &mut self,
+        handle: StateMachineHandle,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+        request_id: u64,
+    ) {
+        let _lock = self.command_gate.acquire();
+        self.command_stream
+            .write(Command::KeyInput)
+            .write(handle)
+            .write(request_id)
+            .write(key)
+            .write(modifiers)
+            .write(is_pressed)
+            .write(is_repeat);
+        self.notify_command();
+    }
+
+    /// Enqueues owned committed UTF-8 text, replacing the focused selection.
+    /// This does not set an IME composition range or replace the whole field.
+    pub fn text_input(&mut self, handle: StateMachineHandle, text: String, request_id: u64) {
+        let _lock = self.command_gate.acquire();
+        self.command_stream
+            .write(Command::TextInput)
+            .write(handle)
+            .write(request_id);
+        self.names.write(text);
+        self.notify_command();
+    }
+
     fn record_pointer(
         &mut self,
         command: Command,
@@ -3213,6 +3269,36 @@ impl CommandQueue {
                         listener
                             .borrow_mut()
                             .on_state_machine_deleted(handle, request_id);
+                    }
+                }
+                Message::KeyInputHandled | Message::TextInputHandled => {
+                    let handle = self.read_message_pod::<StateMachineHandle>();
+                    let request_id = self.read_message_pod::<u64>();
+                    let handled = self.read_message_pod::<bool>();
+                    drop(lock);
+                    if let Some(listener) =
+                        Self::global_listener(&self.global_state_machine_listener)
+                    {
+                        match message {
+                            Message::KeyInputHandled => listener
+                                .borrow_mut()
+                                .on_key_input_handled(handle, request_id, handled),
+                            Message::TextInputHandled => listener
+                                .borrow_mut()
+                                .on_text_input_handled(handle, request_id, handled),
+                            _ => unreachable!(),
+                        }
+                    }
+                    if let Some(listener) = Self::listener(&self.state_machine_listeners, &handle) {
+                        match message {
+                            Message::KeyInputHandled => listener
+                                .borrow_mut()
+                                .on_key_input_handled(handle, request_id, handled),
+                            Message::TextInputHandled => listener
+                                .borrow_mut()
+                                .on_text_input_handled(handle, request_id, handled),
+                            _ => unreachable!(),
+                        }
                     }
                 }
                 Message::SemanticsDiffReceived => {

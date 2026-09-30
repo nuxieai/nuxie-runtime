@@ -30,6 +30,7 @@ use crate::mechanical_port::source::{
     },
     generated::core_registry::CoreCapabilities,
     hit_result::HitResult,
+    input::focusable::{Key, KeyModifiers},
     layout::Alignment,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     renderer::RenderImageRef,
@@ -2492,6 +2493,55 @@ impl CommandServer {
                             request_id,
                             Message::StateMachineError,
                             format!("State machine \"{handle}\" not found for {pointer_command}."),
+                        );
+                    }
+                }
+                Command::KeyInput => {
+                    let handle = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
+                    let key: Key = self.command_queue.read();
+                    let modifiers: KeyModifiers = self.command_queue.read();
+                    let is_pressed: bool = self.command_queue.read();
+                    let is_repeat: bool = self.command_queue.read();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        let handled = wrapper
+                            .lock()
+                            .key_input(key, modifiers, is_pressed, is_repeat);
+                        let mut messages = self.command_queue.message_lock();
+                        messages
+                            .write(Message::KeyInputHandled)
+                            .write(handle)
+                            .write(request_id)
+                            .write(handled);
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!("State machine {handle} not found for keyInput."),
+                        );
+                    }
+                }
+                Command::TextInput => {
+                    let handle = self.command_queue.read();
+                    let request_id: u64 = self.command_queue.read();
+                    let text = self.command_queue.pop_name();
+                    lock.unlock();
+                    if let Some(wrapper) = self.get_state_machine_wrapper(handle) {
+                        let handled = wrapper.lock().text_input(&text);
+                        let mut messages = self.command_queue.message_lock();
+                        messages
+                            .write(Message::TextInputHandled)
+                            .write(handle)
+                            .write(request_id)
+                            .write(handled);
+                    } else {
+                        self.error(
+                            handle,
+                            request_id,
+                            Message::StateMachineError,
+                            format!("State machine {handle} not found for textInput."),
                         );
                     }
                 }

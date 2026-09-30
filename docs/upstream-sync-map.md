@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `70f3c4e63930d0e876ef24a61dbd3b891bd4ea63`
+- LAST_SYNCED_SHA: `c5ac0a130a6ff425e38721183eb1f8f05af8e54a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 95 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 95 require a Rust translation.
+  There are 94 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 94 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c5ac0a130a6ff425e38721183eb1f8f05af8e54a` | **ALREADY SATISFIED AT THE RUST HOST BOUNDARY:** upstream's shared `HostFrameSink` now supplies `oreCommandBuffer()` at ORE frame begin. Rust uses backend-specific hosts: Android Vulkan opens its native frame before replay and passes its recording command buffer through `begin_frame_external`; WebGPU installs its retained command encoder via `beginFrameExternal` for normal and standalone canvas frames. The C++ shared-host class itself is not shipped. Windows viewer/D3D12 and HiDPI changes described by the title are not present in this public delta or claimed imported. | — |
 | `70f3c4e63930d0e876ef24a61dbd3b891bd4ea63` | Admit `emulateDynamicColorWriteDisable` in the valid ubershader miscellaneous-flag mask for draw types that use pipeline dynamic state. Preserve capability filtering and permutation validation, fixing the upstream dynamic-state assertion without changing shader code or generated artifacts. | — |
 | `d158f80d326be040d2b83d2ec04122ebcb58d9f8` | Translate `[[nodiscard]]` to `#[must_use]` on all six float-AABB transformation/rounding methods in both runtime and renderer API owners, preserving their return-value semantics. Upstream also corrects discarded offsets/insets in the unported C++ `strokes`/`xfermodes2` GMs; no corresponding Rust GM implementation or changed runtime arithmetic is present. Existing captured GM streams retain their historical provenance and are not claimed regenerated at this checkpoint. | — |
 | `83acdadc2e528848066d28f771d961a7eec6dad8` | After an ORE replay resource fails to resolve, suppress all eight subsequent pipeline/buffer/bind-group and dynamic-state commands as well as draws until the next pass; retain command decoding, resource resolution and pass completion. The image-paint GM already uses the matching f32 PI constant and arithmetic. C++ check-golds/deployment/Unreal packaging and testing-window external-backend aliases have no Rust product counterpart and are not imported. | — |

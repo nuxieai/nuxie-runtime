@@ -215,6 +215,31 @@ pub fn lua_register_rive<T: LuaRive>(state: &mut LuaState) {
     state.register_rive::<T>();
 }
 
+pub fn lua_register_rive_type<T: LuaRive>(
+    state: &mut LuaState,
+    index: Option<LuaFunction>,
+    namecall: Option<LuaFunction>,
+    newindex: Option<LuaFunction>,
+    iter: Option<LuaFunction>,
+) {
+    state.register_rive::<T>();
+    for (name, function) in [
+        ("__index", index), ("__namecall", namecall),
+        ("__newindex", newindex), ("__iter", iter),
+    ] {
+        if let Some(function) = function {
+            state.push_function(function);
+            state.set_field(-2, name);
+        }
+    }
+    state.set_readonly(-1, true);
+    state.pop(1);
+}
+
+pub fn lua_pushfont(state: &mut LuaState, font: Font) {
+    state.new_rive(ScriptedFont { font: Some(font) });
+}
+
 #[repr(i16)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LuaAtoms {
@@ -497,6 +522,73 @@ pub enum LuaAtoms {
     Boolean,
     String,
     Properties,
+    Append,
+    Line,
+    Lines,
+    HitTest,
+    Caret,
+    SelectionRects,
+    Glyph,
+    Glyphs,
+    Path,
+    GlyphPath,
+    WithOptions,
+    HasGlyph,
+    AxisValue,
+    LineHeight,
+    Decode,
+    Font,
+    Ascent,
+    Descent,
+    CapHeight,
+    XHeight,
+    Weight,
+    IsItalic,
+    Sizing,
+    Overflow,
+    Align,
+    Wrap,
+    WordBreak,
+    Origin,
+    Direction,
+    MaxWidth,
+    MaxHeight,
+    ParagraphSpacing,
+    LineCount,
+    GlyphCount,
+    Baseline,
+    Bottom,
+    Top,
+    TextIndex,
+    FirstIndex,
+    LastIndex,
+    X,
+    Y,
+    IsEmpty,
+    Index,
+    Ltr,
+    Rtl,
+    AutoDetect,
+    Left,
+    Right,
+    Center,
+    End,
+    AutoWidth,
+    AutoHeight,
+    Fixed,
+    Visible,
+    Hidden,
+    Clipped,
+    Ellipsis,
+    NoWrap,
+    BreakWord,
+    Normal,
+    BreakAll,
+    LetterSpacing,
+    ForegroundColor,
+    Min,
+    Max,
+    DefaultValue,
 }
 
 struct LuaAtomName {
@@ -979,6 +1071,73 @@ pub fn find_atom(name: &str) -> Option<LuaAtoms> {
         "string" => Some(LuaAtoms::String),
         #[cfg(feature = "tools")]
         "properties" => Some(LuaAtoms::Properties),
+        "append" => Some(LuaAtoms::Append),
+        "line" => Some(LuaAtoms::Line),
+        "lines" => Some(LuaAtoms::Lines),
+        "hitTest" => Some(LuaAtoms::HitTest),
+        "caret" => Some(LuaAtoms::Caret),
+        "selectionRects" => Some(LuaAtoms::SelectionRects),
+        "glyph" => Some(LuaAtoms::Glyph),
+        "glyphs" => Some(LuaAtoms::Glyphs),
+        "path" => Some(LuaAtoms::Path),
+        "glyphPath" => Some(LuaAtoms::GlyphPath),
+        "withOptions" => Some(LuaAtoms::WithOptions),
+        "hasGlyph" => Some(LuaAtoms::HasGlyph),
+        "axisValue" => Some(LuaAtoms::AxisValue),
+        "lineHeight" => Some(LuaAtoms::LineHeight),
+        "decode" => Some(LuaAtoms::Decode),
+        "font" => Some(LuaAtoms::Font),
+        "ascent" => Some(LuaAtoms::Ascent),
+        "descent" => Some(LuaAtoms::Descent),
+        "capHeight" => Some(LuaAtoms::CapHeight),
+        "xHeight" => Some(LuaAtoms::XHeight),
+        "weight" => Some(LuaAtoms::Weight),
+        "isItalic" => Some(LuaAtoms::IsItalic),
+        "sizing" => Some(LuaAtoms::Sizing),
+        "overflow" => Some(LuaAtoms::Overflow),
+        "align" => Some(LuaAtoms::Align),
+        "wrap" => Some(LuaAtoms::Wrap),
+        "wordBreak" => Some(LuaAtoms::WordBreak),
+        "origin" => Some(LuaAtoms::Origin),
+        "direction" => Some(LuaAtoms::Direction),
+        "maxWidth" => Some(LuaAtoms::MaxWidth),
+        "maxHeight" => Some(LuaAtoms::MaxHeight),
+        "paragraphSpacing" => Some(LuaAtoms::ParagraphSpacing),
+        "lineCount" => Some(LuaAtoms::LineCount),
+        "glyphCount" => Some(LuaAtoms::GlyphCount),
+        "baseline" => Some(LuaAtoms::Baseline),
+        "bottom" => Some(LuaAtoms::Bottom),
+        "top" => Some(LuaAtoms::Top),
+        "textIndex" => Some(LuaAtoms::TextIndex),
+        "firstIndex" => Some(LuaAtoms::FirstIndex),
+        "lastIndex" => Some(LuaAtoms::LastIndex),
+        "x" => Some(LuaAtoms::X),
+        "y" => Some(LuaAtoms::Y),
+        "isEmpty" => Some(LuaAtoms::IsEmpty),
+        "index" => Some(LuaAtoms::Index),
+        "ltr" => Some(LuaAtoms::Ltr),
+        "rtl" => Some(LuaAtoms::Rtl),
+        "auto" => Some(LuaAtoms::AutoDetect),
+        "left" => Some(LuaAtoms::Left),
+        "right" => Some(LuaAtoms::Right),
+        "center" => Some(LuaAtoms::Center),
+        "end" => Some(LuaAtoms::End),
+        "autoWidth" => Some(LuaAtoms::AutoWidth),
+        "autoHeight" => Some(LuaAtoms::AutoHeight),
+        "fixed" => Some(LuaAtoms::Fixed),
+        "visible" => Some(LuaAtoms::Visible),
+        "hidden" => Some(LuaAtoms::Hidden),
+        "clipped" => Some(LuaAtoms::Clipped),
+        "ellipsis" => Some(LuaAtoms::Ellipsis),
+        "noWrap" => Some(LuaAtoms::NoWrap),
+        "breakWord" => Some(LuaAtoms::BreakWord),
+        "normal" => Some(LuaAtoms::Normal),
+        "breakAll" => Some(LuaAtoms::BreakAll),
+        "letterSpacing" => Some(LuaAtoms::LetterSpacing),
+        "foregroundColor" => Some(LuaAtoms::ForegroundColor),
+        "min" => Some(LuaAtoms::Min),
+        "max" => Some(LuaAtoms::Max),
+        "default" => Some(LuaAtoms::DefaultValue),
         _ => None,
     }
 }
@@ -1801,7 +1960,7 @@ pub struct ScriptedFont {
     pub font: Option<Font>,
 }
 
-impl_lua_rive!(ScriptedFont, 65, "Font", no_metatable);
+impl_lua_rive!(ScriptedFont, 65, "Font");
 scripted_property_type!(ScriptedPropertyFont, 66, "Property<Font>");
 scripted_property_type!(ScriptedPropertyBlob, 67, "Property<Blob>");
 

@@ -2453,6 +2453,18 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("image", |lua, this, name: String| {
             this.require_live("image")?;
+            if let Some(source) = this.source.borrow().as_ref() {
+                let image = super::lua_scripted_context::find_file_asset(
+                    lua, &name, source.current_file(), |asset| {
+                        asset.with_downcast::<nuxie_runtime::source::assets::image_asset::ImageAsset, _>(|asset| {
+                            Some((asset.base.name().to_owned(), asset.render_image()?.clone()))
+                        }).flatten()
+                    },
+                );
+                return image.map(|image| lua.create_userdata(
+                    ScriptedImage::from_render_image_rc(image)
+                ).map(Value::UserData)).unwrap_or(Ok(Value::Nil));
+            }
             let image = super::lua_image::script_image_asset_named(lua, &name).or_else(|| {
                 this.model
                     .borrow()
@@ -2476,7 +2488,35 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("blob", |lua, this, name: String| {
             this.require_live("blob")?;
+            if let Some(source) = this.source.borrow().as_ref() {
+                let blob = super::lua_scripted_context::find_file_asset(
+                    lua, &name, source.current_file(), |asset| {
+                        asset.with_downcast::<nuxie_runtime::source::assets::blob_asset::BlobAsset, _>(|asset| {
+                            (!asset.bytes().is_empty()).then(|| (asset.base.name().to_owned(), asset.script_asset()))
+                        }).flatten()
+                    },
+                );
+                return blob.map(|blob| lua.create_userdata(
+                    ScriptedBlob::from_asset(blob)
+                ).map(Value::UserData)).unwrap_or(Ok(Value::Nil));
+            }
             ScriptedBlobAssets::lookup(lua, &name)
+        });
+        methods.add_method("font", |lua, this, name: String| {
+            this.require_live("font")?;
+            let file = this.source.borrow().as_ref().and_then(|source| source.current_file());
+            let font = super::lua_scripted_context::find_file_asset(
+                lua, &name, file, |asset| {
+                    asset.with_downcast::<nuxie_runtime::source::assets::font_asset::FontAsset, _>(|asset| {
+                        Some((asset.base.name().to_owned(), asset.font()?))
+                    }).flatten()
+                },
+            );
+            match font {
+                Some(font) => Ok(create_asset_font(lua, nuxie_runtime::ScriptFont::from_native_font(font))?
+                    .map(Value::UserData).unwrap_or(Value::Nil)),
+                None => Ok(Value::Nil),
+            }
         });
         methods.add_method("decodeImage", |lua, this, encoded: Buffer| {
             this.require_live("decodeImage")?;

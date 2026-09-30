@@ -112,3 +112,30 @@ fn path_indexing_matches_cpp_out_of_range_behavior_and_keeps_methods() {
 }
 mod support;
 use support::ScriptVmSourceTestExt as _;
+
+#[test]
+fn path_add_self_matches_upstream_raw_path_self_append() {
+    let vm = rive_vm();
+    let exact: bool = vm
+        .eval(
+            r#"
+        local path = Path.new()
+        path:moveTo(Vector(1, 2))
+        path:lineTo(Vector(3, 4))
+        path:close()
+        path:add(path)
+        assert(#path == 6)
+        assert(path[4].type == "moveTo")
+        assert(path[4][1].x == 1 and path[4][1].y == 2)
+        assert(path[5][1].x == 3 and path[5][1].y == 4)
+        path:add(path, Mat2D.values(1, 0, 0, 1, 10, 20))
+        assert(#path == 12)
+        assert(path[7][1].x == 11 and path[7][1].y == 22)
+        assert(path[11][1].x == 13 and path[11][1].y == 24)
+        assert(path[10].type == "moveTo")
+        return true
+    "#,
+        )
+        .unwrap();
+    assert!(exact);
+}

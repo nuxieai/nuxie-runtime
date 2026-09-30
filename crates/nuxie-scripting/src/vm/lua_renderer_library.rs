@@ -103,6 +103,8 @@ impl RendererBindings {
         self.install_gradient_global(lua)?;
         self.install_paint_global(lua)?;
         super::lua_transition::install(lua)?;
+        super::lua_font::register(lua)?;
+        super::lua_text::register(lua)?;
         Ok(())
     }
 

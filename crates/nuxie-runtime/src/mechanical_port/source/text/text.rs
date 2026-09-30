@@ -62,12 +62,14 @@ impl StyledText {
         size: f32,
         line_height: f32,
         letter_spacing: f32,
-        text: &str,
+        text: impl AsRef<[u8]>,
         style_id: u16,
     ) {
         let start = self.value.len();
-        let mut bytes = text.as_bytes();
-        while !bytes.is_empty() {
+        let mut bytes = text.as_ref();
+        // std::string::c_str() is traversed by UTF::NextUTF8 until a NUL
+        // lead byte, not by Unicode scalar iteration or the string's length.
+        while bytes.first().is_some_and(|byte| *byte != 0) {
             self.value.push(Utf::next_utf8(&mut bytes));
         }
         self.runs.push(TextRun {

@@ -361,6 +361,33 @@ impl Skin {
         true
     }
 
+    pub(crate) fn add_dirt_from_points_path_occurrence(owner: &CoreHandle, path: &CoreHandle) {
+        let changed = owner
+            .with_downcast_mut::<Self, _>(|skin| {
+                if skin
+                    .component_mut()
+                    .add_dirt_state(ComponentDirt::SKIN)
+                    .is_none()
+                {
+                    return false;
+                }
+                assert_eq!(skin.skinnable.as_ref(), Some(path));
+                true
+            })
+            .expect("live PointsPath Skin");
+        if changed {
+            // Skin::onDirty calls PointsPath::markSkinDirty, whose super call
+            // does not reset winding or dirty the Skin a second time.
+            crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_base_occurrence(
+                path,
+            );
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .notify_artboard();
+        }
+    }
+
     #[cfg(test)]
     pub fn tendons_mut(&mut self) -> &mut Vec<CoreHandle> {
         &mut self.tendons

@@ -91,9 +91,13 @@ pub struct Path {
     shape_notified: bool,
     path_flags: PathFlags,
     raw_path: RawPath,
+    geometry_version: u32,
 }
 
 impl Path {
+    pub fn geometry_version(&self) -> u32 {
+        self.geometry_version
+    }
     pub fn compute_ideal_control_point_distance(
         to_prev: Vec2D,
         to_next: Vec2D,
@@ -542,6 +546,77 @@ impl Path {
         self.base.add_dirt(ComponentDirt::PATH, false);
         self.shape_path_changed();
     }
+    /// Virtual markPathDirty with no arena borrow held across synchronous dirt
+    /// callbacks, which can legitimately reach this same path through a constraint.
+    pub fn mark_path_dirty_occurrence(owner: &CoreHandle, send_to_layout: bool) {
+        let (skin, parametric) = owner
+            .with_mut(|object| {
+                let parametric = object.as_parametric_path().is_some();
+                let skin = object
+                    .as_points_path_mut()
+                    .and_then(|points| points.prepare_mark_path_dirty());
+                (skin, parametric)
+            })
+            .expect("live Path");
+        if let Some(skin) = skin {
+            crate::mechanical_port::source::bones::skin::Skin::add_dirt_from_points_path_occurrence(
+                &skin, owner,
+            );
+        }
+        Self::mark_path_dirty_base_occurrence(owner);
+        if parametric && send_to_layout {
+            crate::mechanical_port::source::shapes::parametric_path::ParametricPath::send_layout_dirty_occurrence(owner);
+        }
+    }
+
+    pub(crate) fn mark_path_dirty_base_occurrence(owner: &CoreHandle) {
+        Self::add_path_dirt_occurrence(owner);
+        Self::send_shape_notification_occurrence(owner);
+    }
+
+    fn add_path_dirt_occurrence(owner: &CoreHandle) {
+        let dirt = owner
+            .with_mut(|object| {
+                object
+                    .as_component_mut()
+                    .expect("Path Component")
+                    .add_dirt_state(ComponentDirt::PATH)
+            })
+            .flatten();
+        if let Some(dirt) = dirt {
+            // Component::addDirt invokes onDirty before notifying the artboard.
+            if has_dirt(
+                dirt,
+                ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
+            ) {
+                Self::send_shape_notification_occurrence(owner);
+            }
+            let deferred = owner
+                .with(|object| object.as_path().expect("Path").deferred_path_dirt)
+                .expect("live Path");
+            if deferred {
+                Self::add_path_dirt_occurrence(owner);
+            }
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .notify_artboard();
+        }
+    }
+
+    fn send_shape_notification_occurrence(owner: &CoreHandle) {
+        let shape = owner
+            .with_mut(|object| {
+                object
+                    .as_path_mut()
+                    .expect("Path")
+                    .take_shape_notification()
+            })
+            .flatten();
+        if let Some(shape) = shape {
+            shape.with_mut(|object| object.as_shape_mut().expect("Shape").path_changed());
+        }
+    }
     fn take_shape_notification(&mut self) -> Option<CoreHandle> {
         if self.shape_notified {
             return None;
@@ -629,6 +704,7 @@ impl Path {
             path.rewind();
             self.build_path(&mut path, closed);
             self.raw_path = path;
+            self.geometry_version = self.geometry_version.wrapping_add(1);
         }
     }
     pub fn is_hole_changed(&mut self) {

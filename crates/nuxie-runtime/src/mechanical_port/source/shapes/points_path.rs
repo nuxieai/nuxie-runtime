@@ -106,6 +106,12 @@ impl PointsPath {
         }
         self.base.base.base.mark_path_dirty(true);
     }
+    pub(crate) fn prepare_mark_path_dirty(
+        &mut self,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.winding_reference = 0;
+        self.skin()
+    }
     pub(crate) fn mark_skin_dirty_from_skin(&mut self, _skin: &mut Skin) {
         self.base.base.base.mark_path_dirty(true);
     }

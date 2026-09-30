@@ -1,4 +1,5 @@
 use crate::mechanical_port::source::{
+    core::CoreHandle,
     generated::shapes::parametric_path_base::ParametricPathBase,
     layout::{
         layout_enums::{LayoutDirection, LayoutScaleType},
@@ -65,20 +66,33 @@ impl ParametricPath {
     pub fn mark_path_dirty(&mut self, send_to_layout: bool) {
         self.base.base.mark_path_dirty(true);
         if send_to_layout {
-            let shape = self.base.shape_handle();
-            let mut parent = self.base.parent_handle();
-            while let Some(current) = parent {
-                if current.is_type_of(
+            Self::send_layout_dirty(self.base.shape_handle(), self.base.parent_handle());
+        }
+    }
+    pub(crate) fn send_layout_dirty_occurrence(owner: &CoreHandle) {
+        let (shape, parent) = owner
+            .with(|object| {
+                let path = object
+                    .as_parametric_path()
+                    .expect("ParametricPath occurrence");
+                (path.base.shape_handle(), path.base.parent_handle())
+            })
+            .expect("live ParametricPath");
+        Self::send_layout_dirty(shape, parent);
+    }
+    fn send_layout_dirty(shape: Option<CoreHandle>, mut parent: Option<CoreHandle>) {
+        while let Some(current) = parent {
+            if current.is_type_of(
                     crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
                 ) {
                     crate::mechanical_port::source::layout_component::LayoutComponent::mark_layout_node_dirty_occurrence(&current, false);
                     break;
                 }
-                let is_node = current.is_type_of(
-                    crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY,
-                );
-                if is_node {
-                    if current
+            let is_node = current.is_type_of(
+                crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY,
+            );
+            if is_node {
+                if current
                         .is_type_of(crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY)
                         && shape.as_ref() == Some(&current)
                     {
@@ -87,12 +101,11 @@ impl ParametricPath {
                             .flatten();
                         continue;
                     }
-                    break;
-                }
-                parent = current
-                    .with(|current| current.component_parent_handle())
-                    .flatten();
+                break;
             }
+            parent = current
+                .with(|current| current.component_parent_handle())
+                .flatten();
         }
     }
     pub fn try_property_bounds(&self, result: &mut Aabb) -> bool {

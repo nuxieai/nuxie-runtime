@@ -3591,6 +3591,8 @@ mod additive_packing_tests {
                 blend,
                 false,
                 additive,
+                false,
+                nuxie_render_api::LayerMaskMode::Alpha,
             );
             assert_eq!(
                 unsafe { paint.value.m_gradTextureRowAndAdditiveness },
@@ -3613,6 +3615,8 @@ impl PaintData {
         blendMode: BlendMode,
         solidUnmultiplied: bool,
         additiveness: f32,
+        isLayerMask: bool,
+        layerMaskMode: nuxie_render_api::LayerMaskMode,
     ) {
         let shiftedClipID = clipID << 16;
         let shiftedBlendMode = ConvertBlendModeToPLSBlendMode(blendMode) << 4;
@@ -3660,6 +3664,13 @@ impl PaintData {
         }
         if hasImage {
             localParams |= PAINT_FLAG_HAS_IMAGE;
+        }
+        if isLayerMask {
+            use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
+                PAINT_FLAG_LAYER_MASK, PAINT_LAYER_MASK_MODE_SHIFT,
+            };
+            localParams |= PAINT_FLAG_LAYER_MASK as u32;
+            localParams |= (layerMaskMode as u32) << PAINT_LAYER_MASK_MODE_SHIFT;
         }
         self.m_params = localParams;
     }

@@ -54,7 +54,10 @@ pub fn schedule_canvases(commands: &[u8], segments: &[DeferredSegment]) -> Canva
             let payload = payload_size_of(command) as u32;
             if matches!(
                 command,
-                RenderCmd::DrawImage | RenderCmd::DrawImageMesh | RenderCmd::DrawImageMeshInstanced
+                RenderCmd::DrawImage
+                    | RenderCmd::DrawImageMesh
+                    | RenderCmd::DrawImageMeshInstanced
+                    | RenderCmd::ApplyLayerMask
             ) {
                 let handle = drawn_image_handle(&commands[pos as usize + 1..]);
                 if handle != INVALID_RENDER_HANDLE && handle & CANVAS_HANDLE_FLAG != 0 {

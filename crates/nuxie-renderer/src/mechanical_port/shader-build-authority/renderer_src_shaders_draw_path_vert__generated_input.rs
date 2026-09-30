@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
-pub const PINNED_SOURCE_SHA256: &str = "c6acd8f1c6ec8216c8f03d966b50ed3b8884d849ddeeb53d3aa78ad2b6782f8b";
+pub const PINNED_SOURCE_SHA256: &str = "0975678982bb41fb41da031a50449e23e3ae5d58120b830e3a326f2f03121d96";
 pub const OWNERSHIP_UNIT: &str = "shader:source:draw_path";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 476;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 15921;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 519;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18185;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_draw_path_vert__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

@@ -103,6 +103,9 @@ impl NativeWebGpuFactory {
 }
 
 impl Factory for NativeWebGpuFactory {
+    fn supports_layer_mask(&self) -> bool {
+        self.core.supports_layer_mask()
+    }
     fn is_render_context(&self) -> bool {
         true
     }
@@ -238,6 +241,14 @@ impl NativeWebGpuFrame {
 }
 
 impl Renderer for NativeWebGpuFrame {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        self.core.apply_layer_mask(mask, sampler, mode);
+    }
     fn draw_image_mesh_instanced(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -250,7 +261,14 @@ impl Renderer for NativeWebGpuFrame {
         instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
     ) {
         self.core.draw_image_mesh_instanced(
-            image, sampler, vertices, uv_coords, indices, vertex_count, index_count, instances,
+            image,
+            sampler,
+            vertices,
+            uv_coords,
+            indices,
+            vertex_count,
+            index_count,
+            instances,
         );
     }
     fn save(&mut self) {

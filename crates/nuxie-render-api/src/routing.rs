@@ -48,6 +48,10 @@ pub fn canvas_texture_owner(
 /// The scripting owner invalidates its Lua renderer before ending the content
 /// bracket, exactly as it does for an immediate canvas frame.
 pub trait DeferredCanvasHost {
+    /// Capability of the canvas this host hands out, not merely its factory.
+    fn supports_layer_mask(&self) -> bool {
+        false
+    }
     /// Allocates the canvas whose content this host is about to take. A
     /// recording host can hand back an unbacked canvas and leave the pixels to
     /// whoever replays, while a host that draws immediately must return one

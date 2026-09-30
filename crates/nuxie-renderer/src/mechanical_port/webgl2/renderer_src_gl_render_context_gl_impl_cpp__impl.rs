@@ -86,7 +86,7 @@ const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
 const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "AE";
 const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "BF";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_CLEAR_COVERAGE: &str = "GE";
 const GLSL_CLOCKWISE_FILL: &str = "HE";
 const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "ED";
@@ -117,7 +117,7 @@ const GLSL_dstColorTexture: &str = "YD";
 const GLSL_featherAtlasTexture: &str = "GD";
 const GLSL_gaussianIntegralTexture: &str = "ZC";
 const GLSL_gradTexture: &str = "FD";
-const GLSL_imageTexture: &str = "IC";
+const GLSL_imageTexture: &str = "DC";
 const GLSL_paintAuxBuffer: &str = "JB";
 const GLSL_paintBuffer: &str = "XC";
 const GLSL_pathBuffer: &str = "LB";
@@ -1632,7 +1632,7 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
         gpu::ShaderFeatures::ENABLE_EVEN_ODD => "YC",
         gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "BD",
-        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "FC",
+        gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "GC",
         gpu::ShaderFeatures::ENABLE_DITHER => "OB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
         _ => panic!("combined or empty shader feature"),
@@ -4598,7 +4598,7 @@ mod tests {
             (
                 "ENABLE_HSL_BLEND_MODES",
                 gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES,
-                "FC",
+                "GC",
             ),
             ("ENABLE_DITHER", gpu::ShaderFeatures::ENABLE_DITHER, "OB"),
             (

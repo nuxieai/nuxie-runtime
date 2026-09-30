@@ -324,6 +324,9 @@ impl ProxyDrawing for LayoutProxy {
 }
 
 impl LayoutComponent {
+    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
+        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&self.local_bounds(),self.base.world_transform(),Some(&self.paints),out)
+    }
     pub(crate) fn has_layout_flag(&self, flag: LayoutComponentFlags) -> bool {
         self.layout_flags & flag as u16 != 0
     }

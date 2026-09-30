@@ -179,6 +179,7 @@ fn filter_allows(filter: ReplayFilter, command: RenderCmd) -> bool {
         | RenderCmd::DrawImage
         | RenderCmd::DrawImageMesh
         | RenderCmd::DrawImageMeshInstanced
+        | RenderCmd::ApplyLayerMask
         | RenderCmd::ModulateOpacity
         | RenderCmd::ModulateColor
         | RenderCmd::CanvasContentBegin
@@ -765,6 +766,30 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                 });
                 if present && image.is_none() {
                     dropped(hooks, kind, c.image, 0);
+                }
+            }
+            RenderCmd::ApplyLayerMask => {
+                let c: ApplyLayerMaskPod = reader.read();
+                let image = if c.mask & CANVAS_HANDLE_FLAG != 0 {
+                    hooks
+                        .canvas_image
+                        .as_mut()
+                        .and_then(|resolve| resolve(c.mask & CANVAS_HANDLE_MASK))
+                } else {
+                    table.images.get(c.mask)
+                };
+                let present = with_renderer(&mut renderer, &current_canvas, in_canvas, |r| {
+                    if let Some(image) = &image {
+                        r.apply_layer_mask(
+                            Some(image.as_ref()),
+                            sampler(c.wrap_x, c.wrap_y, c.filter),
+                            LayerMaskMode::from_value(c.mode as u32)
+                                .expect("invalid recorded layer mask mode"),
+                        );
+                    }
+                });
+                if present && image.is_none() {
+                    dropped(hooks, kind, c.mask, 0);
                 }
             }
             RenderCmd::DrawImageMesh => {

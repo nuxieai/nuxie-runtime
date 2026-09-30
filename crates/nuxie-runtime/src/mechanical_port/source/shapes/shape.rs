@@ -45,6 +45,14 @@ pub struct Shape {
 }
 
 impl Shape {
+    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
+        let mut bounds=self.world_bounds();
+        if bounds.is_empty_or_nan() { *out=Default::default(); return crate::mechanical_port::source::drawable::BoundsFidelity::Exact; }
+        let reach=crate::mechanical_port::source::shapes::paint::paint_outset::shape_paints_world_reach(Some(&self.paint_container),self.base.world_transform());
+        if reach.world_outset>0.0 {bounds=bounds.outset(reach.world_outset,reach.world_outset);}
+        *out=bounds;
+        if reach.trustworthy {crate::mechanical_port::source::drawable::BoundsFidelity::Exact}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+    }
     pub fn shape_world_transform(&self) -> &Mat2D {
         self.base.world_transform()
     }

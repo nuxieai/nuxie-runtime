@@ -210,6 +210,8 @@ void rive_ffi_renderer_draw_image(rive_ffi_renderer*,
                                   uint8_t sampler,
                                   uint8_t blend_mode,
                                   float opacity);
+void rive_ffi_renderer_apply_layer_mask(rive_ffi_renderer*, const rive_ffi_render_image*, uint8_t sampler, uint8_t mode);
+bool rive_ffi_context_supports_layer_mask(const rive_ffi_context*);
 
 void rive_ffi_renderer_draw_image_with_additiveness(rive_ffi_renderer*,
                                   const rive_ffi_render_image*,

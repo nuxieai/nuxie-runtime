@@ -174,14 +174,35 @@ impl DeferredCanvasFrame {
 }
 
 impl Renderer for DeferredCanvasFrame {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        self.target().apply_layer_mask(mask, sampler, mode);
+    }
     fn draw_image_mesh_instanced(
-        &mut self, image: Option<&dyn RenderImage>, sampler: ImageSampler,
-        vertices: Option<&dyn RenderBuffer>, uv: Option<&dyn RenderBuffer>,
-        indices: Option<&dyn RenderBuffer>, vertex_count: u32, index_count: u32,
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        vertices: Option<&dyn RenderBuffer>,
+        uv: Option<&dyn RenderBuffer>,
+        indices: Option<&dyn RenderBuffer>,
+        vertex_count: u32,
+        index_count: u32,
         instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
     ) {
-        self.target().draw_image_mesh_instanced(image, sampler, vertices, uv, indices,
-            vertex_count, index_count, instances);
+        self.target().draw_image_mesh_instanced(
+            image,
+            sampler,
+            vertices,
+            uv,
+            indices,
+            vertex_count,
+            index_count,
+            instances,
+        );
     }
     fn save(&mut self) {
         self.target().save();
@@ -764,12 +785,10 @@ mod tests {
                 None,
             );
             if fail {
-                assert!(
-                    result
-                        .unwrap_err()
-                        .to_string()
-                        .contains("injected update failure")
-                );
+                assert!(result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("injected update failure"));
             } else {
                 assert!(result.is_ok());
             }
@@ -814,11 +833,9 @@ mod tests {
             .load("canvas:beginFrame()")
             .exec()
             .expect_err("recorder gate");
-        assert!(
-            outside
-                .to_string()
-                .contains("requires the deferred recorder")
-        );
+        assert!(outside
+            .to_string()
+            .contains("requires the deferred recorder"));
 
         factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
             nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
@@ -891,10 +908,8 @@ mod tests {
 
         let creation = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 99, 7)
             .expect_err("injected initial allocation failure");
-        assert!(
-            creation
-                .to_string()
-                .contains("context:canvas() failed to create RenderCanvas")
-        );
+        assert!(creation
+            .to_string()
+            .contains("context:canvas() failed to create RenderCanvas"));
     }
 }

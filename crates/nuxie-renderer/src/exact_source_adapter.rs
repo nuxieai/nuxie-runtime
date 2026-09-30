@@ -75,6 +75,29 @@ impl ExactSourceRendererAdapter {
 }
 
 impl Renderer for ExactSourceRendererAdapter {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        let Some(image) =
+            mask.and_then(|image| image.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::applyLayerMask(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                mode,
+            );
+        }
+    }
     fn save(&mut self) {
         <RiveRenderer as RendererContract>::save(&mut self.renderer);
     }
@@ -709,6 +732,9 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 }
 
 impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
+    fn supports_layer_mask(&self) -> bool {
+        self.with_context(|context| context.supportsLayerMask())
+    }
     fn is_render_context(&self) -> bool {
         true
     }
@@ -1123,6 +1149,29 @@ impl<B: ExactSourceBackend> RenderCanvasFrame for ExactSourceRenderCanvasFrame<B
 }
 
 impl<B: ExactSourceBackend> Renderer for ExactSourceRenderCanvasFrame<B> {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        let Some(image) =
+            mask.and_then(|image| image.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::applyLayerMask(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                mode,
+            );
+        }
+    }
     fn save(&mut self) {
         <RiveRenderer as RendererContract>::save(&mut self.renderer);
     }
@@ -1468,6 +1517,29 @@ impl<B: ExactSourceBackend> Drop for ExactSourceFrameCore<B> {
 }
 
 impl<B: ExactSourceBackend> Renderer for ExactSourceFrameCore<B> {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        let Some(image) =
+            mask.and_then(|image| image.as_any().downcast_ref::<RiveRenderImageHandle>())
+        else {
+            return;
+        };
+        let Some(image) = image.source_base_for(&self.resource_domain) else {
+            return;
+        };
+        unsafe {
+            <RiveRenderer as RendererContract>::applyLayerMask(
+                &mut self.renderer,
+                image as *const _,
+                source_image_sampler(sampler),
+                mode,
+            );
+        }
+    }
     fn save(&mut self) {
         <RiveRenderer as RendererContract>::save(&mut self.renderer);
     }

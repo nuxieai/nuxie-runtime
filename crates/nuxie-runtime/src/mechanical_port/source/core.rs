@@ -38,6 +38,17 @@ pub trait CoreType {
 /// arena is the owner; cross-object references retain only `CoreHandle`, so a
 /// graph cycle cannot keep an artboard occurrence alive.
 pub trait CoreObject: CoreRegistryObject + Any {
+    fn painted_world_bounds(&mut self, out: &mut crate::mechanical_port::source::math::aabb::Aabb) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::shape::Shape>() { return owner.painted_world_bounds(out); }
+        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::image::Image>() { return owner.painted_world_bounds(out); }
+        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::text::text::Text>() { return owner.painted_world_bounds(out); }
+        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::text::text_input::TextInput>() { return owner.painted_world_bounds(out); }
+        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable>() { return owner.painted_world_bounds(out); }
+        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::nested_artboard::NestedArtboard>() { return owner.painted_world_bounds(out); }
+        // Artboard inherits LayoutComponent's virtual bounds implementation.
+        if let Some(owner)=self.as_layout_component_mut() { return owner.painted_world_bounds(out); }
+        crate::mechanical_port::source::drawable::BoundsFidelity::None
+    }
     fn core(&self) -> &Core;
     fn core_mut(&mut self) -> &mut Core;
     fn core_type(&self) -> CoreTypeKey;

@@ -92,6 +92,19 @@ impl Frame {
 }
 struct FrameRenderer(Rc<RefCell<Option<Frame>>>);
 impl Renderer for FrameRenderer {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        self.0
+            .borrow_mut()
+            .as_mut()
+            .unwrap()
+            .renderer()
+            .apply_layer_mask(mask, sampler, mode);
+    }
     fn draw_image_mesh_instanced(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -266,6 +279,7 @@ pub(super) struct GmHost {
     // Offscreen frames opened while replaying, i.e. how many times content
     // was actually rasterized into a canvas (a4dbc3ff TestingWindowFrameSink).
     canvas_frames: usize,
+    frame_mode_override: Option<RenderCanvasFrameMode>,
 }
 impl GmHost {
     pub fn new(clear: u32) -> Self {
@@ -311,7 +325,13 @@ impl GmHost {
             clear,
             screen_initialized: open,
             canvas_frames: 0,
+            frame_mode_override: None,
         }
+    }
+    pub fn set_frame_mode(&mut self, mode: RenderCanvasFrameMode) {
+        assert!(!self.screen_initialized);
+        self.factory.borrow().testing_set_frame_mode(mode);
+        self.frame_mode_override = Some(mode);
     }
     pub fn canvas_frames(&self) -> usize {
         self.canvas_frames
@@ -370,7 +390,8 @@ impl GmHost {
 }
 impl DeferredFrameSink for GmHost {
     fn frame_mode(&self) -> nuxie_render_api::RenderCanvasFrameMode {
-        self.factory.borrow().render_mode().canvas_frame_mode()
+        self.frame_mode_override
+            .unwrap_or_else(|| self.factory.borrow().render_mode().canvas_frame_mode())
     }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()

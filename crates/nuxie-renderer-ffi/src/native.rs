@@ -314,6 +314,9 @@ impl Drop for ContextHandle {
 }
 
 impl Factory for FfiFactory {
+    fn supports_layer_mask(&self) -> bool {
+        unsafe { ffi::rive_ffi_context_supports_layer_mask(self.context.as_ptr()) }
+    }
     fn make_image_mesh_instances(
         &mut self,
         count: usize,
@@ -509,6 +512,23 @@ impl Drop for FfiFrame {
 }
 
 impl Renderer for FfiFrame {
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: nuxie_render_api::LayerMaskMode,
+    ) {
+        unsafe {
+            ffi::rive_ffi_renderer_apply_layer_mask(
+                self.renderer.as_ptr(),
+                mask.map(ffi_image)
+                    .map(|image| image.handle.as_ptr())
+                    .unwrap_or(std::ptr::null_mut()),
+                sampler.as_key(),
+                mode as u8,
+            );
+        }
+    }
     fn save(&mut self) {
         unsafe { ffi::rive_ffi_renderer_save(self.renderer.as_ptr()) };
     }
@@ -1355,6 +1375,13 @@ mod ffi {
             blend_mode: u8,
             opacity: f32,
         );
+        pub fn rive_ffi_renderer_apply_layer_mask(
+            renderer: *mut Renderer,
+            mask: *mut RenderImage,
+            sampler: u8,
+            mode: u8,
+        );
+        pub fn rive_ffi_context_supports_layer_mask(context: *const Context) -> bool;
 
         pub fn rive_ffi_renderer_draw_image_with_additiveness(
             renderer: *mut Renderer,

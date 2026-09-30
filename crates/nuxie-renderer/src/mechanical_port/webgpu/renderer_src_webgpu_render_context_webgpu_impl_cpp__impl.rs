@@ -168,10 +168,10 @@ const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "O";
 const GLSL_ENABLE_EVEN_ODD: &str = "YC";
 const GLSL_ENABLE_NESTED_CLIPPING: &str = "BD";
-const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
+const GLSL_ENABLE_HSL_BLEND_MODES: &str = "GC";
 const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
-const GLSL_TARGET_SPIRV: &str = "DC";
+const GLSL_TARGET_SPIRV: &str = "EC";
 const GLSL_PLS_IMPL_EXT_NATIVE: &str = "TF";
 const GLSL_PLS_IMPL_NONE: &str = "VF";
 const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "UF";
@@ -182,7 +182,7 @@ const GLSL_DRAW_IMAGE_RECT: &str = "CD";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "V";
 const GLSL_CLOCKWISE_FILL: &str = "HE";
-const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
+const GLSL_BORROWED_COVERAGE_PASS: &str = "FC";
 const GLSL_OPTIONALLY_FLAT: &str = "KB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
 
@@ -4859,7 +4859,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            52_757
+            53_346
         );
     }
 

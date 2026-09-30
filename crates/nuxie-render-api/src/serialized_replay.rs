@@ -354,10 +354,14 @@ pub fn replay_serialized_commands(
                         *slot = instance;
                     }
                 }
-                if let Some(instances) = instances.as_mut() { instances.end_edit(); }
+                if let Some(instances) = instances.as_mut() {
+                    instances.end_edit();
+                }
             }
             DRAW_IMAGE_MESH_INSTANCED => {
-                let image = images.get(&reader.read_var_uint()).and_then(|value| value.as_deref());
+                let image = images
+                    .get(&reader.read_var_uint())
+                    .and_then(|value| value.as_deref());
                 let pos = buffers.get(&reader.read_var_uint());
                 let uv = buffers.get(&reader.read_var_uint());
                 let idx = buffers.get(&reader.read_var_uint());
@@ -365,12 +369,32 @@ pub fn replay_serialized_commands(
                 if let (Some(image), Some(pos), Some(uv), Some(idx), Some(instances)) =
                     (image, pos, uv, idx, instances)
                 {
-                    active.renderer(renderer, &mut dropped_content).draw_image_mesh_instanced(
-                        Some(image), ImageSampler::LINEAR_CLAMP,
-                        Some(pos.as_ref()), Some(uv.as_ref()), Some(idx.as_ref()),
-                        (pos.size_in_bytes() / 8) as u32,
-                        (idx.size_in_bytes() / 2) as u32, Some(instances),
-                    );
+                    active
+                        .renderer(renderer, &mut dropped_content)
+                        .draw_image_mesh_instanced(
+                            Some(image),
+                            ImageSampler::LINEAR_CLAMP,
+                            Some(pos.as_ref()),
+                            Some(uv.as_ref()),
+                            Some(idx.as_ref()),
+                            (pos.size_in_bytes() / 8) as u32,
+                            (idx.size_in_bytes() / 2) as u32,
+                            Some(instances),
+                        );
+                }
+            }
+            APPLY_LAYER_MASK => {
+                let mask_id = reader.read_var_uint();
+                let mode = reader.read_var_uint() as u8;
+                if let Some(mask) = images.get(&mask_id).and_then(|image| image.as_deref()) {
+                    active
+                        .renderer(renderer, &mut dropped_content)
+                        .apply_layer_mask(
+                            Some(mask),
+                            ImageSampler::LINEAR_CLAMP,
+                            LayerMaskMode::from_value(mode as u32)
+                                .expect("invalid serialized layer mask mode"),
+                        );
                 }
             }
             MAKE_RENDER_CANVAS => {

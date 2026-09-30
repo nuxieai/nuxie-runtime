@@ -15,8 +15,7 @@ pub(crate) const FEATHER_JOIN_CONTOUR_FLAG: u32 = 1 << 26;
 pub(crate) const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 3.0;
 
 pub(crate) fn feather_radius_from_feather(feather: f32) -> f32 {
-    // Blur magnitudes customarily span -1 standard deviation to +1.
-    feather * (GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS / 2.0)
+    nuxie_render_api::paint_outset::feather_radius_from_feather(feather)
 }
 
 #[repr(C)]

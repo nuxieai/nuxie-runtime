@@ -1,36 +1,36 @@
-struct eh {
-    j2_: array<vec4<u32>>,
+struct oh {
+    k2_: array<vec4<u32>>,
 }
 
-struct dh {
-    j2_: array<vec4<u32>>,
+struct nh {
+    k2_: array<vec4<u32>>,
 }
 
 struct UB {
-    Qc: f32,
-    Td: f32,
-    Yf: f32,
-    Zf: f32,
-    z6_: u32,
-    X9_: u32,
-    Kf: u32,
-    Lf: u32,
-    i8_: vec4<i32>,
-    Ch: vec2<f32>,
-    Ud: vec2<f32>,
-    i2_: u32,
-    Gh: f32,
-    T4_: u32,
+    Rc: f32,
+    Ud: f32,
+    cg: f32,
+    dg: f32,
+    B6_: u32,
+    Y9_: u32,
+    Of: u32,
+    Pf: u32,
+    k8_: vec4<i32>,
+    Mh: vec2<f32>,
+    Vd: vec2<f32>,
+    j2_: u32,
+    Qh: f32,
+    U4_: u32,
     c3_: f32,
-    Vd: f32,
-    Ef: u32,
+    Wd: f32,
+    If: u32,
     M3_: f32,
     N3_: f32,
-    Wd: f32,
-    zh: u32,
-    W9_: u32,
-    wc: f32,
+    Xd: f32,
+    Jh: u32,
+    X9_: u32,
     xc: f32,
+    yc: f32,
 }
 
 struct gl_PerVertex {
@@ -40,12 +40,12 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct Bf {
-    j2_: array<vec2<u32>>,
+struct Ff {
+    k2_: array<vec2<u32>>,
 }
 
-struct Cf {
-    j2_: array<vec4<f32>>,
+struct Gf {
+    k2_: array<vec4<f32>>,
 }
 
 struct VertexOutput {
@@ -57,9 +57,9 @@ struct VertexOutput {
 @group(0) @binding(7)
 var TB: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> AD: eh;
+var<storage> AD: oh;
 @group(0) @binding(2)
-var<storage> LB: dh;
+var<storage> LB: nh;
 @group(0) @binding(0)
 var<uniform> j: UB;
 var<private> gl_VertexIndex_1: i32;
@@ -72,11 +72,11 @@ var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f,
 @group(0) @binding(9)
 var ZC: texture_2d<f32>;
 @group(0) @binding(3)
-var<storage> XC: Bf;
+var<storage> XC: Ff;
 @group(0) @binding(4)
-var<storage> JB: Cf;
+var<storage> JB: Gf;
 @group(3) @binding(9)
-var wa: sampler;
+var xa: sampler;
 
 fn main_1() {
     var phi_2281_: f32;
@@ -144,14 +144,14 @@ fn main_1() {
     let _e83 = min(_e74, (_e80 - 1i));
     let _e85 = ((_e70 * _e80) + _e83);
     let _e90 = textureLoad(TB, vec2<i32>((_e85 & 2047i), (_e85 >> bitcast<u32>(11i))), 0i);
-    let _e97 = AD.j2_[(max((_e90.w & 65535u), 1u) - 1u)];
+    let _e97 = AD.k2_[(max((_e90.w & 65535u), 1u) - 1u)];
     let _e99 = bitcast<vec2<f32>>(_e97.xy);
     let _e101 = (_e97.z & 65535u);
     let _e103 = (_e101 * 4u);
-    let _e106 = LB.j2_[_e103];
+    let _e106 = LB.k2_[_e103];
     let _e107 = bitcast<vec4<f32>>(_e106);
     let _e114 = mat2x2<f32>(vec2<f32>(_e107.x, _e107.y), vec2<f32>(_e107.z, _e107.w));
-    let _e118 = LB.j2_[(_e103 + 1u)];
+    let _e118 = LB.k2_[(_e103 + 1u)];
     let _e122 = bitcast<f32>(_e118.z);
     let _e124 = bitcast<f32>(_e118.w);
     let _e125 = (_e90.w & 8388608u);
@@ -453,14 +453,14 @@ fn main_1() {
     let _e575 = phi_2480_;
     let _e577 = phi_2456_;
     let _e580 = (((_e114 * _e577) + _e575) + bitcast<vec2<f32>>(_e118.xy));
-    let _e583 = j.zh;
+    let _e583 = j.Jh;
     let _e586 = select(_e573.xy, vec2<f32>(1f, -1f), vec2((_e583 != 0u)));
     let _e592 = vec4<f32>(_e586.x, _e573.y, _e573.z, _e573.w);
     if !(_e571) {
         S = vec4<f32>(_e592.x, _e586.y, _e592.z, _e592.w);
         F0_ = _e101;
-        let _e601 = j.Yf;
-        let _e603 = j.Zf;
+        let _e601 = j.cg;
+        let _e603 = j.dg;
         phi_2524_ = vec4<f32>(((_e580.x * _e601) - 1f), ((_e580.y * _e603) - sign(_e603)), 0f, 1f);
     } else {
         let _e613 = j.c3_;

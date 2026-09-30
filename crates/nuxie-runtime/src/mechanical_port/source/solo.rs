@@ -19,6 +19,9 @@ pub struct Solo {
 fn is_solo_set_member(child: &CoreHandle) -> bool {
     !(child.is_type_of(ConstraintBase::TYPE_KEY)
         || child.is_type_of(ClippingShapeBase::TYPE_KEY)
+        || child.is_type_of(
+            crate::mechanical_port::source::generated::layer_mask_base::LayerMaskBase::TYPE_KEY,
+        )
         || child.is_type_of(FocusDataBase::TYPE_KEY)
         || child.is_type_of(SemanticDataBase::TYPE_KEY))
 }

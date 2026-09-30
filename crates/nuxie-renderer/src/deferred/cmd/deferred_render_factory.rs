@@ -576,6 +576,29 @@ impl Renderer for DeferredRenderer {
             },
         );
     }
+    fn apply_layer_mask(
+        &mut self,
+        mask: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        mode: LayerMaskMode,
+    ) {
+        let mask = self.image_id(mask);
+        if mask == INVALID_RENDER_HANDLE {
+            Self::warn_foreign("applyLayerMask");
+            return;
+        }
+        self.route();
+        self.buffer.lock().unwrap().append(
+            RenderCmd::ApplyLayerMask,
+            &ApplyLayerMaskPod {
+                mask,
+                wrap_x: sampler.wrap_x as u8,
+                wrap_y: sampler.wrap_y as u8,
+                filter: sampler.filter as u8,
+                mode: mode as u8,
+            },
+        );
+    }
     fn draw_image_mesh(
         &mut self,
         image: Option<&dyn RenderImage>,

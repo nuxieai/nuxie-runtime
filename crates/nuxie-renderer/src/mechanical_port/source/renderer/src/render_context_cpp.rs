@@ -5311,6 +5311,10 @@ impl RenderContext {
             });
             self.m_frame_descriptor.msaaSampleCount = 4;
         }
+        self.m_frame_can_apply_layer_mask.store(
+            self.m_frame_interlock_mode == gpu::InterlockMode::rasterOrdering,
+            std::sync::atomic::Ordering::Relaxed,
+        );
         self.m_frame_shader_features_mask = gpu::ShaderFeaturesMaskFor(self.m_frame_interlock_mode);
         let triangulation_thresholds = self.m_frame_descriptor.triangulationThresholds;
         self.m_triangulation_controller
@@ -5374,6 +5378,17 @@ impl RenderContext {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_did_begin_frame);
         self.m_frame_interlock_mode != gpu::InterlockMode::atomics
+    }
+    pub fn frameSupportsLayerMask(&self) -> bool {
+        #[cfg(debug_assertions)]
+        debug_assert!(self.m_did_begin_frame);
+        self.m_frame_interlock_mode == gpu::InterlockMode::rasterOrdering
+    }
+    pub fn supportsLayerMask(&self) -> bool {
+        self.platformFeatures().supportsRasterOrderingMode
+            && self
+                .m_frame_can_apply_layer_mask
+                .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn generateClipIDExecutable(
@@ -6328,11 +6343,7 @@ impl LogicalFlush {
         location
     }
 
-    pub unsafe fn pushPathExecutable(
-        &mut self,
-        draw: *const PathDraw,
-        z_index: u32,
-    ) -> u32 {
+    pub unsafe fn pushPathExecutable(&mut self, draw: *const PathDraw, z_index: u32) -> u32 {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_has_done_layout);
         self.m_current_path_id += 1;
@@ -6369,6 +6380,8 @@ impl LogicalFlush {
                 && !(context.frameInterlockMode() == gpu::InterlockMode::depthStencil
                     && context.platformFeatures().supportsBlendAdvancedKHR),
             draw.additiveness(),
+            draw.isLayerMask(),
+            draw.layerMaskMode(),
         );
         unsafe { context.m_paint_data.emplace_back(paint) };
         let gradient_coeffs = if draw.gradient().is_null() {
@@ -6639,18 +6652,33 @@ impl LogicalFlush {
             for instance in instances.instance_data() {
                 let packed = gpu::ImageMeshInstance::new(
                     super::rive_renderer_cpp::mul(*owner.imageMatrix(), instance.transform),
-                    super::draw_cpp::color_modulate(0xffffffff, owner.modulated_color, instance.opacity * owner.modulated_opacity),
-                    clip, owner.clipID(), nuxie_render_api::BlendMode::SrcOver, z_index,
-                    instance.additiveness.max(0.0).min(1.0), instance.uv_translate, instance.uv_scale,
+                    super::draw_cpp::color_modulate(
+                        0xffffffff,
+                        owner.modulated_color,
+                        instance.opacity * owner.modulated_opacity,
+                    ),
+                    clip,
+                    owner.clipID(),
+                    nuxie_render_api::BlendMode::SrcOver,
+                    z_index,
+                    instance.additiveness.max(0.0).min(1.0),
+                    instance.uv_translate,
+                    instance.uv_scale,
                 );
                 unsafe { context.m_image_mesh_instance_data.emplace_back(packed) };
             }
             u32::try_from(instances.count()).expect("source lossless instance count")
         } else {
             let instance = gpu::ImageMeshInstance::new(
-                *owner.imageMatrix(), owner.modulatedColor(), clip,
-                owner.clipID(), owner.blendMode(), z_index, owner.additiveness(),
-                owner.uv_translate, owner.uv_scale,
+                *owner.imageMatrix(),
+                owner.modulatedColor(),
+                clip,
+                owner.clipID(),
+                owner.blendMode(),
+                z_index,
+                owner.additiveness(),
+                owner.uv_translate,
+                owner.uv_scale,
             );
             unsafe { context.m_image_mesh_instance_data.emplace_back(instance) };
             1
@@ -7085,6 +7113,8 @@ impl LogicalFlush {
             nuxie_render_api::BlendMode::SrcOver,
             false, // solidUnmultiplied
             0.0,   // additiveness
+            false,
+            nuxie_render_api::LayerMaskMode::Alpha,
         );
         unsafe {
             context.m_paint_data.emplace_back(clear_paint);
@@ -7431,14 +7461,14 @@ impl LogicalFlush {
         debug_assert!(z_index_msb <= DEPTH_Z_INDEX_BIT_COUNT);
         let z_index_shift = DEPTH_Z_INDEX_BIT_COUNT - z_index_msb;
         debug_assert_eq!(
-            ((max_z_index as u32) << z_index_shift)
-                & !((1u32 << DEPTH_Z_INDEX_BIT_COUNT) - 1),
+            ((max_z_index as u32) << z_index_shift) & !((1u32 << DEPTH_Z_INDEX_BIT_COUNT) - 1),
             0
         );
         debug_assert!(
             max_z_index == 0
                 || (((max_z_index as u32) << z_index_shift)
-                    & (1u32 << (DEPTH_Z_INDEX_BIT_COUNT - 1))) != 0
+                    & (1u32 << (DEPTH_Z_INDEX_BIT_COUNT - 1)))
+                    != 0
         );
         let entries = context.m_indirect_draw_list.clone();
         let mut prior: Option<i64> = None;
@@ -8254,6 +8284,9 @@ impl RiveRenderFactoryAccess for RenderContext {
 }
 
 impl FactoryContract for RenderContext {
+    fn supportsLayerMask(&self) -> bool {
+        RenderContext::supportsLayerMask(self)
+    }
     fn makeRenderBuffer(
         &mut self,
         buffer_type: crate::mechanical_port::source::include::rive::renderer_hpp::RenderBufferType,
@@ -8571,10 +8604,18 @@ impl LogicalFlushContract for LogicalFlush {
     unsafe fn pushFeatherAtlasBlit(&mut self, d: *mut PathDraw, p: u32) -> *mut gpu::DrawBatch {
         unsafe { self.pushFeatherAtlasBlitExecutable(d, p) }
     }
-    unsafe fn pushImageRectDraw(&mut self, d: *mut ImageRectDraw, z_index: u32) -> *mut gpu::DrawBatch {
+    unsafe fn pushImageRectDraw(
+        &mut self,
+        d: *mut ImageRectDraw,
+        z_index: u32,
+    ) -> *mut gpu::DrawBatch {
         unsafe { self.pushImageRectDrawExecutable(d, z_index) }
     }
-    unsafe fn pushImageMeshDraw(&mut self, d: *mut ImageMeshDraw, z_index: u32) -> *mut gpu::DrawBatch {
+    unsafe fn pushImageMeshDraw(
+        &mut self,
+        d: *mut ImageMeshDraw,
+        z_index: u32,
+    ) -> *mut gpu::DrawBatch {
         unsafe { self.pushImageMeshDrawExecutable(d, z_index) }
     }
     unsafe fn pushClipResetDraw(&mut self, d: *mut ClipReset, z_index: u32) -> *mut gpu::DrawBatch {

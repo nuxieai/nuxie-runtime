@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
+ * Upstream source revision: 8398db3199cea4cd3eba53747aac562b5c0df3da
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c6acd8f1c6ec8216c8f03d966b50ed3b8884d849ddeeb53d3aa78ad2b6782f8b";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 476;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 15921;
+    "0975678982bb41fb41da031a50449e23e3ae5d58120b830e3a326f2f03121d96";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 519;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18185;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -302,8 +302,22 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
         // Add 1 to the LOD because a z value of 0 means "we don't have an
         // image"
-        v_image =
-            float3(imageCoord.x, imageCoord.y, 1. + paintTranslateAndLOD.z);
+        float imageZ = 1. + paintTranslateAndLOD.z;
+        if ((paintData.x & PAINT_FLAG_LAYER_MASK) != 0u)
+        {
+            // A layer-mask apply. The sampled texel is coverage, not color, so
+            // the fragment shader has to treat it differently -- and there is
+            // no varying to spare for a per-draw flag. Signal it by making z
+            // negative and packing the mode into it, the same sentinel idiom
+            // this shader already uses twice (a negative paint.a means
+            // "gradient", a zero image.z means "no image"). The mask is always
+            // sampled 1:1 with the target, so LOD 0 is exact and there is
+            // nothing lost by giving up the LOD field here.
+            uint mode = (paintData.x & PAINT_LAYER_MASK_MODE_MASK) >>
+                        PAINT_LAYER_MASK_MODE_SHIFT;
+            imageZ = -(1. + float(mode));
+        }
+        v_image = float3(imageCoord.x, imageCoord.y, imageZ);
     }
     else
     {
@@ -378,6 +392,23 @@ FRAG_STORAGE_BUFFER_BLOCK_END
 
 // Add a function here for fragments to unpack the paint since we're the ones
 // who packed it in the vertex shader.
+// The multiplier a layer mask applies to whatever is already in the target.
+// `maskPremul` is the mask's premultiplied texel.
+INLINE half layer_mask_factor(half4 maskPremul, uint mode)
+{
+    // Rec.601, matching lum_from_rgb in advanced_blend.glsl, so a luminance
+    // mask agrees with Rive's own luminosity blending (and with the editor,
+    // which must use the same constant or preview drifts from playback).
+    half luma = dot(maskPremul.rgb, make_half3(.30, .59, .11));
+    if (mode == LAYER_MASK_MODE_ALPHA)
+        return maskPremul.a;
+    if (mode == LAYER_MASK_MODE_INVERTED_ALPHA)
+        return 1. - maskPremul.a;
+    if (mode == LAYER_MASK_MODE_LUMINANCE)
+        return luma;
+    return 1. - luma; // LAYER_MASK_MODE_INVERTED_LUMINANCE
+}
+
 INLINE half4 find_paint_color(
 #ifdef @ENABLE_MODULATED_IMAGE
     float3 image,
@@ -424,6 +455,18 @@ INLINE half4 find_paint_color(
     }
 
 #if defined(@ENABLE_MODULATED_IMAGE)
+    if (@ENABLE_MODULATED_IMAGE && image.z < 0.0)
+    {
+        // Layer mask: the texel *is* the coverage. Return it premultiplied and
+        // unmodulated -- the blend step derives the factor from it and never
+        // composites it as color. Luminance is taken on the premultiplied value
+        // on purpose: luma(rgb/a)*a == dot(rgb, coeffs) identically, with no
+        // divide and no 0/0 at a == 0.
+        return TEXTURE_SAMPLE_DYNAMIC_LOD(@imageTexture,
+                                          imageSampler,
+                                          image.rg,
+                                          make_half(.0));
+    }
     if (@ENABLE_MODULATED_IMAGE && image.z > 0.0)
     {
         half lod = image.z - 1.;

@@ -267,7 +267,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, IAABB, InterlockMode, PlatformFeatures, StorageBufferStructure,
+    DrawContents, FlushDescriptor, InterlockMode, PlatformFeatures, StorageBufferStructure, IAABB,
 };
 #[cfg(any(
     feature = "native-ore-metal-experimental",
@@ -509,6 +509,7 @@ pub trait RenderContextImplContract {
         virtualTileWidth: u32,
         virtualTileHeight: u32,
         combinedDrawContents: DrawContents,
+        msaaSampleCount: u32,
     ) -> bool {
         let _ = (
             interlockMode,
@@ -517,6 +518,7 @@ pub trait RenderContextImplContract {
             virtualTileWidth,
             virtualTileHeight,
             combinedDrawContents,
+            msaaSampleCount,
         );
         false
     }

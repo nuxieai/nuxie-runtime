@@ -33,9 +33,6 @@ mod draw_pipeline;
 #[allow(dead_code)]
 mod draw_shader;
 mod drawable;
-mod readback;
-#[cfg(test)]
-mod pixel_stability_tests;
 #[cfg(test)]
 #[allow(dead_code)]
 mod feather_atlas_pipeline;
@@ -57,6 +54,9 @@ pub(crate) mod pipeline_cache;
 #[cfg(test)]
 #[allow(dead_code)]
 mod pipeline_names;
+#[cfg(test)]
+mod pixel_stability_tests;
+mod readback;
 #[allow(dead_code)]
 mod render_canvas;
 #[cfg(test)]
@@ -88,7 +88,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::rive_rend
 use crate::mechanical_port::source::renderer::src::rive_render_paint_hpp::RiveRenderPaintHandle;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPathHandle;
 #[cfg(test)]
-use capabilities::{ApplePlatform, MetalDeviceCapabilities, select_capabilities};
+use capabilities::{select_capabilities, ApplePlatform, MetalDeviceCapabilities};
 #[cfg(any())]
 use context::NativeMetalContext;
 use nuxie_render_api::{
@@ -484,8 +484,10 @@ impl NativeMetalFactory {
     pub(crate) fn testing_only_set_shader_compilation_mode(
         &self,
         mode: crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode,
-    ) -> crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode {
-        self.mechanical.borrow_mut().testing_only_set_shader_compilation_mode(mode)
+    ) -> crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::ShaderCompilationMode{
+        self.mechanical
+            .borrow_mut()
+            .testing_only_set_shader_compilation_mode(mode)
     }
 
     fn begin_frame_with_dither(
@@ -928,23 +930,41 @@ impl Factory for NativeMetalFactory {
         height: u32,
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         // Recording never consults this factory's device or execution owner.
-        Ok(Box::new(crate::exact_source_adapter::ExactSourceRenderCanvas::new(width, height)))
+        Ok(Box::new(
+            crate::exact_source_adapter::ExactSourceRenderCanvas::new(width, height),
+        ))
     }
 
     fn ensure_canvas_backing(&mut self, canvas: &nuxie_render_api::RenderCanvasHandle) {
         let mut canvas = canvas.borrow_mut();
-        if canvas.is_backed() { return; }
+        if canvas.is_backed() {
+            return;
+        }
         let any: &mut dyn Any = canvas.as_mut();
-        let Some(shell) = any.downcast_mut::<crate::exact_source_adapter::ExactSourceRenderCanvas>() else { return; };
-        let Ok(mechanical) = self.mechanical_context() else { return; };
+        let Some(shell) =
+            any.downcast_mut::<crate::exact_source_adapter::ExactSourceRenderCanvas>()
+        else {
+            return;
+        };
+        let Ok(mechanical) = self.mechanical_context() else {
+            return;
+        };
         let domain = {
             let mut execution = mechanical.borrow_mut();
             let context = unsafe { Pin::get_unchecked_mut(execution.render_context_mut()) };
             context.ensureCanvasBackingExecutable(unsafe { &mut *shell.source_ptr() });
             execution.resource_domain()
         };
-        if !shell.is_backed() { return; }
-        let Some(backing) = NativeMetalRenderCanvas::from_source(shell.ref_source(), Rc::clone(&mechanical), domain.clone()) else { return; };
+        if !shell.is_backed() {
+            return;
+        }
+        let Some(backing) = NativeMetalRenderCanvas::from_source(
+            shell.ref_source(),
+            Rc::clone(&mechanical),
+            domain.clone(),
+        ) else {
+            return;
+        };
         shell.install_backing(Box::new(backing), domain, mechanical as Rc<dyn Any>);
     }
 
@@ -1351,7 +1371,8 @@ impl Renderer for NativeMetalFrame {
 
     fn current_transform(&self) -> Option<Mat2D> {
         let mut out = Mat2D::IDENTITY;
-        <RiveRenderer as RendererContract>::currentTransform(&self.renderer, &mut out).then_some(out)
+        <RiveRenderer as RendererContract>::currentTransform(&self.renderer, &mut out)
+            .then_some(out)
     }
 
     fn current_modulated_opacity(&self) -> Option<f32> {
@@ -1906,7 +1927,9 @@ impl NativeMetalFrame {
     // its save stack alive across the render-context frame boundary.
     #[cfg(all(test, feature = "with-rive-tools"))]
     pub(crate) fn flush_gm_frame(&mut self) -> Result<(), RendererError> {
-        self.mechanical.borrow_mut().finish(self.frame_number, self.frame_number)?;
+        self.mechanical
+            .borrow_mut()
+            .finish(self.frame_number, self.frame_number)?;
         Ok(())
     }
 
@@ -2965,8 +2988,8 @@ fn select_native_metal_mode(
     requested: Option<RenderMode>,
 ) -> Result<RenderMode, RendererError> {
     match requested {
-        Some(RenderMode::Msaa) => Err(RendererError::Unsupported(
-            "native Metal does not implement WebGPU MSAA",
+        Some(RenderMode::Msaa | RenderMode::ClockwiseMsaa1) => Err(RendererError::Unsupported(
+            "native Metal does not implement depth/stencil rendering",
         )),
         Some(RenderMode::RasterOrdering) if !capabilities.supports_raster_ordering => Err(
             RendererError::Unsupported("native Metal device does not support raster ordering"),
@@ -3213,26 +3236,43 @@ mod tests {
     #[cfg(feature = "native-ore-metal-experimental")]
     #[test]
     fn deferred_canvas_is_backed_by_replay_factory_with_stable_image_identity() {
-        let make_factory = || NativeMetalFactory::new_with_mode_and_context_options(
-            8, 8, RenderMode::RasterOrdering,
-            NativeMetalContextOptions { shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous, ..Default::default() },
-        ).expect("live Metal factory");
+        let make_factory = || {
+            NativeMetalFactory::new_with_mode_and_context_options(
+                8,
+                8,
+                RenderMode::RasterOrdering,
+                NativeMetalContextOptions {
+                    shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
+                    ..Default::default()
+                },
+            )
+            .expect("live Metal factory")
+        };
         let mut recording = make_factory();
         let recording_owner = recording.mechanical_context().unwrap();
         let recording_domain = recording_owner.borrow().resource_domain();
         let recording_weak = Rc::downgrade(&recording_owner);
         drop(recording_owner);
         let canvas: nuxie_render_api::RenderCanvasHandle = Rc::new(RefCell::new(
-            recording.make_deferred_render_canvas(8, 8).expect("device-free shell"),
+            recording
+                .make_deferred_render_canvas(8, 8)
+                .expect("device-free shell"),
         ));
         let image = canvas.borrow().render_image();
         let retained_before_replay = image.retain_image();
         let identity = image.image_identity();
         assert!(!canvas.borrow().is_backed());
         assert!(image.ore_texture_info().is_none());
-        assert!(!image.as_any().downcast_ref::<RiveRenderImageHandle>().unwrap().has_source_texture());
+        assert!(!image
+            .as_any()
+            .downcast_ref::<RiveRenderImageHandle>()
+            .unwrap()
+            .has_source_texture());
         drop(recording);
-        assert!(recording_weak.upgrade().is_none(), "recorded shell must not retain recording execution");
+        assert!(
+            recording_weak.upgrade().is_none(),
+            "recorded shell must not retain recording execution"
+        );
 
         let mut replay = make_factory();
         let replay_owner = replay.mechanical_context().unwrap();
@@ -3243,18 +3283,28 @@ mod tests {
         assert!(canvas.borrow().is_backed());
         assert_eq!(canvas.borrow().render_image().image_identity(), identity);
         assert_eq!(retained_before_replay.image_identity(), identity);
-        let source = retained_before_replay.as_any().downcast_ref::<RiveRenderImageHandle>().unwrap();
+        let source = retained_before_replay
+            .as_any()
+            .downcast_ref::<RiveRenderImageHandle>()
+            .unwrap();
         assert!(source.source_base_for(&replay_domain).is_some());
         assert!(source.source_base_for(&recording_domain).is_none());
-        assert!(replay.make_gpu_canvas_image_view(retained_before_replay.clone()).is_ok());
+        assert!(replay
+            .make_gpu_canvas_image_view(retained_before_replay.clone())
+            .is_ok());
         {
             let ore = replay.ore().expect("replaying device ORE context");
-            let info = retained_before_replay.ore_texture_info().expect("backed image");
+            let info = retained_before_replay
+                .ore_texture_info()
+                .expect("backed image");
             assert!(unsafe { ore.borrow_mut().wrapImageSampleView(info) }.is_some());
         }
         drop(canvas);
         drop(replay);
-        assert!(replay_weak.upgrade().is_some(), "retained image keeps replay texture execution alive");
+        assert!(
+            replay_weak.upgrade().is_some(),
+            "retained image keeps replay texture execution alive"
+        );
         assert!(retained_before_replay.ore_texture_info().is_some());
         drop(image);
         drop(retained_before_replay);
@@ -3510,22 +3560,18 @@ mod tests {
                 factory.resize(3, 1).expect("replace target generation");
                 assert!(command_buffer.load().is_some());
                 assert!(texture_owners.iter().all(|owner| owner.load().is_some()));
-                assert!(
-                    atomic_buffer_owners
-                        .iter()
-                        .all(|owner| owner.load().is_some())
-                );
+                assert!(atomic_buffer_owners
+                    .iter()
+                    .all(|owner| owner.load().is_some()));
 
                 drop(frame);
                 (command_buffer, texture_owners, atomic_buffer_owners)
             });
         assert!(command_buffer.load().is_none());
         assert!(texture_owners.iter().all(|owner| owner.load().is_none()));
-        assert!(
-            atomic_buffer_owners
-                .iter()
-                .all(|owner| owner.load().is_none())
-        );
+        assert!(atomic_buffer_owners
+            .iter()
+            .all(|owner| owner.load().is_none()));
     }
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]

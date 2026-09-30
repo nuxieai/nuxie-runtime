@@ -25,8 +25,8 @@ source:metal.minified.glsl=a0c74871c6c7cd40b3020a488f60baf28b2cad5a33235c7a0d6b3
 source:constants.minified.glsl=05ba12e3e03782fb00c816946acec76b341b32fcaa208459dd7c6933113796f7
 source:flush_uniforms.minified.glsl=c3e77a2a4b2f28b23a81177066b6fb36a4b6b5f256797f500026536144385cf4
 source:common.minified.glsl=95e562edab842c27db30650880f48efd2690118b23ac35da46d0051d2fefee1c
-# Historical generation/capture above and below is unchanged. Current source
-# applies only this upstream macro rename; this is not a new generation capture.
+# Historical generation/capture above and below is unchanged. The c18 adaptation
+# applied only this macro rename; the current regenerated batch is recorded below.
 adaptation_upstream_commit=c18b32511bfeaeee6b7c54e35152aea3fdbb5964
 adaptation_from=RENDER_MODE_MSAA
 adaptation_to=RENDER_MODE_DEPTH_STENCIL
@@ -80,3 +80,30 @@ captured_output:iphonesimulator:native_metal_color_ramp.air=65ae7ab4f0249949a02c
 captured_output:iphonesimulator:native_metal_tessellate.air=7220feef30d5abcead1afee02d229cf6c49ac54bf4fc30c5e88e66338b5e2830
 captured_output:iphonesimulator:native_metal_resources.metallib=9e0cb7a47124d4772e952e2e0e905a726d0f3c44b759d5ee61832030a1888f4d
 captured_functions=EF,FF,WF,XF
+
+# Current minified GLSL generation (not an Apple compiled-output capture).
+# Wrappers retain their unchanged historical source bytes.
+current_generation_upstream_commit=1cc2396f0d0d3f6d9c0b16809904e85265f617eb
+current_generation_command=PYTHONHASHSEED=0 PYTHONPATH=<ply-3.11-parent> make -j6 OUT=<isolated-output> minify spirv
+current_generation_runtime=Python 3.14.6; PLY 3.11
+current_generation_minify_sha256=1144ea77fb55558c8e51c2536888b492bf4235add068c3bf41887e5946eae897
+current_generation_makefile_sha256=14756892cfe57c9d64fd2c69a678d0a639d136ecfc46ba4ba4c36d4ab8586620
+current_generation_date=2026-09-29
+current_source:color_ramp.metal=eb525a31f81466aa9b54828f38dd68c3dd62b2728a9fcf7f674304806fc56970
+current_bytes:color_ramp.metal=233
+current_source:tessellate.metal=e7bc6d35e1ad2f95e84b9595738c7035a0ff0bf13277681bec36ddf15cae3471
+current_bytes:tessellate.metal=271
+current_source:metal.minified.glsl=8cb7caf725864e75e8ea68a2e0abc96fd07f9278690fd43d85236f7dbbcbbbe1
+current_bytes:metal.minified.glsl=7213
+current_source:constants.minified.glsl=3444dae4d5bff873299888a403faa63293873d960bcd1e39d098bf3cf1fe171f
+current_bytes:constants.minified.glsl=2251
+current_source:flush_uniforms.minified.glsl=02ac5c03bed7bdc35b64cd010ebc4e82863437928af2099e0bb29374380b4e64
+current_bytes:flush_uniforms.minified.glsl=375
+current_source:common.minified.glsl=32ec7bd7adc16f0b7f143ad8e53961b3f31ff6ea5b7ddbace4265e5eb045067c
+current_bytes:common.minified.glsl=4853
+current_source:color_ramp.minified.glsl=b470a35051f6549f5ba4d5b013b03f2d86a94b55164cb91c4000435eef629004
+current_bytes:color_ramp.minified.glsl=786
+current_source:bezier_utils.minified.glsl=4c814cddc9029034ae2c4a548d4301b5c333968802df54265dbd0d6216126ca6
+current_bytes:bezier_utils.minified.glsl=1914
+current_source:tessellate.minified.glsl=945919200108c5497b778f7458344e01bb83146547b975a0e96532646db7c3d3
+current_bytes:tessellate.minified.glsl=3996

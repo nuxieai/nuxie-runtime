@@ -199,6 +199,9 @@ pub(crate) const GL_FRAMEBUFFER_COMPLETE: GLenum = 0x8CD5;
 pub(crate) const GL_COLOR_ATTACHMENT0: GLenum = 0x8CE0;
 pub(crate) const GL_COLOR_ATTACHMENT1: GLenum = 0x8CE1;
 pub(crate) const GL_DEPTH_ATTACHMENT: GLenum = 0x8D00;
+pub(crate) const GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE: GLenum = 0x8CD0;
+pub(crate) const GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE: GLenum = 0x8216;
+pub(crate) const GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE: GLenum = 0x8217;
 pub(crate) const GL_STENCIL_ATTACHMENT: GLenum = 0x8D20;
 pub(crate) const GL_DEPTH_STENCIL_ATTACHMENT: GLenum = 0x821A;
 pub(crate) const GL_VERTEX_ARRAY_BINDING: GLenum = 0x85B5;
@@ -427,6 +430,12 @@ pub(crate) enum GLCommand {
         width: u32,
         height: u32,
     },
+    RenderbufferStorage {
+        target: GLenum,
+        internal_format: GLenum,
+        width: u32,
+        height: u32,
+    },
     TexStorage2D {
         target: GLenum,
         levels: u32,
@@ -591,6 +600,22 @@ pub(crate) trait GLExecutionProvider {
     fn createShader(&mut self, shaderType: GLenum) -> GLuint;
 
     fn getInteger(&mut self, parameter: GLenum) -> GLint;
+    #[cfg(not(test))]
+    fn getFramebufferAttachmentParameter(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        parameter: GLenum,
+    ) -> GLint;
+    #[cfg(test)]
+    fn getFramebufferAttachmentParameter(
+        &mut self,
+        _target: GLenum,
+        _attachment: GLenum,
+        _parameter: GLenum,
+    ) -> GLint {
+        0
+    }
     fn getFloat(&mut self, parameter: GLenum) -> GLfloat;
     fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>>;
     fn getExtension(&mut self, index: GLuint) -> Option<Vec<u8>>;
@@ -1119,6 +1144,16 @@ impl GLExecutionDomain {
     pub(crate) fn getInteger(&self, parameter: GLenum) -> GLint {
         self.withProvider(|provider| provider.getInteger(parameter))
     }
+    pub(crate) fn getFramebufferAttachmentParameter(
+        &self,
+        target: GLenum,
+        attachment: GLenum,
+        parameter: GLenum,
+    ) -> GLint {
+        self.withProvider(|provider| {
+            provider.getFramebufferAttachmentParameter(target, attachment, parameter)
+        })
+    }
 
     pub(crate) fn getFloat(&self, parameter: GLenum) -> GLfloat {
         self.withProvider(|provider| provider.getFloat(parameter))
@@ -1642,6 +1677,7 @@ impl GLCapabilities {
     gl_capability_bit!(isAdreno, setIsAdreno, driverFlags, 2);
     gl_capability_bit!(isMali, setIsMali, driverFlags, 3);
     gl_capability_bit!(isPowerVR, setIsPowerVR, driverFlags, 4);
+    gl_capability_bit!(isIntel, setIsIntel, driverFlags, 5);
 
     gl_capability_bit!(
         ANGLE_base_vertex_base_instance_shader_builtin,
@@ -2104,7 +2140,7 @@ mod tests {
 
     #[test]
     fn webgl2_constants_and_version_comparison_match_the_header() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 277);
+        assert_eq!(PINNED_SOURCE.lines().count(), 278);
         assert_eq!(GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE, 0x96E0);
         assert_eq!(GL_PIXEL_LOCAL_CLEAR_VALUE_UNSIGNED_INT_ANGLE, 0x96ED);
         assert_eq!(GL_BLEND_ADVANCED_COHERENT_KHR, 0x9285);

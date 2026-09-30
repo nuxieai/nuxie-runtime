@@ -221,6 +221,11 @@ extern "C" int rive_ffi_context_begin_frame_mode_metrics(
         desc.disableRasterOrdering = true;
         desc.clockwiseFillOverride = true;
     }
+    else if (mode == 3)
+    {
+        desc.msaaSampleCount = 1;
+        desc.clockwiseFillOverride = true;
+    }
     else if (mode != 0)
     {
         return 0;

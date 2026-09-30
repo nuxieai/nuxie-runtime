@@ -39,10 +39,11 @@ pub(crate) const CLIP_UPDATE_ONLY: ShaderMiscFlags = 1 << 2;
 pub(crate) const NESTED_CLIP_UPDATE_ONLY: ShaderMiscFlags = 1 << 3;
 pub(crate) const BORROWED_COVERAGE_PASS: ShaderMiscFlags = 1 << 4;
 pub(crate) const EMULATE_DYNAMIC_COLOR_WRITE_DISABLE: ShaderMiscFlags = 1 << 5;
-pub(crate) const STORE_COLOR_CLEAR: ShaderMiscFlags = 1 << 6;
-pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 7;
-pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 8;
-pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 9;
+pub(crate) const MSAA_DST_READ: ShaderMiscFlags = 1 << 6;
+pub(crate) const STORE_COLOR_CLEAR: ShaderMiscFlags = 1 << 7;
+pub(crate) const LOAD_COLOR_FROM_DST_TEXTURE: ShaderMiscFlags = 1 << 8;
+pub(crate) const SWIZZLE_COLOR_BGRA_TO_RGBA: ShaderMiscFlags = 1 << 9;
+pub(crate) const COALESCED_RESOLVE_AND_TRANSFER: ShaderMiscFlags = 1 << 10;
 
 /// The `MetalFeatures` input used by the upstream compiler. The only member
 /// read by `background_shader_compiler.mm:115-119` is the atomic barrier type.
@@ -189,7 +190,9 @@ impl ShaderMacro {
             Self::EnableDither => exports::GLSL_ENABLE_DITHER,
             Self::EnableModulatedImage => exports::GLSL_ENABLE_MODULATED_IMAGE,
             Self::PlsImplDeviceBuffer => exports::GLSL_PLS_IMPL_DEVICE_BUFFER,
-            Self::PlsImplDeviceBufferRasterOrdered => exports::GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED,
+            Self::PlsImplDeviceBufferRasterOrdered => {
+                exports::GLSL_PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED
+            }
             Self::FixedFunctionColorOutput => exports::GLSL_FIXED_FUNCTION_COLOR_OUTPUT,
             Self::ClockwiseFill => exports::GLSL_CLOCKWISE_FILL,
             Self::EnableInstanceIndex => exports::GLSL_ENABLE_INSTANCE_INDEX,
@@ -204,7 +207,9 @@ impl ShaderMacro {
             Self::StoreColorClear => exports::GLSL_STORE_COLOR_CLEAR,
             Self::SwizzleColorBgraToRgba => exports::GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA,
             Self::ResolvePls => exports::GLSL_RESOLVE_PLS,
-            Self::CoalescedPlsResolveAndTransfer => exports::GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER,
+            Self::CoalescedPlsResolveAndTransfer => {
+                exports::GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER
+            }
         }
     }
 
@@ -805,6 +810,7 @@ mod tests {
                 NESTED_CLIP_UPDATE_ONLY,
                 BORROWED_COVERAGE_PASS,
                 EMULATE_DYNAMIC_COLOR_WRITE_DISABLE,
+                MSAA_DST_READ,
                 STORE_COLOR_CLEAR,
                 LOAD_COLOR_FROM_DST_TEXTURE,
                 SWIZZLE_COLOR_BGRA_TO_RGBA,
@@ -821,6 +827,7 @@ mod tests {
                 1 << 7,
                 1 << 8,
                 1 << 9,
+                1 << 10,
             ]
         );
     }

@@ -94,8 +94,9 @@ pub(crate) struct RenderTargetVulkan {
     pub(crate) m_framebufferFormat: vk::Format,
     pub(crate) m_targetUsageFlags: vk::ImageUsageFlags,
     pub(crate) m_offscreenColorTexture: ManuallyDrop<rcp<Texture2D>>,
-    pub(crate) m_msaaColorTexture: ManuallyDrop<rcp<Texture2D>>,
+    pub(crate) m_depthStencilTexture: ManuallyDrop<rcp<Texture2D>>,
     pub(crate) m_msaaDepthStencilTexture: ManuallyDrop<rcp<Texture2D>>,
+    pub(crate) m_msaaColorTexture: ManuallyDrop<rcp<Texture2D>>,
     /// Rust-only concrete dispatch identity for the source virtual interface.
     pub(super) rust_complete_kind: RenderTargetVulkanKind,
 }
@@ -135,8 +136,9 @@ impl RenderTargetVulkan {
 impl Drop for RenderTargetVulkan {
     fn drop(&mut self) {
         unsafe {
-            ManuallyDrop::drop(&mut self.m_msaaDepthStencilTexture);
             ManuallyDrop::drop(&mut self.m_msaaColorTexture);
+            ManuallyDrop::drop(&mut self.m_msaaDepthStencilTexture);
+            ManuallyDrop::drop(&mut self.m_depthStencilTexture);
             ManuallyDrop::drop(&mut self.m_offscreenColorTexture);
             ManuallyDrop::drop(&mut self.m_vk);
             ManuallyDrop::drop(&mut self.base);

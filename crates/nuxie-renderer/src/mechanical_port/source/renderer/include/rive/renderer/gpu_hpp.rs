@@ -2869,7 +2869,7 @@ impl InterlockMode {
 }
 
 pub const INTERLOCK_MODE_COUNT: usize = 5;
-pub const INTERLOCK_MODE_BIT_COUNT: usize = 3;
+pub const InterlockModeBitCount: usize = 3;
 
 macro_rules! define_flag_type {
     ($name:ident, $repr:ty, $( $field:ident = $value:expr ),+ $(,)?) => {
@@ -2913,8 +2913,8 @@ define_flag_type!(
     ENABLE_MODULATED_IMAGE = 1 << 8,
 );
 
-pub const kShaderFeatureCount: usize = 9;
-pub const kAllShaderFeatures: ShaderFeatures = ShaderFeatures((1 << kShaderFeatureCount) - 1);
+pub const ShaderFeatureCount: usize = 9;
+pub const kAllShaderFeatures: ShaderFeatures = ShaderFeatures((1 << ShaderFeatureCount) - 1);
 pub const kVertexShaderFeaturesMask: ShaderFeatures = ShaderFeatures(
     ShaderFeatures::ENABLE_CLIPPING.0
         | ShaderFeatures::ENABLE_CLIP_RECT.0
@@ -2961,11 +2961,21 @@ define_flag_type!(
     nestedClipUpdateOnly = 1 << 3,
     borrowedCoveragePass = 1 << 4,
     emulateDynamicColorWriteDisable = 1 << 5,
-    storeColorClear = 1 << 6,
-    loadColorFromDstTexture = 1 << 7,
-    swizzleColorBGRAToRGBA = 1 << 8,
-    coalescedResolveAndTransfer = 1 << 9,
+    msaaDstRead = 1 << 6,
+    storeColorClear = 1 << 7,
+    loadColorFromDstTexture = 1 << 8,
+    swizzleColorBGRAToRGBA = 1 << 9,
+    coalescedResolveAndTransfer = 1 << 10,
 );
+
+pub const ShaderMiscFlagCount: usize = 11;
+pub const ShaderMiscFlagKeyBitCount: usize = 5;
+pub const DrawTypeKeyBitCount: usize = 3;
+pub const ShaderUniqueKeyBitCount: usize =
+    ShaderMiscFlagKeyBitCount + InterlockModeBitCount + ShaderFeatureCount + DrawTypeKeyBitCount;
+const _: () = assert!(ShaderUniqueKeyBitCount == 20);
+const _: () =
+    assert!(ShaderMiscFlags::coalescedResolveAndTransfer.0 == 1 << (ShaderMiscFlagCount - 1));
 
 impl ShaderMiscFlags {
     pub const FIXED_FUNCTION_COLOR_OUTPUT: Self = Self::fixedFunctionColorOutput;
@@ -3144,7 +3154,7 @@ pub enum StencilType {
     clipReset = 8,
 }
 
-pub const STENCIL_TYPE_BIT_COUNT: u32 = 4;
+pub const StencilTypeBitCount: u32 = 4;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3279,7 +3289,7 @@ pub struct FlushDescriptor {
     pub renderTarget: Option<NonNull<RenderTarget>>,
     pub combinedShaderFeatures: ShaderFeatures,
     pub interlockMode: InterlockMode,
-    pub msaaSampleCount: i32,
+    pub msaaSampleCount: u32,
     pub colorLoadAction: LoadAction,
     pub colorClearValue: ColorInt,
     pub coverageClearValue: u32,
@@ -3827,7 +3837,19 @@ pub enum CullFace {
     counterclockwise = 2,
 }
 
-pub const CULL_FACE_BIT_COUNT: u32 = 2;
+pub const CullFaceBitCount: u32 = 2;
+
+// include/rive/shapes/paint/blend_mode.hpp (the renderer uses render-api's
+// identically valued BlendMode; nuxie-runtime is only a dev dependency here).
+pub const BLEND_MODE_BIT_COUNT: u32 = 5;
+
+pub const PipelineUniqueKeyBitCount: usize = ShaderUniqueKeyBitCount
+    + DrawContentsForDepthStencilPipelineState.0.count_ones() as usize
+    + BLEND_MODE_BIT_COUNT as usize
+    + StencilTypeBitCount as usize
+    + 3 /* colorWrite, depthTest, depthWrite */
+    + CullFaceBitCount as usize;
+const _: () = assert!(PipelineUniqueKeyBitCount == 39);
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

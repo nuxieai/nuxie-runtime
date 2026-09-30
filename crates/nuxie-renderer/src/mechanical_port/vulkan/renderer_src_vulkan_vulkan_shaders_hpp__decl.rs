@@ -69,17 +69,19 @@ impl Deref for ShaderRead<'_> {
 pub(crate) use super::vulkan_shaders_impl::{
     color_ramp_frag, color_ramp_vert, draw_atlas_blit_frag, draw_atlas_blit_vert,
     draw_depthstencil_atlas_blit_fixedcolor_frag, draw_depthstencil_atlas_blit_frag,
-    draw_depthstencil_atlas_blit_noclipdistance_vert, draw_depthstencil_atlas_blit_vert,
-    draw_depthstencil_image_mesh_fixedcolor_frag, draw_depthstencil_image_mesh_frag,
+    draw_depthstencil_atlas_blit_msaa_frag, draw_depthstencil_atlas_blit_noclipdistance_vert,
+    draw_depthstencil_atlas_blit_vert, draw_depthstencil_image_mesh_fixedcolor_frag,
+    draw_depthstencil_image_mesh_frag, draw_depthstencil_image_mesh_msaa_frag,
     draw_depthstencil_image_mesh_noclipdistance_vert, draw_depthstencil_image_mesh_vert,
     draw_depthstencil_path_fixedcolor_frag, draw_depthstencil_path_frag,
-    draw_depthstencil_path_noclipdistance_vert, draw_depthstencil_path_vert,
-    draw_depthstencil_triangles_nocolor_fixedcolor_frag, draw_depthstencil_triangles_nocolor_frag,
-    draw_depthstencil_triangles_nocolor_vert, draw_fullscreen_quad_vert, draw_image_mesh_frag,
-    draw_image_mesh_vert, draw_input_attachment_frag, draw_interior_triangles_frag,
-    draw_interior_triangles_vert, draw_msaa_color_seed_attachment_frag, draw_msaa_resolve_frag,
-    draw_path_frag, draw_path_vert, hotload_shaders, render_atlas_fill_frag,
-    render_atlas_stroke_frag, render_atlas_vert, tessellate_frag, tessellate_vert,
+    draw_depthstencil_path_msaa_frag, draw_depthstencil_path_noclipdistance_vert,
+    draw_depthstencil_path_vert, draw_depthstencil_triangles_nocolor_fixedcolor_frag,
+    draw_depthstencil_triangles_nocolor_frag, draw_depthstencil_triangles_nocolor_vert,
+    draw_fullscreen_quad_vert, draw_image_mesh_frag, draw_image_mesh_vert,
+    draw_input_attachment_frag, draw_interior_triangles_frag, draw_interior_triangles_vert,
+    draw_msaa_color_seed_attachment_frag, draw_msaa_resolve_frag, draw_path_frag, draw_path_vert,
+    hotload_shaders, render_atlas_fill_frag, render_atlas_stroke_frag, render_atlas_vert,
+    tessellate_frag, tessellate_vert,
 };
 
 #[cfg(any(not(target_os = "android"), feature = "android-vulkan-atomics"))]
@@ -121,7 +123,7 @@ pub(crate) use super::vulkan_shaders_impl::{
     draw_clockwise_path_frag, draw_clockwise_path_vert,
 };
 
-pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 94;
+pub(crate) const DECLARED_SHADER_SYMBOL_COUNT: usize = 97;
 #[cfg(all(target_os = "android", feature = "android-vulkan-atomics"))]
 pub(crate) const TARGET_SHADER_SYMBOL_COUNT: usize = DECLARED_SHADER_SYMBOL_COUNT - 16;
 #[cfg(all(target_os = "android", not(feature = "android-vulkan-atomics")))]

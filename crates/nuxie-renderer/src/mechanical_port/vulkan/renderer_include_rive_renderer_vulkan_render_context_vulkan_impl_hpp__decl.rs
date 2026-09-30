@@ -58,6 +58,7 @@ pub(crate) struct DriverWorkarounds {
     pub(crate) maxInstancesPerRenderPass: u32,
     pub(crate) avoidManualMSAAResolves: bool,
     pub(crate) needsManualMSAAResolveAfterDstRead: bool,
+    pub(crate) avoidDstReadFromNonMRTRenderTarget: bool,
 }
 
 impl DriverWorkarounds {
@@ -139,7 +140,7 @@ pub(crate) struct DrawRenderPass {
     pub(crate) m_drawBounds: IAABB,
     pub(crate) m_colorImageView: vk::ImageView,
     pub(crate) m_msaaColorSeedImageView: vk::ImageView,
-    pub(crate) m_msaaResolveImageView: vk::ImageView,
+    pub(crate) m_depthStencilFinalColorImageView: vk::ImageView,
     pub(crate) m_pipelineLayout: *const DrawPipelineLayoutVulkan,
     pub(crate) m_renderPassOptions: RenderPassOptionsVulkan,
     pub(crate) m_scissor: IAABB,
@@ -236,9 +237,7 @@ impl RenderContextVulkanImpl {
     /// `queue` must belong to this context's device and `queueFamilyIndex`
     /// must be its actual family for the complete canvas submission lifetime.
     pub(crate) unsafe fn setCanvasQueue(&mut self, queue: vk::Queue, queueFamilyIndex: u32) {
-        unsafe {
-            super::render_context_vulkan_impl::setCanvasQueue(self, queue, queueFamilyIndex)
-        }
+        unsafe { super::render_context_vulkan_impl::setCanvasQueue(self, queue, queueFamilyIndex) }
     }
     /// # Safety
     /// `image` must be a live externally owned image from this context's
@@ -252,9 +251,7 @@ impl RenderContextVulkanImpl {
         format: vk::Format,
     ) -> rcp<Texture2D> {
         unsafe {
-            super::render_context_vulkan_impl::adoptImageTexture(
-                self, image, width, height, format,
-            )
+            super::render_context_vulkan_impl::adoptImageTexture(self, image, width, height, format)
         }
     }
     #[cfg(feature = "native-ore-vulkan-experimental")]

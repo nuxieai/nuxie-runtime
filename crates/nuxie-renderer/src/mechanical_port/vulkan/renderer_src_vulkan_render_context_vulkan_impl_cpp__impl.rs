@@ -19,7 +19,12 @@ fn print_error_line(message: &str) {
         }
         let message = std::ffi::CString::new(message).expect("static Vulkan diagnostic");
         unsafe {
-            __android_log_print(6, c"rive_runtime".as_ptr(), c"%s".as_ptr(), message.as_ptr());
+            __android_log_print(
+                6,
+                c"rive_runtime".as_ptr(),
+                c"%s".as_ptr(),
+                message.as_ptr(),
+            );
         }
     }
     eprintln!("{message}");
@@ -41,12 +46,12 @@ use super::vkutil_decl::{
 use super::vulkan_context_decl::{VulkanContext, VulkanFeatures};
 use super::vulkan_shaders_decl as spirv;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast;
-use crate::mechanical_port::source::include::rive::refcnt_hpp::{RefCntTarget, make_rcp, rcp};
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp, RefCntTarget};
 use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferContract, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
-    CONST_ID, LiteRttiCastFrom, LiteRttiTypeId,
+    LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::*;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -63,8 +68,8 @@ use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::gpu_resource::{GpuResourcePayload, ResourceHandle};
 use nuxie_render_api::{BlendMode, ColorInt};
-use std::ffi::{CStr, c_void};
-use std::mem::{ManuallyDrop, size_of};
+use std::ffi::{c_void, CStr};
+use std::mem::{size_of, ManuallyDrop};
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::time::Instant;
@@ -92,9 +97,32 @@ const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const COVERAGE_PLANE_IDX: usize = 3;
 const PLS_PLANE_COUNT: usize = 4;
 const COALESCED_ATOMIC_RESOLVE_IDX: usize = SCRATCH_COLOR_PLANE_IDX;
-const MSAA_DEPTH_STENCIL_IDX: usize = 1;
-const MSAA_RESOLVE_IDX: usize = 2;
+const DEPTH_STENCIL_BUFFER_IDX: usize = 1;
+const DEPTH_STENCIL_FINAL_COLOR_IDX: usize = 2;
 const MSAA_COLOR_SEED_IDX: usize = 3;
+
+const ColorAttachmentWriteAccess: ImageAccess = ImageAccess {
+    pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+    accessMask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+    layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+};
+
+fn coversFullRenderTarget(area: &IAABB, target: &mut LiveRenderTargetVulkan) -> bool {
+    area.contains(IAABB {
+        left: 0,
+        top: 0,
+        right: target.width() as i32,
+        bottom: target.height() as i32,
+    })
+}
+
+fn renderTargetAccessActionFor(load: LoadAction, full: bool) -> ImageAccessAction {
+    if full && load != LoadAction::preserveRenderTarget {
+        ImageAccessAction::invalidateContents
+    } else {
+        ImageAccessAction::preserveContents
+    }
+}
 
 const K_MAX_IMAGE_TEXTURE_UPDATES: u32 = 256;
 
@@ -480,7 +508,9 @@ pub(crate) unsafe fn ensureCanvasBacking(
     canvas: *mut RenderCanvas,
 ) {
     let canvas = unsafe { &mut *canvas };
-    if canvas.isBacked() { return; }
+    if canvas.isBacked() {
+        return;
+    }
     let (width, height) = (canvas.width(), canvas.height());
     let format = vk::Format::R8G8B8A8_UNORM;
     let usage = vk::ImageUsageFlags::COLOR_ATTACHMENT
@@ -511,6 +541,7 @@ pub(crate) unsafe fn ensureCanvasBacking(
                 m_framebufferFormat: format,
                 m_targetUsageFlags: usage,
                 m_offscreenColorTexture: ManuallyDrop::new(rcp::new()),
+                m_depthStencilTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaColorTexture: ManuallyDrop::new(rcp::new()),
                 m_msaaDepthStencilTexture: ManuallyDrop::new(rcp::new()),
                 rust_complete_kind: RenderTargetVulkanKind::Texture,
@@ -1175,6 +1206,7 @@ impl RenderContextVulkanImpl {
             },
             avoidManualMSAAResolves: vendor == vkutil::Samsung,
             needsManualMSAAResolveAfterDstRead: vendor == vkutil::Qualcomm,
+            avoidDstReadFromNonMRTRenderTarget: vendor == vkutil::Qualcomm,
         };
         let mut base = RenderContextImpl::default();
         base.m_platformFeatures.supportsRasterOrderingMode =
@@ -1401,17 +1433,23 @@ impl RenderContextVulkanImpl {
         };
         *self.m_colorRampPipeline = ColorRampPipeline::make(manager, self.m_workarounds);
         if self.m_colorRampPipeline.is_none() {
-            print_error_line("ERROR: Rive Vulkan renderer failed to create the color ramp pipeline.");
+            print_error_line(
+                "ERROR: Rive Vulkan renderer failed to create the color ramp pipeline.",
+            );
             return false;
         }
         *self.m_tessellatePipeline = TessellatePipeline::make(manager, self.m_workarounds);
         if self.m_tessellatePipeline.is_none() {
-            print_error_line("ERROR: Rive Vulkan renderer failed to create the tessellation pipeline.");
+            print_error_line(
+                "ERROR: Rive Vulkan renderer failed to create the tessellation pipeline.",
+            );
             return false;
         }
         *self.m_featherAtlasPipeline = FeatherAtlasPipeline::make(manager, self.m_workarounds);
         if self.m_featherAtlasPipeline.is_none() {
-            print_error_line("ERROR: Rive Vulkan renderer failed to create the feather atlas pipeline.");
+            print_error_line(
+                "ERROR: Rive Vulkan renderer failed to create the feather atlas pipeline.",
+            );
             return false;
         }
         self.m_plsTransientUsageFlags =
@@ -1990,8 +2028,10 @@ impl LiveRenderTargetVulkan {
         self.withDispatch(super::render_target_vulkan_impl::msaaColorTexture)
     }
 
-    fn msaaDepthStencilTexture(&mut self) -> *mut Texture2D {
-        self.withDispatch(super::render_target_vulkan_impl::msaaDepthStencilTexture)
+    fn depthStencilTexture(&mut self, msaa: bool) -> *mut Texture2D {
+        self.withDispatch(|target| {
+            super::render_target_vulkan_impl::depthStencilTexture(target, msaa)
+        })
     }
 
     fn copyTargetImageToOffscreenColorTexture(
@@ -2144,35 +2184,52 @@ pub(crate) unsafe fn wantsManualRenderPassResolve(
     virtual_tile_width: u32,
     virtual_tile_height: u32,
     draw_contents: DrawContents,
+    msaa_sample_count: u32,
 ) -> bool {
-    if interlock_mode == InterlockMode::rasterOrdering
-        && virtual_tile_width == 0
-        && virtual_tile_height == 0
-        && !implementation
-            .m_workarounds
-            .needsInterruptibleRenderPasses()
-    {
-        #[cfg(not(target_vendor = "apple"))]
+    if interlock_mode == InterlockMode::rasterOrdering {
+        if virtual_tile_width == 0
+            && virtual_tile_height == 0
+            && !implementation
+                .m_workarounds
+                .needsInterruptibleRenderPasses()
         {
-            let target = unsafe { &*render_target.cast::<RenderTargetVulkan>() };
-            return !target
-                .m_targetUsageFlags
-                .contains(vk::ImageUsageFlags::INPUT_ATTACHMENT);
+            #[cfg(not(target_vendor = "apple"))]
+            {
+                let target = unsafe { &*render_target.cast::<RenderTargetVulkan>() };
+                return !target
+                    .m_targetUsageFlags
+                    .contains(vk::ImageUsageFlags::INPUT_ATTACHMENT);
+            }
         }
+        return false;
     }
-    if interlock_mode == InterlockMode::depthStencil
-        && !implementation.m_workarounds.avoidManualMSAAResolves
-    {
-        let target = unsafe { &*render_target };
-        if !update_bounds.contains(target.bounds()) {
-            return true;
+    if interlock_mode == InterlockMode::depthStencil {
+        if msaa_sample_count <= 1 {
+            if draw_contents.0 & DrawContents::advancedBlend.0 != 0 {
+                let target = unsafe { &*render_target.cast::<RenderTargetVulkan>() };
+                let readable = target
+                    .m_targetUsageFlags
+                    .contains(vk::ImageUsageFlags::INPUT_ATTACHMENT)
+                    && !implementation
+                        .m_workarounds
+                        .avoidDstReadFromNonMRTRenderTarget;
+                return !readable;
+            }
+            return false;
         }
-        if implementation
-            .m_workarounds
-            .needsManualMSAAResolveAfterDstRead
-            && draw_contents.0 & DrawContents::advancedBlend.0 != 0
-        {
-            return true;
+        if !implementation.m_workarounds.avoidManualMSAAResolves {
+            let target = unsafe { &*render_target };
+            if !update_bounds.contains(target.bounds()) {
+                return true;
+            }
+            if implementation
+                .m_workarounds
+                .needsManualMSAAResolveAfterDstRead
+                && draw_contents.0 & DrawContents::advancedBlend.0 != 0
+            {
+                return true;
+            }
+            return false;
         }
     }
     false
@@ -2461,7 +2518,7 @@ impl DrawRenderPass {
         draw_bounds: IAABB,
         color_view: vk::ImageView,
         msaa_seed_view: vk::ImageView,
-        msaa_resolve_view: vk::ImageView,
+        depth_stencil_final_color_view: vk::ImageView,
         options: RenderPassOptionsVulkan,
         scissor: IAABB,
     ) -> Self {
@@ -2471,7 +2528,7 @@ impl DrawRenderPass {
             m_drawBounds: draw_bounds,
             m_colorImageView: color_view,
             m_msaaColorSeedImageView: msaa_seed_view,
-            m_msaaResolveImageView: msaa_resolve_view,
+            m_depthStencilFinalColorImageView: depth_stencil_final_color_view,
             m_pipelineLayout: core::ptr::null(),
             m_renderPassOptions: RenderPassOptionsVulkan::none,
             m_scissor: scissor,
@@ -2516,6 +2573,8 @@ impl DrawRenderPass {
                 manager.plsBackingType(desc.interlockMode),
             )
         };
+        let full_target = coversFullRenderTarget(&self.m_drawBounds, &mut target);
+        let target_action = renderTargetAccessActionFor(override_load, full_target);
         let mut views = Vec::with_capacity(layout::MAX_RENDER_PASS_ATTACHMENTS as usize);
         let mut clears = Vec::with_capacity(layout::MAX_RENDER_PASS_ATTACHMENTS as usize);
         if backing == PLSBackingType::inputAttachment
@@ -2548,12 +2607,8 @@ impl DrawRenderPass {
                     debug_assert_eq!(views.len(), PLS_PLANE_COUNT);
                     views.push(target.accessTargetImageView(
                         command,
-                        ImageAccess {
-                            pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                            accessMask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                        },
-                        ImageAccessAction::invalidateContents,
+                        ColorAttachmentWriteAccess,
+                        target_action,
                     ));
                     clears.push(vk::ClearValue::default());
                 }
@@ -2569,20 +2624,10 @@ impl DrawRenderPass {
                     .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
                 {
                     debug_assert_eq!(views.len(), COALESCED_ATOMIC_RESOLVE_IDX);
-                    let full = self.m_drawBounds.contains(IAABB {
-                        left: 0,
-                        top: 0,
-                        right: target.width() as i32,
-                        bottom: target.height() as i32,
-                    });
                     views.push(target.accessTargetImageView(
                         command,
-                        ImageAccess {
-                            pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                            accessMask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-                        },
-                        if full {
+                        ColorAttachmentWriteAccess,
+                        if full_target {
                             ImageAccessAction::invalidateContents
                         } else {
                             ImageAccessAction::preserveContents
@@ -2600,8 +2645,11 @@ impl DrawRenderPass {
                 clears.push(vk::ClearValue::default());
             }
             InterlockMode::depthStencil => {
-                debug_assert_eq!(views.len(), MSAA_DEPTH_STENCIL_IDX);
-                let depth = target.msaaDepthStencilTexture();
+                let msaa = unsafe { &*pipeline_layout }
+                    .renderPassOptions()
+                    .has(RenderPassOptionsVulkan::msaa);
+                debug_assert_eq!(views.len(), DEPTH_STENCIL_BUFFER_IDX);
+                let depth = target.depthStencilTexture(msaa);
                 views.push(unsafe { (&*depth).vkImageView() });
                 clears.push(vk::ClearValue {
                     depth_stencil: vk::ClearDepthStencilValue {
@@ -2609,16 +2657,36 @@ impl DrawRenderPass {
                         stencil: desc.stencilClearValue as u32,
                     },
                 });
-                debug_assert_eq!(views.len(), MSAA_RESOLVE_IDX);
-                views.push(self.m_msaaResolveImageView);
-                clears.push(vk::ClearValue::default());
+                if msaa
+                    || unsafe { &*pipeline_layout }
+                        .renderPassOptions()
+                        .has(RenderPassOptionsVulkan::manuallyResolved)
+                {
+                    debug_assert_eq!(views.len(), DEPTH_STENCIL_FINAL_COLOR_IDX);
+                    views.push(self.m_depthStencilFinalColorImageView);
+                    clears.push(vk::ClearValue::default());
+                } else {
+                    debug_assert_eq!(
+                        self.m_depthStencilFinalColorImageView,
+                        vk::ImageView::null()
+                    );
+                }
                 if unsafe { &*pipeline_layout }
                     .renderPassOptions()
                     .has(RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture)
                 {
+                    debug_assert!(msaa);
+                    debug_assert_eq!(override_load, LoadAction::preserveRenderTarget);
+                    debug_assert_ne!(self.m_msaaColorSeedImageView, vk::ImageView::null());
+                    debug_assert_ne!(
+                        self.m_msaaColorSeedImageView,
+                        self.m_depthStencilFinalColorImageView
+                    );
                     debug_assert_eq!(views.len(), MSAA_COLOR_SEED_IDX);
                     views.push(self.m_msaaColorSeedImageView);
                     clears.push(vk::ClearValue::default());
+                } else {
+                    debug_assert_eq!(self.m_msaaColorSeedImageView, vk::ImageView::null());
                 }
             }
         }
@@ -2751,13 +2819,17 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.fixedFunctionColorOutput {
         options |= RenderPassOptionsVulkan::fixedFunctionColorOutput;
     }
+    if desc.msaaSampleCount > 1 {
+        debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
+        options |= RenderPassOptionsVulkan::msaa;
+    }
     if desc.manuallyResolved {
         options |= RenderPassOptionsVulkan::manuallyResolved;
-    } else if desc.interlockMode == InterlockMode::depthStencil {
+    } else if options.has(RenderPassOptionsVulkan::msaa) {
         draw_bounds = target.bounds();
     }
     debug_assert!(
-        desc.interlockMode != InterlockMode::depthStencil
+        !options.has(RenderPassOptionsVulkan::msaa)
             || desc.manuallyResolved
             || draw_bounds == target.bounds()
     );
@@ -2799,11 +2871,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.interlockMode == InterlockMode::rasterOrdering
         && pending_tess_patches > implementation.m_workarounds.maxInstancesPerRenderPass
     {
-        debug_assert!(
-            !implementation
-                .m_plsTransientUsageFlags
-                .contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT)
-        );
+        debug_assert!(!implementation
+            .m_plsTransientUsageFlags
+            .contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT));
         debug_assert!(!desc.manuallyResolved);
         options |= RenderPassOptionsVulkan::rasterOrderingInterruptible;
     }
@@ -3005,11 +3075,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
     if desc.tessVertexSpanCount > 0 {
         unsafe { rcp_ref(&implementation.m_tessTexture) }.barrier(
             command,
-            ImageAccess {
-                pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                accessMask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            },
+            ColorAttachmentWriteAccess,
             ImageAccessAction::invalidateContents,
             vk::DependencyFlags::empty(),
         );
@@ -3355,17 +3421,8 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             vk::ImageLayout::GENERAL
         },
     };
-    let full_target = draw_bounds.contains(IAABB {
-        left: 0,
-        top: 0,
-        right: target.width() as i32,
-        bottom: target.height() as i32,
-    });
-    let target_action = if full_target && desc.colorLoadAction != LoadAction::preserveRenderTarget {
-        ImageAccessAction::invalidateContents
-    } else {
-        ImageAccessAction::preserveContents
-    };
+    let full_target = coversFullRenderTarget(&draw_bounds, &mut target);
+    let target_action = renderTargetAccessActionFor(desc.colorLoadAction, full_target);
     let backing = implementation
         .m_pipelineManager
         .as_ref()
@@ -3373,9 +3430,10 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         .plsBackingType(desc.interlockMode);
     let mut color_view = vk::ImageView::null();
     let mut color_offscreen = false;
-    let mut msaa_resolve_view = vk::ImageView::null();
+    let mut depth_stencil_final_color_view = vk::ImageView::null();
     let mut msaa_seed_view = vk::ImageView::null();
-    if desc.interlockMode == InterlockMode::depthStencil {
+    if options.has(RenderPassOptionsVulkan::msaa) {
+        debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
         color_view = unsafe { (&*target.msaaColorTexture()).vkImageView() };
         if desc.colorLoadAction == LoadAction::preserveRenderTarget {
             let copied = target.copyTargetImageToOffscreenColorTexture(
@@ -3390,13 +3448,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             msaa_seed_view = unsafe { (&*copied).vkImageView() };
             options |= RenderPassOptionsVulkan::msaaSeedFromOffscreenTexture;
         }
-        msaa_resolve_view = target.accessTargetImageView(
+        depth_stencil_final_color_view = target.accessTargetImageView(
             command,
-            ImageAccess {
-                pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
-                accessMask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
-                layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-            },
+            ColorAttachmentWriteAccess,
             if full_target {
                 ImageAccessAction::invalidateContents
             } else {
@@ -3409,7 +3463,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             && target
                 .targetUsageFlags()
                 .contains(vk::ImageUsageFlags::INPUT_ATTACHMENT))
+        || (desc.interlockMode == InterlockMode::depthStencil && !desc.manuallyResolved)
     {
+        debug_assert!(!options.has(RenderPassOptionsVulkan::msaa));
         color_view = target.accessTargetImageView(command, color_load_access, target_action);
     } else if backing == PLSBackingType::storageTexture {
         let storage_access = ImageAccess {
@@ -3486,6 +3542,15 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         color_offscreen = true;
     }
 
+    if desc.interlockMode == InterlockMode::depthStencil
+        && !options.has(RenderPassOptionsVulkan::msaa)
+        && options.has(RenderPassOptionsVulkan::manuallyResolved)
+    {
+        debug_assert!(color_offscreen);
+        depth_stencil_final_color_view =
+            target.accessTargetImageView(command, ColorAttachmentWriteAccess, target_action);
+    }
+
     if desc.interlockMode == InterlockMode::clockwise
         || desc.interlockMode == InterlockMode::atomics
     {
@@ -3534,7 +3599,9 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             let clear_range = vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
                 level_count: 1,
-                layer_count: if desc.combinedShaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0 != 0 {
+                layer_count: if desc.combinedShaderFeatures.0 & ShaderFeatures::ENABLE_CLIPPING.0
+                    != 0
+                {
                     2
                 } else {
                     1
@@ -3653,7 +3720,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
         draw_bounds,
         color_view,
         msaa_seed_view,
-        msaa_resolve_view,
+        depth_stencil_final_color_view,
         options,
         initial_scissor,
     );
@@ -4058,6 +4125,15 @@ fn submitDrawList(
         }
         if draw_pass
             .m_renderPassOptions
+            .has(RenderPassOptionsVulkan::msaa)
+            && !misc.has(ShaderMiscFlags::fixedFunctionColorOutput)
+            && batch.drawType != DrawType::renderPassInitialize
+        {
+            debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
+            misc |= ShaderMiscFlags::msaaDstRead;
+        }
+        if draw_pass
+            .m_renderPassOptions
             .has(RenderPassOptionsVulkan::atomicCoalescedResolveAndTransfer)
             && batch.drawType == DrawType::renderPassResolve
         {
@@ -4198,11 +4274,9 @@ fn submitDrawList(
                 if pipeline.is_none() {
                     continue;
                 }
-                debug_assert!(
-                    !implementation
-                        .m_workarounds
-                        .needsInterruptibleRenderPasses()
-                );
+                debug_assert!(!implementation
+                    .m_workarounds
+                    .needsInterruptibleRenderPasses());
                 unsafe {
                     implementation.m_vk.ashDevice().cmd_bind_vertex_buffers(
                         command,
@@ -4664,6 +4738,7 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
         tile_width: u32,
         tile_height: u32,
         contents: DrawContents,
+        msaa_sample_count: u32,
     ) -> bool {
         unsafe {
             wantsManualRenderPassResolve(
@@ -4674,6 +4749,7 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
                 tile_width,
                 tile_height,
                 contents,
+                msaa_sample_count,
             )
         }
     }
@@ -4784,7 +4860,7 @@ pub(crate) unsafe fn MakeContext(
     let properties = &vk_context.physicalDeviceProperties;
     if properties.api_version < vk::API_VERSION_1_1 {
         print_error_line(
-            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1."
+            "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1.",
         );
         vk_context.shutdown();
         return None;

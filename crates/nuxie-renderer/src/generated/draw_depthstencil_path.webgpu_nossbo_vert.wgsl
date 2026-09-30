@@ -21,12 +21,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -389,7 +389,7 @@ fn main_1() {
         }
         let _e470 = phi_2582_;
         let _e472 = (_e470 >> bitcast<u32>(16i));
-        let _e474 = n.e6_;
+        let _e474 = n.f6_;
         if (_e472 == 0u) {
             phi_2583_ = 0f;
         } else {
@@ -442,7 +442,7 @@ fn main_1() {
     } else {
         if (Bh && (_e466 == 0u)) {
             let _e574 = (_e464.x >> bitcast<u32>(16i));
-            let _e576 = n.e6_;
+            let _e576 = n.f6_;
             if (_e574 == 0u) {
                 phi_2624_ = 0f;
             } else {
@@ -501,7 +501,7 @@ fn main_1() {
         let _e721 = vec4<f32>(((_e451.x * _e711) - 1f), ((_e451.y * _e713) - sign(_e713)), 0f, 1f);
         phi_2641_ = vec4<f32>(_e721.x, _e721.y, (1f - (f32(_e449) * 0.000061035156f)), _e721.w);
     } else {
-        let _e731 = n.T2_;
+        let _e731 = n.U2_;
         phi_2641_ = vec4(_e731);
     }
     let _e734 = phi_2641_;

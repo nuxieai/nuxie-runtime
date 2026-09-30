@@ -28,12 +28,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -67,12 +67,12 @@ var<uniform> n: BC;
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var W5_: sampler;
+var X5_: sampler;
 var<private> Z1_1: vec2<f32>;
 var<private> M0_1: vec4<f32>;
 @group(2) @binding(3)
 var<storage, read_write> x4_: x4Qd;
-var<private> x3_1: u32;
+var<private> y3_1: u32;
 var<private> H1_1: vec4<f32>;
 var<private> A1_1: u32;
 @group(3) @binding(9)
@@ -126,7 +126,7 @@ fn main_1() {
     let _e88 = n.q6_;
     let _e117 = bitcast<i32>((((((_e86.y >> bitcast<u32>(5u)) * (((_e88 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e86.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e86.x & 28u) << bitcast<u32>(5u)) + ((_e86.y & 28u) << bitcast<u32>(2i)))) + (((_e86.y & 3u) << bitcast<u32>(2i)) + (_e86.x & 3u))));
     let _e118 = Z1_1;
-    let _e119 = textureSample(HC, W5_, _e118);
+    let _e119 = textureSample(HC, X5_, _e118);
     phi_5920_ = 1f;
     if Ch {
         let _e120 = M0_1;
@@ -414,7 +414,7 @@ fn main_1() {
     let _e607 = vec4<f32>(_e601.x, _e601.y, _e589.z, _e601.w);
     phi_1270_ = Bh;
     if Bh {
-        let _e608 = x3_1;
+        let _e608 = y3_1;
         phi_1270_ = (_e608 != 0u);
     }
     let _e611 = phi_1270_;
@@ -427,7 +427,7 @@ fn main_1() {
             phi_5908_ = _e615;
         }
         let _e617 = phi_5908_;
-        let _e618 = x3_1;
+        let _e618 = y3_1;
         if (_e618 == (_e617 >> bitcast<u32>(16i))) {
             phi_5936_ = min(_e129, unpack2x16float(_e617).x);
         } else {
@@ -634,8 +634,8 @@ fn main_1() {
     let _e966 = (_e965 * _e628);
     let _e970 = ((_e607 * (1f - _e966.w)) + _e966);
     let _e971 = _e970.xyz;
-    let _e974 = n.B3_;
-    let _e976 = n.C3_;
+    let _e974 = n.C3_;
+    let _e976 = n.D3_;
     if (Ih && (_e970.w != 0f)) {
         phi_7340_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e82.x) + (0.00583715f * _e82.y))))) * _e974) + _e976)) + _e971);
     } else {
@@ -669,11 +669,11 @@ fn main_1() {
 }
 
 @fragment
-fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(0) Z1_: vec2<f32>, @location(1) M0_: vec4<f32>, @location(4) @interpolate(flat, either) x3_: u32, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @location(5) @interpolate(flat, either) A1_: u32) {
+fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(0) Z1_: vec2<f32>, @location(1) M0_: vec4<f32>, @location(4) @interpolate(flat, either) y3_: u32, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @location(5) @interpolate(flat, either) A1_: u32) {
     gl_FragCoord_1 = gl_FragCoord;
     Z1_1 = Z1_;
     M0_1 = M0_;
-    x3_1 = x3_;
+    y3_1 = y3_;
     H1_1 = H1_;
     A1_1 = A1_;
     main_1();

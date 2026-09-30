@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -67,7 +67,7 @@ var<private> M0_: vec4<f32>;
 var<private> SB_1: vec4<f32>;
 var<private> H1_: vec4<f32>;
 var<private> XB_1: u32;
-var<private> x3_: u32;
+var<private> y3_: u32;
 var<private> YB_1: u32;
 var<private> A1_: u32;
 var<private> ZB_1: u32;
@@ -131,7 +131,7 @@ fn main_1() {
     let _e86 = XB_1;
     H1_ = unpack4x8unorm(_e86);
     let _e88 = YB_1;
-    x3_ = _e88;
+    y3_ = _e88;
     let _e89 = ZB_1;
     A1_ = _e89;
     let _e91 = n.Ef;
@@ -157,7 +157,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_
     let _e31 = Z1_;
     let _e32 = M0_;
     let _e33 = H1_;
-    let _e34 = x3_;
+    let _e34 = y3_;
     let _e35 = A1_;
     let _e36 = unnamed.gl_Position;
     return VertexOutput(_e31, _e32, _e33, _e34, _e35, _e36);

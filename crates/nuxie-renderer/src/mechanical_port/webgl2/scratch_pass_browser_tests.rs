@@ -184,6 +184,7 @@ fn solid(pixels: &[u8], channels: [bool; 3]) {
 }
 
 pub fn run_scratch_pass_browser_tests(canvas: HtmlCanvasElement) -> Result<String, String> {
+    retargets_depth_stencil_framebuffer(canvas.clone())?;
     let (provider, adapter, _) = BrowserWebGl2Provider::new(canvas, 64, 64)
         .map_err(|error| format!("WebGL2 unavailable: {error:?}"))?;
     let domain = GLExecutionDomain::new(Box::new(provider));
@@ -257,6 +258,117 @@ pub fn run_scratch_pass_browser_tests(canvas: HtmlCanvasElement) -> Result<Strin
     drop(ctx);
     domain.shutdown();
     Ok(format!(
-        "5ab9 scratch scrub and overlap pixel assertions passed: {adapter}"
+        "Scratch scrub, overlap, and depth/stencil retarget pixel assertions passed: {adapter}"
     ))
+}
+
+// rendering_tests.cpp: TextureRenderTargetGL_retargetsDepthStencilFramebuffer.
+// This requires the real browser provider: command-only providers cannot prove
+// that both external textures retain their own pixels when switching samples.
+fn retargets_depth_stencil_framebuffer(canvas: HtmlCanvasElement) -> Result<(), String> {
+    use super::render_context_gl_decl::{ContextOptions, RenderContextGLImpl};
+    use super::render_target_gl_decl::TextureRenderTargetGL;
+    use crate::mechanical_port::source::include::rive::renderer_hpp::RendererContract;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
+        FlushResources, FrameDescriptor, RenderContextContract,
+    };
+    use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_helper_impl_hpp::RenderContextHelperBackendContract;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::RiveRenderer;
+    use nuxie_render_api::{FillRule, RawPath, RenderPaint};
+    use std::pin::Pin;
+
+    let (provider, _, _) = BrowserWebGl2Provider::new(canvas, 32, 32)
+        .map_err(|error| format!("WebGL2 unavailable: {error:?}"))?;
+    let mut context =
+        super::render_context_gl_impl::MakeContext(ContextOptions::default(), Box::new(provider))
+            .ok_or("GL render context unavailable")?;
+    let context = unsafe { Pin::get_unchecked_mut(context.as_mut()) };
+    let implementation = unsafe { &mut *context.static_impl_cast::<RenderContextGLImpl>() };
+    let execution = (&*implementation.rust_execution).clone();
+    let domain = execution.domain().clone();
+    let textures = domain.withCurrent(|| {
+        std::array::from_fn::<_, 2, _>(|_| {
+            let texture = domain.generateObject(GLObjectKind::Texture);
+            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, texture));
+            recordGLCommand(GLCommand::TexStorage2D {
+                target: GL_TEXTURE_2D,
+                levels: 1,
+                internal_format: GL_RGBA8,
+                width: 32,
+                height: 32,
+            });
+            texture
+        })
+    });
+    let mut target = TextureRenderTargetGL::new(32, 32, execution);
+    let mut raw_path = RawPath::default();
+    raw_path.move_to(0.0, 0.0);
+    raw_path.line_to(32.0, 0.0);
+    raw_path.line_to(32.0, 32.0);
+    raw_path.line_to(0.0, 32.0);
+    raw_path.close();
+    let path = context
+        .riveRenderFactoryMut()
+        .makeRenderPathHandle(&mut raw_path, FillRule::NonZero)
+        .ok_or("GL retarget test path allocation failed")?;
+    let mut paint = context
+        .riveRenderFactoryMut()
+        .makeRenderPaintHandle()
+        .ok_or("GL retarget test paint allocation failed")?;
+    let mut frame = 0;
+    for samples in [4, 1, 4] {
+        for (texture, color) in textures.into_iter().zip([0xffff0000, 0xff00ffff]) {
+            target.setTargetTexture(texture);
+            unsafe { &mut *context.static_impl_cast::<RenderContextGLImpl>() }.invalidateGLState();
+            context.beginFrameExecutable(&FrameDescriptor {
+                renderTargetWidth: 32,
+                renderTargetHeight: 32,
+                clearColor: color,
+                msaaSampleCount: samples,
+                clockwiseFillOverride: true,
+                ..FrameDescriptor::default()
+            });
+            paint.color(color);
+            let mut renderer = unsafe { RiveRenderer::new_from_context(context) };
+            unsafe {
+                renderer.drawPath(
+                    path.source_base() as *const _ as *mut _,
+                    paint.source_base_mut(),
+                );
+            }
+            drop(renderer);
+            frame += 1;
+            // The target and its GL execution domain remain live for the flush.
+            unsafe {
+                context.flushExecutable(&FlushResources {
+                    renderTarget: (&mut target as *mut TextureRenderTargetGL).cast(),
+                    externalCommandBuffer: std::ptr::null_mut(),
+                    currentFrameNumber: frame,
+                    safeFrameNumber: frame - 1,
+                });
+            }
+        }
+        for (texture, expected) in textures
+            .into_iter()
+            .zip([[255, 0, 0, 255], [0, 255, 255, 255]])
+        {
+            target.setTargetTexture(texture);
+            target.bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
+            let pixels = domain.withCurrent(|| domain.readPixelsRGBA8(0, 0, 32, 32));
+            assert_eq!(pixels.len(), 32 * 32 * 4);
+            for pixel in pixels.chunks_exact(4) {
+                assert_eq!(
+                    pixel, expected,
+                    "retarget samples={samples}, texture={texture}"
+                );
+            }
+        }
+    }
+    drop(target);
+    domain.withCurrent(|| {
+        for texture in textures {
+            recordGLCommand(GLCommand::DeleteTexture(texture));
+        }
+    });
+    Ok(())
 }

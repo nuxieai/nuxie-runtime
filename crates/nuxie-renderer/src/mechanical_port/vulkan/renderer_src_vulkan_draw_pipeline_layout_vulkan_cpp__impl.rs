@@ -99,7 +99,8 @@ impl DrawPipelineLayoutVulkan {
                     .descriptor_count(1)
                     .stage_flags(vk::ShaderStageFlags::FRAGMENT),
             );
-        } else if interlockMode == InterlockMode::depthStencil {
+        } else if renderPassOptions.has(RenderPassOptionsVulkan::msaa) {
+            assert_eq!(interlockMode, InterlockMode::depthStencil);
             plsLayoutBindings.push(
                 vk::DescriptorSetLayoutBinding::default()
                     .binding(COVERAGE_PLANE_IDX)
@@ -263,11 +264,19 @@ mod tests {
             2
         );
         assert_eq!(
-            colorAttachmentCountForMode(InterlockMode::depthStencil, 0, RenderPassOptionsVulkan::none),
+            colorAttachmentCountForMode(
+                InterlockMode::depthStencil,
+                0,
+                RenderPassOptionsVulkan::none
+            ),
             1
         );
         assert_eq!(
-            colorAttachmentCountForMode(InterlockMode::depthStencil, 2, RenderPassOptionsVulkan::none),
+            colorAttachmentCountForMode(
+                InterlockMode::depthStencil,
+                2,
+                RenderPassOptionsVulkan::none
+            ),
             1
         );
     }

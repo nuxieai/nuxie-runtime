@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -33,7 +33,7 @@ var N9_: sampler;
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var W5_: sampler;
+var X5_: sampler;
 var<private> V1_1: vec4<f32>;
 var<private> C2_1: vec3<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
@@ -103,7 +103,7 @@ fn main_1() {
     let _e77 = phi_415_;
     phi_619_ = _e73;
     if _e77 {
-        let _e81 = textureSampleLevel(HC, W5_, _e27.xy, (_e27.z - 1f));
+        let _e81 = textureSampleLevel(HC, X5_, _e27.xy, (_e27.z - 1f));
         phi_612_ = _e81;
         if Dh {
             if (_e81.w != 0f) {
@@ -121,8 +121,8 @@ fn main_1() {
     let _e97 = phi_619_;
     let _e98 = _e97.xyz;
     let _e100 = gl_FragCoord_1;
-    let _e102 = n.B3_;
-    let _e104 = n.C3_;
+    let _e102 = n.C3_;
+    let _e104 = n.D3_;
     if (Ih && (_e97.w != 0f)) {
         phi_620_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e100.x) + (0.00583715f * _e100.y))))) * _e102) + _e104)) + _e98);
     } else {

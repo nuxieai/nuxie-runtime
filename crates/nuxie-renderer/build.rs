@@ -239,10 +239,10 @@ fn generate_vulkan_spirv_module() -> io::Result<()> {
         .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("h"))
         .collect::<Vec<_>>();
     headers.sort();
-    if headers.len() != 93 {
+    if headers.len() != 96 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("expected 93 frozen SPIR-V headers, found {}", headers.len()),
+            format!("expected 96 frozen SPIR-V headers, found {}", headers.len()),
         ));
     }
 
@@ -508,6 +508,22 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
          \t}\n\
          }\n",
     );
+    // Function-name literals must follow this same minifier invocation, just
+    // like macro literals. Keep the upstream immortal NSString ownership while
+    // avoiding a second, stale table of minified spellings in the native host.
+    rust.push_str(
+        "#[cfg(target_vendor = \"apple\")]\n\
+         pub fn source_function_literal(text: &str) -> Option<&'static objc2_foundation::NSString> {\n\
+             Some(match text {\n",
+    );
+    for name in REQUIRED_EXPORTS.iter().filter(|name| name.ends_with("Main")) {
+        let value = values[name];
+        rust.push_str(&format!(
+            "        {:?} => objc2_foundation::ns_string!({:?}),\n",
+            value, value
+        ));
+    }
+    rust.push_str("        _ => return None,\n    })\n}\n");
     fs::write(generated_dir.join("runtime_shader_exports.rs"), rust)
 }
 

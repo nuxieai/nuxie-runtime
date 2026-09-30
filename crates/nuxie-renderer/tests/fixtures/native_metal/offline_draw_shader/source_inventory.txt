@@ -21,14 +21,14 @@
 # renderer/src/shaders/minify.py. The four minified files at the end are the
 # transitive includes named by draw_combinations.metal.
 #
-# Current inputs below retain that captured batch's naming and apply only the
+# Historical adapted inputs below retained that captured batch's naming and applied only the
 # upstream c18b32511bfeaeee6b7c54e35152aea3fdbb5964 macro rename
 # RENDER_MODE_MSAA -> RENDER_MODE_DEPTH_STENCIL. No new generation is claimed.
 # captured_source|common.minified.glsl|4826|95e562edab842c27db30650880f48efd2690118b23ac35da46d0051d2fefee1c
 # captured_source|draw_path_common.minified.glsl|6464|04b241b5300392fd5f6f7aa8e830cc2ab5e17065974f9e71845344fc5c57398e
 # captured_source|draw_path.minified.vert|5189|deb11c22b40505379a8208ae04384f92abe4b35e82d79f28a159b1f3e2e774a8
 # captured_source|draw_image_mesh.minified.vert|1439|8b93b525f34e1543a900b36c344e3dd5ed919d57c0c684108fd15f8f6a975ee3
-# kind|path|bytes|sha256 (current inputs)
+# kind|path|bytes|sha256 (historical c18 adapted inputs)
 direct|metal.minified.glsl|7217|a0c74871c6c7cd40b3020a488f60baf28b2cad5a33235c7a0d6b3dfa0f56e400
 direct|constants.minified.glsl|2195|05ba12e3e03782fb00c816946acec76b341b32fcaa208459dd7c6933113796f7
 direct|flush_uniforms.minified.glsl|375|c3e77a2a4b2f28b23a81177066b6fb36a4b6b5f256797f500026536144385cf4
@@ -48,3 +48,26 @@ transitive|draw_image_mesh.minified.vert|1484|a43ab478e3009a7de924c65b78d7b0276b
 # therefore pinned as an oracle rather than re-generated during Cargo builds.
 
 # draw_combinations_capture_upstream_commit=3ed35ee0ded0d58fb8d380930a156041a4624a2f
+
+# Current 1cc minified batch; historical captures above are unchanged.
+# current_generation_upstream_commit=1cc2396f0d0d3f6d9c0b16809904e85265f617eb
+# current_generation_command=PYTHONHASHSEED=0 PYTHONPATH=<ply-3.11-parent> make -j6 OUT=<isolated-output> minify spirv
+# current_generation_runtime=Python 3.14.6; PLY 3.11
+# current_generation_minify_sha256=1144ea77fb55558c8e51c2536888b492bf4235add068c3bf41887e5946eae897
+# current_generation_makefile_sha256=14756892cfe57c9d64fd2c69a678d0a639d136ecfc46ba4ba4c36d4ab8586620
+# current_generation_date=2026-09-29
+# Only minified GLSL was regenerated. draw.metal and draw_combinations.metal
+# retain their historical bytes and provenance recorded above.
+# current_source|draw.metal|947|1111713584059e5d2b6469d45200b5c11949de17d7dcb7ffe62529c96c6269bd
+# current_source|metal.minified.glsl|7213|8cb7caf725864e75e8ea68a2e0abc96fd07f9278690fd43d85236f7dbbcbbbe1
+# current_source|constants.minified.glsl|2251|3444dae4d5bff873299888a403faa63293873d960bcd1e39d098bf3cf1fe171f
+# current_source|flush_uniforms.minified.glsl|375|02ac5c03bed7bdc35b64cd010ebc4e82863437928af2099e0bb29374380b4e64
+# current_source|common.minified.glsl|4853|32ec7bd7adc16f0b7f143ad8e53961b3f31ff6ea5b7ddbace4265e5eb045067c
+# current_source|draw_path_common.minified.glsl|6647|71190bacf2b97d70d3b74f82a3fc354b3b3e83df7326d1b8e4ba8ad7db2f21ac
+# current_source|render_atlas.minified.glsl|2361|0cd327768037e501dd4ff06c935f31b59fc107d044ee5c16a37bca1e8ec8beb6
+# current_source|advanced_blend.minified.glsl|2259|31c1048651d801d1543aacc572427439048c63f0d3e0926ed6dedbec459f100d
+# current_source|draw_combinations.metal|5877|d3ec0fcb16802b4081d04356e03560d244afb4799c408b0a7b633e591679e06d
+# current_source|draw_path.minified.vert|5069|99b06b36c430793bb07069643cd3838b4ba70dc8f600f6a2d406defa6174a192
+# current_source|draw_raster_order_path.minified.frag|1920|766d6108901c1f62a1bf6654b76e4cbe28c96b6c0759289adc24dffd5d6edb66
+# current_source|draw_mesh.minified.frag|2195|4d4ae3052da6e9d65a7220cafdd2159b597fe637e1fdff27b44adc0c91963587
+# current_source|draw_image_mesh.minified.vert|1379|384a122fd12698fe015062a44f0f66aa99692f56abfdb2e0929e63b0833a121e

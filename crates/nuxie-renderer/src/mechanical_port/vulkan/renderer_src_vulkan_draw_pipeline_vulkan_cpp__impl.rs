@@ -20,7 +20,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::
     ShaderMiscFlags, DEPTH_MAX, DEPTH_MIN,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp::{
-    get_pipeline_state, pipeline_unique_key,
+    getPipelineUniqueKey, get_pipeline_state,
 };
 use ash::vk;
 use std::sync::Arc;
@@ -116,7 +116,8 @@ const fn add_bits_to_key(key: u64, value: u64, bitCount: u64) -> u64 {
 }
 
 pub(crate) fn createKey(props: &PipelineProps, platformFeatures: &PlatformFeatures) -> u64 {
-    let mut key = pipeline_unique_key(
+    const _: () = assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PipelineUniqueKeyBitCount as u64 + KEY_NO_INTERLOCK_MODE_BIT_COUNT + DRAW_PIPELINE_OPTION_COUNT as u64 + 1 <= 64);
+    let mut key = getPipelineUniqueKey(
         props.drawType,
         props.shaderFeatures,
         props.interlockMode,
@@ -155,6 +156,7 @@ pub(crate) fn subpass_index(
     colorLoadAction: LoadAction,
     interlockMode: InterlockMode,
     shaderMiscFlags: ShaderMiscFlags,
+    renderPassOptions: RenderPassOptionsVulkan,
 ) -> u32 {
     if interlockMode == InterlockMode::clockwiseAtomic {
         return if shaderMiscFlags.has(ShaderMiscFlags::borrowedCoveragePass) {
@@ -164,7 +166,8 @@ pub(crate) fn subpass_index(
         };
     }
     let mainSubpassIdx = u32::from(
-        interlockMode == InterlockMode::depthStencil && colorLoadAction == LoadAction::preserveRenderTarget,
+        renderPassOptions.has(RenderPassOptionsVulkan::msaa)
+            && colorLoadAction == LoadAction::preserveRenderTarget,
     );
     match drawType {
         DrawType::renderPassInitialize => {
@@ -247,6 +250,7 @@ impl DrawPipelineVulkan {
             props.colorLoadAction,
             interlockMode,
             props.shaderMiscFlags,
+            pipelineLayout.renderPassOptions(),
         );
 
         let shaderPermutationFlags =
@@ -396,7 +400,10 @@ impl DrawPipelineVulkan {
             depthStencilState.back = back;
         }
         let msaaState = vk::PipelineMultisampleStateCreateInfo::default().rasterization_samples(
-            if interlockMode == InterlockMode::depthStencil && props.drawType != DrawType::renderPassResolve
+            if pipelineLayout
+                .renderPassOptions()
+                .has(RenderPassOptionsVulkan::msaa)
+                && props.drawType != DrawType::renderPassResolve
             {
                 vk::SampleCountFlags::TYPE_4
             } else {
@@ -572,6 +579,7 @@ mod tests {
                 LoadAction::clear,
                 InterlockMode::rasterOrdering,
                 ShaderMiscFlags::none,
+                RenderPassOptionsVulkan::none,
             ),
             0
         );
@@ -581,6 +589,7 @@ mod tests {
                 LoadAction::preserveRenderTarget,
                 InterlockMode::depthStencil,
                 ShaderMiscFlags::none,
+                RenderPassOptionsVulkan::msaa,
             ),
             0
         );
@@ -590,6 +599,7 @@ mod tests {
                 LoadAction::preserveRenderTarget,
                 InterlockMode::depthStencil,
                 ShaderMiscFlags::none,
+                RenderPassOptionsVulkan::msaa,
             ),
             2
         );
@@ -599,6 +609,7 @@ mod tests {
                 LoadAction::clear,
                 InterlockMode::clockwiseAtomic,
                 ShaderMiscFlags::borrowedCoveragePass,
+                RenderPassOptionsVulkan::none,
             ),
             0
         );
@@ -608,6 +619,7 @@ mod tests {
                 LoadAction::clear,
                 InterlockMode::clockwiseAtomic,
                 ShaderMiscFlags::none,
+                RenderPassOptionsVulkan::none,
             ),
             1
         );
@@ -616,10 +628,37 @@ mod tests {
     #[test]
     fn dynamic_state_choice_has_a_distinct_pipeline_key() {
         let features = PlatformFeatures::default();
-        let dynamic = props(DrawType::stencilDynamicMidpointFans, InterlockMode::depthStencil);
+        let dynamic = props(
+            DrawType::stencilDynamicMidpointFans,
+            InterlockMode::depthStencil,
+        );
         let mut baked = dynamic;
         baked.drawType = DrawType::stencilMidpointFans;
         assert_ne!(createKey(&dynamic, &features), createKey(&baked, &features));
+    }
+
+    #[test]
+    fn single_sample_preserve_does_not_insert_msaa_seed_subpass() {
+        assert_eq!(
+            subpass_index(
+                DrawType::depthStrokes,
+                LoadAction::preserveRenderTarget,
+                InterlockMode::depthStencil,
+                ShaderMiscFlags::none,
+                RenderPassOptionsVulkan::none
+            ),
+            0
+        );
+        assert_eq!(
+            subpass_index(
+                DrawType::renderPassResolve,
+                LoadAction::preserveRenderTarget,
+                InterlockMode::depthStencil,
+                ShaderMiscFlags::none,
+                RenderPassOptionsVulkan::manuallyResolved
+            ),
+            1
+        );
     }
 
     #[test]

@@ -75,8 +75,8 @@ const GLSL_GLSL_VERSION: &str = "LC";
 const GLSL_VERTEX: &str = "DB";
 const GLSL_FRAGMENT: &str = "FB";
 const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
-const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "NF";
-const GLSL_GL_RENDERER_MALI: &str = "OF";
+const GLSL_TESS_TEXTURE_FLOATING_POINT: &str = "OF";
+const GLSL_GL_RENDERER_MALI: &str = "PF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -530,7 +530,7 @@ mod tests {
             289
         );
         assert_eq!(PINNED_SOURCE.lines().count(), 501);
-        assert_eq!(GLSL_GLSL.as_bytes().len(), 10413);
+        assert_eq!(GLSL_GLSL.as_bytes().len(), 10573);
     }
 
     #[test]
@@ -581,8 +581,8 @@ mod tests {
             "#define FB\n",
             "#define CUSTOM true\n",
             "#define EE _baseInstance\n",
-            "#define NF\n",
             "#define OF\n",
+            "#define PF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

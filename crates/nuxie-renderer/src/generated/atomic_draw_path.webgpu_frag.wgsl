@@ -28,12 +28,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -80,7 +80,7 @@ var<storage, read_write> x4_: x4Qd_1;
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var W5_: sampler;
+var X5_: sampler;
 
 fn main_1() {
     var local: vec3<f32>;
@@ -467,8 +467,8 @@ fn main_1() {
     let _e717 = phi_4945_;
     let _e719 = phi_4938_;
     let _e720 = _e719.xyz;
-    let _e723 = n.B3_;
-    let _e725 = n.C3_;
+    let _e723 = n.C3_;
+    let _e725 = n.D3_;
     if (Ih && (_e719.w != 0f)) {
         phi_4940_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e93.x) + (0.00583715f * _e93.y))))) * _e723) + _e725)) + _e720);
     } else {

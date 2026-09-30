@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -38,7 +38,7 @@ var<private> gl_VertexIndex_1: i32;
 var<private> JC_1: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> n: BC;
-var<private> V6_: vec4<f32>;
+var<private> W6_: vec4<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
@@ -100,7 +100,7 @@ fn main_1() {
         phi_244_ = _e85;
     }
     let _e87 = phi_244_;
-    V6_ = (vec4<f32>(((vec4(_e87) >> bitcast<vec4<u32>>(vec4<u32>(16u, 8u, 0u, 24u))) & vec4<u32>(255u, 255u, 255u, 255u))) * vec4<f32>(0.003921569f, 0.003921569f, 0.003921569f, 0.003921569f));
+    W6_ = (vec4<f32>(((vec4(_e87) >> bitcast<vec4<u32>>(vec4<u32>(16u, 8u, 0u, 24u))) & vec4<u32>(255u, 255u, 255u, 255u))) * vec4<f32>(0.003921569f, 0.003921569f, 0.003921569f, 0.003921569f));
     unnamed.gl_Position = vec4<f32>(((_e81 * 2f) - 1f), (((f32((_e56 & 536870911u)) + _e54) * _e50) - sign(_e50)), 0f, 1f);
     return;
 }
@@ -110,7 +110,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) JC: vec4<u32>) 
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     JC_1 = JC;
     main_1();
-    let _e8 = V6_;
+    let _e8 = W6_;
     let _e9 = unnamed.gl_Position;
     return VertexOutput(_e8, _e9);
 }

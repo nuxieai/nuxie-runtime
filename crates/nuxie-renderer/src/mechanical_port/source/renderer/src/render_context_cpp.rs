@@ -4832,6 +4832,7 @@ fn wants_fixed_function_color_output(
     interlock: gpu::InterlockMode,
     contents: gpu::DrawContents,
     manually_resolved: bool,
+    _msaa_sample_count: u32,
 ) -> bool {
     let advanced = (contents.0 & gpu::DrawContents::advancedBlend.0) != 0;
     match interlock {
@@ -7287,6 +7288,7 @@ impl LogicalFlush {
         } else if context.frameInterlockMode() == gpu::InterlockMode::depthStencil
             && self.m_flush_desc.colorLoadAction == gpu::LoadAction::preserveRenderTarget
             && features.msaaColorPreserveNeedsDraw
+            && self.m_flush_desc.msaaSampleCount > 1
         {
             let batch = self.m_draw_list.push_back(gpu::DrawBatch::new(
                 gpu::DrawType::renderPassInitialize, self.m_baseline_shader_misc_flags,
@@ -7605,7 +7607,11 @@ impl LogicalFlush {
         ) as u32;
         self.m_flush_desc.renderTarget = NonNull::new(flush_resources.renderTarget);
         self.m_flush_desc.interlockMode = context.frameInterlockMode();
-        self.m_flush_desc.msaaSampleCount = frame.msaaSampleCount as i32;
+        self.m_flush_desc.msaaSampleCount = frame.msaaSampleCount;
+        debug_assert_eq!(
+            self.m_flush_desc.interlockMode == gpu::InterlockMode::depthStencil,
+            self.m_flush_desc.msaaSampleCount != 0,
+        );
         let mut clear_during_atomic_resolve = false;
         if logical_flush_index != 0 {
             self.m_flush_desc.colorLoadAction = gpu::LoadAction::preserveRenderTarget;
@@ -7652,6 +7658,7 @@ impl LogicalFlush {
                 self.m_flush_desc.virtualTileWidth,
                 self.m_flush_desc.virtualTileHeight,
                 self.m_combined_draw_contents,
+                self.m_flush_desc.msaaSampleCount,
             )
         };
         self.m_flush_desc.fixedFunctionColorOutput = wants_fixed_function_color_output(
@@ -7659,6 +7666,7 @@ impl LogicalFlush {
             context.frameInterlockMode(),
             self.m_combined_draw_contents,
             self.m_flush_desc.manuallyResolved,
+            self.m_flush_desc.msaaSampleCount,
         );
         if self.m_flush_desc.fixedFunctionColorOutput {
             self.m_baseline_shader_misc_flags |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;

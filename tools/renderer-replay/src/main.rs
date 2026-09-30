@@ -160,6 +160,7 @@ fn replay_native_webgpu(
     }
     let mode = match mode {
         "msaa" => nuxie_renderer::RenderMode::Msaa,
+        "clockwise-msaa1" => nuxie_renderer::RenderMode::ClockwiseMsaa1,
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported exact WebGPU mode `{value}`").into()),
     };
@@ -181,6 +182,7 @@ fn replay_native_vulkan(
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let mode = match mode {
         "msaa" => nuxie_renderer::RenderMode::Msaa,
+        "clockwise-msaa1" => nuxie_renderer::RenderMode::ClockwiseMsaa1,
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported exact Vulkan mode `{value}`").into()),
     };
@@ -192,7 +194,7 @@ fn replay_native_vulkan(
 }
 
 fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
-    if !matches!(mode, "msaa" | "clockwise-atomic") {
+    if !matches!(mode, "msaa" | "clockwise-atomic" | "clockwise-msaa1") {
         return Err(format!("unsupported renderer mode `{mode}`"));
     }
     if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "msaa" {
@@ -200,6 +202,9 @@ fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
             "native Metal does not implement `msaa`; upstream Metal selects raster-order or atomic execution"
                 .to_owned(),
         );
+    }
+    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "clockwise-msaa1" {
+        return Err("native Metal does not implement depth/stencil rendering".to_owned());
     }
     Ok(())
 }
@@ -344,6 +349,7 @@ fn replay_ffi(
     use nuxie_renderer_ffi::FfiRenderMode;
     let mode = match mode {
         "msaa" => FfiRenderMode::Msaa,
+        "clockwise-msaa1" => FfiRenderMode::ClockwiseMsaa1,
         "clockwise-atomic" => FfiRenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported renderer mode `{value}`").into()),
     };
@@ -424,7 +430,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-vulkan-exact|rust-webgpu-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-vulkan-exact|rust-webgpu-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic|clockwise-msaa1] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]

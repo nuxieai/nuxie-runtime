@@ -41,15 +41,15 @@ def main() -> None:
     checksums = {name: digest for digest, name in (
         line.split() for line in Path(__file__).with_name("vulkan-spirv.sha256").read_text().splitlines()
     )}
-    pinned_ref = "c5ac0a130a6ff425e38721183eb1f8f05af8e54a"
+    pinned_ref = "1cc2396f0d0d3f6d9c0b16809904e85265f617eb"
 
     includes = [
         match.decode("utf-8")
         for match in INCLUDE_RE.findall(source_cpp.read_bytes())
     ]
-    if len(includes) != 93 or len(set(includes)) != 93:
+    if len(includes) != 96 or len(set(includes)) != 96:
         raise SystemExit(
-            f"expected 93 unique vulkan_shaders.cpp headers, got "
+            f"expected 96 unique vulkan_shaders.cpp headers, got "
             f"{len(includes)} includes/{len(set(includes))} unique"
         )
 

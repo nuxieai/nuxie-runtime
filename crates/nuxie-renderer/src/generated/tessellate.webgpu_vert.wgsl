@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -61,8 +61,8 @@ var<storage> PB: Bg;
 var YC: texture_2d<f32>;
 @group(3) @binding(9)
 var ea: sampler;
-var<private> B6_: vec4<f32>;
 var<private> C6_: vec4<f32>;
+var<private> D6_: vec4<f32>;
 var<private> O4_: vec4<f32>;
 var<private> P4_: vec3<f32>;
 var<private> I7_: u32;
@@ -421,8 +421,8 @@ fn main_1() {
         phi_1994_ = -(_e452);
     }
     let _e464 = phi_1994_;
-    B6_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
-    C6_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
+    C6_ = vec4<f32>(_e60.x, _e60.y, _e383.x, _e383.y);
+    D6_ = vec4<f32>(_e381.x, _e381.y, _e63.z, _e63.w);
     let _e475 = f32((((_e417 + _e119) + _e121) - 1u));
     O4_ = vec4<f32>((_e475 - abs((_e93 - _e115.x))), _e475, f32(((_e121 << bitcast<u32>(10i)) | _e417)), _e464);
     let _e485 = VC_1;
@@ -469,8 +469,8 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) MD: vec4<f32>, 
     VC_1 = VC;
     TB_1 = TB;
     main_1();
-    let _e18 = B6_;
-    let _e19 = C6_;
+    let _e18 = C6_;
+    let _e19 = D6_;
     let _e20 = O4_;
     let _e21 = P4_;
     let _e22 = I7_;

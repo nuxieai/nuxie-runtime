@@ -19,11 +19,11 @@ gl_Position.y=-gl_Position.y;
 #else
 #extension GL_EXT_shader_framebuffer_fetch:require
 #endif
-#ifdef WE
+#ifdef XE
 #if __VERSION__>=310
 layout(binding=0,std140)uniform ij{uniform highp vec4 th;}uh;
 #else
-uniform mediump vec4 XE;
+uniform mediump vec4 YE;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
@@ -34,7 +34,7 @@ __pixel_local_outEXT S1
 #endif
 {layout(rgba8)mediump vec4 k0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 m4;layout(r32ui)highp uint H7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
-#ifdef YE
+#ifdef ZE
 layout(location=0)inout mediump vec4 db;
 #endif
 #endif
@@ -42,14 +42,14 @@ layout(location=0)inout mediump vec4 db;
 layout(location=0)out mediump vec4 db;
 #endif
 void main(){
-#ifdef WE
+#ifdef XE
 #if __VERSION__>=310
 k0=uh.th;
 #else
-k0=XE;
+k0=YE;
 #endif
 #endif
-#ifdef YE
+#ifdef ZE
 #ifdef GL_ARM_shader_framebuffer_fetch
 k0=gl_LastFragColorARM;
 #else
@@ -59,7 +59,7 @@ k0=db;
 #ifdef GE
 H7=0u;
 #endif
-#ifdef XF
+#ifdef YF
 h0=0u;
 #endif
 #ifdef FE

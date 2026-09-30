@@ -28,12 +28,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -79,7 +79,7 @@ var YC: texture_2d<f32>;
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var W5_: sampler;
+var X5_: sampler;
 
 fn main_1() {
     var local: vec3<f32>;
@@ -395,8 +395,8 @@ fn main_1() {
     let _e599 = vec4<f32>(_e593.x, _e587.y, _e593.z, _e593.w);
     let _e605 = vec4<f32>(_e599.x, _e599.y, _e587.z, _e599.w);
     let _e606 = _e605.xyz;
-    let _e608 = n.B3_;
-    let _e610 = n.C3_;
+    let _e608 = n.C3_;
+    let _e610 = n.D3_;
     if (Ih && (_e584.w != 0f)) {
         phi_4138_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e79.x) + (0.00583715f * _e79.y))))) * _e608) + _e610)) + _e606);
     } else {

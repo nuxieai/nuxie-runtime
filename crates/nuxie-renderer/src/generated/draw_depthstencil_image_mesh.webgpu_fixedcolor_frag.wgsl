@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -27,8 +27,8 @@ struct BC {
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var W5_: sampler;
-var<private> G5_1: vec2<f32>;
+var X5_: sampler;
+var<private> H5_1: vec2<f32>;
 @group(0) @binding(0)
 var<uniform> n: BC;
 var<private> H1_1: vec4<f32>;
@@ -42,15 +42,15 @@ var YD: texture_2d<f32>;
 fn main_1() {
     var phi_206_: vec3<f32>;
 
-    let _e18 = G5_1;
+    let _e18 = H5_1;
     let _e20 = n.Cd;
-    let _e21 = textureSampleBias(HC, W5_, _e18, _e20);
+    let _e21 = textureSampleBias(HC, X5_, _e18, _e20);
     let _e22 = H1_1;
     let _e23 = (_e21 * _e22);
     let _e24 = _e23.xyz;
     let _e26 = gl_FragCoord_1;
-    let _e28 = n.B3_;
-    let _e30 = n.C3_;
+    let _e28 = n.C3_;
+    let _e30 = n.D3_;
     if (Ih && (_e23.w != 0f)) {
         phi_206_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e26.x) + (0.00583715f * _e26.y))))) * _e28) + _e30)) + _e24);
     } else {
@@ -64,8 +64,8 @@ fn main_1() {
 }
 
 @fragment
-fn main(@location(0) G5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) K3_: f32, @location(4) @interpolate(flat, either) A1_: u32) -> @location(0) vec4<f32> {
-    G5_1 = G5_;
+fn main(@location(0) H5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) K3_: f32, @location(4) @interpolate(flat, either) A1_: u32) -> @location(0) vec4<f32> {
+    H5_1 = H5_;
     H1_1 = H1_;
     gl_FragCoord_1 = gl_FragCoord;
     K3_1 = K3_;

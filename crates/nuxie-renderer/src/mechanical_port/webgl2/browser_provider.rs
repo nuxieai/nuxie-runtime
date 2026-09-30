@@ -9,23 +9,23 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use js_sys::{
-    Array, Float32Array, Function, Int16Array, Int32Array, Int8Array, Object, Promise, Reflect,
-    Uint16Array, Uint32Array, Uint8Array,
+    Array, Float32Array, Function, Int8Array, Int16Array, Int32Array, Object, Promise, Reflect,
+    Uint8Array, Uint16Array, Uint32Array,
 };
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Event, HtmlCanvasElement};
 
 use super::gles3_decl::{
-    GLCommand, GLContextLifecycleIngress, GLFinalReleaseIngress, GLObjectKind,
-    GLExecutionProvider, WebGLShaderPixelLocalStorageEnableResult, GLenum, GLfloat, GLint, GLuint,
     GL_ARRAY_BUFFER_BINDING, GL_CURRENT_PROGRAM, GL_ELEMENT_ARRAY_BUFFER_BINDING,
-    GL_FRAMEBUFFER_BINDING, GL_RENDERER, GL_RGBA, GL_UNIFORM_BUFFER_BINDING,
-    GL_NUM_EXTENSIONS, GL_UNSIGNED_BYTE, GL_VERSION, GL_VERTEX_ARRAY_BINDING,
+    GL_FRAMEBUFFER_BINDING, GL_NUM_EXTENSIONS, GL_RENDERER, GL_RGBA, GL_UNIFORM_BUFFER_BINDING,
+    GL_UNSIGNED_BYTE, GL_VERSION, GL_VERTEX_ARRAY_BINDING, GLCommand, GLContextLifecycleIngress,
+    GLExecutionProvider, GLFinalReleaseIngress, GLObjectKind, GLenum, GLfloat, GLint, GLuint,
+    WebGLShaderPixelLocalStorageEnableResult,
 };
 
 thread_local! {
@@ -66,7 +66,10 @@ impl NameTable {
             self.next = 1;
         }
         let name = self.next;
-        self.next = self.next.checked_add(1).expect("WebGL object name overflow");
+        self.next = self
+            .next
+            .checked_add(1)
+            .expect("WebGL object name overflow");
         self.values.insert(name, value);
         name
     }
@@ -75,10 +78,7 @@ impl NameTable {
         if name == 0 {
             JsValue::NULL
         } else {
-            self.values
-                .get(&name)
-                .cloned()
-                .unwrap_or(JsValue::NULL)
+            self.values.get(&name).cloned().unwrap_or(JsValue::NULL)
         }
     }
 
@@ -263,14 +263,17 @@ impl BrowserWebGl2Provider {
         }
         let name = match parameter {
             GL_CURRENT_PROGRAM => self.names.programs.name_of(value),
-            GL_ARRAY_BUFFER_BINDING | GL_ELEMENT_ARRAY_BUFFER_BINDING | GL_UNIFORM_BUFFER_BINDING => {
-                self.names.buffers.name_of(value)
-            }
+            GL_ARRAY_BUFFER_BINDING
+            | GL_ELEMENT_ARRAY_BUFFER_BINDING
+            | GL_UNIFORM_BUFFER_BINDING => self.names.buffers.name_of(value),
             GL_FRAMEBUFFER_BINDING => self.names.framebuffers.name_of(value),
             GL_VERTEX_ARRAY_BINDING => self.names.vertex_arrays.name_of(value),
             _ => None,
         };
-        name.map_or_else(|| value.as_f64().unwrap_or(0.0) as GLint, |name| name as GLint)
+        name.map_or_else(
+            || value.as_f64().unwrap_or(0.0) as GLint,
+            |name| name as GLint,
+        )
     }
 
     fn shader(&self, name: GLuint) -> JsValue {
@@ -354,161 +357,757 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
 
     fn submit(&mut self, command: GLCommand) {
         match command {
-            GLCommand::Finish => { self.call("finish", &[]); }
-            GLCommand::Clear(mask) => { self.call("clear", &[number(mask)]); }
-            GLCommand::ClearColor(r, g, b, a) => { self.call("clearColor", &[number(r), number(g), number(b), number(a)]); }
-            GLCommand::FrontFace(mode) => { self.call("frontFace", &[number(mode)]); }
-            GLCommand::DepthRange(near, far) => { self.call("depthRange", &[number(near), number(far)]); }
-            GLCommand::DepthFunc(function) => { self.call("depthFunc", &[number(function)]); }
-            GLCommand::ClearDepth(depth) => { self.call("clearDepth", &[number(depth)]); }
-            GLCommand::ClearStencil(stencil) => { self.call("clearStencil", &[number(stencil)]); }
-            GLCommand::Enable(capability) => { self.call("enable", &[number(capability)]); }
-            GLCommand::Disable(capability) => { self.call("disable", &[number(capability)]); }
-            GLCommand::PixelStore(parameter, value) => { self.call("pixelStorei", &[number(parameter), number(value)]); }
-            GLCommand::BindAttribLocation { program, index, name } => {
-                self.call("bindAttribLocation", &[self.program(program), number(index), JsValue::from_str(bytes_string(&name))]);
+            GLCommand::Finish => {
+                self.call("finish", &[]);
             }
-            GLCommand::BindBuffer(target, buffer) => { self.call("bindBuffer", &[number(target), self.object(GLObjectKind::Buffer, buffer)]); }
-            GLCommand::BindBufferRange { target, index, buffer, offset, size } => {
-                self.call("bindBufferRange", &[number(target), number(index), self.object(GLObjectKind::Buffer, buffer), number(offset), number(size)]);
+            GLCommand::Clear(mask) => {
+                self.call("clear", &[number(mask)]);
             }
-            GLCommand::BindFramebuffer(target, framebuffer) => { self.call("bindFramebuffer", &[number(target), self.object(GLObjectKind::Framebuffer, framebuffer)]); }
+            GLCommand::ClearColor(r, g, b, a) => {
+                self.call("clearColor", &[number(r), number(g), number(b), number(a)]);
+            }
+            GLCommand::FrontFace(mode) => {
+                self.call("frontFace", &[number(mode)]);
+            }
+            GLCommand::DepthRange(near, far) => {
+                self.call("depthRange", &[number(near), number(far)]);
+            }
+            GLCommand::DepthFunc(function) => {
+                self.call("depthFunc", &[number(function)]);
+            }
+            GLCommand::ClearDepth(depth) => {
+                self.call("clearDepth", &[number(depth)]);
+            }
+            GLCommand::ClearStencil(stencil) => {
+                self.call("clearStencil", &[number(stencil)]);
+            }
+            GLCommand::Enable(capability) => {
+                self.call("enable", &[number(capability)]);
+            }
+            GLCommand::Disable(capability) => {
+                self.call("disable", &[number(capability)]);
+            }
+            GLCommand::PixelStore(parameter, value) => {
+                self.call("pixelStorei", &[number(parameter), number(value)]);
+            }
+            GLCommand::BindAttribLocation {
+                program,
+                index,
+                name,
+            } => {
+                self.call(
+                    "bindAttribLocation",
+                    &[
+                        self.program(program),
+                        number(index),
+                        JsValue::from_str(bytes_string(&name)),
+                    ],
+                );
+            }
+            GLCommand::BindBuffer(target, buffer) => {
+                self.call(
+                    "bindBuffer",
+                    &[number(target), self.object(GLObjectKind::Buffer, buffer)],
+                );
+            }
+            GLCommand::BindBufferRange {
+                target,
+                index,
+                buffer,
+                offset,
+                size,
+            } => {
+                self.call(
+                    "bindBufferRange",
+                    &[
+                        number(target),
+                        number(index),
+                        self.object(GLObjectKind::Buffer, buffer),
+                        number(offset),
+                        number(size),
+                    ],
+                );
+            }
+            GLCommand::BindFramebuffer(target, framebuffer) => {
+                self.call(
+                    "bindFramebuffer",
+                    &[
+                        number(target),
+                        self.object(GLObjectKind::Framebuffer, framebuffer),
+                    ],
+                );
+            }
             GLCommand::BindFramebufferFromQuery(target, slot) => {
-                let value = self.names.query_values.get(&slot).cloned().unwrap_or(JsValue::NULL);
+                let value = self
+                    .names
+                    .query_values
+                    .get(&slot)
+                    .cloned()
+                    .unwrap_or(JsValue::NULL);
                 self.call("bindFramebuffer", &[number(target), value]);
             }
-            GLCommand::BindRenderbuffer(target, renderbuffer) => { self.call("bindRenderbuffer", &[number(target), self.object(GLObjectKind::Renderbuffer, renderbuffer)]); }
-            GLCommand::BindSampler(unit, sampler) => { self.call("bindSampler", &[number(unit), self.object(GLObjectKind::Sampler, sampler)]); }
+            GLCommand::BindRenderbuffer(target, renderbuffer) => {
+                self.call(
+                    "bindRenderbuffer",
+                    &[
+                        number(target),
+                        self.object(GLObjectKind::Renderbuffer, renderbuffer),
+                    ],
+                );
+            }
+            GLCommand::BindSampler(unit, sampler) => {
+                self.call(
+                    "bindSampler",
+                    &[number(unit), self.object(GLObjectKind::Sampler, sampler)],
+                );
+            }
             GLCommand::ProvokingVertex(mode) => {
                 if let Some(extension) = self.provoking_vertex.as_ref() {
                     Self::call_extension(extension, "provokingVertexWEBGL", &[number(mode)]);
                 }
             }
-            GLCommand::Scissor(x, y, width, height) => { self.call("scissor", &[number(x), number(y), number(width), number(height)]); }
-            GLCommand::Viewport(x, y, width, height) => { self.call("viewport", &[number(x), number(y), number(width), number(height)]); }
-            GLCommand::PolygonOffset(factor, units) => { self.call("polygonOffset", &[number(factor), number(units)]); }
-            GLCommand::CullFace(mode) => { self.call("cullFace", &[number(mode)]); }
-            GLCommand::BlendEquation(mode) => { self.call("blendEquation", &[number(mode)]); }
-            GLCommand::BlendEquationSeparate(rgb, alpha) => { self.call("blendEquationSeparate", &[number(rgb), number(alpha)]); }
-            GLCommand::BlendFunc(source, destination) => { self.call("blendFunc", &[number(source), number(destination)]); }
-            GLCommand::BlendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha) => { self.call("blendFuncSeparate", &[number(src_rgb), number(dst_rgb), number(src_alpha), number(dst_alpha)]); }
-            GLCommand::BlendColor(r, g, b, a) => { self.call("blendColor", &[number(r), number(g), number(b), number(a)]); }
-            GLCommand::ColorMask(r, g, b, a) => { self.call("colorMask", &[JsValue::from_bool(r), JsValue::from_bool(g), JsValue::from_bool(b), JsValue::from_bool(a)]); }
-            GLCommand::DepthMask(enabled) => { self.call("depthMask", &[JsValue::from_bool(enabled)]); }
-            GLCommand::StencilMask(mask) => { self.call("stencilMask", &[number(mask)]); }
-            GLCommand::StencilMaskSeparate(face, mask) => { self.call("stencilMaskSeparate", &[number(face), number(mask)]); }
-            GLCommand::StencilFunc(function, reference, mask) => { self.call("stencilFunc", &[number(function), number(reference), number(mask)]); }
-            GLCommand::StencilOp(fail, depth_fail, pass) => { self.call("stencilOp", &[number(fail), number(depth_fail), number(pass)]); }
-            GLCommand::StencilFuncSeparate(face, function, reference, mask) => { self.call("stencilFuncSeparate", &[number(face), number(function), number(reference), number(mask)]); }
-            GLCommand::StencilOpSeparate(face, fail, depth_fail, pass) => { self.call("stencilOpSeparate", &[number(face), number(fail), number(depth_fail), number(pass)]); }
-            GLCommand::UseProgram(program) => { self.call("useProgram", &[self.program(program)]); }
-            GLCommand::BindVertexArray(array) => { self.call("bindVertexArray", &[self.object(GLObjectKind::VertexArray, array)]); }
+            GLCommand::Scissor(x, y, width, height) => {
+                self.call(
+                    "scissor",
+                    &[number(x), number(y), number(width), number(height)],
+                );
+            }
+            GLCommand::Viewport(x, y, width, height) => {
+                self.call(
+                    "viewport",
+                    &[number(x), number(y), number(width), number(height)],
+                );
+            }
+            GLCommand::PolygonOffset(factor, units) => {
+                self.call("polygonOffset", &[number(factor), number(units)]);
+            }
+            GLCommand::CullFace(mode) => {
+                self.call("cullFace", &[number(mode)]);
+            }
+            GLCommand::BlendEquation(mode) => {
+                self.call("blendEquation", &[number(mode)]);
+            }
+            GLCommand::BlendEquationSeparate(rgb, alpha) => {
+                self.call("blendEquationSeparate", &[number(rgb), number(alpha)]);
+            }
+            GLCommand::BlendFunc(source, destination) => {
+                self.call("blendFunc", &[number(source), number(destination)]);
+            }
+            GLCommand::BlendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha) => {
+                self.call(
+                    "blendFuncSeparate",
+                    &[
+                        number(src_rgb),
+                        number(dst_rgb),
+                        number(src_alpha),
+                        number(dst_alpha),
+                    ],
+                );
+            }
+            GLCommand::BlendColor(r, g, b, a) => {
+                self.call("blendColor", &[number(r), number(g), number(b), number(a)]);
+            }
+            GLCommand::ColorMask(r, g, b, a) => {
+                self.call(
+                    "colorMask",
+                    &[
+                        JsValue::from_bool(r),
+                        JsValue::from_bool(g),
+                        JsValue::from_bool(b),
+                        JsValue::from_bool(a),
+                    ],
+                );
+            }
+            GLCommand::DepthMask(enabled) => {
+                self.call("depthMask", &[JsValue::from_bool(enabled)]);
+            }
+            GLCommand::StencilMask(mask) => {
+                self.call("stencilMask", &[number(mask)]);
+            }
+            GLCommand::StencilMaskSeparate(face, mask) => {
+                self.call("stencilMaskSeparate", &[number(face), number(mask)]);
+            }
+            GLCommand::StencilFunc(function, reference, mask) => {
+                self.call(
+                    "stencilFunc",
+                    &[number(function), number(reference), number(mask)],
+                );
+            }
+            GLCommand::StencilOp(fail, depth_fail, pass) => {
+                self.call(
+                    "stencilOp",
+                    &[number(fail), number(depth_fail), number(pass)],
+                );
+            }
+            GLCommand::StencilFuncSeparate(face, function, reference, mask) => {
+                self.call(
+                    "stencilFuncSeparate",
+                    &[
+                        number(face),
+                        number(function),
+                        number(reference),
+                        number(mask),
+                    ],
+                );
+            }
+            GLCommand::StencilOpSeparate(face, fail, depth_fail, pass) => {
+                self.call(
+                    "stencilOpSeparate",
+                    &[number(face), number(fail), number(depth_fail), number(pass)],
+                );
+            }
+            GLCommand::UseProgram(program) => {
+                self.call("useProgram", &[self.program(program)]);
+            }
+            GLCommand::BindVertexArray(array) => {
+                self.call(
+                    "bindVertexArray",
+                    &[self.object(GLObjectKind::VertexArray, array)],
+                );
+            }
             GLCommand::BindVertexArrayFromQuery(slot) => {
-                let value = self.names.query_values.get(&slot).cloned().unwrap_or(JsValue::NULL);
+                let value = self
+                    .names
+                    .query_values
+                    .get(&slot)
+                    .cloned()
+                    .unwrap_or(JsValue::NULL);
                 self.call("bindVertexArray", &[value]);
             }
-            GLCommand::ClearBufferDepthStencil { buffer, drawbuffer, depth, stencil } => { self.call("clearBufferfi", &[number(buffer), number(drawbuffer), number(depth), number(stencil)]); }
-            GLCommand::ClearBufferFloat { buffer, drawbuffer, values, value_count } => {
+            GLCommand::ClearBufferDepthStencil {
+                buffer,
+                drawbuffer,
+                depth,
+                stencil,
+            } => {
+                self.call(
+                    "clearBufferfi",
+                    &[
+                        number(buffer),
+                        number(drawbuffer),
+                        number(depth),
+                        number(stencil),
+                    ],
+                );
+            }
+            GLCommand::ClearBufferFloat {
+                buffer,
+                drawbuffer,
+                values,
+                value_count,
+            } => {
                 let array = Float32Array::from(&values[..usize::from(value_count)]);
-                self.call("clearBufferfv", &[number(buffer), number(drawbuffer), array.into()]);
+                self.call(
+                    "clearBufferfv",
+                    &[number(buffer), number(drawbuffer), array.into()],
+                );
             }
-            GLCommand::ClearBufferInt { buffer, drawbuffer, values, value_count } => {
+            GLCommand::ClearBufferInt {
+                buffer,
+                drawbuffer,
+                values,
+                value_count,
+            } => {
                 let array = Int32Array::from(&values[..usize::from(value_count)]);
-                self.call("clearBufferiv", &[number(buffer), number(drawbuffer), array.into()]);
+                self.call(
+                    "clearBufferiv",
+                    &[number(buffer), number(drawbuffer), array.into()],
+                );
             }
-            GLCommand::ClearBufferUInt { buffer, drawbuffer, values, value_count } => {
+            GLCommand::ClearBufferUInt {
+                buffer,
+                drawbuffer,
+                values,
+                value_count,
+            } => {
                 let array = Uint32Array::from(&values[..usize::from(value_count)]);
-                self.call("clearBufferuiv", &[number(buffer), number(drawbuffer), array.into()]);
+                self.call(
+                    "clearBufferuiv",
+                    &[number(buffer), number(drawbuffer), array.into()],
+                );
             }
-            GLCommand::EnableVertexAttribArray(index) => { self.call("enableVertexAttribArray", &[number(index)]); }
-            GLCommand::DisableVertexAttribArray(index) => { self.call("disableVertexAttribArray", &[number(index)]); }
-            GLCommand::VertexAttribIPointer { index, size, type_, stride, offset } => { self.call("vertexAttribIPointer", &[number(index), number(size), number(type_), number(stride), number(offset)]); }
-            GLCommand::VertexAttribPointer { index, size, type_, normalized, stride, offset } => { self.call("vertexAttribPointer", &[number(index), number(size), number(type_), JsValue::from_bool(normalized != 0), number(stride), number(offset)]); }
-            GLCommand::VertexAttribDivisor(index, divisor) => { self.call("vertexAttribDivisor", &[number(index), number(divisor)]); }
-            GLCommand::DrawArrays { mode, first, count } => { self.call("drawArrays", &[number(mode), number(first), number(count)]); }
-            GLCommand::DrawArraysInstanced { mode, first, count, instanceCount } => { self.call("drawArraysInstanced", &[number(mode), number(first), number(count), number(instanceCount)]); }
-            GLCommand::DrawElements { mode, count, type_, offset } => { self.call("drawElements", &[number(mode), number(count), number(type_), number(offset)]); }
-            GLCommand::DrawElementsInstanced { mode, count, type_, offset, instanceCount } => { self.call("drawElementsInstanced", &[number(mode), number(count), number(type_), number(offset), number(instanceCount)]); }
-            GLCommand::DrawElementsInstancedBaseInstance { mode, count, type_, offset, instance_count, base_instance } => {
-                let extension = self.extensions.get("WEBGL_draw_instanced_base_vertex_base_instance").expect("source admitted base-instance extension");
-                Self::call_extension(extension, "drawElementsInstancedBaseVertexBaseInstanceWEBGL", &[number(mode), number(count), number(type_), number(offset), number(instance_count), number(0), number(base_instance)]);
+            GLCommand::EnableVertexAttribArray(index) => {
+                self.call("enableVertexAttribArray", &[number(index)]);
+            }
+            GLCommand::DisableVertexAttribArray(index) => {
+                self.call("disableVertexAttribArray", &[number(index)]);
+            }
+            GLCommand::VertexAttribIPointer {
+                index,
+                size,
+                type_,
+                stride,
+                offset,
+            } => {
+                self.call(
+                    "vertexAttribIPointer",
+                    &[
+                        number(index),
+                        number(size),
+                        number(type_),
+                        number(stride),
+                        number(offset),
+                    ],
+                );
+            }
+            GLCommand::VertexAttribPointer {
+                index,
+                size,
+                type_,
+                normalized,
+                stride,
+                offset,
+            } => {
+                self.call(
+                    "vertexAttribPointer",
+                    &[
+                        number(index),
+                        number(size),
+                        number(type_),
+                        JsValue::from_bool(normalized != 0),
+                        number(stride),
+                        number(offset),
+                    ],
+                );
+            }
+            GLCommand::VertexAttribDivisor(index, divisor) => {
+                self.call("vertexAttribDivisor", &[number(index), number(divisor)]);
+            }
+            GLCommand::DrawArrays { mode, first, count } => {
+                self.call("drawArrays", &[number(mode), number(first), number(count)]);
+            }
+            GLCommand::DrawArraysInstanced {
+                mode,
+                first,
+                count,
+                instanceCount,
+            } => {
+                self.call(
+                    "drawArraysInstanced",
+                    &[
+                        number(mode),
+                        number(first),
+                        number(count),
+                        number(instanceCount),
+                    ],
+                );
+            }
+            GLCommand::DrawElements {
+                mode,
+                count,
+                type_,
+                offset,
+            } => {
+                self.call(
+                    "drawElements",
+                    &[number(mode), number(count), number(type_), number(offset)],
+                );
+            }
+            GLCommand::DrawElementsInstanced {
+                mode,
+                count,
+                type_,
+                offset,
+                instanceCount,
+            } => {
+                self.call(
+                    "drawElementsInstanced",
+                    &[
+                        number(mode),
+                        number(count),
+                        number(type_),
+                        number(offset),
+                        number(instanceCount),
+                    ],
+                );
+            }
+            GLCommand::DrawElementsInstancedBaseInstance {
+                mode,
+                count,
+                type_,
+                offset,
+                instance_count,
+                base_instance,
+            } => {
+                let extension = self
+                    .extensions
+                    .get("WEBGL_draw_instanced_base_vertex_base_instance")
+                    .expect("source admitted base-instance extension");
+                Self::call_extension(
+                    extension,
+                    "drawElementsInstancedBaseVertexBaseInstanceWEBGL",
+                    &[
+                        number(mode),
+                        number(count),
+                        number(type_),
+                        number(offset),
+                        number(instance_count),
+                        number(0),
+                        number(base_instance),
+                    ],
+                );
             }
             GLCommand::BlendBarrierKHR => {
                 if let Some(extension) = self.extensions.get("KHR_blend_equation_advanced") {
                     Self::call_extension(extension, "blendBarrierKHR", &[]);
                 }
             }
-            GLCommand::ReadBuffer(mode) => { self.call("readBuffer", &[number(mode)]); }
-            GLCommand::FramebufferTexture2D { target, attachment, texture_target, texture, level } => { self.call("framebufferTexture2D", &[number(target), number(attachment), number(texture_target), self.object(GLObjectKind::Texture, texture), number(level)]); }
-            GLCommand::FramebufferTextureLayer { target, attachment, texture, level, layer } => { self.call("framebufferTextureLayer", &[number(target), number(attachment), self.object(GLObjectKind::Texture, texture), number(level), number(layer)]); }
-            GLCommand::FramebufferRenderbuffer { target, attachment, renderbuffer_target, renderbuffer } => { self.call("framebufferRenderbuffer", &[number(target), number(attachment), number(renderbuffer_target), self.object(GLObjectKind::Renderbuffer, renderbuffer)]); }
-            GLCommand::DrawBuffers(buffers) => { self.call("drawBuffers", &[Uint32Array::from(buffers.as_slice()).into()]); }
-            GLCommand::Flush => { self.call("flush", &[]); }
-            GLCommand::GenerateMipmap(target) => { self.call("generateMipmap", &[number(target)]); }
-            GLCommand::InvalidateFramebuffer { target, attachments } => { self.call("invalidateFramebuffer", &[number(target), Uint32Array::from(attachments.as_slice()).into()]); }
+            GLCommand::ReadBuffer(mode) => {
+                self.call("readBuffer", &[number(mode)]);
+            }
+            GLCommand::FramebufferTexture2D {
+                target,
+                attachment,
+                texture_target,
+                texture,
+                level,
+            } => {
+                self.call(
+                    "framebufferTexture2D",
+                    &[
+                        number(target),
+                        number(attachment),
+                        number(texture_target),
+                        self.object(GLObjectKind::Texture, texture),
+                        number(level),
+                    ],
+                );
+            }
+            GLCommand::FramebufferTextureLayer {
+                target,
+                attachment,
+                texture,
+                level,
+                layer,
+            } => {
+                self.call(
+                    "framebufferTextureLayer",
+                    &[
+                        number(target),
+                        number(attachment),
+                        self.object(GLObjectKind::Texture, texture),
+                        number(level),
+                        number(layer),
+                    ],
+                );
+            }
+            GLCommand::FramebufferRenderbuffer {
+                target,
+                attachment,
+                renderbuffer_target,
+                renderbuffer,
+            } => {
+                self.call(
+                    "framebufferRenderbuffer",
+                    &[
+                        number(target),
+                        number(attachment),
+                        number(renderbuffer_target),
+                        self.object(GLObjectKind::Renderbuffer, renderbuffer),
+                    ],
+                );
+            }
+            GLCommand::DrawBuffers(buffers) => {
+                self.call(
+                    "drawBuffers",
+                    &[Uint32Array::from(buffers.as_slice()).into()],
+                );
+            }
+            GLCommand::Flush => {
+                self.call("flush", &[]);
+            }
+            GLCommand::GenerateMipmap(target) => {
+                self.call("generateMipmap", &[number(target)]);
+            }
+            GLCommand::InvalidateFramebuffer {
+                target,
+                attachments,
+            } => {
+                self.call(
+                    "invalidateFramebuffer",
+                    &[
+                        number(target),
+                        Uint32Array::from(attachments.as_slice()).into(),
+                    ],
+                );
+            }
             GLCommand::PolygonModeANGLE { face, mode } => {
                 if let Some(extension) = self.extensions.get("ANGLE_polygon_mode") {
-                    Self::call_extension(extension, "polygonModeANGLE", &[number(face), number(mode)]);
+                    Self::call_extension(
+                        extension,
+                        "polygonModeANGLE",
+                        &[number(face), number(mode)],
+                    );
                 }
             }
-            GLCommand::LineWidth(width) => { self.call("lineWidth", &[number(width)]); }
-            GLCommand::FramebufferTexturePixelLocalStorageANGLE { plane, backing_texture, level, layer, usage } => {
+            GLCommand::LineWidth(width) => {
+                self.call("lineWidth", &[number(width)]);
+            }
+            GLCommand::FramebufferTexturePixelLocalStorageANGLE {
+                plane,
+                backing_texture,
+                level,
+                layer,
+                usage,
+            } => {
                 if let Some(extension) = self.pixel_local_storage.as_ref() {
-                    Self::call_extension(extension, "framebufferTexturePixelLocalStorageWEBGL", &[number(plane), self.object(GLObjectKind::Texture, backing_texture), number(level), number(layer), number(usage)]);
+                    Self::call_extension(
+                        extension,
+                        "framebufferTexturePixelLocalStorageWEBGL",
+                        &[
+                            number(plane),
+                            self.object(GLObjectKind::Texture, backing_texture),
+                            number(level),
+                            number(layer),
+                            number(usage),
+                        ],
+                    );
                 }
             }
             GLCommand::FramebufferPixelLocalClearValuefvANGLE { plane, value } => {
                 if let Some(extension) = self.pixel_local_storage.as_ref() {
-                    Self::call_extension(extension, "framebufferPixelLocalClearValuefvWEBGL", &[number(plane), Float32Array::from(value.as_slice()).into()]);
+                    Self::call_extension(
+                        extension,
+                        "framebufferPixelLocalClearValuefvWEBGL",
+                        &[number(plane), Float32Array::from(value.as_slice()).into()],
+                    );
                 }
             }
             GLCommand::BeginPixelLocalStorageANGLE { load_ops } => {
                 if let Some(extension) = self.pixel_local_storage.as_ref() {
-                    Self::call_extension(extension, "beginPixelLocalStorageWEBGL", &[Uint32Array::from(load_ops.as_slice()).into()]);
+                    Self::call_extension(
+                        extension,
+                        "beginPixelLocalStorageWEBGL",
+                        &[Uint32Array::from(load_ops.as_slice()).into()],
+                    );
                 }
             }
             GLCommand::EndPixelLocalStorageANGLE { store_ops } => {
                 if let Some(extension) = self.pixel_local_storage.as_ref() {
-                    Self::call_extension(extension, "endPixelLocalStorageWEBGL", &[Uint32Array::from(store_ops.as_slice()).into()]);
+                    Self::call_extension(
+                        extension,
+                        "endPixelLocalStorageWEBGL",
+                        &[Uint32Array::from(store_ops.as_slice()).into()],
+                    );
                 }
             }
-            GLCommand::RenderbufferStorageMultisample { target, samples, internal_format, width, height } => { self.call("renderbufferStorageMultisample", &[number(target), number(samples), number(internal_format), number(width), number(height)]); }
-            GLCommand::TexStorage2D { target, levels, internal_format, width, height } => { self.call("texStorage2D", &[number(target), number(levels), number(internal_format), number(width), number(height)]); }
-            GLCommand::TexStorage3D { target, levels, internal_format, width, height, depth } => { self.call("texStorage3D", &[number(target), number(levels), number(internal_format), number(width), number(height), number(depth)]); }
-            GLCommand::DeleteProgram(name) => self.delete_named(GLObjectKind::Program, name, "deleteProgram"),
-            GLCommand::DeleteVertexArray(name) => self.delete_named(GLObjectKind::VertexArray, name, "deleteVertexArray"),
-            GLCommand::DeleteBuffer(name) => self.delete_named(GLObjectKind::Buffer, name, "deleteBuffer"),
-            GLCommand::DeleteTexture(name) => self.delete_named(GLObjectKind::Texture, name, "deleteTexture"),
-            GLCommand::DeleteFramebuffer(name) => self.delete_named(GLObjectKind::Framebuffer, name, "deleteFramebuffer"),
-            GLCommand::DeleteRenderbuffer(name) => self.delete_named(GLObjectKind::Renderbuffer, name, "deleteRenderbuffer"),
-            GLCommand::DeleteSampler(name) => self.delete_named(GLObjectKind::Sampler, name, "deleteSampler"),
-            GLCommand::GenerateBuffer(_) | GLCommand::GenerateTexture(_) | GLCommand::GenerateFramebuffer(_) | GLCommand::GenerateRenderbuffer(_) | GLCommand::GenerateSampler(_) | GLCommand::GenerateVertexArray(_) | GLCommand::CreateProgram(_) | GLCommand::CreateShader(_, _) => {
+            GLCommand::RenderbufferStorageMultisample {
+                target,
+                samples,
+                internal_format,
+                width,
+                height,
+            } => {
+                self.call(
+                    "renderbufferStorageMultisample",
+                    &[
+                        number(target),
+                        number(samples),
+                        number(internal_format),
+                        number(width),
+                        number(height),
+                    ],
+                );
+            }
+            GLCommand::RenderbufferStorage {
+                target,
+                internal_format,
+                width,
+                height,
+            } => {
+                self.call(
+                    "renderbufferStorage",
+                    &[
+                        number(target),
+                        number(internal_format),
+                        number(width),
+                        number(height),
+                    ],
+                );
+            }
+            GLCommand::TexStorage2D {
+                target,
+                levels,
+                internal_format,
+                width,
+                height,
+            } => {
+                self.call(
+                    "texStorage2D",
+                    &[
+                        number(target),
+                        number(levels),
+                        number(internal_format),
+                        number(width),
+                        number(height),
+                    ],
+                );
+            }
+            GLCommand::TexStorage3D {
+                target,
+                levels,
+                internal_format,
+                width,
+                height,
+                depth,
+            } => {
+                self.call(
+                    "texStorage3D",
+                    &[
+                        number(target),
+                        number(levels),
+                        number(internal_format),
+                        number(width),
+                        number(height),
+                        number(depth),
+                    ],
+                );
+            }
+            GLCommand::DeleteProgram(name) => {
+                self.delete_named(GLObjectKind::Program, name, "deleteProgram")
+            }
+            GLCommand::DeleteVertexArray(name) => {
+                self.delete_named(GLObjectKind::VertexArray, name, "deleteVertexArray")
+            }
+            GLCommand::DeleteBuffer(name) => {
+                self.delete_named(GLObjectKind::Buffer, name, "deleteBuffer")
+            }
+            GLCommand::DeleteTexture(name) => {
+                self.delete_named(GLObjectKind::Texture, name, "deleteTexture")
+            }
+            GLCommand::DeleteFramebuffer(name) => {
+                self.delete_named(GLObjectKind::Framebuffer, name, "deleteFramebuffer")
+            }
+            GLCommand::DeleteRenderbuffer(name) => {
+                self.delete_named(GLObjectKind::Renderbuffer, name, "deleteRenderbuffer")
+            }
+            GLCommand::DeleteSampler(name) => {
+                self.delete_named(GLObjectKind::Sampler, name, "deleteSampler")
+            }
+            GLCommand::GenerateBuffer(_)
+            | GLCommand::GenerateTexture(_)
+            | GLCommand::GenerateFramebuffer(_)
+            | GLCommand::GenerateRenderbuffer(_)
+            | GLCommand::GenerateSampler(_)
+            | GLCommand::GenerateVertexArray(_)
+            | GLCommand::CreateProgram(_)
+            | GLCommand::CreateShader(_, _) => {
                 panic!("production WebGL names are published synchronously, never replayed")
             }
-            GLCommand::SamplerParameterFloat { sampler, parameter, value } => { self.call("samplerParameterf", &[self.object(GLObjectKind::Sampler, sampler), number(parameter), number(value)]); }
-            GLCommand::SamplerParameterInt { sampler, parameter, value } => { self.call("samplerParameteri", &[self.object(GLObjectKind::Sampler, sampler), number(parameter), number(value)]); }
-            GLCommand::ShaderSource(shader, source) => { self.call("shaderSource", &[self.shader(shader), JsValue::from_str(&source)]); }
-            GLCommand::ShaderSourceBytes { shader, source } => { self.call("shaderSource", &[self.shader(shader), JsValue::from_str(source.as_deref().map(bytes_string).unwrap_or(""))]); }
-            GLCommand::ShaderSourceBypassingEmscripten { shader, minimal_source: _, raw_source } => { self.call("shaderSource", &[self.shader(shader), JsValue::from_str(&raw_source)]); }
-            GLCommand::CompileShader(shader) => { self.call("compileShader", &[self.shader(shader)]); }
+            GLCommand::SamplerParameterFloat {
+                sampler,
+                parameter,
+                value,
+            } => {
+                self.call(
+                    "samplerParameterf",
+                    &[
+                        self.object(GLObjectKind::Sampler, sampler),
+                        number(parameter),
+                        number(value),
+                    ],
+                );
+            }
+            GLCommand::SamplerParameterInt {
+                sampler,
+                parameter,
+                value,
+            } => {
+                self.call(
+                    "samplerParameteri",
+                    &[
+                        self.object(GLObjectKind::Sampler, sampler),
+                        number(parameter),
+                        number(value),
+                    ],
+                );
+            }
+            GLCommand::ShaderSource(shader, source) => {
+                self.call(
+                    "shaderSource",
+                    &[self.shader(shader), JsValue::from_str(&source)],
+                );
+            }
+            GLCommand::ShaderSourceBytes { shader, source } => {
+                self.call(
+                    "shaderSource",
+                    &[
+                        self.shader(shader),
+                        JsValue::from_str(source.as_deref().map(bytes_string).unwrap_or("")),
+                    ],
+                );
+            }
+            GLCommand::ShaderSourceBypassingEmscripten {
+                shader,
+                minimal_source: _,
+                raw_source,
+            } => {
+                self.call(
+                    "shaderSource",
+                    &[self.shader(shader), JsValue::from_str(&raw_source)],
+                );
+            }
+            GLCommand::CompileShader(shader) => {
+                self.call("compileShader", &[self.shader(shader)]);
+            }
             GLCommand::PrintShaderCompilationErrors(shader) => self.log_shader_error(shader),
-            GLCommand::ValidateShaderCompilationAndAbort { shader, stderr_flush_delay_ms: _ } => {
-                if self.shaderParameter(shader, 0x8B81) == 0 { self.log_shader_error(shader); panic!("exact WebGL shader compilation failed"); }
+            GLCommand::ValidateShaderCompilationAndAbort {
+                shader,
+                stderr_flush_delay_ms: _,
+            } => {
+                if self.shaderParameter(shader, 0x8B81) == 0 {
+                    self.log_shader_error(shader);
+                    panic!("exact WebGL shader compilation failed");
+                }
             }
             GLCommand::DeleteShader(name) => {
                 let shader = self.names.shaders.remove(name);
                 self.call("deleteShader", &[shader]);
             }
-            GLCommand::AttachShader(program, shader) => { self.call("attachShader", &[self.program(program), self.shader(shader)]); }
-            GLCommand::LinkProgram(program) => { self.call("linkProgram", &[self.program(program)]); }
+            GLCommand::AttachShader(program, shader) => {
+                self.call(
+                    "attachShader",
+                    &[self.program(program), self.shader(shader)],
+                );
+            }
+            GLCommand::LinkProgram(program) => {
+                self.call("linkProgram", &[self.program(program)]);
+            }
             GLCommand::PrintLinkProgramErrors(program) => self.log_program_error(program),
             GLCommand::ValidateProgramLinkAndAbort(program) => {
-                if self.programParameter(program, 0x8B82) == 0 { self.log_program_error(program); panic!("exact WebGL program link failed"); }
+                if self.programParameter(program, 0x8B82) == 0 {
+                    self.log_program_error(program);
+                    panic!("exact WebGL program link failed");
+                }
             }
-            GLCommand::TextureParameter(target, parameter, value) => { self.call("texParameteri", &[number(target), number(parameter), number(value)]); }
-            GLCommand::BlitFramebuffer(bounds, mask, filter) => { self.call("blitFramebuffer", &[number(bounds[0]), number(bounds[1]), number(bounds[2]), number(bounds[3]), number(bounds[4]), number(bounds[5]), number(bounds[6]), number(bounds[7]), number(mask), number(filter)]); }
+            GLCommand::TextureParameter(target, parameter, value) => {
+                self.call(
+                    "texParameteri",
+                    &[number(target), number(parameter), number(value)],
+                );
+            }
+            GLCommand::BlitFramebuffer(bounds, mask, filter) => {
+                self.call(
+                    "blitFramebuffer",
+                    &[
+                        number(bounds[0]),
+                        number(bounds[1]),
+                        number(bounds[2]),
+                        number(bounds[3]),
+                        number(bounds[4]),
+                        number(bounds[5]),
+                        number(bounds[6]),
+                        number(bounds[7]),
+                        number(mask),
+                        number(filter),
+                    ],
+                );
+            }
             GLCommand::Uniform1iByName(program, name, value) => {
-                let location = self.call("getUniformLocation", &[self.program(program), JsValue::from_str(&name)]);
+                let location = self.call(
+                    "getUniformLocation",
+                    &[self.program(program), JsValue::from_str(&name)],
+                );
                 self.call("uniform1i", &[location, number(value)]);
             }
             GLCommand::GetInteger(parameter, slot) => {
@@ -516,26 +1115,184 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
                 self.names.query_values.insert(slot, value);
             }
             GLCommand::BindBufferFromQuery(target, slot) => {
-                let value = self.names.query_values.get(&slot).cloned().unwrap_or(JsValue::NULL);
+                let value = self
+                    .names
+                    .query_values
+                    .get(&slot)
+                    .cloned()
+                    .unwrap_or(JsValue::NULL);
                 self.call("bindBuffer", &[number(target), value]);
             }
-            GLCommand::BufferSubData { target, offset, data } => { self.call("bufferSubData", &[number(target), number(offset), Uint8Array::from(data.as_slice()).into()]); }
-            GLCommand::BufferData { target, size, data, usage } => {
-                let payload = data.map_or_else(|| number(size), |bytes| Uint8Array::from(bytes.as_slice()).into());
+            GLCommand::BufferSubData {
+                target,
+                offset,
+                data,
+            } => {
+                self.call(
+                    "bufferSubData",
+                    &[
+                        number(target),
+                        number(offset),
+                        Uint8Array::from(data.as_slice()).into(),
+                    ],
+                );
+            }
+            GLCommand::BufferData {
+                target,
+                size,
+                data,
+                usage,
+            } => {
+                let payload = data.map_or_else(
+                    || number(size),
+                    |bytes| Uint8Array::from(bytes.as_slice()).into(),
+                );
                 self.call("bufferData", &[number(target), payload, number(usage)]);
             }
-            GLCommand::ActiveTexture(texture) => { self.call("activeTexture", &[number(texture)]); }
-            GLCommand::BindTexture(target, texture) => { self.call("bindTexture", &[number(target), self.object(GLObjectKind::Texture, texture)]); }
-            GLCommand::CompressedTexSubImage2D { target, level, x, y, width, height, format, data } => { self.call("compressedTexSubImage2D", &[number(target), number(level), number(x), number(y), number(width), number(height), number(format), Uint8Array::from(data.as_slice()).into()]); }
-            GLCommand::CompressedTexSubImage3D { target, level, x, y, z, width, height, depth, format, data } => { self.call("compressedTexSubImage3D", &[number(target), number(level), number(x), number(y), number(z), number(width), number(height), number(depth), number(format), Uint8Array::from(data.as_slice()).into()]); }
-            GLCommand::TexSubImage2D { target, level, x, y, width, height, format, type_, data } => { self.call("texSubImage2D", &[number(target), number(level), number(x), number(y), number(width), number(height), number(format), number(type_), texture_pixel_data(type_, &data), number(0)]); }
-            GLCommand::TexSubImage3D { target, level, x, y, z, width, height, depth, format, type_, data } => { self.call("texSubImage3D", &[number(target), number(level), number(x), number(y), number(z), number(width), number(height), number(depth), number(format), number(type_), texture_pixel_data(type_, &data), number(0)]); }
+            GLCommand::ActiveTexture(texture) => {
+                self.call("activeTexture", &[number(texture)]);
+            }
+            GLCommand::BindTexture(target, texture) => {
+                self.call(
+                    "bindTexture",
+                    &[number(target), self.object(GLObjectKind::Texture, texture)],
+                );
+            }
+            GLCommand::CompressedTexSubImage2D {
+                target,
+                level,
+                x,
+                y,
+                width,
+                height,
+                format,
+                data,
+            } => {
+                self.call(
+                    "compressedTexSubImage2D",
+                    &[
+                        number(target),
+                        number(level),
+                        number(x),
+                        number(y),
+                        number(width),
+                        number(height),
+                        number(format),
+                        Uint8Array::from(data.as_slice()).into(),
+                    ],
+                );
+            }
+            GLCommand::CompressedTexSubImage3D {
+                target,
+                level,
+                x,
+                y,
+                z,
+                width,
+                height,
+                depth,
+                format,
+                data,
+            } => {
+                self.call(
+                    "compressedTexSubImage3D",
+                    &[
+                        number(target),
+                        number(level),
+                        number(x),
+                        number(y),
+                        number(z),
+                        number(width),
+                        number(height),
+                        number(depth),
+                        number(format),
+                        Uint8Array::from(data.as_slice()).into(),
+                    ],
+                );
+            }
+            GLCommand::TexSubImage2D {
+                target,
+                level,
+                x,
+                y,
+                width,
+                height,
+                format,
+                type_,
+                data,
+            } => {
+                self.call(
+                    "texSubImage2D",
+                    &[
+                        number(target),
+                        number(level),
+                        number(x),
+                        number(y),
+                        number(width),
+                        number(height),
+                        number(format),
+                        number(type_),
+                        texture_pixel_data(type_, &data),
+                        number(0),
+                    ],
+                );
+            }
+            GLCommand::TexSubImage3D {
+                target,
+                level,
+                x,
+                y,
+                z,
+                width,
+                height,
+                depth,
+                format,
+                type_,
+                data,
+            } => {
+                self.call(
+                    "texSubImage3D",
+                    &[
+                        number(target),
+                        number(level),
+                        number(x),
+                        number(y),
+                        number(z),
+                        number(width),
+                        number(height),
+                        number(depth),
+                        number(format),
+                        number(type_),
+                        texture_pixel_data(type_, &data),
+                        number(0),
+                    ],
+                );
+            }
             GLCommand::PixelStoreFromQuery(parameter, slot) => {
-                let value = self.names.query_values.get(&slot).cloned().unwrap_or_else(|| number(0));
+                let value = self
+                    .names
+                    .query_values
+                    .get(&slot)
+                    .cloned()
+                    .unwrap_or_else(|| number(0));
                 self.call("pixelStorei", &[number(parameter), value]);
             }
-            GLCommand::Uniform1iLocation { location, value } => { self.call("uniform1i", &[self.uniform_location(location), number(value)]); }
-            GLCommand::UniformBlockBinding { program, block_index, binding } => { self.call("uniformBlockBinding", &[self.program(program), number(block_index), number(binding)]); }
+            GLCommand::Uniform1iLocation { location, value } => {
+                self.call(
+                    "uniform1i",
+                    &[self.uniform_location(location), number(value)],
+                );
+            }
+            GLCommand::UniformBlockBinding {
+                program,
+                block_index,
+                binding,
+            } => {
+                self.call(
+                    "uniformBlockBinding",
+                    &[self.program(program), number(block_index), number(binding)],
+                );
+            }
         }
     }
 
@@ -558,7 +1315,11 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
 
     fn createShader(&mut self, shaderType: GLenum) -> GLuint {
         let shader = self.call("createShader", &[number(shaderType)]);
-        if shader.is_null() || shader.is_undefined() { 0 } else { self.names.shaders.insert(shader) }
+        if shader.is_null() || shader.is_undefined() {
+            0
+        } else {
+            self.names.shaders.insert(shader)
+        }
     }
 
     fn getInteger(&mut self, parameter: GLenum) -> GLint {
@@ -569,6 +1330,20 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
         self.queried_name(parameter, &value)
     }
 
+    fn getFramebufferAttachmentParameter(
+        &mut self,
+        target: GLenum,
+        attachment: GLenum,
+        parameter: GLenum,
+    ) -> GLint {
+        self.call(
+            "getFramebufferAttachmentParameter",
+            &[number(target), number(attachment), number(parameter)],
+        )
+        .as_f64()
+        .unwrap_or_default() as GLint
+    }
+
     fn getFloat(&mut self, parameter: GLenum) -> GLfloat {
         self.call("getParameter", &[number(parameter)])
             .as_f64()
@@ -576,7 +1351,9 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
     }
 
     fn getString(&mut self, parameter: GLenum) -> Option<Vec<u8>> {
-        let mut value = self.call("getParameter", &[number(parameter)]).as_string()?;
+        let mut value = self
+            .call("getParameter", &[number(parameter)])
+            .as_string()?;
         if parameter == GL_VERSION && !value.starts_with("OpenGL ES ") {
             value = format!("OpenGL ES 3.0 ({value})");
         }
@@ -592,20 +1369,40 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
 
     fn enableWebGLExtension(&mut self, name: &str) -> bool {
         let extension = self.call("getExtension", &[JsValue::from_str(name)]);
-        if extension.is_null() || extension.is_undefined() { false } else {
+        if extension.is_null() || extension.is_undefined() {
+            false
+        } else {
             self.extensions.insert(name.to_owned(), extension);
             true
         }
     }
 
-    fn enableWebGLShaderPixelLocalStorageCoherent(&mut self, warning: &'static str) -> WebGLShaderPixelLocalStorageEnableResult {
-        let extension = self.call("getExtension", &[JsValue::from_str("WEBGL_shader_pixel_local_storage")]);
-        if extension.is_null() || extension.is_undefined() { return WebGLShaderPixelLocalStorageEnableResult::ExtensionUnavailable; }
-        if !Self::call_extension(&extension, "isCoherent", &[]).as_bool().unwrap_or(false) {
+    fn enableWebGLShaderPixelLocalStorageCoherent(
+        &mut self,
+        warning: &'static str,
+    ) -> WebGLShaderPixelLocalStorageEnableResult {
+        let extension = self.call(
+            "getExtension",
+            &[JsValue::from_str("WEBGL_shader_pixel_local_storage")],
+        );
+        if extension.is_null() || extension.is_undefined() {
+            return WebGLShaderPixelLocalStorageEnableResult::ExtensionUnavailable;
+        }
+        if !Self::call_extension(&extension, "isCoherent", &[])
+            .as_bool()
+            .unwrap_or(false)
+        {
             return WebGLShaderPixelLocalStorageEnableResult::NonCoherent;
         }
-        let function = Reflect::get(&extension, &JsValue::from_str("framebufferTexturePixelLocalStorageWEBGL")).expect("query WebGL PLS function");
-        let arity = Reflect::get(&function, &JsValue::from_str("length")).ok().and_then(|value| value.as_f64()).unwrap_or(0.0) as u32;
+        let function = Reflect::get(
+            &extension,
+            &JsValue::from_str("framebufferTexturePixelLocalStorageWEBGL"),
+        )
+        .expect("query WebGL PLS function");
+        let arity = Reflect::get(&function, &JsValue::from_str("length"))
+            .ok()
+            .and_then(|value| value.as_f64())
+            .unwrap_or(0.0) as u32;
         if arity != 5 {
             console_call("warn", warning);
             return WebGLShaderPixelLocalStorageEnableResult::DeprecatedVersion;
@@ -615,43 +1412,124 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
     }
 
     fn enableWebGLProvokingVertex(&mut self) -> bool {
-        let extension = self.call("getExtension", &[JsValue::from_str("WEBGL_provoking_vertex")]);
-        if extension.is_null() || extension.is_undefined() { false } else {
+        let extension = self.call(
+            "getExtension",
+            &[JsValue::from_str("WEBGL_provoking_vertex")],
+        );
+        if extension.is_null() || extension.is_undefined() {
+            false
+        } else {
             self.provoking_vertex = Some(extension);
             true
         }
     }
 
-    fn getFramebufferPixelLocalStorageParameter(&mut self, plane: GLint, parameter: GLenum) -> GLint {
-        self.pixel_local_storage.as_ref().map(|extension| Self::call_extension(extension, "getFramebufferPixelLocalStorageParameterWEBGL", &[number(plane), number(parameter)]).as_f64().unwrap_or(0.0) as GLint).unwrap_or(0)
+    fn getFramebufferPixelLocalStorageParameter(
+        &mut self,
+        plane: GLint,
+        parameter: GLenum,
+    ) -> GLint {
+        self.pixel_local_storage
+            .as_ref()
+            .map(|extension| {
+                Self::call_extension(
+                    extension,
+                    "getFramebufferPixelLocalStorageParameterWEBGL",
+                    &[number(plane), number(parameter)],
+                )
+                .as_f64()
+                .unwrap_or(0.0) as GLint
+            })
+            .unwrap_or(0)
     }
 
     fn isObject(&mut self, kind: GLObjectKind, name: GLuint) -> bool {
         let method = match kind {
-            GLObjectKind::Buffer => "isBuffer", GLObjectKind::Framebuffer => "isFramebuffer",
-            GLObjectKind::Program => "isProgram", GLObjectKind::Renderbuffer => "isRenderbuffer",
-            GLObjectKind::Sampler => "isSampler", GLObjectKind::Texture => "isTexture",
+            GLObjectKind::Buffer => "isBuffer",
+            GLObjectKind::Framebuffer => "isFramebuffer",
+            GLObjectKind::Program => "isProgram",
+            GLObjectKind::Renderbuffer => "isRenderbuffer",
+            GLObjectKind::Sampler => "isSampler",
+            GLObjectKind::Texture => "isTexture",
             GLObjectKind::VertexArray => "isVertexArray",
         };
-        self.call(method, &[self.object(kind, name)]).as_bool().unwrap_or(false)
+        self.call(method, &[self.object(kind, name)])
+            .as_bool()
+            .unwrap_or(false)
     }
 
-    fn checkFramebufferStatus(&mut self, target: GLenum) -> GLenum { self.call("checkFramebufferStatus", &[number(target)]).as_f64().unwrap_or(0.0) as GLenum }
-    fn shaderParameter(&mut self, shader: GLuint, parameter: GLenum) -> GLint { js_integer(self.call("getShaderParameter", &[self.shader(shader), number(parameter)])) }
-    fn shaderInfoLog(&mut self, shader: GLuint, maxLength: usize) -> Vec<u8> { truncate_bytes(self.call("getShaderInfoLog", &[self.shader(shader)]).as_string().unwrap_or_default().into_bytes(), maxLength) }
-    fn programParameter(&mut self, program: GLuint, parameter: GLenum) -> GLint { js_integer(self.call("getProgramParameter", &[self.program(program), number(parameter)])) }
-    fn programInfoLog(&mut self, program: GLuint, maxLength: usize) -> Vec<u8> { truncate_bytes(self.call("getProgramInfoLog", &[self.program(program)]).as_string().unwrap_or_default().into_bytes(), maxLength) }
-    fn uniformBlockIndex(&mut self, program: GLuint, name: &[u8]) -> GLuint { self.call("getUniformBlockIndex", &[self.program(program), JsValue::from_str(bytes_string(name))]).as_f64().unwrap_or(f64::from(u32::MAX)) as GLuint }
+    fn checkFramebufferStatus(&mut self, target: GLenum) -> GLenum {
+        self.call("checkFramebufferStatus", &[number(target)])
+            .as_f64()
+            .unwrap_or(0.0) as GLenum
+    }
+    fn shaderParameter(&mut self, shader: GLuint, parameter: GLenum) -> GLint {
+        js_integer(self.call(
+            "getShaderParameter",
+            &[self.shader(shader), number(parameter)],
+        ))
+    }
+    fn shaderInfoLog(&mut self, shader: GLuint, maxLength: usize) -> Vec<u8> {
+        truncate_bytes(
+            self.call("getShaderInfoLog", &[self.shader(shader)])
+                .as_string()
+                .unwrap_or_default()
+                .into_bytes(),
+            maxLength,
+        )
+    }
+    fn programParameter(&mut self, program: GLuint, parameter: GLenum) -> GLint {
+        js_integer(self.call(
+            "getProgramParameter",
+            &[self.program(program), number(parameter)],
+        ))
+    }
+    fn programInfoLog(&mut self, program: GLuint, maxLength: usize) -> Vec<u8> {
+        truncate_bytes(
+            self.call("getProgramInfoLog", &[self.program(program)])
+                .as_string()
+                .unwrap_or_default()
+                .into_bytes(),
+            maxLength,
+        )
+    }
+    fn uniformBlockIndex(&mut self, program: GLuint, name: &[u8]) -> GLuint {
+        self.call(
+            "getUniformBlockIndex",
+            &[self.program(program), JsValue::from_str(bytes_string(name))],
+        )
+        .as_f64()
+        .unwrap_or(f64::from(u32::MAX)) as GLuint
+    }
 
     fn uniformLocation(&mut self, program: GLuint, name: &[u8]) -> GLint {
-        let location = self.call("getUniformLocation", &[self.program(program), JsValue::from_str(bytes_string(name))]);
-        if location.is_null() || location.is_undefined() { -1 } else { self.names.uniform_locations.insert(location) as GLint }
+        let location = self.call(
+            "getUniformLocation",
+            &[self.program(program), JsValue::from_str(bytes_string(name))],
+        );
+        if location.is_null() || location.is_undefined() {
+            -1
+        } else {
+            self.names.uniform_locations.insert(location) as GLint
+        }
     }
 
     fn readPixelsRGBA8(&mut self, x: i32, y: i32, width: u32, height: u32) -> Vec<u8> {
-        let len = usize::try_from(u64::from(width) * u64::from(height) * 4).expect("WebGL readback size overflow");
+        let len = usize::try_from(u64::from(width) * u64::from(height) * 4)
+            .expect("WebGL readback size overflow");
         let pixels = Uint8Array::new_with_length(len as u32);
-        self.call("readPixels", &[number(x), number(y), number(width), number(height), number(GL_RGBA), number(GL_UNSIGNED_BYTE), pixels.clone().into()]);
+        self.call(
+            "readPixels",
+            &[
+                number(x),
+                number(y),
+                number(width),
+                number(height),
+                number(GL_RGBA),
+                number(GL_UNSIGNED_BYTE),
+                pixels.clone().into(),
+            ],
+        );
         let mut result = vec![0; len];
         pixels.copy_to(&mut result);
         result
@@ -673,13 +1551,21 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
 impl Drop for BrowserWebGl2Provider {
     fn drop(&mut self) {
         if let Some(listener) = self.context_lost_listener.as_ref() {
-            let _ = self.canvas.remove_event_listener_with_callback("webglcontextlost", listener.as_ref().unchecked_ref());
+            let _ = self.canvas.remove_event_listener_with_callback(
+                "webglcontextlost",
+                listener.as_ref().unchecked_ref(),
+            );
         }
         if let Some(listener) = self.context_restored_listener.as_ref() {
-            let _ = self.canvas.remove_event_listener_with_callback("webglcontextrestored", listener.as_ref().unchecked_ref());
+            let _ = self.canvas.remove_event_listener_with_callback(
+                "webglcontextrestored",
+                listener.as_ref().unchecked_ref(),
+            );
         }
         if let Some(id) = self.wake_id.take() {
-            FINAL_RELEASE_INGRESSES.with(|ingresses| { ingresses.borrow_mut().remove(&id); });
+            FINAL_RELEASE_INGRESSES.with(|ingresses| {
+                ingresses.borrow_mut().remove(&id);
+            });
         }
     }
 }
@@ -690,21 +1576,38 @@ fn invoke(receiver: &JsValue, method: &str, args: &[JsValue]) -> JsValue {
         .dyn_into()
         .unwrap_or_else(|_| panic!("WebGL property `{method}` is not callable"));
     let arguments = Array::new();
-    for argument in args { arguments.push(argument); }
-    function.apply(receiver, &arguments).unwrap_or_else(|error| {
-        panic!("WebGL method `{method}` threw: {:?}", error.as_string())
-    })
+    for argument in args {
+        arguments.push(argument);
+    }
+    function
+        .apply(receiver, &arguments)
+        .unwrap_or_else(|error| panic!("WebGL method `{method}` threw: {:?}", error.as_string()))
 }
 
-trait JsNumber { fn to_f64(self) -> f64; }
+trait JsNumber {
+    fn to_f64(self) -> f64;
+}
 macro_rules! impl_js_number {
     ($($ty:ty),* $(,)?) => { $(impl JsNumber for $ty { fn to_f64(self) -> f64 { self as f64 } })* };
 }
 impl_js_number!(u8, u32, u64, usize, i32, i64, f32, f64);
-fn number(value: impl JsNumber) -> JsValue { JsValue::from_f64(value.to_f64()) }
-fn bytes_string(bytes: &[u8]) -> &str { std::str::from_utf8(bytes).unwrap_or("").trim_end_matches('\0') }
-fn js_integer(value: JsValue) -> GLint { value.as_bool().map_or_else(|| value.as_f64().unwrap_or(0.0) as GLint, i32::from) }
-fn truncate_bytes(mut bytes: Vec<u8>, max_length: usize) -> Vec<u8> { bytes.truncate(max_length); bytes }
+fn number(value: impl JsNumber) -> JsValue {
+    JsValue::from_f64(value.to_f64())
+}
+fn bytes_string(bytes: &[u8]) -> &str {
+    std::str::from_utf8(bytes)
+        .unwrap_or("")
+        .trim_end_matches('\0')
+}
+fn js_integer(value: JsValue) -> GLint {
+    value
+        .as_bool()
+        .map_or_else(|| value.as_f64().unwrap_or(0.0) as GLint, i32::from)
+}
+fn truncate_bytes(mut bytes: Vec<u8>, max_length: usize) -> Vec<u8> {
+    bytes.truncate(max_length);
+    bytes
+}
 
 // Exact port of Emscripten 3.1.61's `heapObjectForWebGLType`, which owns the
 // GLES-pointer to WebGL-typed-array boundary used by the pinned C++ oracle.
@@ -744,6 +1647,9 @@ fn texture_pixel_data(type_: GLenum, data: &[u8]) -> JsValue {
 }
 
 fn console_call(method: &str, message: &str) {
-    let console = Reflect::get(&js_sys::global(), &JsValue::from_str("console")).unwrap_or(JsValue::UNDEFINED);
-    if !console.is_undefined() { let _ = invoke(&console, method, &[JsValue::from_str(message)]); }
+    let console = Reflect::get(&js_sys::global(), &JsValue::from_str("console"))
+        .unwrap_or(JsValue::UNDEFINED);
+    if !console.is_undefined() {
+        let _ = invoke(&console, method, &[JsValue::from_str(message)]);
+    }
 }

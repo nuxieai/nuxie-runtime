@@ -12,12 +12,12 @@ struct BC {
     Bd: vec2<f32>,
     d2_: u32,
     fh: f32,
-    e6_: u32,
-    T2_: f32,
+    f6_: u32,
+    U2_: f32,
     Cd: f32,
     lf: u32,
-    B3_: f32,
     C3_: f32,
+    D3_: f32,
     Dd: f32,
     Yg: u32,
 }
@@ -58,7 +58,7 @@ var HC: texture_2d<f32>;
 @group(3) @binding(8)
 var N9_: sampler;
 @group(1) @binding(13)
-var W5_: sampler;
+var X5_: sampler;
 @group(0) @binding(3)
 var<storage> DD: hf;
 @group(0) @binding(4)

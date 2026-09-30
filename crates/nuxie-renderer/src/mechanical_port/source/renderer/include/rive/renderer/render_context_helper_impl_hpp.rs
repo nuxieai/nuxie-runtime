@@ -134,7 +134,7 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
     RenderBuffer, RenderBufferFlags, RenderBufferType,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    DrawContents, FlushDescriptor, IAABB, InterlockMode,
+    DrawContents, FlushDescriptor, InterlockMode, IAABB,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 #[cfg(any(
@@ -395,8 +395,17 @@ pub trait RenderContextHelperBackendContract:
         tile_width: u32,
         tile_height: u32,
         contents: DrawContents,
+        msaa_sample_count: u32,
     ) -> bool {
-        let _ = (mode, target, bounds, tile_width, tile_height, contents);
+        let _ = (
+            mode,
+            target,
+            bounds,
+            tile_width,
+            tile_height,
+            contents,
+            msaa_sample_count,
+        );
         false
     }
     fn prepareToFlush(&mut self, next: u64, safe: u64) {
@@ -532,9 +541,12 @@ where
         w: u32,
         h: u32,
         c: DrawContents,
+        samples: u32,
     ) -> bool {
         unsafe {
-            RenderContextHelperBackendContract::wantsManualRenderPassResolve(self, m, t, b, w, h, c)
+            RenderContextHelperBackendContract::wantsManualRenderPassResolve(
+                self, m, t, b, w, h, c, samples,
+            )
         }
     }
     fn prepareToFlush(&mut self, n: u64, s: u64) {

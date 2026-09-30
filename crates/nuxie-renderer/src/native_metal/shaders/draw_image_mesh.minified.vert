@@ -34,7 +34,7 @@ if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
 O0=W7(L1(RB),NB.zw,l0 C5);
 #else
-Rc(L1(RB),NB.zw,l0 C5);
+Sc(L1(RB),NB.zw,l0 C5);
 #endif
 }
 #endif

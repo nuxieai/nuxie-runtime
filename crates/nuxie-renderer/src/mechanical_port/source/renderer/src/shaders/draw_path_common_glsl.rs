@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path_common.glsl.
  *
- * Upstream source revision: 27a2876815e282c9f235def8b7c529c77d8bb105
+ * Upstream source revision: 69f43681303ec4e17c131c9f8d584c19f1c34290
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "27a2876815e282c9f235def8b7c529c77d8bb105";
+pub const PINNED_UPSTREAM_COMMIT: &str = "69f43681303ec4e17c131c9f8d584c19f1c34290";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path_common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "4504050f09455310243c6660f7e2e6585c8ef28afece8ecf6a8f2068af6f2be3";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 916;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 39767;
+    "a9ccb65a1fc87b9b17740b5795a81ad2c70b4c877753f37c682bbbfd9d6c5d1b";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 918;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 39826;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -388,6 +388,8 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
                              mirroredContourFlag;
     }
 
+    bool discardVertex = false;
+
     // Find the tangent angle of the curve at our vertex.
     float theta;
 #ifdef @ENABLE_FEATHER
@@ -669,7 +671,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
 
         // Throw away the fan triangles since we're a stroke.
         if (vertexType != STROKE_VERTEX)
-            return false;
+            discardVertex = true;
     }
     else // This is a fill.
     {
@@ -788,7 +790,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         if ((contourIDWithFlags & RETROFIT_TRI_STRIP_CONTOUR_FLAG) != 0u &&
             vertexType != FAN_VERTEX)
         {
-            return false;
+            discardVertex = true;
         }
     }
 
@@ -805,7 +807,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
                           make_bool2(uniforms.wireframeEnabled != 0u));
 #endif
 
-    return true;
+    return !discardVertex;
 }
 #endif // @VERTEX && @DRAW_PATH
 

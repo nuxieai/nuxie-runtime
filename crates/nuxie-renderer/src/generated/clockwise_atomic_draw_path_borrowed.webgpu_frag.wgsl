@@ -1,39 +1,39 @@
 struct SB {
-    xc: f32,
-    Hd: f32,
-    Mf: f32,
+    yc: f32,
+    Id: f32,
     Nf: f32,
+    Of: f32,
     r6_: u32,
-    Rb: u32,
-    yf: u32,
+    Sb: u32,
     zf: u32,
+    Af: u32,
     X7_: vec4<i32>,
-    jh: vec2<f32>,
-    Id: vec2<f32>,
+    kh: vec2<f32>,
+    Jd: vec2<f32>,
     f2_: u32,
-    nh: f32,
+    oh: f32,
     g6_: u32,
     W2_: f32,
-    Jd: f32,
-    sf: u32,
+    Kd: f32,
+    tf: u32,
     F3_: f32,
     G3_: f32,
-    Kd: f32,
-    gh: u32,
-    Qb: u32,
-    dc: f32,
+    Ld: f32,
+    hh: u32,
+    Rb: u32,
     ec: f32,
+    fc: f32,
 }
 
-struct Fe {
+struct Ge {
     g2_: array<u32>,
 }
 
-struct Fe_1 {
+struct Ge_1 {
     g2_: array<atomic<u32>>,
 }
 
-@id(3) override Mh: bool = true;
+@id(3) override Nh: bool = true;
 
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
@@ -45,7 +45,7 @@ var<private> k3_1: vec2<u32>;
 @group(0) @binding(0)
 var<uniform> j: SB;
 @group(0) @binding(6)
-var<storage, read_write> S0_: Fe_1;
+var<storage, read_write> S0_: Ge_1;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(1) @binding(11)
@@ -76,8 +76,8 @@ fn main_1() {
             if (_e48.y >= 0f) {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_535_ = Mh;
-                        if Mh {
+                        phi_535_ = Nh;
+                        if Nh {
                             phi_535_ = (_e48.x < -1.5f);
                         }
                         let _e119 = phi_535_;
@@ -98,8 +98,8 @@ fn main_1() {
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_598_ = Mh;
-                        if Mh {
+                        phi_598_ = Nh;
+                        if Nh {
                             phi_598_ = (_e48.y < -1.5f);
                         }
                         let _e55 = phi_598_;

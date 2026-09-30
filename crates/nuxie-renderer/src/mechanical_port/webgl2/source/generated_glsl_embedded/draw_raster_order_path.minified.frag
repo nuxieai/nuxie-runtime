@@ -25,7 +25,7 @@ E V4=unpackHalf2x16(a1(J7));d m9=V4.y;d r0=m9==D0?V4.x:J0(.0);
 #ifdef DB
 r0+=j1;h2(J7);
 #else
-r0=wi(r0,O e1);d1(J7,packHalf2x16(D2(r0,D0)));
+r0=xi(r0,O e1);d1(J7,packHalf2x16(D2(r0,D0)));
 #endif
 d o;
 #ifdef GE

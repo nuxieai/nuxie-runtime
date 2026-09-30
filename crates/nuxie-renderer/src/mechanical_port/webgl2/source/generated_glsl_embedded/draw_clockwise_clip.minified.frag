@@ -5,7 +5,7 @@ z0(G2,m0);
 #endif
 k1(X2,i0);
 #ifndef Q
-cb(j6,p4);
+db(j6,p4);
 #endif
 k1(M6,S0);N1 P1(HB){r(Y1,E);d m1=-Y1.x;
 #ifdef DB
@@ -23,7 +23,7 @@ d M5=Y1.y;if(YC&&M5!=.0){d w4=.0;
 #if defined(DB)&&defined(CC)
 if(CC){Q0=unpackHalf2x16(a1(i0));O5=Q0.y;}
 #endif
-if(O5!=m1){w4=O5==M5?Q0.x:.0;d1(S0,packHalf2x16(D2(w4,jg)));}else{w4=unpackHalf2x16(a1(S0)).x;h2(S0);}z3=min(z3,w4);}else
+if(O5!=m1){w4=O5==M5?Q0.x:.0;d1(S0,packHalf2x16(D2(w4,kg)));}else{w4=unpackHalf2x16(a1(S0)).x;h2(S0);}z3=min(z3,w4);}else
 #endif
 {h2(S0);}d1(i0,packHalf2x16(D2(z3,m1)));
 #ifndef Q

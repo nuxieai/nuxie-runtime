@@ -19,11 +19,13 @@ impl DependencySorter {
         self.temp.insert(root.clone());
         for dependent in dependents {
             if !self.visit(dependent, order) {
+                order.reverse();
                 return;
             }
         }
         self.perm.insert(root.clone());
-        order.insert(0, root);
+        order.push(root);
+        order.reverse();
     }
     pub fn sort(
         &mut self,
@@ -32,6 +34,7 @@ impl DependencySorter {
     ) {
         order.clear();
         self.visit(root, order);
+        order.reverse();
     }
 
     pub fn sort_roots(
@@ -43,6 +46,7 @@ impl DependencySorter {
         for root in roots {
             self.visit(root, order);
         }
+        order.reverse();
     }
 
     pub fn visit(
@@ -60,16 +64,24 @@ impl DependencySorter {
 
         self.temp.insert(component.clone());
 
-        let dependents = component
-            .with_component(|component| component.dependents().to_vec())
-            .unwrap_or_default();
-        for dependent in dependents {
-            if !self.visit(dependent, order) {
-                return false;
-            }
+        // Borrow the dependent list throughout traversal rather than copying
+        // every node's vector. Recursive visits only mutate sorter state.
+        let visited = component
+            .with_component(|component| {
+                for dependent in component.dependents() {
+                    if !self.visit(dependent.clone(), order) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .unwrap_or(true);
+        if !visited {
+            return false;
         }
         self.perm.insert(component.clone());
-        order.insert(0, component);
+        // Append in finish order; each sort entrypoint reverses exactly once.
+        order.push(component);
 
         true
     }

@@ -3149,6 +3149,158 @@ fn view_model_instance_listener() {
     }
 }
 
+// d85630c5: record failed reads without inspecting an invalid scalar payload.
+struct FailedPropertyReadState {
+    expected_handle: ViewModelInstanceHandle,
+    expected_path: &'static str,
+    expected_type: DataType,
+    error_ids: Vec<u64>,
+    value_ids: Vec<u64>,
+}
+
+struct FailedPropertyReadListener {
+    base: ListenerBase<ViewModelInstanceHandle>,
+    state: Arc<Mutex<FailedPropertyReadState>>,
+}
+
+impl ViewModelInstanceListener for FailedPropertyReadListener {
+    fn listener_base(&mut self) -> &mut ListenerBase<ViewModelInstanceHandle> {
+        &mut self.base
+    }
+
+    fn on_view_model_instance_error(
+        &mut self,
+        handle: ViewModelInstanceHandle,
+        request_id: u64,
+        error: String,
+    ) {
+        let mut state = self.state.lock().unwrap();
+        assert_eq!(handle, state.expected_handle);
+        assert!(error.contains("Could not find view model property"));
+        state.error_ids.push(request_id);
+    }
+
+    fn on_view_model_data_received(
+        &mut self,
+        handle: ViewModelInstanceHandle,
+        request_id: u64,
+        data: ViewModelInstanceData,
+    ) {
+        let mut state = self.state.lock().unwrap();
+        assert_eq!(handle, state.expected_handle);
+        assert_eq!(data.meta_data.name, state.expected_path);
+        assert_eq!(data.meta_data.data_type, state.expected_type);
+        state.value_ids.push(request_id);
+    }
+}
+
+#[test]
+fn failed_property_reads_emit_only_errors_and_preserve_later_commands() {
+    type Getter = fn(&mut CommandQueue, ViewModelInstanceHandle, String, u64);
+    let cases: [(DataType, Getter, &str, &str); 5] = [
+        (
+            DataType::Boolean,
+            CommandQueue::request_view_model_instance_bool,
+            "Test Bool",
+            "Test Num",
+        ),
+        (
+            DataType::Number,
+            CommandQueue::request_view_model_instance_number,
+            "Test Num",
+            "Test Bool",
+        ),
+        (
+            DataType::Color,
+            CommandQueue::request_view_model_instance_color,
+            "Test Color",
+            "Test Bool",
+        ),
+        (
+            DataType::String,
+            CommandQueue::request_view_model_instance_string,
+            "Test String",
+            "Test Bool",
+        ),
+        (
+            DataType::Enum,
+            CommandQueue::request_view_model_instance_enum,
+            "Test Enum",
+            "Test Bool",
+        ),
+    ];
+    for (data_type, getter, valid_path, wrong_type_path) in cases {
+        let mut queue = CommandQueue::new();
+        let state = Arc::new(Mutex::new(FailedPropertyReadState {
+            expected_handle: ViewModelInstanceHandle::NULL,
+            expected_path: valid_path,
+            expected_type: data_type,
+            error_ids: Vec::new(),
+            value_ids: Vec::new(),
+        }));
+        let listener: ViewModelInstanceListenerHandle =
+            ListenerHandle::new(Box::new(FailedPropertyReadListener {
+                base: ListenerBase::new(),
+                state: state.clone(),
+            }));
+        let mut server = server(&queue);
+        let file = queue.load_file(DATA_BIND_FIXTURE.to_vec(), None, 0, None);
+        let artboard = queue.instantiate_default_artboard(file, None, 0);
+        let instance = queue.instantiate_view_model_instance_for_artboard(
+            file,
+            artboard,
+            String::new(),
+            Some(&listener),
+            0,
+        );
+        state.lock().unwrap().expected_handle = instance;
+
+        // Draws queued before a failed read must still reach the batch epilogue.
+        let drew = Arc::new(Mutex::new(false));
+        let drew_callback = drew.clone();
+        let draw_key = queue.create_draw_key();
+        queue.draw(
+            draw_key,
+            Box::new(move |_, _| *drew_callback.lock().unwrap() = true),
+        );
+        let mut request_id = 0;
+        let mut expected_errors = Vec::new();
+        for path in [
+            "nonexistent",
+            "Test Nested/nonexistent",
+            "nonexistent/child",
+            wrong_type_path,
+        ] {
+            request_id += 1;
+            expected_errors.push(request_id);
+            getter(&mut queue, instance, path.to_owned(), request_id);
+        }
+        // A valid read in the same batch survives the preceding lookup failures.
+        let valid_request_id = request_id + 1;
+        getter(&mut queue, instance, valid_path.to_owned(), valid_request_id);
+        let reached_later_command = Arc::new(Mutex::new(false));
+        let later_callback = reached_later_command.clone();
+        queue.run_once(Box::new(move |_| *later_callback.lock().unwrap() = true));
+        server.process_commands();
+        queue.process_messages();
+
+        assert!(*reached_later_command.lock().unwrap());
+        assert!(*drew.lock().unwrap());
+        {
+            let state = state.lock().unwrap();
+            assert_eq!(state.error_ids, expected_errors, "{valid_path}");
+            assert_eq!(state.value_ids, vec![valid_request_id], "{valid_path}");
+        }
+
+        queue.delete_view_model_instance(instance, 0);
+        queue.delete_artboard(artboard, 0);
+        queue.delete_file(file, 0);
+        queue.disconnect();
+        server.process_commands();
+        queue.process_messages();
+    }
+}
+
 #[test]
 fn view_model_property_set_get() {
     let mut queue = CommandQueue::new();

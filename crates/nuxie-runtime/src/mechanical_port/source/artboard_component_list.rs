@@ -1041,12 +1041,11 @@ impl ArtboardComponentList {
             let top = if is_horizontal { 0.0 } else { running_size };
             return Aabb::new(left, top, left + item_size.x, top + item_size.y);
         }
-        if index < self.num_layout_nodes() {
-            if let Some(artboard) =
-                self.artboard_instance_with_virtualization(index as i32, virtualized)
-            {
-                return artboard.with_artboard(|artboard| artboard.layout_bounds());
-            }
+        // A row can have no artboard (e.g. its view model resolves to none).
+        if let Some(artboard) =
+            self.artboard_instance_with_virtualization(index as i32, virtualized)
+        {
+            return artboard.with_artboard(|artboard| artboard.layout_bounds());
         }
         Aabb::default()
     }

@@ -37,13 +37,14 @@ pub enum RenderCmd {
     DrawImage,
     DrawImageMesh,
     ModulateOpacity,
+    ModulateColor,
     CanvasContentBegin,
     CanvasContentEnd,
     ResourceNewVersion,
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 36] = [
+        const COMMANDS: [RenderCmd; 37] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -77,6 +78,7 @@ impl RenderCmd {
             RenderCmd::DrawImage,
             RenderCmd::DrawImageMesh,
             RenderCmd::ModulateOpacity,
+            RenderCmd::ModulateColor,
             RenderCmd::CanvasContentBegin,
             RenderCmd::CanvasContentEnd,
             RenderCmd::ResourceNewVersion,
@@ -264,6 +266,10 @@ wire_pod!(DrawImageMeshPod {
     opacity: f32
 });
 wire_pod!(OpacityPod { opacity: f32 });
+wire_pod!(ModulateColorPod {
+    color: u32,
+    replace: u32
+});
 wire_pod!(CanvasContentPod {
     canvas_id: u32,
     clear_color: u32
@@ -302,6 +308,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
         RenderCmd::DrawImage => DrawImagePod::SIZE,
         RenderCmd::DrawImageMesh => DrawImageMeshPod::SIZE,
         RenderCmd::ModulateOpacity => OpacityPod::SIZE,
+        RenderCmd::ModulateColor => ModulateColorPod::SIZE,
         RenderCmd::CanvasContentBegin => CanvasContentPod::SIZE,
         RenderCmd::ResourceNewVersion => ResourceVersionPod::SIZE,
     }

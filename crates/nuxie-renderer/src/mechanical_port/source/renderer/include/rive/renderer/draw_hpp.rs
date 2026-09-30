@@ -58,7 +58,7 @@ pub const FULLSCREEN_PIXEL_BOUNDS:
 /// Executable getter surface consumed by the pinned `PathDraw::Make` and
 /// `PathDraw` constructor. Backends may keep their authored paint owner; this
 /// contract preserves every source getter, including the already-opacity-
-/// modulated gradient owner returned by `getGradientWithOpacity()`.
+/// modulated gradient owner returned by `getModulatedGradient()`.
 pub trait RiveRenderPaintContract {
     fn getBlendMode(&self) -> BlendMode;
     fn getAdditiveness(&self) -> f32;
@@ -71,9 +71,10 @@ pub trait RiveRenderPaintContract {
         &self,
     ) -> crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
     fn getImageTransform(&self) -> Mat2D;
-    fn getGradientWithOpacity(
+    fn getModulatedGradient(
         &self,
         opacity: f32,
+        color: u32,
     ) -> crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient>;
     fn getType(&self) -> PaintType;
     fn getSimpleValue(&self) -> SimplePaintValue;
@@ -143,9 +144,10 @@ impl RiveRenderPaintContract for RiveRenderPaintData {
     fn getImageTransform(&self) -> Mat2D {
         self.image_transform
     }
-    fn getGradientWithOpacity(
+    fn getModulatedGradient(
         &self,
         _: f32,
+        _: u32,
     ) -> crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient> {
         self.gradient_with_opacity.clone()
     }

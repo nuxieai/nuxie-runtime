@@ -2087,6 +2087,28 @@ pub trait ScriptArtboard {
         factory: &mut dyn RenderFactory,
         renderer: &mut dyn Renderer,
     ) -> Result<(), ScriptError>;
+
+    fn property_key(&self, _name: &[u8]) -> u32 {
+        u32::MAX
+    }
+
+    fn draw_with_visitor(
+        &mut self,
+        _factory: &mut dyn RenderFactory,
+        _renderer: &mut dyn Renderer,
+        _visitor: crate::mechanical_port::source::artboard::RuntimeDrawVisitor,
+    ) -> Result<(), ScriptError> {
+        Err(ScriptError::new("artboard does not support draw visitors"))
+    }
+
+    fn draw_modulated(
+        &mut self,
+        _factory: &mut dyn RenderFactory,
+        _renderer: &mut dyn Renderer,
+        _key: u32,
+    ) -> Result<(), ScriptError> {
+        Err(ScriptError::new("artboard does not support color modulation"))
+    }
 }
 
 /// Deferred Artboard construction produced by resolver validation.

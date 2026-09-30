@@ -881,9 +881,12 @@ unsafe fn read_render_callbacks(
         return Err(NuxStatus::InvalidStructSize);
     }
     let mut value = NuxRenderCallbacks::default();
-    let read_len = usize::try_from(caller_size)
-        .unwrap_or(usize::MAX)
-        .min(std::mem::size_of::<NuxRenderCallbacks>());
+    // Never materialize a partially supplied optional function pointer.
+    let read_len = if struct_size_supports(caller_size, std::mem::size_of::<NuxRenderCallbacks>()) {
+        std::mem::size_of::<NuxRenderCallbacks>()
+    } else {
+        NUX_RENDER_CALLBACKS_V3_MIN_SIZE
+    };
     unsafe {
         ptr::copy_nonoverlapping(
             callbacks.cast::<u8>(),

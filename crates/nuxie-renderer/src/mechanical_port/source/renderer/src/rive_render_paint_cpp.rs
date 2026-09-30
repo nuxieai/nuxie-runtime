@@ -127,14 +127,15 @@ impl RiveRenderPaint {
     pub fn implementation_source_identity() -> &'static str {
         "renderer/src/rive_render_paint.cpp@ee60b7014f1a28fa6bb5f2588cb274c273080f32"
     }
-    pub fn getGradientWithOpacity(
+    pub fn getModulatedGradient(
         &self,
         opacity: f32,
+        color: u32,
     ) -> crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient> {
         if self.m_data.m_gradient.get().is_null() {
             crate::mechanical_port::source::include::rive::refcnt_hpp::rcp::new()
         } else {
-            unsafe { (&*self.m_data.m_gradient.get()).getModulated(opacity) }
+            unsafe { (&*self.m_data.m_gradient.get()).getModulated(opacity, color) }
         }
     }
 }
@@ -145,7 +146,7 @@ impl crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp
     fn getImageTexture(&self)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::Texture> { unsafe { crate::mechanical_port::source::include::rive::refcnt_hpp::ref_rcp(self.m_data.m_imageTexture.get()) } }
     fn getImageSampler(&self)->crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler { self.getImageSampler() }
     fn getImageTransform(&self)->nuxie_render_api::Mat2D { *self.getImageTransform() }
-    fn getGradientWithOpacity(&self, opacity:f32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient> { self.getGradientWithOpacity(opacity) }
+    fn getModulatedGradient(&self, opacity:f32, color:u32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient> { self.getModulatedGradient(opacity, color) }
     fn getType(&self)->crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PaintType { self.getType() }
     fn getSimpleValue(&self)->crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SimplePaintValue { self.getSimpleValue() }
     fn getIsOpaque(&self)->bool { self.getIsOpaque() }

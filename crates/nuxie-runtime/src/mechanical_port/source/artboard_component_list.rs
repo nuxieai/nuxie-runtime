@@ -1262,6 +1262,44 @@ impl ArtboardComponentList {
 }
 
 impl ArtboardComponentList {
+    pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        fn read<R>(owner: &CoreHandle, callback: impl FnOnce(&mut ArtboardComponentList) -> R) -> R {
+            owner.with_downcast_mut::<ArtboardComponentList, _>(callback).expect("live artboard component list")
+        }
+        if read(owner, |this| this.drawable().needs_save_operation()) {
+            renderer.save();
+        }
+        let virtualized = read(owner, |this| this.virtualization_enabled());
+        if virtualized {
+            let transform = read(owner, |this| this.layout_parent_ref(|parent| *parent.world_transform().values()));
+            if let Some(transform) = transform {
+                renderer.transform(nuxie_render_api::Mat2D(transform));
+            }
+        } else {
+            let transform = read(owner, |this| *this.transform().world_transform().values());
+            renderer.transform(nuxie_render_api::Mat2D(transform));
+        }
+        if !virtualized || read(owner, |this| this.realized_start_index != -1 && this.realized_end_index != -1) {
+            let indices = read(owner, |this| this.ordered_list_indices().to_vec());
+            for index in indices {
+                // Resolve each row only when the source loop reaches it: a
+                // preceding hosted visit can mutate the list's live contents.
+                let row = read(owner, |this| this.artboard_instance(index).zip(this.list_item(index)));
+                if let Some((artboard, item)) = row {
+                    renderer.save();
+                    let transform = read(owner, |this| *this.artboard_transforms.entry(item).or_default().values());
+                    renderer.transform(nuxie_render_api::Mat2D(transform));
+                    let host = read(owner, |this| this.parent_artboard().expect("component list artboard"));
+                    Artboard::draw_hosted_handle(&host, &artboard.core_handle(), renderer);
+                    renderer.restore();
+                }
+            }
+        }
+        if read(owner, |this| this.drawable().needs_save_operation()) {
+            renderer.restore();
+        }
+    }
+
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.drawable().needs_save_operation() {
             renderer.save();
@@ -1281,7 +1319,7 @@ impl ArtboardComponentList {
                         // a newly realized row is waiting for layout.
                         let transform = *self.artboard_transforms.entry(item).or_default();
                         renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-                        artboard.draw_internal(renderer);
+                        Artboard::draw_hosted_handle(&self.parent_artboard().expect("component list artboard"), &artboard.core_handle(), renderer);
                         renderer.restore();
                     }
                 }
@@ -1297,7 +1335,7 @@ impl ArtboardComponentList {
                     renderer.save();
                     let transform = *self.artboard_transforms.entry(item).or_default();
                     renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-                    artboard.draw_internal(renderer);
+                    Artboard::draw_hosted_handle(&self.parent_artboard().expect("component list artboard"), &artboard.core_handle(), renderer);
                     renderer.restore();
                 }
             }

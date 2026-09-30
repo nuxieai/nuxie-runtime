@@ -2638,6 +2638,10 @@ pub trait Renderer {
     );
     fn modulate_opacity(&mut self, opacity: f32);
 
+    /// Multiply subsequent draws by a color, scoped by save/restore. With
+    /// `replace`, set the color instead. Upstream defaults to no operation.
+    fn modulate_color(&mut self, _color: ColorInt, _replace: bool) {}
+
     fn draw_image_with_additiveness(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -4744,6 +4748,12 @@ impl Renderer for RecordingRenderer {
         self.stream.borrow_mut().semantic_line(format!(
             "modulateOpacity opacity={}",
             float_to_string(opacity)
+        ));
+    }
+
+    fn modulate_color(&mut self, color: ColorInt, replace: bool) {
+        self.stream.borrow_mut().semantic_line(format!(
+            "modulateColor color=0x{color:08x} replace={}", u8::from(replace)
         ));
     }
 }

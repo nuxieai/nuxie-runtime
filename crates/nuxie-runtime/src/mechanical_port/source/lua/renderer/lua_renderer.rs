@@ -38,6 +38,16 @@ impl ScriptedRenderer {
     pub fn modulate_opacity(&mut self, state: &mut LuaState, opacity: f32) {
         self.validate(state).modulate_opacity(opacity);
     }
+    pub fn modulate_color(&mut self, state: &mut LuaState, color: u32, replace: bool) {
+        self.validate(state).modulate_color(color, replace);
+    }
+    pub fn save_count(&self) -> u32 { self.save_count }
+    pub fn restore_to(&mut self, count: u32) {
+        while self.save_count > count {
+            self.renderer.as_mut().unwrap().restore();
+            self.save_count -= 1;
+        }
+    }
     pub fn validate(&mut self, state: &mut LuaState) -> &mut Renderer {
         if self.renderer.is_none() {
             state.error::<()>(format!("{} is no longer valid.", Self::LUA_NAME));
@@ -76,6 +86,11 @@ fn namecall(s: &mut LuaState) -> i32 {
         LuaAtoms::ModulateOpacity => {
             let opacity = s.check_number(2) as f32;
             s.to_rive_mut::<ScriptedRenderer>(1).modulate_opacity(s, opacity);
+            0
+        }
+        LuaAtoms::ModulateColor | LuaAtoms::SetColorModulation => {
+            let color = s.check_unsigned(2);
+            s.to_rive_mut::<ScriptedRenderer>(1).modulate_color(s, color, atom == LuaAtoms::SetColorModulation);
             0
         }
         LuaAtoms::DrawImage => {

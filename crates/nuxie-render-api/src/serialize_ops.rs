@@ -45,6 +45,7 @@ operations! {
     MAKE_RENDER_CANVAS = makeRenderCanvas = 32,
     CANVAS_CONTENT_BEGIN = canvasContentBegin = 33,
     CANVAS_CONTENT_END = canvasContentEnd = 34,
+    MODULATE_COLOR = modulateColor = 35,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {

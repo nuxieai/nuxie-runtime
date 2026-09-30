@@ -34,7 +34,7 @@ use crate::mechanical_port::source::{
     draw_target_placement::DrawTargetPlacement,
     drawable::{Drawable, RuntimeDrawableOccurrence},
     factory::RuntimeFactoryHandle,
-    file::RuntimeFileWeakHandle,
+    file::{RuntimeFileHandle, RuntimeFileWeakHandle},
     focus_data::FocusData,
     generated::core_registry::{CoreCapabilities, CoreRegistry},
     generated::{
@@ -153,6 +153,18 @@ enum RecipeState {
     Unusable,
 }
 
+pub type RuntimeDrawVisitor = Rc<dyn Fn(&CoreHandle, &mut Renderer)>;
+
+struct DrawVisitorScope {
+    artboard: CoreHandle,
+    previous: Option<RuntimeDrawVisitor>,
+}
+impl Drop for DrawVisitorScope {
+    fn drop(&mut self) {
+        self.artboard.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor = self.previous.take());
+    }
+}
+
 pub struct Artboard {
     pub base: ArtboardBase,
     core_arena: CoreArena,
@@ -187,6 +199,8 @@ pub struct Artboard {
     key_frame_source_binds_built: Cell<bool>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     file: RuntimeFileWeakHandle,
+    draw_visitor: Option<RuntimeDrawVisitor>,
+    draw_visitor_file: Option<RuntimeFileWeakHandle>,
     joysticks_apply_before_update: bool,
     dirty_state: RuntimeArtboardDirtyHandle,
     factory: Option<RuntimeFactoryHandle>,
@@ -269,6 +283,8 @@ impl Default for Artboard {
             key_frame_source_binds_built: Cell::new(false),
             scripting_vm: None,
             file: RuntimeFileWeakHandle::default(),
+            draw_visitor: None,
+            draw_visitor_file: None,
             joysticks_apply_before_update: true,
             dirty_state: RuntimeArtboardDirtyHandle::default(),
             factory: None,
@@ -2659,13 +2675,62 @@ impl Artboard {
     }
 
     pub fn draw_internal_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        Self::draw_internal_with_visitor_handle(root, renderer, None, None);
+    }
+
+    pub fn draw_visitor_file_handle(root: &CoreHandle) -> Option<RuntimeFileHandle> {
+        root.with_downcast::<Artboard, _>(|a| a.draw_visitor_file.as_ref().and_then(RuntimeFileWeakHandle::upgrade).or_else(|| a.artboard_file().and_then(|f| f.upgrade()))).flatten()
+    }
+
+    pub fn draw_hosted_handle(host: &CoreHandle, hosted: &CoreHandle, renderer: &mut Renderer) {
+        let mut visitor = host.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone()).flatten();
+        if visitor.is_some() {
+            let file = Self::draw_visitor_file_handle(host);
+            let hosted_file = hosted.with_downcast::<Artboard, _>(|a| a.artboard_file().and_then(|f| f.upgrade())).flatten();
+            if hosted_file.as_ref().is_some_and(|hosted| !file.as_ref().is_some_and(|file| hosted.ptr_eq(file))) {
+                visitor = None;
+            }
+            hosted.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor_file = file.as_ref().map(RuntimeFileHandle::downgrade));
+        }
+        Self::draw_internal_with_visitor_handle(hosted, renderer, visitor, None);
+    }
+
+    pub fn draw_modulated_handle(root: &CoreHandle, renderer: &mut Renderer, property_key: u32, keys_file: Option<RuntimeFileHandle>) {
+        use crate::mechanical_port::source::{generated::{custom_property_number_base::CustomPropertyNumberBase, custom_property_color_base::CustomPropertyColorBase}, shapes::paint::color::*};
+        let level = Rc::new(Cell::new([1.0f32; 4]));
+        let visitor: RuntimeDrawVisitor = Rc::new(move |drawable, renderer| {
+            let own = Drawable::custom_property_handle(drawable, property_key).and_then(|p| {
+                if p.is_type_of(CustomPropertyNumberBase::TYPE_KEY) {
+                    let value = crate::mechanical_port::source::math::math_types::clamp(CoreRegistry::get_double_handle(&p, CustomPropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into()).unwrap(), 0.0, 1.0);
+                    Some([1.0, value, value, value])
+                } else if p.is_type_of(CustomPropertyColorBase::TYPE_KEY) {
+                    let color = CoreRegistry::get_color_handle(&p, CustomPropertyColorBase::PROPERTY_VALUE_PROPERTY_KEY.into()).unwrap() as u32;
+                    Some([color_opacity(color), color_red(color) as f32 / 255.0, color_green(color) as f32 / 255.0, color_blue(color) as f32 / 255.0])
+                } else { None }
+            });
+            let Some(own) = own else { Drawable::draw_handle(drawable, renderer); return; };
+            let outer = level.get();
+            let combined = std::array::from_fn(|i| outer[i] * own[i]);
+            level.set(combined);
+            let channels: [i32; 4] = combined.map(|v| (v * 255.0).round() as i32);
+            renderer.modulate_color(color_argb(channels[0], channels[1], channels[2], channels[3]), true);
+            Drawable::draw_handle(drawable, renderer);
+            level.set(outer);
+        });
+        Self::draw_internal_with_visitor_handle(root, renderer, Some(visitor), keys_file);
+    }
+
+    pub fn draw_internal_with_visitor_handle(root: &CoreHandle, renderer: &mut Renderer, visitor: Option<RuntimeDrawVisitor>, keys_file: Option<RuntimeFileHandle>) {
+        if let Some(file) = keys_file {
+            root.with_downcast_mut::<Artboard, _>(|a| a.draw_visitor_file = Some(file.downgrade()));
+        }
         let has_cache = root
             .with_downcast::<Artboard, _>(|artboard| artboard.bitmap_cache.is_some())
             .unwrap_or(false);
-        if has_cache && Self::draw_cached_as_bitmap_handle(root, renderer) {
+        if visitor.is_none() && has_cache && Self::draw_cached_as_bitmap_handle(root, renderer) {
             return;
         }
-        Self::draw_content_handle(root, renderer);
+        Self::draw_content_with_visitor_handle(root, renderer, visitor);
     }
 
     /// The actual vector-drawing body of draw_internal. Split out so the
@@ -2673,13 +2738,19 @@ impl Artboard {
     /// re-entering the hook, and so the standalone-root draw() path can bypass
     /// caching entirely.
     pub fn draw_content_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        Self::draw_content_with_visitor_handle(root, renderer, None);
+    }
+
+    pub fn draw_content_with_visitor_handle(root: &CoreHandle, renderer: &mut Renderer, visitor: Option<RuntimeDrawVisitor>) {
         let Some((save, first_drawable)) = root
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
             .flatten()
         else {
             return;
         };
-        Self::draw_drawables(renderer, first_drawable);
+        let previous = root.with_downcast_mut::<Artboard, _>(|a| std::mem::replace(&mut a.draw_visitor, visitor.clone())).flatten();
+        let _scope = DrawVisitorScope { artboard: root.clone(), previous };
+        Self::draw_drawables(renderer, first_drawable, visitor);
         if save {
             renderer.restore();
         }
@@ -2746,7 +2817,7 @@ impl Artboard {
         Some((save, self.first_drawable.clone()))
     }
 
-    fn draw_drawables(renderer: &mut Renderer, first_drawable: Option<RuntimeDrawableOccurrence>) {
+    fn draw_drawables(renderer: &mut Renderer, first_drawable: Option<RuntimeDrawableOccurrence>, visitor: Option<RuntimeDrawVisitor>) {
         let mut empty_clips = 0;
         let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();
         let mut drawable = first_drawable;
@@ -2769,7 +2840,14 @@ impl Artboard {
                     pending.draw(renderer);
                 }
             }
-            current.draw(renderer);
+            let tagged = current.with(Drawable::has_custom_properties).unwrap_or(false);
+            if let (Some(visitor), Some(handle)) = (visitor.as_ref().filter(|_| tagged), current.authored_handle()) {
+                renderer.save();
+                visitor(&handle, renderer);
+                renderer.restore();
+            } else {
+                current.draw(renderer);
+            }
         }
     }
 

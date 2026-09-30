@@ -488,6 +488,14 @@ pub enum LuaAtoms {
     HasStandardAxisIntent,
     IntentButton,
     IntentAxis,
+    ModulateColor,
+    SetColorModulation,
+    PropertyKey,
+    DrawModulated,
+    Number,
+    Boolean,
+    String,
+    Properties,
 }
 
 struct LuaAtomName {
@@ -957,6 +965,15 @@ pub fn find_atom(name: &str) -> Option<LuaAtoms> {
         "writeToBuffer" => Some(LuaAtoms::WriteToBuffer),
         "invertAffine" => Some(LuaAtoms::InvertAffine),
         "writeVec4" => Some(LuaAtoms::WriteVec4),
+        "modulateColor" => Some(LuaAtoms::ModulateColor),
+        "setColorModulation" => Some(LuaAtoms::SetColorModulation),
+        "propertyKey" => Some(LuaAtoms::PropertyKey),
+        "drawModulated" => Some(LuaAtoms::DrawModulated),
+        "number" => Some(LuaAtoms::Number),
+        "boolean" => Some(LuaAtoms::Boolean),
+        "string" => Some(LuaAtoms::String),
+        #[cfg(feature = "tools")]
+        "properties" => Some(LuaAtoms::Properties),
         _ => None,
     }
 }
@@ -1588,6 +1605,13 @@ impl TransitionChild {
     pub fn invalidate(&mut self) { self.artboard = None; }
 }
 impl_lua_rive!(TransitionChild, 68, "TransitionChild");
+
+// The live Rust-native binding keeps this occurrence in a scoped shared cell,
+// restoring the outer occurrence on recursive visits and invalidating on exit.
+pub struct VisitedDrawable {
+    pub drawable: Option<CoreHandle>,
+}
+impl_lua_rive!(VisitedDrawable, 69, "Drawable");
 
 pub struct ScriptReffedArtboard {
     pub file: RuntimeFileWeakHandle,

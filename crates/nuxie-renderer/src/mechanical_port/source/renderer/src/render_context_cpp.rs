@@ -6577,7 +6577,7 @@ impl LogicalFlush {
         };
         let instance = gpu::ImageMeshInstance::new(
             *unsafe { (*draw).imageMatrix() },
-            unsafe { (*draw).opacity() },
+            unsafe { (*draw).modulatedColor() },
             clip,
             unsafe { (*draw).clipID() },
             unsafe { (*draw).blendMode() },

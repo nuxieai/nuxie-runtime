@@ -83,6 +83,10 @@ pub enum Command {
         opacity: f32,
     },
     ModulateOpacity(f32),
+    ModulateColor {
+        color: ColorInt,
+        replace: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -190,6 +194,13 @@ impl RenderStream {
                     line_number,
                     "opacity",
                 )?));
+                continue;
+            }
+            if let Some(value) = line.strip_prefix("modulateColor ") {
+                commands.push(Command::ModulateColor {
+                    color: parse_hex_u32(field(value, "color", line_number)?, line_number)?,
+                    replace: parse_field::<u32>(value, "replace", line_number)? != 0,
+                });
                 continue;
             }
             if let Some(value) = line.strip_prefix("clipPath path=") {
@@ -404,6 +415,9 @@ impl RenderStream {
                     *opacity,
                 ),
                 Command::ModulateOpacity(opacity) => renderer.modulate_opacity(*opacity),
+                Command::ModulateColor { color, replace } => {
+                    renderer.modulate_color(*color, *replace)
+                }
             }
         }
         Ok(())

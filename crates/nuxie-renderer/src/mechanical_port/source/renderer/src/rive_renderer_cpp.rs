@@ -1846,6 +1846,7 @@ impl RiveRenderer {
                     rule,
                     &paint,
                     1.0,
+                    0xffff_ffff,
                     bounds,
                 )
             };
@@ -2055,8 +2056,9 @@ impl RendererContract for RiveRenderer {
                     matrix,
                     q.getBlendMode(),
                     q.getAdditiveness(),
-                    super::draw_cpp::color_modulate_opacity(
+                    super::draw_cpp::color_modulate(
                         color,
+                        self.current_state().modulatedColor,
                         self.current_state().modulatedOpacity,
                     ),
                     ref_rcp(q.getImageTexture()),
@@ -2090,6 +2092,7 @@ impl RendererContract for RiveRenderer {
                         p.getFillRule(),
                         q,
                         self.current_state().modulatedOpacity,
+                        self.current_state().modulatedColor,
                         None,
                     )
                 };
@@ -2109,6 +2112,7 @@ impl RendererContract for RiveRenderer {
                 p.getFillRule(),
                 q,
                 self.current_state().modulatedOpacity,
+                self.current_state().modulatedColor,
                 None,
             )
         };
@@ -2207,7 +2211,7 @@ impl RendererContract for RiveRenderer {
                     self.current_state().matrix,
                     blend,
                     additiveness,
-                    super::draw_cpp::color_modulate_opacity(0xffffffff, final_opacity),
+                    super::draw_cpp::color_modulate(0xffffffff, self.current_state().modulatedColor, final_opacity),
                     texture,
                     rcp::new(),
                     sampler,
@@ -2302,7 +2306,7 @@ impl RendererContract for RiveRenderer {
                 self.current_state().matrix,
                 blend,
                 additiveness,
-                final_opacity,
+                super::draw_cpp::color_modulate(0xffffffff, self.current_state().modulatedColor, final_opacity),
                 texture,
                 sampler,
                 gpu::DrawContents::none,
@@ -2320,6 +2324,15 @@ impl RendererContract for RiveRenderer {
     fn modulateOpacity(&mut self, opacity: f32) {
         let current = self.current_state().modulatedOpacity;
         self.current_state_mut().modulatedOpacity = (current * opacity).max(0.0);
+    }
+
+    fn modulateColor(&mut self, color: u32, replace: bool) {
+        let state = self.current_state_mut();
+        state.modulatedColor = if replace {
+            color
+        } else {
+            super::draw_cpp::color_modulate(state.modulatedColor, color, 1.0)
+        };
     }
 
     // Inline in rive_renderer.hpp.

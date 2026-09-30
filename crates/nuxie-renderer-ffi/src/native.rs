@@ -668,6 +668,11 @@ impl Renderer for FfiFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         unsafe { ffi::rive_ffi_renderer_modulate_opacity(self.renderer.as_ptr(), opacity) };
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        unsafe {
+            ffi::rive_ffi_renderer_modulate_color(self.renderer.as_ptr(), color, u32::from(replace))
+        };
+    }
 }
 
 #[derive(Clone)]
@@ -1255,6 +1260,7 @@ mod ffi {
             additiveness: f32,
         );
         pub fn rive_ffi_renderer_modulate_opacity(renderer: *mut Renderer, opacity: f32);
+        pub fn rive_ffi_renderer_modulate_color(renderer: *mut Renderer, color: u32, replace: u32);
     }
 }
 

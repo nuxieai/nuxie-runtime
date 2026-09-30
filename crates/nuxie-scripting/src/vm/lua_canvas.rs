@@ -261,6 +261,10 @@ impl Renderer for DeferredCanvasFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         self.target().modulate_opacity(opacity);
     }
+
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        self.target().modulate_color(color, replace);
+    }
     // Upstream hands the host's recorder to the scripted renderer directly,
     // so its transform and opacity queries answer through this frame.
     fn current_transform(&self) -> Option<Mat2D> {

@@ -3091,6 +3091,14 @@ pub fn drawable_draw_handle(
         crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::draw_occurrence(handle, renderer);
         return true;
     }
+    if handle.with(|owner| owner.as_nested_artboard().is_some()).unwrap_or(false) {
+        crate::mechanical_port::source::nested_artboard::NestedArtboard::draw_occurrence(handle, renderer);
+        return true;
+    }
+    if handle.core_type() == Some(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
+        crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::draw_occurrence(handle, renderer);
+        return true;
+    }
     if handle.core_type() == Some(crate::video::Video::TYPE_KEY) {
         crate::video::Video::draw_occurrence(handle, renderer);
         return true;
@@ -3925,6 +3933,7 @@ pub enum CoreField {
     CustomPropertyStringPropertyValue,
     CustomPropertyTriggerFire,
     CustomPropertyTriggerPropertyValue,
+    CustomPropertyNameId,
     DashLength,
     DashLengthIsPercentage,
     DashPathOffset,
@@ -8170,6 +8179,7 @@ impl CoreRegistry {
             814 => CoreField::ViewModelInstanceSymbolListIndexPropertyValue,
             577 => CoreField::ViewModelInstanceViewModelPropertyValue,
             870 => CoreField::CustomPropertyTriggerPropertyValue,
+            449 => CoreField::CustomPropertyNameId,
             119 => CoreField::DrawTargetDrawableId,
             120 => CoreField::DrawTargetPlacementValue,
             173 => CoreField::TargetedConstraintTargetId,
@@ -8955,6 +8965,7 @@ impl CoreRegistry {
             814 => CoreField::ViewModelInstanceSymbolListIndexPropertyValue,
             577 => CoreField::ViewModelInstanceViewModelPropertyValue,
             870 => CoreField::CustomPropertyTriggerPropertyValue,
+            449 => CoreField::CustomPropertyNameId,
             119 => CoreField::DrawTargetDrawableId,
             120 => CoreField::DrawTargetPlacementValue,
             173 => CoreField::TargetedConstraintTargetId,
@@ -9772,6 +9783,7 @@ impl CoreRegistry {
             814 => 0,
             577 => 0,
             870 => 0,
+            449 => 0,
             119 => 0,
             120 => 0,
             173 => 0,
@@ -10418,6 +10430,7 @@ impl CoreRegistry {
             814 => 566,
             577 => 444,
             870 => 613,
+            449 => 167,
             119 => 48,
             120 => 48,
             173 => 80,
@@ -15196,6 +15209,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -15246,6 +15264,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             CoreField::CustomPropertyTriggerPropertyValue => self.base.property_value(),
             _ => 0,
@@ -15324,6 +15343,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_trigger::ScriptInputTrigger as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self
                     .base
@@ -15393,6 +15417,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             CoreField::CustomPropertyTriggerPropertyValue => self.base.base.base.property_value(),
             _ => 0,
@@ -15596,6 +15621,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::custom_property_number::CustomPropertyNumber as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::custom_property_number::CustomPropertyNumber as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -15641,6 +15671,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -15712,6 +15743,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_viewmod
     fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::script_input_viewmodel_property_base::ScriptInputViewModelPropertyBase::is_type_of(type_key) }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_viewmodel_property::ScriptInputViewModelProperty as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::script_input_viewmodel_property::ScriptInputViewModelProperty as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -15749,6 +15785,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_viewmod
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -19949,6 +19986,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::custom_property_color::CustomPropertyColor as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::custom_property_color::CustomPropertyColor as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -19994,6 +20036,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -21589,6 +21632,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_number:
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_number::ScriptInputNumber as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self
                     .base
@@ -21652,6 +21700,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_number:
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -40608,6 +40657,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -40653,6 +40707,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -40732,6 +40787,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_boolean::ScriptInputBoolean as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self
                     .base
@@ -40795,6 +40855,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -40868,6 +40929,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_color::
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_color::ScriptInputColor as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self
                     .base
@@ -40931,6 +40997,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_color::
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -42840,6 +42907,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::custom_property_string::CustomPropertyString as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::custom_property_string::CustomPropertyString as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -42883,6 +42955,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -42959,6 +43032,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_string:
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_string::ScriptInputString as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self
                     .base
@@ -43020,6 +43098,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_string:
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
             _ => 0,
         }
@@ -52208,6 +52287,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -52257,6 +52341,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             CoreField::CustomPropertyEnumPropertyValue => self.base.property_value(),
             CoreField::CustomPropertyEnumEnumId => self.base.enum_id(),
@@ -54018,6 +54103,11 @@ impl CoreRegistryObject
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::CustomPropertyNameId => {
+                if self.base.base.base.set_name_id_value(value) {
+                    <crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, 449);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
                     <crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
@@ -54061,6 +54151,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::CustomPropertyNameId => self.base.base.base.name_id(),
             CoreField::ComponentParentId => self.base.base.base.base.base.parent_id(),
             CoreField::ScriptInputArtboardArtboardId => self.base.artboard_id(),
             _ => 0,
@@ -54974,6 +55065,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger
 {
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    }
+
     fn is_resetting_component(&self) -> bool {
         true
     }
@@ -55150,6 +55245,10 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_target::DrawTarge
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_number::CustomPropertyNumber
 {
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    }
+
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -56665,6 +56764,10 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_color::CustomPropertyColor
 {
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    }
+
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -65150,6 +65253,10 @@ impl CoreCapabilities for crate::mechanical_port::source::focus_data::FocusData 
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean
 {
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    }
+
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -66152,6 +66259,10 @@ impl CoreCapabilities for crate::mechanical_port::source::semantic::semantic_dat
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_string::CustomPropertyString
 {
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    }
+
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -69284,6 +69395,10 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum {
+    fn lifecycle_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(crate::mechanical_port::source::custom_property::CustomProperty::on_added_clean(&mut self.base.base, context))
+    }
+
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,

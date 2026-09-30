@@ -739,7 +739,8 @@ impl ScriptedTransition {
             let child = Self::child_ref(owner, &current);
             renderer.save();
             renderer.transform(child.transform);
-            instance.draw_internal(renderer);
+            let host = Self::read(owner, |this| this.component().artboard_handle()).expect("transition artboard");
+            Artboard::draw_hosted_handle(&host, &instance.core_handle(), renderer);
             renderer.restore();
         }
     }

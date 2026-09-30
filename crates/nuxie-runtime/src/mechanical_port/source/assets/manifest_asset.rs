@@ -176,6 +176,13 @@ impl ManifestAsset {
         self.names.get(&id).map_or("", String::as_str)
     }
 
+    pub fn name_id(&self, name: &[u8]) -> i32 {
+        self.names
+            .iter()
+            .find_map(|(id, value)| (value.as_bytes() == name).then_some(*id))
+            .unwrap_or(-1)
+    }
+
     pub fn resolve_path(&self, id: i32) -> &[u32] {
         self.paths.get(&id).map_or(&[], Vec::as_slice)
     }

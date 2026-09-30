@@ -735,6 +735,7 @@ typedef struct NuxRenderCallbacks {
                           uint8_t,
                           float);
   void (*modulate_opacity)(void*, float);
+  void (*modulate_color)(void*, uint32_t, uint32_t);
 } NuxRenderCallbacks;
 
 /**

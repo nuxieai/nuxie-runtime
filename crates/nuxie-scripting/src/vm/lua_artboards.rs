@@ -7,6 +7,12 @@ use luaur_rt::{
     AnyUserData, Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
     Vector as LuaVector,
 };
+use nuxie_runtime::mechanical_port::source::{
+    core::CoreHandle,
+    custom_property::{CustomProperty, CustomPropertyKind},
+    drawable::Drawable,
+    generated::core_registry::CoreRegistry,
+};
 use nuxie_runtime::{
     ScriptAnimation, ScriptAnimationTime, ScriptArtboard, ScriptMethod, ScriptNode,
 };
@@ -220,8 +226,69 @@ impl UserData for ScriptedArtboard {
                 None => Value::Nil,
             })
         });
-        methods.add_method("draw", |_, this, renderer: AnyUserData| {
+        methods.add_method("propertyKey", |_, this, name: luaur_rt::LuaString| {
+            Ok(this.owner.artboard.property_key(&name.as_bytes()))
+        });
+        methods.add_method(
+            "drawModulated",
+            |_, this, (renderer, key): (AnyUserData, u32)| {
+                let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
+                scripted_renderer.bindings.with_factory(|factory| {
+                    scripted_renderer.with_renderer_mut(|renderer| {
+                        this.owner
+                            .artboard
+                            .retained_handle()
+                            .draw_modulated(factory, renderer, key)
+                            .map_err(|error| Error::runtime(error.to_string()))
+                    })
+                })
+            },
+        );
+        methods.add_method("draw", |lua, this, (renderer, visitor, context): (AnyUserData, Option<luaur_rt::Function>, Value)| {
             let scripted_renderer = renderer.borrow::<ScriptedRenderer>()?;
+            if let Some(visitor) = visitor {
+                let current = Rc::new(RefCell::new(None));
+                let visited = lua.create_userdata(VisitedDrawable { current: current.clone() })?;
+                let failure = Rc::new(RefCell::new(None));
+                let draw_visitor: nuxie_runtime::mechanical_port::source::artboard::RuntimeDrawVisitor = {
+                    let current = current.clone();
+                    let failure = failure.clone();
+                    let renderer_userdata = renderer.clone();
+                    Rc::new(move |drawable, renderer| {
+                        if failure.borrow().is_some() {
+                            Drawable::draw_handle(drawable, renderer);
+                            return;
+                        }
+                        let previous = current.replace(Some(drawable.clone()));
+                        let result = (|| {
+                            let scripted_renderer = renderer_userdata.borrow::<ScriptedRenderer>()?;
+                            scripted_renderer.with_reborrowed_renderer(renderer, || {
+                                let saves = scripted_renderer.save_count();
+                                let result = visitor.call::<()>((context.clone(), visited.clone(), renderer_userdata.clone()));
+                                if result.is_err() {
+                                    scripted_renderer.restore_to(saves)?;
+                                }
+                                result
+                            })
+                        })();
+                        current.replace(previous);
+                        if let Err(error) = result {
+                            *failure.borrow_mut() = Some(error);
+                        }
+                    })
+                };
+                let result = scripted_renderer.bindings.with_factory(|factory| {
+                    scripted_renderer.with_renderer_mut(|renderer| {
+                        this.owner.artboard.retained_handle().draw_with_visitor(factory, renderer, draw_visitor)
+                            .map_err(|error| Error::runtime(error.to_string()))
+                    })
+                });
+                current.replace(None);
+                if let Some(error) = failure.take() {
+                    return Err(error);
+                }
+                return result;
+            }
             scripted_renderer.bindings.with_factory(|factory| {
                 scripted_renderer.with_renderer_mut(|renderer| {
                     this.owner
@@ -231,6 +298,109 @@ impl UserData for ScriptedArtboard {
                         .map_err(|error| Error::runtime(error.to_string()))
                 })
             })
+        });
+    }
+}
+
+struct VisitedDrawable {
+    current: Rc<RefCell<Option<CoreHandle>>>,
+}
+
+impl VisitedDrawable {
+    fn drawable(&self) -> Result<CoreHandle> {
+        self.current
+            .borrow()
+            .clone()
+            .ok_or_else(|| Error::runtime("Drawable is only valid inside the draw visitor"))
+    }
+}
+
+impl UserData for VisitedDrawable {
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("number", |_, this, key: u32| {
+            Ok(Drawable::custom_property_handle(&this.drawable()?, key)
+                .filter(|property| {
+                    CustomProperty::kind_handle(property) == CustomPropertyKind::Number
+                })
+                .and_then(|property| CoreRegistry::get_double_handle(&property, 243)))
+        });
+        methods.add_method("boolean", |_, this, key: u32| {
+            Ok(Drawable::custom_property_handle(&this.drawable()?, key)
+                .filter(|property| {
+                    CustomProperty::kind_handle(property) == CustomPropertyKind::Boolean
+                })
+                .and_then(|property| CoreRegistry::get_bool_handle(&property, 245)))
+        });
+        methods.add_method("color", |_, this, key: u32| {
+            Ok(Drawable::custom_property_handle(&this.drawable()?, key)
+                .filter(|property| {
+                    CustomProperty::kind_handle(property) == CustomPropertyKind::Color
+                })
+                .and_then(|property| CoreRegistry::get_color_handle(&property, 836))
+                .map(|color| color as u32))
+        });
+        methods.add_method("string", |_, this, key: u32| {
+            Ok(Drawable::custom_property_handle(&this.drawable()?, key)
+                .filter(|property| {
+                    CustomProperty::kind_handle(property) == CustomPropertyKind::String
+                })
+                .and_then(|property| CoreRegistry::get_string_handle(&property, 246)))
+        });
+        methods.add_method("draw", |_, this, renderer: AnyUserData| {
+            let drawable = this.drawable()?;
+            renderer
+                .borrow::<ScriptedRenderer>()?
+                .with_renderer_mut(|renderer| {
+                    Drawable::draw_handle(&drawable, renderer);
+                    Ok(())
+                })
+        });
+        #[cfg(feature = "tools")]
+        methods.add_method("properties", |lua, this, ()| {
+            use nuxie_runtime::mechanical_port::source::{
+                artboard::Artboard,
+                assets::manifest_asset::ManifestAsset,
+                custom_property::{CustomProperty, CustomPropertyKind},
+                generated::custom_property_base::CustomPropertyBase,
+            };
+            let drawable = this.drawable()?;
+            let result = lua.create_table();
+            let file = drawable
+                .with(|object| {
+                    object
+                        .as_component()
+                        .and_then(|component| component.artboard_handle())
+                })
+                .flatten()
+                .and_then(|artboard| Artboard::draw_visitor_file_handle(&artboard));
+            let manifest = file.and_then(|file| file.with_file(|file| file.manifest()));
+            if let Some(manifest) = manifest {
+                for property in Drawable::tagging_properties_handle(&drawable) {
+                    let id = CoreRegistry::get_uint_handle(
+                        &property,
+                        CustomPropertyBase::NAME_ID_PROPERTY_KEY.into(),
+                    )
+                    .unwrap();
+                    let name = manifest
+                        .with_downcast::<ManifestAsset, _>(|manifest| {
+                            manifest.resolve_name(id as i32).to_owned()
+                        })
+                        .unwrap();
+                    let kind = match CustomProperty::kind_handle(&property) {
+                        CustomPropertyKind::Number => "number",
+                        CustomPropertyKind::Boolean => "boolean",
+                        CustomPropertyKind::String => "string",
+                        CustomPropertyKind::Color => "color",
+                        CustomPropertyKind::Enumeration => "enum",
+                        CustomPropertyKind::Trigger => "trigger",
+                    };
+                    let entry = lua.create_table();
+                    entry.set("name", name)?;
+                    entry.set("kind", kind)?;
+                    result.raw_push(entry)?;
+                }
+            }
+            Ok(result)
         });
     }
 }
@@ -378,6 +548,188 @@ mod artboard_owner_tests {
             .join(name);
         std::fs::read(&fixture)
             .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()))
+    }
+
+    /// Complete port of scripting_draw_visitor_test.cpp's source case.
+    #[cfg(feature = "tools")]
+    #[test]
+    fn artboard_draw_visitor_reads_custom_properties() {
+        use nuxie_render_api::*;
+        let lua = Lua::new();
+        let mut factory = PersistentFactory::new(SerializingFactory::new());
+        let file = import_fixture("drawable_custom_properties.riv", &mut factory);
+        let source = file.with_file(|file| file.artboard_handle(0)).unwrap();
+        let bindings = RendererBindings::new(ScriptViewModelFrameContext::default());
+        bindings.bootstrap_render_context(&mut factory).unwrap();
+        bindings.install(&lua).unwrap();
+        lua.load(
+            r#"
+visits = 0
+emissive = 0
+glows = 0
+tint = 0
+label = ""
+missing = 0
+kinds = ""
+passed = 0
+stored = nil
+function render(artboard: Artboard, renderer: Renderer)
+    artboard:advance(0)
+    local EMISSIVE = artboard:propertyKey("emissive")
+    local GLOW = artboard:propertyKey("glow")
+    local TINT = artboard:propertyKey("tint")
+    local LABEL = artboard:propertyKey("label")
+    local NOPE = artboard:propertyKey("nope")
+    renderer:save()
+    renderer:modulateColor(Color.rgba(0, 0, 0, 255))
+    artboard:draw(renderer, function(context, drawable, r)
+        visits += 1
+        passed = context
+        stored = drawable
+        emissive += drawable:number(EMISSIVE) or 0
+        if drawable:boolean(GLOW) then
+            glows += 1
+            tint = drawable:color(TINT) or 0
+            label = drawable:string(LABEL) or ""
+            for _, property in drawable:properties() do
+                kinds ..= property.name .. ":" .. property.kind .. " "
+            end
+        end
+        if drawable:number(LABEL) == nil and drawable:number(NOPE) == nil then
+            missing += 1
+        end
+        r:setColorModulation(Color.rgba(255, 255, 255, 255))
+        drawable:draw(r)
+    end, 7)
+    renderer:restore()
+end
+function afterwards() stored:number(0) end
+function modulated(artboard: Artboard, renderer: Renderer)
+    artboard:advance(0)
+    renderer:save()
+    renderer:setColorModulation(Color.rgba(0, 0, 0, 255))
+    artboard:drawModulated(renderer, artboard:propertyKey("emissive"))
+    renderer:restore()
+end
+function passing(artboard: Artboard, renderer: Renderer)
+    artboard:advance(0)
+    artboard:draw(renderer, function(context, drawable, r) drawable:draw(r) end)
+end
+function failingOpen(artboard: Artboard, renderer: Renderer)
+    artboard:advance(0)
+    artboard:draw(renderer, function(context, drawable, r)
+        r:save()
+        error("visitor failed with a save open")
+    end)
+end
+function failing(artboard: Artboard, renderer: Renderer)
+    artboard:advance(0)
+    artboard:draw(renderer, function() error("visitor failed") end)
+end
+"#,
+        )
+        .exec()
+        .unwrap();
+        let call = |renderer: &mut dyn Renderer, name: &str| -> Result<()> {
+            let artboard = bindings.create_scripted_artboard(
+                &lua,
+                native_script_artboard(
+                    file.clone(),
+                    nuxie_runtime::Artboard::instance_from_handle(&source).unwrap(),
+                    None,
+                    None,
+                )
+                .unwrap(),
+            )?;
+            let (userdata, _scope) =
+                ScriptedRenderer::create_call_scoped_userdata(&lua, renderer, bindings.clone())?;
+            let result = lua
+                .globals()
+                .get::<luaur_rt::Function>(name)?
+                .call::<()>((artboard, userdata.clone()));
+            userdata.borrow::<ScriptedRenderer>()?.end();
+            result
+        };
+        let mut renderer = factory.borrow().make_renderer();
+        call(&mut renderer, "render").unwrap();
+        for (name, expected) in [
+            ("visits", 4.0),
+            ("glows", 1.0),
+            ("tint", 0xFF8040FFu32 as f64),
+            ("missing", 4.0),
+            ("passed", 7.0),
+        ] {
+            assert_eq!(lua.globals().get::<f64>(name).unwrap(), expected);
+        }
+        assert!((lua.globals().get::<f64>("emissive").unwrap() - 2.3).abs() < 0.00001);
+        assert_eq!(lua.globals().get::<String>("label").unwrap(), "ghost");
+        assert_eq!(
+            lua.globals().get::<String>("kinds").unwrap(),
+            "emissive:number glow:boolean tint:color label:string "
+        );
+        assert!(
+            lua.globals()
+                .get::<luaur_rt::Function>("afterwards")
+                .unwrap()
+                .call::<()>(())
+                .is_err()
+        );
+        call(&mut renderer, "modulated").unwrap();
+        #[derive(Default)]
+        struct DepthRecorder {
+            depth: i32,
+            deepest_draw: i32,
+            draws: i32,
+        }
+        impl Renderer for DepthRecorder {
+            fn save(&mut self) {
+                self.depth += 1;
+            }
+            fn restore(&mut self) {
+                self.depth -= 1;
+            }
+            fn transform(&mut self, _: Mat2D) {}
+            fn draw_path(&mut self, _: &dyn RenderPath, _: &dyn RenderPaint) {
+                self.draws += 1;
+                self.deepest_draw = self.deepest_draw.max(self.depth);
+            }
+            fn clip_path(&mut self, _: &dyn RenderPath) {}
+            fn draw_image(
+                &mut self,
+                _: Option<&dyn RenderImage>,
+                _: ImageSampler,
+                _: BlendMode,
+                _: f32,
+            ) {
+            }
+            fn draw_image_mesh(
+                &mut self,
+                _: Option<&dyn RenderImage>,
+                _: ImageSampler,
+                _: Option<&dyn RenderBuffer>,
+                _: Option<&dyn RenderBuffer>,
+                _: Option<&dyn RenderBuffer>,
+                _: u32,
+                _: u32,
+                _: BlendMode,
+                _: f32,
+            ) {
+            }
+            fn modulate_opacity(&mut self, _: f32) {}
+        }
+        let mut passing = DepthRecorder::default();
+        call(&mut passing, "passing").unwrap();
+        assert!(passing.deepest_draw > 0);
+        let mut failed = DepthRecorder::default();
+        assert!(call(&mut failed, "failingOpen").is_err());
+        assert_eq!(failed.deepest_draw, passing.deepest_draw);
+        assert_eq!(failed.draws, passing.draws - 1);
+        assert!(
+            call(&mut renderer, "failing")
+                .unwrap_err()
+                .to_string()
+                .contains("visitor failed")
+        );
     }
 
     fn import_fixture(name: &str, factory: &mut dyn RenderFactory) -> RuntimeFileHandle {

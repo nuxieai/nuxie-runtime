@@ -42,7 +42,7 @@ pub fn color_opacity(value: ColorInt) -> f32 {
     color_alpha(value) as f32 / 0xff as f32
 }
 pub fn opacity_to_alpha(opacity: f32) -> u8 {
-    (255.0 * opacity.clamp(0.0, 1.0)).round() as u8
+    (255.0 * opacity.min(1.0).max(0.0)).round() as u8
 }
 pub fn color_with_alpha(value: ColorInt, alpha: u32) -> ColorInt {
     color_argb(
@@ -59,6 +59,15 @@ pub fn color_modulate_opacity(value: ColorInt, opacity: f32) -> ColorInt {
     color_with_alpha(
         value,
         opacity_to_alpha(color_opacity(value) * opacity) as u32,
+    )
+}
+pub fn color_modulate(value: ColorInt, color: ColorInt, opacity: f32) -> ColorInt {
+    let mul8 = |a: u32, b: u32| ((a * b + 127) / 255) as i32;
+    color_argb(
+        opacity_to_alpha(color_opacity(value) * color_opacity(color) * opacity) as i32,
+        mul8(color_red(value), color_red(color)),
+        mul8(color_green(value), color_green(color)),
+        mul8(color_blue(value), color_blue(color)),
     )
 }
 fn lerp(a: u32, b: u32, mix: f32) -> u32 {

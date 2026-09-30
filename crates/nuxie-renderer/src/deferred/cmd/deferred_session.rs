@@ -464,6 +464,9 @@ impl Renderer for ScopedRenderer {
     fn modulate_opacity(&mut self, o: f32) {
         self.0.borrow_mut().modulate_opacity(o);
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        self.0.borrow_mut().modulate_color(color, replace);
+    }
     fn current_transform(&self) -> Option<Mat2D> {
         self.0.borrow().current_transform()
     }

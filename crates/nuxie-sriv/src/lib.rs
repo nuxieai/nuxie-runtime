@@ -59,6 +59,7 @@ pub enum OpKind {
     MakeRenderCanvas = 32,
     CanvasContentBegin = 33,
     CanvasContentEnd = 34,
+    ModulateColor = 35,
 }
 
 impl OpKind {
@@ -97,6 +98,7 @@ impl OpKind {
             32 => Self::MakeRenderCanvas,
             33 => Self::CanvasContentBegin,
             34 => Self::CanvasContentEnd,
+            35 => Self::ModulateColor,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -143,6 +145,7 @@ impl Display for OpKind {
             Self::MakeRenderCanvas => "makeRenderCanvas",
             Self::CanvasContentBegin => "canvasContentBegin",
             Self::CanvasContentEnd => "canvasContentEnd",
+            Self::ModulateColor => "modulateColor",
         })
     }
 }
@@ -566,6 +569,10 @@ fn parse_fields(
         }
         OpKind::ModulateOpacity => {
             push_float(reader, fields, "opacity")?;
+        }
+        OpKind::ModulateColor => {
+            push_uint(reader, fields, "modulatecolor_value")?;
+            push_uint(reader, fields, "modulatecolor_replace")?;
         }
         OpKind::PaintModulatedImage => {
             for name in ["paint_id", "raw_image_id", "filter", "wrap_x", "wrap_y"] {

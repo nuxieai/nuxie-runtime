@@ -779,6 +779,12 @@ void RecordingRenderer::modulateOpacity(float opacity)
     m_stream->line("modulateOpacity opacity=" + floatToString(opacity));
 }
 
+void RecordingRenderer::modulateColor(rive::ColorInt color, bool replace)
+{
+    m_stream->line("modulateColor color=" + colorToString(color) +
+                   " replace=" + (replace ? "1" : "0"));
+}
+
 void NullRenderer::save() {}
 
 void NullRenderer::restore() {}

@@ -177,6 +177,7 @@ fn with_active_renderer<R>(
     callback(unsafe { renderer.renderer.as_mut() })
 }
 
+#[derive(Clone)]
 enum RendererTarget {
     CallScoped(u64),
     CanvasFrame(Rc<RefCell<Box<dyn RenderCanvasFrame>>>),
@@ -237,7 +238,7 @@ impl ScriptedRenderer {
         &self,
         callback: impl FnOnce(&mut dyn Renderer) -> Result<R>,
     ) -> Result<R> {
-        let target = self.target.borrow();
+        let target = self.target.borrow().clone();
         match target
             .as_ref()
             .ok_or_else(|| Error::lua_l_runtime("Renderer is no longer valid."))?
@@ -250,6 +251,41 @@ impl ScriptedRenderer {
                 callback(frame.renderer())
             }
         }
+    }
+
+    pub(super) fn with_reborrowed_renderer<R>(
+        &self,
+        renderer: &mut dyn Renderer,
+        callback: impl FnOnce() -> Result<R>,
+    ) -> Result<R> {
+        let access = ScopedRendererAccess::new(renderer);
+        struct RestoreTarget<'a> {
+            target: &'a RefCell<Option<RendererTarget>>,
+            previous: Option<RendererTarget>,
+        }
+        impl Drop for RestoreTarget<'_> {
+            fn drop(&mut self) {
+                *self.target.borrow_mut() = self.previous.take();
+            }
+        }
+        let _restore = RestoreTarget {
+            target: &self.target,
+            previous: self
+                .target
+                .replace(Some(RendererTarget::CallScoped(access.token))),
+        };
+        callback()
+    }
+
+    pub(super) fn save_count(&self) -> usize {
+        self.save_count.get()
+    }
+
+    pub(super) fn restore_to(&self, count: usize) -> Result<()> {
+        while self.save_count.get() > count {
+            self.restore()?;
+        }
+        Ok(())
     }
 
     fn save(&self) -> Result<()> {
@@ -280,6 +316,18 @@ impl UserData for ScriptedRenderer {
         methods.add_method("modulateOpacity", |_, this, opacity: f32| {
             this.with_renderer_mut(|renderer| {
                 renderer.modulate_opacity(opacity);
+                Ok(())
+            })
+        });
+        methods.add_method("modulateColor", |_, this, color: u32| {
+            this.with_renderer_mut(|renderer| {
+                renderer.modulate_color(color, false);
+                Ok(())
+            })
+        });
+        methods.add_method("setColorModulation", |_, this, color: u32| {
+            this.with_renderer_mut(|renderer| {
+                renderer.modulate_color(color, true);
                 Ok(())
             })
         });

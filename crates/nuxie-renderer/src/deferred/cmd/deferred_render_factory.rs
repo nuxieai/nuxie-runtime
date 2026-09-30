@@ -516,6 +516,13 @@ impl Renderer for DeferredRenderer {
             .unwrap()
             .append(RenderCmd::ModulateOpacity, &OpacityPod { opacity });
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        self.route();
+        self.buffer.lock().unwrap().append(
+            RenderCmd::ModulateColor,
+            &ModulateColorPod { color, replace: u32::from(replace) },
+        );
+    }
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,

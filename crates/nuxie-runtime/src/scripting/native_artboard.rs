@@ -271,6 +271,42 @@ impl ScriptArtboard for NativeScriptArtboard {
         Ok(())
     }
 
+    fn property_key(&self, name: &[u8]) -> u32 {
+        self.owner.file.with_file(|file| {
+            crate::mechanical_port::source::file::File::custom_property_key(Some(file), name)
+        })
+    }
+
+    fn draw_with_visitor(
+        &mut self,
+        _factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        visitor: crate::mechanical_port::source::artboard::RuntimeDrawVisitor,
+    ) -> Result<(), ScriptError> {
+        Artboard::draw_internal_with_visitor_handle(
+            &self.owner.artboard.core_handle(),
+            renderer,
+            Some(visitor),
+            Some(self.owner.file.clone()),
+        );
+        Ok(())
+    }
+
+    fn draw_modulated(
+        &mut self,
+        _factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        key: u32,
+    ) -> Result<(), ScriptError> {
+        Artboard::draw_modulated_handle(
+            &self.owner.artboard.core_handle(),
+            renderer,
+            key,
+            Some(self.owner.file.clone()),
+        );
+        Ok(())
+    }
+
     fn dispatch_input(
         &mut self,
         method: ScriptMethod,

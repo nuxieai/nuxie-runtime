@@ -74,7 +74,7 @@ impl ScriptInputNumber {
     }
 
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
-        let code = self.base.base.base.base.base.base.on_added_clean(context);
+        let code = self.base.base.base.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
         }

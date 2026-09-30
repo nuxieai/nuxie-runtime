@@ -227,6 +227,7 @@ void rive_ffi_renderer_draw_image_mesh_with_additiveness(rive_ffi_renderer*,
                                        uint8_t blend_mode,
                                        float opacity, float additiveness);
 void rive_ffi_renderer_modulate_opacity(rive_ffi_renderer*, float opacity);
+void rive_ffi_renderer_modulate_color(rive_ffi_renderer*, uint32_t color, uint32_t replace);
 
 #ifdef __cplusplus
 }

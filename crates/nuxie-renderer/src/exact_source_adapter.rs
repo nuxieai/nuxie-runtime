@@ -304,6 +304,9 @@ impl Renderer for ExactSourceRendererAdapter {
     fn modulate_opacity(&mut self, opacity: f32) {
         <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        <RiveRenderer as RendererContract>::modulateColor(&mut self.renderer, color, replace);
+    }
 
     fn current_transform(&self) -> Option<Mat2D> {
         let mut out = Mat2D::IDENTITY;
@@ -1280,6 +1283,9 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceRenderCanvasFrame<B> {
     fn modulate_opacity(&mut self, opacity: f32) {
         <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
     }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        <RiveRenderer as RendererContract>::modulateColor(&mut self.renderer, color, replace);
+    }
 
     fn current_transform(&self) -> Option<Mat2D> {
         let mut out = Mat2D::IDENTITY;
@@ -1566,6 +1572,9 @@ impl<B: ExactSourceBackend> Renderer for ExactSourceFrameCore<B> {
 
     fn modulate_opacity(&mut self, opacity: f32) {
         <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
+    }
+    fn modulate_color(&mut self, color: u32, replace: bool) {
+        <RiveRenderer as RendererContract>::modulateColor(&mut self.renderer, color, replace);
     }
 
     fn current_transform(&self) -> Option<Mat2D> {

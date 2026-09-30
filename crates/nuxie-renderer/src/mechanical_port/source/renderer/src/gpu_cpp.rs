@@ -3889,7 +3889,7 @@ impl ImageRectInstance {
 impl ImageMeshInstance {
     pub fn new(
         matrix: Mat2D,
-        opacity: f32,
+        modulatedColor: u32,
         clipRectInverseMatrix: Option<Mat2D>,
         clipID: u32,
         blendMode: BlendMode,
@@ -3899,7 +3899,7 @@ impl ImageMeshInstance {
         Self {
             m_commons: image_draw_instance_base(
                 matrix,
-                super::draw_cpp::color_modulate_opacity(0xffffffff, opacity),
+                modulatedColor,
                 clipRectInverseMatrix,
                 clipID,
                 blendMode,

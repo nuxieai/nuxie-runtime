@@ -828,6 +828,13 @@ impl Renderer for SerializingRenderer {
         writer.varuint(MODULATE_OPACITY);
         writer.float(opacity);
     }
+
+    fn modulate_color(&mut self, color: ColorInt, replace: bool) {
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(MODULATE_COLOR);
+        writer.varuint(color as u64);
+        writer.varuint(u64::from(replace));
+    }
 }
 
 fn serializing_path(path: &dyn RenderPath) -> &SerializingRenderPath {

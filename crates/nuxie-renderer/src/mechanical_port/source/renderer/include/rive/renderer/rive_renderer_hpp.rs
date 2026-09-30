@@ -226,6 +226,7 @@ pub struct RenderState {
     pub clipRectPixelBounds: gpu::IAABB,
     pub clipRectInverseMatrix: *const gpu::ClipRectInverseMatrix,
     pub modulatedOpacity: f32,
+    pub modulatedColor: u32,
     pub overallClipPixelBounds: gpu::IAABB,
 }
 impl Default for RenderState {
@@ -238,6 +239,7 @@ impl Default for RenderState {
             clipRectPixelBounds: gpu::IAABB::default(),
             clipRectInverseMatrix: core::ptr::null(),
             modulatedOpacity: 1.0,
+            modulatedColor: 0xffff_ffff,
             overallClipPixelBounds: gpu::IAABB::makeMaximal(),
         }
     }
@@ -431,5 +433,8 @@ impl RiveRenderer {
     }
     pub fn currentModulatedOpacity(&self) -> f32 {
         self.current_state().modulatedOpacity
+    }
+    pub fn currentModulatedColor(&self) -> u32 {
+        self.current_state().modulatedColor
     }
 }

@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "af39db759ecd48fe78dfee4fff59a918368181c6"
+UPSTREAM_REF = "f01e9e26284d27090840e6c247c4955f3cf9cf71"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -147,7 +147,6 @@ GRID_STACK_FFP_CONTRACT_DIVERGENCES = {
 SERIALIZED_RENDERING_FFP_CONTRACT_DIVERGENCES = {
     "car_widgets_v01",
     "hunter_x_demo",
-    "juice",
     "rewards_demo",
 }
 
@@ -319,6 +318,7 @@ EXACT = (
     "hittest_ab1_grand_parent",
     "hittest_ab1_parent",
     "hide_test",
+    "juice",
     "hittest_collapsed_layouts",
     "hittest_nested",
     "image_fit_alignment_2",
@@ -2344,8 +2344,7 @@ DIVERGENCES = dict(
     line.split("|", 1)
     for line in """
 bidirectional_binding_source|frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save
-data_binding_artboards_test|frame 7, op 582 (frame): expected frame, got makeRenderPaint
-juice|frame 1, op 360 (addRawPath): expected 40 fields, got 42
+data_binding_artboards_test|frame 7, op 580 (frame): expected frame, got makeRenderPaint
 car_widgets_v01|frame 0, op 10306 (addRawPath): expected 60 fields, got 56
 collapse_data_binds-test_1|frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672
 focus_traversal|frame 0, op 95 (color): expected color, got save

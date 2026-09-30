@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     component::{Component, ComponentOccurrenceHandle},
     component_dirt::ComponentDirt,
     core::CoreHandle,
+    math::mat2d::Mat2D,
     shapes::{paint::shape_paint_path::ShapePaintPath, path_flags::PathFlags},
 };
 use std::{cell::RefCell, rc::Rc};
@@ -23,6 +24,10 @@ impl RuntimePathComposerHandle {
                 local_clockwise_path: ShapePaintPath::new(true),
                 deferred_path_dirt: false,
                 shape_notified: false,
+                local_inputs: Vec::new(),
+                scratch_inputs: Vec::new(),
+                built_local_flags: PathFlags::NONE,
+                has_local_inputs: false,
             })
         }))
     }
@@ -91,6 +96,30 @@ impl Default for RuntimePathComposerHandle {
     }
 }
 
+#[derive(Clone)]
+pub struct LocalPathInput {
+    pub transform: Mat2D,
+    pub geometry_version: u32,
+    pub skipped: bool,
+    pub linear_tolerance: f32,
+    pub translation_tolerance: f32,
+}
+
+impl LocalPathInput {
+    pub fn matches(&self, other: &Self) -> bool {
+        if self.geometry_version != other.geometry_version || self.skipped != other.skipped {
+            return false;
+        }
+        for i in 0..4 {
+            if (self.transform[i] - other.transform[i]).abs() > other.linear_tolerance {
+                return false;
+            }
+        }
+        (self.transform[4] - other.transform[4]).abs() <= other.translation_tolerance
+            && (self.transform[5] - other.transform[5]).abs() <= other.translation_tolerance
+    }
+}
+
 pub struct PathComposer {
     pub component: Component,
     shape: Option<CoreHandle>,
@@ -99,9 +128,88 @@ pub struct PathComposer {
     local_clockwise_path: ShapePaintPath,
     deferred_path_dirt: bool,
     shape_notified: bool,
+    local_inputs: Vec<LocalPathInput>,
+    scratch_inputs: Vec<LocalPathInput>,
+    built_local_flags: PathFlags,
+    has_local_inputs: bool,
 }
 
 impl PathComposer {
+    pub fn local_inputs_changed(&mut self) -> bool {
+        // Preserve std::max's operand selection, including unordered values.
+        fn source_max(a: f32, b: f32) -> f32 {
+            if a < b { b } else { a }
+        }
+        fn linear_magnitude(transform: Mat2D) -> f32 {
+            source_max(
+                source_max(
+                    source_max(transform[0].abs(), transform[1].abs()),
+                    transform[2].abs(),
+                ),
+                transform[3].abs(),
+            )
+        }
+        let (paths, world, local_flags) = self
+            .shape()
+            .with(|object| {
+                let shape = object.as_shape().expect("PathComposer Shape");
+                (
+                    shape.paths(),
+                    *shape.world_transform(),
+                    shape.paint_container.path_flags()
+                        & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE),
+                )
+            })
+            .expect("live PathComposer Shape");
+        let inverse = world.invert_or_identity();
+        const ULPS: f32 = 16.0 * f32::EPSILON;
+        let inverse_linear = linear_magnitude(inverse);
+        let inverse_translation = source_max(inverse[4].abs(), inverse[5].abs());
+        self.scratch_inputs.clear();
+        self.scratch_inputs.reserve(paths.len());
+        for handle in &paths {
+            let input = handle
+                .with(|object| {
+                    let path = object.as_path().expect("Shape path");
+                    let path_world =
+                        crate::mechanical_port::source::shapes::path::Path::path_transform_for(
+                            object,
+                        );
+                    let path_linear = linear_magnitude(path_world);
+                    let path_translation = source_max(path_world[4].abs(), path_world[5].abs());
+                    LocalPathInput {
+                        transform: inverse * path_world,
+                        geometry_version: path.geometry_version(),
+                        skipped: path.is_hidden() || path.is_collapsed(),
+                        linear_tolerance: ULPS * source_max(1.0, inverse_linear * path_linear),
+                        translation_tolerance: ULPS
+                            * source_max(
+                                1.0,
+                                inverse_linear * path_translation + inverse_translation,
+                            ),
+                    }
+                })
+                .expect("live Shape path");
+            self.scratch_inputs.push(input);
+        }
+        let mut changed = !self.has_local_inputs
+            || self.local_inputs.len() != paths.len()
+            || !(local_flags & !self.built_local_flags).is_empty();
+        for i in 0..paths.len() {
+            if changed {
+                break;
+            }
+            changed = !self.local_inputs[i].matches(&self.scratch_inputs[i]);
+        }
+        if changed {
+            // Compare future frames to the inputs actually used for the build,
+            // never to a running snapshot that would accumulate tolerated drift.
+            self.local_inputs.clone_from(&self.scratch_inputs);
+            self.has_local_inputs = true;
+            self.built_local_flags = local_flags;
+        }
+        changed
+    }
     pub fn shape(&self) -> CoreHandle {
         self.shape.clone().expect("arena-installed Shape")
     }
@@ -154,7 +262,8 @@ impl PathComposer {
             return None;
         }
         self.deferred_path_dirt = false;
-        if local {
+        let rebuild_local = (local || clockwise) && self.local_inputs_changed();
+        if local && rebuild_local {
             self.local_path.rewind();
             let inverse = transform.invert_or_identity();
             for handle in &paths {
@@ -171,7 +280,7 @@ impl PathComposer {
                 });
             }
         }
-        if clockwise {
+        if clockwise && rebuild_local {
             self.local_clockwise_path.rewind();
             let inverse = transform.invert_or_identity();
             for handle in &paths {

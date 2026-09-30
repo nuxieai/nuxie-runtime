@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `af39db759ecd48fe78dfee4fff59a918368181c6`
+- LAST_SYNCED_SHA: `f01e9e26284d27090840e6c247c4955f3cf9cf71`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 31 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 31 require a Rust translation.
+  There are 30 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 30 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f01e9e26284d27090840e6c247c4955f3cf9cf71` | Retain composed local paths across rigid transforms by comparing ordered geometry versions, visibility and relative transforms against the last built snapshot, using upstream's separate linear/translation tolerances. Keep world-path rebuilding unchanged. Port all three path-composer regressions, including the twelve-file, 120-frame comparison; release Rust occurrence borrows across synchronous forced-rebuild callbacks without suppressing dirt. Consume all 71 modified upstream Silver baselines (the commit message says 69). The unchanged comparator now accepts juice; promote it to exact. Two removed commands shift the existing data-binding failure from operation 582 to 580. The known stateful_multi_property clipping failure remains red under UNIV-3751, without relaxing its exact classification. The macOS-only CoreGraphics visual-diff diagnostic remains in the pinned C++ test tooling, not the shipped Rust runtime. | [UNIV-3751](https://universe.basis.dev/issue/UNIV-3751) |
 | `af39db759ecd48fe78dfee4fff59a918368181c6` | **UPSTREAM TEST-DEPLOYMENT ONLY:** adds Unreal iOS package/device launch support, relocates Unreal installation, and avoids forcing window resolution on the Unreal player. No Unreal host or these deployment scripts ship in the Rust workspace, and no runtime, renderer, shader, fixture or assertion changed. Existing native Apple host APIs are unaffected. | — |
 | `8daed0a3dfc437bf18980244bb95222f2a32a9aa` | **DEFERRED WASM EXECUTION:** disables WAMR libc-wasi and removes its source/include paths. The full public delta is confined to the parked WAMR scripting backend and private source pointer; no Rust Luau, shared runtime or browser-renderer change is imported. | UNIV-3728 |
 | `93e4ce468f0aadff5622e960baa16e6c87e0d5fb` | Cache skinned-path and layout-participant lookups at registration, coalesce path/composer shape notifications per dirt cycle, and skip hidden stroke-effect measurement except for clip sources. Preserve active Rust owner borrows through explicit registration witnesses and notification extraction. Port the complete hidden-stroke visibility regression. Upstream private-editor rescans are not enabled by the distinct Rust tools feature. | — |

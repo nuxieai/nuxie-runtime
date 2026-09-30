@@ -142,6 +142,30 @@ impl ShapePaint {
     ) {
         if has_dirt(value, ComponentDirt::PATH) && !self.effects_container.effects.is_empty() {
             let parent = self.base.parent_handle().expect("ShapePaint container");
+            // Hidden paints are invalidated again when shown. Clip sources
+            // still consume their effect geometry while hidden.
+            if self.render_opacity() == 0.0
+                && parent
+                    .with(|container| {
+                        let flags = container
+                            .as_shape_paint_container()
+                            .expect("ShapePaint container")
+                            .path_flags_with_active_paint(
+                                &self.base.handle().expect("installed ShapePaint"),
+                                match kind {
+                                    ShapePaintPathKind::Local => PathFlags::LOCAL,
+                                    ShapePaintPathKind::World => PathFlags::WORLD,
+                                    ShapePaintPathKind::LocalClockwise => {
+                                        PathFlags::LOCAL_CLOCKWISE
+                                    }
+                                },
+                            );
+                        (flags & PathFlags::CLIPPING).is_empty()
+                    })
+                    .expect("live ShapePaint container")
+            {
+                return;
+            }
             let mut source = None;
             parent.with_mut(|container| {
                 container.with_shape_paint_path_mut(kind, &mut |path| {

@@ -88,6 +88,7 @@ pub struct Path {
     shape: Option<CoreHandle>,
     vertices: Vec<PathVertexOccurrence>,
     deferred_path_dirt: bool,
+    shape_notified: bool,
     path_flags: PathFlags,
     raw_path: RawPath,
 }
@@ -114,6 +115,13 @@ impl Path {
     }
 
     pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        self.on_added_clean_with_skin(context, false)
+    }
+    pub(crate) fn on_added_clean_with_skin(
+        &mut self,
+        context: &mut dyn CoreContext,
+        has_skin: bool,
+    ) -> StatusCode {
         let code = self.base.on_added_clean(context);
         if code != StatusCode::Ok {
             return code;
@@ -129,7 +137,7 @@ impl Path {
                 self.shape = Some(current.clone());
                 current.with_mut(|shape| {
                     if let Some(shape) = shape.as_shape_mut() {
-                        shape.add_path(this);
+                        shape.add_path_with_skin(this, has_skin);
                     }
                 });
                 return StatusCode::Ok;
@@ -532,7 +540,18 @@ impl Path {
     }
     pub fn mark_path_dirty(&mut self, _send_to_layout: bool) {
         self.base.add_dirt(ComponentDirt::PATH, false);
-        if let Some(shape) = self.shape.as_ref() {
+        self.shape_path_changed();
+    }
+    fn take_shape_notification(&mut self) -> Option<CoreHandle> {
+        if self.shape_notified {
+            return None;
+        }
+        let shape = self.shape.clone()?;
+        self.shape_notified = true;
+        Some(shape)
+    }
+    fn shape_path_changed(&mut self) {
+        if let Some(shape) = self.take_shape_notification() {
             shape.with_mut(|shape| {
                 if let Some(shape) = shape.as_shape_mut() {
                     shape.path_changed();
@@ -545,13 +564,7 @@ impl Path {
             value,
             ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
         ) {
-            if let Some(shape) = self.shape.as_ref() {
-                shape.with_mut(|shape| {
-                    if let Some(shape) = shape.as_shape_mut() {
-                        shape.path_changed();
-                    }
-                });
-            }
+            self.shape_path_changed();
         }
         if self.deferred_path_dirt {
             self.base.add_dirt(ComponentDirt::PATH, false);
@@ -567,7 +580,7 @@ impl Path {
             ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
         ) {
             let shape = owner
-                .with(|owner| owner.as_path().and_then(Path::shape_handle))
+                .with_mut(|owner| owner.as_path_mut().and_then(Path::take_shape_notification))
                 .flatten();
             if let Some(shape) = shape {
                 if active_shape.base.handle().as_ref() == Some(&shape) {
@@ -593,6 +606,9 @@ impl Path {
             )
             .add_dirt_from_shape(active_shape, ComponentDirt::PATH, false);
         }
+    }
+    pub(crate) fn update_before_transform_super(&mut self) {
+        self.shape_notified = false;
     }
     pub(crate) fn update_after_transform_super(
         &mut self,

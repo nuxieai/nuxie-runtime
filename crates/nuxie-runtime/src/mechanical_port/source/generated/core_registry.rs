@@ -3439,6 +3439,9 @@ fn component_update_before_transform(
     if let Some(points) = object.as_points_path_mut() {
         points.update_before_path_super(dirt);
     }
+    if let Some(path) = object.as_path_mut() {
+        path.update_before_transform_super();
+    }
 }
 
 fn component_update_after_transform(
@@ -63270,8 +63273,8 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::P
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
     ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(
-            crate::mechanical_port::source::shapes::path::Path::on_added_clean(
-                &mut self.base.base.base.base,
+            crate::mechanical_port::source::shapes::points_path::PointsPath::on_added_clean(
+                self,
                 context,
             ),
         )

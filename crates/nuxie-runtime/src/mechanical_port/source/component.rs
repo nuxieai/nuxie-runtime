@@ -127,7 +127,7 @@ impl ComponentOccurrenceHandle {
         if let Self::PathComposer(handle) = self {
             let shape = handle
                 .upgrade()
-                .and_then(|owner| owner.borrow().dirty_shape());
+                .and_then(|owner| owner.borrow_mut().dirty_shape());
             if let Some(shape) = shape {
                 shape.with_mut(|shape| shape.as_shape_mut().map(|shape| shape.path_changed()));
             }
@@ -287,7 +287,7 @@ impl ComponentOccurrenceHandle {
             Self::PathComposer(handle) => {
                 let dirty_shape = handle
                     .upgrade()
-                    .and_then(|helper| helper.borrow().dirty_shape());
+                    .and_then(|helper| helper.borrow_mut().dirty_shape());
                 if let Some(dirty_shape) = dirty_shape {
                     if shape.base.handle().as_ref() == Some(&dirty_shape) {
                         shape.path_changed();
@@ -648,6 +648,9 @@ impl Component {
             .with_mut(|parent| {
                 if let Some(range) = parent.as_any_mut().downcast_mut::<TextModifierRange>() {
                     range.add_child(child);
+                    true
+                } else if let Some(shape) = parent.as_shape_mut() {
+                    shape.add_child(child);
                     true
                 } else if let Some(parent) = parent.as_container_component_mut() {
                     parent.add_child(child);

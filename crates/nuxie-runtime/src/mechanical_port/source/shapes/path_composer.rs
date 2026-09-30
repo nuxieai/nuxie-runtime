@@ -22,6 +22,7 @@ impl RuntimePathComposerHandle {
                 world_path: ShapePaintPath::new(false),
                 local_clockwise_path: ShapePaintPath::new(true),
                 deferred_path_dirt: false,
+                shape_notified: false,
             })
         }))
     }
@@ -50,7 +51,7 @@ impl RuntimePathComposerHandle {
         let Some(_) = dirty else {
             return false;
         };
-        if self.with(|helper| helper.deferred_path_dirt) {
+        if self.with_mut(|helper| helper.dirty_shape()).is_some() {
             shape.path_changed();
         }
         let occurrence = self.occurrence();
@@ -76,7 +77,7 @@ impl RuntimePathComposerHandle {
         {
             return false;
         }
-        if self.with(|helper| helper.deferred_path_dirt) {
+        if self.with_mut(|helper| helper.dirty_shape()).is_some() {
             shape.path_changed();
         }
         self.occurrence().notify_artboard();
@@ -97,6 +98,7 @@ pub struct PathComposer {
     world_path: ShapePaintPath,
     local_clockwise_path: ShapePaintPath,
     deferred_path_dirt: bool,
+    shape_notified: bool,
 }
 
 impl PathComposer {
@@ -104,8 +106,12 @@ impl PathComposer {
         self.shape.clone().expect("arena-installed Shape")
     }
 
-    pub(crate) fn dirty_shape(&self) -> Option<CoreHandle> {
-        self.deferred_path_dirt.then(|| self.shape())
+    pub(crate) fn dirty_shape(&mut self) -> Option<CoreHandle> {
+        if !self.deferred_path_dirt || self.shape_notified {
+            return None;
+        }
+        self.shape_notified = true;
+        Some(self.shape())
     }
 
     /// Shape adds itself before this tail, while it already has its own mutable
@@ -125,6 +131,7 @@ impl PathComposer {
     }
 
     pub fn update(&mut self, value: ComponentDirt) -> Option<CoreHandle> {
+        self.shape_notified = false;
         if !value.intersects(ComponentDirt::PATH | ComponentDirt::N_SLICER) {
             return None;
         }

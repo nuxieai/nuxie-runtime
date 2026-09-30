@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-912312dc744a989ea561064bcd7291e7659e02ef}
+ref=${RIVE_RUNTIME_REF:-f0ec99212cc7bbc1d4755c22794eff81d103319b}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
@@ -16,16 +16,17 @@ assets=(
   "sync/layout_animation_transition_test.riv|9d9912b30f621ca8ac35f47ee35aa2070749646f2b3b888bfa8402b95a52be48|621f2a2e295f79a52c5fcf8c617327803f28d3c7|layout_animation_transition_test.riv"
   "sync/solo_nested_artboard_leaf.riv|50e22279a323c5880eefcc971437b6f8d514ff6e4018d82529749cc9a5b66e89|3b2c51e2dd957722fd3061112667d884b1ec60c3|solo_nested_artboard_leaf.riv"
   "semantic/zero_area_semantics.riv|7f53903646eb07548f68d349fd31833c81aa0ccb623d4665f530829ec6a5f2b8|293eaf002cdda1ab6ec20316ee2d67ebd2854775|semantic/zero_area_semantics.riv"
-  "sync/layout/matrix/matrix.expect|6ae71099b8a03f18e3002d934d39abc1735157ad11d47a81c89cfa45ae82f09c|3b2c51e2dd957722fd3061112667d884b1ec60c3|layout/matrix/matrix.expect"
-  "sync/layout/matrix/matrix.riv|4d00f48241a5963854c37c01acf28796a7ddf696ce1d9df935388b4e53589bc3|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix.riv"
-  "sync/layout/matrix/matrix_font.expect|8765f35841bb4a6fd1d5b3e3d1606961660ef6a13bf7837e3f1a9f1a17ebca74|7db8b61f747b24553bc4783df50cff997610e17c|layout/matrix/matrix_font.expect"
-  "sync/layout/matrix/matrix_font.riv|24c0efa0429ec7f727ca9bda080d29a4356bed21074112e933717685903dceb1|7db8b61f747b24553bc4783df50cff997610e17c|layout/matrix/matrix_font.riv"
+  "sync/layout/hug_unbounded.riv|0513c546996913d7fbd4181da1e0f224530509e6261f4743426fc28525bf01eb|f0ec99212cc7bbc1d4755c22794eff81d103319b|layout/hug_unbounded.riv"
+  "sync/layout/matrix/matrix.expect|605f1dc47b563121bb76ec0105a9f06e50eb0604cb252ea02304aa3fb7122952|f0ec99212cc7bbc1d4755c22794eff81d103319b|layout/matrix/matrix.expect"
+  "sync/layout/matrix/matrix.riv|21971c4a17a4e9caf7d40d8e5d8097969c69d6543a9bb642a2c995d05c0d5ae6|f0ec99212cc7bbc1d4755c22794eff81d103319b|layout/matrix/matrix.riv"
+  "sync/layout/matrix/matrix_font.expect|88c701a8a3b6474d87243623d29d101436e649eac9d6bcad1c29ea808923bcb2|f0ec99212cc7bbc1d4755c22794eff81d103319b|layout/matrix/matrix_font.expect"
+  "sync/layout/matrix/matrix_font.riv|37a9588e7617373cf8d3890231da8f7b9fa9a709b13e5fded40e7a0fe353d5cd|f0ec99212cc7bbc1d4755c22794eff81d103319b|layout/matrix/matrix_font.riv"
   "sync/layout/matrix/matrix_image.expect|175bf6c4e9539bd698f13007bb82969323da8b6b1efc9d5339acd8d071178d1c|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_image.expect"
   "sync/layout/matrix/matrix_image.riv|bd8940cfc111c1565928cf11ce46307cbf1750ac4d9c22f39482d497abeaa0bb|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|layout/matrix/matrix_image.riv"
   "sync/layout/matrix/matrix_legacy.expect|62068a77f1e4b4883a145ae0118310aee7620b4c6125a178d32e9764f57788a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.expect"
   "sync/layout/matrix/matrix_legacy.riv|0f788e1abe9d074b348a7cca55f077325f4a8242ce8758324518daa1ba154716|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/matrix_legacy.riv"
   "sync/layout/matrix/README.md|36e3afa7769913e9a3d0a0420d6b3115e81e67b8a9ee1230883e9039829bd0a0|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|layout/matrix/README.md"
-  "sync/layout/matrix/CORPUS.md|880fe8392d12178c58b5046634b7d353b4010300ccde24022747eabea3f70713|7db8b61f747b24553bc4783df50cff997610e17c|layout/matrix/CORPUS.md"
+  "sync/layout/matrix/CORPUS.md|8f5ee095fcdbdee4bc22419482b181f76fb3c17d42fa8500ea7a6c620e649281|f0ec99212cc7bbc1d4755c22794eff81d103319b|layout/matrix/CORPUS.md"
   "sync/fit_font_size_hug_test.riv|7b3c156ce6d6e9455ff42745a102f00709ecc163ba87cebf713f43c9c03b8f49|45d4d01dfd1fe70d3f9e73764538c16f63a04d07|fit_font_size_hug_test.riv"
   "sync/layout/assets/Montserrat.ttf|a4fe82b4bfd40c71320ab0f1daca8ba2f230b55a56ffa94d5d1b349675b70d73|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|Montserrat.ttf"
   "sync/layout/assets/batdude.png|32c86d18c059d4338cca1771faf9b43a80827ae8ea30d6cc10d64f681bfeec01|78b07a3fdc72fa7f64bf464d871ae80474a5a39a|batdude.png"

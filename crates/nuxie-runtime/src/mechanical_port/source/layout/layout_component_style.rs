@@ -533,6 +533,9 @@ impl LayoutComponentStyle {
     pub fn layout_height_scale_type_changed(&mut self) {
         self.scale_type_changed();
     }
+    pub fn hug_unbounded_changed(&mut self) {
+        self.mark_layout_node_dirty();
+    }
     pub fn display_value_changed(&mut self) {
         self.display_changed();
     }

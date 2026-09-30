@@ -1634,6 +1634,7 @@ impl LayoutComponent {
         height: f32,
         height_mode: LayoutMeasureMode,
     ) -> Vec2D {
+        let (width_mode, height_mode) = self.content_measure_modes(width_mode, height_mode);
         let mut size = Vec2D::default();
         for child in self.base.base.base.base.base.children() {
             let measured = child
@@ -1651,6 +1652,36 @@ impl LayoutComponent {
             }
         }
         size
+    }
+    // Shared with the handle-based measurement adapter, which releases the
+    // layout owner before invoking children that can read their parent.
+    fn content_measure_modes(
+        &self,
+        mut width_mode: LayoutMeasureMode,
+        mut height_mode: LayoutMeasureMode,
+    ) -> (LayoutMeasureMode, LayoutMeasureMode) {
+        use crate::mechanical_port::source::layout::layout_measure_mode::unbound_measure_mode;
+        if self
+            .with_style(|style| style.hug_unbounded())
+            .unwrap_or(false)
+        {
+            let mut width_hugs = self.effective_width_scale_type() == LayoutScaleType::Hug;
+            let mut height_hugs = self.effective_height_scale_type() == LayoutScaleType::Hug;
+            if !width_hugs && !height_hugs {
+                let intrinsic = self
+                    .with_style(|style| style.intrinsically_sized())
+                    .unwrap_or(false);
+                width_hugs = intrinsic;
+                height_hugs = intrinsic;
+            }
+            if width_hugs {
+                width_mode = unbound_measure_mode(width_mode);
+            }
+            if height_hugs {
+                height_mode = unbound_measure_mode(height_mode);
+            }
+        }
+        (width_mode, height_mode)
     }
     pub fn effective_parent_is_row(&mut self) -> bool {
         if self.can_have_overrides() {
@@ -2126,12 +2157,9 @@ impl LayoutComponent {
                     let data = participant
                         .native_layout_data()
                         .expect("participating node");
-                    let host = participant
-                        .measurement_host_handle()
-                        .expect("participant host");
                     (
                         data.style.taffy_style(),
-                        Some(LayoutMeasureContext::Participant(host)),
+                        Some(LayoutMeasureContext::Participant(owner.clone())),
                         data.dirty,
                     )
                 }
@@ -2209,9 +2237,8 @@ impl LayoutComponent {
             }
             match available {
                 AvailableSpace::Definite(value) => (value, LayoutMeasureMode::AtMost),
-                // Yoga's grid min-content probe measures the selected axis
-                // under AtMost(0), while its other unconstrained axis remains
-                // Undefined. Keep that distinction for native measured leaves.
+                // The separate probe flag widens this intrinsic request, not
+                // ordinary Definite(0), after per-axis hug handling.
                 AvailableSpace::MinContent => (0.0, LayoutMeasureMode::AtMost),
                 AvailableSpace::MaxContent => (f32::NAN, LayoutMeasureMode::Undefined),
             }
@@ -2337,7 +2364,7 @@ impl LayoutComponent {
         }
         cache
             .tree
-            .compute_layout_with_measure(
+            .compute_layout_with_measure_and_probe(
             root,
             Size {
                 width: if size.x.is_nan() {
@@ -2351,17 +2378,45 @@ impl LayoutComponent {
                     AvailableSpace::Definite(size.y)
                 },
             },
-            |known, available, _, context, _| {
+            |known, available, _, context, _, probing| {
                 let (width, width_mode) = axis(known.width, available.width);
                 let (height, height_mode) = axis(known.height, available.height);
                 let measured = match context {
-                    Some(LayoutMeasureContext::Participant(host)) => {
-                        measure_host(host, width, width_mode, height, height_mode)
+                    Some(LayoutMeasureContext::Participant(owner)) => {
+                        use crate::mechanical_port::source::layout::layout_measure_mode::{
+                            measure_mode_for_content, unbound_measure_mode,
+                        };
+                        let (host, mut width_mode, mut height_mode) = owner
+                            .with(|object| {
+                                let participant = object.as_any().downcast_ref::<LayoutParticipant>()
+                                    .expect("participant measurement owner");
+                                let mut w = width_mode;
+                                let mut h = height_mode;
+                                if participant.hug_unbounded() {
+                                    if participant.layout_width_scale_type() == LayoutScaleType::Hug as u8 {
+                                        w = unbound_measure_mode(w);
+                                    }
+                                    if participant.layout_height_scale_type() == LayoutScaleType::Hug as u8 {
+                                        h = unbound_measure_mode(h);
+                                    }
+                                }
+                                (participant.measurement_host_handle(), w, h)
+                            })
+                            .expect("live participant measurement owner");
+                        width_mode = measure_mode_for_content(width_mode, width, probing);
+                        height_mode = measure_mode_for_content(height_mode, height, probing);
+                        host.map(|host| measure_host(&host, width, width_mode, height, height_mode))
+                            .unwrap_or_default()
                     }
                     Some(LayoutMeasureContext::Layout(owner)) => {
-                        let children = owner
+                        use crate::mechanical_port::source::layout::layout_measure_mode::measure_mode_for_content;
+                        let width_mode = measure_mode_for_content(width_mode, width, probing);
+                        let height_mode = measure_mode_for_content(height_mode, height, probing);
+                        let (children, (width_mode, height_mode)) = owner
                             .with(|object| {
-                                object.as_container_component().unwrap().children().to_vec()
+                                let layout = object.as_layout_component().unwrap();
+                                (object.as_container_component().unwrap().children().to_vec(),
+                                 layout.content_measure_modes(width_mode, height_mode))
                             })
                             .expect("measurement owner");
                         let mut measured = Vec2D::default();

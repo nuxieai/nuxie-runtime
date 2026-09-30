@@ -3377,7 +3377,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
+    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3666,14 +3666,21 @@ impl PaintData {
             localParams |= PAINT_FLAG_HAS_IMAGE;
         }
         if isLayerMask {
-            use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
-                PAINT_FLAG_LAYER_MASK, PAINT_LAYER_MASK_MODE_SHIFT,
-            };
+            use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::PAINT_FLAG_LAYER_MASK;
             localParams |= PAINT_FLAG_LAYER_MASK as u32;
-            localParams |= (layerMaskMode as u32) << PAINT_LAYER_MASK_MODE_SHIFT;
+            localParams |= packed_layer_mask_mode(layerMaskMode as u32);
         }
         self.m_params = localParams;
     }
+}
+
+// Keep the raw packing operation separate so out-of-range source values can be
+// checked without constructing an invalid Rust enum.
+fn packed_layer_mask_mode(mode: u32) -> u32 {
+    use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
+        PAINT_LAYER_MASK_MODE_MASK, PAINT_LAYER_MASK_MODE_SHIFT,
+    };
+    (mode << PAINT_LAYER_MASK_MODE_SHIFT) & PAINT_LAYER_MASK_MODE_MASK
 }
 
 fn swizzleRiveColorToRGBAPremulAdditive(color: ColorInt, complement: f32) -> u32 {
@@ -3958,7 +3965,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{find_transformed_area, Mat2D, AABB};
+    use super::{AABB, Mat2D, find_transformed_area};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -4751,6 +4758,39 @@ mod dynamic_color_write_tests {
                 StencilType::disabled
             );
         }
+    }
+
+    #[test]
+    fn layer_mask_mode_stays_out_of_the_clip_id() {
+        use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
+            LAYER_MASK_MODE_INVERTED_LUMINANCE, PAINT_LAYER_MASK_MODE_MASK,
+            PAINT_LAYER_MASK_MODE_SHIFT,
+        };
+        let mut data: PaintData = unsafe { core::mem::zeroed() };
+        data.set(
+            DrawContents::none,
+            PaintType::solidColor,
+            SimplePaintValue { color: 0 },
+            GradTextureLayout::default(),
+            2,
+            false,
+            true,
+            BlendMode::SrcOver,
+            false,
+            0.0,
+            true,
+            nuxie_render_api::LayerMaskMode::InvertedLuminance,
+        );
+        let valid = data.m_params;
+        assert_eq!(valid >> 16, 2);
+        assert_eq!(
+            (valid & PAINT_LAYER_MASK_MODE_MASK) >> PAINT_LAYER_MASK_MODE_SHIFT,
+            LAYER_MASK_MODE_INVERTED_LUMINANCE as u32
+        );
+        // Rust's closed enum cannot contain the C++ static_cast value 8.
+        // Exercise the same production raw packing operation instead.
+        let out_of_range = (valid & !PAINT_LAYER_MASK_MODE_MASK) | packed_layer_mask_mode(8);
+        assert_eq!(out_of_range >> 16, 2);
     }
 
     #[test]

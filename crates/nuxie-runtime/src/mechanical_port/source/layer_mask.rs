@@ -132,7 +132,8 @@ impl LayerMask {
             1 => MaskMode::InvertedAlpha,
             2 => MaskMode::Luminance,
             3 => MaskMode::InvertedLuminance,
-            _ => unreachable!(),
+            // Unknown bound modes fall back to alpha, as in the editor.
+            _ => MaskMode::Alpha,
         }
     }
     pub fn source(&self) -> Option<CoreHandle> {

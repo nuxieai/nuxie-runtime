@@ -346,6 +346,23 @@ fn a_self_referential_mask_is_dropped_rather_than_recursing() {
     assert_eq!(f.draw_count(), 1);
 }
 #[test]
+fn an_unknown_mask_mode_falls_back_to_alpha() {
+    use nuxie_runtime::source::layer_mask::MaskMode;
+    let arena = CoreArena::default();
+    let mask = arena.insert(LayerMask::default());
+    uint(&mask, LayerMaskBase::MASK_MODE_VALUE_PROPERTY_KEY, 8);
+    assert_eq!(
+        mask.with_downcast::<LayerMask, _>(LayerMask::mask_mode),
+        Some(MaskMode::Alpha)
+    );
+    uint(&mask, LayerMaskBase::MASK_MODE_VALUE_PROPERTY_KEY, 3);
+    assert_eq!(
+        mask.with_downcast::<LayerMask, _>(LayerMask::mask_mode),
+        Some(MaskMode::InvertedLuminance)
+    );
+}
+
+#[test]
 fn a_mask_is_not_a_solo_option() {
     use nuxie_runtime::source::solo::Solo;
     let f = Fixture::new(false);

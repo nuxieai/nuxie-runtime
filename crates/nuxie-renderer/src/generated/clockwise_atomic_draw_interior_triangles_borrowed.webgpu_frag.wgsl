@@ -1,35 +1,35 @@
 struct SB {
-    xc: f32,
-    Hd: f32,
-    Mf: f32,
+    yc: f32,
+    Id: f32,
     Nf: f32,
+    Of: f32,
     r6_: u32,
-    Rb: u32,
-    yf: u32,
+    Sb: u32,
     zf: u32,
+    Af: u32,
     X7_: vec4<i32>,
-    jh: vec2<f32>,
-    Id: vec2<f32>,
+    kh: vec2<f32>,
+    Jd: vec2<f32>,
     f2_: u32,
-    nh: f32,
+    oh: f32,
     g6_: u32,
     W2_: f32,
-    Jd: f32,
-    sf: u32,
+    Kd: f32,
+    tf: u32,
     F3_: f32,
     G3_: f32,
-    Kd: f32,
-    gh: u32,
-    Qb: u32,
-    dc: f32,
+    Ld: f32,
+    hh: u32,
+    Rb: u32,
     ec: f32,
+    fc: f32,
 }
 
-struct Fe {
+struct Ge {
     g2_: array<u32>,
 }
 
-struct Fe_1 {
+struct Ge_1 {
     g2_: array<atomic<u32>>,
 }
 
@@ -39,7 +39,7 @@ var<private> k3_1: vec2<u32>;
 @group(0) @binding(0)
 var<uniform> j: SB;
 @group(0) @binding(6)
-var<storage, read_write> S0_: Fe_1;
+var<storage, read_write> S0_: Ge_1;
 @group(3) @binding(9)
 var ha: sampler;
 @group(0) @binding(8)

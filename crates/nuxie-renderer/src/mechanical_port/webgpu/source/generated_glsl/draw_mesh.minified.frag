@@ -1,8 +1,8 @@
 #ifdef FRAGMENT
 #if(defined(FIXED_FUNCTION_COLOR_OUTPUT)&&!defined(ENABLE_CLIPPING))||defined(RENDER_MODE_CLOCKWISE_ATOMIC)
-#undef Fb
+#undef Gb
 #else
-#define Fb
+#define Gb
 #endif
 M1
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
@@ -68,12 +68,12 @@ g3(g1),
 X1 Y2);d o=clamp(j2(ED,U9,F2,.0).x,J0(.0),J0(1.));
 #endif
 #ifdef DRAW_IMAGE_MESH
-i k=D7(GC,Z5,L5,j.Jd);d o=1.;
+i k=D7(GC,Z5,L5,j.Kd);d o=1.;
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){d c5=max(m3(g5(O0)),J0(.0));o=min(c5,o);}
 #endif
-#ifdef Fb
+#ifdef Gb
 z2;
 #endif
 #if defined(ENABLE_CLIPPING)
@@ -118,7 +118,7 @@ h2(i0);h2(S0);
 #else
 A0(i0,E0(.0));
 #endif
-#ifdef Fb
+#ifdef Gb
 A2;
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT

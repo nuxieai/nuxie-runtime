@@ -25,7 +25,7 @@ r(g1,d);
 #endif
 #endif
 #ifdef KB
-i k=D7(GC,Z5,L5,j.Jd)*K1;
+i k=D7(GC,Z5,L5,j.Kd)*K1;
 #else
 d o=
 #ifdef FB

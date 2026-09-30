@@ -1,28 +1,28 @@
 struct SB {
-    xc: f32,
-    Hd: f32,
-    Mf: f32,
+    yc: f32,
+    Id: f32,
     Nf: f32,
+    Of: f32,
     r6_: u32,
-    Rb: u32,
-    yf: u32,
+    Sb: u32,
     zf: u32,
+    Af: u32,
     X7_: vec4<i32>,
-    jh: vec2<f32>,
-    Id: vec2<f32>,
+    kh: vec2<f32>,
+    Jd: vec2<f32>,
     f2_: u32,
-    nh: f32,
+    oh: f32,
     g6_: u32,
     W2_: f32,
-    Jd: f32,
-    sf: u32,
+    Kd: f32,
+    tf: u32,
     F3_: f32,
     G3_: f32,
-    Kd: f32,
-    gh: u32,
-    Qb: u32,
-    dc: f32,
+    Ld: f32,
+    hh: u32,
+    Rb: u32,
     ec: f32,
+    fc: f32,
 }
 
 struct gl_PerVertex {
@@ -153,7 +153,7 @@ fn main_1() {
     }
     let _e103 = phi_1794_;
     let _e104 = vec2<f32>(select(_e95, _e92, ((_e61 & 1i) == 0i)), _e103);
-    let _e107 = j.Hd;
+    let _e107 = j.Id;
     phi_1991_ = _e104;
     if (((_e95 - _e92) * _e107) < 0f) {
         phi_1991_ = vec2<f32>(_e104.x, (((2f * _e74) + 1f) - _e103));

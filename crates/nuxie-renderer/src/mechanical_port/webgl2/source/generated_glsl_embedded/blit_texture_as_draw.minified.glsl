@@ -13,17 +13,17 @@ f X=f(r2,0,1);C1(X);}
 #ifdef EB
 I3
 #ifdef SD
-If(h5,a4,HC);
+Jf(h5,a4,HC);
 #else
 e3(h5,a4,HC);
 #endif
 J3
 #ifdef FD
-i5 c4(Jf)j5
+i5 c4(Kf)j5
 #endif
 f3(i,QE){i o8;
 #ifdef FD
-r(c2,c);o8=X6(HC,Jf,c2,.0);
+r(c2,c);o8=X6(HC,Kf,c2,.0);
 #elif defined(SD)
 o8=(p8(HC,0,Z(floor(d0.xy)))+p8(HC,1,Z(floor(d0.xy)))+p8(HC,2,Z(floor(d0.xy)))+p8(HC,3,Z(floor(d0.xy))))*0.25;
 #else

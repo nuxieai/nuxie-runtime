@@ -1,28 +1,28 @@
 struct SB {
-    xc: f32,
-    Hd: f32,
-    Mf: f32,
+    yc: f32,
+    Id: f32,
     Nf: f32,
+    Of: f32,
     r6_: u32,
-    Rb: u32,
-    yf: u32,
+    Sb: u32,
     zf: u32,
+    Af: u32,
     X7_: vec4<i32>,
-    jh: vec2<f32>,
-    Id: vec2<f32>,
+    kh: vec2<f32>,
+    Jd: vec2<f32>,
     f2_: u32,
-    nh: f32,
+    oh: f32,
     g6_: u32,
     W2_: f32,
-    Jd: f32,
-    sf: u32,
+    Kd: f32,
+    tf: u32,
     F3_: f32,
     G3_: f32,
-    Kd: f32,
-    gh: u32,
-    Qb: u32,
-    dc: f32,
+    Ld: f32,
+    hh: u32,
+    Rb: u32,
     ec: f32,
+    fc: f32,
 }
 
 struct gl_PerVertex {
@@ -32,19 +32,19 @@ struct gl_PerVertex {
     gl_CullDistance: array<f32, 1>,
 }
 
-struct Jg {
+struct Kg {
     g2_: array<vec4<u32>>,
 }
 
-struct pf {
+struct qf {
     g2_: array<vec2<u32>>,
 }
 
-struct qf {
+struct rf {
     g2_: array<vec4<f32>>,
 }
 
-struct Kg {
+struct Lg {
     g2_: array<vec4<u32>>,
 }
 
@@ -59,7 +59,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(1) override Kh: bool = true;
+@id(1) override Lh: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
@@ -89,13 +89,13 @@ var JC: texture_2d<u32>;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(0) @binding(2)
-var<storage> OB: Jg;
+var<storage> OB: Kg;
 @group(0) @binding(3)
-var<storage> CD: pf;
+var<storage> CD: qf;
 @group(0) @binding(4)
-var<storage> PB: qf;
+var<storage> PB: rf;
 @group(0) @binding(5)
-var<storage> HD: Kg;
+var<storage> HD: Lg;
 @group(3) @binding(9)
 var ha: sampler;
 var<private> LC_1: u32;
@@ -162,7 +162,7 @@ fn main_1() {
         phi_755_ = (_e137 + ((_e139 * ((abs(_e139.x) + abs(_e139.y)) / dot(_e139, _e139))) * 0.5f));
     }
     let _e151 = phi_755_;
-    if Kh {
+    if Lh {
         let _e152 = RB_1;
         let _e157 = vec2<f32>(_e152.x, _e152.y);
         let _e158 = vec2<f32>(_e152.z, _e152.w);
@@ -196,8 +196,8 @@ fn main_1() {
     B3_ = _e189;
     let _e190 = ZB_1;
     D1_ = _e190;
-    let _e192 = j.Mf;
-    let _e194 = j.Nf;
+    let _e192 = j.Nf;
+    let _e194 = j.Of;
     let _e204 = NC_1[3u];
     if (_e204 != 0f) {
         let _e206 = PD_1;

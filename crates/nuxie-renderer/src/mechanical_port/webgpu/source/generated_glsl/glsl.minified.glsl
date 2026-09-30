@@ -1,4 +1,4 @@
-#define Fc
+#define Gc
 #ifndef GLSL_VERSION
 #define GLSL_VERSION __VERSION__
 #endif
@@ -58,9 +58,9 @@
 #define A7(g,a) layout(std140)uniform a{
 #endif
 #define P8(a) }a;
-#define Qd(a) layout(push_constant)uniform a{
-#define Rd(a0,a) a0 a;
-#define Sd(a) }a;
+#define Rd(a) layout(push_constant)uniform a{
+#define Sd(a0,a) a0 a;
+#define Td(a) }a;
 #define h1(a)
 #define K(g,a0,a) layout(location=g)in a0 a
 #define i1
@@ -122,8 +122,8 @@
 #ifdef TARGET_SPIRV
 #define w6(V,g,a) layout(set=V,binding=g)uniform mediump sampler a;
 #ifdef USE_WEBGPU_SAMPLERS
-#define g4(C7,a) layout(set=og,binding=C7)uniform mediump sampler a;
-#define c4(a) w6(h5,ng,a)
+#define g4(C7,a) layout(set=pg,binding=C7)uniform mediump sampler a;
+#define c4(a) w6(h5,og,a)
 #else
 #define g4(C7,a) layout(set=h3,binding=C7)uniform mediump sampler a;
 #define c4(a) w6(h5,a4,a)
@@ -147,7 +147,7 @@
 #define D7(n0,p,m,U1) B5(n0,p,m,U1)
 #define l6(V,g,a) q5(V,g,a)
 #define c7(a,p,q,x6,U8,U0) j2(a,p,c(q,U8),U0)
-#define oh(V,g,a) I4(V,g,a)
+#define ph(V,g,a) I4(V,g,a)
 #define L3
 #define e1
 #define v1(a,m) texelFetch(a,m,0)
@@ -161,10 +161,10 @@
 #define V3
 #ifdef DISABLE_SHADER_STORAGE_BUFFERS
 #define R5(g,y1,a) I4(h3,g,a)
-#define N4(g,y1,a) oh(h3,g,a)
+#define N4(g,y1,a) ph(h3,g,a)
 #define S5(g,y1,a) l5(h3,g,a)
-#define L0(a,C0) v1(a,Z((C0)&Vc,(C0)>>Uc))
-#define U5(a,C0) v1(a,Z((C0)&Vc,(C0)>>Uc)).xy
+#define L0(a,C0) v1(a,Z((C0)&Wc,(C0)>>Vc))
+#define U5(a,C0) v1(a,Z((C0)&Wc,(C0)>>Vc)).xy
 #else
 #ifdef GL_ARB_shader_storage_buffer_object
 #extension GL_ARB_shader_storage_buffer_object:require
@@ -172,13 +172,13 @@
 #define R5(g,y1,a) layout(std430,binding=g)readonly buffer y1{N0 g2[];}a
 #define N4(g,y1,a) layout(std430,binding=g)readonly buffer y1{Y g2[];}a
 #define S5(g,y1,a) layout(std430,binding=g)readonly buffer y1{f g2[];}a
-#define Wa(g,y1,a) layout(std430,binding=g)buffer y1{uint g2[];}a
+#define Xa(g,y1,a) layout(std430,binding=g)buffer y1{uint g2[];}a
 #define L0(a,C0) a.g2[C0]
 #define U5(a,C0) a.g2[C0]
-#define Wd(a,C0) a.g2[C0]
+#define Xd(a,C0) a.g2[C0]
 #define F7(a,C0,q) atomicMax(a.g2[C0],q)
-#define Xa(a,C0,q) atomicAdd(a.g2[C0],q)
-#define ph(a,C0,q) atomicOr(a.g2[C0],q)
+#define Ya(a,C0,q) atomicAdd(a.g2[C0],q)
+#define qh(a,C0,q) atomicOr(a.g2[C0],q)
 #endif
 #ifdef PLS_IMPL_STORAGE_BUFFER
 #define P1(a) void main(){Z G=ivec2(floor(d0));int G0=int(O8(uvec2(G),(j.r6+(Da-1u))&~(Da-1u)));
@@ -186,17 +186,17 @@
 #define W3 ,int G0
 #define Q1 ,G0
 #ifdef TARGET_WGSL
-#define H2(g,a) layout(std430,set=w3,binding=g)buffer a##Xd{uint g2[];}a
+#define H2(g,a) layout(std430,set=w3,binding=g)buffer a##Yd{uint g2[];}a
 #elif defined(TARGET_SPIRV)
-#define H2(g,a) layout(std430,set=w3,binding=g)coherent buffer a##Xd{uint g2[];}a
+#define H2(g,a) layout(std430,set=w3,binding=g)coherent buffer a##Yd{uint g2[];}a
 #else
-#define H2(g,a) layout(std430,binding=g)coherent buffer a##Xd{uint g2[];}a
+#define H2(g,a) layout(std430,binding=g)coherent buffer a##Yd{uint g2[];}a
 #endif
-#define Ya H2
+#define Za H2
 #define Z2(h) h.g2[G0]
 #define a3(h,D) h.g2[G0]=D
-#define Za(h) unpackUnorm4x8(Z2(h))
-#define ab(h,D) a3(h,packUnorm4x8(D))
+#define ab(h) unpackUnorm4x8(Z2(h))
+#define bb(h,D) a3(h,packUnorm4x8(D))
 #define e5(h,q) atomicMax(h.g2[G0],q)
 #define f5(h,q) atomicAdd(h.g2[G0],q)
 #elif defined(PLS_IMPL_STORAGE_TEXTURE)||defined(USING_PLS_STORAGE_TEXTURES)
@@ -208,18 +208,18 @@
 #define W3 ,Z G
 #define Q1 ,G
 #ifdef TARGET_SPIRV
-#define Ya(g,a) layout(set=w3,binding=g,rgba8)uniform mediump coherent image2D a
+#define Za(g,a) layout(set=w3,binding=g,rgba8)uniform mediump coherent image2D a
 #define H2(g,a) layout(set=w3,binding=g,r32ui)uniform highp coherent uimage2D a
-#define bb(g,a) layout(set=w3,binding=g,rgb10_a2)uniform mediump coherent image2D a
+#define cb(g,a) layout(set=w3,binding=g,rgb10_a2)uniform mediump coherent image2D a
 #else
-#define Ya(g,a) layout(binding=g,rgba8)uniform mediump coherent image2D a
+#define Za(g,a) layout(binding=g,rgba8)uniform mediump coherent image2D a
 #define H2(g,a) layout(binding=g,r32ui)uniform highp coherent uimage2D a
-#define bb(g,a) layout(binding=g,rgb10_a2)uniform mediump coherent image2D a;
+#define cb(g,a) layout(binding=g,rgb10_a2)uniform mediump coherent image2D a;
 #endif
 #define Z2(h) imageLoad(h,G).x
 #define a3(h,D) imageStore(h,G,uvec4(D))
-#define Za(h) imageLoad(h,G)
-#define ab(h,D) imageStore(h,G,D)
+#define ab(h) imageLoad(h,G)
+#define bb(h,D) imageStore(h,G,D)
 #define e5(h,q) imageAtomicMax(h,G,q)
 #define f5(h,q) imageAtomicAdd(h,G,q)
 #else
@@ -251,7 +251,7 @@
 #endif
 #define M1 __pixel_localEXT V1{
 #define z0(g,a) layout(rgba8)mediump vec4 a
-#define cb(g,a) layout(rgb10_a2)mediump vec4 a
+#define db(g,a) layout(rgb10_a2)mediump vec4 a
 #define k1(g,a) layout(r32ui)highp uint a
 #define N1 };
 #define K0(h) h
@@ -269,11 +269,11 @@
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
 #define M1
 #define N1
-#define z0 Ya
+#define z0 Za
 #define k1 H2
-#define cb bb
-#define K0 Za
-#define A0 ab
+#define db cb
+#define K0 ab
+#define A0 bb
 #define a1 Z2
 #define d1 a3
 #define y2(h)
@@ -294,8 +294,8 @@
 #ifdef PLS_IMPL_SUBPASS_LOAD
 #define M1
 #define y4(g,a) layout(input_attachment_index=g,binding=g,set=w3)uniform mediump subpassInput G7##a
-#define Yd(g,a) layout(location=g)out mediump vec4 a
-#define z0(g,a) y4(g,a);Yd(g,a)
+#define Zd(g,a) layout(location=g)out mediump vec4 a
+#define z0(g,a) y4(g,a);Zd(g,a)
 #define k1(g,a) layout(input_attachment_index=g,binding=g,set=w3)uniform highp usubpassInput G7##a;layout(location=g)out highp uvec4 a
 #define N1
 #define K0(h) subpassLoad(G7##h)
@@ -352,19 +352,19 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define c0(a)
 #define r(a,a0)
 #define C1(R0) gl_Position=R0;}
-#define f3(z1,a) layout(location=0)out z1 qh;void main()
+#define f3(z1,a) layout(location=0)out z1 rh;void main()
 #define y6(z1,a) f3(z1,a)
 #define z6 gl_FrontFacing
-#define M2(D) qh=D
+#define M2(D) rh=D
 #define d0 gl_FragCoord.xy
 #define O6
 #define Y2
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
-#define Zd(H7,h,D) if(!(H7)){A0(h,D);}
-#define ae(H7,h,D) if(!(H7)){d1(h,D);}
+#define ae(H7,h,D) if(!(H7)){A0(h,D);}
+#define be(H7,h,D) if(!(H7)){d1(h,D);}
 #else
-#define Zd(H7,h,D) A0(h,D);
-#define ae(H7,h,D) d1(h,D);
+#define ae(H7,h,D) A0(h,D);
+#define be(H7,h,D) d1(h,D);
 #endif
 #ifndef v2
 #define v2(a) layout(location=0)out i F1;P1(a)
@@ -379,12 +379,12 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #define A6(a) subpassLoad(a)
 #endif
 #else
-#define r5(a) e3(h3,mg,a)
+#define r5(a) e3(h3,ng,a)
 #define A6(a) texelFetch(a,ivec2(floor(d0.xy)),0)
 #endif
 #define P0(C,H) ((C)*(H))
 precision highp float;precision highp int;
 #if GLSL_VERSION<310
-e i rh(uint u){Y l1=Y(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(l1)*(1./255.);}
-#define unpackUnorm4x8 rh
+e i sh(uint u){Y l1=Y(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return f(l1)*(1./255.);}
+#define unpackUnorm4x8 sh
 #endif

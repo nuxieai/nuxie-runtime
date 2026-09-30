@@ -51,7 +51,7 @@ g3(g1),
 #endif
 X1 Y2);I1=1.;
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){d yb=m3(f5(O0));I1=min(yb,I1);}
+if(ENABLE_CLIP_RECT){d yb=m3(g5(O0));I1=min(yb,I1);}
 #endif
 }z2;
 #if defined(DRAW_INTERIOR_TRIANGLES)&&defined(BORROWED_COVERAGE_PASS)
@@ -67,11 +67,11 @@ V5(O)?max(W4,y0):
 #endif
 W4+y0;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&Y1.x!=.0){D Q0=unpackHalf2x16(a1(i0));d L5=Q0.y;d zb=L5==Y1.x?Q0.x:J0(.0);I1=min(zb,I1);}
+if(ENABLE_CLIPPING&&Y1.x!=.0){D Q0=unpackHalf2x16(a1(i0));d M5=Q0.y;d zb=M5==Y1.x?Q0.x:J0(.0);I1=min(zb,I1);}
 #endif
-I1=max(I1,.0);d e2=fa(W4,.0,I1);d H1=fa(Ge,.0,I1);
+I1=max(I1,.0);d e2=ga(W4,.0,I1);d H1=ga(Ge,.0,I1);
 #ifdef ENABLE_DITHER
-d K5;if(ENABLE_DITHER){K5=ia(d0.xy,j.F3,j.G3);}
+d L5;if(ENABLE_DITHER){L5=ja(d0.xy,j.F3,j.G3);}
 #endif
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 i O1=K0(m0);
@@ -80,7 +80,7 @@ if(ENABLE_ADVANCED_BLEND&&g1!=Z5(B4)){if(H1!=.0){if(e2==.0){k0.xyz=Y4(k0.xyz,O1,
 #ifndef DRAW_INTERIOR_TRIANGLES
 if(H1<I1){v P7=k0.xyz;
 #ifdef ENABLE_DITHER
-if(ENABLE_DITHER){P7+=K5*j.Fd;}
+if(ENABLE_DITHER){P7+=L5*j.Fd;}
 #endif
 A0(D6,E0(P7,0.0));}
 #endif
@@ -89,7 +89,7 @@ A0(D6,E0(P7,0.0));}
 #endif
 k0*=K8(e2,H1,k0.w);
 #ifdef ENABLE_DITHER
-k0.xyz=K2(k0.xyz,k0.w,K5);
+k0.xyz=K2(k0.xyz,k0.w,L5);
 #endif
 #ifndef DRAW_INTERIOR_TRIANGLES
 #ifdef ENABLE_ADVANCED_BLEND

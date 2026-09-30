@@ -2,7 +2,7 @@
  * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
  * coverage-precision adaptation. Constants below describe the upstream input.
  *
- * Upstream source revision: b86b7ecb0256842cc37823f63c8699d5bffe081e
+ * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "b86b7ecb0256842cc37823f63c8699d5bffe081e";
+pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "c614020a453eab1e105ca0152fbccfc0cf0ac7fab5e399b16035dbc4735952f3";
+    "eb68ec1e79af90d098b6595101bdba833d4b8cd33a965c3fa02ea5563c8babeb";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 496;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 16754;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 16763;
 
 /// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -339,7 +339,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         pos.y = -pos.y;
 #endif
 #ifdef @RENDER_MODE_DEPTH_STENCIL
-        pos.z = normalize_z_index(pathZIndex);
+        pos.z = packNormalizedDepth(pathZIndex, 0xffu);
 #elif defined(@RENDER_MODE_CLOCKWISE_ATOMIC)
         uint4 coverageData =
             STORAGE_BUFFER_LOAD4(@pathBuffer, pathID * 4u + 3u);

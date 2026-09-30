@@ -3,7 +3,7 @@ use super::{
     canvas_schedule::schedule_canvases,
     deferred_cmd::replay_render_commands_with_optional_factory,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{GpuCensus, take_gpu_census},
+    gpu_census::{take_gpu_census, GpuCensus},
     render_handle::INVALID_RENDER_HANDLE,
     render_replay::*,
 };
@@ -50,14 +50,18 @@ pub trait DeferredFrameSink {
 }
 #[derive(Default)]
 pub struct DeferredFrame {
+    // Rust drops fields in declaration order, so keep the retained resources
+    // in C++ reverse-member destruction order. Carried retirements drop before
+    // canvas/image retains can enqueue fresh retirements for a later drain.
+    pub segments: Vec<DeferredSegment>,
+    pub ore_reals: Vec<AnyResourceHandle>,
+    pub retired_canvas_backings: Vec<super::deferred_canvas::RetiredCanvasBacking>,
+    pub content_canvases: HashMap<u32, RenderCanvasHandle>,
+    pub canvas_images: Vec<Rc<dyn RenderImage>>,
     pub commands: Vec<u8>,
     pub blobs: Vec<u8>,
     pub ore_commands: Vec<u8>,
     pub ore_blobs: Vec<u8>,
-    pub canvas_images: Vec<Rc<dyn RenderImage>>,
-    pub content_canvases: HashMap<u32, RenderCanvasHandle>,
-    pub ore_reals: Vec<AnyResourceHandle>,
-    pub segments: Vec<DeferredSegment>,
     pub ore_caps: ReplayCaps,
 }
 pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
@@ -77,6 +81,7 @@ pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
         ore_blobs: stream.blob_bytes().to_vec(),
         canvas_images: session.canvases().borrow().images().to_vec(),
         content_canvases: session.content_canvases(),
+        retired_canvas_backings: session.take_retired_canvas_backings(),
         ore_reals,
         segments,
         ore_caps,

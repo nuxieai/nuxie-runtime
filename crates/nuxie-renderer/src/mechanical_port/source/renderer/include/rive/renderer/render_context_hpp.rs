@@ -1139,7 +1139,7 @@ pub enum DitherMode {
 pub type DrawReleaseRefsFn = unsafe fn(*mut Draw);
 pub type DrawCountSubpassesFn = unsafe fn(*mut Draw, &gpu::PlatformFeatures);
 pub type DrawAllocateResourcesFn = unsafe fn(*mut Draw, *mut LogicalFlush) -> bool;
-pub type DrawPushFn = unsafe fn(*mut Draw, *mut LogicalFlush, i32) -> *mut gpu::DrawBatch;
+pub type DrawPushFn = unsafe fn(*mut Draw, *mut LogicalFlush, i32, u32) -> *mut gpu::DrawBatch;
 
 unsafe fn default_release_refs(_: *mut Draw) {}
 unsafe fn default_count_subpasses(draw: *mut Draw, _: &gpu::PlatformFeatures) {
@@ -1148,7 +1148,7 @@ unsafe fn default_count_subpasses(draw: *mut Draw, _: &gpu::PlatformFeatures) {
 unsafe fn default_allocate_resources(_: *mut Draw, _: *mut LogicalFlush) -> bool {
     true
 }
-unsafe fn default_push(_: *mut Draw, _: *mut LogicalFlush, _: i32) -> *mut gpu::DrawBatch {
+unsafe fn default_push(_: *mut Draw, _: *mut LogicalFlush, _: i32, _: u32) -> *mut gpu::DrawBatch {
     core::ptr::null_mut()
 }
 
@@ -1341,8 +1341,9 @@ impl Draw {
         &mut self,
         flush: *mut LogicalFlush,
         subpass: i32,
+        z_index: u32,
     ) -> *mut gpu::DrawBatch {
-        unsafe { (self.push_to_render_context)(self, flush, subpass) }
+        unsafe { (self.push_to_render_context)(self, flush, subpass, z_index) }
     }
 }
 
@@ -2600,7 +2601,6 @@ pub struct LogicalFlush {
     pub(crate) m_pending_feather_atlas_draws: Vec<*mut PathDraw>,
     pub(crate) m_coverage_buffer_length: u32,
     pub(crate) m_pending_barriers: gpu::BarrierFlags,
-    pub(crate) m_current_z_index: u32,
     #[cfg(debug_assertions)]
     pub(crate) m_has_done_layout: bool,
 }
@@ -2738,7 +2738,7 @@ pub trait LogicalFlushContract {
     fn writeResources(&mut self);
     fn allocateMidpointFanTessVertices(&mut self, count: u32) -> u32;
     fn allocateOuterCubicTessVertices(&mut self, count: u32) -> u32;
-    unsafe fn pushPath(&mut self, draw: *const PathDraw) -> u32;
+    unsafe fn pushPath(&mut self, draw: *const PathDraw, z_index: u32) -> u32;
     fn pushContour(
         &mut self,
         path_id: u32,
@@ -2777,9 +2777,9 @@ pub trait LogicalFlushContract {
         draw: *mut PathDraw,
         path_id: u32,
     ) -> *mut gpu::DrawBatch;
-    unsafe fn pushImageRectDraw(&mut self, draw: *mut ImageRectDraw) -> *mut gpu::DrawBatch;
-    unsafe fn pushImageMeshDraw(&mut self, draw: *mut ImageMeshDraw) -> *mut gpu::DrawBatch;
-    unsafe fn pushClipResetDraw(&mut self, draw: *mut ClipReset) -> *mut gpu::DrawBatch;
+    unsafe fn pushImageRectDraw(&mut self, draw: *mut ImageRectDraw, z_index: u32) -> *mut gpu::DrawBatch;
+    unsafe fn pushImageMeshDraw(&mut self, draw: *mut ImageMeshDraw, z_index: u32) -> *mut gpu::DrawBatch;
+    unsafe fn pushClipResetDraw(&mut self, draw: *mut ClipReset, z_index: u32) -> *mut gpu::DrawBatch;
     fn getWritableClipInfo(&mut self, clip_id: u32) -> &mut ClipInfo;
     unsafe fn pushPathDraw(
         &mut self,

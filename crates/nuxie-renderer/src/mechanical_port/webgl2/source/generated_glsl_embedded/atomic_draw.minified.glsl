@@ -1,6 +1,6 @@
 #ifdef ND
 #ifdef CB
-h1(g0) K(0,f,UB);K(1,f,VB);i1
+h1(g0) K(0,f,VB);K(1,f,WB);i1
 #endif
 q2
 #ifdef GB
@@ -10,13 +10,13 @@ I0 W(0,D,O);
 #endif
 V2 W(1,N,D0);i2
 #ifdef CB
-B1(EC,g0,F,A,r){L(A,F,UB,f);L(A,F,VB,f);
+B1(EC,g0,F,A,r){L(A,F,VB,f);L(A,F,WB,f);
 #ifdef GB
 V(O,f);
 #else
 V(O,D);
 #endif
-V(D0,N);f X;uint o0;c l0;f P;if(r9(UB,VB,r,o0,l0,P A3)){
+V(D0,N);f X;uint o0;c l0;f P;if(r9(VB,WB,r,o0,l0,P A3)){
 #ifdef GB
 O=P;
 #else
@@ -60,7 +60,7 @@ c0(D0);C1(X);}
 #endif
 #ifdef ZC
 #ifdef CB
-h1(g0) K(0,f,FC);i1 h1(p1) K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);K(cf,f,OD);K(df,f,PD);K(ef,f,AD);K(Lb,f,NC);i1
+h1(g0) K(0,f,FC);i1 h1(p1) K(v9,f,XB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,YB);K(z9,uint,ZB);K(A9,uint,AC);K(B9,uint,LC);K(cf,f,OD);K(df,f,PD);K(ef,f,AD);K(Lb,f,NC);i1
 #endif
 q2 I0 W(0,c,c2);I0 W(1,d,Z4);I0 W(2,f,a5);
 #ifdef AB
@@ -75,7 +75,7 @@ V2 W(6,N,D1);
 #endif
 i2
 #ifdef CB
-S7(EC,g0,F,p1,h0,A,r){L(A,F,FC,f);L(r,h0,WB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,XB,uint);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,LC,uint);L(r,h0,OD,f);L(r,h0,PD,f);L(r,h0,AD,f);L(r,h0,NC,f);V(c2,c);V(Z4,d);V(a5,f);
+S7(EC,g0,F,p1,h0,A,r){L(A,F,FC,f);L(r,h0,XB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,LC,uint);L(r,h0,OD,f);L(r,h0,PD,f);L(r,h0,AD,f);L(r,h0,NC,f);V(c2,c);V(Z4,d);V(a5,f);
 #ifdef AB
 V(O0,f);
 #endif
@@ -86,16 +86,16 @@ V(B3,N);
 #ifdef T
 V(D1,N);
 #endif
-bool C9=FC.z==.0||FC.w==.0;Z4=C9?.0:1.;c l0=FC.xy;e0 W0=L1(WB);e0 H6=transpose(inverse(W0));if(!C9){float D9=x4*E9(H6[1])/dot(W0[1],H6[1]);if(D9>=.5){l0.x=.5;Z4*=S3(.5/D9);}else{l0.x+=D9*FC.z;}float F9=x4*E9(H6[0])/dot(W0[0],H6[0]);if(F9>=.5){l0.y=.5;Z4*=S3(.5/F9);}else{l0.y+=F9*FC.w;}}e0 ff=L1(OD);c2=P0(ff,l0)+AD.xy;l0=P0(W0,l0)+NB.xy;if(C9){c T3=P0(H6,FC.zw);T3*=E9(T3)/dot(T3,T3);l0+=x4*T3;}
+bool C9=FC.z==.0||FC.w==.0;Z4=C9?.0:1.;c l0=FC.xy;e0 W0=L1(XB);e0 H6=transpose(inverse(W0));if(!C9){float D9=x4*E9(H6[1])/dot(W0[1],H6[1]);if(D9>=.5){l0.x=.5;Z4*=S3(.5/D9);}else{l0.x+=D9*FC.z;}float F9=x4*E9(H6[0])/dot(W0[0],H6[0]);if(F9>=.5){l0.y=.5;Z4*=S3(.5/F9);}else{l0.y+=F9*FC.w;}}e0 ff=L1(OD);c2=P0(ff,l0)+AD.xy;l0=P0(W0,l0)+NB.xy;if(C9){c T3=P0(H6,FC.zw);T3*=E9(T3)/dot(T3,T3);l0+=x4*T3;}
 #ifdef AB
 if(AB){O0=T7(L1(RB),NB.zw,l0);}
 #endif
-K1=unpackUnorm4x8(XB);
+K1=unpackUnorm4x8(YB);
 #ifdef I
-B3=a2(YB);
+B3=a2(ZB);
 #endif
 #ifdef T
-D1=a2(ZB);
+D1=a2(AC);
 #endif
 f X=Q3(l0);c v0=l0;
 #ifdef ME
@@ -116,7 +116,7 @@ C1(X);}
 #endif
 #elif defined(KB)
 #ifdef CB
-h1(n3) K(0,c,OC);i1 h1(C3) K(1,c,PC);i1 h1(p1) K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);i1
+h1(n3) K(0,c,OC);i1 h1(C3) K(1,c,PC);i1 h1(p1) K(v9,f,XB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,YB);K(z9,uint,ZB);K(A9,uint,AC);K(B9,uint,LC);i1
 #endif
 q2 I0 W(0,c,c2);
 #ifdef AB
@@ -131,7 +131,7 @@ V2 W(5,N,D1);
 #endif
 i2
 #ifdef CB
-I6(EC,n3,o3,C3,D3,p1,h0,A){L(A,o3,OC,c);L(A,D3,PC,c);L(r,h0,WB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,XB,uint);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,LC,uint);V(c2,c);
+I6(EC,n3,o3,C3,D3,p1,h0,A){L(A,o3,OC,c);L(A,D3,PC,c);L(r,h0,XB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,LC,uint);V(c2,c);
 #ifdef AB
 V(O0,f);
 #endif
@@ -142,16 +142,16 @@ V(B3,N);
 #ifdef T
 V(D1,N);
 #endif
-e0 W0=L1(WB);c l0=P0(W0,OC)+NB.xy;c2=PC;
+e0 W0=L1(XB);c l0=P0(W0,OC)+NB.xy;c2=PC;
 #ifdef AB
 if(AB){O0=T7(L1(RB),NB.zw,l0);}
 #endif
-K1=unpackUnorm4x8(XB);
+K1=unpackUnorm4x8(YB);
 #ifdef I
-B3=a2(YB);
+B3=a2(ZB);
 #endif
 #ifdef T
-D1=a2(ZB);
+D1=a2(AC);
 #endif
 f X=Q3(l0);c0(c2);
 #ifdef AB
@@ -267,7 +267,7 @@ J=E0(.0);}
 if(d5){if(J.w*o!=.0){i O1=K0(m0);J.xyz=Y4(J.xyz,O1,p3);}J.xyz*=J.w;}
 #endif
 J*=o;
-#if defined(AC)&&(defined(Q)||defined(QC))
+#if defined(BC)&&(defined(Q)||defined(QC))
 J=q3(J);
 #endif
 }
@@ -405,7 +405,7 @@ k2*=K1;
 if(T&&D1!=B4){i O1=K0(m0)*(1.-J.w)+J;k2.xyz=Y4(F6(k2),O1,D1)*k2.w;}
 #endif
 k2*=X5;
-#if defined(AC)
+#if defined(BC)
 k2=q3(k2);
 #endif
 J=J*(1.-k2.w)+k2;J.xyz=K2(J.xyz,J.w,d0.xy,j.F3,j.G3);

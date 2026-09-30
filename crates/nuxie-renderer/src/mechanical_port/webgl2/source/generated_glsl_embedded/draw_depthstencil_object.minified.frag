@@ -53,8 +53,8 @@ i O1=x6(XD);k.xyz=Y4(k.xyz,O1,p3)*k.w;
 #ifndef KB
 k*=o;
 #endif
-#ifdef AC
-if(AC){k=q3(k);}
+#ifdef BC
+if(BC){k=q3(k);}
 #endif
 k.xyz=K2(k.xyz,k.w,d0.xy,j.F3,j.G3);M2(k);}
 #endif

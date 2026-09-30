@@ -903,6 +903,15 @@ pub(crate) struct ExactSourceRenderCanvas {
 }
 
 impl ExactSourceRenderCanvas {
+    pub(crate) fn new_deferred(
+        retirer: std::sync::Arc<crate::deferred::cmd::deferred_canvas::CanvasRetirer>,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        Self::from_source(make_rcp(|| {
+            SourceRenderCanvas::new_deferred(retirer, width, height)
+        }))
+    }
     pub(crate) fn new(width: u32, height: u32) -> Self {
         Self::from_source(make_rcp(|| SourceRenderCanvas::new(width, height)))
     }

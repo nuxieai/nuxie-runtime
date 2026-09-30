@@ -4,6 +4,10 @@
 // both stage pair sources for depth-only non-filtering samplers (50ba2f5a).
 // The legacy live adapter uses the same builder in exact_gpu_canvas.rs. This retained
 // mechanical file is not compiled; its older local derivation is not the live owner.
+// Upstream 57dddb37 allocScriptRenderCanvas is implemented by
+// nuxie-scripting/src/vm/lua_canvas.rs::allocate_script_render_canvas, shared by
+// both 2D and ORE canvases: deferred host first, then late-bound shell, then
+// eager context allocation. The host-created canvas owns deferred retirement.
 use crate::mechanical_port::source::{
     assets::{script_asset::ScriptAsset, shader_asset::ShaderAsset},
     lua::rive_lua_libs::*,

@@ -171,7 +171,7 @@ const GLSL_ENABLE_NESTED_CLIPPING: &str = "YC";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "DC";
 const GLSL_ENABLE_DITHER: &str = "LB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "IB";
-const GLSL_TARGET_SPIRV: &str = "BC";
+const GLSL_TARGET_SPIRV: &str = "SB";
 const GLSL_PLS_IMPL_EXT_NATIVE: &str = "RF";
 const GLSL_PLS_IMPL_NONE: &str = "TF";
 const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "SF";
@@ -1732,7 +1732,7 @@ pub(crate) fn makeDrawPipeline(
             super::webgpu_decl::WGPUOptionalBool_False
         };
         depthStencilState.depthCompare = if pipelineState.depthTestEnabled {
-            super::webgpu_cpp_decl::CompareFunction::Less.into()
+            super::webgpu_cpp_decl::CompareFunction::Greater.into()
         } else {
             super::webgpu_cpp_decl::CompareFunction::Always.into()
         };
@@ -4835,7 +4835,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            52_135
+            52_597
         );
     }
 

@@ -4862,7 +4862,7 @@ fn empty_flush_descriptor() -> gpu::FlushDescriptor {
         colorLoadAction: gpu::LoadAction::clear,
         colorClearValue: 0,
         coverageClearValue: 0,
-        depthClearValue: gpu::DEPTH_MAX,
+        depthClearValue: gpu::DEPTH_MIN,
         stencilClearValue: gpu::STENCIL_CLEAR,
         renderTargetUpdateBounds: gpu::IAABB::default(),
         virtualTileWidth: 0,
@@ -5953,7 +5953,6 @@ impl LogicalFlush {
             m_pending_feather_atlas_draws: Vec::new(),
             m_coverage_buffer_length: 0,
             m_pending_barriers: gpu::BarrierFlags::none,
-            m_current_z_index: 0,
             #[cfg(debug_assertions)]
             m_has_done_layout: false,
         });
@@ -5998,7 +5997,6 @@ impl LogicalFlush {
         self.m_pending_feather_atlas_draws.clear();
         self.m_coverage_buffer_length = 0;
         self.m_pending_barriers = gpu::BarrierFlags::none;
-        self.m_current_z_index = 0;
         #[cfg(debug_assertions)]
         {
             self.m_has_done_layout = false;
@@ -6280,7 +6278,11 @@ impl LogicalFlush {
         location
     }
 
-    pub unsafe fn pushPathExecutable(&mut self, draw: *const PathDraw) -> u32 {
+    pub unsafe fn pushPathExecutable(
+        &mut self,
+        draw: *const PathDraw,
+        z_index: u32,
+    ) -> u32 {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_has_done_layout);
         self.m_current_path_id += 1;
@@ -6296,7 +6298,7 @@ impl LogicalFlush {
             *draw.paintMatrix(),
             draw.strokeRadius(),
             draw.featherRadius(),
-            self.m_current_z_index,
+            z_index,
             &atlas,
             &coverage,
         );
@@ -6507,6 +6509,7 @@ impl LogicalFlush {
     pub unsafe fn pushImageRectDrawExecutable(
         &mut self,
         draw: *mut ImageRectDraw,
+        z_index: u32,
     ) -> *mut gpu::DrawBatch {
         debug_assert!(!unsafe { self.m_ctx.as_ref() }.frameSupportsImagePaintForPathsExecutable());
         let context = unsafe { self.m_ctx.as_mut() };
@@ -6543,7 +6546,7 @@ impl LogicalFlush {
             clip,
             unsafe { (*draw).clipID() },
             unsafe { (*draw).blendMode() },
-            self.m_current_z_index,
+            z_index,
             *unsafe { (*draw).imageMatrix() },
             gradient_matrix,
             gradient_type,
@@ -6567,6 +6570,7 @@ impl LogicalFlush {
     pub unsafe fn pushImageMeshDrawExecutable(
         &mut self,
         draw: *mut ImageMeshDraw,
+        z_index: u32,
     ) -> *mut gpu::DrawBatch {
         let context = unsafe { self.m_ctx.as_mut() };
         let base = context.m_image_mesh_instance_data.elementsWritten() as u32;
@@ -6581,7 +6585,7 @@ impl LogicalFlush {
             clip,
             unsafe { (*draw).clipID() },
             unsafe { (*draw).blendMode() },
-            self.m_current_z_index,
+            z_index,
             unsafe { (*draw).additiveness() },
         );
         unsafe { context.m_image_mesh_instance_data.emplace_back(instance) };
@@ -6607,13 +6611,14 @@ impl LogicalFlush {
     pub unsafe fn pushClipResetDrawExecutable(
         &mut self,
         draw: *mut ClipReset,
+        z_index: u32,
     ) -> *mut gpu::DrawBatch {
         let context = unsafe { self.m_ctx.as_mut() };
         let base = context.m_triangle_vertex_data.elementsWritten() as u32;
         let bounds = self
             .getClipInfo(unsafe { (*draw).previousClipID() })
             .contentBounds;
-        let z = self.m_current_z_index as u16;
+        let z = z_index as u16;
         for (x, y) in [
             (bounds.left, bounds.bottom),
             (bounds.left, bounds.top),
@@ -7039,7 +7044,12 @@ impl LogicalFlush {
                 debug_assert_eq!(draw.prepassCount(), 0);
                 debug_assert!(draw.subpassCount() > 0);
                 for subpass in 0..draw.subpassCount() {
-                    unsafe { draw.pushToRenderContext(self, subpass) };
+                    // Non-depthStencil draws do not use zIndex.
+                    debug_assert_ne!(
+                        context.frameInterlockMode(),
+                        gpu::InterlockMode::depthStencil
+                    );
+                    unsafe { draw.pushToRenderContext(self, subpass, 0) };
                 }
             }
         } else {
@@ -7063,6 +7073,12 @@ impl LogicalFlush {
                 });
             context.m_scissor_id_lookup.clear();
             context.m_prev_scissor_id = 0;
+            // Copying a destination texture destroys MSAA information, so all
+            // subpasses must stay in one group in that advanced-blend case.
+            let all_same_group = context.frameInterlockMode() == gpu::InterlockMode::depthStencil
+                && !features.supportsBlendAdvancedKHR
+                && (self.m_combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0;
+            let mut max_z_index = 0i16;
             for draw_index in 0..self.m_draws.len() {
                 let draw = unsafe { &mut *self.m_draws[draw_index].0 };
                 let mut scissor_id = 0i16;
@@ -7109,10 +7125,6 @@ impl LogicalFlush {
                         context.frameDescriptor().renderTargetHeight,
                     );
                 }
-                let all_same_group = context.frameInterlockMode()
-                    == gpu::InterlockMode::depthStencil
-                    && !features.supportsBlendAdvancedKHR
-                    && (self.m_combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0;
                 let max_subpasses = draw.prepassCount().max(draw.subpassCount()) as i8;
                 let group = context
                     .m_intersection_board
@@ -7127,6 +7139,8 @@ impl LogicalFlush {
                         ),
                         i16::from(if all_same_group { 1 } else { max_subpasses }),
                     );
+                debug_assert!(group > 0);
+                max_z_index = max_z_index.max(group);
                 let mut key = make_sort_key(draw, group, scissor_id, 0);
                 if draw.prepassCount() > 0 {
                     context.m_indirect_draw_list.push(DrawSortEntry {
@@ -7171,7 +7185,7 @@ impl LogicalFlush {
             context
                 .m_indirect_draw_list
                 .sort_unstable_by_key(|entry| entry.sortKey);
-            self.writeSortedDrawsExecutable(&features);
+            self.writeSortedDrawsExecutable(&features, all_same_group, max_z_index);
         }
 
         if context.frameInterlockMode() == gpu::InterlockMode::atomics
@@ -7291,7 +7305,12 @@ impl LogicalFlush {
         }
     }
 
-    unsafe fn writeSortedDrawsExecutable(&mut self, features: &gpu::PlatformFeatures) {
+    unsafe fn writeSortedDrawsExecutable(
+        &mut self,
+        features: &gpu::PlatformFeatures,
+        all_same_group: bool,
+        max_z_index: i16,
+    ) {
         let context = unsafe { self.m_ctx.as_mut() };
         debug_assert_eq!(self.m_pending_barriers, gpu::BarrierFlags::none);
         if context.frameInterlockMode() == gpu::InterlockMode::atomics
@@ -7339,6 +7358,22 @@ impl LogicalFlush {
             }
             _ => {}
         }
+        // Spread zIndex across its 15-bit field, preserving one Z for every
+        // subpass of a draw (including the reverse-ordered prepasses).
+        use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::DEPTH_Z_INDEX_BIT_COUNT;
+        let z_index_msb = u32::BITS - (max_z_index as u32).leading_zeros();
+        debug_assert!(z_index_msb <= DEPTH_Z_INDEX_BIT_COUNT);
+        let z_index_shift = DEPTH_Z_INDEX_BIT_COUNT - z_index_msb;
+        debug_assert_eq!(
+            ((max_z_index as u32) << z_index_shift)
+                & !((1u32 << DEPTH_Z_INDEX_BIT_COUNT) - 1),
+            0
+        );
+        debug_assert!(
+            max_z_index == 0
+                || (((max_z_index as u32) << z_index_shift)
+                    & (1u32 << (DEPTH_Z_INDEX_BIT_COUNT - 1))) != 0
+        );
         let entries = context.m_indirect_draw_list.clone();
         let mut prior: Option<i64> = None;
         let mut current_group = -1i16;
@@ -7381,14 +7416,22 @@ impl LogicalFlush {
             }
             let key = signed_key.unsigned_abs();
             let mut subpass = ((key >> SORT_SUBPASS_SHIFT) & 7) as i32;
+            let group = ((key >> SORT_GROUP_SHIFT) & 0x7fff) as i16;
+            debug_assert!(group > 0);
+            debug_assert!(subpass >= 0);
+            let base_group = if all_same_group {
+                group
+            } else {
+                group - subpass as i16
+            };
+            debug_assert!(base_group > 0);
+            let z_index = (base_group as u32) << z_index_shift;
+            debug_assert!(z_index < (1u32 << DEPTH_Z_INDEX_BIT_COUNT));
             if signed_key < 0 {
                 subpass = -1 - subpass;
             }
-            let group = ((key >> SORT_GROUP_SHIFT) & 0x7fff) as i16;
-            debug_assert!(group > 0);
-            self.m_current_z_index = group as u32;
             let draw = unsafe { &mut *self.m_draws[entry.drawIndex as usize].0 };
-            let batch = unsafe { draw.pushToRenderContext(self, subpass) };
+            let batch = unsafe { draw.pushToRenderContext(self, subpass, z_index) };
             if !batch.is_null() && features.supportsClipScissor {
                 unsafe {
                     (*batch).scissorRect = draw.scissorRect().map(|r| gpu::AABBu16 {
@@ -8409,8 +8452,8 @@ impl LogicalFlushContract for LogicalFlush {
     fn allocateOuterCubicTessVertices(&mut self, c: u32) -> u32 {
         self.allocateOuterCubicTessVerticesExecutable(c)
     }
-    unsafe fn pushPath(&mut self, d: *const PathDraw) -> u32 {
-        unsafe { self.pushPathExecutable(d) }
+    unsafe fn pushPath(&mut self, d: *const PathDraw, z_index: u32) -> u32 {
+        unsafe { self.pushPathExecutable(d, z_index) }
     }
     fn pushContour(&mut self, p: u32, m: Vec2D, s: bool, c: bool, v: u32) -> u32 {
         self.pushContourExecutable(p, m, s, c, v)
@@ -8462,14 +8505,14 @@ impl LogicalFlushContract for LogicalFlush {
     unsafe fn pushFeatherAtlasBlit(&mut self, d: *mut PathDraw, p: u32) -> *mut gpu::DrawBatch {
         unsafe { self.pushFeatherAtlasBlitExecutable(d, p) }
     }
-    unsafe fn pushImageRectDraw(&mut self, d: *mut ImageRectDraw) -> *mut gpu::DrawBatch {
-        unsafe { self.pushImageRectDrawExecutable(d) }
+    unsafe fn pushImageRectDraw(&mut self, d: *mut ImageRectDraw, z_index: u32) -> *mut gpu::DrawBatch {
+        unsafe { self.pushImageRectDrawExecutable(d, z_index) }
     }
-    unsafe fn pushImageMeshDraw(&mut self, d: *mut ImageMeshDraw) -> *mut gpu::DrawBatch {
-        unsafe { self.pushImageMeshDrawExecutable(d) }
+    unsafe fn pushImageMeshDraw(&mut self, d: *mut ImageMeshDraw, z_index: u32) -> *mut gpu::DrawBatch {
+        unsafe { self.pushImageMeshDrawExecutable(d, z_index) }
     }
-    unsafe fn pushClipResetDraw(&mut self, d: *mut ClipReset) -> *mut gpu::DrawBatch {
-        unsafe { self.pushClipResetDrawExecutable(d) }
+    unsafe fn pushClipResetDraw(&mut self, d: *mut ClipReset, z_index: u32) -> *mut gpu::DrawBatch {
+        unsafe { self.pushClipResetDrawExecutable(d, z_index) }
     }
     fn getWritableClipInfo(&mut self, id: u32) -> &mut ClipInfo {
         self.getWritableClipInfoExecutable(id)

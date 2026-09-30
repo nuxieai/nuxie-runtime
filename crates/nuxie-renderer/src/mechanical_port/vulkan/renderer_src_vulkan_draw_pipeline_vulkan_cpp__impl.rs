@@ -364,7 +364,7 @@ impl DrawPipelineVulkan {
         let mut depthStencilState = vk::PipelineDepthStencilStateCreateInfo::default()
             .depth_test_enable(pipelineState.depthTestEnabled)
             .depth_write_enable(pipelineState.depthWriteEnabled)
-            .depth_compare_op(vk::CompareOp::LESS)
+            .depth_compare_op(vk::CompareOp::GREATER)
             .depth_bounds_test_enable(false)
             .stencil_test_enable(pipelineState.stencilTestEnabled)
             .min_depth_bounds(DEPTH_MIN)
@@ -451,6 +451,8 @@ impl DrawPipelineVulkan {
         let mut dynamicStates = [vk::DynamicState::VIEWPORT; 8];
         dynamicStates[1] = vk::DynamicState::SCISSOR;
         let mut dynamicStateCount = 2;
+        // Depth compare stays baked at GREATER; stencil reference is always
+        // 0x80, so neither is part of the dynamic state list.
         if crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(props.drawType) {
             dynamicStates[2..7].copy_from_slice(&[
                 vk::DynamicState::DEPTH_WRITE_ENABLE,

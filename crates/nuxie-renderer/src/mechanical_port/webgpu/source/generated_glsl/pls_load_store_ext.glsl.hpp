@@ -21,7 +21,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef WE
 #if __VERSION__>=310
-layout(binding=0,std140)uniform lj{uniform highp vec4 wh;}xh;
+layout(binding=0,std140) uniform qj{uniform highp vec4 zh;}Ah;
 #else
 uniform mediump vec4 XE;
 #endif
@@ -32,19 +32,19 @@ __pixel_local_inEXT V1
 #else
 __pixel_local_outEXT V1
 #endif
-{layout(rgba8)mediump vec4 m0;layout(r32ui)highp uint i0;layout(rgba8)mediump vec4 p4;layout(r32ui)highp uint G7;};
+{layout(rgba8) mediump vec4 m0;layout(r32ui) highp uint i0;layout(rgba8) mediump vec4 p4;layout(r32ui) highp uint G7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef YE
-layout(location=0)inout mediump vec4 cb;
+layout(location=0) inout mediump vec4 cb;
 #endif
 #endif
 #ifdef EE
-layout(location=0)out mediump vec4 cb;
+layout(location=0) out mediump vec4 cb;
 #endif
 void main(){
 #ifdef WE
 #if __VERSION__>=310
-m0=xh.wh;
+m0=Ah.zh;
 #else
 m0=XE;
 #endif
@@ -67,7 +67,7 @@ cb=m0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 yh;void main(){yh=vec4(0,1,0,1);}
+layout(location=0) out mediump vec4 Bh;void main(){Bh=vec4(0,1,0,1);}
 #endif
 #endif
 )===";

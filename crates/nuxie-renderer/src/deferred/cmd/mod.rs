@@ -1,5 +1,6 @@
 pub mod canvas_schedule;
 pub mod command_stream;
+pub mod deferred_canvas;
 pub mod deferred_canvas_host;
 pub mod deferred_cmd;
 pub mod deferred_render_factory;

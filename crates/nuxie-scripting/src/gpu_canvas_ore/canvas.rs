@@ -54,7 +54,6 @@ impl Canvas {
         let context = self.render_context.as_mut().expect("allocation context");
         let canvas = allocate_script_render_canvas(&self.bindings, context, width, height)
             .map_err(|_| Error::runtime(format!("{caller} failed to create RenderCanvas")))?;
-        let canvas: RenderCanvasHandle = Rc::new(RefCell::new(canvas));
         let info = nuxie_render_api::canvas_texture_info(&canvas);
         let ore = self
             .bindings

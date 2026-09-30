@@ -1,4 +1,4 @@
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -8,10 +8,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,7 +19,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -45,13 +45,13 @@ struct lf {
     g2_: array<vec4<f32>>,
 }
 
-@id(13) override Rh: bool = false;
-@id(14) override Sh: bool = false;
-@id(0) override Eh: bool = true;
+@id(13) override Uh: bool = false;
+@id(14) override Vh: bool = false;
+@id(0) override Hh: bool = true;
 
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 @group(2) @binding(0)
 var<storage, read_write> m0_: m0Sd;
 @group(1) @binding(11)
@@ -81,17 +81,17 @@ fn main_1() {
     let _e32 = bitcast<vec2<u32>>(_e31);
     let _e34 = j.n6_;
     let _e63 = bitcast<i32>((((((_e32.y >> bitcast<u32>(5u)) * (((_e34 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e32.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e32.x & 28u) << bitcast<u32>(5u)) + ((_e32.y & 28u) << bitcast<u32>(2i)))) + (((_e32.y & 3u) << bitcast<u32>(2i)) + (_e32.x & 3u))));
-    if Rh {
+    if Uh {
         let _e65 = j.tf;
         m0_.g2_[_e63] = pack4x8unorm(unpack4x8unorm(_e65));
     }
-    if Sh {
+    if Vh {
         let _e70 = textureLoad(GC, _e31, 0i);
         m0_.g2_[_e63] = pack4x8unorm(_e70);
     }
     let _e75 = j.uf;
     A4_.g2_[_e63] = _e75;
-    if Eh {
+    if Hh {
         i0_.g2_[_e63] = 0u;
     }
     return;

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_image_mesh.vert.
  *
- * Upstream source revision: 9463ff7b5b9a1452d0c32e41390a99cd39b6c946
+ * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "9463ff7b5b9a1452d0c32e41390a99cd39b6c946";
+pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_image_mesh.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "b0fff7fe9498a42d90faebbfc58bc3242b73e9fc18ca824e1e0d35bb882af19d";
+    "4f11d1133504ee14f7bb75830f491223d874aedc2ca3d539395a85386d0d3019";
 pub const PINNED_SOURCE_LINE_COUNT: usize = 132;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 4176;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 4185;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_IMAGE_MESH_VERT_SOURCE: &str = r###"/*
@@ -128,7 +128,7 @@ IMAGE_MESH_VERTEX_MAIN(@drawVertexMain,
     pos.y = -pos.y;
 #endif
 #ifdef @RENDER_MODE_DEPTH_STENCIL
-    pos.z = normalize_z_index(@a_imageDrawZIndex);
+    pos.z = packNormalizedDepth(@a_imageDrawZIndex, 0xffu);
 #endif
 
     v_imageModulatedColor = unpackUnorm4x8(@a_imageDrawModulatedColor);

@@ -207,6 +207,7 @@ struct SessionTargets {
 }
 #[derive(Clone)]
 pub struct DeferredSession {
+    canvas_retirer: std::sync::Arc<super::deferred_canvas::CanvasRetirer>,
     // Shared only by session handles, not renderers/resources. A clone keeps
     // the session alive; dropping the last handle sends the source notice.
     attachments: Rc<SessionAttachments>,
@@ -234,6 +235,7 @@ impl Drop for DeferredSession {
                 attachment.deferred_session_destroyed();
             }
         }
+        self.canvas_retirer.close();
     }
 }
 impl DeferredSession {
@@ -248,6 +250,7 @@ impl DeferredSession {
         )));
         let ore = DeferredOreContext::new(caps);
         let mut out = Self {
+            canvas_retirer: std::sync::Arc::new(super::deferred_canvas::CanvasRetirer::default()),
             attachments: Rc::new(SessionAttachments::default()),
             factory,
             ore_context: Rc::new(RefCell::new(ore)),
@@ -364,6 +367,8 @@ impl DeferredSession {
     pub fn reset_frame(&mut self) {
         self.factory.borrow_mut().reset_frame();
         self.ore_context.borrow_mut().resetFrame();
+        // Snapshot replay already took these; inline replay drops them here.
+        drop(self.canvas_retirer.take());
         self.routing.borrow_mut().reset_frame();
         self.canvas_renderers.borrow_mut().clear();
         // Screen recorders are kept across frames (FFI hosts hold them), so
@@ -382,6 +387,8 @@ impl DeferredSession {
         let ore_begin = ore_stream.borrow().command_bytes().len();
         buffer.lock().unwrap().drain_destroys();
         self.ore_context.borrow_mut().drain_pending_destroys();
+        // An idle session has no replay in flight to hand these to.
+        drop(self.canvas_retirer.take());
         let commands = buffer.lock().unwrap().command_bytes()[begin..].to_vec();
         let ore_commands = ore_stream.borrow().command_bytes()[ore_begin..].to_vec();
         PendingDestroyBytes {
@@ -421,6 +428,11 @@ impl DeferredSession {
     }
     pub fn content_canvases(&self) -> HashMap<u32, RenderCanvasHandle> {
         self.routing.borrow().content_canvases.clone()
+    }
+    pub fn take_retired_canvas_backings(
+        &self,
+    ) -> Vec<super::deferred_canvas::RetiredCanvasBacking> {
+        self.canvas_retirer.take()
     }
     fn wire_ore_canvases(&mut self) {
         let weak_routing = Rc::downgrade(&self.routing);
@@ -549,10 +561,33 @@ impl DeferredCanvasHost for DeferredSession {
     // context it replays against, so this only mints the identity the stream
     // refers to.
     fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
-        let mut rc = self.render_context.borrow().clone()?;
-        rc.make_deferred_render_canvas(width, height)
-            .ok()
-            .map(|canvas| Rc::new(RefCell::new(canvas)))
+        self.render_context.borrow().as_ref()?;
+        #[cfg(any(
+            feature = "native-vulkan-experimental",
+            feature = "renderer-vulkan",
+            feature = "renderer-webgpu",
+            feature = "renderer-webgl2",
+            feature = "renderer-metal"
+        ))]
+        {
+            let canvas = crate::exact_source_adapter::ExactSourceRenderCanvas::new_deferred(
+                self.canvas_retirer.clone(),
+                width,
+                height,
+            );
+            Some(Rc::new(RefCell::new(Box::new(canvas))))
+        }
+        #[cfg(not(any(
+            feature = "native-vulkan-experimental",
+            feature = "renderer-vulkan",
+            feature = "renderer-webgpu",
+            feature = "renderer-webgl2",
+            feature = "renderer-metal"
+        )))]
+        {
+            let _ = (width, height);
+            None
+        }
     }
     fn begin_canvas_content(
         &mut self,

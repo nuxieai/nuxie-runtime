@@ -5,7 +5,7 @@
 namespace rive {
 namespace gpu {
 namespace glsl {
-const char constants[] = R"===(#define Xf float(2048)
+const char constants[] = R"===(#define ag float(2048)
 #define Nc 11
 #define oa 16u
 #define pa float(512)
@@ -14,8 +14,8 @@ const char constants[] = R"===(#define Xf float(2048)
 #define xc 0
 #define yc 1
 #define Oc 3u
-#define Yf (Oc+1u)
-#define Zf float(1.0)
+#define bg (Oc+1u)
+#define cg float(1.0)
 #define Pc 8
 #define Qc 0xffu
 #define uc 0x80000000u
@@ -23,21 +23,21 @@ const char constants[] = R"===(#define Xf float(2048)
 #define ba 0x20000000u
 #define Gf (uc|wc|ba)
 #define Rc (1u<<31u)
-#define ag (1u<<29u)
+#define dg (1u<<29u)
 #define f4 (7u<<26u)
-#define bg (5u<<26u)
-#define cg (4u<<26u)
+#define eg (5u<<26u)
+#define fg (4u<<26u)
 #define x8 (2u<<26u)
 #define y8 (1u<<26u)
 #define z8 (1u<<25u)
-#define dg (1u<<24u)
+#define gg (1u<<24u)
 #define K3 (1u<<23u)
 #define ra (1u<<22u)
 #define Sc (1u<<21u)
 #define A8 (1u<<20u)
 #define Tc (1u<<19u)
 #define Uc 0xffffu
-#define eg .0
+#define hg .0
 #define B8 0
 #define Vc 1
 #define Wc 2
@@ -50,9 +50,9 @@ const char constants[] = R"===(#define Xf float(2048)
 #define of 0x100u
 #define K9 0x200u
 #define pf 0x400u
-#define fg 0x800u
+#define ig 0x800u
 #define h3 0
-#define g5 1
+#define h5 1
 #define K4 0
 #define Xc 1
 #define Yc 2
@@ -60,17 +60,17 @@ const char constants[] = R"===(#define Xf float(2048)
 #define Rb 4
 #define Zc 5
 #define sa 6
-#define gg 7
+#define jg 7
 #define ad 8
 #define h7 9
 #define bd 10
 #define a4 11
-#define hg 12
+#define kg 12
 #define e6 13
-#define ig 13
+#define lg 13
 #define R1(g) (3+g)
 #define w3 2
-#define jg 3
+#define mg 3
 #define G2 0
 #define X2 1
 #define f6 2
@@ -88,8 +88,8 @@ const char constants[] = R"===(#define Xf float(2048)
 #define df 10
 #define ef 11
 #define Lb 12
-#define kg Lb
-#define lg cd
+#define ng Lb
+#define og cd
 #define Nf 1023u
 #define p9 6.2e-5
 #define B4 0u
@@ -108,42 +108,43 @@ const char constants[] = R"===(#define Xf float(2048)
 #define Ze 13u
 #define af 14u
 #define bf 15u
+#define Yf 8u
 #define I9 float(2048)
 #define Sb float(0.00048828125)
 #define J9 float(1<<16)
 #define P9 (1u<<16)
 #define U5 17u
 #define f8 0x1ffffu
-#define mg float(1024)
+#define pg float(1024)
 #define ua float(0.0009765625)
 #define va 19u
-#define m5 (1u<<(va-1u))
+#define n5 (1u<<(va-1u))
 #define wa ((1u<<va)-1u)
 #define i7 (1u<<va)
-#define ng 0
-#define og 1
-#define pg 2
-#define qg 3
-#define rg 4
-#define sg 5
-#define tg 6
-#define ug 7
-#define vg 8
-#define wg 9
-#define xg 10
-#define yg 11
-#define zg 12
-#define Ag 13
-#define Bg 14
-#define Cg 15
+#define qg 0
+#define rg 1
+#define sg 2
+#define tg 3
+#define ug 4
+#define vg 5
+#define wg 6
+#define xg 7
+#define yg 8
+#define zg 9
+#define Ag 10
+#define Bg 11
+#define Cg 12
+#define Dg 13
+#define Eg 14
+#define Fg 15
 #define dd 65536.
 #define xa 8.
 #define ya 32u
 #define g6 5u
 #define E3 8u
-#ifdef Dg
-#if Dg>=201703
-ej(ya==1u<<g6);
+#ifdef Gg
+#if Gg>=201703
+jj(ya==1u<<g6);
 #endif
 #endif
 )===";

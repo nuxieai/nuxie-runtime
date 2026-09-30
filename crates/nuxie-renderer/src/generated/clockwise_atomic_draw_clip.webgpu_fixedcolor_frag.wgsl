@@ -2,7 +2,7 @@ struct Ae {
     g2_: array<u32>,
 }
 
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -12,10 +12,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -23,7 +23,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -38,7 +38,7 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override Oh: bool = false;
+@id(10) override Rh: bool = false;
 
 var<private> O_1: vec4<f32>;
 var<private> k3_1: vec2<u32>;
@@ -46,7 +46,7 @@ var<private> v4_1: vec2<f32>;
 @group(0) @binding(6)
 var<storage, read_write> S0_: Ae_1;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 var<private> i0_: vec4<f32>;
 var<private> F1_: vec4<f32>;
 @group(3) @binding(9)
@@ -78,7 +78,7 @@ fn main_1() {
     var phi_471_: f32;
 
     let _e39 = O_1[0u];
-    if Oh {
+    if Rh {
         let _e41 = k3_1[1u];
         let _e43 = k3_1[0u];
         let _e44 = v4_1;

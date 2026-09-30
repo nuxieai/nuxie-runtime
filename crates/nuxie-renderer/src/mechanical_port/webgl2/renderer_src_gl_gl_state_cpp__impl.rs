@@ -15,8 +15,8 @@ pub(crate) fn invalidate(state: &mut GLState) {
     state.m_validState = ValidState::default();
     recordGLCommand(GLCommand::FrontFace(GL_CW));
     recordGLCommand(GLCommand::DepthRange(0.0, 1.0));
-    recordGLCommand(GLCommand::DepthFunc(GL_LESS));
-    recordGLCommand(GLCommand::ClearDepth(1.0));
+    recordGLCommand(GLCommand::DepthFunc(GL_GREATER));
+    recordGLCommand(GLCommand::ClearDepth(0.0));
     recordGLCommand(GLCommand::ClearStencil(0));
     recordGLCommand(GLCommand::Disable(GL_DITHER));
     recordGLCommand(GLCommand::Disable(GL_POLYGON_OFFSET_FILL));
@@ -391,6 +391,23 @@ pub(crate) fn deleteBuffer(state: &mut GLState, bufferID: GLuint) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalidate_sets_packed_depth_order_and_clear() {
+        resetGLCommandStream();
+        let _state = GLState::new(GLCapabilities::default());
+        let commands = takeGLCommands();
+        assert_eq!(
+            &commands[..5],
+            &[
+                GLCommand::FrontFace(GL_CW),
+                GLCommand::DepthRange(0.0, 1.0),
+                GLCommand::DepthFunc(GL_GREATER),
+                GLCommand::ClearDepth(0.0),
+                GLCommand::ClearStencil(0),
+            ]
+        );
+    }
 
     #[test]
     fn scissor_uses_the_target_row_orientation() {

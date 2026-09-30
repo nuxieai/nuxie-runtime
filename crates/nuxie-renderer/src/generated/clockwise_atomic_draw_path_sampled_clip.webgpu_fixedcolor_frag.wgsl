@@ -1,4 +1,4 @@
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -8,10 +8,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,7 +19,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -33,19 +33,19 @@ struct Ae_1 {
     g2_: array<atomic<u32>>,
 }
 
-@id(7) override Lh: bool = true;
-@id(2) override Gh: bool = true;
-@id(8) override Mh: bool = true;
-@id(3) override Hh: bool = true;
-@id(1) override Fh: bool = true;
-@id(0) override Eh: bool = true;
+@id(7) override Oh: bool = true;
+@id(2) override Jh: bool = true;
+@id(8) override Ph: bool = true;
+@id(3) override Kh: bool = true;
+@id(1) override Ih: bool = true;
+@id(0) override Hh: bool = true;
 
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(3) @binding(9)
 var ca: sampler;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(3) @binding(8)
@@ -113,7 +113,7 @@ fn main_1() {
     let _e70 = g1_1;
     let _e72 = C2_1;
     let _e73 = X1_1;
-    let _e75 = (Gh && (u32(_e70) != 0u));
+    let _e75 = (Jh && (u32(_e70) != 0u));
     if (_e73.w >= 0f) {
         phi_2062_ = _e73;
     } else {
@@ -144,8 +144,8 @@ fn main_1() {
         phi_2062_ = _e116;
     }
     let _e118 = phi_2062_;
-    phi_1222_ = Mh;
-    if Mh {
+    phi_1222_ = Ph;
+    if Ph {
         phi_1222_ = (_e72.z > 0f);
     }
     let _e122 = phi_1222_;
@@ -175,8 +175,8 @@ fn main_1() {
             if _e146 {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_1365_ = Hh;
-                        if Hh {
+                        phi_1365_ = Kh;
+                        if Kh {
                             phi_1365_ = (_e143.x < -1.5f);
                         }
                         let _e214 = phi_1365_;
@@ -197,8 +197,8 @@ fn main_1() {
             } else {
                 switch bitcast<i32>(0u) {
                     default: {
-                        phi_1428_ = Hh;
-                        if Hh {
+                        phi_1428_ = Kh;
+                        if Kh {
                             phi_1428_ = (_e143.y < -1.5f);
                         }
                         let _e150 = phi_1428_;
@@ -246,14 +246,14 @@ fn main_1() {
     let _e238 = vec2<u32>(floor(_e232));
     let _e265 = (_e237 + (((((_e238.y >> bitcast<u32>(5u)) * (_e235 << bitcast<u32>(5u))) + ((_e238.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e238.x & 28u) << bitcast<u32>(5u)) + ((_e238.y & 28u) << bitcast<u32>(2i)))) + (((_e238.y & 3u) << bitcast<u32>(2i)) + (_e238.x & 3u))));
     phi_2092_ = 1f;
-    if Fh {
+    if Ih {
         let _e266 = O0_1;
         let _e269 = min(_e266.xy, _e266.zw);
         phi_2092_ = min(min(_e269.x, _e269.y), 1f);
     }
     let _e275 = phi_2092_;
-    phi_1013_ = Eh;
-    if Eh {
+    phi_1013_ = Hh;
+    if Hh {
         let _e277 = Y1_1[0u];
         phi_1013_ = (_e277 != 0f);
     }
@@ -367,11 +367,11 @@ fn main_1() {
     }
     let _e402 = phi_2128_;
     phi_2142_ = f32();
-    if Lh {
+    if Oh {
         let _e403 = gl_FragCoord_1;
         let _e405 = j.F3_;
         let _e407 = j.G3_;
-        if Lh {
+        if Oh {
             phi_2126_ = ((fract((52.982918f * fract(((0.06711056f * _e403.x) + (0.00583715f * _e403.y))))) * _e405) + _e407);
         } else {
             phi_2126_ = 0f;
@@ -382,7 +382,7 @@ fn main_1() {
     let _e421 = phi_2142_;
     let _e422 = (_e142 * _e402);
     let _e423 = _e422.xyz;
-    if (Lh && (_e422.w != 0f)) {
+    if (Oh && (_e422.w != 0f)) {
         phi_2172_ = (vec3(_e421) + _e423);
     } else {
         phi_2172_ = _e423;

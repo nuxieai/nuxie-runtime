@@ -1,4 +1,4 @@
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -8,10 +8,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,7 +19,7 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
@@ -37,14 +37,14 @@ struct Ae_1 {
     g2_: array<atomic<u32>>,
 }
 
-@id(7) override Lh: bool = true;
-@id(2) override Gh: bool = true;
-@id(8) override Mh: bool = true;
-@id(1) override Fh: bool = true;
-@id(0) override Eh: bool = true;
+@id(7) override Oh: bool = true;
+@id(2) override Jh: bool = true;
+@id(8) override Ph: bool = true;
+@id(1) override Ih: bool = true;
+@id(0) override Hh: bool = true;
 
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 @group(0) @binding(8)
 var DD: texture_2d<f32>;
 @group(3) @binding(8)
@@ -109,7 +109,7 @@ fn main_1() {
     let _e93 = g1_1;
     let _e95 = C2_1;
     let _e96 = X1_1;
-    let _e98 = (Gh && (u32(_e93) != 0u));
+    let _e98 = (Jh && (u32(_e93) != 0u));
     if (_e96.w >= 0f) {
         phi_1404_ = _e96;
     } else {
@@ -140,8 +140,8 @@ fn main_1() {
         phi_1404_ = _e139;
     }
     let _e141 = phi_1404_;
-    phi_920_ = Mh;
-    if Mh {
+    phi_920_ = Ph;
+    if Ph {
         phi_920_ = (_e95.z > 0f);
     }
     let _e145 = phi_920_;
@@ -169,14 +169,14 @@ fn main_1() {
     let _e172 = k3_1[0u];
     let _e173 = vec2<u32>(floor(_e167));
     phi_1409_ = 1f;
-    if Fh {
+    if Ih {
         let _e201 = O0_1;
         let _e204 = min(_e201.xy, _e201.zw);
         phi_1409_ = min(min(_e204.x, _e204.y), 1f);
     }
     let _e210 = phi_1409_;
-    phi_706_ = Eh;
-    if Eh {
+    phi_706_ = Hh;
+    if Hh {
         let _e212 = Y1_1[0u];
         phi_706_ = (_e212 != 0f);
     }
@@ -262,10 +262,10 @@ fn main_1() {
     }
     let _e306 = phi_1433_;
     phi_1444_ = f32();
-    if Lh {
+    if Oh {
         let _e308 = j.F3_;
         let _e310 = j.G3_;
-        if Lh {
+        if Oh {
             phi_1434_ = ((fract((52.982918f * fract(((0.06711056f * _e57.x) + (0.00583715f * _e57.y))))) * _e308) + _e310);
         } else {
             phi_1434_ = 0f;
@@ -276,7 +276,7 @@ fn main_1() {
     let _e324 = phi_1444_;
     let _e325 = (_e165 * _e306);
     let _e326 = _e325.xyz;
-    if (Lh && (_e325.w != 0f)) {
+    if (Oh && (_e325.w != 0f)) {
         phi_1464_ = (vec3(_e324) + _e326);
     } else {
         phi_1464_ = _e326;

@@ -1,4 +1,4 @@
-struct SB {
+struct TB {
     tc: f32,
     Cd: f32,
     Hf: f32,
@@ -8,10 +8,10 @@ struct SB {
     tf: u32,
     uf: u32,
     U7_: vec4<i32>,
-    eh: vec2<f32>,
+    hh: vec2<f32>,
     Dd: vec2<f32>,
     f2_: u32,
-    ih: f32,
+    lh: f32,
     c6_: u32,
     W2_: f32,
     Ed: f32,
@@ -19,17 +19,17 @@ struct SB {
     F3_: f32,
     G3_: f32,
     Fd: f32,
-    bh: u32,
+    eh: u32,
     Mb: u32,
     Zb: f32,
     ac: f32,
 }
 
-struct Fg {
+struct Ig {
     g2_: array<vec4<u32>>,
 }
 
-struct Eg {
+struct Hg {
     g2_: array<vec4<u32>>,
 }
 
@@ -53,13 +53,13 @@ var<private> gl_VertexIndex_1: i32;
 var<private> LD_1: vec4<f32>;
 var<private> MD_1: vec4<f32>;
 var<private> UC_1: vec4<f32>;
-var<private> TB_1: vec4<u32>;
+var<private> UB_1: vec4<u32>;
 @group(0) @binding(0)
-var<uniform> j: SB;
+var<uniform> j: TB;
 @group(0) @binding(5)
-var<storage> HD: Fg;
+var<storage> HD: Ig;
 @group(0) @binding(2)
-var<storage> OB: Eg;
+var<storage> OB: Hg;
 @group(0) @binding(9)
 var XC: texture_2d<f32>;
 @group(3) @binding(9)
@@ -137,16 +137,16 @@ fn main_1() {
     }
     let _e72 = phi_1770_;
     if _e66 {
-        let _e74 = TB_1[0u];
+        let _e74 = UB_1[0u];
         phi_1771_ = _e74;
     } else {
-        let _e76 = TB_1[1u];
+        let _e76 = UB_1[1u];
         phi_1771_ = _e76;
     }
     let _e78 = phi_1771_;
     let _e79 = bitcast<i32>(_e78);
     let _e81 = (_e79 << bitcast<u32>(16i));
-    let _e83 = TB_1[2u];
+    let _e83 = UB_1[2u];
     phi_1772_ = _e81;
     if (_e83 == 4294967295u) {
         phi_1772_ = (_e81 - 1i);
@@ -170,7 +170,7 @@ fn main_1() {
     let _e116 = (_e83 & 1023u);
     let _e119 = ((_e83 >> bitcast<u32>(10i)) & 1023u);
     let _e121 = (_e83 >> bitcast<u32>(20i));
-    let _e123 = TB_1[3u];
+    let _e123 = UB_1[3u];
     let _e124 = (_e123 & 65535u);
     if (_e124 > 0u) {
         let _e131 = HD.g2_[(max(_e124, 1u) - 1u)][2u];
@@ -465,12 +465,12 @@ fn main_1() {
 }
 
 @vertex
-fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LD: vec4<f32>, @location(1) MD: vec4<f32>, @location(2) UC: vec4<f32>, @location(3) TB: vec4<u32>) -> VertexOutput {
+fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) LD: vec4<f32>, @location(1) MD: vec4<f32>, @location(2) UC: vec4<f32>, @location(3) UB: vec4<u32>) -> VertexOutput {
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     LD_1 = LD;
     MD_1 = MD;
     UC_1 = UC;
-    TB_1 = TB;
+    UB_1 = UB;
     main_1();
     let _e18 = A6_;
     let _e19 = B6_;

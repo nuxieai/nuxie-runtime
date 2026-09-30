@@ -1,0 +1,92 @@
+{
+  "name": "PaintImage",
+  "key": {
+    "int": 113,
+    "string": "paintimage"
+  },
+  "extends": "component.json",
+  "properties": {
+    "imageAssetId": {
+      "type": "Id",
+      "typeRuntime": "uint",
+      "initialValue": "Core.missingId",
+      "initialValueRuntime": "-1",
+      "key": {
+        "int": 415,
+        "string": "imageassetid"
+      }
+    },
+    "imageSamplerFilter": {
+      "type": "uint8",
+      "initialValue": "0",
+      "key": {
+        "int": 269,
+        "string": "imagesamplerfilter"
+      }
+    },
+    "imageSamplerWrapX": {
+      "type": "uint8",
+      "initialValue": "0",
+      "key": {
+        "int": 270,
+        "string": "imagesamplerwrapx"
+      }
+    },
+    "imageSamplerWrapY": {
+      "type": "uint8",
+      "initialValue": "0",
+      "key": {
+        "int": 271,
+        "string": "imagesamplerwrapy"
+      }
+    },
+    "imageScaleX": {
+      "type": "double",
+      "initialValue": "1.0",
+      "key": {
+        "int": 416,
+        "string": "imagescalex"
+      }
+    },
+    "imageScaleY": {
+      "type": "double",
+      "initialValue": "1.0",
+      "key": {
+        "int": 368,
+        "string": "imagescaley"
+      }
+    },
+    "imageOffsetX": {
+      "type": "double",
+      "initialValue": "0.0",
+      "key": {
+        "int": 369,
+        "string": "imageoffsetx"
+      }
+    },
+    "imageOffsetY": {
+      "type": "double",
+      "initialValue": "0.0",
+      "key": {
+        "int": 410,
+        "string": "imageoffsety"
+      }
+    },
+    "imageRotation": {
+      "type": "double",
+      "initialValue": "0.0",
+      "key": {
+        "int": 411,
+        "string": "imagerotation"
+      }
+    },
+    "imageSizeMode": {
+      "type": "uint8",
+      "initialValue": "0",
+      "key": {
+        "int": 412,
+        "string": "imagesizemode"
+      }
+    }
+  }
+}

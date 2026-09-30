@@ -277,6 +277,12 @@ impl ScriptedRenderer {
 impl UserData for ScriptedRenderer {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("save", |_, this, ()| this.save());
+        methods.add_method("modulateOpacity", |_, this, opacity: f32| {
+            this.with_renderer_mut(|renderer| {
+                renderer.modulate_opacity(opacity);
+                Ok(())
+            })
+        });
         methods.add_method("restore", |_, this, ()| this.restore());
         methods.add_method("transform", |_, this, matrix: AnyUserData| {
             let matrix = matrix.borrow::<ScriptedMat2D>()?;

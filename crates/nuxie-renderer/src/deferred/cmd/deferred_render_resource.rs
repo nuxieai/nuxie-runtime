@@ -1,6 +1,7 @@
 //! renderer/cmd/deferred_render_resource.hpp at e949498e.
 use super::{
     command_stream::WirePod,
+    foreign_image_registry::ForeignImageRegistry,
     render_command_buffer::{RenderCommandBuffer, SharedIdAllocator},
     render_commands::*,
     render_handle::INVALID_RENDER_HANDLE,
@@ -134,6 +135,11 @@ pub struct DeferredRenderPaint {
     shader_identity: Option<usize>,
     color_known: bool,
     stroke_invalidated: Cell<bool>,
+    image_id: u32,
+    image_known: bool,
+    image_sampler: ImageSampler,
+    image_matrix: Mat2D,
+    canvases: Option<Rc<RefCell<ForeignImageRegistry>>>,
 }
 impl Drop for DeferredRenderPaint {
     fn drop(&mut self) {
@@ -144,6 +150,12 @@ impl Drop for DeferredRenderPaint {
 }
 impl DeferredRenderPaint {
     pub fn new(base: DeferredResourceBase) -> Self {
+        Self::with_canvases(base, None)
+    }
+    pub fn with_canvases(
+        base: DeferredResourceBase,
+        canvases: Option<Rc<RefCell<ForeignImageRegistry>>>,
+    ) -> Self {
         Self {
             resource: VersionedDeferredResource::new(base),
             style: 1,
@@ -157,6 +169,11 @@ impl DeferredRenderPaint {
             shader_identity: None,
             color_known: true,
             stroke_invalidated: Cell::new(false),
+            image_id: INVALID_RENDER_HANDLE,
+            image_known: false,
+            image_sampler: ImageSampler::default(),
+            image_matrix: Mat2D::IDENTITY,
+            canvases,
         }
     }
     pub fn mark_drawn(&self) {
@@ -269,6 +286,54 @@ impl RenderPaint for DeferredRenderPaint {
             &PaintShaderPod {
                 paint: self.resource.base.id,
                 shader,
+            },
+        );
+    }
+    fn modulated_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        matrix: Mat2D,
+    ) {
+        let mut id = INVALID_RENDER_HANDLE;
+        let mut foreign = false;
+        if let Some(image) = image {
+            if let Some(decoded) = image.as_any().downcast_ref::<DeferredRenderImage>() {
+                id = decoded.base.id;
+            } else if let Some(canvases) = &self.canvases {
+                id = canvases.borrow_mut().image_draw_id(image);
+                foreign = true;
+            }
+        }
+        // Foreign entries are re-registered and recorded every frame, because
+        // the per-frame registry is cleared. Decoded images can be absorbed.
+        if !foreign
+            && self.image_known
+            && id == self.image_id
+            && sampler == self.image_sampler
+            && matrix == self.image_matrix
+        {
+            return;
+        }
+        self.image_known = true;
+        self.image_id = id;
+        self.image_sampler = sampler;
+        self.image_matrix = matrix;
+        self.resource.bump();
+        self.resource.base.append(
+            RenderCmd::PaintModulatedImage,
+            &PaintModulatedImagePod {
+                paint: self.resource.base.id,
+                image: id,
+                wrap_x: sampler.wrap_x as u8,
+                wrap_y: sampler.wrap_y as u8,
+                filter: sampler.filter as u8,
+                xx: matrix.0[0],
+                xy: matrix.0[1],
+                yx: matrix.0[2],
+                yy: matrix.0[3],
+                tx: matrix.0[4],
+                ty: matrix.0[5],
             },
         );
     }

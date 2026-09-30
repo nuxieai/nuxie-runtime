@@ -26,6 +26,8 @@ impl AdvancingComponentHandle {
             advance_nested_artboard
         } else if component.is_type_of(ArtboardComponentListBase::TYPE_KEY) {
             advance_artboard_component_list
+        } else if component.is_type_of(crate::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY) {
+            crate::source::scripted::scripted_transition::ScriptedTransition::advance_occurrence
         } else if component
             .with(|owner| owner.as_scripted_drawable().is_some())
             .unwrap_or(false)
@@ -128,6 +130,7 @@ impl dyn AdvancingComponent {
             scripted::scripted_data_converter_base::ScriptedDataConverterBase,
             scripted::scripted_drawable_base::ScriptedDrawableBase,
             scripted::scripted_layout_base::ScriptedLayoutBase,
+            scripted::scripted_transition_base::ScriptedTransitionBase,
             scripted::scripted_path_effect_base::ScriptedPathEffectBase,
             text::text_input_base::TextInputBase,
         };
@@ -144,6 +147,7 @@ impl dyn AdvancingComponent {
             | ScriptedDataConverterBase::TYPE_KEY
             | ScriptedDrawableBase::TYPE_KEY
             | ScriptedLayoutBase::TYPE_KEY
+            | ScriptedTransitionBase::TYPE_KEY
             | ScriptedPathEffectBase::TYPE_KEY => {
                 Some(AdvancingComponentHandle::classified(component))
             }

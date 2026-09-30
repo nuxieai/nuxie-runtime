@@ -5,6 +5,9 @@ use std::{
 
 use crate::mechanical_port::source::core::CoreHandle;
 
+/// Shared transition backend child payload; callbacks live on ScriptInstance.
+pub use crate::scripting::ScriptTransitionChildRef as TransitionChildRef;
+
 /// Shared state from rive/scripted/script_backend.hpp. Handles are non-owning
 /// arena identities; each object retains its Rust VM handle independently.
 pub struct ScriptBackend {

@@ -388,6 +388,20 @@ pub fn replay_render_commands(
                             if shadow.shader != INVALID_RENDER_HANDLE {
                                 fresh.shader(table.shaders.get(shadow.shader).as_deref());
                             }
+                            if shadow.image != INVALID_RENDER_HANDLE {
+                                let image = if shadow.image & CANVAS_HANDLE_FLAG != 0 {
+                                    hooks.canvas_image.as_mut().and_then(|resolve| {
+                                        resolve(shadow.image & CANVAS_HANDLE_MASK)
+                                    })
+                                } else {
+                                    table.images.get(shadow.image)
+                                };
+                                fresh.modulated_image(
+                                    image.as_deref(),
+                                    shadow.image_sampler,
+                                    shadow.image_matrix,
+                                );
+                            }
                         }
                         table.paints.new_version(
                             c.id,
@@ -514,6 +528,32 @@ pub fn replay_render_commands(
                         .borrow_mut()
                         .shader(table.shaders.get(c.shader).as_deref());
                     table.paint_shadows[c.paint as usize].shader = c.shader;
+                }
+            }
+            RenderCmd::PaintModulatedImage => {
+                let c: PaintModulatedImagePod = reader.read();
+                if let Some(paint) = table.paints.get(c.paint) {
+                    let image = if c.image == INVALID_RENDER_HANDLE {
+                        None
+                    } else if c.image & CANVAS_HANDLE_FLAG != 0 {
+                        hooks
+                            .canvas_image
+                            .as_mut()
+                            .and_then(|resolve| resolve(c.image & CANVAS_HANDLE_MASK))
+                    } else {
+                        table.images.get(c.image)
+                    };
+                    let image_sampler = sampler(c.wrap_x, c.wrap_y, c.filter);
+                    let image_matrix = Mat2D([c.xx, c.xy, c.yx, c.yy, c.tx, c.ty]);
+                    paint.borrow_mut().modulated_image(
+                        image.as_deref(),
+                        image_sampler,
+                        image_matrix,
+                    );
+                    let shadow = &mut table.paint_shadows[c.paint as usize];
+                    shadow.image = c.image;
+                    shadow.image_sampler = image_sampler;
+                    shadow.image_matrix = image_matrix;
                 }
             }
             RenderCmd::PaintInvalidateStroke => {

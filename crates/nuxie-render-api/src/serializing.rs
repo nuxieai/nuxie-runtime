@@ -410,6 +410,31 @@ impl RenderPaint for SerializingRenderPaint {
         }
     }
 
+    fn modulated_image(
+        &mut self,
+        image: Option<&dyn RenderImage>,
+        sampler: ImageSampler,
+        matrix: Mat2D,
+    ) {
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(PAINT_MODULATED_IMAGE);
+        writer.varuint(self.id);
+        writer.varuint(image.map_or(0, |image| {
+            image
+                .as_any()
+                .downcast_ref::<SerializingRenderImage>()
+                .expect("SerializingFactory requires SerializingRenderImage")
+                .id
+                + 1
+        }));
+        writer.varuint(sampler.filter as u64);
+        writer.varuint(sampler.wrap_x as u64);
+        writer.varuint(sampler.wrap_y as u64);
+        for value in matrix.0 {
+            writer.float(value);
+        }
+    }
+
     fn invalidate_stroke(&mut self) {}
 }
 

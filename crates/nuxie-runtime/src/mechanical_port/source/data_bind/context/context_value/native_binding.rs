@@ -386,6 +386,12 @@ impl TargetBinding for CoreBinding {
                     let any = target.as_any();
                     if any.is::<Solo>() {
                         TargetKind::Solo
+                    } else if any
+                        .is::<crate::source::scripted::scripted_transition::ScriptedTransition>()
+                    {
+                        TargetKind::ScriptedTransition
+                    } else if any.is::<crate::source::shapes::paint::paint_image::PaintImage>() {
+                        TargetKind::PaintImage
                     } else if any.is::<BindablePropertyAsset>() {
                         TargetKind::BindableAsset
                     } else if any.is::<BindablePropertyViewModel>() {
@@ -557,6 +563,18 @@ impl ContextApplyBinding for CoreBinding {
     fn solo_update_by_name(&mut self, name: String) {
         Solo::update_by_name_occurrence(self.target.as_ref().expect("Solo target"), &name);
     }
+    fn transition_update_by_index(&mut self, index: usize) {
+        crate::source::scripted::scripted_transition::ScriptedTransition::update_by_index_occurrence(
+            self.target.as_ref().expect("ScriptedTransition target"),
+            index,
+        );
+    }
+    fn transition_update_by_name(&mut self, name: String) {
+        crate::source::scripted::scripted_transition::ScriptedTransition::update_by_name_occurrence(
+            self.target.as_ref().expect("ScriptedTransition target"),
+            &name,
+        );
+    }
     fn update_list(&mut self, items: &[CoreHandle]) {
         if let Some(target) = &self.target {
             mutate(|| {
@@ -658,7 +676,14 @@ impl ContextApplyBinding for CoreBinding {
             .flatten()
     }
     fn set_target_image_asset(&mut self, asset: CoreHandle) {
-        Image::set_asset_occurrence(self.target.as_ref().expect("Image target"), Some(asset));
+        let target = self.target.as_ref().expect("image asset target");
+        if self.target_kind() == TargetKind::PaintImage {
+            target.with_downcast_mut::<crate::source::shapes::paint::paint_image::PaintImage, _>(
+                |paint| paint.set_asset(Some(asset)),
+            );
+        } else {
+            Image::set_asset_occurrence(target, Some(asset));
+        }
     }
     fn set_target_font_asset(&mut self, asset: CoreHandle) {
         crate::mechanical_port::source::text::text_style::TextStyle::set_asset_occurrence(

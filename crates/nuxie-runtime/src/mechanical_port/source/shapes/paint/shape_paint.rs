@@ -67,6 +67,7 @@ pub struct ShapePaint {
     render_paint: Option<RuntimeRenderPaintHandle>,
     paint_mutator: Option<CoreHandle>,
     feather: Option<CoreHandle>,
+    has_modulated_image: bool,
     script_paint_scope: Option<Rc<crate::scripting::ScriptPaint>>,
 }
 
@@ -79,6 +80,7 @@ impl Default for ShapePaint {
             render_paint: None,
             paint_mutator: None,
             feather: None,
+            has_modulated_image: false,
             script_paint_scope: None,
         }
     }
@@ -370,6 +372,7 @@ impl ShapePaint {
             }
         }
 
+        let image_bounds = shape_paint_path.raw_path().bounds();
         let mut draw_path = |path: &mut ShapePaintPath| {
             let render_path = path.render_path(factory);
             if !use_path_fill_rule {
@@ -381,6 +384,9 @@ impl ShapePaint {
                         _ => {}
                     }
                 }
+            }
+            if override_paint.is_none() {
+                self.apply_modulated_image(&image_bounds);
             }
             if let Some(paint) = override_paint.as_deref() {
                 renderer.draw_path(render_path, paint);
@@ -429,6 +435,42 @@ impl ShapePaint {
 
     pub fn invalidate_rendering(&mut self) {
         self.base.add_dirt(ComponentDirt::PATH, true);
+    }
+
+    fn apply_modulated_image(&mut self, bounds: &crate::source::math::aabb::Aabb) {
+        use crate::source::{
+            generated::shapes::paint::paint_image_base::PaintImageBase,
+            shapes::paint::paint_image::PaintImage,
+        };
+        let child = self
+            .base
+            .children()
+            .iter()
+            .find(|child| child.is_type_of(PaintImageBase::TYPE_KEY))
+            .cloned();
+        if let Some(child) = child {
+            let applied = self
+                .with_render_paint_mut(|paint| {
+                    child
+                        .with_downcast::<PaintImage, _>(|image| image.apply_to(paint, bounds))
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false);
+            if applied {
+                self.has_modulated_image = true;
+                return;
+            }
+        }
+        if self.has_modulated_image {
+            self.with_render_paint_mut(|paint| {
+                paint.modulated_image(
+                    None,
+                    nuxie_render_api::ImageSampler::LINEAR_CLAMP,
+                    nuxie_render_api::Mat2D::IDENTITY,
+                )
+            });
+            self.has_modulated_image = false;
+        }
     }
 
     pub fn add_stroke_effect(

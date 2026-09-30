@@ -1,0 +1,30 @@
+{
+  "name": "ScriptedTransition",
+  "key": {
+    "int": 110,
+    "string": "scriptedtransition"
+  },
+  "extends": "scripted/scripted_drawable.json",
+  "properties": {
+    "activeComponentId": {
+      "type": "Id",
+      "typeRuntime": "uint",
+      "initialValue": "0",
+      "initialValueRuntime": "0",
+      "key": {
+        "int": 273,
+        "string": "activecomponentid"
+      }
+    },
+    "listSource": {
+      "type": "Id",
+      "typeRuntime": "uint",
+      "initialValue": "Core.missingId",
+      "initialValueRuntime": "-1",
+      "key": {
+        "int": 414,
+        "string": "listsource"
+      }
+    }
+  }
+}

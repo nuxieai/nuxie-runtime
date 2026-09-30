@@ -867,22 +867,7 @@ impl ArtboardComponentList {
 
     fn prepare_list_item(&mut self, index: usize) -> bool {
         let item = self.list_items[index].clone();
-        let view_model_instance = item
-            .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
-            .flatten();
-        if let Some(symbol) = view_model_instance.as_ref().and_then(|instance| {
-            instance
-                .with_downcast::<ViewModelInstance, _>(|instance| {
-                    instance.property_value_for_symbol(SymbolType::ItemIndex)
-                })
-                .flatten()
-        }) {
-            crate::mechanical_port::source::generated::core_registry::CoreRegistry::set_uint_handle(
-                    &symbol,
-                    crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_symbol_list_index_base::ViewModelInstanceSymbolListIndexBase::PROPERTY_VALUE_PROPERTY_KEY as i32,
-                    index as u32,
-                );
-        }
+        item.with_downcast::<ViewModelInstanceListItem, _>(|item| item.assign_list_index(index as u32));
         if let Some(artboard) = self.find_artboard(&item) {
             if let Some(size) = artboard.with_downcast::<Artboard, _>(|artboard| {
                 Vec2D::new(artboard.width(), artboard.height())

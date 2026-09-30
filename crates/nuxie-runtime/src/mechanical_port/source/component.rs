@@ -398,6 +398,12 @@ impl ComponentOccurrenceHandle {
             // Container children can synchronously call back into their host
             // (notably Path::onDirty into Shape). End the host borrow first.
             if handle.is_type_of(
+                crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY,
+            ) {
+                crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::collapse_after_component_occurrence(handle, value);
+                return true;
+            }
+            if handle.is_type_of(
                 crate::mechanical_port::source::generated::solo_base::SoloBase::TYPE_KEY,
             ) {
                 let children = handle

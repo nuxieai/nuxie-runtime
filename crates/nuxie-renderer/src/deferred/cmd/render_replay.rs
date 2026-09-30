@@ -113,6 +113,9 @@ pub struct PaintShadow {
     pub feather: f32,
     pub blend_mode: u8,
     pub shader: u32,
+    pub image: u32,
+    pub image_sampler: ImageSampler,
+    pub image_matrix: Mat2D,
 }
 impl Default for PaintShadow {
     fn default() -> Self {
@@ -125,6 +128,9 @@ impl Default for PaintShadow {
             feather: 0.0,
             blend_mode: 3,
             shader: u32::MAX,
+            image: u32::MAX,
+            image_sampler: ImageSampler::default(),
+            image_matrix: Mat2D::IDENTITY,
         }
     }
 }

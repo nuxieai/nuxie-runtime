@@ -15,6 +15,28 @@ pub struct ViewModelInstanceListItem {
 }
 
 impl ViewModelInstanceListItem {
+    pub fn assign_list_index(&self, index: u32) {
+        use crate::mechanical_port::source::{
+            generated::{
+                core_registry::CoreRegistry,
+                viewmodel::viewmodel_instance_symbol_list_index_base::ViewModelInstanceSymbolListIndexBase,
+            },
+            viewmodel::{symbol_type::SymbolType, viewmodel_instance::ViewModelInstance},
+        };
+        if let Some(symbol) = self.view_model_instance.as_ref().and_then(|instance| {
+            instance
+                .with_downcast::<ViewModelInstance, _>(|instance| {
+                    instance.property_value_for_symbol(SymbolType::ItemIndex)
+                })
+                .flatten()
+        }) {
+            CoreRegistry::set_uint_handle(
+                &symbol,
+                ViewModelInstanceSymbolListIndexBase::PROPERTY_VALUE_PROPERTY_KEY as i32,
+                index,
+            );
+        }
+    }
     pub fn set_view_model_instance(&mut self, value: Option<CoreHandle>) {
         self.view_model_instance = value;
     }

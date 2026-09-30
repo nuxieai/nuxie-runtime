@@ -2100,6 +2100,15 @@ pub trait PreparedScriptArtboard: fmt::Debug {
     fn construct(self: Box<Self>) -> Result<Box<dyn ScriptArtboard>, ScriptError>;
 }
 
+/// One transition child and the world transform used for this invocation.
+/// A missing artboard is exposed to the script as nil. Backend userdata must
+/// be invalidated when the invocation returns, even if the script retains it.
+#[derive(Clone)]
+pub struct ScriptTransitionChildRef {
+    pub artboard: Option<crate::mechanical_port::source::core::CoreHandle>,
+    pub transform: nuxie_render_api::Mat2D,
+}
+
 /// Runtime-owned handle for one scripted object instance.
 pub trait ScriptInstance {
     /// Settle backend-owned asynchronous work on the script VM's owning
@@ -2421,6 +2430,38 @@ pub trait ScriptInstance {
         let _ = (factory, renderer, host);
         Err(ScriptError::new(
             "script draw requires a backend renderer binding",
+        ))
+    }
+
+    /// Only an explicit boolean false in self.managesTo opts out.
+    fn transition_manages_to(&self) -> bool {
+        true
+    }
+
+    fn call_transition_changed(
+        &mut self,
+        from: &ScriptTransitionChildRef,
+        to: &ScriptTransitionChildRef,
+        direction: i32,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        let _ = (from, to, direction, host);
+        Err(ScriptError::new(
+            "transition changed requires backend child userdata support",
+        ))
+    }
+
+    fn call_transition_draw(
+        &mut self,
+        factory: &mut dyn RenderFactory,
+        renderer: &mut dyn Renderer,
+        from: &ScriptTransitionChildRef,
+        to: &ScriptTransitionChildRef,
+        host: &mut dyn ScriptHost,
+    ) -> Result<(), ScriptError> {
+        let _ = (factory, renderer, from, to, host);
+        Err(ScriptError::new(
+            "transition draw requires backend child userdata support",
         ))
     }
 

@@ -102,6 +102,7 @@ impl RendererBindings {
         super::lua_mesh::install_mesh_globals(lua)?;
         self.install_gradient_global(lua)?;
         self.install_paint_global(lua)?;
+        super::lua_transition::install(lua)?;
         Ok(())
     }
 

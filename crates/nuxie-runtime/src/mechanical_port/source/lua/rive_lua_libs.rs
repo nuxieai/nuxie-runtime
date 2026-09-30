@@ -311,6 +311,7 @@ pub enum LuaAtoms {
     Swap,
     Clear,
     Draw,
+    ModulateOpacity,
     Advance,
     FrameOrigin,
     Data,
@@ -779,6 +780,7 @@ pub fn find_atom(name: &str) -> Option<LuaAtoms> {
         "shift" => Some(LuaAtoms::Shift),
         "clear" => Some(LuaAtoms::Clear),
         "draw" => Some(LuaAtoms::Draw),
+        "modulateOpacity" => Some(LuaAtoms::ModulateOpacity),
         "advance" => Some(LuaAtoms::Advance),
         "frameOrigin" => Some(LuaAtoms::FrameOrigin),
         "data" => Some(LuaAtoms::Data),
@@ -1574,6 +1576,18 @@ impl ScriptedRenderer {
 }
 
 impl_lua_rive!(ScriptedRenderer, 9, "Renderer");
+
+pub struct TransitionChild {
+    pub artboard: Option<CoreHandle>,
+    pub world_transform: Mat2D,
+}
+impl TransitionChild {
+    pub fn new(artboard: CoreHandle, world_transform: Mat2D) -> Self {
+        Self { artboard: Some(artboard), world_transform }
+    }
+    pub fn invalidate(&mut self) { self.artboard = None; }
+}
+impl_lua_rive!(TransitionChild, 68, "TransitionChild");
 
 pub struct ScriptReffedArtboard {
     pub file: RuntimeFileWeakHandle,

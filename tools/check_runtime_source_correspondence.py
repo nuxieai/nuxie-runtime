@@ -26,6 +26,7 @@ ADAPTED_OWNERS = {
     "lua/lua_asset_reference": Path("crates/nuxie-scripting/src/vm/lua_blob.rs"),
     "lua/lua_atoms": Path("crates/nuxie-scripting/src/vm.rs"),
     "lua/lua_script_backend": Path("crates/nuxie-scripting/src/vm.rs"),
+    "lua/lua_transition": Path("crates/nuxie-scripting/src/vm/lua_transition.rs"),
     "scripted/script_backend": Path("crates/nuxie-runtime/src/scripting.rs"),
 }
 # C++ object-layout padding across preprocessor configurations has no Rust ABI

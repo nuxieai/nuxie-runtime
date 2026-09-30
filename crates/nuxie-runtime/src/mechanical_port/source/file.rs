@@ -723,12 +723,14 @@ impl File {
                 crate::mechanical_port::source::generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::TYPE_KEY
+                | crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::animation::scripted_transition_condition_base::ScriptedTransitionConditionBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::TYPE_KEY => {
                     stack_object = Some(Box::new(ScriptedObjectImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY;
+                    object.with_downcast_mut::<crate::source::scripted::scripted_transition::ScriptedTransition,_>(|transition| transition.set_file(self.self_handle.clone()));
                 }
                 crate::mechanical_port::source::generated::data_bind::data_bind_path_base::DataBindPathBase::TYPE_KEY => {
                     stack_object = Some(Box::new(DataBindPathImporter::new(object.clone())));

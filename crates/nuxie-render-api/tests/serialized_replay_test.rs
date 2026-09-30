@@ -1,4 +1,4 @@
-//! `tests/unit_tests/runtime/serialized_replay_test.cpp` at e949498e.
+//! `tests/unit_tests/runtime/serialized_replay_test.cpp` through d9747935.
 use nuxie_render_api::serialized_replay::{SerializedReplayHooks, replay_serialized_commands};
 use nuxie_render_api::*;
 
@@ -40,12 +40,34 @@ fn serialized_2d_commands_replay_byte_identically() {
     );
     let mut paint2 = a.make_render_paint();
     paint2.shader(Some(grad.as_ref()));
+    let image_path = std::path::PathBuf::from(
+        std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+    )
+    .join("tests/unit_tests/assets/open_source.jpg");
+    let image_bytes = std::fs::read(&image_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", image_path.display()));
+    let image = a.decode_image(&image_bytes).expect("modulating image");
+    let sampler = ImageSampler {
+        filter: ImageFilter::Nearest,
+        wrap_x: ImageWrap::Repeat,
+        wrap_y: ImageWrap::Mirror,
+    };
+    paint2.modulated_image(
+        Some(image.as_ref()),
+        sampler,
+        Mat2D([2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),
+    );
+    let mut paint3 = a.make_render_paint();
+    paint3.modulated_image(Some(image.as_ref()), sampler, Mat2D::IDENTITY);
+    paint3.modulated_image(None, ImageSampler::LINEAR_CLAMP, Mat2D::IDENTITY);
     renderer_a.save();
     renderer_a.transform(Mat2D([1.0, 0.0, 0.0, 1.0, 5.0, 7.0]));
     renderer_a.clip_path(clip.as_ref());
     renderer_a.modulate_opacity(0.5);
     renderer_a.draw_path(path.as_ref(), paint.as_ref());
     renderer_a.draw_path(path.as_ref(), paint2.as_ref());
+    renderer_a.draw_path(path.as_ref(), paint3.as_ref());
     renderer_a.restore();
 
     let mut b = PersistentFactory::new(SerializingFactory::default());

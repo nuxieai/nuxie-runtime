@@ -34,6 +34,15 @@ impl DataBindContextValueNumber {
                     property_key,
                 ) {
                     binding.set_int(property_key, value.round() as i32)
+                } else if binding.target_is_scripted_transition() {
+                    // Upstream rejects negative rounded indices as out of range;
+                    // Rust's saturating float cast would otherwise select zero.
+                    let rounded = value.round();
+                    binding.transition_update_by_index(if rounded < 0.0 {
+                        usize::MAX
+                    } else {
+                        rounded as usize
+                    })
                 } else {
                     binding.set_uint(
                         property_key,

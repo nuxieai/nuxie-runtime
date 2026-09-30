@@ -1,10 +1,13 @@
 //! The three numeric text_test.cpp regressions added at upstream 45d4d01d.
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
-    generated::{core_registry::CoreRegistry, text::text_base::TextBase},
+    generated::{
+        core_registry::CoreRegistry,
+        text::{text_base::TextBase, text_value_run_base::TextValueRunBase},
+    },
     layout_component::LayoutComponent,
     text::text::{Text, TextValueRunHandle},
-    text_engine::TextOverflow,
+    text_engine::{TextOverflow, TextTrimBottom, TextTrimTop, pack_text_vertical_trim},
 };
 use nuxie_runtime::{CoreHandle, File, RuntimeFactoryHandle, RuntimeFileHandle};
 
@@ -137,4 +140,91 @@ fn fit_font_size_hug_slot_tracks_fitted_text_at_7_4() {
 #[test]
 fn fit_font_size_hug_slot_honors_resizes_box_at_7_4() {
     check(4, false, 423.49, 439.49);
+}
+
+fn check_trimmed_hug_fit(top: TextTrimTop, bottom: TextTrimBottom) -> (f32, f32) {
+    let file = import_text_with_minor_version(4);
+    let artboard = file
+        .with_file(File::artboard_default)
+        .expect("default artboard");
+    let title = artboard
+        .with_artboard(|board| board.find_all_handles::<Text>())
+        .into_iter()
+        .find(|text| {
+            text.with_downcast::<Text, _>(|text| {
+                text.runs().first().is_some_and(|run| match run {
+                    TextValueRunHandle::Core(run) => run
+                        .with(|run| !run.as_text_value_run().unwrap().base.text().is_empty())
+                        .unwrap(),
+                    TextValueRunHandle::Runtime(run) => !run.borrow().base.text().is_empty(),
+                })
+            })
+            .unwrap()
+        })
+        .expect("nonempty title");
+    assert_eq!(
+        title.with_downcast::<Text, _>(Text::overflow).unwrap(),
+        TextOverflow::FitFontSize
+    );
+    assert!(CoreRegistry::set_bool_handle(
+        &title,
+        i32::from(TextBase::FIT_FONT_SIZE_RESIZES_BOX_PROPERTY_KEY),
+        true
+    ));
+    let run = title
+        .with_downcast::<Text, _>(|text| text.runs()[0].clone())
+        .unwrap();
+    match run {
+        TextValueRunHandle::Core(run) => assert!(CoreRegistry::set_string_handle(
+            &run,
+            i32::from(TextValueRunBase::TEXT_PROPERTY_KEY),
+            "Ag".into()
+        )),
+        TextValueRunHandle::Runtime(run) => run.borrow_mut().set_bound_text("Ag".into()),
+    }
+    assert!(CoreRegistry::set_uint_handle(
+        &title,
+        i32::from(TextBase::VERTICAL_TRIM_VALUE_PROPERTY_KEY),
+        pack_text_vertical_trim(top, bottom)
+    ));
+    let machine = artboard.state_machine_at(0).expect("state machine 0");
+    let id = artboard.with_artboard(|board| board.base.view_model_id());
+    let vmi = file.with_file_mut(|file| {
+        if id == u32::MAX {
+            file.create_view_model_instance_for_artboard(artboard.core_handle())
+        } else {
+            file.create_view_model_instance_at(id as usize, 0)
+        }
+    });
+    machine.with_instance_mut(|machine| machine.bind_view_model_instance(vmi));
+    machine.advance_and_apply(0.0);
+    let height = parent(&title)
+        .with_downcast::<LayoutComponent, _>(LayoutComponent::layout_height)
+        .expect("title parent is LayoutComponent");
+    let size = title
+        .with_downcast::<Text, _>(|text| {
+            assert_eq!(text.shape().len(), 1);
+            assert!(!text.shape()[0].runs.is_empty());
+            text.shape()[0].runs[0].size
+        })
+        .unwrap();
+    (height, size)
+}
+
+/// Complete f3e99df8 regression: inspect the chosen shaped-run size, not its box.
+#[test]
+fn vertical_trim_does_not_shrink_a_fit_font_size_hug_text() {
+    let (untrimmed_height, untrimmed_size) =
+        check_trimmed_hug_fit(TextTrimTop::None, TextTrimBottom::None);
+    let (trimmed_height, trimmed_size) =
+        check_trimmed_hug_fit(TextTrimTop::Cap, TextTrimBottom::Alphabetic);
+    let approx = |actual: f32, expected: f32, margin: f64| {
+        let delta = (f64::from(actual) - f64::from(expected)).abs();
+        delta <= margin || delta <= 100.0 * f64::from(f32::EPSILON) * f64::from(expected).abs()
+    };
+    assert!(approx(untrimmed_size, 175.0, f64::from(0.01f32)));
+    assert!(approx(trimmed_size, untrimmed_size, f64::from(0.01f32)));
+    assert!(trimmed_height < untrimmed_height);
+    assert!(approx(untrimmed_height, 211.74, f64::from(0.5f32)));
+    assert!(approx(trimmed_height, 127.32, f64::from(0.5f32)));
 }

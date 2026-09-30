@@ -36,6 +36,8 @@ pub struct Shape {
     path_composer: RuntimePathComposerHandle,
     paths: Vec<CoreHandle>,
     world_bounds: Aabb,
+    local_bounds: std::cell::Cell<Aabb>,
+    local_bounds_clean: std::cell::Cell<bool>,
     world_length: f32,
     want_difference_path: bool,
     deformer: Option<CoreHandle>,
@@ -52,6 +54,8 @@ impl Shape {
             path_composer: RuntimePathComposerHandle::new(),
             paths: Vec::new(),
             world_bounds: Aabb::default(),
+            local_bounds: std::cell::Cell::new(Aabb::default()),
+            local_bounds_clean: std::cell::Cell::new(false),
             world_length: -1.0,
             want_difference_path: false,
             deformer: None,
@@ -179,6 +183,9 @@ impl Shape {
             .clone()
             .add_dirt_from_shape(self, ComponentDirt::PATH, true);
         self.world_length = -1.0;
+        // Geometry and path transforms invalidate this even when a transparent
+        // shape defers the composer update and therefore mark_bounds_dirty.
+        self.local_bounds_clean.set(false);
         self.invalidate_intrinsic_bounds();
         for constraint in self.base.constraints().to_vec() {
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
@@ -413,6 +420,7 @@ impl Shape {
         self.base.will_draw() && self.base.render_opacity() != 0.0
     }
     pub fn path_collapse_changed(&mut self) {
+        self.local_bounds_clean.set(false);
         let helper = self.path_composer.occurrence();
         self.path_composer
             .clone()
@@ -436,6 +444,7 @@ impl Shape {
     }
     pub fn mark_bounds_dirty(&mut self) {
         self.set_drawable_flags(self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0);
+        self.local_bounds_clean.set(false);
         self.world_length = -1.0;
         if let Some(participant) = self.layout_participant() {
             participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {
@@ -444,6 +453,8 @@ impl Shape {
         }
     }
 
+    /// Combined path control-point hulls in world space. The optional transform
+    /// is applied after each path's world transform.
     pub fn compute_world_bounds(&self, xform: Option<Mat2D>) -> Aabb {
         let mut result = Aabb::for_expansion();
         let mut first = true;
@@ -455,11 +466,9 @@ impl Shape {
                 if path.base.is_collapsed() {
                     return;
                 }
-                let mut raw = path.raw_path().clone();
                 let path_transform = Path::path_transform_for(object);
-                let matrix = xform.map(|x| path_transform * x).unwrap_or(path_transform);
-                raw.transform_in_place(matrix);
-                let bounds = raw.bounds();
+                let matrix = xform.map(|x| x * path_transform).unwrap_or(path_transform);
+                let bounds = matrix.map_bounding_box_points(path.raw_path().points());
                 if first {
                     first = false;
                     result = bounds;
@@ -474,7 +483,11 @@ impl Shape {
         self.compute_world_bounds(Some(self.base.world_transform().invert_or_identity()))
     }
     pub fn local_bounds(&self) -> Aabb {
-        self.compute_local_bounds()
+        if !self.local_bounds_clean.get() {
+            self.local_bounds_clean.set(true);
+            self.local_bounds.set(self.compute_local_bounds());
+        }
+        self.local_bounds.get()
     }
 
     pub fn compute_intrinsic_bounds(&self) -> Aabb {

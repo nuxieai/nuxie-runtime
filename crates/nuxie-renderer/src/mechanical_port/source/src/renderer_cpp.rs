@@ -547,11 +547,14 @@ impl Drop for RenderPath {
     fn drop(&mut self) {}
 }
 
-// bool rive::isWhiteSpace(Unichar c)
+// Upstream moved isWhiteSpace and Font::shapeText to text/text_engine.cpp.
+// This renderer adapter retains its established trait/type location.
 pub fn isWhiteSpace(c: Unichar) -> bool {
-    // 0x2028 is a Line separator.
-    // 0x200B is a Zero width space.
-    c <= b' ' as u32 || c == 0x2028 || c == 0x200B
+    c <= b' ' as u32
+        || c == 0x0085
+        || c == 0x1680
+        || (0x2000..=0x200B).contains(&c) && c != 0x2007
+        || matches!(c, 0x2028 | 0x2029 | 0x205F | 0x3000)
 }
 
 // Font::shapeText(Span<const Unichar> text,
@@ -593,8 +596,22 @@ pub trait FontShapeTextContract {
         // SimpleArray<Paragraph> paragraphs =
         //     onShapeText(text, runs, textDirectionFlag);
         let mut paragraphs = self.onShapeText(text, runs, textDirectionFlag);
-        // bool wantWhiteSpace = false;
-        let mut wantWhiteSpace = false;
+        use nuxie_render_api::line_break::{
+            compute_line_breaks, line_break_props, LineBreak, LineBreakClass,
+        };
+        let mut inlineBreaks = [LineBreak::None; 257];
+        let mut heapBreaks = Vec::new();
+        let breakCount = text.len() + 1;
+        if breakCount > inlineBreaks.len() {
+            heapBreaks.resize(breakCount, LineBreak::None);
+        }
+        let lineBreaks = if heapBreaks.is_empty() {
+            &mut inlineBreaks[..breakCount]
+        } else {
+            heapBreaks.as_mut_slice()
+        };
+        compute_line_breaks(text.data, lineBreaks);
+        let mut inWord = false;
         // GlyphRun* lastRun = nullptr;
         let mut lastRun: *mut GlyphRun = core::ptr::null_mut();
         // size_t reserveSize = text.size() / 4;
@@ -621,25 +638,39 @@ pub trait FontShapeTextContract {
                 }
                 // uint32_t glyphIndex = 0;
                 let mut glyphIndex = 0u32;
+                let mut lastOffset = u32::MAX;
                 // for (uint32_t offset : gr.textIndices)
                 for offset in gr.textIndices.iter().copied() {
+                    if offset == lastOffset {
+                        glyphIndex += 1;
+                        continue;
+                    }
+                    lastOffset = offset;
                     // Unichar unicode = text[offset];
                     let unicode = text[offset as usize];
-                    if unicode == '\n' as u32 || unicode == 0x2028 {
+                    if lineBreaks[offset as usize + 1] == LineBreak::Mandatory {
                         // breakBuilder.add(glyphIndex);
                         breakBuilder.add(glyphIndex);
                         // breakBuilder.add(glyphIndex);
                         breakBuilder.add(glyphIndex);
                     }
-                    if unicode == 0x2060 {
+                    if unicode >= 0x2060 && line_break_props(unicode).cls == LineBreakClass::WJ {
                         // joinerBuilder.add(offset);
                         joinerBuilder.add(offset);
                     }
-                    if wantWhiteSpace == isWhiteSpace(unicode) {
-                        // breakBuilder.add(glyphIndex);
+                    if inWord {
+                        if isWhiteSpace(unicode) {
+                            breakBuilder.add(glyphIndex);
+                            inWord = false;
+                        } else if lineBreaks[offset as usize] == LineBreak::Allowed
+                            && text[offset as usize - 1] != 0x00AD
+                        {
+                            breakBuilder.add(glyphIndex);
+                            breakBuilder.add(glyphIndex);
+                        }
+                    } else if !isWhiteSpace(unicode) {
                         breakBuilder.add(glyphIndex);
-                        // wantWhiteSpace = !wantWhiteSpace;
-                        wantWhiteSpace = !wantWhiteSpace;
+                        inWord = true;
                     }
                     // glyphIndex++;
                     glyphIndex += 1;
@@ -650,7 +681,7 @@ pub trait FontShapeTextContract {
             }
         }
         if !lastRun.is_null() {
-            if wantWhiteSpace {
+            if inWord {
                 // breakBuilder.add((uint32_t)lastRun->glyphs.size());
                 unsafe {
                     breakBuilder.add((*lastRun).glyphs.len() as u32);

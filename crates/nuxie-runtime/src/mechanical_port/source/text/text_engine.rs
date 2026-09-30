@@ -5,9 +5,18 @@ use std::sync::Arc;
 
 use crate::mechanical_port::source::math::raw_path::RawPath;
 use crate::mechanical_port::source::math::vec2d::Vec2D;
-pub use crate::mechanical_port::source::renderer::is_white_space;
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 use crate::mechanical_port::source::text::glyph_lookup::GlyphLookup;
+use nuxie_render_api::line_break::{compute_line_breaks, line_break_props, LineBreak, LineBreakClass};
+
+// No-break spaces U+00A0, U+2007 and U+202F are deliberately excluded.
+pub fn is_white_space(c: u32) -> bool {
+    c <= u32::from(b' ')
+        || c == 0x0085
+        || c == 0x1680
+        || (0x2000..=0x200B).contains(&c) && c != 0x2007
+        || matches!(c, 0x2028 | 0x2029 | 0x205F | 0x3000)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextSizing {
@@ -371,7 +380,19 @@ pub trait Font: Any + Send + Sync {
         });
 
         let mut paragraphs = self.on_shape_text(text, runs, text_direction_flag);
-        let mut want_white_space = false;
+        let mut inline_breaks = [LineBreak::None; 257];
+        let mut heap_breaks = Vec::new();
+        let break_count = text.len() + 1;
+        if break_count > inline_breaks.len() {
+            heap_breaks.resize(break_count, LineBreak::None);
+        }
+        let line_breaks = if heap_breaks.is_empty() {
+            &mut inline_breaks[..break_count]
+        } else {
+            heap_breaks.as_mut_slice()
+        };
+        compute_line_breaks(text, line_breaks);
+        let mut in_word = false;
         let reserve_size = text.len() / 4;
         let mut breaks = Vec::with_capacity(reserve_size);
         let mut joiners = Vec::with_capacity(reserve_size);
@@ -388,18 +409,33 @@ pub trait Font: Any + Send + Sync {
                 }
 
                 let glyph_run = &mut paragraphs[paragraph_index].runs[run_index];
+                let mut last_offset = u32::MAX;
                 for (glyph_index, offset) in glyph_run.text_indices.iter().copied().enumerate() {
+                    if offset == last_offset {
+                        continue;
+                    }
+                    last_offset = offset;
                     let unicode = text[offset as usize];
-                    if unicode == u32::from(b'\n') || unicode == 0x2028 {
+                    if line_breaks[offset as usize + 1] == LineBreak::Mandatory {
                         breaks.push(glyph_index as u32);
                         breaks.push(glyph_index as u32);
                     }
-                    if unicode == 0x2060 {
+                    if unicode >= 0x2060 && line_break_props(unicode).cls == LineBreakClass::WJ {
                         joiners.push(offset);
                     }
-                    if want_white_space == is_white_space(unicode) {
+                    if in_word {
+                        if is_white_space(unicode) {
+                            breaks.push(glyph_index as u32);
+                            in_word = false;
+                        } else if line_breaks[offset as usize] == LineBreak::Allowed
+                            && text[offset as usize - 1] != 0x00AD
+                        {
+                            breaks.push(glyph_index as u32);
+                            breaks.push(glyph_index as u32);
+                        }
+                    } else if !is_white_space(unicode) {
                         breaks.push(glyph_index as u32);
-                        want_white_space = !want_white_space;
+                        in_word = true;
                     }
                 }
 
@@ -409,7 +445,7 @@ pub trait Font: Any + Send + Sync {
 
         if let Some((paragraph_index, run_index)) = last_run {
             let last_run = &mut paragraphs[paragraph_index].runs[run_index];
-            if want_white_space {
+            if in_word {
                 breaks.push(last_run.glyphs.len() as u32);
             } else {
                 let last_break = breaks.last().copied().unwrap_or(0);

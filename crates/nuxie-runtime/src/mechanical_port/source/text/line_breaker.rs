@@ -269,6 +269,11 @@ impl<'a> RunIterator<'a> {
         }
 
         let run = &self.runs[self.run];
+        while self.index > 0
+            && run.text_indices[self.index as usize] == run.text_indices[self.index as usize - 1]
+        {
+            self.index -= 1;
+        }
         if !run.joiners.is_empty() && run.text_indices[self.index as usize] > 0 {
             let joiners = &run.joiners;
             let word_joiner_index = run.text_indices[self.index as usize] - 1;
@@ -325,6 +330,13 @@ impl<'a> RunIterator<'a> {
             self.index += 1;
         }
 
+        while self.index > 0
+            && (self.index as usize) < self.runs[self.run].glyphs.len()
+            && self.runs[self.run].text_indices[self.index as usize]
+                == self.runs[self.run].text_indices[self.index as usize - 1]
+        {
+            self.index += 1;
+        }
         if !self.runs[self.run].joiners.is_empty()
             && (self.index as usize) < self.runs[self.run].text_indices.len()
         {

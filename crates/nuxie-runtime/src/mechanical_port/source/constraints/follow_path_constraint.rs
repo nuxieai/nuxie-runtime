@@ -254,7 +254,10 @@ impl FollowPathConstraint {
         components_b
     }
 
-    pub fn update(&mut self, _value: ComponentDirt) {
+    pub fn update(&mut self, value: ComponentDirt) {
+        if value == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
         let target = self.base.target().expect("added constraint has target");
         let paths = target
             .with(|target| {

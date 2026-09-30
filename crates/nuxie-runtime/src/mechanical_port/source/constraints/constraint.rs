@@ -131,15 +131,28 @@ impl Constraint {
             .expect("Constraint parent component");
     }
 
-    pub fn on_dirty(&mut self, _dirt: ComponentDirt) {
+    pub fn on_dirty(&mut self, dirt: ComponentDirt) {
+        if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
         self.mark_constraint_dirty();
+    }
+
+    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+        if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
+        Self::mark_constraint_dirty_occurrence(owner);
     }
 
     pub(crate) fn on_dirty_from_shape(
         owner: &CoreHandle,
-        _dirt: ComponentDirt,
+        dirt: ComponentDirt,
         active_shape: &mut crate::mechanical_port::source::shapes::shape::Shape,
     ) {
+        if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
         // A path composer can dirty a constraint while its Shape is active.
         // Release the constraint before synchronously dirtying its parent:
         // that parent's dependents can lead back to the same Shape's paths.
@@ -157,10 +170,13 @@ impl Constraint {
 
     pub(crate) fn on_dirty_from_layout(
         owner: &CoreHandle,
-        _dirt: ComponentDirt,
+        dirt: ComponentDirt,
         active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
         active_handle: &CoreHandle,
     ) {
+        if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
         // Release this Constraint's arena slot before dirtying its parent. In
         // C++ the parent can be the Layout object whose setter is already on
         // the stack; the active-owner path preserves that reentrant call.

@@ -2786,8 +2786,7 @@ impl StateMachineInstance {
                 let property = if let Some(property) = self
                     .ensure_bindables()
                     .property_instances
-                    .get(&original_target)
-                    .cloned()
+                    .find(&original_target)
                 {
                     property
                 } else {
@@ -4888,8 +4887,7 @@ impl StateMachineInstance {
         self.bindables
             .get()?
             .property_instances
-            .get(property)
-            .cloned()
+            .find(property)
     }
 
     pub fn bindable_data_bind_to_source(&self, property: &CoreHandle) -> Option<CoreHandle> {
@@ -5122,14 +5120,15 @@ impl Drop for StateMachineInstance {
         }
         self.layers.clear();
         if let Some(bindables) = self.bindables.get_mut() {
-            for (_, property) in bindables.property_instances.drain() {
+            bindables.property_instances.for_each_instance(|property| {
                 property.remove_occurrence();
-            }
+            });
             for (_, properties) in bindables.transition_property_instances.drain() {
                 for (_, property) in properties {
                     property.remove_occurrence();
                 }
             }
+            bindables.property_instances.clear();
         }
         if let Some(reporting) = self.reporting.get_mut() {
             reporting.listener_view_models.clear();

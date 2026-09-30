@@ -319,7 +319,11 @@ impl Skin {
         }
     }
 
-    pub fn on_dirty(&mut self, _dirt: ComponentDirt) {
+    pub fn on_dirty(&mut self, dirt: ComponentDirt) {
+        // Opacity cannot move bones. Collapsed is retained state, not work.
+        if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
         if let Some(skinnable) = self.skinnable.clone() {
             skinnable
                 .with_mut(|object| {

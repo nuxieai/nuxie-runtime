@@ -28,6 +28,8 @@ ADAPTED_OWNERS = {
     "lua/lua_script_backend": Path("crates/nuxie-scripting/src/vm.rs"),
     "lua/lua_transition": Path("crates/nuxie-scripting/src/vm/lua_transition.rs"),
     "scripted/script_backend": Path("crates/nuxie-runtime/src/scripting.rs"),
+    # Shared by runtime and renderers, matching the upstream standalone enum.
+    "shapes/paint/layer_mask_mode": Path("crates/nuxie-render-api/src/layer_mask_mode.rs"),
 }
 # C++ object-layout padding across preprocessor configurations has no Rust ABI
 # counterpart. This is not an exemption for scripting lifecycle behavior.

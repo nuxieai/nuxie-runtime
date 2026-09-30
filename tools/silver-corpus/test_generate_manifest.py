@@ -141,8 +141,19 @@ TEST_CASE("renders selected board", "[silver]")
             if producer.id == "layout_grid_stack_grid_with_layouts"
         )
         self.assertEqual(grid.artboard, "GridWithLayouts")
+        self.assertEqual(grid.status, "exact")
         self.assertEqual(len(grid.actions), 362)
         self.assertEqual(sum(action["kind"] == "frame" for action in grid.actions), 120)
+
+        stack = next(
+            producer
+            for producer in producers
+            if producer.id == "layout_grid_stack_stack_with_layouts"
+        )
+        self.assertEqual(stack.artboard, "StackWithLayouts")
+        self.assertEqual(stack.status, "exact")
+        self.assertEqual(len(stack.actions), 362)
+        self.assertEqual(sum(action["kind"] == "frame" for action in stack.actions), 120)
 
         snap = next(
             producer

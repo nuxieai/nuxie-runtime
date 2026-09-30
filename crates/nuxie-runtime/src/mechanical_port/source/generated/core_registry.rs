@@ -3277,8 +3277,17 @@ pub fn component_update_handle(
             .unwrap_or(false);
     }
 
-    handle.with_mut(|object| component_update_before_transform(object, dirt));
-    if dirt.contains(ComponentDirt::TRANSFORM) {
+    let is_layout = handle.with(|object| object.as_layout_component().is_some()).unwrap_or(false);
+    if is_layout && dirt == ComponentDirt::FILTHY {
+        crate::mechanical_port::source::layout_component::LayoutComponent::interrupt_animation_occurrence(handle);
+    }
+    // LayoutComponent passes augmented dirt into Super so a solved pivot is
+    // rebuilt before the single world-transform/constraint pass.
+    let super_dirt = if is_layout && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+        && handle.with(|object| object.component_parent_handle().is_some()).unwrap_or(false)
+    { dirt | ComponentDirt::TRANSFORM } else { dirt };
+    handle.with_mut(|object| component_update_before_transform(object, super_dirt));
+    if super_dirt.contains(ComponentDirt::TRANSFORM) {
         handle.with_mut(|object| {
             if object.as_artboard().is_some() {
                 let (origin_x, origin_y) = object
@@ -3368,30 +3377,12 @@ pub fn component_update_handle(
         });
     }
 
-    if dirt == ComponentDirt::FILTHY
-        && handle
-            .with(|owner| owner.as_layout_component().is_some())
-            .unwrap_or(false)
-    {
-        crate::mechanical_port::source::layout_component::LayoutComponent::interrupt_animation_occurrence(handle);
-    }
-    let layout_constraints = handle
-        .with_mut(|object| {
-            let child_opacity = object.world_transform_child_opacity();
-            object
-                .as_layout_component_mut()
-                .map(|layout| {
-                    layout.update_after_transform_super(
-                        dirt,
-                        child_opacity.expect("LayoutComponent opacity"),
-                    )
-                })
-                .unwrap_or(false)
-        })
-        .unwrap_or(false);
-    if layout_constraints {
-        component_update_constraints_handle(handle);
-    }
+    handle.with_mut(|object| {
+        let child_opacity = object.world_transform_child_opacity();
+        if let Some(layout) = object.as_layout_component_mut() {
+            layout.update_after_transform_super(dirt, child_opacity.expect("LayoutComponent opacity"));
+        }
+    });
     handle.with_mut(|object| {
         if object.as_layout_component().is_some() {
             if dirt.intersects(

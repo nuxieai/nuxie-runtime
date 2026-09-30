@@ -1,36 +1,36 @@
 struct BC {
-    rc: f32,
-    Bd: f32,
-    Ff: f32,
+    sc: f32,
+    Cd: f32,
     Gf: f32,
-    q6_: u32,
-    Ob: u32,
-    rf: u32,
+    Hf: f32,
+    o6_: u32,
+    Pb: u32,
     sf: u32,
+    tf: u32,
     V7_: vec4<i32>,
-    ch: vec2<f32>,
-    Cd: vec2<f32>,
+    dh: vec2<f32>,
+    Dd: vec2<f32>,
     d2_: u32,
-    gh: f32,
-    f6_: u32,
-    U2_: f32,
-    Dd: f32,
-    mf: u32,
+    hh: f32,
+    d6_: u32,
+    T2_: f32,
+    Ed: f32,
+    nf: u32,
     C3_: f32,
     D3_: f32,
-    Ed: f32,
-    Zg: u32,
-    Nb: u32,
+    Fd: f32,
+    ah: u32,
+    Ob: u32,
 }
 
-@id(7) override Jh: bool = true;
-@id(6) override Ih: bool = true;
+@id(7) override Kh: bool = true;
+@id(6) override Jh: bool = true;
 
 @group(1) @binding(11)
 var HC: texture_2d<f32>;
 @group(1) @binding(13)
-var X5_: sampler;
-var<private> H5_1: vec2<f32>;
+var V5_: sampler;
+var<private> G5_1: vec2<f32>;
 @group(0) @binding(0)
 var<uniform> l: BC;
 var<private> H1_1: vec4<f32>;
@@ -38,7 +38,7 @@ var<private> A1_1: u32;
 @group(0) @binding(12)
 var YD: texture_2d<f32>;
 var<private> gl_FragCoord_1: vec4<f32>;
-var<private> jh: vec4<f32>;
+var<private> kh: vec4<f32>;
 var<private> L3_1: f32;
 
 fn main_1() {
@@ -51,9 +51,9 @@ fn main_1() {
     var phi_2538_: i32;
     var phi_2590_: vec3<f32>;
 
-    let _e42 = H5_1;
-    let _e44 = l.Dd;
-    let _e45 = textureSampleBias(HC, X5_, _e42, _e44);
+    let _e42 = G5_1;
+    let _e44 = l.Ed;
+    let _e45 = textureSampleBias(HC, V5_, _e42, _e44);
     let _e46 = H1_1;
     let _e47 = (_e45 * _e46);
     let _e50 = (_e47.w != 0f);
@@ -184,7 +184,7 @@ fn main_1() {
             break;
         }
         case 12: {
-            if Ih {
+            if Jh {
                 let _e222 = local_2;
                 let _e223 = clamp(_e222, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e223;
@@ -198,7 +198,7 @@ fn main_1() {
             break;
         }
         case 13: {
-            if Ih {
+            if Jh {
                 let _e271 = local_2;
                 let _e272 = clamp(_e271, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e272;
@@ -212,7 +212,7 @@ fn main_1() {
             break;
         }
         case 14: {
-            if Ih {
+            if Jh {
                 let _e320 = local_2;
                 let _e321 = clamp(_e320, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e321;
@@ -224,7 +224,7 @@ fn main_1() {
             break;
         }
         case 15: {
-            if Ih {
+            if Jh {
                 let _e346 = local_2;
                 let _e347 = clamp(_e346, vec3<f32>(0f, 0f, 0f), vec3<f32>(1f, 1f, 1f));
                 local_2 = _e347;
@@ -251,7 +251,7 @@ fn main_1() {
     let _e414 = gl_FragCoord_1;
     let _e416 = l.C3_;
     let _e418 = l.D3_;
-    if (Jh && _e50) {
+    if (Kh && _e50) {
         phi_2590_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e414.x) + (0.00583715f * _e414.y))))) * _e416) + _e418)) + _e413);
     } else {
         phi_2590_ = _e413;
@@ -259,18 +259,18 @@ fn main_1() {
     let _e433 = phi_2590_;
     let _e439 = vec4<f32>(_e433.x, _e412.y, _e412.z, _e412.w);
     let _e445 = vec4<f32>(_e439.x, _e433.y, _e439.z, _e439.w);
-    jh = vec4<f32>(_e445.x, _e445.y, _e433.z, _e445.w);
+    kh = vec4<f32>(_e445.x, _e445.y, _e433.z, _e445.w);
     return;
 }
 
 @fragment
-fn main(@location(0) H5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @location(4) @interpolate(flat, either) A1_: u32, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) L3_: f32) -> @location(0) vec4<f32> {
-    H5_1 = H5_;
+fn main(@location(0) G5_: vec2<f32>, @location(3) @interpolate(flat, either) H1_: vec4<f32>, @location(4) @interpolate(flat, either) A1_: u32, @builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(flat, either) L3_: f32) -> @location(0) vec4<f32> {
+    G5_1 = G5_;
     H1_1 = H1_;
     A1_1 = A1_;
     gl_FragCoord_1 = gl_FragCoord;
     L3_1 = L3_;
     main_1();
-    let _e11 = jh;
+    let _e11 = kh;
     return _e11;
 }

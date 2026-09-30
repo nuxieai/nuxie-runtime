@@ -1,26 +1,26 @@
 struct BC {
-    rc: f32,
-    Bd: f32,
-    Ff: f32,
+    sc: f32,
+    Cd: f32,
     Gf: f32,
-    q6_: u32,
-    Ob: u32,
-    rf: u32,
+    Hf: f32,
+    o6_: u32,
+    Pb: u32,
     sf: u32,
+    tf: u32,
     V7_: vec4<i32>,
-    ch: vec2<f32>,
-    Cd: vec2<f32>,
+    dh: vec2<f32>,
+    Dd: vec2<f32>,
     d2_: u32,
-    gh: f32,
-    f6_: u32,
-    U2_: f32,
-    Dd: f32,
-    mf: u32,
+    hh: f32,
+    d6_: u32,
+    T2_: f32,
+    Ed: f32,
+    nf: u32,
     C3_: f32,
     D3_: f32,
-    Ed: f32,
-    Zg: u32,
-    Nb: u32,
+    Fd: f32,
+    ah: u32,
+    Ob: u32,
 }
 
 struct gl_PerVertex {
@@ -64,7 +64,7 @@ fn main_1() {
     let _e43 = phi_239_;
     let _e45 = (f32(_e43) * 0.000015258789f);
     let _e48 = select(1f, 0f, ((_e31 & 1i) == 0i));
-    let _e50 = l.rc;
+    let _e50 = l.sc;
     phi_240_ = _e48;
     if (_e50 < 0f) {
         phi_240_ = (1f - _e48);

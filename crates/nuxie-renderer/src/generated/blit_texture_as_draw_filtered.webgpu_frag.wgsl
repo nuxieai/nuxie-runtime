@@ -1,41 +1,41 @@
 struct BC {
-    rc: f32,
-    Bd: f32,
-    Ff: f32,
+    sc: f32,
+    Cd: f32,
     Gf: f32,
-    q6_: u32,
-    Ob: u32,
-    rf: u32,
+    Hf: f32,
+    o6_: u32,
+    Pb: u32,
     sf: u32,
+    tf: u32,
     V7_: vec4<i32>,
-    ch: vec2<f32>,
-    Cd: vec2<f32>,
+    dh: vec2<f32>,
+    Dd: vec2<f32>,
     d2_: u32,
-    gh: f32,
-    f6_: u32,
-    U2_: f32,
-    Dd: f32,
-    mf: u32,
+    hh: f32,
+    d6_: u32,
+    T2_: f32,
+    Ed: f32,
+    nf: u32,
     C3_: f32,
     D3_: f32,
-    Ed: f32,
-    Zg: u32,
-    Nb: u32,
+    Fd: f32,
+    ah: u32,
+    Ob: u32,
 }
 
 @group(1) @binding(11)
 var IC: texture_2d<f32>;
 @group(1) @binding(13)
-var Cf: sampler;
+var Df: sampler;
 var<private> Z1_1: vec2<f32>;
-var<private> jh: vec4<f32>;
+var<private> kh: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> l: BC;
 
 fn main_1() {
     let _e6 = Z1_1;
-    let _e7 = textureSampleLevel(IC, Cf, _e6, 0f);
-    jh = _e7;
+    let _e7 = textureSampleLevel(IC, Df, _e6, 0f);
+    kh = _e7;
     return;
 }
 
@@ -43,6 +43,6 @@ fn main_1() {
 fn main(@location(0) Z1_: vec2<f32>) -> @location(0) vec4<f32> {
     Z1_1 = Z1_;
     main_1();
-    let _e3 = jh;
+    let _e3 = kh;
     return _e3;
 }

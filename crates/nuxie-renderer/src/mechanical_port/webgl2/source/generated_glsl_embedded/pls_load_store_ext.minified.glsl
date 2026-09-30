@@ -14,7 +14,7 @@ gl_Position.y=-gl_Position.y;
 #endif
 #ifdef XE
 #if __VERSION__>=310
-layout(binding=0,std140)uniform jj{uniform highp vec4 uh;}vh;
+layout(binding=0,std140)uniform kj{uniform highp vec4 vh;}wh;
 #else
 uniform mediump vec4 YE;
 #endif
@@ -28,16 +28,16 @@ __pixel_local_outEXT S1
 {layout(rgba8)mediump vec4 k0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 m4;layout(r32ui)highp uint H7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef ZE
-layout(location=0)inout mediump vec4 db;
+layout(location=0)inout mediump vec4 eb;
 #endif
 #endif
 #ifdef FE
-layout(location=0)out mediump vec4 db;
+layout(location=0)out mediump vec4 eb;
 #endif
 void main(){
 #ifdef XE
 #if __VERSION__>=310
-k0=vh.uh;
+k0=wh.vh;
 #else
 k0=YE;
 #endif
@@ -46,7 +46,7 @@ k0=YE;
 #ifdef GL_ARM_shader_framebuffer_fetch
 k0=gl_LastFragColorARM;
 #else
-k0=db;
+k0=eb;
 #endif
 #endif
 #ifdef GE
@@ -56,10 +56,10 @@ H7=0u;
 h0=0u;
 #endif
 #ifdef FE
-db=k0;
+eb=k0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 wh;void main(){wh=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 xh;void main(){xh=vec4(0,1,0,1);}
 #endif
 #endif

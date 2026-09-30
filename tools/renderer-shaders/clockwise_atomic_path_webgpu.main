@@ -14,7 +14,6 @@
 #define DRAW_PATH
 #endif
 #define RENDER_MODE_CLOCKWISE_ATOMIC
-#define NEVER_GENERATE_PREMULTIPLIED_PAINT_COLORS
 #include "glsl.minified.glsl"
 
 #undef PLS_DECL4F

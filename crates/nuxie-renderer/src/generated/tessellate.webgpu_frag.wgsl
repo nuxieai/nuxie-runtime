@@ -1,34 +1,34 @@
 struct BC {
-    rc: f32,
-    Bd: f32,
-    Ff: f32,
+    sc: f32,
+    Cd: f32,
     Gf: f32,
-    q6_: u32,
-    Ob: u32,
-    rf: u32,
+    Hf: f32,
+    o6_: u32,
+    Pb: u32,
     sf: u32,
+    tf: u32,
     V7_: vec4<i32>,
-    ch: vec2<f32>,
-    Cd: vec2<f32>,
+    dh: vec2<f32>,
+    Dd: vec2<f32>,
     d2_: u32,
-    gh: f32,
-    f6_: u32,
-    U2_: f32,
-    Dd: f32,
-    mf: u32,
+    hh: f32,
+    d6_: u32,
+    T2_: f32,
+    Ed: f32,
+    nf: u32,
     C3_: f32,
     D3_: f32,
-    Ed: f32,
-    Zg: u32,
-    Nb: u32,
+    Fd: f32,
+    ah: u32,
+    Ob: u32,
 }
 
-var<private> C6_1: vec4<f32>;
-var<private> D6_1: vec4<f32>;
+var<private> A6_1: vec4<f32>;
+var<private> B6_1: vec4<f32>;
 var<private> O4_1: vec4<f32>;
 var<private> I7_1: u32;
 var<private> P4_1: vec3<f32>;
-var<private> jh: vec4<u32>;
+var<private> kh: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> l: BC;
 
@@ -73,10 +73,10 @@ fn main_1() {
     var phi_1058_: vec4<u32>;
     var local_2: f32;
 
-    let _e43 = C6_1;
+    let _e43 = A6_1;
     let _e44 = _e43.xy;
     let _e45 = _e43.zw;
-    let _e46 = D6_1;
+    let _e46 = B6_1;
     let _e47 = _e46.xy;
     let _e48 = _e46.zw;
     if any((_e44 != _e45)) {
@@ -316,18 +316,18 @@ fn main_1() {
         phi_1058_ = vec4<u32>(_e337.x, _e337.y, bitcast<u32>((_e322 - (floor((_e322 / 6.2831855f)) * 6.2831855f))), _e337.w);
     }
     let _e361 = phi_1058_;
-    jh = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
+    kh = vec4<u32>(_e361.x, _e361.y, _e361.z, _e134);
     return;
 }
 
 @fragment
-fn main(@location(0) C6_: vec4<f32>, @location(1) D6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
-    C6_1 = C6_;
-    D6_1 = D6_;
+fn main(@location(0) A6_: vec4<f32>, @location(1) B6_: vec4<f32>, @location(2) O4_: vec4<f32>, @location(4) @interpolate(flat, either) I7_: u32, @location(3) P4_: vec3<f32>) -> @location(0) vec4<u32> {
+    A6_1 = A6_;
+    B6_1 = B6_;
     O4_1 = O4_;
     I7_1 = I7_;
     P4_1 = P4_;
     main_1();
-    let _e11 = jh;
+    let _e11 = kh;
     return _e11;
 }

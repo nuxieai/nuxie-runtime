@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_clockwise_atomic_path.frag.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "5d7ab77e6a0fc9f91e69fd08c8b470c7d072d555";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_clockwise_atomic_path.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "2559c79422c61f0ab83655c2a11c8f61d5d3d47e1b10c29170d608e70cd49701";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 384;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 14527;
+    "3e3c1563d680fb4287ed03672d1277ca7f8e763318100d07109ddd69565cf396";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 387;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 14839;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_CLOCKWISE_ATOMIC_PATH_FRAG_SOURCE: &str = r###"/*
@@ -38,7 +38,7 @@ FRAG_STORAGE_BUFFER_BLOCK_BEGIN
 STORAGE_BUFFER_U32_ATOMIC(COVERAGE_BUFFER_IDX, CoverageBuffer, coverageBuffer);
 FRAG_STORAGE_BUFFER_BLOCK_END
 
-INLINE void apply_stroke_coverage(INOUT(float) paintAlpha,
+INLINE half apply_stroke_coverage(float paintAlpha,
                                   half fragCoverage,
                                   uint coverageIndex,
                                   OUT(uint) preexistingCoverageValue,
@@ -52,7 +52,7 @@ INLINE void apply_stroke_coverage(INOUT(float) paintAlpha,
         // if another fragment from the path will get drawn on top. This is
         // because any fragment drawn on top will be the same color, and any
         // color blended onto a fully opaque version of itself is a no-op.
-        return;
+        return 1.;
     }
 #endif
 
@@ -99,10 +99,10 @@ INLINE void apply_stroke_coverage(INOUT(float) paintAlpha,
 #endif
     }
 
-    paintAlpha *= X;
+    return X;
 }
 
-INLINE void apply_fill_coverage(INOUT(float) paintAlpha,
+INLINE half apply_fill_coverage(float paintAlpha,
                                 half fragCoverageRemaining,
                                 uint coverageIndex,
                                 OUT(uint) preexistingCoverageValue,
@@ -127,7 +127,7 @@ INLINE void apply_fill_coverage(INOUT(float) paintAlpha,
         // top. This is because any fragment drawn on top will be the same
         // color, and any color blended onto a fully opaque version of itself is
         // a no-op.
-        return;
+        return 1.;
     }
 #endif
 
@@ -212,7 +212,7 @@ INLINE void apply_fill_coverage(INOUT(float) paintAlpha,
              incremental_clockwise_coverage(c0, c1, paintAlpha);
     }
 
-    paintAlpha *= X;
+    return X;
 }
 
 CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
@@ -303,24 +303,25 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
     fragCoverage = clamp(fragCoverage, .0, maxCoverage);
 
     uint preexistingCoverageValue;
+    half incrementalCoverage;
     float newCoverage;
 #ifndef @DRAW_INTERIOR_TRIANGLES
     if (is_stroke(v_coverages))
     {
-        apply_stroke_coverage(paintColor.a,
-                              fragCoverage,
-                              coverageIndex,
-                              preexistingCoverageValue,
-                              newCoverage);
+        incrementalCoverage = apply_stroke_coverage(paintColor.a,
+                                                    fragCoverage,
+                                                    coverageIndex,
+                                                    preexistingCoverageValue,
+                                                    newCoverage);
     }
     else // It's a fill.
 #endif   // !DRAW_INTERIOR_TRIANGLES
     {
-        apply_fill_coverage(paintColor.a,
-                            fragCoverage,
-                            coverageIndex,
-                            preexistingCoverageValue,
-                            newCoverage);
+        incrementalCoverage = apply_fill_coverage(paintColor.a,
+                                                  fragCoverage,
+                                                  coverageIndex,
+                                                  preexistingCoverageValue,
+                                                  newCoverage);
     }
 
 #ifdef @ENABLE_DITHER
@@ -333,7 +334,10 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
     }
 #endif
 
-#ifndef @FIXED_FUNCTION_COLOR_OUTPUT
+#ifdef @FIXED_FUNCTION_COLOR_OUTPUT
+    paintColor *= incrementalCoverage;
+#else
+    paintColor.a *= incrementalCoverage;
     if (paintColor.a > .0)
     {
         bool wasBlendColorValid =
@@ -386,9 +390,8 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
             paintColor.rgb = PLS_LOAD4F_UAV(blendColorBuffer).rgb;
         }
     }
-#endif
-
     paintColor.rgb *= paintColor.a;
+#endif
 
 #ifdef @ENABLE_DITHER
     paintColor.rgb =

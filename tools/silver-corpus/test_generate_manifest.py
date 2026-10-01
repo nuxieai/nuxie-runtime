@@ -7,6 +7,34 @@ import generate_manifest
 
 
 class SilverManifestGeneratorTests(unittest.TestCase):
+    def test_reenrolled_serialized_producers_preserve_binding_mutation_and_frames(self):
+        for silver_id, frames, seconds in [
+            ("data_viz_demo", 12, 0.064),
+            ("db_health_tracker", 62, 0.016),
+            ("echo_show_demo", 62, 0.1),
+        ]:
+            with self.subTest(silver_id=silver_id):
+                actions = generate_manifest.p1q_round2_actions(silver_id)
+                self.assertIn(silver_id, generate_manifest.EXACT)
+                self.assertNotIn(silver_id, generate_manifest.CLASSIFIED_RUNTIME_BLOCKERS)
+                prefix = [
+                    {"kind": "bind-selected-artboard-authored-view-model", "if_present": False},
+                    {"kind": "advance", "target": "state-machine", "seconds": 0.1},
+                    {"kind": "draw"},
+                ]
+                if silver_id == "data_viz_demo":
+                    prefix.append({"kind": "set-view-model-number", "property": "item1/value", "value": 20.0})
+                expected = prefix + [
+                    entry
+                    for _ in range(frames)
+                    for entry in [
+                        {"kind": "frame"},
+                        {"kind": "advance", "target": "state-machine", "seconds": seconds},
+                        {"kind": "draw"},
+                    ]
+                ]
+                self.assertEqual(actions, tuple(expected))
+
     def test_collapsed_databinds_keeps_only_the_three_upstream_draws(self):
         actions = generate_manifest.p1q_view_model_actions("collapsed_databinds_test")
         self.assertEqual([a["kind"] for a in actions[:3]],

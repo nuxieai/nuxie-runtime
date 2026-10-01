@@ -160,11 +160,6 @@ PROVENANCE_UNKNOWN = {
         "stateful VM instances are not created and the test may be revisited."
     ),
 }
-FORCED_BLOCKERS = {
-    "db_health_tracker": "runtime-frame-loop-nontermination",
-    "echo_show_demo": "renderer-paint-allocation",
-    "data_viz_demo": "runtime-frame-loop-nontermination-after-nested-view-model-mutation",
-}
 CLASSIFIED_RUNTIME_BLOCKERS = {
     "bindable_artboard_nesty": "external-bindable-artboard-with-bound-view-model-injection",
     "image_binding_with_listener": "live-decoded-image-view-model-payload-injection",
@@ -184,6 +179,9 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
 }
 EXACT = (
     "additive_blendmode_test",
+    "data_viz_demo",
+    "db_health_tracker",
+    "echo_show_demo",
     "focus_traversal_click_to_focus",
     "focus_traversal_data_bound",
     "layout_text_match",
@@ -1960,9 +1958,22 @@ def p1q_round2_actions(silver_id: str) -> tuple[dict[str, object], ...] | None:
         ]
         return tuple(actions)
 
-    if silver_id == "data_viz_demo":
-        actions = [bind, advance(0.1), draw, action("set-view-model-number", property="item1/value", value=20.0)]
-        actions += repeated_frames(30, 0.064)
+    if silver_id in {"data_viz_demo", "db_health_tracker", "echo_show_demo"}:
+        # serialized_rendering_test.cpp binds authored instance 0 directly
+        # to machine 0, using a fresh instance only for an unset viewModelId.
+        actions = [
+            action("bind-selected-artboard-authored-view-model", if_present=False),
+            advance(0.1),
+            draw,
+        ]
+        if silver_id == "data_viz_demo":
+            actions.append(action("set-view-model-number", property="item1/value", value=20.0))
+            # int(0.8f / 0.064f), not the old dormant 30-frame recipe.
+            actions += repeated_frames(12, 0.064)
+        else:
+            # Both producers use int(1.0f / 0.016f) frames; echo advances
+            # 0.1 seconds each frame even though its count uses 0.016.
+            actions += repeated_frames(62, 0.1 if silver_id == "echo_show_demo" else 0.016)
         return tuple(actions)
 
     if silver_id == "data_bind_artboard_input":
@@ -2979,11 +2990,7 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             action("draw"),
                         )
                         blocker = None
-                    blocker = FORCED_BLOCKERS.get(
-                        silver_id, CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
-                    )
-                    if blocker in FORCED_BLOCKERS.values():
-                        actions = ()
+                    blocker = CLASSIFIED_RUNTIME_BLOCKERS.get(silver_id, blocker)
                     if blocker is not None:
                         status = "unsupported-feature"
                 line = test_line + chunk.count("\n", 0, match.start())

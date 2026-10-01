@@ -203,14 +203,16 @@ impl Mat2D {
     pub fn decompose(&self) -> TransformComponents {
         let (m0, m1, m2, m3) = (self[0], self[1], self[2], self[3]);
         let rotation = m1.atan2(m0);
-        let denom = m0 * m0 + m1 * m1;
+        // Match the three contracted product sums in the pinned production
+        // C++ Mat2D::decompose (the second product rounds before each FMA).
+        let denom = m0.mul_add(m0, m1 * m1);
         let scale_x = denom.sqrt();
         let scale_y = if scale_x == 0.0 {
             0.0
         } else {
-            (m0 * m3 - m2 * m1) / scale_x
+            m0.mul_add(m3, -(m2 * m1)) / scale_x
         };
-        let skew = (m0 * m2 + m1 * m3).atan2(denom);
+        let skew = m0.mul_add(m2, m1 * m3).atan2(denom);
         let mut result = TransformComponents::default();
         result.set_x(self[4]);
         result.set_y(self[5]);
@@ -433,7 +435,7 @@ mod tests {
     }
 
     #[test]
-    fn decompose_and_compose_match_pinned_source_arithmetic() {
+    fn decompose_and_compose_match_pinned_production_arithmetic() {
         let world = Mat2D::new(
             f32::from_bits(0xbe42_8f5c),
             f32::from_bits(0xb2f6_7039),
@@ -449,10 +451,10 @@ mod tests {
         assert_eq!(components.scale_x().to_bits(), 0x3e42_8f5c);
         assert_eq!(components.scale_y().to_bits(), 0x3e42_8f5c);
         assert_eq!(components.rotation().to_bits(), 0xc049_0fda);
-        // Upstream spells this as ordinary products and a sum. Keeping an
-        // explicit fused multiply-add here perturbs repeated IK decomposition
-        // enough to fail the upstream 1000-iteration test.
-        assert_eq!(components.skew().to_bits(), 0);
+        // Captured from the unmodified bbf3c4d8 scripted-release librive.a
+        // (Apple clang 21, -O2 -flto=full). A noncontracted expression produces
+        // zero here, unlike that production C++ implementation.
+        assert_eq!(components.skew().to_bits(), 0xa7c5_a99a);
 
         let recomposed = Mat2D::compose(&components);
         assert_eq!(
@@ -460,11 +462,31 @@ mod tests {
             [
                 0xbe42_8f5c,
                 0xb2f6_7039,
-                0x32f6_7039,
+                0x32f6_703a,
                 0xbe42_8f5c,
                 0x43c6_73b2,
                 0x43a0_b75d,
             ]
         );
+    }
+
+    #[test]
+    fn decompose_matches_pinned_production_scale_and_skew_bits() {
+        let world = Mat2D::new(
+            f32::from_bits(0xbfc2_f51c),
+            f32::from_bits(0x3e29_f8e0),
+            f32::from_bits(0xbf55_09ca),
+            f32::from_bits(0xbe5a_5062),
+            f32::from_bits(0x43c9_945b),
+            f32::from_bits(0x4400_5a6c),
+        );
+        // The same pinned production archive supplies these independent bits.
+        let components = world.decompose();
+        assert_eq!(components.x().to_bits(), 0x43c9_945b);
+        assert_eq!(components.y().to_bits(), 0x4400_5a6c);
+        assert_eq!(components.scale_x().to_bits(), 0x3fc4_1c9d);
+        assert_eq!(components.scale_y().to_bits(), 0x3e9a_acd5);
+        assert_eq!(components.rotation().to_bits(), 0x4042_1d57);
+        assert_eq!(components.skew().to_bits(), 0x3ef7_7a4f);
     }
 }

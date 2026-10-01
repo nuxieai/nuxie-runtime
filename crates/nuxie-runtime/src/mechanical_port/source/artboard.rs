@@ -1056,7 +1056,12 @@ impl Artboard {
                     return code;
                 }
             }
-            for state_machine in state_machines.clone() {
+            // The generated state machine was appended after the dirty phase.
+            // Like the source, clean the current list, including that machine.
+            let clean_state_machines = root
+                .with_downcast::<Artboard, _>(|artboard| artboard.state_machines.clone())
+                .unwrap_or_default();
+            for state_machine in clean_state_machines {
                 let code = state_machine
                     .with_mut(|state_machine| state_machine.on_added_clean(&mut context))
                     .unwrap_or(StatusCode::MissingObject);
@@ -2462,14 +2467,9 @@ impl Artboard {
                     })
                     .expect("live Artboard dependency walk")
                 };
-                let dirt = component
-                    .with_component(|component| component.dirt())
-                    .expect("live component in dependency graph");
-                if dirt == ComponentDirt::NONE || dirt.contains(ComponentDirt::COLLAPSED) {
+                if !component.update_if_dirty() {
                     continue;
                 }
-                component.with_component_mut(|component| component.set_dirt(ComponentDirt::NONE));
-                component.update(dirt);
                 // Read fresh dirt depth after the callback, through the same
                 // live runtime receiver already retained for this walk. No
                 // receiver borrow is carried across component.update().
@@ -2490,7 +2490,7 @@ impl Artboard {
     }
 
     pub fn clean_layout(&mut self, layout_component: &CoreHandle) {
-        assert!(!self.is_cleaning_dirty_layouts);
+        debug_assert!(!self.is_cleaning_dirty_layouts);
         if self.is_cleaning_dirty_layouts {
             eprintln!("Artboard::cleanLayout - trying to remove a dirty layout during clean pass!");
             return;
@@ -2508,7 +2508,7 @@ impl Artboard {
 
     fn begin_layout_dirty(&mut self, layout_component: CoreHandle) -> bool {
         self.wake_if_quiet_row();
-        assert!(!self.is_cleaning_dirty_layouts);
+        debug_assert!(!self.is_cleaning_dirty_layouts);
         if self.is_cleaning_dirty_layouts {
             eprintln!(
                 "Artboard::markLayoutDirty - trying to mark a layout dirty during clean pass!"
@@ -2812,13 +2812,12 @@ impl Artboard {
         }
         let mut drawable = last;
         while let Some(current) = drawable {
+            if !current.is_hidden() {
+                if let Some(core) = current.hit_test(info, &matrix) {
+                    return Some(core);
+                }
+            }
             drawable = current.with(Drawable::next_drawable).flatten();
-            if current.is_hidden() {
-                continue;
-            }
-            if let Some(core) = current.hit_test(info, &matrix) {
-                return Some(core);
-            }
         }
         None
     }
@@ -3126,12 +3125,13 @@ impl Artboard {
         renderer: &mut Renderer,
         visitor: Option<RuntimeDrawVisitor>,
     ) {
-        let Some((save, first_drawable)) = root
-            .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
-            .flatten()
-        else {
+        let visible = root.with_downcast::<Artboard, _>(|artboard| {
+            artboard.dirty_state.0.did_change.set(false);
+            artboard.child_opacity() != 0.0
+        });
+        if visible != Some(true) {
             return;
-        };
+        }
         let previous = root
             .with_downcast_mut::<Artboard, _>(|a| {
                 std::mem::replace(&mut a.draw_visitor, visitor.clone())
@@ -3140,6 +3140,12 @@ impl Artboard {
         let _scope = DrawVisitorScope {
             artboard: root.clone(),
             previous,
+        };
+        let Some((save, first_drawable)) = root
+            .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
+            .flatten()
+        else {
+            return;
         };
         Self::draw_drawable_range_handle(root, renderer, first_drawable, None);
         if save {
@@ -3151,7 +3157,6 @@ impl Artboard {
         &mut self,
         renderer: &mut Renderer,
     ) -> Option<(bool, Option<RuntimeDrawableOccurrence>)> {
-        self.dirty_state.0.did_change.set(false);
         if self.child_opacity() == 0.0 {
             return None;
         }
@@ -3296,47 +3301,49 @@ impl Artboard {
             if stop.as_ref() == Some(&d) {
                 break;
             }
-            current = d.with(Drawable::prev_drawable).flatten();
-            let prev = empty_clips;
-            empty_clips += d.empty_clip_count();
-            if !d.will_draw() || empty_clips != prev || empty_clips > 0 {
-                continue;
-            }
-            if d.is_clip_start() || d.is_clip_end() || d.is_mask_start() || d.is_mask_end() {
-                continue;
-            }
-            drew = true;
-            let mut painted = Aabb::default();
-            let fidelity = d.painted_world_bounds(&mut painted);
-            if fidelity == BoundsFidelity::None {
-                *any_drawn = true;
-                return BoundsFidelity::None;
-            }
-            if fidelity == BoundsFidelity::Approximate {
-                worst = BoundsFidelity::Approximate;
-                let relative = 0.25
-                    * if painted.width() < painted.height() {
-                        painted.height()
+            'drawable: {
+                let prev = empty_clips;
+                empty_clips += d.empty_clip_count();
+                if !d.will_draw() || empty_clips != prev || empty_clips > 0 {
+                    break 'drawable;
+                }
+                if d.is_clip_start() || d.is_clip_end() || d.is_mask_start() || d.is_mask_end() {
+                    break 'drawable;
+                }
+                drew = true;
+                let mut painted = Aabb::default();
+                let fidelity = d.painted_world_bounds(&mut painted);
+                if fidelity == BoundsFidelity::None {
+                    *any_drawn = true;
+                    return BoundsFidelity::None;
+                }
+                if fidelity == BoundsFidelity::Approximate {
+                    worst = BoundsFidelity::Approximate;
+                    let relative = 0.25
+                        * if painted.width() < painted.height() {
+                            painted.height()
+                        } else {
+                            painted.width()
+                        };
+                    let absolute = if raster_scale > 0.0 {
+                        8.0 / raster_scale
                     } else {
-                        painted.width()
+                        8.0
                     };
-                let absolute = if raster_scale > 0.0 {
-                    8.0 / raster_scale
-                } else {
-                    8.0
-                };
-                let slop = if relative < absolute {
-                    absolute
-                } else {
-                    relative
-                };
-                if slop.is_finite() && slop > 0.0 {
-                    painted = painted.outset(slop, slop);
+                    let slop = if relative < absolute {
+                        absolute
+                    } else {
+                        relative
+                    };
+                    if slop.is_finite() && slop > 0.0 {
+                        painted = painted.outset(slop, slop);
+                    }
+                }
+                if !painted.is_empty_or_nan() {
+                    accumulated.expand(painted);
                 }
             }
-            if !painted.is_empty_or_nan() {
-                accumulated.expand(painted);
-            }
+            current = d.with(Drawable::prev_drawable).flatten();
         }
         *any_drawn = drew;
         if !drew {
@@ -4252,28 +4259,56 @@ impl Artboard {
     }
 
     pub fn is_ancestor(&mut self, artboard: Option<CoreHandle>) -> bool {
+        let receiver = crate::mechanical_port::source::core::CoreObject::core(self).handle();
         let candidate_source = artboard.as_ref().and_then(|artboard| {
+            if receiver.as_ref() == Some(artboard) {
+                return self.artboard_source_handle();
+            }
             artboard
                 .with_downcast::<Artboard, _>(Artboard::artboard_source_handle)
                 .flatten()
         });
-        if candidate_source.is_some() && candidate_source == self.artboard_source_handle() {
+        #[cfg(feature = "tools")]
+        let candidate_id = artboard.as_ref().and_then(|candidate| {
+            if receiver.as_ref() == Some(candidate) {
+                Some(self.artboard_id())
+            } else {
+                candidate.with_downcast::<Artboard, _>(Artboard::artboard_id)
+            }
+        });
+        self.is_ancestor_source(
+            candidate_source,
+            #[cfg(feature = "tools")]
+            candidate_id,
+        )
+    }
+
+    // Resolve the candidate once before following parents: it may be the
+    // receiver whose checked mutable borrow is active on the caller's stack.
+    fn is_ancestor_source(
+        &mut self,
+        candidate_source: Option<CoreHandle>,
+        #[cfg(feature = "tools")] candidate_id: Option<u16>,
+    ) -> bool {
+        if candidate_source.is_some() && candidate_source == self.artboard_source {
             return true;
         }
         if let Some(parent) = self.parent_artboard() {
             return parent
-                .with_downcast_mut::<Artboard, _>(|parent| parent.is_ancestor(artboard.clone()))
+                .with_downcast_mut::<Artboard, _>(|parent| {
+                    parent.is_ancestor_source(
+                        candidate_source,
+                        #[cfg(feature = "tools")]
+                        candidate_id,
+                    )
+                })
                 .unwrap_or(false);
         }
         #[cfg(feature = "tools")]
-        if let (Some(callback), Some(artboard)) = (self.is_ancestor_callback, artboard)
-            && artboard
-                .with_downcast::<Artboard, _>(|artboard| {
-                    callback(self.callback_user_data, artboard.artboard_id()) == 1
-                })
-                .unwrap_or(false)
-        {
-            return true;
+        if let (Some(callback), Some(id)) = (self.is_ancestor_callback, candidate_id) {
+            if callback(self.callback_user_data, id) == 1 {
+                return true;
+            }
         }
         false
     }
@@ -5718,10 +5753,10 @@ impl Drop for Artboard {
         }
         self.unbind_for_drop();
 
-        if self.dispose_source_for_replacement {
-            // Identify refcounted VM objects before destroying any hierarchy
-            // components. They remain owned by the existing arena so externally
-            // retained VM handles and their values continue to resolve.
+        if self.dispose_source_for_replacement || self.is_instance {
+            // Identify VM objects before destroying hierarchy components.
+            // Replacement of an authored definition leaves those occurrences
+            // in the existing arena; an instance retires them after hierarchy.
             let vm_objects: std::collections::HashSet<_> = self
                 .objects
                 .iter()
@@ -5748,18 +5783,24 @@ impl Drop for Artboard {
                     drop(self.core_arena.remove(object));
                 }
             }
+            if self.is_instance {
+                // As in Artboard::~Artboard, hierarchy destructors run while
+                // VM occurrences still resolve; bindings are deleted afterward.
+                for object in self
+                    .objects
+                    .iter()
+                    .skip(1)
+                    .chain(self.invalid_objects.iter())
+                    .flatten()
+                {
+                    if vm_objects.contains(object) {
+                        drop(self.core_arena.remove(object));
+                    }
+                }
+            }
         }
         self.data_bind_container.delete_data_binds();
         if self.is_instance {
-            for object in self
-                .objects
-                .iter()
-                .skip(1)
-                .chain(self.invalid_objects.iter())
-                .flatten()
-            {
-                self.core_arena.remove(object);
-            }
             if let Some(root) =
                 crate::mechanical_port::source::core::CoreObject::core(self).handle()
             {
@@ -5846,6 +5887,10 @@ impl std::ops::DerefMut for Artboard {
 
 pub struct ArtboardInstance {
     pub base: Artboard,
+    // File::instanceArtboard supplies this owning reference. Source artboards
+    // and instances made directly from definitions retain only weak File links,
+    // so the File's own arena does not acquire a back-reference to its owner.
+    retained_file: Option<RuntimeFileHandle>,
     /// Host observation state belongs to the occurrence, not a particular player.
     /// It does not consume or alter native listener delivery queues.
     pub(crate) host_nested_event_sequence: u64,
@@ -6111,6 +6156,7 @@ impl Default for ArtboardInstance {
     fn default() -> Self {
         Self {
             base: Artboard::default(),
+            retained_file: None,
             host_nested_event_sequence: 0,
         }
     }
@@ -6119,6 +6165,27 @@ impl Default for ArtboardInstance {
 #[cfg(test)]
 mod update_receiver_tests {
     use super::*;
+
+    #[test]
+    fn layout_cleaning_guards_preserve_debug_assert_and_release_return_contract() {
+        let mut artboard = Artboard::default();
+        let arena = CoreArena::default();
+        let layout = arena.insert(LayoutComponent::default());
+        artboard.dirty_layout.insert(layout.clone());
+        artboard.is_cleaning_dirty_layouts = true;
+        let clean = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            artboard.clean_layout(&layout);
+        }));
+        let dirty = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            artboard.begin_layout_dirty(layout.clone())
+        }));
+        assert_eq!(clean.is_err(), cfg!(debug_assertions));
+        assert_eq!(dirty.is_err(), cfg!(debug_assertions));
+        if let Ok(accepted) = dirty {
+            assert!(!accepted);
+        }
+        assert!(artboard.dirty_layout.contains(&layout));
+    }
 
     #[test]
     fn runtime_update_releases_scoped_receiver_and_preserves_last_owner_cleanup() {
@@ -6378,6 +6445,7 @@ impl ArtboardInstance {
     }
 
     pub fn set_file(&mut self, file: Option<RuntimeFileWeakHandle>) {
+        self.retained_file = file.as_ref().and_then(RuntimeFileWeakHandle::upgrade);
         self.base.file = file.unwrap_or_default();
     }
 

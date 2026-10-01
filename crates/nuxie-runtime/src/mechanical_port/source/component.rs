@@ -457,6 +457,77 @@ impl ComponentOccurrenceHandle {
         self.with_component_mut(Component::update_collapsables);
         true
     }
+    /// Artboard::updateComponents' per-occurrence preparation. Read under a
+    /// shared borrow so clean/collapsed entries need no exclusive access; clear
+    /// dirt only for an actual update and release preparation before callbacks.
+    pub(crate) fn update_if_dirty(&self) -> bool {
+        let needs_update = |dirt: ComponentDirt| {
+            dirt != ComponentDirt::NONE && !dirt.contains(ComponentDirt::COLLAPSED)
+        };
+        match self {
+            Self::Authored(handle) => {
+                let prepared = handle
+                    .with(|object| {
+                        let component = object.as_component().expect("dependency graph Component");
+                        let dirt = component.dirt();
+                        needs_update(dirt).then(|| (dirt, object.component_update_handler()))
+                    })
+                    .expect("live component in dependency graph");
+                let Some((dirt, handler)) = prepared else {
+                    return false;
+                };
+                handle.with_mut(|object| {
+                    object
+                        .as_component_mut()
+                        .expect("dependency graph Component")
+                        .set_dirt(ComponentDirt::NONE);
+                });
+                if let Some(update) = handler {
+                    update(handle, dirt);
+                } else {
+                    handle.with_mut(|object| object.component_update(dirt));
+                }
+            }
+            Self::PathComposer(handle) => {
+                let owner = handle
+                    .upgrade()
+                    .expect("live component in dependency graph");
+                let dirt = owner.borrow().component.dirt();
+                if !needs_update(dirt) {
+                    return false;
+                }
+                let shape = {
+                    let mut owner = owner.borrow_mut();
+                    owner.component.set_dirt(ComponentDirt::NONE);
+                    owner.update(dirt)
+                };
+                if let Some((shape, measured_geometry_changed)) = shape {
+                    shape.with_mut(|shape| {
+                        let shape = shape.as_shape_mut().expect("PathComposer Shape");
+                        if measured_geometry_changed {
+                            shape.mark_bounds_dirty();
+                        } else {
+                            shape.mark_world_bounds_dirty();
+                        }
+                    });
+                }
+            }
+            Self::TextVariationHelper(handle) => {
+                let owner = handle
+                    .upgrade()
+                    .expect("live component in dependency graph");
+                let dirt = owner.borrow().component.dirt();
+                if !needs_update(dirt) {
+                    return false;
+                }
+                let mut owner = owner.borrow_mut();
+                owner.component.set_dirt(ComponentDirt::NONE);
+                owner.update(dirt);
+            }
+        }
+        true
+    }
+
     pub fn update(&self, dirt: ComponentDirt) {
         match self {
             Self::Authored(handle) => {
@@ -846,6 +917,40 @@ impl std::ops::DerefMut for Component {
 mod dirt_dispatch_tests {
     use super::{Component, ComponentDirt, ComponentOccurrenceHandle};
     use crate::mechanical_port::source::{core::CoreArena, node::Node};
+
+    #[test]
+    fn update_preparation_preserves_shared_clean_and_collapsed_borrows_for_all_occurrences() {
+        use crate::mechanical_port::source::{
+            shapes::path_composer::RuntimePathComposerHandle,
+            text::{text_style::TextStyle, text_variation_helper::RuntimeTextVariationHelperHandle},
+        };
+        let arena = CoreArena::default();
+        let node = arena.insert(Node::default());
+        let style = arena.insert(TextStyle::default());
+        let path = RuntimePathComposerHandle::new();
+        let variation = RuntimeTextVariationHelperHandle::new(style);
+        for occurrence in [node.into(), path.occurrence(), variation.occurrence()] {
+            for dirt in [
+                ComponentDirt::NONE,
+                ComponentDirt::COLLAPSED | ComponentDirt::TRANSFORM,
+            ] {
+                occurrence.with_component_mut(|component| component.set_dirt(dirt));
+                occurrence
+                    .with_component(|component| {
+                        assert!(!occurrence.update_if_dirty());
+                        assert_eq!(component.dirt(), dirt);
+                    })
+                    .unwrap();
+            }
+            occurrence.with_component_mut(|component| component.set_dirt(ComponentDirt::TRANSFORM));
+            assert!(occurrence.update_if_dirty());
+            assert_eq!(
+                occurrence.with_component(Component::dirt),
+                Some(ComponentDirt::NONE)
+            );
+            assert!(!occurrence.update_if_dirty());
+        }
+    }
 
     #[test]
     fn dependency_snapshot_owns_the_original_order_across_owner_mutation() {

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_mesh.frag.
  *
- * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
+ * Upstream source revision: 0aadd4c65084a38dbeae3bd05814ead3f743ed77
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
+pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_mesh.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "6171a7ee41ed358ae9915a35c17e97d7fb694597e6aca2045f3023dbd66df721";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 221;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 6615;
+    "f1d04c96e07fba636aa6aa3ef31fec31aafbe1c2dc7790be812492fe1a31e381";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 210;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 6229;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_MESH_FRAG_SOURCE: &str = r###"/*
@@ -187,17 +187,6 @@ PLS_MAIN(@drawFragmentMain)
     }
 #endif // @ENABLE_ADVANCED_BLEND
     color *= coverage;
-
-    // Certain platforms give us less control of the format of what we are
-    // rendering too. Specifically, we are auto converted from linear -> sRGB on
-    // render target writes in unreal. In those cases we made need to end up in
-    // linear color space
-#ifdef @NEEDS_GAMMA_CORRECTION
-    if (@NEEDS_GAMMA_CORRECTION)
-    {
-        color = gamma_to_linear(color);
-    }
-#endif
 
     color.rgb = add_dither_if_alpha_nonzero(color.rgb,
                                             color.a,

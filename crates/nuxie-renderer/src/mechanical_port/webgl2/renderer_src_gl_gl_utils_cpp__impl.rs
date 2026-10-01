@@ -71,12 +71,12 @@ pub(crate) fn ReclaimedNameCount() -> u32 {
     RECLAIMED_COUNT.load(Ordering::Relaxed)
 }
 
-const GLSL_GLSL_VERSION: &str = "LC";
+const GLSL_GLSL_VERSION: &str = "KC";
 const GLSL_VERTEX: &str = "BB";
-const GLSL_FRAGMENT: &str = "EB";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
-const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "VE";
-const GLSL_GL_RENDERER_MALI: &str = "PF";
+const GLSL_FRAGMENT: &str = "FB";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "DE";
+const GLSL_BASE_VERTEX_UNIFORM_NAME: &str = "UE";
+const GLSL_GL_RENDERER_MALI: &str = "OF";
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 
 fn generatedObject(kind: GLObjectKind) -> GLObject {
@@ -587,12 +587,12 @@ mod tests {
         };
         let expectedPrefix = concat!(
             "#version 300 es\n",
-            "#define LC 300\n",
-            "#define EB\n",
+            "#define KC 300\n",
+            "#define FB\n",
             "#define CUSTOM true\n",
-            "#define VE _baseVertex\n",
-            "#define EE _baseInstance\n",
-            "#define PF\n",
+            "#define UE _baseVertex\n",
+            "#define DE _baseInstance\n",
+            "#define OF\n",
         );
         assert!(source.starts_with(expectedPrefix));
         assert!(source.ends_with("void main() {}\n"));

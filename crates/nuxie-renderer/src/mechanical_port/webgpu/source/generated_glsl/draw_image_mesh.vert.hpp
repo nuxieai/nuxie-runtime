@@ -6,65 +6,65 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_image_mesh_vert[] = R"===(#ifdef BB
-c1(w3) K(0,c,QC);d1 c1(K3) K(1,c,RC);d1 c1(A1) K(M9,f,YB);K(N9,f,SB);K(O9,f,PB);K(P9,uint,ZB);K(Q9,uint,AC);K(R9,uint,BC);K(S9,uint,MC);K(aa,f,IC);d1
+c1(w3) K(0,c,PC);d1 c1(J3) K(1,c,QC);d1 c1(A1) K(L9,e,YB);K(M9,e,SB);K(N9,e,PB);K(O9,uint,ZB);K(P9,uint,AC);K(Q9,uint,BC);K(R9,uint,LC);K(Z9,e,HC);d1
 #endif
-l2 E0 W(0,c,W5);
+l2 E0 V(0,c,V5);
 #ifdef A
-KB W(1,d,Z3);
+KB V(1,d,Y3);
 #endif
 #if defined(AB)&&!defined(CB)
-E0 W(2,f,S0);
+E0 V(2,e,R0);
 #endif
-KB W(3,i,Q1);
-#ifdef O
-a3 W(4,R,H1);
+KB V(3,i,Q1);
+#ifdef N
+Z2 V(4,Q,H1);
 #endif
 e2
 #ifdef BB
-k4 l4 U6(RB,w3,x3,K3,L3,A1,h0,G){L(G,x3,QC,c);L(G,L3,RC,c);L(r,h0,YB,f);L(r,h0,SB,f);L(r,h0,PB,f);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,BC,uint);L(r,h0,MC,uint);L(r,h0,IC,f);T(W5,c);
+j4 k4 T6(RB,w3,x3,J3,K3,A1,h0,G){L(G,x3,PC,c);L(G,K3,QC,c);L(r,h0,YB,e);L(r,h0,SB,e);L(r,h0,PB,e);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,BC,uint);L(r,h0,LC,uint);L(r,h0,HC,e);T(V5,c);
 #ifdef A
-T(Z3,d);
+T(Y3,d);
 #endif
 #if defined(AB)&&!defined(CB)
-T(S0,f);
+T(R0,e);
 #endif
 T(Q1,i);
-#ifdef O
-T(H1,R);
+#ifdef N
+T(H1,Q);
 #endif
-c k0=M0(n1(YB),QC)+PB.xy;W5=RC*IC.zw+IC.xy;
+c k0=M0(n1(YB),PC)+PB.xy;V5=QC*HC.zw+HC.xy;
 #ifdef A
-if(A){Z3=m6(AC,j.U4);}
+if(A){Y3=l6(AC,j.T4);}
 #endif
 #ifdef AB
 if(AB){
 #ifndef CB
-S0=j8(n1(SB),PB.zw,k0 Z4);
+R0=i8(n1(SB),PB.zw,k0 Y4);
 #else
-Ha(n1(SB),PB.zw,k0 Z4);
+Ga(n1(SB),PB.zw,k0 Y4);
 #endif
 }
 #endif
-f I=I3(k0);
-#ifdef NC
+e I=H3(k0);
+#ifdef MC
 I.y=-I.y;
 #endif
 #ifdef CB
-I.z=J8(MC,0xffu);
+I.z=I8(LC,0xffu);
 #endif
 Q1=unpackUnorm4x8(ZB);
-#ifdef O
+#ifdef N
 H1=P1(BC);
 #endif
-Z(W5);
+Z(V5);
 #ifdef A
-Z(Z3);
+Z(Y3);
 #endif
 #if defined(AB)&&!defined(CB)
-Z(S0);
+Z(R0);
 #endif
 Z(Q1);
-#ifdef O
+#ifdef N
 Z(H1);
 #endif
 w1(I);}

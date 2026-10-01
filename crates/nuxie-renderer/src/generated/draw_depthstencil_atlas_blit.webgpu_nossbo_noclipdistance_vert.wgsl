@@ -1,28 +1,28 @@
 struct UB {
-    Rc: f32,
-    Ud: f32,
+    Qc: f32,
+    Td: f32,
+    bg: f32,
     cg: f32,
-    dg: f32,
-    B6_: u32,
-    Y9_: u32,
-    Of: u32,
-    Pf: u32,
-    k8_: vec4<i32>,
-    Mh: vec2<f32>,
-    Vd: vec2<f32>,
-    j2_: u32,
-    Qh: f32,
-    U4_: u32,
-    c3_: f32,
-    Wd: f32,
-    If: u32,
-    M3_: f32,
-    N3_: f32,
-    Xd: f32,
-    Jh: u32,
+    A6_: u32,
     X9_: u32,
+    Nf: u32,
+    Of: u32,
+    j8_: vec4<i32>,
+    Lh: vec2<f32>,
+    Ud: vec2<f32>,
+    j2_: u32,
+    Ph: f32,
+    T4_: u32,
+    a3_: f32,
+    Vd: f32,
+    Hf: u32,
+    L3_: f32,
+    M3_: f32,
+    Wd: f32,
+    Ih: u32,
+    W9_: u32,
+    wc: f32,
     xc: f32,
-    yc: f32,
 }
 
 struct gl_PerVertex {
@@ -41,9 +41,9 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override li: bool = true;
-@id(2) override ni: bool = true;
-@id(8) override ti: bool = true;
+@id(0) override ki: bool = true;
+@id(2) override mi: bool = true;
+@id(8) override si: bool = true;
 
 @group(0) @binding(2)
 var LB: texture_2d<u32>;
@@ -51,10 +51,10 @@ var LB: texture_2d<u32>;
 var<uniform> j: UB;
 var<private> gl_VertexIndex_1: i32;
 var<private> MB_1: vec3<f32>;
-var<private> K2_: vec2<f32>;
+var<private> J2_: vec2<f32>;
 @group(0) @binding(3)
-var XC: texture_2d<u32>;
-var<private> Z3_: f32;
+var WC: texture_2d<u32>;
+var<private> Y3_: f32;
 var<private> Q0_: f32;
 @group(0) @binding(4)
 var JB: texture_2d<f32>;
@@ -64,11 +64,11 @@ var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f,
 @group(0) @binding(7)
 var TB: texture_2d<u32>;
 @group(0) @binding(9)
-var ZC: texture_2d<f32>;
+var YC: texture_2d<f32>;
 @group(0) @binding(5)
-var AD: texture_2d<u32>;
+var ZC: texture_2d<u32>;
 @group(3) @binding(9)
-var xa: sampler;
+var wa: sampler;
 
 fn main_1() {
     var phi_787_: u32;
@@ -86,11 +86,11 @@ fn main_1() {
     let _e63 = textureLoad(LB, vec2<i32>(bitcast<i32>((_e56 & 255u)), bitcast<i32>((_e56 >> bitcast<u32>(8i)))), 0i);
     let _e65 = _e51.xy;
     let _e67 = bitcast<vec3<f32>>(_e63.yzw);
-    let _e73 = j.Mh;
-    K2_ = (((_e65 * _e67.x) + _e67.yz) * _e73);
-    let _e81 = textureLoad(XC, vec2<i32>(bitcast<i32>((_e53 & 255u)), bitcast<i32>((_e54 >> bitcast<u32>(8i)))), 0i);
+    let _e73 = j.Lh;
+    J2_ = (((_e65 * _e67.x) + _e67.yz) * _e73);
+    let _e81 = textureLoad(WC, vec2<i32>(bitcast<i32>((_e53 & 255u)), bitcast<i32>((_e54 >> bitcast<u32>(8i)))), 0i);
     let _e83 = (_e81.x & 15u);
-    if li {
+    if ki {
         let _e84 = (_e83 == 0u);
         if _e84 {
             phi_787_ = _e81.y;
@@ -99,7 +99,7 @@ fn main_1() {
         }
         let _e87 = phi_787_;
         let _e89 = (_e87 >> bitcast<u32>(16i));
-        let _e91 = j.U4_;
+        let _e91 = j.T4_;
         if (_e89 == 0u) {
             phi_788_ = 0f;
         } else {
@@ -111,9 +111,9 @@ fn main_1() {
             phi_789_ = -(_e98);
         }
         let _e101 = phi_789_;
-        Z3_ = _e101;
+        Y3_ = _e101;
     }
-    if ni {
+    if mi {
         Q0_ = f32(((_e81.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e83 == 1u) {
@@ -144,8 +144,8 @@ fn main_1() {
         let _e190 = a1_[3u];
         a1_[3u] = -(_e190);
     }
-    phi_445_ = ti;
-    if ti {
+    phi_445_ = si;
+    if si {
         phi_445_ = ((_e81.x & 2048u) != 0u);
     }
     let _e197 = phi_445_;
@@ -165,8 +165,8 @@ fn main_1() {
     } else {
         r1_ = vec3<f32>(0f, 0f, 0f);
     }
-    let _e240 = j.cg;
-    let _e242 = j.dg;
+    let _e240 = j.bg;
+    let _e242 = j.cg;
     let _e250 = vec4<f32>(((_e51.x * _e240) - 1f), ((_e51.y * _e242) - sign(_e242)), 0f, 1f);
     unnamed.gl_Position = vec4<f32>(_e250.x, _e250.y, ((f32(((_e63.x << bitcast<u32>(8u)) | 255u)) * 0.000000059604645f) + 0.000000029802322f), _e250.w);
     return;
@@ -177,8 +177,8 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @location(0) MB: vec3<f32>) 
     gl_VertexIndex_1 = i32(gl_VertexIndex);
     MB_1 = MB;
     main_1();
-    let _e12 = K2_;
-    let _e13 = Z3_;
+    let _e12 = J2_;
+    let _e13 = Y3_;
     let _e14 = Q0_;
     let _e15 = a1_;
     let _e16 = r1_;

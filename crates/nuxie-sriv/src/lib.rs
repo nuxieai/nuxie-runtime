@@ -379,10 +379,23 @@ fn values_match(expected: &Value, actual: &Value) -> bool {
             let expected_y = f32::from_bits(*expected_y);
             let actual_x = f32::from_bits(*actual_x);
             let actual_y = f32::from_bits(*actual_y);
-            if !ordinary_finite(expected_x, actual_x) || !ordinary_finite(expected_y, actual_y) {
+            if !expected_x.is_finite()
+                || !expected_y.is_finite()
+                || !actual_x.is_finite()
+                || !actual_y.is_finite()
+            {
                 expected_x.to_bits() == actual_x.to_bits()
                     && expected_y.to_bits() == actual_y.to_bits()
+            } else if (!ordinary_finite(expected_x, actual_x)
+                && expected_x.to_bits() != actual_x.to_bits())
+                || (!ordinary_finite(expected_y, actual_y)
+                    && expected_y.to_bits() != actual_y.to_bits())
+            {
+                false
             } else {
+                // Preserve signed-zero identity per coordinate without making
+                // its finite neighbor bit-exact. Upstream compares finite Vec2D
+                // values using one magnitude-scaled vector-distance tolerance.
                 let magnitude = expected_x
                     .abs()
                     .max(expected_y.abs())
@@ -886,30 +899,40 @@ mod tests {
 
     #[test]
     fn rejects_bad_header_version_unknown_op_and_truncation() {
-        assert!(parse_sriv(b"NOPE\x01")
-            .unwrap_err()
-            .message
-            .contains("header"));
-        assert!(parse_sriv(b"SRIV\x02")
-            .unwrap_err()
-            .message
-            .contains("version"));
-        assert!(parse_sriv(b"SRIV\x01\x04")
-            .unwrap_err()
-            .message
-            .contains("unknown"));
-        assert!(parse_sriv(b"SRIV\x01\x09\0")
-            .unwrap_err()
-            .message
-            .contains("truncated"));
+        assert!(
+            parse_sriv(b"NOPE\x01")
+                .unwrap_err()
+                .message
+                .contains("header")
+        );
+        assert!(
+            parse_sriv(b"SRIV\x02")
+                .unwrap_err()
+                .message
+                .contains("version")
+        );
+        assert!(
+            parse_sriv(b"SRIV\x01\x04")
+                .unwrap_err()
+                .message
+                .contains("unknown")
+        );
+        assert!(
+            parse_sriv(b"SRIV\x01\x09\0")
+                .unwrap_err()
+                .message
+                .contains("truncated")
+        );
     }
 
     #[test]
     fn rejects_noncanonical_and_overflowing_varuints() {
-        assert!(parse_sriv(b"SRIV\x81\0")
-            .unwrap_err()
-            .message
-            .contains("non-canonical"));
+        assert!(
+            parse_sriv(b"SRIV\x81\0")
+                .unwrap_err()
+                .message
+                .contains("non-canonical")
+        );
         let mut bytes = b"SRIV".to_vec();
         bytes.extend([0xff; 10]);
         assert!(parse_sriv(&bytes).unwrap_err().message.contains("overflow"));
@@ -947,6 +970,46 @@ mod tests {
         let outside = Value::Vec2(1000.009_f32.to_bits(), 0.009_f32.to_bits());
         assert!(values_match(&expected, &within));
         assert!(!values_match(&expected, &outside));
+    }
+
+    #[test]
+    fn comparator_signed_zero_does_not_make_other_coordinate_bit_exact() {
+        for swap in [false, true] {
+            let vector = |zero: f32, value: f32| {
+                if swap {
+                    Value::Vec2(value.to_bits(), zero.to_bits())
+                } else {
+                    Value::Vec2(zero.to_bits(), value.to_bits())
+                }
+            };
+            let expected = vector(-0.0, 1000.0);
+            assert!(values_match(&expected, &vector(-0.0, 1000.008)));
+            assert!(!values_match(&expected, &vector(-0.0, 1000.012)));
+            assert!(!values_match(&expected, &vector(0.0, 1000.0)));
+            assert!(!values_match(&expected, &vector(0.0001, 1000.0)));
+        }
+    }
+
+    #[test]
+    fn comparator_nonfinite_vectors_still_require_all_component_bits() {
+        for special in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            for swap in [false, true] {
+                let vector = |special: f32, value: f32| {
+                    if swap {
+                        Value::Vec2(value.to_bits(), special.to_bits())
+                    } else {
+                        Value::Vec2(special.to_bits(), value.to_bits())
+                    }
+                };
+                let expected = vector(special, 1000.0);
+                assert!(values_match(&expected, &vector(special, 1000.0)));
+                assert!(!values_match(&expected, &vector(special, 1000.008)));
+                assert!(!values_match(
+                    &expected,
+                    &vector(f32::from_bits(special.to_bits() ^ 1), 1000.0)
+                ));
+            }
+        }
     }
 
     #[test]

@@ -367,10 +367,11 @@ impl RawPath {
             verb: start_verb,
             point: start_point,
         } = start;
-        let mut kept_verbs = self.verbs[..start_verb].to_vec();
-        let mut kept_points = self.points[..start_point].to_vec();
+        let mut dst_verb = start_verb;
+        let mut dst_point = start_point;
         let mut point_index = start_point;
-        for verb in self.verbs[start_verb..].iter().copied() {
+        for src_verb in start_verb..self.verbs.len() {
+            let verb = self.verbs[src_verb];
             let advance = path_verb_to_point_count(verb);
             let keep = match verb {
                 PathVerb::Move | PathVerb::Close => true,
@@ -386,13 +387,20 @@ impl RawPath {
                 }
             };
             if keep {
-                kept_verbs.push(verb);
-                kept_points.extend_from_slice(&self.points[point_index..point_index + advance]);
+                if src_verb != dst_verb {
+                    self.verbs[dst_verb] = verb;
+                    self.points
+                        .copy_within(point_index..point_index + advance, dst_point);
+                }
+                dst_verb += 1;
+                dst_point += advance;
             }
             point_index += advance;
         }
-        self.verbs = kept_verbs;
-        self.points = kept_points;
+        if dst_verb != self.verbs.len() {
+            self.verbs.truncate(dst_verb);
+            self.points.truncate(dst_point);
+        }
     }
     pub fn add_to(&self, result: &mut dyn CommandPath) {
         for segment in self.segments() {
@@ -614,6 +622,207 @@ fn expand_cubic_bounds_for_axis(
         expand_bounds_to_cubic_point(bounds, axis, d2a / (d2a - d2b), start, cp1, cp2, end);
     }
 }
+#[cfg(test)]
+mod prune_tests {
+    use super::*;
+
+    fn point(x: f32, y: f32) -> Vec2D {
+        Vec2D { x, y }
+    }
+
+    fn buffers(path: &RawPath) -> (*const PathVerb, usize, *const Vec2D, usize) {
+        (
+            path.verbs.as_ptr(),
+            path.verbs.capacity(),
+            path.points.as_ptr(),
+            path.points.capacity(),
+        )
+    }
+
+    // Pinned raw_path_test.cpp: prune-empty-segments, implicit move cases.
+    #[test]
+    fn prune_empty_and_implicit_moves() {
+        let mut empty = RawPath::default();
+        empty.prune_empty_segments();
+        assert!(empty.verbs.is_empty());
+        assert!(empty.points.is_empty());
+        for verb in [PathVerb::Line, PathVerb::Quad, PathVerb::Cubic] {
+            let mut path = RawPath::default();
+            let zero = Vec2D::default();
+            match verb {
+                PathVerb::Line => path.line_to_point(zero),
+                PathVerb::Quad => path.quad_to_points(zero, zero),
+                PathVerb::Cubic => path.cubic_to_points(zero, zero, zero),
+                _ => unreachable!(),
+            }
+            let storage = buffers(&path);
+            path.prune_empty_segments();
+            assert_eq!(path.verbs, [PathVerb::Move]);
+            assert_eq!(path.points, [zero]);
+            assert_eq!(buffers(&path), storage);
+        }
+    }
+
+    // Same mixed sequence and expected kept segments as upstream's test.
+    #[test]
+    fn prune_upstream_mixed_segments() {
+        let mut path = RawPath::default();
+        path.move_to_point(point(1.0, 2.0));
+        path.line_to_point(point(3.0, 4.0));
+        path.line_to_point(point(3.0, 4.0));
+        for [cx, cy, x, y] in [
+            [5.0, 6.0, 7.0, 8.0],
+            [7.0, 8.0, 7.0, 8.0],
+            [7.0, 8.0, 7.0, 9.0],
+            [7.0, 9.0, 7.0, 9.0],
+            [7.0, 9.0, 7.0, 8.0],
+            [7.0, 8.0, 7.0, 8.0],
+        ] {
+            path.quad_to_points(point(cx, cy), point(x, y));
+        }
+        for [ax, ay, bx, by, x, y] in [
+            [9.0, 10.0, 11.0, 12.0, 13.0, 14.0],
+            [13.0, 14.0, 13.0, 14.0, 13.0, 14.0],
+            [13.0, 14.0, 13.0, 14.0, 13.0, 15.0],
+            [13.0, 15.0, 13.0, 15.0, 13.0, 15.0],
+            [13.0, 16.0, 13.0, 15.0, 13.0, 15.0],
+            [13.0, 15.0, 13.0, 15.0, 13.0, 15.0],
+            [13.0, 15.0, 13.0, 16.0, 13.0, 15.0],
+            [13.0, 15.0, 13.0, 15.0, 13.0, 15.0],
+            [13.0, 15.0, 13.0, 15.0, 13.0, 16.0],
+        ] {
+            path.cubic_to_points(point(ax, ay), point(bx, by), point(x, y));
+        }
+        path.close();
+        let storage = buffers(&path);
+        path.prune_empty_segments();
+        use PathVerb::{Close, Cubic, Line, Move, Quad};
+        assert_eq!(
+            path.verbs,
+            [
+                Move, Line, Quad, Quad, Quad, Cubic, Cubic, Cubic, Cubic, Cubic, Close
+            ]
+        );
+        let expected = [
+            (1.0, 2.0),
+            (3.0, 4.0),
+            (5.0, 6.0),
+            (7.0, 8.0),
+            (7.0, 8.0),
+            (7.0, 9.0),
+            (7.0, 9.0),
+            (7.0, 8.0),
+            (9.0, 10.0),
+            (11.0, 12.0),
+            (13.0, 14.0),
+            (13.0, 14.0),
+            (13.0, 14.0),
+            (13.0, 15.0),
+            (13.0, 16.0),
+            (13.0, 15.0),
+            (13.0, 15.0),
+            (13.0, 15.0),
+            (13.0, 16.0),
+            (13.0, 15.0),
+            (13.0, 15.0),
+            (13.0, 15.0),
+            (13.0, 16.0),
+        ]
+        .map(|(x, y)| point(x, y));
+        assert_eq!(path.points, expected);
+        assert_eq!(buffers(&path), storage);
+    }
+
+    #[test]
+    fn prune_upstream_suffix_and_end_cursor() {
+        let mut path = RawPath::default();
+        path.move_to_point(point(1.0, 2.0));
+        path.line_to_point(point(1.0, 2.0));
+        path.line_to_point(point(3.0, 4.0));
+        let mut added = RawPath::default();
+        added.move_to_point(point(5.0, 6.0));
+        added.quad_to_points(point(7.0, 8.0), point(9.0, 10.0));
+        added.close();
+        added.move_to_point(point(11.0, 12.0));
+        added.cubic_to_points(point(13.0, 14.0), point(15.0, 16.0), point(17.0, 18.0));
+        let matrix = Mat2D::new(0.0, 0.0, 0.0, 0.0, 19.0, 20.0);
+        let cursor = path.add_path(&added, Some(&matrix));
+        let original = path.clone();
+        let storage = buffers(&path);
+        path.prune_empty_segments_from(RawPathCursor {
+            verb: path.verbs.len(),
+            point: path.points.len(),
+        });
+        assert_eq!(path, original);
+        assert_eq!(buffers(&path), storage);
+        path.prune_empty_segments_from(cursor);
+        use PathVerb::{Close, Line, Move};
+        assert_eq!(path.verbs, [Move, Line, Line, Move, Close, Move]);
+        assert_eq!(
+            path.points,
+            [
+                point(1.0, 2.0),
+                point(1.0, 2.0),
+                point(3.0, 4.0),
+                point(19.0, 20.0),
+                point(19.0, 20.0)
+            ]
+        );
+        path.prune_empty_segments();
+        assert_eq!(path.verbs, [Move, Line, Move, Close, Move]);
+        assert_eq!(
+            path.points,
+            [
+                point(1.0, 2.0),
+                point(3.0, 4.0),
+                point(19.0, 20.0),
+                point(19.0, 20.0)
+            ]
+        );
+        assert_eq!(buffers(&path), storage);
+    }
+
+    #[test]
+    fn prune_overlapping_copy_preserves_float_bits_and_storage() {
+        let mut path = RawPath::default();
+        path.reserve(32, 64);
+        path.move_to_point(point(-0.0, 0.0));
+        path.line_to_point(point(0.0, -0.0)); // Numerically empty, despite different bits.
+        let controls = [
+            point(f32::from_bits(0x7fc0_1234), -0.0),
+            point(f32::INFINITY, f32::NEG_INFINITY),
+            point(2.0, -0.0),
+        ];
+        path.cubic_to_points(controls[0], controls[1], controls[2]);
+        path.line_to_point(controls[2]);
+        path.close();
+        path.move_to_point(controls[0]);
+        path.line_to_point(controls[0]); // NaN != itself: this segment must survive.
+        let storage = buffers(&path);
+        let metadata = (path.last_move_index, path.contour_is_open);
+        path.prune_empty_segments();
+        use PathVerb::{Close, Cubic, Line, Move};
+        assert_eq!(path.verbs, [Move, Cubic, Close, Move, Line]);
+        let expected = [
+            point(-0.0, 0.0),
+            controls[0],
+            controls[1],
+            controls[2],
+            controls[0],
+            controls[0],
+        ];
+        assert_eq!(path.points.len(), expected.len());
+        for (actual, expected) in path.points.iter().zip(expected) {
+            assert_eq!(
+                (actual.x.to_bits(), actual.y.to_bits()),
+                (expected.x.to_bits(), expected.y.to_bits())
+            );
+        }
+        assert_eq!(buffers(&path), storage);
+        assert_eq!((path.last_move_index, path.contour_is_open), metadata);
+    }
+}
+
 fn cubic_wangs_formula(points: &[Vec2D; 4], precision: f32) -> f32 {
     let v0 = points[0] - 2.0 * points[1] + points[2];
     let v1 = points[1] - 2.0 * points[2] + points[3];

@@ -5497,7 +5497,7 @@ pub trait CoreCapabilities: Any {
                 if recurse {
                     component.dependents_snapshot()
                 } else {
-                    Vec::new()
+                    Default::default()
                 },
             ))
         })() else {

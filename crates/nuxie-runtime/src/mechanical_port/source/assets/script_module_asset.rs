@@ -8,7 +8,7 @@ use crate::mechanical_port::source::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
     Luau = 0,
-    AssemblyScript = 1,
+    AnimaScript = 1,
 }
 
 #[derive(Default)]
@@ -73,7 +73,7 @@ mod tests {
     fn module_language_deserializes_as_file_asset() {
         let mut asset = ScriptModuleAsset::default();
         assert!(asset.deserialize(1087, &mut BinaryReader::new(&[1])));
-        assert_eq!(asset.base.language(), Language::AssemblyScript as u32);
+        assert_eq!(asset.base.language(), Language::AnimaScript as u32);
         assert_eq!(asset.core_type(), 1071);
         assert!(asset.is_type_of(103));
         assert!(asset.is_type_of(99));

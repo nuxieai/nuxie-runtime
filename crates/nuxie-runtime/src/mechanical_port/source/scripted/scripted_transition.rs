@@ -116,6 +116,9 @@ impl ScriptedTransition {
             std::mem::take(&mut self.pending_list_source_changed),
         )
     }
+    pub(crate) fn has_pending_property_changes(&self) -> bool {
+        self.pending_active_component_changed || self.pending_list_source_changed
+    }
     fn read<R>(owner: &CoreHandle, f: impl FnOnce(&Self) -> R) -> R {
         owner.with_downcast(f).expect("live ScriptedTransition")
     }
@@ -836,5 +839,189 @@ impl Drop for ScriptedTransition {
         self.list_items.clear();
         self.artboards_map.clear();
         self.active_list_index = -1;
+    }
+}
+
+#[cfg(test)]
+mod keyed_setter_tests {
+    use super::*;
+    use crate::source::{
+        animation::{
+            keyed_object::{KeyedObject, KeyedObjectContext},
+            keyed_property::KeyedProperty,
+            keyframe_double::KeyFrameDouble,
+            keyframe_id::KeyFrameId,
+            keyframe_uint::KeyFrameUint,
+        },
+        core::CoreArena,
+        core_context::CoreContext,
+        generated::{
+            core_registry::CoreRegistry,
+            world_transform_component_base::WorldTransformComponentBase,
+        },
+    };
+
+    struct Context<'a> {
+        arena: &'a CoreArena,
+        target: CoreHandle,
+    }
+    impl CoreContext for Context<'_> {
+        fn core_arena(&self) -> &CoreArena {
+            self.arena
+        }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            (id == 1).then(|| self.target.clone())
+        }
+    }
+    impl KeyedObjectContext for Context<'_> {
+        fn resolves_object(&self, id: u32) -> bool {
+            self.resolve_handle(id).is_some()
+        }
+        fn resolve_object(&mut self, id: u32) -> Option<CoreHandle> {
+            self.resolve_handle(id)
+        }
+        fn object_supports_property(&self, _id: u32, _key: u32) -> bool {
+            true
+        }
+        fn overrides_keyed_interpolation(&self, object: &CoreHandle, key: u32) -> bool {
+            if key == u32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY) {
+                // The next real keyed property observes the previous setter's
+                // callback, not merely the new stored ID.
+                object
+                    .with_downcast::<ScriptedTransition, _>(|transition| {
+                        assert!(transition.list_items.is_empty());
+                        assert!(!transition.has_pending_property_changes());
+                    })
+                    .unwrap();
+            }
+            false
+        }
+    }
+
+    #[test]
+    fn keyed_object_clean_ignores_property_status_like_upstream() {
+        use crate::source::status_code::StatusCode;
+        let arena = CoreArena::default();
+        let target = arena.insert(ScriptedTransition::default());
+        let mut context = Context {
+            arena: &arena,
+            target,
+        };
+        let frame = arena.insert(KeyFrameDouble::default());
+        let mut property = KeyedProperty::default();
+        property.add_key_frame(frame.clone());
+        // A removed occurrence exercises the native property's failure return
+        // without introducing a replacement test lifecycle implementation.
+        drop(arena.remove(&frame).unwrap());
+        assert_eq!(
+            property.on_added_clean(&mut context),
+            StatusCode::MissingObject
+        );
+        let mut object = KeyedObject::default();
+        object.add_keyed_property(arena.insert(property));
+        object.add_keyed_property(arena.insert(KeyedProperty::default()));
+        assert_eq!(object.on_added_clean(&mut context), StatusCode::Ok);
+    }
+
+    #[test]
+    fn id_and_held_uint_keyframes_finish_callbacks_before_next_property() {
+        for use_id in [false, true] {
+            for time in [0.0, 0.5] {
+                let arena = CoreArena::default();
+                let target = arena.insert(ScriptedTransition::default());
+                let key = i32::from(ScriptedTransitionBase::LIST_SOURCE_PROPERTY_KEY);
+                assert!(CoreRegistry::set_id_handle(&target, key, 0));
+                let item = arena.insert(ViewModelInstanceListItem::default());
+                ScriptedTransition::update_list_occurrence(&target, &[item]);
+                assert_eq!(
+                    target.with_downcast::<ScriptedTransition, _>(|owner| owner.list_items.len()),
+                    Some(1)
+                );
+
+                let mut property = KeyedProperty::default();
+                property.base.set_property_key_value(key as u32);
+                for frame in [0, 60] {
+                    let handle = if use_id {
+                        let mut value = KeyFrameId::default();
+                        value.base.set_value_value(u32::MAX);
+                        arena.insert(value)
+                    } else {
+                        let mut value = KeyFrameUint::default();
+                        value.base.set_value_value(u32::MAX);
+                        arena.insert(value)
+                    };
+                    handle.with_mut(|owner| {
+                        let keyframe = owner.as_key_frame_mut().unwrap();
+                        keyframe.base.set_frame_value(frame);
+                        keyframe.compute_seconds(60);
+                    });
+                    // Exercise both the exact-frame and interpolation dispatch.
+                    CoreRegistry::set_uint_handle(&handle,
+                        i32::from(crate::source::generated::animation::interpolating_keyframe_base::InterpolatingKeyFrameBase::INTERPOLATION_TYPE_PROPERTY_KEY), 1);
+                    property.add_key_frame(handle);
+                }
+                let mut next = KeyedProperty::default();
+                next.base.set_property_key_value(u32::from(
+                    WorldTransformComponentBase::OPACITY_PROPERTY_KEY,
+                ));
+                next.add_key_frame(arena.insert(KeyFrameDouble::default()));
+                let mut object = KeyedObject::default();
+                object.base.set_object_id_value(1);
+                object.add_keyed_property(arena.insert(property));
+                object.add_keyed_property(arena.insert(next));
+                object.apply(
+                    &mut Context {
+                        arena: &arena,
+                        target: target.clone(),
+                    },
+                    time,
+                    1.0,
+                    None,
+                );
+                assert_eq!(
+                    target.with_downcast::<ScriptedTransition, _>(|owner| owner.base.list_source()),
+                    Some(u32::MAX)
+                );
+                // Unchanged writes neither queue nor redispatch callbacks.
+                assert!(CoreRegistry::set_uint_handle(&target, key, u32::MAX));
+                assert!(
+                    !target
+                        .with_downcast::<ScriptedTransition, _>(
+                            |owner| owner.has_pending_property_changes()
+                        )
+                        .unwrap()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unchanged_setter_drains_preexisting_callbacks_after_releasing_owner() {
+        let arena = CoreArena::default();
+        let target = arena.insert(ScriptedTransition::default());
+        let key = i32::from(ScriptedTransitionBase::LIST_SOURCE_PROPERTY_KEY);
+        CoreRegistry::set_id_handle(&target, key, 0);
+        ScriptedTransition::update_list_occurrence(
+            &target,
+            &[arena.insert(ViewModelInstanceListItem::default())],
+        );
+        target.with_mut(|owner| {
+            CoreRegistry::set_id(owner, key, u32::MAX);
+            CoreRegistry::set_id(
+                owner,
+                i32::from(ScriptedTransitionBase::ACTIVE_COMPONENT_ID_PROPERTY_KEY),
+                7,
+            );
+        });
+        assert!(target.with_downcast::<ScriptedTransition, _>(|owner| owner.has_pending_property_changes()).unwrap());
+        // The unchanged value must not hide callbacks queued by the borrowed
+        // setter. Both callbacks re-enter the released target safely.
+        assert!(CoreRegistry::set_id_handle(&target, key, u32::MAX));
+        target
+            .with_downcast::<ScriptedTransition, _>(|owner| {
+                assert!(!owner.has_pending_property_changes());
+                assert!(owner.list_items.is_empty());
+            })
+            .unwrap();
     }
 }

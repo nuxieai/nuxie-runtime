@@ -85,10 +85,6 @@ impl KeyedProperty {
         override_mix: bool,
     ) {
         assert!(!self.keyframes.is_empty());
-        // Keyframes write through a borrowed registry object. Dispatch any
-        // transition callback after that borrow ends, before the next keyed
-        // property is applied, preserving the upstream setter's ordering.
-        let callback_target = object.clone();
         let mix = if override_mix { 1.0 } else { mix };
         let index = self.closest_frame_index(seconds, 0);
         if index == 0 {
@@ -128,9 +124,6 @@ impl KeyedProperty {
                 keyframe.keyframe_apply(object, self.base.property_key() as i32, mix, context)
             });
         }
-        crate::mechanical_port::source::generated::core_registry::CoreRegistry::flush_scripted_transition_property_changes(
-            &callback_target,
-        );
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         for frame in &self.keyframes {

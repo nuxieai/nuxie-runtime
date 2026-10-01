@@ -44,8 +44,8 @@ impl LinearAnimation {
     }
     pub fn on_added_dirty(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         let mut status = StatusCode::Ok;
-        let mut i = 0;
-        while i < self.keyed_objects.len() {
+        let mut failed = Vec::new();
+        for i in 0..self.keyed_objects.len() {
             let code = self.keyed_objects[i]
                 .with_downcast_mut::<KeyedObject, _>(|object| object.on_added_dirty(context))
                 .unwrap_or(StatusCode::MissingObject);
@@ -53,10 +53,11 @@ impl LinearAnimation {
                 if status == StatusCode::Ok || status == StatusCode::MissingObject {
                     status = code;
                 }
-                self.keyed_objects.remove(i);
-            } else {
-                i += 1
+                failed.push(i);
             }
+        }
+        for i in failed.into_iter().rev() {
+            self.keyed_objects.remove(i);
         }
         if status == StatusCode::MissingObject {
             StatusCode::Ok

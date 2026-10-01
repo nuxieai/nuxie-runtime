@@ -92,7 +92,29 @@ namespace
 #if defined(RIVE_GOLDEN_COVERAGE_TRACE)
 extern "C" int __llvm_profile_write_file(void);
 extern "C" void __llvm_profile_reset_counters(void);
+extern "C" void __llvm_profile_set_filename(const char*);
+extern "C" int __llvm_profile_is_continuous_mode_enabled(void);
 #endif
+
+void finishFrameLoopCoverageIfRequested()
+{
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (std::getenv("RIVE_GOLDEN_COVERAGE_FRAME_ONLY") != nullptr)
+    {
+        // Preserve only the frame loop, not reporting or scene teardown.
+        const int status = __llvm_profile_write_file();
+#ifdef _WIN32
+        __llvm_profile_set_filename("NUL");
+#else
+        __llvm_profile_set_filename("/dev/null");
+#endif
+        if (status != 0)
+        {
+            throw std::runtime_error("failed to write frame-loop coverage profile");
+        }
+    }
+#endif
+}
 
 void flushCoverageProfileIfRequested()
 {
@@ -244,6 +266,12 @@ void validateTraceOptions(const Options& options)
         std::getenv("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY") != nullptr;
     const bool mechanismInput =
         std::getenv("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT") != nullptr;
+#if defined(RIVE_GOLDEN_COVERAGE_TRACE)
+    if (frameOnly && __llvm_profile_is_continuous_mode_enabled())
+    {
+        throw CliError("frame-only coverage does not support continuous profiling");
+    }
+#endif
 #if !defined(RIVE_GOLDEN_COVERAGE_TRACE)
     const bool flush =
         std::getenv("RIVE_GOLDEN_COVERAGE_FLUSH") != nullptr;
@@ -2062,6 +2090,7 @@ int runFile(const Options& options)
     const auto benchmarkElapsed =
         std::chrono::steady_clock::now() - benchmarkStart;
     const uint64_t frameLoopAllocations = stopFrameLoopAllocationCounter();
+    finishFrameLoopCoverageIfRequested();
     if (std::getenv("RIVE_GOLDEN_ALLOCATION_COUNTER") != nullptr)
     {
         std::cerr << "frame_loop_allocations=" << frameLoopAllocations << "\n";

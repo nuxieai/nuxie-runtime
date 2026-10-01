@@ -18,6 +18,18 @@ impl std::ops::DerefMut for Ellipse {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    Ellipse,
+    |owner, dirt| {
+        owner.with_downcast_mut::<Self, _>(|object| object.update_before_path_super(dirt));
+        crate::mechanical_port::source::shapes::path::Path::update_occurrence::<Self>(owner, dirt);
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl Ellipse {
     pub const TYPE_KEY: u16 = EllipseBase::TYPE_KEY;
 }

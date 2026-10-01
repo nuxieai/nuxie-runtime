@@ -219,6 +219,35 @@ impl Drop for ArtboardComponentList {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    ArtboardComponentList,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        if owner.is_alive() {
+            Self::update_after_transform_occurrence(owner, dirt);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    |owner| {
+        owner.with_downcast_mut::<Self, _>(|object| object.update_world_transform_before_super());
+        crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>(
+            owner,
+        );
+    },
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    |owner| {
+        let Some((layout,list,transforms)) = owner.with_downcast::<Self,_>(|object| {
+            (object.layout_constraint_handles(), object.active_list_constraint_handles(),
+             crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_transform_component(object).expect("transform receiver").constraints().to_vec())
+        }) else { return; };
+        crate::mechanical_port::source::transform_component::apply_constraint_lists(
+            owner, layout, list, transforms, true,
+        );
+    }
+);
+
 impl ArtboardComponentList {
     pub const TYPE_KEY: u16 = ArtboardComponentListBase::TYPE_KEY;
 
@@ -932,7 +961,9 @@ impl ArtboardComponentList {
 
     fn prepare_list_item(&mut self, index: usize) -> bool {
         let item = self.list_items[index].clone();
-        item.with_downcast::<ViewModelInstanceListItem, _>(|item| item.assign_list_index(index as u32));
+        item.with_downcast::<ViewModelInstanceListItem, _>(|item| {
+            item.assign_list_index(index as u32)
+        });
         if let Some(artboard) = self.find_artboard(&item) {
             if let Some(size) = artboard.with_downcast::<Artboard, _>(|artboard| {
                 Vec2D::new(artboard.width(), artboard.height())
@@ -1009,7 +1040,11 @@ impl ArtboardComponentList {
         let Some(artboard) = artboard else {
             return if machine.is_none() { QuietState::Quiet } else { QuietState::Busy };
         };
-        if machine.is_some_and(|machine| !machine.with_instance(|machine| machine.artboard()).ptr_eq(&artboard.downgrade())) {
+        if machine.is_some_and(|machine| {
+            !machine
+                .with_instance(|machine| machine.artboard())
+                .ptr_eq(&artboard.downgrade())
+        }) {
             return QuietState::Busy;
         }
         if self.should_reset_instances {
@@ -1018,8 +1053,12 @@ impl ArtboardComponentList {
             if bound.is_some() && bound != item { return QuietState::Busy; }
         }
         let state = artboard.with_artboard(|artboard| artboard.row_quiet_state());
-        if state != QuietState::Quiet { return state; }
-        machine.map_or(state, |machine| machine.with_instance_mut(|machine| machine.row_quiet_state()))
+        if state != QuietState::Quiet {
+            return state;
+        }
+        machine.map_or(state, |machine| {
+            machine.with_instance_mut(|machine| machine.row_quiet_state())
+        })
     }
 
     fn try_quiet_row(&mut self, row: usize) -> bool {
@@ -1062,7 +1101,9 @@ impl ArtboardComponentList {
             while quiet != 0 {
                 let row = (word << 6) + quiet.trailing_zeros() as usize;
                 if let Some(Some(artboard)) = self.artboard_instances_by_index.get(row) {
-                    artboard.with_artboard(|artboard| artboard.set_quiet_host_row(Artboard::NO_QUIET_ROW));
+                    artboard.with_artboard(|artboard| {
+                        artboard.set_quiet_host_row(Artboard::NO_QUIET_ROW)
+                    });
                 }
                 quiet &= quiet - 1;
             }
@@ -1195,7 +1236,18 @@ impl ArtboardComponentList {
             index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1)).unwrap() as i32;
         }
         #[cfg(any(test, feature = "testing"))]
-        owner.with_downcast::<Self, _>(|list| list.verify_quiet_rows(if new_frame { RowPass::Advance } else { RowPass::Settle }, elapsed_seconds, advancing_flags, advance_nested));
+        owner.with_downcast::<Self, _>(|list| {
+            list.verify_quiet_rows(
+                if new_frame {
+                    RowPass::Advance
+                } else {
+                    RowPass::Settle
+                },
+                elapsed_seconds,
+                advancing_flags,
+                advance_nested,
+            )
+        });
         keep_going
     }
 
@@ -1488,7 +1540,9 @@ impl ArtboardComponentList {
         }
         let virtualized = read(owner, |this| this.virtualization_enabled());
         if virtualized {
-            let transform = read(owner, |this| this.layout_parent_ref(|parent| *parent.world_transform().values()));
+            let transform = read(owner, |this| {
+                this.layout_parent_ref(|parent| *parent.world_transform().values())
+            });
             if let Some(transform) = transform {
                 renderer.transform(nuxie_render_api::Mat2D(transform));
             }
@@ -1496,17 +1550,27 @@ impl ArtboardComponentList {
             let transform = read(owner, |this| *this.transform().world_transform().values());
             renderer.transform(nuxie_render_api::Mat2D(transform));
         }
-        if !virtualized || read(owner, |this| this.realized_start_index != -1 && this.realized_end_index != -1) {
+        if !virtualized
+            || read(owner, |this| {
+                this.realized_start_index != -1 && this.realized_end_index != -1
+            })
+        {
             let indices = read(owner, |this| this.ordered_list_indices().to_vec());
             for index in indices {
                 // Resolve each row only when the source loop reaches it: a
                 // preceding hosted visit can mutate the list's live contents.
-                let row = read(owner, |this| this.artboard_instance(index).zip(this.list_item(index)));
+                let row = read(owner, |this| {
+                    this.artboard_instance(index).zip(this.list_item(index))
+                });
                 if let Some((artboard, item)) = row {
                     renderer.save();
-                    let transform = read(owner, |this| *this.artboard_transforms.entry(item).or_default().values());
+                    let transform = read(owner, |this| {
+                        *this.artboard_transforms.entry(item).or_default().values()
+                    });
                     renderer.transform(nuxie_render_api::Mat2D(transform));
-                    let host = read(owner, |this| this.parent_artboard().expect("component list artboard"));
+                    let host = read(owner, |this| {
+                        this.parent_artboard().expect("component list artboard")
+                    });
                     Artboard::draw_hosted_handle(&host, &artboard.core_handle(), renderer);
                     renderer.restore();
                 }
@@ -1749,7 +1813,9 @@ impl ArtboardComponentList {
                 index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1)).unwrap() as i32;
             }
             #[cfg(any(test, feature = "testing"))]
-            owner.with_downcast::<Self, _>(|list| list.verify_quiet_rows(RowPass::Update, 0.0, AdvanceFlags::NONE, false));
+            owner.with_downcast::<Self, _>(|list| {
+                list.verify_quiet_rows(RowPass::Update, 0.0, AdvanceFlags::NONE, false)
+            });
         }
     }
 
@@ -1888,7 +1954,9 @@ impl ArtboardComponentList {
             index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index + 1)).unwrap();
         }
         #[cfg(any(test, feature = "testing"))]
-        owner.with_downcast::<Self, _>(|list| list.verify_quiet_rows(RowPass::UpdateDataBinds, 0.0, AdvanceFlags::NONE, false));
+        owner.with_downcast::<Self, _>(|list| {
+            list.verify_quiet_rows(RowPass::UpdateDataBinds, 0.0, AdvanceFlags::NONE, false)
+        });
     }
 
     fn artboard_transform(&self, artboard: &RuntimeArtboardInstanceHandle) -> Mat2D {

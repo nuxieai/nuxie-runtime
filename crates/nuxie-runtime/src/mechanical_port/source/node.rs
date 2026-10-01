@@ -19,7 +19,37 @@ impl Default for Node {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    Node,
+    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl Node {
+    /// Node::updateWorldTransform: mark the derived local matrix stale before
+    /// invoking TransformComponent's virtual composition/constraint sequence.
+    pub(crate) fn update_world_transform_occurrence<
+        T: crate::mechanical_port::source::transform_component::TransformUpdate,
+    >(
+        owner: &crate::mechanical_port::source::core::CoreHandle,
+    ) {
+        if owner
+            .with_downcast_mut::<T, _>(|object| {
+                object
+                    .as_node_mut()
+                    .expect("Node virtual receiver")
+                    .update_world_transform_before_super();
+            })
+            .is_some()
+        {
+            crate::mechanical_port::source::transform_component::update_world_transform_super::<T>(
+                owner,
+            );
+        }
+    }
     pub fn set_x(&mut self, value: f32) {
         if self.base.set_x_value(value) {
             self.x_changed();

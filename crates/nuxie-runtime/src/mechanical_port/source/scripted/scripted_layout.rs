@@ -25,6 +25,22 @@ impl Drop for ScriptedLayout {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    ScriptedLayout,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        if owner.is_alive() {
+            crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::update_after_super_occurrence(owner, dirt);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl ScriptedLayout {
     /// The size the layout engine last gave this box; absent before it has.
     pub fn layout_size(&self) -> Option<Vec2> {

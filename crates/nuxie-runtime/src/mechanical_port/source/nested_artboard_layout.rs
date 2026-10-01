@@ -32,6 +32,35 @@ impl Default for NestedArtboardLayout {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    NestedArtboardLayout,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        if owner.is_alive() {
+            crate::mechanical_port::source::nested_artboard::NestedArtboard::update_after_transform_occurrence(owner,dirt);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    |owner| {
+        let Some((layout,transforms)) = owner.with_downcast::<Self,_>(|object| {
+            (object.layout_constraint_handles(),
+             crate::mechanical_port::source::generated::core_registry::CoreCapabilities::as_transform_component(object).expect("transform receiver").constraints().to_vec())
+        }) else { return; };
+        crate::mechanical_port::source::transform_component::apply_constraint_lists(
+            owner,
+            layout,
+            Vec::new(),
+            transforms,
+            false,
+        );
+        owner.with_downcast_mut::<Self, _>(|object| object.apply_layout_placement());
+    }
+);
+
 impl NestedArtboardLayout {
     pub fn layout_node(
         &self,

@@ -52,6 +52,22 @@ impl Drop for ScriptedDrawable {
         ScriptedObject::dispose_owned_script_inputs(&mut self.properties);
     }
 }
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    ScriptedDrawable,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        if owner.is_alive() {
+            crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::update_after_super_occurrence(owner, dirt);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl ScriptedDrawable {
     pub fn asset_id(&self) -> u32 {
         self.base.script_asset_id()

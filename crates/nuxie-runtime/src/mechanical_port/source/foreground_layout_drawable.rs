@@ -17,12 +17,44 @@ pub struct ForegroundLayoutDrawable {
     paint_container: ShapePaintContainer,
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    ForegroundLayoutDrawable,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        owner.with_downcast_mut::<Self, _>(|object| object.update_after_transform_super(dirt));
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl ForegroundLayoutDrawable {
-    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
-        let Some(parent)=self.base.parent_handle() else {return crate::mechanical_port::source::drawable::BoundsFidelity::None};
-        let bounds=parent.with(|parent|parent.as_layout_component().map(|parent|parent.local_bounds())).flatten();
-        let Some(bounds)=bounds else {return crate::mechanical_port::source::drawable::BoundsFidelity::None};
-        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&bounds,self.base.world_transform(),Some(&self.paint_container),out)
+    pub fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        let Some(parent) = self.base.parent_handle() else {
+            return crate::mechanical_port::source::drawable::BoundsFidelity::None;
+        };
+        let bounds = parent
+            .with(|parent| {
+                parent
+                    .as_layout_component()
+                    .map(|parent| parent.local_bounds())
+            })
+            .flatten();
+        let Some(bounds) = bounds else {
+            return crate::mechanical_port::source::drawable::BoundsFidelity::None;
+        };
+        crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+            &bounds,
+            self.base.world_transform(),
+            Some(&self.paint_container),
+            out,
+        )
     }
     pub fn shape_paint_container(&self) -> &ShapePaintContainer {
         &self.paint_container

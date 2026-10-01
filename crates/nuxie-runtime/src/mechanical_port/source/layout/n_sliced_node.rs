@@ -33,6 +33,20 @@ pub struct NSlicedNode {
     pub map_world_point: Box<dyn Fn(&mut Vec2D)>,
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    NSlicedNode,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        owner.with_downcast_mut::<Self, _>(|object| object.update_after_transform_super(dirt));
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl NSlicedNode {
     pub const TYPE_KEY: u16 = NSlicedNodeBase::TYPE_KEY;
     pub fn new(base: NSlicedNodeBase) -> Self {

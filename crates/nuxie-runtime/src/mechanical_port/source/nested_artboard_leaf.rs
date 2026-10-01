@@ -14,6 +14,25 @@ pub struct NestedArtboardLeaf {
     pub base: NestedArtboardLeafBase,
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    NestedArtboardLeaf,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        if owner.is_alive() {
+            crate::mechanical_port::source::nested_artboard::NestedArtboard::update_after_transform_occurrence(owner, dirt);
+            if owner.is_alive() {
+                Self::update_after_nested_artboard_super_occurrence(owner, dirt);
+            }
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl NestedArtboardLeaf {
     pub fn clone_leaf(&self) -> Self {
         let mut nested_artboard = NestedArtboardLeafBase::clone_into(self);

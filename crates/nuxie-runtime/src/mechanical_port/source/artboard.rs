@@ -480,6 +480,14 @@ impl LinearAnimationArtboard for RuntimeArtboardObjectContext {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(Artboard,
+    |owner, dirt| { crate::mechanical_port::source::layout_component::LayoutComponent::update_occurrence::<Self>(owner, dirt, |object| object.update_render_path());
+        if owner.is_alive() { Self::update_after_layout_super_handle(owner, dirt); } },
+    |object: &mut Self| { let (x,y) = (object.pivot_origin_x(), object.pivot_origin_y()); object.base.base.update_transform_for_artboard(x,y); },
+    |_owner| {},
+    |object: &mut Self| { object.base.base.compose_world_transform(); },
+    crate::mechanical_port::source::layout_component::LayoutComponent::update_constraints_occurrence::<Self>);
+
 impl Artboard {
     pub fn new() -> Box<Self> {
         let mut artboard = Box::new(Self::default());
@@ -6121,8 +6129,15 @@ mod update_receiver_tests {
         // path, which must run after every checked root borrow has ended.
         let _manager = runtime.ensure_focus_manager();
         runtime.with_artboard_mut(|instance| {
-            let node = instance.core_arena.insert(crate::mechanical_port::source::node::Node::default());
-            node.with_mut(|object| object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE));
+            let node = instance
+                .core_arena
+                .insert(crate::mechanical_port::source::node::Node::default());
+            node.with_mut(|object| {
+                object
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::NONE)
+            });
             instance.dependency_order.push(node.into());
         });
         assert!(Artboard::update_components_handle(&root));
@@ -6152,8 +6167,15 @@ mod update_receiver_tests {
         let weak = runtime.downgrade();
         let _manager = runtime.ensure_focus_manager();
         let node = runtime.with_artboard_mut(|instance| {
-            let node = instance.core_arena.insert(crate::mechanical_port::source::node::Node::default());
-            node.with_mut(|object| object.as_component_mut().unwrap().set_dirt(ComponentDirt::TRANSFORM));
+            let node = instance
+                .core_arena
+                .insert(crate::mechanical_port::source::node::Node::default());
+            node.with_mut(|object| {
+                object
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::TRANSFORM)
+            });
             instance.dependency_order.push(node.clone().into());
             node
         });

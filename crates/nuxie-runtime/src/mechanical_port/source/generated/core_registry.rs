@@ -5498,7 +5498,7 @@ pub trait CoreCapabilities: Any {
             let dirt = component.add_dirt_state(value)?;
             Some((
                 dirt,
-                component.base.base.handle(),
+                if recurse { component.base.base.handle() } else { None },
                 component.artboard_handle(),
                 component.graph_order(),
                 if recurse {

@@ -1322,8 +1322,30 @@ fn state_machine_added_phases_match_cpp() {
             3,
             "{member} must stop on the first child failure"
         );
+        let lifecycle = if member.ends_with("onAddedClean") {
+            let classification = body
+                .find("std::unordered_set<const Core*> untracked;")
+                .expect("post-lifecycle settle classification");
+            let binds = body.find("m_dataBinds").expect("untracked binding scan");
+            let settle = body
+                .find("state->transitionsSettleSafe")
+                .expect("settle classification");
+            let time = body
+                .find("state->transitionsIgnoreTime")
+                .expect("time classification");
+            assert!(
+                listeners < classification
+                    && classification < binds
+                    && binds < settle
+                    && settle < time
+            );
+            &body[..classification]
+        } else {
+            body
+        };
+        assert!(!body.contains("m_scriptedObjects"));
         assert!(
-            !body.contains("m_dataBinds") && !body.contains("m_scriptedObjects"),
+            !lifecycle.contains("m_dataBinds"),
             "{member} must not visit definition collections outside the pinned three phases"
         );
     }

@@ -20,6 +20,13 @@ use nuxie_runtime::source::{
         converters::data_converter_to_string::DataConverterToString, data_bind::DataBind,
         data_bind_container::DataBindContainerOwner, data_bind_context::DataBindContext,
     },
+    generated::{
+        core_registry::CoreRegistry,
+        data_bind::{
+            bindable_property_color_base::BindablePropertyColorBase,
+            bindable_property_string_base::BindablePropertyStringBase,
+        },
+    },
     math::random::RandomProvider,
     node::Node,
     viewmodel::{
@@ -379,29 +386,26 @@ impl NativeFixture {
     }
 
     fn set_bindable_string(&self, value: &str, label: &str) {
-        self.machine.with_instance_mut(|machine| {
-            let target = bindable_property(machine, label);
-            target
-                .with_downcast_mut::<BindablePropertyString, _>(|property| {
-                    let mut base = std::mem::take(&mut property.base);
-                    base.set_property_value(value.to_owned(), property);
-                    property.base = base;
-                })
-                .unwrap_or_else(|| panic!("wrong native bindable string type for {label}"));
-        });
+        let target = self
+            .machine
+            .with_instance_mut(|machine| bindable_property(machine, label));
+        // Keep the live observer chain in place while the setter notifies it.
+        assert!(CoreRegistry::set_string_handle(
+            &target,
+            i32::from(BindablePropertyStringBase::PROPERTY_VALUE_PROPERTY_KEY),
+            value.to_owned(),
+        ));
     }
 
     fn set_bindable_color(&self, value: u32, label: &str) {
-        self.machine.with_instance_mut(|machine| {
-            let target = bindable_property(machine, label);
-            target
-                .with_downcast_mut::<BindablePropertyColor, _>(|property| {
-                    let mut base = std::mem::take(&mut property.base);
-                    base.set_property_value(value as i32, property);
-                    property.base = base;
-                })
-                .unwrap_or_else(|| panic!("wrong native bindable color type for {label}"));
-        });
+        let target = self
+            .machine
+            .with_instance_mut(|machine| bindable_property(machine, label));
+        assert!(CoreRegistry::set_color_handle(
+            &target,
+            i32::from(BindablePropertyColorBase::PROPERTY_VALUE_PROPERTY_KEY),
+            value as i32,
+        ));
     }
 }
 

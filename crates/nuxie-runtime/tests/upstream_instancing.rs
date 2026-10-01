@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory, RecordingRenderer};
 use nuxie_runtime::{
-    source::shapes::{clipping_shape::ClippingShape, shape::Shape},
     Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
+    source::shapes::{clipping_shape::ClippingShape, shape::Shape},
 };
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
@@ -289,6 +289,50 @@ fn custom_clip_changes_preserve_native_semantic_snapshots() {
         .with(|object| *object.as_node().unwrap().world_transform())
         .unwrap();
     let clip = &clips[0];
+    instance.advance_default(0.0);
+    let semantic_data = manager
+        .with_semantic_manager(|manager| manager.node_by_id(id))
+        .unwrap()
+        .borrow()
+        .semantic_data
+        .clone()
+        .unwrap();
+    let semantic_dirt = || {
+        semantic_data
+            .with(|data| data.as_component().unwrap().dirt())
+            .unwrap()
+    };
+    use nuxie_runtime::source::component_dirt::ComponentDirt;
+    // This test appends SemanticData after source import, so it is absent from
+    // the source dependency order replayed by the instance. Initialize that
+    // injected occurrence through the same clear-before-update boundary as
+    // Artboard::update_components_handle; do not clear dirt after clip changes.
+    let initial_dirt = semantic_dirt();
+    assert!(
+        semantic_data
+            .with_mut(|data| data.component_set_dirt(ComponentDirt::NONE))
+            .unwrap()
+    );
+    assert!(
+        nuxie_runtime::source::generated::core_registry::component_update_handle(
+            &semantic_data,
+            initial_dirt,
+        )
+    );
+    assert!(!semantic_dirt().contains(ComponentDirt::PATH));
+    // Upstream rebuilds the clip path and dirties artboard clipping when its
+    // visibility changes; neither operation dirties sibling semantic data.
+    clip.with_downcast_mut::<ClippingShape, _>(|clip| clip.update(ComponentDirt::PATH))
+        .unwrap();
+    assert!(!semantic_dirt().contains(ComponentDirt::PATH));
+    for visible in [true, false] {
+        assert!(CoreRegistry::set_bool_handle(
+            clip,
+            ClippingShapeBase::IS_VISIBLE_PROPERTY_KEY.into(),
+            visible
+        ));
+        assert!(!semantic_dirt().contains(ComponentDirt::PATH));
+    }
     let clip_source = clip
         .with_downcast::<ClippingShape, _>(ClippingShape::source)
         .flatten()
@@ -339,8 +383,12 @@ fn custom_clip_changes_preserve_native_semantic_snapshots() {
         x + 10000.0
     ));
     instance.advance_default(0.0);
-    assert!(manager
-        .with_semantic_manager_mut(|manager| manager.snapshot().iter().any(|node| node.id == id)));
+    assert!(
+        manager.with_semantic_manager_mut(|manager| manager
+            .snapshot()
+            .iter()
+            .any(|node| node.id == id))
+    );
     assert!(CoreRegistry::set_bool_handle(
         clip,
         ClippingShapeBase::IS_VISIBLE_PROPERTY_KEY.into(),
@@ -358,7 +406,7 @@ fn custom_clip_changes_preserve_native_semantic_snapshots() {
     );
     use nuxie_runtime::source::{
         math::{aabb::Aabb, path_types::PathDirection},
-        semantic::semantic_provider::{validate_semantic_geometry, SemanticGeometryError},
+        semantic::semantic_provider::{SemanticGeometryError, validate_semantic_geometry},
     };
     assert_eq!(validate_semantic_geometry(&instance.core_handle()), Ok(()));
     clip.with_downcast_mut::<ClippingShape, _>(|clip| {

@@ -1,0 +1,29 @@
+perf-gate error: ceilings exceeded: script_dependency_test_using_library_v2=2.313>1, script_dependency_test_using_library=2.227>1, image_scripting_property_value=6.226>5, audio_script=3.606>2, spotify_kids_demo=11.348>9, multi_listeners=3.208>3
+perf-gate advance+draw: release median of 5, 100 frames at 60 Hz
+| file | C++ ms/frame | Rust ms/frame | Rust/C++ | ceiling | result |
+|---|---:|---:|---:|---:|---|
+| text_vertical_trim_test | 0.005478 | 0.016027 | 2.925x | 16x | PASS |
+| jellyfish_test | 0.000676 | 0.004162 | 6.158x | 10x | PASS |
+| car_widgets_v01 | 0.027835 | 0.138152 | 4.963x | 10x | PASS |
+| zombie_skins | 0.030161 | 0.271197 | 8.992x | 15x | PASS |
+| script_dependency_test_using_library_v2 | 0.001677 | 0.003880 | 2.313x | 1x | FAIL |
+| script_dependency_test_using_library | 0.001633 | 0.003637 | 2.227x | 1x | FAIL |
+| data_bind_test_cmdq | 0.006011 | 0.018443 | 3.068x | 12x | PASS |
+| data_viz_demo | 0.018962 | 0.219198 | 11.560x | 282x | PASS |
+| viewmodel_based_condition | 0.000854 | 0.004900 | 5.739x | 6x | PASS |
+| image_scripting_property_value | 0.000469 | 0.002921 | 6.226x | 5x | FAIL |
+| background_measure | 0.001356 | 0.003151 | 2.323x | 3x | PASS |
+| audio_script | 0.002682 | 0.009673 | 3.606x | 2x | FAIL |
+| spotify_kids_demo | 0.011014 | 0.124988 | 11.348x | 9x | FAIL |
+| library_with_text_and_image | 0.000264 | 0.001212 | 4.586x | 5x | PASS |
+| library | 0.001575 | 0.003485 | 2.213x | 4x | PASS |
+| layout_grid_stack | 0.001303 | 0.005494 | 4.215x | 7x | PASS |
+| gamepad_test | 0.002603 | 0.012409 | 4.767x | 8x | PASS |
+| local_bounds | 0.002572 | 0.005605 | 2.179x | 3x | PASS |
+| hit_test_test | 0.002694 | 0.013402 | 4.975x | 30x | PASS |
+| multi_listeners | 0.011098 | 0.035603 | 3.208x | 3x | FAIL |
+| script_create_text_runs | 0.005469 | 0.024588 | 4.496x | 7x | PASS |
+| virtualize_blendmode | 0.003961 | 0.029503 | 7.449x | 13x | PASS |
+| component_list_1 | 0.005486 | 0.025074 | 4.570x | 7x | PASS |
+| collapsing_elements | 0.004650 | 0.030062 | 6.465x | 12x | PASS |
+| clear_viewmodel_list | 0.001022 | 0.006482 | 6.345x | 9x | PASS |

@@ -1,0 +1,78 @@
+START cpp-first 2026-10-01T01:49:10.511352+00:00
+{ 20.98 35.64 40.77 }
+COMMAND ['tools/perf-gate/run-pinned.sh', '/tmp/nuxie-closeout-perf-baseline.zqOlnh/perf-compare', '--cpp-runner', '/tmp/nuxie-closeout-perf-baseline.zqOlnh/rive_golden_runner_scripted', '--rust-runner', '/tmp/nuxie-closeout-perf-corrected.gDK6d1/rust-golden-runner-scripted', '--rive-runtime-dir', '/Users/levi/dev/worktrees/rive-runtime-resume-8e8492f8', '--corpus', 'corpus.toml', '--corpus-ids', 'text_vertical_trim_test,jellyfish_test,car_widgets_v01,zombie_skins,script_dependency_test_using_library_v2,script_dependency_test_using_library,data_bind_test_cmdq,data_viz_demo,viewmodel_based_condition,image_scripting_property_value,background_measure,audio_script,spotify_kids_demo,library_with_text_and_image,library,layout_grid_stack,gamepad_test,local_bounds,hit_test_test,multi_listeners,script_create_text_runs,virtualize_blendmode,component_list_1,collapsing_elements,clear_viewmodel_list', '--iterations', '5', '--warmups', '0', '--aggregate', 'median', '--runner-order', 'cpp-first', '--runner-benchmark', '--benchmark-frames', '100', '--benchmark-hz', '60', '--rust-execute-scripts', '--json', '/tmp/nuxie-closeout-perf-corrected.gDK6d1/cpp-first.json', '--meta', 'build_profile=release', '--meta', 'git_sha=89f28829a354e58f4b02a060c5a0661f730a41b3', '--meta', 'upstream_sha=bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6', '--meta', 'host=Apple M5 Max; macOS26.6.2;18 CPUs', '--meta', 'contention=unrelated host workloads present; diagnostic only; own builds and validation stopped', '--meta', 'rustc=1.97.1 Homebrew; LLVM22.1.8', '--meta', 'cpp=Apple clang21.0.0; upstream-O2-fullLTO', '--meta', 'correctness=23of25 stream comparisons; zombie_skins and virtualize_blendmode mismatch; not proof of identical internal work', '--meta', 'baseline=post-harness-fix; not an optimization measurement', '--meta', 'rust_runner_sha256=208f15d885157fadc6de460d81d08fb9cd24a5bb6207126564f9cf0d78adf048', '--meta', 'cpp_runner_sha256=e71c538d962de71f587681f5e2ea0e2994a475fe79718ab708d7770ddca3025b']
+perf-gate affinity=unavailable platform=Darwin scheduler=default
+perf-compare corpus=corpus.toml
+perf-compare entries=25 iterations=5 warmups=0
+perf-compare metric=runner_hot_loop_ms
+perf-compare benchmark_repeat=1
+perf-compare benchmark_frames=100 benchmark_hz=60.000
+perf-compare aggregate=median
+perf-compare runner_order=cpp-first
+entry id=text_vertical_trim_test segments=100 cpp_median_ms=0.525 rust_median_ms=1.909 cpp_min_ms=0.479 rust_min_ms=1.493 rust_over_cpp=3.640
+entry id=jellyfish_test segments=100 cpp_median_ms=0.066 rust_median_ms=0.510 cpp_min_ms=0.065 rust_min_ms=0.492 rust_over_cpp=7.669
+entry id=car_widgets_v01 segments=100 cpp_median_ms=3.092 rust_median_ms=15.084 cpp_min_ms=2.874 rust_min_ms=13.713 rust_over_cpp=4.879
+entry id=zombie_skins segments=100 cpp_median_ms=3.425 rust_median_ms=27.481 cpp_min_ms=3.215 rust_min_ms=25.776 rust_over_cpp=8.025
+entry id=script_dependency_test_using_library_v2 segments=100 cpp_median_ms=0.216 rust_median_ms=0.484 cpp_min_ms=0.194 rust_min_ms=0.367 rust_over_cpp=2.239
+entry id=script_dependency_test_using_library segments=100 cpp_median_ms=0.200 rust_median_ms=0.375 cpp_min_ms=0.155 rust_min_ms=0.349 rust_over_cpp=1.876
+entry id=data_bind_test_cmdq segments=100 cpp_median_ms=0.588 rust_median_ms=1.930 cpp_min_ms=0.546 rust_min_ms=1.807 rust_over_cpp=3.283
+entry id=data_viz_demo segments=100 cpp_median_ms=1.782 rust_median_ms=23.803 cpp_min_ms=1.613 rust_min_ms=22.165 rust_over_cpp=13.355
+entry id=viewmodel_based_condition segments=100 cpp_median_ms=0.084 rust_median_ms=0.408 cpp_min_ms=0.081 rust_min_ms=0.401 rust_over_cpp=4.852
+entry id=image_scripting_property_value segments=100 cpp_median_ms=0.049 rust_median_ms=0.358 cpp_min_ms=0.048 rust_min_ms=0.281 rust_over_cpp=7.268
+entry id=background_measure segments=100 cpp_median_ms=0.139 rust_median_ms=0.309 cpp_min_ms=0.133 rust_min_ms=0.294 rust_over_cpp=2.228
+entry id=audio_script segments=100 cpp_median_ms=0.279 rust_median_ms=1.020 cpp_min_ms=0.262 rust_min_ms=0.905 rust_over_cpp=3.656
+entry id=spotify_kids_demo segments=100 cpp_median_ms=1.166 rust_median_ms=11.273 cpp_min_ms=1.117 rust_min_ms=10.754 rust_over_cpp=9.670
+entry id=library_with_text_and_image segments=100 cpp_median_ms=0.029 rust_median_ms=0.130 cpp_min_ms=0.029 rust_min_ms=0.125 rust_over_cpp=4.452
+entry id=library segments=100 cpp_median_ms=0.183 rust_median_ms=0.372 cpp_min_ms=0.175 rust_min_ms=0.349 rust_over_cpp=2.025
+entry id=layout_grid_stack segments=100 cpp_median_ms=0.142 rust_median_ms=0.556 cpp_min_ms=0.135 rust_min_ms=0.544 rust_over_cpp=3.906
+entry id=gamepad_test segments=100 cpp_median_ms=0.223 rust_median_ms=1.129 cpp_min_ms=0.204 rust_min_ms=1.074 rust_over_cpp=5.060
+entry id=local_bounds segments=100 cpp_median_ms=0.235 rust_median_ms=0.627 cpp_min_ms=0.211 rust_min_ms=0.497 rust_over_cpp=2.671
+entry id=hit_test_test segments=100 cpp_median_ms=0.250 rust_median_ms=1.126 cpp_min_ms=0.236 rust_min_ms=1.014 rust_over_cpp=4.499
+entry id=multi_listeners segments=100 cpp_median_ms=1.014 rust_median_ms=3.201 cpp_min_ms=0.964 rust_min_ms=2.877 rust_over_cpp=3.157
+entry id=script_create_text_runs segments=100 cpp_median_ms=0.531 rust_median_ms=2.901 cpp_min_ms=0.445 rust_min_ms=2.429 rust_over_cpp=5.464
+entry id=virtualize_blendmode segments=100 cpp_median_ms=0.446 rust_median_ms=2.463 cpp_min_ms=0.361 rust_min_ms=2.048 rust_over_cpp=5.525
+entry id=component_list_1 segments=100 cpp_median_ms=0.446 rust_median_ms=2.685 cpp_min_ms=0.398 rust_min_ms=2.095 rust_over_cpp=6.018
+entry id=collapsing_elements segments=100 cpp_median_ms=0.547 rust_median_ms=3.016 cpp_min_ms=0.462 rust_min_ms=2.679 rust_over_cpp=5.509
+entry id=clear_viewmodel_list segments=100 cpp_median_ms=0.105 rust_median_ms=0.582 cpp_min_ms=0.102 rust_min_ms=0.557 rust_over_cpp=5.522
+aggregate mode=median entries=25 segments=2500 cpp_ms_sum=15.763 rust_ms_sum=103.732 rust_over_cpp=6.581
+perf-compare json=/tmp/nuxie-closeout-perf-corrected.gDK6d1/cpp-first.json
+EXIT 0
+START rust-first 2026-10-01T01:49:13.499054+00:00
+{ 20.26 35.24 40.60 }
+COMMAND ['tools/perf-gate/run-pinned.sh', '/tmp/nuxie-closeout-perf-baseline.zqOlnh/perf-compare', '--cpp-runner', '/tmp/nuxie-closeout-perf-baseline.zqOlnh/rive_golden_runner_scripted', '--rust-runner', '/tmp/nuxie-closeout-perf-corrected.gDK6d1/rust-golden-runner-scripted', '--rive-runtime-dir', '/Users/levi/dev/worktrees/rive-runtime-resume-8e8492f8', '--corpus', 'corpus.toml', '--corpus-ids', 'text_vertical_trim_test,jellyfish_test,car_widgets_v01,zombie_skins,script_dependency_test_using_library_v2,script_dependency_test_using_library,data_bind_test_cmdq,data_viz_demo,viewmodel_based_condition,image_scripting_property_value,background_measure,audio_script,spotify_kids_demo,library_with_text_and_image,library,layout_grid_stack,gamepad_test,local_bounds,hit_test_test,multi_listeners,script_create_text_runs,virtualize_blendmode,component_list_1,collapsing_elements,clear_viewmodel_list', '--iterations', '5', '--warmups', '0', '--aggregate', 'median', '--runner-order', 'rust-first', '--runner-benchmark', '--benchmark-frames', '100', '--benchmark-hz', '60', '--rust-execute-scripts', '--json', '/tmp/nuxie-closeout-perf-corrected.gDK6d1/rust-first.json', '--meta', 'build_profile=release', '--meta', 'git_sha=89f28829a354e58f4b02a060c5a0661f730a41b3', '--meta', 'upstream_sha=bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6', '--meta', 'host=Apple M5 Max; macOS26.6.2;18 CPUs', '--meta', 'contention=unrelated host workloads present; diagnostic only; own builds and validation stopped', '--meta', 'rustc=1.97.1 Homebrew; LLVM22.1.8', '--meta', 'cpp=Apple clang21.0.0; upstream-O2-fullLTO', '--meta', 'correctness=23of25 stream comparisons; zombie_skins and virtualize_blendmode mismatch; not proof of identical internal work', '--meta', 'baseline=post-harness-fix; not an optimization measurement', '--meta', 'rust_runner_sha256=208f15d885157fadc6de460d81d08fb9cd24a5bb6207126564f9cf0d78adf048', '--meta', 'cpp_runner_sha256=e71c538d962de71f587681f5e2ea0e2994a475fe79718ab708d7770ddca3025b']
+perf-gate affinity=unavailable platform=Darwin scheduler=default
+perf-compare corpus=corpus.toml
+perf-compare entries=25 iterations=5 warmups=0
+perf-compare metric=runner_hot_loop_ms
+perf-compare benchmark_repeat=1
+perf-compare benchmark_frames=100 benchmark_hz=60.000
+perf-compare aggregate=median
+perf-compare runner_order=rust-first
+entry id=text_vertical_trim_test segments=100 cpp_median_ms=0.551 rust_median_ms=1.608 cpp_min_ms=0.493 rust_min_ms=1.523 rust_over_cpp=2.920
+entry id=jellyfish_test segments=100 cpp_median_ms=0.071 rust_median_ms=0.422 cpp_min_ms=0.070 rust_min_ms=0.383 rust_over_cpp=5.971
+entry id=car_widgets_v01 segments=100 cpp_median_ms=2.787 rust_median_ms=13.823 cpp_min_ms=2.537 rust_min_ms=13.040 rust_over_cpp=4.960
+entry id=zombie_skins segments=100 cpp_median_ms=3.019 rust_median_ms=27.130 cpp_min_ms=2.924 rust_min_ms=25.159 rust_over_cpp=8.986
+entry id=script_dependency_test_using_library_v2 segments=100 cpp_median_ms=0.171 rust_median_ms=0.393 cpp_min_ms=0.167 rust_min_ms=0.370 rust_over_cpp=2.304
+entry id=script_dependency_test_using_library segments=100 cpp_median_ms=0.166 rust_median_ms=0.368 cpp_min_ms=0.154 rust_min_ms=0.339 rust_over_cpp=2.216
+entry id=data_bind_test_cmdq segments=100 cpp_median_ms=0.604 rust_median_ms=1.849 cpp_min_ms=0.525 rust_min_ms=1.806 rust_over_cpp=3.062
+entry id=data_viz_demo segments=100 cpp_median_ms=1.899 rust_median_ms=21.926 cpp_min_ms=1.629 rust_min_ms=20.310 rust_over_cpp=11.545
+entry id=viewmodel_based_condition segments=100 cpp_median_ms=0.088 rust_median_ms=0.495 cpp_min_ms=0.079 rust_min_ms=0.383 rust_over_cpp=5.615
+entry id=image_scripting_property_value segments=100 cpp_median_ms=0.050 rust_median_ms=0.297 cpp_min_ms=0.049 rust_min_ms=0.287 rust_over_cpp=5.910
+entry id=background_measure segments=100 cpp_median_ms=0.138 rust_median_ms=0.320 cpp_min_ms=0.136 rust_min_ms=0.296 rust_over_cpp=2.313
+entry id=audio_script segments=100 cpp_median_ms=0.271 rust_median_ms=0.973 cpp_min_ms=0.264 rust_min_ms=0.784 rust_over_cpp=3.584
+entry id=spotify_kids_demo segments=100 cpp_median_ms=1.104 rust_median_ms=12.510 cpp_min_ms=1.078 rust_min_ms=11.512 rust_over_cpp=11.332
+entry id=library_with_text_and_image segments=100 cpp_median_ms=0.029 rust_median_ms=0.125 cpp_min_ms=0.029 rust_min_ms=0.120 rust_over_cpp=4.261
+entry id=library segments=100 cpp_median_ms=0.161 rust_median_ms=0.353 cpp_min_ms=0.149 rust_min_ms=0.340 rust_over_cpp=2.201
+entry id=layout_grid_stack segments=100 cpp_median_ms=0.133 rust_median_ms=0.554 cpp_min_ms=0.130 rust_min_ms=0.541 rust_over_cpp=4.154
+entry id=gamepad_test segments=100 cpp_median_ms=0.263 rust_median_ms=1.246 cpp_min_ms=0.215 rust_min_ms=1.117 rust_over_cpp=4.736
+entry id=local_bounds segments=100 cpp_median_ms=0.260 rust_median_ms=0.565 cpp_min_ms=0.250 rust_min_ms=0.509 rust_over_cpp=2.172
+entry id=hit_test_test segments=100 cpp_median_ms=0.272 rust_median_ms=1.348 cpp_min_ms=0.240 rust_min_ms=1.120 rust_over_cpp=4.962
+entry id=multi_listeners segments=100 cpp_median_ms=1.113 rust_median_ms=3.566 cpp_min_ms=0.972 rust_min_ms=3.023 rust_over_cpp=3.205
+entry id=script_create_text_runs segments=100 cpp_median_ms=0.550 rust_median_ms=2.465 cpp_min_ms=0.440 rust_min_ms=2.092 rust_over_cpp=4.483
+entry id=virtualize_blendmode segments=100 cpp_median_ms=0.399 rust_median_ms=2.956 cpp_min_ms=0.372 rust_min_ms=2.287 rust_over_cpp=7.407
+entry id=component_list_1 segments=100 cpp_median_ms=0.552 rust_median_ms=2.512 cpp_min_ms=0.504 rust_min_ms=2.248 rust_over_cpp=4.551
+entry id=collapsing_elements segments=100 cpp_median_ms=0.468 rust_median_ms=3.012 cpp_min_ms=0.448 rust_min_ms=2.589 rust_over_cpp=6.430
+entry id=clear_viewmodel_list segments=100 cpp_median_ms=0.104 rust_median_ms=0.652 cpp_min_ms=0.101 rust_min_ms=0.580 rust_over_cpp=6.248
+aggregate mode=median entries=25 segments=2500 cpp_ms_sum=15.223 rust_ms_sum=101.468 rust_over_cpp=6.665
+perf-compare json=/tmp/nuxie-closeout-perf-corrected.gDK6d1/rust-first.json
+EXIT 0

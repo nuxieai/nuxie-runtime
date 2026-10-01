@@ -1,0 +1,52 @@
+[exact] text_vertical_trim_test: c++ stream ok (8753479 bytes)
+[exact] text_vertical_trim_test: rust comparison verified
+[exact] jellyfish_test: c++ stream ok (6580131 bytes)
+[exact] jellyfish_test: rust comparison verified
+[exact] car_widgets_v01: c++ stream ok (49176101 bytes)
+[exact] car_widgets_v01: rust comparison verified
+[exact] zombie_skins: c++ stream ok (9076021 bytes)
+[exact] script_dependency_test_using_library_v2: c++ stream ok (1767602 bytes)
+[exact] script_dependency_test_using_library_v2: rust comparison verified
+[exact] script_dependency_test_using_library: c++ stream ok (1227999 bytes)
+[exact] script_dependency_test_using_library: rust comparison verified
+[exact] data_bind_test_cmdq: c++ stream ok (22865600 bytes)
+[exact] data_bind_test_cmdq: rust comparison verified
+[exact] data_viz_demo: c++ stream ok (37868015 bytes)
+[exact] data_viz_demo: rust comparison verified
+[exact] viewmodel_based_condition: c++ stream ok (3416380 bytes)
+[exact] viewmodel_based_condition: rust comparison verified
+[exact] image_scripting_property_value: c++ stream ok (3304650 bytes)
+[exact] image_scripting_property_value: rust comparison verified
+[exact] background_measure: c++ stream ok (1235984 bytes)
+[exact] background_measure: rust comparison verified
+[exact] audio_script: c++ stream ok (9276865 bytes)
+[exact] audio_script: rust comparison verified
+[exact] spotify_kids_demo: c++ stream ok (6622340 bytes)
+[exact] spotify_kids_demo: rust comparison verified
+[exact] library_with_text_and_image: c++ stream ok (228247 bytes)
+[exact] library_with_text_and_image: rust comparison verified
+[exact] library: c++ stream ok (3285492 bytes)
+[exact] library: rust comparison verified
+[exact] layout_grid_stack: c++ stream ok (345908 bytes)
+[exact] layout_grid_stack: rust comparison verified
+[exact] gamepad_test: c++ stream ok (942069 bytes)
+[exact] gamepad_test: rust comparison verified
+[exact] local_bounds: c++ stream ok (4598609 bytes)
+[exact] local_bounds: rust comparison verified
+[exact] hit_test_test: c++ stream ok (533053 bytes)
+[exact] hit_test_test: rust comparison verified
+[exact] multi_listeners: c++ stream ok (38834901 bytes)
+[exact] multi_listeners: rust comparison verified
+[exact] script_create_text_runs: c++ stream ok (5896223 bytes)
+[exact] script_create_text_runs: rust comparison verified
+[exact] virtualize_blendmode: c++ stream ok (384489 bytes)
+[exact] component_list_1: c++ stream ok (2724888 bytes)
+[exact] component_list_1: rust comparison verified
+[exact] collapsing_elements: c++ stream ok (932670 bytes)
+[exact] collapsing_elements: rust comparison verified
+[exact] clear_viewmodel_list: c++ stream ok (151430 bytes)
+[exact] clear_viewmodel_list: rust comparison verified
+golden-compare summary: entries=25 exact=25 exact-segments=2500 side-channel-segments=0 diverges=0 unsupported-feature=0 not-yet=0
+failure: zombie_skins: stream differs from C++ under exact verification: line 9542: rust `transform matrix=[0.891314566,-0.21955955,0.239183128,0.97097367,-88.4210739,56.8318672]` vs c++ `transform matrix=[0.891313076,-0.219559699,0.239182979,0.970974505,-88.4210358,56.8320007]`
+failure: virtualize_blendmode: stream differs from C++ under exact verification: line 6351: rust `drawPath path={id=15,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(0,0),(375,0),(375,112),(0,112),(0,0)]}} paint={id=18,style=fill,color=0xff656716,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}` vs c++ `drawPath path={id=15,fillRule=0,path={verbs=[move,line,line,line,line,close],points=[(0,0),(375,0),(375,112),(0,112),(0,0)]}} paint={id=18,style=fill,color=0xff656816,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}`
+golden-compare error: 2 corpus entries failed

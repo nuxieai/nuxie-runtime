@@ -36,6 +36,7 @@ impl AndroidVulkanFactory {
             .unwrap_or_default();
         let mut session = DeferredSession::with_caps(caps);
         session.bind_render_context(native.persistent_context());
+        session.ore_context.borrow_mut().setTarget(native.borrow().ore_target_desc());
         Self {
             session,
             replayer: Rc::new(RefCell::new(DeferredReplayer::default())),
@@ -44,7 +45,9 @@ impl AndroidVulkanFactory {
     }
 
     pub(super) fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
-        self.native.borrow_mut().resize(width, height)
+        self.native.borrow_mut().resize(width, height)?;
+        self.session.ore_context.borrow_mut().setTarget(self.native.borrow().ore_target_desc());
+        Ok(())
     }
 
     fn upload_rgba8_premul_srgb(
@@ -491,6 +494,13 @@ impl AndroidVulkanFrameSink {
 }
 
 impl DeferredFrameSink for AndroidVulkanFrameSink {
+    fn target_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        self.native.borrow().ore_render_target()
+    }
+
+    fn set_target_preserved(&mut self, preserved: bool) {
+        self.native.borrow().set_target_preserved(preserved);
+    }
     fn frame_mode(&self) -> nuxie::render_api::RenderCanvasFrameMode {
         RenderMode::Msaa.canvas_frame_mode()
     }

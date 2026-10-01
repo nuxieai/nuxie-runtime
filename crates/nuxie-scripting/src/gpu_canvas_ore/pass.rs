@@ -13,9 +13,9 @@ pub(super) struct Pass {
     pub draw_call_count: u32,
 }
 impl Pass {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<bool> {
         if self.finished
-            || self.pass.as_ref().is_none_or(|pass| {
+            || self.pass.as_ref().is_some_and(|pass| {
                 pass.activeToken()
                     .upgrade()
                     .is_none_or(|token| token.isFinished())
@@ -25,7 +25,7 @@ impl Pass {
                 "render pass expired: it was already finished",
             ));
         }
-        Ok(())
+        Ok(self.pass.is_some())
     }
     fn require_pipeline(&self) -> Result<()> {
         if !self.pipeline_set {
@@ -39,8 +39,8 @@ impl Pass {
 }
 impl UserData for Pass {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method_mut("setPipeline",|lua,this,data:AnyUserData| {
-            this.validate()?;let pipeline=data.borrow::<Pipeline>()?;
+        methods.add_method_mut("setPipeline",|lua,this,data:Value| {
+            if !this.validate()? { return Ok(()); }let data=AnyUserData::from_lua(data,lua)?;let pipeline=data.borrow::<Pipeline>()?;
             if pipeline.sample_count!=this.sample_count {return Err(Error::runtime(format!("pipeline sampleCount ({}) does not match render pass sampleCount ({}) — recreate the pipeline with matching sampleCount",pipeline.sample_count,this.sample_count)));}
             let context=context(lua)?;context.borrow().clearLastError();
             this.pass().setPipeline(Some(&pipeline.resource));
@@ -50,7 +50,9 @@ impl UserData for Pass {
         methods.add_method_mut(
             "setVertexBuffer",
             |lua, this, (slot, data): (Value, Value)| {
-                this.validate()?;
+                if !this.validate()? {
+                    return Ok(());
+                }
                 let slot = u32::from_lua(slot, lua)?;
                 if slot >= kMaxVertexBufferSlots {
                     return Err(Error::runtime(vertex_slot_range_message(
@@ -66,8 +68,11 @@ impl UserData for Pass {
         );
         methods.add_method_mut(
             "setIndexBuffer",
-            |lua, this, (data, format): (AnyUserData, Value)| {
-                this.validate()?;
+            |lua, this, (data, format): (Value, Value)| {
+                if !this.validate()? {
+                    return Ok(());
+                }
+                let data = AnyUserData::from_lua(data, lua)?;
                 let buffer = data.borrow::<Buffer>()?;
                 let format = string_value(lua, format)?;
                 this.pass().setIndexBuffer(
@@ -82,9 +87,9 @@ impl UserData for Pass {
                 Ok(())
             },
         );
-        methods.add_method_mut("setBindGroup",|lua,this,(group,data,offsets):(u32,AnyUserData,Value)| {
-            this.validate()?;if group>=kMaxBindGroups {return Err(Error::runtime(format!("setBindGroup: groupIndex must be in [0, {kMaxBindGroups}) (got {group})")));}
-            let bg=data.borrow::<BindGroup>()?;let mut values=Vec::new();
+        methods.add_method_mut("setBindGroup",|lua,this,(group,data,offsets):(Value,Value,Value)| {
+            if !this.validate()? { return Ok(()); }let group=u32::from_lua(group,lua)?;if group>=kMaxBindGroups {return Err(Error::runtime(format!("setBindGroup: groupIndex must be in [0, {kMaxBindGroups}) (got {group})")));}
+            let data=AnyUserData::from_lua(data,lua)?;let bg=data.borrow::<BindGroup>()?;let mut values=Vec::new();
             if let Value::Table(offsets)=offsets {
                 if offsets.raw_len()>8 {return Err(Error::runtime(format!("setBindGroup: dynamicOffsets count {} exceeds maximum of 8",offsets.raw_len())));}
                 for index in 0..offsets.raw_len() {let offset=number_value(lua,offsets.raw_get::<Value>(index+1)?,0.0)? as u32;if offset%256!=0{return Err(Error::runtime(format!("setBindGroup: dynamicOffsets[{index}] = {offset} is not a multiple of 256 (alignment requirement)")));}values.push(offset);}
@@ -95,29 +100,50 @@ impl UserData for Pass {
         });
         methods.add_method_mut(
             "setViewport",
-            |_, this, (x, y, w, h): (f32, f32, f32, f32)| {
-                this.validate()?;
+            |lua, this, (x, y, w, h): (Value, Value, Value, Value)| {
+                if !this.validate()? {
+                    return Ok(());
+                }
+                let x = f32::from_lua(x, lua)?;
+                let y = f32::from_lua(y, lua)?;
+                let w = f32::from_lua(w, lua)?;
+                let h = f32::from_lua(h, lua)?;
                 this.pass().setViewport(x, y, w, h, 0.0, 1.0);
                 Ok(())
             },
         );
         methods.add_method_mut(
             "setScissorRect",
-            |_, this, (x, y, w, h): (u32, u32, u32, u32)| {
-                this.validate()?;
+            |lua, this, (x, y, w, h): (Value, Value, Value, Value)| {
+                if !this.validate()? {
+                    return Ok(());
+                }
+                let x = u32::from_lua(x, lua)?;
+                let y = u32::from_lua(y, lua)?;
+                let w = u32::from_lua(w, lua)?;
+                let h = u32::from_lua(h, lua)?;
                 this.pass().setScissorRect(x, y, w, h);
                 Ok(())
             },
         );
-        methods.add_method_mut("setStencilReference", |_, this, value: u32| {
-            this.validate()?;
+        methods.add_method_mut("setStencilReference", |lua, this, value: Value| {
+            if !this.validate()? {
+                return Ok(());
+            }
+            let value = u32::from_lua(value, lua)?;
             this.pass().setStencilReference(value);
             Ok(())
         });
         methods.add_method_mut(
             "setBlendColor",
-            |_, this, (r, g, b, a): (f32, f32, f32, f32)| {
-                this.validate()?;
+            |lua, this, (r, g, b, a): (Value, Value, Value, Value)| {
+                if !this.validate()? {
+                    return Ok(());
+                }
+                let r = f32::from_lua(r, lua)?;
+                let g = f32::from_lua(g, lua)?;
+                let b = f32::from_lua(b, lua)?;
+                let a = f32::from_lua(a, lua)?;
                 this.pass().setBlendColor(r, g, b, a);
                 Ok(())
             },
@@ -125,7 +151,9 @@ impl UserData for Pass {
         methods.add_method_mut(
             "draw",
             |lua, this, (count, instances, first, first_instance): (Value, Value, Value, Value)| {
-                this.validate()?;
+                if !this.validate()? {
+                    return Ok(());
+                }
                 this.require_pipeline()?;
                 let count = u32::from_lua(count, lua)?;
                 let instances = number_value(lua, instances, 1.0)? as u32;
@@ -156,7 +184,9 @@ impl UserData for Pass {
                 Value,
                 Value,
             )| {
-                this.validate()?;
+                if !this.validate()? {
+                    return Ok(());
+                }
                 this.require_pipeline()?;
                 let count = u32::from_lua(count, lua)?;
                 let instances = number_value(lua, instances, 1.0)? as u32;
@@ -184,8 +214,9 @@ impl UserData for Pass {
             },
         );
         methods.add_method_mut("finish", |_, this, ()| {
-            this.validate()?;
-            this.pass().finish();
+            if this.validate()? {
+                this.pass().finish();
+            }
             this.finished = true;
             Ok(())
         });

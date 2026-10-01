@@ -1552,14 +1552,13 @@ impl ContextMetal {
     // inline rcp<TextureView> ContextMetal::mtlWrapCanvasTexture(
     //     gpu::RenderCanvas* canvas)
     #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
-    unsafe fn mtlWrapCanvasTexture<C: MetalRenderCanvasHost>(
+    unsafe fn mtlWrapTarget<C: MetalRenderCanvasHost>(
         &mut self,
         canvas: *mut C,
     ) -> Option<AnyResourceHandle> {
         debug_assert!(!canvas.is_null());
         let canvas = unsafe { &*canvas };
         let mtlTexture = canvas.metalTargetTexture();
-        debug_assert!(mtlTexture.is_some());
 
         let texDesc = TextureDesc {
             width: canvas.metalWidth(),
@@ -1938,7 +1937,7 @@ impl ContextMetal {
         &mut self,
         canvas: *mut C,
     ) -> Option<AnyResourceHandle> {
-        unsafe { self.mtlWrapCanvasTexture(canvas) }
+        unsafe { self.mtlWrapTarget(canvas) }
     }
 
     pub unsafe fn wrapRiveTexture<T: MetalRiveTextureHost>(
@@ -1999,6 +1998,21 @@ impl ContextMetal {
 }
 
 impl ContextApi for ContextMetal {
+    unsafe fn wrapRenderTarget(
+        &mut self,
+        target: crate::context::RenderTargetInfo,
+    ) -> Option<AnyResourceHandle> {
+        #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
+        {
+            if target.target.is_null() { return None; }
+            unsafe { self.mtlWrapTarget(target.target.cast::<MetalRenderCanvasBridge>()) }
+        }
+        #[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]
+        {
+            let _ = target;
+            None
+        }
+    }
     fn usesDeferredFrameReplay(&self) -> bool {
         true
     }

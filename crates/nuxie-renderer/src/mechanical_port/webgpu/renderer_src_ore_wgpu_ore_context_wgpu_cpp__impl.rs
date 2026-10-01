@@ -1085,7 +1085,17 @@ pub(crate) unsafe fn wrapCanvasTexture(
     use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
 
     let canvas = unsafe { canvas.cast::<RenderCanvas>().as_mut() }?;
-    let target = unsafe { canvas.renderTarget().cast::<RenderTargetWebGPU>().as_mut() }?;
+    unsafe { wrapTarget(context, canvas.renderTarget().cast()) }
+}
+
+unsafe fn wrapTarget(
+    context: &mut ContextWGPU,
+    target: *mut core::ffi::c_void,
+) -> Option<AnyResourceHandle> {
+    let target = unsafe { target.cast::<RenderTargetWebGPU>().as_mut() }?;
+    if target.targetTextureView().Get().is_null() {
+        return None;
+    }
     let format = match target.framebufferFormat() {
         WgpuTextureFormat::BGRA8Unorm => TextureFormat::bgra8unorm,
         WgpuTextureFormat::RGBA16Float => TextureFormat::rgba16float,
@@ -1093,8 +1103,8 @@ pub(crate) unsafe fn wrapCanvasTexture(
         _ => TextureFormat::rgba8unorm,
     };
     let textureDesc = TextureDesc {
-        width: canvas.width(),
-        height: canvas.height(),
+        width: target.width(),
+        height: target.height(),
         format,
         r#type: TextureType::texture2D,
         renderTarget: true,
@@ -1244,6 +1254,12 @@ pub(crate) fn endFrame(context: &mut ContextWGPU) {
 }
 
 impl ContextApi for ContextWGPU {
+    unsafe fn wrapRenderTarget(
+        &mut self,
+        target: nuxie_ore_metal::context::RenderTargetInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { wrapTarget(self, target.target) }
+    }
     fn contextBase(&self) -> &Context {
         &self.base
     }
@@ -1323,9 +1339,9 @@ impl ContextApi for ContextWGPU {
 }
 
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
-pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 16;
+pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 17;
 pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 21;
-const _: [(); 47170] = [(); PINNED_SOURCE.len()];
+const _: [(); 47097] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1333,9 +1349,9 @@ mod tests {
 
     #[test]
     fn complete_source_byte_and_feature_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1273);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1275);
         assert_eq!(SOURCE_CONVERSION_HELPER_COUNT, 20);
-        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
+        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 17);
         assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 21);
         let features = webGPUFeatures();
         assert!(features.colorBufferFloat);

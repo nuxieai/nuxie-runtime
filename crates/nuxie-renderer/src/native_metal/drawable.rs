@@ -44,6 +44,7 @@ impl NativeMetalDrawableFrame {
         restore_width: u32,
         restore_height: u32,
         clear_color: u32,
+        preserved: bool,
     ) -> Result<Self, RendererError> {
         let (renderer, frame_number, resource_domain) = {
             let mut mechanical_context = mechanical.borrow_mut();
@@ -52,7 +53,11 @@ impl NativeMetalDrawableFrame {
             let height = u32::try_from(texture.height())
                 .map_err(|_| RendererError::NativeMetal("drawable height exceeds UInt32".into()))?;
             mechanical_context.replace_target(texture, width, height)?;
-            mechanical_context.begin_frame(clear_color)?;
+            mechanical_context.begin_frame_with_load_action(clear_color, if preserved {
+                super::LoadAction::preserveRenderTarget
+            } else {
+                super::LoadAction::clear
+            })?;
             let context = unsafe {
                 std::pin::Pin::get_unchecked_mut(mechanical_context.render_context_mut())
             };

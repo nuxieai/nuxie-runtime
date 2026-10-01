@@ -7,7 +7,7 @@ use nuxie_ore_metal::cmd::{
 };
 use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer::{OreCommandBuffer, SharedIdAllocator, SharedOreCommandBuffer},
-    ore_commands::WrapCanvasViewMode,
+    ore_commands::{WrapCanvasViewMode, packTargetSize},
     ore_deferred_resource::*,
     ore_handle::{INVALID_HANDLE, REAL_RESOURCE_FLAG, REAL_RESOURCE_MASK},
     ore_make_recording::*,
@@ -18,7 +18,7 @@ use nuxie_ore_metal::ore_cmd::{
 use nuxie_ore_metal::{
     context::{
         CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor, ReplayCaps,
-        ShaderTarget,
+        ShaderTarget, TargetDesc,
     },
     gpu_resource::{AnyResourceHandle, ResourceHandle},
     render_pass::RenderPassApi,
@@ -62,6 +62,11 @@ pub struct DeferredOreContext {
     realResources: Rc<RefCell<RealResources>>,
     canvasIdProvider: Option<Box<dyn FnMut(RenderCanvasHandle) -> u32>>,
     canvasRegistry: Option<Rc<RefCell<ForeignImageRegistry>>>,
+    target: TargetDesc,
+    targetView: Option<AnyResourceHandle>,
+    targetWrapped: bool,
+    targetDrawn: bool,
+    targetHidden: bool,
 }
 pub struct StreamBytes {
     pub commands: usize,
@@ -114,6 +119,11 @@ impl DeferredOreContext {
             realResources,
             canvasIdProvider: None,
             canvasRegistry: None,
+            target: TargetDesc::default(),
+            targetView: None,
+            targetWrapped: false,
+            targetDrawn: false,
+            targetHidden: true,
         };
         out.adoptCapsFeatures();
         out
@@ -210,6 +220,8 @@ impl DeferredOreContext {
     pub fn resetFrame(&mut self) {
         self.base.finishOpenRenderPassesFrom(0);
         self.render.borrow_mut().reset();
+        self.targetWrapped = false;
+        self.targetDrawn = false;
         self.render.borrow_mut().drainDestroys();
         let mut real = self.realResources.borrow_mut();
         real.ids.clear();
@@ -256,14 +268,34 @@ impl DeferredOreContext {
         width: u32,
         height: u32,
     ) -> AnyResourceHandle {
+        self.makeProxyView(
+            id,
+            generation,
+            width,
+            height,
+            self.caps.canvasTargetFormat,
+            1,
+            false,
+        )
+    }
+    fn makeProxyView(
+        &self,
+        id: u32,
+        generation: u32,
+        width: u32,
+        height: u32,
+        format: TextureFormat,
+        sampleCount: u32,
+        hostTarget: bool,
+    ) -> AnyResourceHandle {
         let desc = TextureDesc {
             width,
             height,
-            format: self.caps.canvasTargetFormat,
+            format,
             r#type: TextureType::texture2D,
             renderTarget: true,
             numMipmaps: 1,
-            sampleCount: 1,
+            sampleCount,
             ..Default::default()
         };
         let texture =
@@ -278,18 +310,49 @@ impl DeferredOreContext {
             layerCount: 1,
             ..Default::default()
         };
-        ResourceHandle::new(
-            None,
-            DeferredTextureView::new(
-                id,
-                generation,
-                Some(&self.render),
-                Some(&self.ids),
-                Some(texture.clone()),
-                &view,
-            ),
-        )
-        .erase()
+        let mut proxy = DeferredTextureView::new(
+            id,
+            generation,
+            Some(&self.render),
+            Some(&self.ids),
+            Some(texture.clone()),
+            &view,
+        );
+        proxy.hostTarget = hostTarget;
+        ResourceHandle::new(None, proxy).erase()
+    }
+    pub fn setTarget(&mut self, desc: TargetDesc) {
+        self.targetHidden = desc.width == 0;
+        if !self.targetHidden && desc != self.target {
+            self.target = desc;
+            self.targetView = None;
+        }
+    }
+    pub fn targetDrawn(&self) -> bool {
+        self.targetDrawn
+    }
+    pub fn drawnTargetSize(&self) -> u32 {
+        if self.targetDrawn {
+            packTargetSize(self.target.width, self.target.height)
+        } else {
+            0
+        }
+    }
+    fn recordWrapTargetView(&mut self) {
+        let view = self
+            .targetView
+            .as_ref()
+            .unwrap()
+            .downcast_ref::<DeferredTextureView>()
+            .unwrap();
+        recordWrapCanvasView(
+            &mut self.render.borrow_mut(),
+            view.clientHandle(),
+            view.generation(),
+            packTargetSize(self.target.width, self.target.height),
+            WrapCanvasViewMode::targetView,
+        );
+        self.targetWrapped = true;
     }
 }
 impl Drop for DeferredOreContext {
@@ -300,6 +363,25 @@ impl Drop for DeferredOreContext {
     }
 }
 impl ContextApi for DeferredOreContext {
+    fn targetView(&mut self) -> Option<AnyResourceHandle> {
+        if self.targetHidden {
+            return None;
+        }
+        if self.targetView.is_none() {
+            let a = self.alloc();
+            self.targetView = Some(self.makeProxyView(
+                a.id,
+                a.generation,
+                self.target.width,
+                self.target.height,
+                self.target.format,
+                self.target.sampleCount,
+                true,
+            ));
+            self.recordWrapTargetView();
+        }
+        self.targetView.clone()
+    }
     fn contextBase(&self) -> &Context {
         &self.base
     }
@@ -466,10 +548,18 @@ impl ContextApi for DeferredOreContext {
             .iter()
             .map(|e| self.handleFor(e.buffer))
             .collect();
-        let texs: Vec<_> = desc.textures[..desc.textureCount as usize]
-            .iter()
-            .map(|e| self.handleFor(e.view))
-            .collect();
+        let mut texs = Vec::with_capacity(desc.textureCount as usize);
+        for entry in &desc.textures[..desc.textureCount as usize] {
+            if entry
+                .view
+                .and_then(|view| view.downcast_ref::<DeferredTextureView>())
+                .is_some_and(|view| view.hostTarget)
+            {
+                self.setLastError("makeBindGroup: the target view cannot be sampled");
+                return None;
+            }
+            texs.push(self.handleFor(entry.view));
+        }
         let samps: Vec<_> = desc.samplers[..desc.samplerCount as usize]
             .iter()
             .map(|e| self.handleFor(e.sampler))
@@ -505,6 +595,34 @@ impl ContextApi for DeferredOreContext {
         desc: &RenderPassDesc<'_>,
         _outError: Option<&mut String>,
     ) -> Option<Box<dyn RenderPassApi>> {
+        let mut drawsTarget = false;
+        for attachment in &desc.colorAttachments[..desc.colorCount as usize] {
+            for view in [attachment.view, attachment.resolveTarget]
+                .into_iter()
+                .flatten()
+            {
+                let Some(deferred) = view.downcast_ref::<DeferredTextureView>() else {
+                    continue;
+                };
+                if !deferred.hostTarget {
+                    continue;
+                }
+                if self.targetView.as_ref().is_none_or(|current| {
+                    current.allocation_identity() != view.allocation_identity()
+                }) {
+                    self.setLastError("beginRenderPass: stale target view");
+                    return None;
+                }
+                if self.targetHidden {
+                    return None;
+                }
+                drawsTarget = true;
+            }
+        }
+        if drawsTarget && !self.targetWrapped {
+            self.recordWrapTargetView();
+        }
+        self.targetDrawn |= drawsTarget;
         Some(Box::new(RenderPassRecording::new(
             Some(&self.base),
             self.render.clone(),

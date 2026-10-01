@@ -1412,6 +1412,26 @@ pub(crate) unsafe fn wrapCanvasTexture(
     // dispatch. Recover the actual Rust complete object so a texture-backed
     // RenderCanvas retains those same derived image/view overrides.
     let target = NonNull::new(canvas.renderTarget())?;
+    unsafe { wrapTargetImage(context, target, vk::ImageLayout::UNDEFINED, true) }
+}
+
+pub(crate) unsafe fn wrapRenderTarget(
+    context: &mut ContextVulkan,
+    info: nuxie_ore_metal::context::RenderTargetInfo,
+) -> Option<AnyResourceHandle> {
+    let target = NonNull::new(info.target.cast())?;
+    let binding = unsafe {
+        super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target)
+    };
+    unsafe { wrapTargetImage(context, target, binding.targetLastAccess.layout, false) }
+}
+
+unsafe fn wrapTargetImage(
+    context: &mut ContextVulkan,
+    target: NonNull<crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget>,
+    layout: vk::ImageLayout,
+    sampleable: bool,
+) -> Option<AnyResourceHandle> {
     let binding =
         unsafe { super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target) };
     let image = binding.image;
@@ -1438,7 +1458,8 @@ pub(crate) unsafe fn wrapCanvasTexture(
     let (manager, domain) = contextResourceParts(context);
     let mut texture = TextureVulkan::new(manager.clone(), &desc, context);
     texture.m_vkImage = image;
-    texture.m_vkLayout.set(vk::ImageLayout::UNDEFINED);
+    texture.m_vkLayout.set(layout);
+    texture.m_vkSampleable = sampleable;
     // Rive's tracker still says undefined until something draws the canvas.
     if binding.targetLastAccess.layout != vk::ImageLayout::UNDEFINED {
         texture.vkMarkWritten(0, 0);
@@ -1519,6 +1540,12 @@ pub(crate) unsafe fn wrapRiveTexture(
 }
 
 impl ContextApi for ContextVulkan {
+    unsafe fn wrapRenderTarget(
+        &mut self,
+        target: nuxie_ore_metal::context::RenderTargetInfo,
+    ) -> Option<AnyResourceHandle> {
+        unsafe { wrapRenderTarget(self, target) }
+    }
     fn contextBase(&self) -> &Context {
         &self.base
     }

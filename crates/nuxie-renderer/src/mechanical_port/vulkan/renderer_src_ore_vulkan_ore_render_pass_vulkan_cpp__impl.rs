@@ -294,6 +294,27 @@ fn transitionColorImage(
     }
 }
 
+fn keepAsAttachment(
+    texture: Option<&AnyResourceHandle>,
+    target: Option<&mut super::render_target_vulkan_decl::RetainedRenderTargetVulkan>,
+) -> bool {
+    let Some(texture) = texture.and_then(|texture| texture.downcast_ref::<TextureVulkan>()) else {
+        return false;
+    };
+    if texture.m_vkSampleable {
+        return false;
+    }
+    texture.m_vkLayout.set(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+    if let Some(target) = target {
+        target.updateLastAccess(ImageAccess {
+            pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
+            accessMask: vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+            layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        });
+    }
+    true
+}
+
 pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
     if nuxie_ore_metal::render_pass_is_finished(&pass.base) {
         return;
@@ -315,6 +336,12 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
     for index in 0..pass.m_vkColorCount as usize {
         let image = pass.m_vkColorImages[index];
         if image == vk::Image::null() {
+            continue;
+        }
+        if keepAsAttachment(
+            pass.m_vkColorTextures[index].as_ref(),
+            pass.m_vkColorRenderTargets[index].as_mut(),
+        ) {
             continue;
         }
         transitionColorImage(
@@ -344,6 +371,10 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
             )
         };
         if image == vk::Image::null() {
+            continue;
+        }
+        let resolve = &mut pass.m_vkResolveTargets[index];
+        if keepAsAttachment(resolve.texture.as_ref(), resolve.renderTarget.as_mut()) {
             continue;
         }
         transitionColorImage(pass, image, range);

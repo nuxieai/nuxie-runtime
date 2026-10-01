@@ -379,6 +379,14 @@ impl Drop for OreFrame {
 }
 
 impl AppleMetalFactory {
+    fn declare_target(&self, width: u32, height: u32) {
+        let target = if width == 0 || height == 0 {
+            nuxie_ore_metal::context::TargetDesc::default()
+        } else {
+            nuxie_ore_metal::context::TargetDesc::color8(width, height, true)
+        };
+        self.session.ore_context.borrow_mut().setTarget(target);
+    }
     fn new(inner: NativeMetalFactory) -> Result<Self, ApiFailure> {
         let mut native = PersistentFactory::new(inner);
         let caps = native
@@ -387,6 +395,7 @@ impl AppleMetalFactory {
             .unwrap_or_default();
         let mut session = DeferredSession::with_caps(caps);
         session.bind_render_context(native.persistent_context());
+        session.ore_context.borrow_mut().setTarget(native.borrow().ore_target_desc());
         Ok(Self {
             session,
             replayer: Rc::new(RefCell::new(DeferredReplayer::default())),
@@ -825,6 +834,7 @@ struct AppleMetalFrameSink<'a> {
     screen: Rc<RefCell<Option<ReplayFrame>>>,
     canvas: Rc<RefCell<Option<ReplayFrame>>>,
     ore_frame: Option<OreFrame>,
+    target_preserved: bool,
     failure: Option<ApiFailure>,
 }
 
@@ -843,6 +853,7 @@ impl<'a> AppleMetalFrameSink<'a> {
             screen: Rc::new(RefCell::new(None)),
             canvas: Rc::new(RefCell::new(None)),
             ore_frame: None,
+            target_preserved: false,
             failure: None,
         }
     }
@@ -867,6 +878,13 @@ impl<'a> AppleMetalFrameSink<'a> {
 }
 
 impl DeferredFrameSink for AppleMetalFrameSink<'_> {
+    fn target_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        Some(NativeMetalFactory::ore_texture_target(self.drawable.texture()))
+    }
+
+    fn set_target_preserved(&mut self, preserved: bool) {
+        self.target_preserved = preserved;
+    }
     fn frame_mode(&self) -> nuxie::render_api::RenderCanvasFrameMode {
         self.native.borrow().render_mode().canvas_frame_mode()
     }
@@ -884,10 +902,12 @@ impl DeferredFrameSink for AppleMetalFrameSink<'_> {
             return None;
         }
         if self.screen.borrow().is_none() {
-            let frame = self
-                .native
-                .borrow()
-                .begin_drawable_frame(self.drawable, self.clear_color);
+            let native = self.native.borrow();
+            let frame = if self.target_preserved {
+                native.begin_drawable_frame_preserving(self.drawable, self.clear_color)
+            } else {
+                native.begin_drawable_frame(self.drawable, self.clear_color)
+            };
             match frame {
                 Ok(frame) => *self.screen.borrow_mut() = Some(ReplayFrame::Screen(frame)),
                 Err(error) => {
@@ -1374,6 +1394,7 @@ pub unsafe extern "C" fn nux_renderer_new_metal(
                 return failure.status;
             }
         };
+        factory.declare_target(pixel_width, pixel_height);
         let renderer = Box::into_raw(Box::new(NuxRenderer {
             state: RefCell::new(RendererState {
                 factory: PersistentFactory::new(crate::asset_hooks::AssetFactory::new(factory)),
@@ -1491,6 +1512,12 @@ pub unsafe extern "C" fn nux_renderer_resize(
         }
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
+        let (target_width, target_height) = if state.attached {
+            (pixel_width, pixel_height)
+        } else {
+            (0, 0)
+        };
+        state.factory.borrow().declare_target(target_width, target_height);
         let disposition = if pixel_width == 0 || pixel_height == 0 {
             NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
         } else {
@@ -1520,6 +1547,7 @@ pub unsafe extern "C" fn nux_renderer_detach(
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
         state.attached = false;
+        state.factory.borrow().declare_target(0, 0);
         write_outcome(
             out_outcome,
             &outcome(&state, NUX_RENDERER_DISPOSITION_NONE, None),
@@ -1578,6 +1606,7 @@ pub unsafe extern "C" fn nux_renderer_reattach(
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
         state.attached = true;
+        state.factory.borrow().declare_target(pixel_width, pixel_height);
         let disposition = if pixel_width == 0 || pixel_height == 0 {
             NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
         } else {
@@ -1722,6 +1751,10 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     factory.native.clone(),
                 )
             };
+            native.borrow().validate_drawable_texture(&drawable.texture()).map_err(renderer_failure)?;
+            session.ore_context.borrow_mut().setTarget(
+                nuxie_ore_metal::context::TargetDesc::color8(state.pixel_width, state.pixel_height, true),
+            );
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
             })?;

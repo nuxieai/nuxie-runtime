@@ -26,6 +26,17 @@ pub struct NativeWebGpuFactory {
 }
 
 impl NativeWebGpuFactory {
+    pub fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        self.core.ore_target_desc()
+    }
+
+    pub fn ore_render_target(&self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        self.core.ore_render_target()
+    }
+
+    pub fn set_target_preserved(&self, preserved: bool) {
+        self.core.set_target_preserved(preserved);
+    }
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
         let backend = WebGpuProductBackend::new(width, height)?;
         let adapter_name = backend.adapter_name().to_owned();

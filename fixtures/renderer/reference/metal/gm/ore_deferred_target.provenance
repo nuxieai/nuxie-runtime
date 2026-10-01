@@ -1,0 +1,37 @@
+provenance_schema=1
+renderer_implementation=cpp-native-metal-approved-fma-and-coverage-adaptations
+capture_tool=upstream-gms
+build_command=PREMAKE_PATH=<upstream>/build premake5 gmake2 --config=release --out=out/50-gms-text-canvas --with_rive_text --with_rive_canvas (from tests); make -C out/50-gms-text-canvas -j6 gms
+capture_command=MTL_DEBUG_LAYER=1 <evidence>/gms-adapted --backend metal --headless --match ore_deferred_target --output <evidence>/adapted --verbose
+backend=metal
+adapter_vendor=apple
+adapter_device=Apple M5 Max
+adapter_description=Metal driver on macOS 26.6.2
+case_id=ore_deferred_target
+gm_source=tests/gm/ore_deferred_target.cpp
+gm_source_sha256=98dc86b9189d62dcb6a026037fdf01b6840c8f640d1e89af825f092386cfdbe1
+runtime_revision=6a2e3ab71656709cbc2b1c21a8fa92f130c37464
+xcode_version=27.0
+xcode_build=27A266a
+capture_binary_sha256=d9ecfb1bf7ab8bf2ca34b91d7e2770286d9ae352cfe2b6a8b43dde53f48587c7
+png_sha256=be74dfe824ea22ddb0b57f6e910407b98ac52873b4b7c4f86d4acc8ce4fe826d
+shader_regeneration_command=PYTHONHASHSEED=0 make -C <isolated-shader-copy> -j8 OUT=<upstream>/tests/out/50-gms-text-canvas/include/generated/shaders FLAGS="-p <upstream>/tests/dependencies/dabeaz_ply_3.11" rive_pls_macosx_metallib; make -C <upstream>/tests/out/50-gms-text-canvas -j8 gms
+approved_fma_adaptation_commit=07bdd108904eeb29e2e4986e8c1aaff3c00790f2
+fma_adaptation=under METAL replace color += dstColorPremul * (1. - paintAlpha) with color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color); retain original expression under else
+upstream_fragment_shader_sha256=bf0da3019985a1ebfd0faf8f9db544f5c59d24aecd6456955cef8198fb38c4e3
+adapted_fragment_shader_sha256=f11c688c6490642fa99132d54ccf1088094750d888ecbbeeb1a333a87d6de269
+approved_coverage_adaptation_commit=a07db8d3ec50af8eb940db4af788fbbfad74b626
+coverage_adaptation=draw_path.vert selects float4 COVERAGE_TYPE and preserves coverages before interpolation when ENABLE_FEATHER or METAL; both guards and comment match the existing Rust shader literal
+upstream_vertex_shader_sha256=0975678982bb41fb41da031a50449e23e3ae5d58120b830e3a326f2f03121d96
+adapted_vertex_shader_sha256=1dd36aa09a813bfaf9d6dd9de7af7951756fc05cd52a8ea52b2eb616238faa15
+pristine_capture_file=ore_deferred_target.pristine.png
+pristine_capture_binary_sha256=3fff9a3ead73ff77be130520a9ee2bb1426dab4ca47bc1d7aaf059326d1e0d35
+pristine_png_sha256=4907a377c95e116790b669a9e03996f172436c0afe5939297f11e7bbf3daa658
+pristine_comparison=864 differing pixels, maximum channel delta 1; both existing approved adaptations give exact equality to current Rust diagnostic
+evidence_directory=/tmp/nuxie-6a2e-target-shader-proof.HqBIbZ
+frame=0
+frame_width=256
+frame_height=256
+mode=raster-ordering
+shader_compilation_mode=always-synchronous
+sample_count=1

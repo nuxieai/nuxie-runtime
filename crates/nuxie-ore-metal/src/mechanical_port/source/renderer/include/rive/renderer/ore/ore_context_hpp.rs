@@ -276,6 +276,18 @@ impl BufferErrorSink for ContextState {
 
 pub trait ContextApi {
     fn contextBase(&self) -> &Context;
+    unsafe fn wrapRenderTarget(&mut self, _target: RenderTargetInfo) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn targetView(&mut self) -> Option<AnyResourceHandle> {
+        None
+    }
+    fn setRenderTarget(&self, target: Option<RenderTargetInfo>) {
+        *self.contextBase().renderTarget.borrow_mut() = target;
+    }
+    fn renderTarget(&self) -> Option<RenderTargetInfo> {
+        self.contextBase().renderTarget.borrow().clone()
+    }
     /// Forwarding facades project the native replay context without retaining
     /// either that context or its host. Ordinary contexts use their own handle.
     fn inlineReplayContext(&self) -> Option<RcWeak<RefCell<dyn ContextApi>>> {
@@ -442,6 +454,7 @@ pub struct Context {
     pub(crate) openRenderPasses: Rc<OpenRenderPassRegistry>,
     ownsOpenRenderPasses: bool,
     deferredRecording: Rc<Cell<bool>>,
+    renderTarget: Rc<RefCell<Option<RenderTargetInfo>>>,
     pendingFrame: crate::ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
 }
 
@@ -456,6 +469,7 @@ impl Context {
             openRenderPasses: self.openRenderPasses.clone(),
             ownsOpenRenderPasses: false,
             deferredRecording: self.deferredRecording.clone(),
+            renderTarget: self.renderTarget.clone(),
             pendingFrame: self.pendingFrame.clone(),
         }
     }
@@ -640,6 +654,7 @@ impl Context {
             openRenderPasses: Rc::new(OpenRenderPassRegistry::default()),
             ownsOpenRenderPasses: true,
             deferredRecording: Rc::new(Cell::new(std::env::var_os("RIVE_ORE_DEFER").is_some())),
+            renderTarget: Rc::new(RefCell::new(None)),
             pendingFrame: Rc::new(RefCell::new(
                 crate::ore_cmd::ore_command_buffer::OreCommandBuffer::default(),
             )),
@@ -696,6 +711,46 @@ impl Default for ReplayCaps {
             canvasTargetFormat: TextureFormat::rgba8unorm,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetDesc {
+    pub width: u32,
+    pub height: u32,
+    pub format: TextureFormat,
+    pub sampleCount: u32,
+}
+impl Default for TargetDesc {
+    fn default() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            format: TextureFormat::rgba8unorm,
+            sampleCount: 1,
+        }
+    }
+}
+impl TargetDesc {
+    pub fn color8(width: u32, height: u32, bgra: bool) -> Self {
+        Self {
+            width,
+            height,
+            format: if bgra {
+                TextureFormat::bgra8unorm
+            } else {
+                TextureFormat::rgba8unorm
+            },
+            sampleCount: 1,
+        }
+    }
+}
+/// Projection of the host target, retained only around a replay frame.
+#[derive(Clone)]
+pub struct RenderTargetInfo {
+    pub target: *mut c_void,
+    pub width: u32,
+    pub height: u32,
+    pub owner: Option<Rc<dyn std::any::Any>>,
 }
 
 /// Borrowed source RenderCanvas fields across the existing opaque GPU host seam.

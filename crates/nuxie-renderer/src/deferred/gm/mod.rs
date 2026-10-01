@@ -19,6 +19,8 @@ mod ore_buffer_offsets;
 mod ore_pipeline_switch;
 mod ore_vertex_buffer_before_pipeline;
 mod ore_gm_helper;
+mod ore_gm_sink;
+mod ore_deferred_target;
 mod ore_layout_intern;
 mod ore_nested_pass;
 mod ore_render_deferred_canvas;

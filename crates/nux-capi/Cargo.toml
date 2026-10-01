@@ -22,11 +22,11 @@ nuxie-binary = { path = "../nuxie-binary" }
 nuxie-image-codec = { path = "../nuxie-image-codec", optional = true }
 nuxie-project-data-scripting = { path = "../nuxie-project-data-scripting", optional = true }
 nuxie-renderer = { path = "../nuxie-renderer", optional = true, default-features = false }
+nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false }
 
 [dev-dependencies]
 nuxie-video-host = { path = "../nuxie-video-host" }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
-nuxie-ore-metal = { path = "../nuxie-ore-metal", default-features = false }
 luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }

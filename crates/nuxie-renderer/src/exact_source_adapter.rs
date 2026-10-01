@@ -476,6 +476,13 @@ pub(crate) fn install_bitmap_decoder(mut context: Pin<&mut RenderContext>) {
 }
 
 pub(crate) trait ExactSourceBackend: 'static {
+    fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        Default::default()
+    }
+    fn ore_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        None
+    }
+    fn set_target_preserved(&mut self, _preserved: bool) {}
     fn context_mut(&mut self) -> Pin<&mut RenderContext>;
     fn resize(&mut self, _width: u32, _height: u32) -> Result<(), RendererError> {
         Err(RendererError::Unsupported("backend target resize"))
@@ -587,6 +594,18 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
 
     pub(crate) fn after_deferred_ore_frame(&self) {
         self.backend.borrow_mut().after_deferred_ore_frame();
+    }
+
+    pub(crate) fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        self.backend.borrow().ore_target_desc()
+    }
+
+    pub(crate) fn ore_render_target(&self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        self.backend.borrow_mut().ore_render_target()
+    }
+
+    pub(crate) fn set_target_preserved(&self, preserved: bool) {
+        self.backend.borrow_mut().set_target_preserved(preserved);
     }
 
     pub(crate) fn upload_rgba8_premul_srgb(

@@ -119,6 +119,7 @@ pub(crate) struct VulkanProductBackend {
     height: u32,
     frame_number: u64,
     active_frame: bool,
+    target_preserved: bool,
     frame_recovery_error: Option<String>,
     #[cfg(test)]
     fail_next_finish: bool,
@@ -227,6 +228,7 @@ impl VulkanProductBackend {
             height,
             frame_number: 0,
             active_frame: false,
+            target_preserved: false,
             frame_recovery_error: None,
             #[cfg(test)]
             fail_next_finish: false,
@@ -906,6 +908,32 @@ fn load_vulkan_entry() -> Result<ash::Entry, RendererError> {
 }
 
 impl ExactSourceBackend for VulkanProductBackend {
+    fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        let target = unsafe { &*self.target.get() };
+        super::ore_context_vulkan_decl::targetDescFor(&target.base)
+    }
+
+    fn ore_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        if self.ore_target_desc().width == 0 { return None; }
+        Some(nuxie_ore_metal::context::RenderTargetInfo {
+            target: self.target.get().cast(),
+            width: self.width,
+            height: self.height,
+            owner: Some(Rc::new(self.target.clone())),
+        })
+    }
+
+    fn set_target_preserved(&mut self, preserved: bool) {
+        self.target_preserved = preserved;
+        if self.active_frame {
+            unsafe { Pin::get_unchecked_mut(self.context_pin()) }.m_frame_descriptor.loadAction =
+                if preserved {
+                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
+                } else {
+                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
+                };
+        }
+    }
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
     }
@@ -958,6 +986,11 @@ impl ExactSourceBackend for VulkanProductBackend {
             renderTargetWidth: self.width,
             renderTargetHeight: self.height,
             clearColor: clear_color,
+            loadAction: if self.target_preserved {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
+            } else {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
+            },
             ..FrameDescriptor::default()
         };
         match mode {

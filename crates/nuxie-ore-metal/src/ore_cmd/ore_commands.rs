@@ -92,6 +92,11 @@ pub enum WrapCanvasViewMode {
     colorView = 0,
     sampleView = 1,
     imageView = 2,
+    targetView = 3,
+}
+pub fn packTargetSize(width: u32, height: u32) -> u32 {
+    assert!(width <= 0xffff && height <= 0xffff);
+    width << 16 | height
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]

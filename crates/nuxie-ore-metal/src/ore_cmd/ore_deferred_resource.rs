@@ -55,6 +55,9 @@ impl DeferredResource {
     pub fn clientHandle(&self) -> u32 {
         self.handle
     }
+    pub fn generation(&self) -> u32 {
+        self.generation
+    }
     pub fn recordsInto(&self, stream: &SharedOreCommandBuffer) -> bool {
         self.stream
             .is_some_and(|p| p.as_ptr() == Rc::as_ptr(stream).cast_mut())
@@ -127,7 +130,57 @@ macro_rules! deferred_owner {
 }
 deferred_owner!(DeferredBuffer, Buffer);
 deferred_owner!(DeferredTexture, Texture);
-deferred_owner!(DeferredTextureView, TextureView, texture_view_base);
+#[repr(C)]
+pub struct DeferredTextureView {
+    pub base: ManuallyDrop<TextureView>,
+    pub deferred: ManuallyDrop<DeferredResource>,
+    pub hostTarget: bool,
+}
+impl DeferredTextureView {
+    pub fn fromBase(
+        base: TextureView,
+        handle: u32,
+        generation: u32,
+        stream: Option<&SharedOreCommandBuffer>,
+        allocator: Option<&SharedIdAllocator>,
+    ) -> Self {
+        Self {
+            base: ManuallyDrop::new(base),
+            deferred: ManuallyDrop::new(DeferredResource::new(
+                handle, generation, stream, allocator,
+            )),
+            hostTarget: false,
+        }
+    }
+    pub fn clientHandle(&self) -> u32 {
+        self.deferred.clientHandle()
+    }
+    pub fn generation(&self) -> u32 {
+        self.deferred.generation()
+    }
+    pub fn recordsInto(&self, stream: &SharedOreCommandBuffer) -> bool {
+        self.deferred.recordsInto(stream)
+    }
+}
+impl Drop for DeferredTextureView {
+    fn drop(&mut self) {
+        unsafe {
+            ManuallyDrop::drop(&mut self.deferred);
+            ManuallyDrop::drop(&mut self.base);
+        }
+    }
+}
+unsafe impl GpuResourcePayload for DeferredTextureView {
+    fn gpu_resource(&self) -> &GPUResource {
+        self.base.gpu_resource()
+    }
+    fn gpu_resource_mut(&mut self) -> &mut GPUResource {
+        self.base.gpu_resource_mut()
+    }
+    fn texture_view_base(&self) -> Option<&TextureView> {
+        Some(&self.base)
+    }
+}
 deferred_owner!(DeferredSampler, Sampler);
 deferred_owner!(
     DeferredBindGroupLayout,

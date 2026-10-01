@@ -303,6 +303,35 @@ impl NativeMetalExecutionInventory {
 }
 
 impl NativeMetalFactory {
+    pub fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        nuxie_ore_metal::context::TargetDesc::color8(self.target_width, self.target_height, true)
+    }
+
+    pub fn ore_render_target(&self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        #[cfg(feature = "native-ore-metal-experimental")]
+        { Some(Self::ore_texture_target(self.target_texture.borrow().clone())) }
+        #[cfg(not(feature = "native-ore-metal-experimental"))]
+        { None }
+    }
+
+    #[cfg(feature = "native-ore-metal-experimental")]
+    pub fn ore_texture_target(
+        texture: Retained<ProtocolObject<dyn MTLTexture>>,
+    ) -> nuxie_ore_metal::context::RenderTargetInfo {
+        let width = texture.width() as u32;
+        let height = texture.height() as u32;
+        let bridge = Rc::new(nuxie_ore_metal::metal::context::MetalRenderCanvasBridge {
+            width,
+            height,
+            texture: Some(texture),
+        });
+        nuxie_ore_metal::context::RenderTargetInfo {
+            target: Rc::as_ptr(&bridge).cast_mut().cast(),
+            width,
+            height,
+            owner: Some(bridge),
+        }
+    }
     pub fn new(width: u32, height: u32) -> Result<Self, RendererError> {
         Self::new_impl(width, height, None, NativeMetalContextOptions::default())
     }
@@ -696,7 +725,25 @@ impl NativeMetalFactory {
         drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
         texture: Retained<ProtocolObject<dyn MTLTexture>>,
         clear_color: u32,
+        preserved: bool,
     ) -> Result<NativeMetalDrawableFrame, RendererError> {
+        let (expected_width, expected_height) = self.dimensions();
+        self.validate_drawable_texture(&texture)?;
+        let mechanical = self.mechanical_context()?;
+        let restore_texture = self.target_texture.borrow().clone();
+        NativeMetalDrawableFrame::new(
+            mechanical,
+            drawable,
+            texture,
+            restore_texture,
+            expected_width,
+            expected_height,
+            clear_color,
+            preserved,
+        )
+    }
+
+    pub fn validate_drawable_texture(&self, texture: &ProtocolObject<dyn MTLTexture>) -> Result<(), RendererError> {
         let (expected_width, expected_height) = self.dimensions();
         if texture.pixelFormat() != MTLPixelFormat::BGRA8Unorm {
             return Err(RendererError::InvalidDrawable(
@@ -718,17 +765,7 @@ impl NativeMetalFactory {
                 expected_height,
             )));
         }
-        let mechanical = self.mechanical_context()?;
-        let restore_texture = self.target_texture.borrow().clone();
-        NativeMetalDrawableFrame::new(
-            mechanical,
-            drawable,
-            texture,
-            restore_texture,
-            expected_width,
-            expected_height,
-            clear_color,
-        )
+        Ok(())
     }
 }
 

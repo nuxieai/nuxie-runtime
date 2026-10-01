@@ -2504,17 +2504,25 @@ impl UserData for ScriptedContext {
         });
         methods.add_method("font", |lua, this, name: String| {
             this.require_live("font")?;
-            let file = this.source.borrow().as_ref().and_then(|source| source.current_file());
-            let font = super::lua_scripted_context::find_file_asset(
-                lua, &name, file, |asset| {
-                    asset.with_downcast::<nuxie_runtime::source::assets::font_asset::FontAsset, _>(|asset| {
-                        Some((asset.base.name().to_owned(), asset.font()?))
-                    }).flatten()
-                },
-            );
+            let file = this
+                .source
+                .borrow()
+                .as_ref()
+                .and_then(|source| source.current_file());
+            let font = super::lua_scripted_context::find_file_asset(lua, &name, file, |asset| {
+                asset
+                    .with_downcast::<nuxie_runtime::source::assets::font_asset::FontAsset, _>(
+                        |asset| Some((asset.base.name().to_owned(), asset.font()?)),
+                    )
+                    .flatten()
+            });
             match font {
-                Some(font) => Ok(create_asset_font(lua, nuxie_runtime::ScriptFont::from_native_font(font))?
-                    .map(Value::UserData).unwrap_or(Value::Nil)),
+                Some(font) => Ok(create_asset_font(
+                    lua,
+                    nuxie_runtime::ScriptFont::from_native_font(font),
+                )?
+                .map(Value::UserData)
+                .unwrap_or(Value::Nil)),
                 None => Ok(Value::Nil),
             }
         });
@@ -2562,6 +2570,10 @@ impl UserData for ScriptedContext {
         methods.add_method("pixelRatio", |lua, this, ()| {
             this.require_live("pixelRatio")?;
             Ok(super::script_pixel_ratio(lua))
+        });
+        methods.add_method("gpuTarget", |lua, this, ()| {
+            this.require_live("gpuTarget")?;
+            crate::gpu_canvas::ore::target_userdata(lua)
         });
         methods.add_method("features", |lua, this, ()| {
             this.require_live("features")?;

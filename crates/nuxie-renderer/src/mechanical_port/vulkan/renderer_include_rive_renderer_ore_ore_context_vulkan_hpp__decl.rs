@@ -3,6 +3,14 @@
 
 #![allow(non_snake_case)]
 
+pub(crate) fn targetDescFor(target: &super::render_target_vulkan_decl::RenderTargetVulkan) -> nuxie_ore_metal::context::TargetDesc {
+    match target.framebufferFormat() {
+        ash::vk::Format::R8G8B8A8_UNORM | ash::vk::Format::B8G8R8A8_UNORM =>
+            nuxie_ore_metal::context::TargetDesc::color8(target.width(), target.height(), target.framebufferFormat() == ash::vk::Format::B8G8R8A8_UNORM),
+        _ => Default::default(),
+    }
+}
+
 use super::vulkan_context_decl::VulkanContext;
 use ash::vk;
 use nuxie_ore_metal::context::Context;

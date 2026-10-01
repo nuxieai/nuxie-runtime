@@ -60,7 +60,9 @@ impl KeyFrameDouble {
             .base
             .base
             .transform_value(context, from, to, factor)
-            .unwrap_or_else(|| from + (to - from) * factor);
+            // Production C++ contracts this linear fallback to one FMA after
+            // rounding the subtraction; blend weights retain that rounding.
+            .unwrap_or_else(|| (to - from).mul_add(factor, from));
         if let Some(accumulator) = context.and_then(KeyFrameValueContext::blend_accumulator) {
             accumulator
                 .borrow_mut()

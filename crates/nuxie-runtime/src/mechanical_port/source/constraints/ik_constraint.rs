@@ -203,11 +203,13 @@ impl IKConstraint {
         let a = av.length();
         let b = bv.length();
         let c = cv.length();
-        let angle_a = ((-a * a + b * b + c * c) / (2.0 * b * c))
+        // Pinned production C++ rounds b*b, then contracts each remaining
+        // numerator product in source order; denominators stay separate.
+        let angle_a = (c.mul_add(c, (-a).mul_add(a, b * b)) / (2.0 * b * c))
             .min(1.0)
             .max(-1.0)
             .acos();
-        let angle_c = ((a * a + b * b - c * c) / (2.0 * a * b))
+        let angle_c = ((-c).mul_add(c, a.mul_add(a, b * b)) / (2.0 * a * b))
             .min(1.0)
             .max(-1.0)
             .acos();
@@ -264,8 +266,8 @@ impl IKConstraint {
             transform[3] *= scale_y;
             let skew = components.skew();
             if skew != 0.0 {
-                transform[2] = transform[0] * skew + transform[2];
-                transform[3] = transform[1] * skew + transform[3];
+                transform[2] = transform[0].mul_add(skew, transform[2]);
+                transform[3] = transform[1].mul_add(skew, transform[3]);
             }
             bone.compose_world_transform();
         });
@@ -356,7 +358,7 @@ impl IKConstraint {
                 } else if diff < -math_types::PI {
                     diff += math_types::PI * 2.0;
                 }
-                let angle = from_angle + diff * self.base.strength();
+                let angle = diff.mul_add(self.base.strength(), from_angle);
                 self.constrain_rotation(index, angle);
             }
         }

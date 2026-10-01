@@ -1536,9 +1536,10 @@ fn binding_reference_instance(property: &CoreHandle) -> CoreHandle {
 }
 
 fn binding_trigger(property: &CoreHandle) {
-    property
-        .with_downcast_mut::<ViewModelInstanceTrigger, _>(|property| property.trigger())
-        .expect("trigger property");
+    assert!(
+        ViewModelInstanceTrigger::trigger_handle(property),
+        "trigger property"
+    );
 }
 
 fn binding_list_item(list: &CoreHandle, instance: Option<CoreHandle>) -> CoreHandle {

@@ -6655,6 +6655,7 @@ impl LogicalFlush {
         };
         let owner = unsafe { &*draw };
         let count = if let Some(instances) = &owner.instances {
+            #[cfg(debug_assertions)]
             debug_assert!(self.m_has_done_layout);
             let instances = instances.borrow();
             debug_assert_eq!(owner.instances_edit_count, instances.edit_count());

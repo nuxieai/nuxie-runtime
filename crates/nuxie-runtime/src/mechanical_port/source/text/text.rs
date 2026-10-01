@@ -1979,7 +1979,9 @@ impl Text {
             }
             _ => f32::MAX,
         };
-        let fit_width = max.x.min(measuring_width);
+        // Parent-controlled intrinsic text has no participant of its own.
+        // Its exact slot must govern shaping as well as the reported width.
+        let fit_width = max.x.min(exact_width.unwrap_or(measuring_width));
         let font_scale = if self.overflow() == TextOverflow::FitFontSize
             && self.fit_font_size_resizes_box_active()
             && self.has_file_feature(FILE_FEATURE_LAYOUT_SIZES_BOX)
@@ -2059,8 +2061,7 @@ impl Text {
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::AutoHeight => Vec2D::new(
-                // Taffy's known-width boundary reports its exact slot width;
-                // shaping above still follows upstream participant ownership.
+                // Report the exact slot width used for shaping above.
                 exact_width.unwrap_or(self.base.width()),
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
@@ -2231,6 +2232,13 @@ mod settled_text_value_tests {
         let authored = measure(&mut text, 354.0, LayoutMeasureMode::AtMost);
         assert!(narrow.y > authored.y, "fixture must wrap more at 120px");
         text.base.set_width_value(120.0);
+        // An intrinsic child of LayoutComponent has no participant of its own.
+        // Its exact measurement constraint is the box control_size will draw.
+        assert_eq!(
+            measure(&mut text, 354.0, LayoutMeasureMode::Exactly),
+            authored,
+            "a parent-controlled text child must shape at its exact slot width"
+        );
         // Width ownership belongs to the participant before the first solve,
         // not to measure mode or the slot control_size supplies afterward.
         let mut participant = LayoutParticipant::default();

@@ -19,7 +19,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
-- Closeout validation at `bbf3c4d8`: 832 renderer tests pass (11 ignored), with
+- Catch-up baseline validation at `bbf3c4d8`: 832 renderer tests pass (11 ignored), with
   live Metal required and the documented serial test configuration; 330 scripting
   tests pass (one ignored), and 11 Apple host tests pass. wasm32-unknown-unknown
   WebGPU/WebGL2/scripting and Android arm64 Vulkan/scripting compilation pass.
@@ -41,6 +41,54 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   correspondence tests seven; the source check counts 1,055 mirrored and ten
   adapted owners (structural coverage, not proof of behavior). Android hardware,
   browser pixels and native Dawn execution are not claimed by compilation.
+- Follow-up correctness audit at the same upstream pin corrects nonrecursive
+  clipping dirt, semantic registration/queued dispatch, and native semantic
+  bounds. Golden loading now uses File's public instantiation path and mirrors
+  C++ destruction order; the hydration regression models failed-init cleanup
+  without prematurely disposing tracked properties. Each correction received
+  source-equivalence and separate Rust-integration review. Native/C API semantic
+  bounds intentionally exclude rendered clipping and root frame-origin
+  projection; those remain separate host geometry helpers, not native policy.
+  Three stale Silver exclusions (`data_viz_demo`, `db_health_tracker`, and
+  `echo_show_demo`) now replay literal upstream actions and pass unchanged
+  epsilon; the exact-case ratchet increases by three. In particular, the data-viz
+  producer runs 12 frames after mutation, not the dormant recipe's 30.
+  Final code at `89f28829a3`: 92 runtime library tests pass (two ignored), all
+  66 affected native/host semantic tests pass, and browser wasm32 WebGPU/WebGL2
+  with scripting compiles. Ordinary and scripted Golden each process 364 entries
+  without failures, retaining one and two recorded divergences respectively.
+  Runtime Silver: 92 byte-exact, 115 within unchanged epsilon, seven recorded
+  divergences, 17 unsupported skips, zero failures. Generator tests pass 27 and
+  structural correspondence tests seven; 1,055 mirrored owners remain covered.
+  Remaining exclusions are not approved adaptations merely because they are
+  recorded: 17 runtime Silver skips, seven recorded divergences, 41 pending
+  scripted (Luau, not parked Wasm) producers, and three unknown-provenance cases
+  still need adjudication. The grid-participant exclusion now executes but
+  differs at frame 0/op 169, so it was not promoted. Structural file pairing
+  and a fully accounted commit sequence do not prove these behaviors correct.
+- Performance baseline after these corrections is diagnostic, not a speed-parity
+  claim. The existing release benchmark runs 25 fixtures for 100 frames at 60 Hz,
+  five samples, median aggregation, in both runner orders. Longer-frame output
+  comparison matches 23/25; `zombie_skins` retains a transform mismatch and
+  `virtualize_blendmode` a color mismatch. Across those 23 matching fixtures,
+  summed Rust/C++ median hot-loop times are 6.20x (C++ first) and 6.05x (Rust first).
+  All 25 aggregate to 6.58x and 6.67x, but the two mismatching fixtures cannot
+  support a performance-parity claim. These measurements exclude import,
+  actual GPU rendering and audio-device work. Our builds/validation were stopped,
+  but unrelated host load remained; a quiet-host rerun is required before
+  publishing performance conclusions. Existing ceilings are historical
+  regression limits, not an "as fast as upstream" criterion.
+  Both unchanged ceiling checks pass 19/25 and fail six: the two script-dependency
+  fixtures, image scripting, `audio_script`, Spotify and multi-listeners. The
+  nominal audio fixture does not measure audio-device execution.
+  Raw [C++-first](evidence/runtime-closeout-2026-09-30/post-harness-fix-cpp-first.json)
+  and [Rust-first](evidence/runtime-closeout-2026-09-30/post-harness-fix-rust-first.json)
+  reports retain source/toolchain/binary identity; the adjacent correctness log
+  records the two mismatches. Pre-harness-fix reports are historical diagnostics,
+  not a valid optimization baseline. Next, resolve the two longer-frame output
+  discrepancies and profile measured Rust overhead (starting with data-viz,
+  Spotify and car-widget fixtures); keep upstream algorithms unchanged and
+  optimize only proven translation overhead or explicit Rust adaptation seams.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not

@@ -2404,12 +2404,17 @@ impl Artboard {
                 }
                 component.with_component_mut(|component| component.set_dirt(ComponentDirt::NONE));
                 component.update(dirt);
-                if root
-                    .with_downcast::<Artboard, _>(|artboard| {
+                // Read fresh dirt depth after the callback, through the same
+                // live runtime receiver already retained for this walk. No
+                // receiver borrow is carried across component.update().
+                let dirtied_earlier = if let Some(receiver) = runtime_receiver.as_ref() {
+                    receiver.with_artboard(|instance| instance.dirty_state.0.depth.get() < i as u32)
+                } else {
+                    root.with_downcast::<Artboard, _>(|artboard| {
                         artboard.dirty_state.0.depth.get() < i as u32
-                    })
-                    .unwrap_or(false)
-                {
+                    }).unwrap_or(false)
+                };
+                if dirtied_earlier {
                     break;
                 }
             }
@@ -6073,6 +6078,27 @@ mod update_receiver_tests {
         assert!(!Artboard::update_components_handle(&root));
         drop(arena.remove(&root));
         assert!(!Artboard::update_components_handle(&root));
+    }
+
+    #[test]
+    fn runtime_dirty_update_releases_receiver_before_final_cleanup() {
+        let runtime = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let root = runtime.core_handle();
+        let weak = runtime.downgrade();
+        let _manager = runtime.ensure_focus_manager();
+        let node = runtime.with_artboard_mut(|instance| {
+            let node = instance.core_arena.insert(crate::mechanical_port::source::node::Node::default());
+            node.with_mut(|object| object.as_component_mut().unwrap().set_dirt(ComponentDirt::TRANSFORM));
+            instance.dependency_order.push(node.clone().into());
+            node
+        });
+        assert!(Artboard::update_components_handle(&root));
+        assert_eq!(node.with(|object| object.as_component().unwrap().dirt()), Some(ComponentDirt::NONE));
+        assert!(!Artboard::update_components_handle(&root));
+        assert_eq!(Rc::strong_count(&runtime.0), 1);
+        drop(runtime);
+        assert!(weak.upgrade().is_none());
+        assert!(!root.is_alive());
     }
 }
 

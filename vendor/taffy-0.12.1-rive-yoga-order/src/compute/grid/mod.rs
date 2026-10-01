@@ -70,6 +70,21 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         .maybe_resolve(parent_size, |val, basis| tree.calc(val, basis))
         .maybe_apply_aspect_ratio(aspect_ratio)
         .maybe_add(box_sizing_adjustment);
+    // GridLayout.cpp leaves Undefined inflow tracks indefinite, but forwards
+    // the numeric inner offer to layoutAbsoluteDescendants. Do not use this
+    // as either the track basis or the grid's own content-sized dimensions.
+    let rive_absolute_percentage_basis = if tree.uses_rive_layout() {
+        let margin = style.margin().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
+        inputs.rive_undefined_available
+            .maybe_sub(margin.sum_axes())
+            .maybe_sub(padding_border_size)
+            .maybe_clamp(
+                min_size.maybe_sub(padding_border_size).or(Size::ZERO.map(Some)),
+                max_size.maybe_sub(padding_border_size),
+            )
+    } else {
+        Size::NONE
+    };
     let preferred_size = if inputs.sizing_mode == SizingMode::InherentSize {
         style
             .size()
@@ -597,6 +612,8 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             container_alignment_styles,
             item.baseline_shim,
             direction,
+            Size::NONE,
+            false,
         );
         item.y_position = y_position;
         item.height = height;
@@ -689,7 +706,8 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             // TODO: Baseline alignment support for absolutely positioned items (should check if is actually specified)
             #[cfg_attr(not(feature = "content_size"), allow(unused_variables))]
             let (content_size_contribution, _, _) =
-                align_and_position_item(tree, child, order, grid_area, container_alignment_styles, 0.0, direction);
+                align_and_position_item(tree, child, order, grid_area, container_alignment_styles, 0.0, direction,
+                    rive_absolute_percentage_basis, tree.rive_container_is_row(node));
             #[cfg(feature = "content_size")]
             {
                 item_content_size_contribution = item_content_size_contribution.f32_max(content_size_contribution);
@@ -892,6 +910,182 @@ impl DetailedGridItemsInfo {
             row_end: to_one_indexed_grid_line(grid_item.row_indexes.end),
             column_start: to_one_indexed_grid_line(grid_item.column_indexes.start),
             column_end: to_one_indexed_grid_line(grid_item.column_indexes.end),
+        }
+    }
+}
+
+#[cfg(all(test, feature = "taffy_tree", feature = "flexbox"))]
+mod rive_finite_undefined_tests {
+    use crate::prelude::*;
+
+    #[test]
+    fn wrapped_grid_absolute_requests_use_child_owner_and_preserve_undefined_width() {
+        let mut tree = TaffyTree::<()>::new();
+        tree.disable_rounding();
+        let content = tree
+            .new_leaf(Style { size: Size { width: length(80.0), height: length(10.0) }, ..Style::default() })
+            .unwrap();
+        let padded = tree
+            .new_leaf(Style {
+                position: Position::Absolute,
+                size: Size { width: percent(0.5), height: length(10.0) },
+                padding: Rect { left: percent(0.1), right: percent(0.1), ..Rect::zero() },
+                ..Style::default()
+            })
+            .unwrap();
+        let measured = tree
+            .new_leaf_with_context(
+                Style {
+                    position: Position::Absolute,
+                    size: Size { width: auto(), height: length(10.0) },
+                    ..Style::default()
+                },
+                (),
+            )
+            .unwrap();
+        let margined = tree
+            .new_leaf(Style {
+                position: Position::Absolute,
+                size: Size { width: percent(0.5), height: length(10.0) },
+                margin: Rect { left: percent(0.1), right: percent(0.1), ..Rect::zero() },
+                inset: Rect { left: length(0.0), ..Rect::auto() },
+                ..Style::default()
+            })
+            .unwrap();
+        let bounded = tree
+            .new_leaf(Style {
+                position: Position::Absolute,
+                size: Size { width: percent(0.5), height: length(10.0) },
+                max_size: Size { width: percent(0.25), height: auto() },
+                ..Style::default()
+            })
+            .unwrap();
+        let grid = tree
+            .new_with_children(
+                Style {
+                    display: Display::Grid,
+                    flex_grow: 1.0,
+                    min_size: Size { width: length(0.0), height: length(0.0) },
+                    ..Style::default()
+                },
+                &[content, padded, measured, margined, bounded],
+            )
+            .unwrap();
+        let root = tree
+            .new_with_children(
+                Style {
+                    flex_direction: FlexDirection::Column,
+                    flex_wrap: FlexWrap::Wrap,
+                    align_content: Some(AlignContent::FLEX_START),
+                    size: Size { width: length(400.0), height: length(100.0) },
+                    ..Style::default()
+                },
+                &[grid],
+            )
+            .unwrap();
+        let mut requests = Vec::new();
+        tree.compute_layout_with_measure_and_probe(
+            root,
+            Size::MAX_CONTENT,
+            |_, _, _| Default::default(),
+            |known, available, node, _, _, _| {
+                if node == measured {
+                    requests.push(available.width);
+                }
+                known.unwrap_or(Size { width: 123.0, height: 10.0 })
+            },
+        )
+        .unwrap();
+        assert_eq!(tree.layout(grid).unwrap().size.width, 80.0);
+        assert_eq!(tree.layout(padded).unwrap().size.width, 200.0);
+        assert_eq!(tree.layout(padded).unwrap().padding.left, 20.0);
+        assert_eq!(requests.last(), Some(&AvailableSpace::MaxContent));
+        assert_eq!(tree.layout(measured).unwrap().size.width, 123.0);
+        // Initial request:200 +80 container-resolved margin =280. The actual
+        // child resolves its margins against that owner:28 +28, leaving224.
+        assert_eq!(tree.layout(margined).unwrap().size.width, 224.0);
+        assert_eq!(tree.layout(margined).unwrap().margin.left, 28.0);
+        assert_eq!(tree.layout(margined).unwrap().location.x, 40.0);
+        assert_eq!(tree.layout(bounded).unwrap().size.width, 50.0);
+    }
+
+    #[test]
+    fn wrapped_grid_keeps_absolute_percentage_basis_separate_from_content_width() {
+        for (rive, max_width, basis) in [(true, None, 400.0), (true, Some(200.0), 200.0), (false, None, 80.0)] {
+            let mut tree = TaffyTree::<()>::new();
+            tree.disable_rounding();
+            let content = tree
+                .new_leaf(Style { size: Size { width: length(80.0), height: length(10.0) }, ..Style::default() })
+                .unwrap();
+            let percentage = tree
+                .new_leaf(Style {
+                    position: Position::Absolute,
+                    size: Size { width: percent(0.5), height: length(10.0) },
+                    inset: Rect { left: percent(0.1), ..Rect::auto() },
+                    ..Style::default()
+                })
+                .unwrap();
+            let opposing = tree
+                .new_leaf(Style {
+                    position: Position::Absolute,
+                    size: Size { width: auto(), height: length(10.0) },
+                    inset: Rect { left: percent(0.1), right: percent(0.1), ..Rect::auto() },
+                    ..Style::default()
+                })
+                .unwrap();
+            let trailing = tree
+                .new_leaf(Style {
+                    position: Position::Absolute,
+                    size: Size { width: length(10.0), height: length(10.0) },
+                    inset: Rect { right: percent(0.05), ..Rect::auto() },
+                    ..Style::default()
+                })
+                .unwrap();
+            let grid = tree
+                .new_with_children(
+                    Style {
+                        display: Display::Grid,
+                        flex_grow: 1.0,
+                        min_size: Size { width: length(0.0), height: length(0.0) },
+                        max_size: Size { width: max_width.map(length).unwrap_or_else(auto), height: auto() },
+                        ..Style::default()
+                    },
+                    &[content, percentage, opposing, trailing],
+                )
+                .unwrap();
+            let root = tree
+                .new_with_children(
+                    Style {
+                        flex_direction: FlexDirection::Column,
+                        flex_wrap: FlexWrap::Wrap,
+                        align_content: Some(AlignContent::FLEX_START),
+                        size: Size { width: length(400.0), height: length(100.0) },
+                        ..Style::default()
+                    },
+                    &[grid],
+                )
+                .unwrap();
+            if rive {
+                tree.compute_layout_with_measure_and_probe(
+                    root,
+                    Size::MAX_CONTENT,
+                    |_, _, _| Default::default(),
+                    |known, _, _, _, _, _| known.unwrap_or(Size::ZERO),
+                )
+                .unwrap();
+            } else {
+                tree.compute_layout(root, Size::MAX_CONTENT).unwrap();
+            }
+            // GridLayout.cpp leaves the Undefined inflow track basis indefinite,
+            // but passes the finite offer to Yoga's absolute-child resolver.
+            assert_eq!(tree.layout(grid).unwrap().size.width, 80.0);
+            assert_eq!(tree.layout(content).unwrap().size.width, 80.0);
+            assert_eq!(tree.layout(percentage).unwrap().size.width, basis * 0.5);
+            assert_eq!(tree.layout(percentage).unwrap().location.x, basis * 0.1);
+            // Opposing and trailing offsets still use the actual content-sized
+            // grid rectangle, not the larger percentage resolution basis.
+            assert_eq!(tree.layout(opposing).unwrap().size.width, (80.0 - basis * 0.2).max(0.0));
+            assert_eq!(tree.layout(trailing).unwrap().location.x, 80.0 - basis * 0.05 - 10.0);
         }
     }
 }

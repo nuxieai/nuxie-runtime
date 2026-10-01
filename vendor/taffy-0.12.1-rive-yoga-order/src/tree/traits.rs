@@ -199,11 +199,17 @@ pub trait LayoutPartialTree: TraversePartialTree {
     /// Compute the specified node's size or full layout given the specified constraints
     fn compute_child_layout(&mut self, node_id: NodeId, inputs: LayoutInput) -> LayoutOutput;
 
+    /// Whether this traversal uses Rive's pinned Yoga layout boundary.
+    fn uses_rive_layout(&self) -> bool { false }
+
+    /// Rive's grid absolute-child caller retains the owner's flex axis.
+    fn rive_container_is_row(&self, _node: NodeId) -> bool { false }
+
     /// Rive: bracket an intrinsic grid probe, including recursive descendants.
     fn begin_min_content_probe(&mut self) {}
 
     /// Rive: leave the intrinsic grid probe.
-    fn end_min_content_probe(&mut self) {}
+    fn end_min_content_probe(&mut self, _owner: NodeId) {}
 }
 
 /// Trait used by the `compute_cached_layout` method which allows cached layout results to be stored and retrieved.
@@ -348,6 +354,7 @@ pub(crate) trait LayoutPartialTreeExt: LayoutPartialTree {
                 axis: axis.into(),
                 run_mode: RunMode::ComputeSize,
                 vertical_margins_are_collapsible,
+                rive_undefined_available: Size::NONE,
             },
         )
         .size
@@ -376,6 +383,7 @@ pub(crate) trait LayoutPartialTreeExt: LayoutPartialTree {
                 axis: RequestedAxis::Both,
                 run_mode: RunMode::ComputeSize,
                 vertical_margins_are_collapsible,
+                rive_undefined_available: Size::NONE,
             },
         )
         .size
@@ -402,6 +410,7 @@ pub(crate) trait LayoutPartialTreeExt: LayoutPartialTree {
                 axis: RequestedAxis::Both,
                 run_mode: RunMode::PerformLayout,
                 vertical_margins_are_collapsible,
+                rive_undefined_available: Size::NONE,
             },
         )
     }

@@ -936,6 +936,7 @@ fn perform_final_layout_on_in_flow_children(
                 known_dimensions,
                 parent_size,
                 available_space: available_space.map_width(|_| AvailableSpace::Definite(stretch_width)),
+                rive_undefined_available: Size::NONE,
                 vertical_margins_are_collapsible: if item.is_in_same_bfc { Line::TRUE } else { Line::FALSE },
             };
 

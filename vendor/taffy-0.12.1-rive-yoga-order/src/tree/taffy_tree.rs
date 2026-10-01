@@ -21,6 +21,8 @@ use crate::compute::{
     compute_cached_layout, compute_hidden_layout, compute_root_layout, round_layout,
 };
 use crate::CacheTree;
+use crate::tree::rive_measure_cache::RiveMeasureCache;
+use crate::tree::RiveMeasureMetadata;
 
 #[cfg(feature = "block_layout")]
 use crate::{compute::compute_block_layout, LayoutBlockContainer};
@@ -117,6 +119,8 @@ struct NodeData {
     // Rive: callbacks may distinguish an intrinsic probe from an ordinary
     // zero-space offer even when their final LayoutInput is identical.
     cache_measure_context: u8,
+    cache_undefined_available: Size<Option<f32>>,
+    rive_measure_cache: RiveMeasureCache,
 
     /// The computation result from layout algorithm
     #[cfg(feature = "detailed_layout_info")]
@@ -131,6 +135,8 @@ impl NodeData {
             style,
             cache: Cache::new(),
             cache_measure_context: 0,
+            cache_undefined_available: Size::NONE,
+            rive_measure_cache: RiveMeasureCache::new(),
             unrounded_layout: Layout::new(),
             final_layout: Layout::new(),
             has_context: false,
@@ -145,19 +151,25 @@ impl NodeData {
     /// If the node was already marked as dirty, returns true
     #[inline]
     pub fn mark_dirty(&mut self) -> ClearState {
-        self.cache.clear()
+        let generic = self.cache.clear();
+        if self.rive_measure_cache.mark_dirty() { ClearState::Cleared } else { generic }
     }
 
     fn cached_layout(&self, input: &LayoutInput, context: u8) -> Option<LayoutOutput> {
-        if self.cache_measure_context != context {
+        if self.cache_measure_context != context || self.cache_undefined_available != input.rive_undefined_available {
             return None;
         }
         self.cache.get(input)
     }
 
     fn store_layout(&mut self, input: &LayoutInput, output: LayoutOutput, context: u8) {
+        if self.cache_undefined_available != input.rive_undefined_available {
+            self.cache.clear();
+            self.cache_undefined_available = input.rive_undefined_available;
+        }
         if self.cache_measure_context != context {
             self.cache.clear();
+            self.rive_measure_cache.clear();
             self.cache_measure_context = context;
         }
         self.cache.store(input, output);
@@ -187,6 +199,7 @@ pub struct TaffyTree<NodeContext = ()> {
 
     /// Layout mode configuration
     config: TaffyConfig,
+    rive_generation: u64,
 }
 
 impl Default for TaffyTree {
@@ -297,6 +310,7 @@ where
     pub(crate) measure_function: MeasureFunction,
     // Local to this solve, preserving nested probe scope without global state.
     min_content_probe_depth: Option<&'t core::cell::Cell<usize>>,
+    rive_metadata: Option<&'t mut dyn FnMut(NodeId, Option<&NodeContext>, bool) -> RiveMeasureMetadata>,
 }
 
 impl<NodeContext, MeasureFunction> TaffyView<'_, NodeContext, MeasureFunction>
@@ -326,6 +340,30 @@ where
         if inputs.run_mode == RunMode::PerformHiddenLayout {
             debug_log!("HIDDEN");
             return compute_hidden_layout(self, node_id);
+        }
+
+        let key = node_id.into();
+        let data = &self.taffy.nodes[key];
+        if self.rive_metadata.is_some() && data.has_context && self.child_count(node_id) == 0
+            && data.style.display != Display::None && !crate::CoreStyle::is_block(&data.style)
+        {
+            let probing = self.min_content_probe_depth.is_some_and(|depth| depth.get() != 0);
+            let metadata = self.rive_metadata.as_mut().unwrap()(node_id, self.taffy.node_context_data.get(key), probing);
+            let data = &mut self.taffy.nodes[key];
+            // Generic and Rive layouts must not consume each other's entries.
+            if data.cache_measure_context == 0 {
+                data.cache.clear();
+                data.rive_measure_cache.clear();
+                data.cache_measure_context = 1;
+            }
+            let context = self.taffy.node_context_data.get_mut(key);
+            let style = &data.style;
+            let measure = &mut self.measure_function;
+            return crate::compute::leaf::compute_leaf_layout_cached(
+                inputs, style, |_, _| 0.0,
+                |known, available| measure(known, available, node_id, context, style),
+                true, Some((&mut data.rive_measure_cache, metadata, self.taffy.rive_generation)),
+            );
         }
 
         // We run the following wrapped in "compute_cached_layout", which will check the cache for an entry matching the node and inputs and:
@@ -445,9 +483,22 @@ where
         }
     }
 
-    fn end_min_content_probe(&mut self) {
+    fn uses_rive_layout(&self) -> bool {
+        self.min_content_probe_depth.is_some()
+    }
+
+    #[cfg(feature = "flexbox")]
+    fn rive_container_is_row(&self, node: NodeId) -> bool {
+        self.taffy.nodes[node.into()].style.flex_direction.is_row()
+    }
+
+    fn end_min_content_probe(&mut self, owner: NodeId) {
         if let Some(depth) = self.min_content_probe_depth {
             depth.set(depth.get() - 1);
+            // TrackSizing::measureItemMinContent invalidates the probed item,
+            // not every descendant nor the eight measurement entries.
+            self.taffy.nodes[owner.into()].rive_measure_cache.invalidate_final();
+            self.taffy.nodes[owner.into()].cache.clear();
         }
     }
 }
@@ -468,6 +519,7 @@ where
 
     fn cache_clear(&mut self, node_id: NodeId) {
         self.taffy.nodes[node_id.into()].cache.clear();
+        self.taffy.nodes[node_id.into()].rive_measure_cache.clear();
     }
 }
 
@@ -603,6 +655,7 @@ impl<NodeContext> TaffyTree<NodeContext> {
             parents: SlotMap::with_capacity(capacity),
             node_context_data: SecondaryMap::with_capacity(capacity),
             config: TaffyConfig::default(),
+            rive_generation: 0,
         }
     }
 
@@ -963,7 +1016,7 @@ impl<NodeContext> TaffyTree<NodeContext> {
             FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
     {
         let use_rounding = self.config.use_rounding;
-        let mut taffy_view = TaffyView { taffy: self, measure_function, min_content_probe_depth: None };
+        let mut taffy_view = TaffyView { taffy: self, measure_function, min_content_probe_depth: None, rive_metadata: None };
         compute_root_layout(&mut taffy_view, node_id, available_space);
         if use_rounding {
             round_layout(&mut taffy_view, node_id);
@@ -976,24 +1029,28 @@ impl<NodeContext> TaffyTree<NodeContext> {
     /// cannot alias, even if descendants receive identical constraints.
     /// Context-bearing non-block leaves also use Yoga's exact/exact shortcut:
     /// final layout does not request intrinsic content size for fixed axes.
-    pub fn compute_layout_with_measure_and_probe<MeasureFunction>(
+    pub fn compute_layout_with_measure_and_probe<MeasureFunction, MetadataFunction>(
         &mut self,
         node_id: NodeId,
         available_space: Size<AvailableSpace>,
+        mut metadata: MetadataFunction,
         mut measure_function: MeasureFunction,
     ) -> Result<(), TaffyError>
     where
+        MetadataFunction: FnMut(NodeId, Option<&NodeContext>, bool) -> RiveMeasureMetadata,
         MeasureFunction:
             FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style, bool) -> Size<f32>,
     {
         let use_rounding = self.config.use_rounding;
         let depth = core::cell::Cell::new(0);
+        self.rive_generation = self.rive_generation.wrapping_add(1);
         let mut taffy_view = TaffyView {
             taffy: self,
             measure_function: |known, available, node, context, style| {
                 measure_function(known, available, node, context, style, depth.get() != 0)
             },
             min_content_probe_depth: Some(&depth),
+            rive_metadata: Some(&mut metadata),
         };
         compute_root_layout(&mut taffy_view, node_id, available_space);
         if use_rounding {
@@ -1016,7 +1073,7 @@ impl<NodeContext> TaffyTree<NodeContext> {
     /// Returns an instance of LayoutTree representing the TaffyTree
     #[cfg(test)]
     pub(crate) fn as_layout_tree(&mut self) -> impl LayoutPartialTree + CacheTree + '_ {
-        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO, min_content_probe_depth: None }
+        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO, min_content_probe_depth: None, rive_metadata: None }
     }
 }
 
@@ -1039,7 +1096,7 @@ mod tests {
             };
             let mut calls = 0;
             if rive {
-                tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _, _, _, _| {
+                tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _| RiveMeasureMetadata::default(), |_, _, _, _, _, _| {
                     calls += 1;
                     Size { width: 33.0, height: 44.0 }
                 }).unwrap();
@@ -1099,7 +1156,7 @@ mod tests {
             }).unwrap();
             assert!(generic_calls > 0);
             let mut rive_calls = 0;
-            tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _, _, _, _| {
+            tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _| RiveMeasureMetadata::default(), |_, _, _, _, _, _| {
                 rive_calls += 1;
                 Size { width: 33.0, height: 44.0 }
             }).unwrap();
@@ -1132,6 +1189,7 @@ mod tests {
                 Size { width: if depth.get() > 0 { 80.0 } else { 0.0 }, height: 0.0 }
             },
             min_content_probe_depth: Some(&depth),
+            rive_metadata: None,
         };
         let input = LayoutInput {
             run_mode: RunMode::ComputeSize,
@@ -1142,10 +1200,382 @@ mod tests {
         view.begin_min_content_probe();
         view.begin_min_content_probe();
         assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 80.0);
-        view.end_min_content_probe();
+        view.end_min_content_probe(node);
         assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 80.0);
-        view.end_min_content_probe();
+        view.end_min_content_probe(node);
         assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, node, input).size.width, 0.0);
+    }
+
+    #[test]
+    fn rive_measured_probe_invalidates_only_its_owner_final_slot() {
+        let mut tree = TaffyTree::<()>::new();
+        let owner = tree.new_leaf_with_context(Style::default(), ()).unwrap();
+        let other = tree.new_leaf_with_context(Style::default(), ()).unwrap();
+        tree.rive_generation = 1;
+        let depth = core::cell::Cell::new(0);
+        let calls = core::cell::Cell::new(0);
+        let mut metadata = |_, _: Option<&()>, _| RiveMeasureMetadata::default();
+        let mut view = TaffyView {
+            taffy: &mut tree,
+            measure_function: |_, _, _, _: Option<&mut ()>, _: &Style| {
+                calls.set(calls.get() + 1);
+                Size { width: if depth.get() > 0 { 80.0 } else { 0.0 }, height: 0.0 }
+            },
+            min_content_probe_depth: Some(&depth), rive_metadata: Some(&mut metadata),
+        };
+        let input = LayoutInput {
+            run_mode: RunMode::PerformLayout,
+            available_space: Size { width: AvailableSpace::Definite(0.0), height: AvailableSpace::MaxContent },
+            ..LayoutInput::HIDDEN
+        };
+        view.begin_min_content_probe();
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, owner, input).size.width, 80.0);
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, other, input).size.width, 80.0);
+        view.end_min_content_probe(owner);
+        // The pinned grid owner invalidation deliberately is not a subtree or
+        // global probe-lane reset. The other node's final result stays cached.
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, other, input).size.width, 80.0);
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, owner, input).size.width, 0.0);
+        assert_eq!(calls.get(), 3);
+    }
+
+    #[test]
+    fn rive_stretch_cross_offer_respects_overflow_margins_aspect_and_parent_mode() {
+        use crate::style::{FlexDirection, FlexWrap};
+        use crate::style_helpers::{auto, percent};
+        fn run(mut parent: Style, child: Style, hidden_sibling: bool, rive: bool) -> (usize, Size<f32>) {
+            let mut tree = TaffyTree::<()>::new();
+            tree.disable_rounding();
+            let leaf = tree.new_leaf_with_context(child, ()).unwrap();
+            let hidden = tree.new_leaf(Style { display: Display::None, ..Style::default() }).unwrap();
+            let children = if hidden_sibling { vec![leaf, hidden] } else { vec![leaf] };
+            parent.flex_direction = FlexDirection::Row;
+            let root = tree.new_with_children(parent, &children).unwrap();
+            let mut calls = 0;
+            if rive {
+                tree.compute_layout_with_measure_and_probe(
+                    root,
+                    Size::MAX_CONTENT,
+                    |_, _, _| RiveMeasureMetadata::default(),
+                    |known, _, _, _, _, _| {
+                        calls += 1;
+                        known.unwrap_or(Size { width: 20.0, height: 10.0 })
+                    },
+                )
+                .unwrap();
+            } else {
+                tree.compute_layout_with_measure(root, Size::MAX_CONTENT, |known, _, _, _, _| {
+                    calls += 1;
+                    known.unwrap_or(Size { width: 20.0, height: 10.0 })
+                })
+                .unwrap();
+            }
+            (calls, tree.layout(leaf).unwrap().size)
+        }
+        let parent = Style { size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() };
+        let child = Style {
+            flex_basis: length(20.0),
+            flex_shrink: 0.0,
+            min_size: Size { width: length(0.0), height: length(0.0) },
+            ..Style::default()
+        };
+        assert_eq!(run(parent.clone(), child.clone(), false, true), (0, Size { width: 20.0, height: 80.0 }));
+        assert!(run(parent.clone(), child.clone(), false, false).0 > 0);
+        let wrap = Style { flex_wrap: FlexWrap::Wrap, ..parent.clone() };
+        assert_eq!(run(wrap.clone(), child.clone(), false, true).0, 0);
+        assert!(run(wrap, Style { flex_basis: length(120.0), ..child.clone() }, false, true).0 > 0);
+        assert!(
+            run(
+                parent.clone(),
+                Style { margin: crate::geometry::Rect { top: auto(), ..crate::geometry::Rect::zero() }, ..child.clone() },
+                false,
+                true
+            )
+            .0 > 0
+        );
+        assert!(run(parent.clone(), Style { aspect_ratio: Some(2.0), ..child.clone() }, false, true).0 > 0);
+        assert!(
+            run(
+                Style { size: Size { width: length(100.0), height: auto() }, ..parent.clone() },
+                child.clone(),
+                false,
+                true
+            )
+            .0 > 0
+        );
+        // Yoga counts the hidden sibling in the gap multiplier, and resolves
+        // this percentage main gap against cross=200, not main=100: 90+20>100.
+        assert!(
+            run(
+                Style {
+                    size: Size { width: length(100.0), height: length(200.0) },
+                    flex_wrap: FlexWrap::Wrap,
+                    gap: Size { width: percent(0.1), height: length(0.0) },
+                    ..parent
+                },
+                Style { flex_basis: length(90.0), ..child },
+                true,
+                true
+            )
+            .0 > 0
+        );
+    }
+
+    #[test]
+    fn rive_undefined_numeric_offer_preserves_percent_basis_and_cache_identity() {
+        let mut tree = TaffyTree::<()>::new();
+        tree.disable_rounding();
+        let child = tree
+            .new_leaf(Style {
+                size: Size { width: percent(0.5), height: length(10.0) },
+                flex_shrink: 0.0,
+                ..Style::default()
+            })
+            .unwrap();
+        let root =
+            tree.new_with_children(Style { flex_direction: FlexDirection::Column, ..Style::default() }, &[child]).unwrap();
+        let depth = core::cell::Cell::new(0);
+        let mut metadata = |_, _: Option<&()>, _| RiveMeasureMetadata::default();
+        let mut view = TaffyView {
+            taffy: &mut tree,
+            min_content_probe_depth: Some(&depth),
+            rive_metadata: Some(&mut metadata),
+            measure_function: |_, _, _, _: Option<&mut ()>, _: &Style| Size::ZERO,
+        };
+        // A finite Undefined offer is neither the containing owner's1000 nor
+        // a fixed/AtMost own width. Changing/leaving/re-entering it cannot hit
+        // a generic cache entry computed with another percentage basis.
+        for (offer, expected) in [(Some(400.0), 200.0), (Some(600.0), 300.0), (None, 0.0), (Some(400.0), 200.0)] {
+            let output = LayoutPartialTree::compute_child_layout(
+                &mut view,
+                root,
+                LayoutInput {
+                    run_mode: RunMode::PerformLayout,
+                    parent_size: Size { width: Some(1000.0), height: None },
+                    rive_undefined_available: Size { width: offer, height: None },
+                    ..LayoutInput::HIDDEN
+                },
+            );
+            assert_eq!(output.size.width, expected);
+            assert_eq!(view.taffy.nodes[child.into()].unrounded_layout.size.width, expected);
+        }
+    }
+
+    #[test]
+    fn rive_undefined_offer_applies_insets_maximum_and_measured_mode() {
+        let mut tree = TaffyTree::<()>::new();
+        let measured = tree.new_leaf_with_context(Style::default(), ()).unwrap();
+        let child = tree
+            .new_leaf(Style {
+                size: Size { width: percent(0.5), height: length(10.0) },
+                flex_shrink: 0.0,
+                ..Style::default()
+            })
+            .unwrap();
+        let root = tree
+            .new_with_children(
+                Style {
+                    flex_direction: FlexDirection::Column,
+                    max_size: Size { width: length(300.0), height: auto() },
+                    padding: crate::geometry::Rect {
+                        left: percent(0.1),
+                        right: percent(0.1),
+                        top: length(0.0),
+                        bottom: length(0.0),
+                    },
+                    ..Style::default()
+                },
+                &[child],
+            )
+            .unwrap();
+        let depth = core::cell::Cell::new(0);
+        let calls = core::cell::Cell::new(0);
+        let mut metadata = |_, _: Option<&()>, _| RiveMeasureMetadata::default();
+        let mut view = TaffyView {
+            taffy: &mut tree,
+            min_content_probe_depth: Some(&depth),
+            rive_metadata: Some(&mut metadata),
+            measure_function: |known: Size<Option<f32>>, available, _, context: Option<&mut ()>, _: &Style| {
+                if context.is_none() {
+                    return known.unwrap_or(Size::ZERO);
+                }
+                calls.set(calls.get() + 1);
+                assert_eq!(known.width, None);
+                assert_eq!(available.width, AvailableSpace::MaxContent);
+                Size { width: 350.0, height: 10.0 }
+            },
+        };
+        let input = LayoutInput {
+            run_mode: RunMode::PerformLayout,
+            parent_size: Size { width: Some(1000.0), height: None },
+            rive_undefined_available: Size { width: Some(400.0), height: None },
+            ..LayoutInput::HIDDEN
+        };
+        // Own padding resolves against1000 (200 total); numeric inner offer
+        // is capped by max300 minus padding, so the50% descendant gets50.
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, root, input).size.width, 250.0);
+        assert_eq!(view.taffy.nodes[child.into()].unrounded_layout.size.width, 50.0);
+        // The numeric offer must not reach a measured callback as AtMost.
+        assert_eq!(LayoutPartialTree::compute_child_layout(&mut view, measured, input).size.width, 350.0);
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[test]
+    fn rive_undefined_container_forwards_numeric_atmost_to_measured_descendant() {
+        let mut tree = TaffyTree::<()>::new();
+        let child = tree
+            .new_leaf_with_context(
+                Style { min_size: Size { width: length(0.0), height: length(0.0) }, ..Style::default() },
+                (),
+            )
+            .unwrap();
+        let root = tree
+            .new_with_children(
+                Style {
+                    flex_direction: FlexDirection::Column,
+                    align_items: Some(crate::style::AlignItems::FLEX_START),
+                    ..Style::default()
+                },
+                &[child],
+            )
+            .unwrap();
+        let depth = core::cell::Cell::new(0);
+        let observed = core::cell::Cell::new(false);
+        let mut metadata = |_, _: Option<&()>, _| RiveMeasureMetadata::default();
+        let mut view = TaffyView {
+            taffy: &mut tree,
+            min_content_probe_depth: Some(&depth),
+            rive_metadata: Some(&mut metadata),
+            measure_function: |known: Size<Option<f32>>,
+                               available: Size<AvailableSpace>,
+                               _,
+                               _: Option<&mut ()>,
+                               _: &Style| {
+                if known.width.is_none() && available.width == AvailableSpace::Definite(100.0) {
+                    observed.set(true);
+                }
+                let width = known.width.unwrap_or_else(|| match available.width {
+                    AvailableSpace::Definite(v) => v.min(200.0),
+                    _ => 200.0,
+                });
+                Size { width, height: if width < 200.0 { 20.0 } else { 10.0 } }
+            },
+        };
+        let output = LayoutPartialTree::compute_child_layout(
+            &mut view,
+            root,
+            LayoutInput {
+                run_mode: RunMode::PerformLayout,
+                rive_undefined_available: Size { width: Some(100.0), height: None },
+                ..LayoutInput::HIDDEN
+            },
+        );
+        assert!(observed.get());
+        assert_eq!(output.size, Size { width: 100.0, height: 20.0 });
+    }
+
+    #[test]
+    fn rive_wrapping_nonstretch_content_remeasures_hug_container_cross_axis() {
+        use crate::style::{AlignContent, FlexDirection, FlexWrap};
+        for row in [false, true] {
+            let mut tree = TaffyTree::<()>::new();
+            tree.disable_rounding();
+            let mut hugs = vec![];
+            for cross in [167.0, 279.0, 170.0] {
+                let a = tree
+                    .new_leaf(Style {
+                        size: if row {
+                            Size { width: length(10.0), height: length(100.0) }
+                        } else {
+                            Size { width: length(100.0), height: length(10.0) }
+                        },
+                        ..Style::default()
+                    })
+                    .unwrap();
+                let b = tree
+                    .new_leaf(Style {
+                        size: if row {
+                            Size { width: length(10.0), height: length(cross - 100.0) }
+                        } else {
+                            Size { width: length(cross - 100.0), height: length(10.0) }
+                        },
+                        ..Style::default()
+                    })
+                    .unwrap();
+                hugs.push(
+                    tree.new_with_children(
+                        Style {
+                            flex_direction: if row { FlexDirection::Column } else { FlexDirection::Row },
+                            flex_grow: 1.0,
+                            flex_shrink: 0.0,
+                            min_size: Size { width: length(0.0), height: length(0.0) },
+                            ..Style::default()
+                        },
+                        &[a, b],
+                    )
+                    .unwrap(),
+                );
+            }
+            let root = tree
+                .new_with_children(
+                    Style {
+                        size: Size { width: length(500.0), height: length(500.0) },
+                        flex_direction: if row { FlexDirection::Row } else { FlexDirection::Column },
+                        flex_wrap: FlexWrap::Wrap,
+                        align_content: Some(AlignContent::FLEX_START),
+                        ..Style::default()
+                    },
+                    &hugs,
+                )
+                .unwrap();
+            tree.compute_layout_with_measure_and_probe(
+                root,
+                Size::MAX_CONTENT,
+                |_, _, _| RiveMeasureMetadata::default(),
+                |known, _, _, _, _, _| known.unwrap_or(Size::ZERO),
+            )
+            .unwrap();
+            // Pinned Yoga's final kStretch pass makes the wrapping cross axis
+            // Undefined when align-content does not grow. Initial exact sizing
+            // must not overwrite intrinsic widths with the parent's500. Step8
+            // then remeasures all siblings at the shared measured maximum279.
+            for hug in hugs {
+                let size = tree.layout(hug).unwrap().size;
+                assert_eq!(if row { size.height } else { size.width }, 279.0);
+                assert!(((if row { size.width } else { size.height }) - 500.0 / 3.0).abs() < 0.0001);
+            }
+        }
+    }
+
+    #[test]
+    fn rive_completed_results_survive_callback_mutation_until_dirt_or_direction_changes() {
+        let mut tree = TaffyTree::<()>::new();
+        let node = tree.new_leaf_with_context(Style::default(), ()).unwrap();
+        let calls = core::cell::Cell::new(0);
+        let content = core::cell::Cell::new(10.0);
+        let direction = core::cell::Cell::new(0);
+        let mut run = |tree: &mut TaffyTree<()>| {
+            tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT,
+                |_, _, _| RiveMeasureMetadata { owner_direction: direction.get(), normalization: 0 },
+                |_, _, _, _, _, _| {
+                    calls.set(calls.get() + 1);
+                    let width = content.get();
+                    content.set(width + 10.0);
+                    Size { width, height: 10.0 }
+                }).unwrap();
+        };
+        run(&mut tree);
+        run(&mut tree);
+        assert_eq!(calls.get(), 1);
+        assert_eq!(tree.layout(node).unwrap().size.width, 10.0);
+        tree.mark_dirty(node).unwrap();
+        run(&mut tree);
+        assert_eq!(calls.get(), 2);
+        direction.set(1);
+        run(&mut tree);
+        direction.set(0);
+        run(&mut tree);
+        assert_eq!(calls.get(), 4);
     }
 
     #[test]

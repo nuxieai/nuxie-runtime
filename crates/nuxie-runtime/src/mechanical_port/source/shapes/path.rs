@@ -43,6 +43,42 @@ enum RenderVertex {
     },
 }
 
+#[derive(Clone, Copy)]
+enum VertexRead {
+    First,
+    Body,
+    Incoming,
+    Outgoing,
+}
+
+fn read_cubic(vertex: &mut dyn CubicVertexBehavior, read: VertexRead) -> RenderVertex {
+    let mut translation = Vec2D::default();
+    let mut in_point = Vec2D::default();
+    let mut out_point = Vec2D::default();
+    match read {
+        VertexRead::First => {
+            in_point = vertex.render_in();
+            out_point = vertex.render_out();
+            translation = vertex.render_translation();
+        }
+        VertexRead::Body => {
+            in_point = vertex.render_in();
+            translation = vertex.render_translation();
+        }
+        VertexRead::Incoming => in_point = vertex.render_in(),
+        VertexRead::Outgoing => out_point = vertex.render_out(),
+    }
+    RenderVertex::Cubic {
+        translation,
+        in_point,
+        out_point,
+    }
+}
+
+fn cpp_min(a: f32, b: f32) -> f32 {
+    if b < a { b } else { a }
+}
+
 impl RenderVertex {
     fn translation(self) -> Vec2D {
         match self {
@@ -268,15 +304,15 @@ impl Path {
     }
 
     fn render_vertex(vertex: &PathVertexOccurrence) -> Option<RenderVertex> {
+        Self::read_vertex(vertex, VertexRead::First)
+    }
+
+    fn read_vertex(vertex: &PathVertexOccurrence, read: VertexRead) -> Option<RenderVertex> {
         match vertex {
             PathVertexOccurrence::Authored(vertex) => vertex
                 .with_mut(|vertex| {
                     if let Some(cubic) = vertex.as_cubic_vertex_behavior_mut() {
-                        return Some(RenderVertex::Cubic {
-                            translation: cubic.render_translation(),
-                            in_point: cubic.render_in(),
-                            out_point: cubic.render_out(),
-                        });
+                        return Some(read_cubic(cubic, read));
                     }
                     let radius = vertex
                         .as_straight_vertex()
@@ -298,11 +334,7 @@ impl Path {
             }
             PathVertexOccurrence::RuntimeCubicDetached(vertex) => {
                 let mut vertex = vertex.borrow_mut();
-                Some(RenderVertex::Cubic {
-                    translation: vertex.render_translation(),
-                    in_point: vertex.render_in(),
-                    out_point: vertex.render_out(),
-                })
+                Some(read_cubic(&mut *vertex, read))
             }
         }
     }
@@ -334,13 +366,13 @@ impl Path {
                 radii[3],
             ),
         ];
-        let max_radius = bounds.width().min(bounds.height()) * 0.5;
+        let max_radius = cpp_min(bounds.width(), bounds.height()) * 0.5;
         let mut start = Vec2D::default();
         for (index, (position, to_prev, to_next, authored_radius)) in
             corners.into_iter().enumerate()
         {
             if authored_radius != 0.0 {
-                let radius = authored_radius.abs().min(max_radius);
+                let radius = cpp_min(authored_radius.abs(), max_radius);
                 let ideal = Self::compute_ideal_control_point_distance(to_prev, to_next, radius);
                 let enter = Vec2D::scale_and_add(position, to_prev, radius);
                 if index == 0 {
@@ -367,38 +399,33 @@ impl Path {
         raw_path.close();
     }
 
-    pub fn build_path(&self, raw_path: &mut RawPath, closed: bool) {
-        self.build_path_with_host(raw_path, closed, None);
+    pub fn build_path(&self, raw_path: &mut RawPath, closed: bool, skinned: bool) {
+        self.build_path_with_host(raw_path, closed, skinned, None);
     }
 
     pub(crate) fn build_path_from_shape(
         &self,
         raw_path: &mut RawPath,
         closed: bool,
+        skinned: bool,
         shape: &Shape,
     ) {
-        self.build_path_with_host(raw_path, closed, Some(shape));
+        self.build_path_with_host(raw_path, closed, skinned, Some(shape));
     }
 
     fn build_path_with_host(
         &self,
         raw_path: &mut RawPath,
         closed: bool,
+        skinned: bool,
         active_shape: Option<&Shape>,
     ) {
-        let Some(vertices) = self
-            .vertices
-            .iter()
-            .map(Self::render_vertex)
-            .collect::<Option<Vec<_>>>()
-        else {
-            return;
-        };
+        let vertices = &self.vertices;
         let length = vertices.len();
         if length < 2 {
             return;
         }
-        let first = vertices[0];
+        let first = Self::read_vertex(&vertices[0], VertexRead::First).expect("live Path vertex");
         let mut out;
         let mut previous_cubic;
         let start;
@@ -427,14 +454,21 @@ impl Path {
                 unreachable!()
             };
             if radius != 0.0 {
-                let previous = vertices[length - 1];
+                let previous = Self::read_vertex(&vertices[length - 1], VertexRead::Outgoing)
+                    .expect("live Path vertex");
                 let mut to_prev = previous.outgoing() - position;
                 let previous_length = to_prev.normalize_length();
-                let next = vertices[1];
+                let next = Self::read_vertex(&vertices[1], VertexRead::Incoming)
+                    .expect("live Path vertex");
                 let mut to_next = next.incoming() - position;
                 let next_length = to_next.normalize_length();
-                let render_radius =
-                    (previous_length / 2.0).min((next_length / 2.0).min(radius.abs()));
+                let render_radius = cpp_min(
+                    previous_length / 2.0,
+                    cpp_min(
+                        next_length / 2.0,
+                        if radius > 0.0 { radius } else { -radius },
+                    ),
+                );
                 let ideal =
                     Self::compute_ideal_control_point_distance(to_prev, to_next, render_radius);
                 start = Vec2D::scale_and_add(position, to_prev, render_radius);
@@ -455,16 +489,19 @@ impl Path {
             }
         }
         for index in 1..length {
-            let vertex = vertices[index];
+            let vertex =
+                Self::read_vertex(&vertices[index], VertexRead::Body).expect("live Path vertex");
             if let RenderVertex::Cubic {
                 translation,
                 in_point: incoming,
-                out_point,
+                out_point: _,
             } = vertex
             {
                 raw_path.cubic_to_points(out, incoming, translation);
                 previous_cubic = true;
-                out = out_point;
+                out = Self::read_vertex(&vertices[index], VertexRead::Outgoing)
+                    .expect("live Path vertex")
+                    .outgoing();
             } else {
                 let RenderVertex::Straight {
                     translation: position,
@@ -474,14 +511,22 @@ impl Path {
                     unreachable!()
                 };
                 if radius != 0.0 {
-                    let previous = vertices[index - 1];
+                    let previous = Self::read_vertex(&vertices[index - 1], VertexRead::Outgoing)
+                        .expect("live Path vertex");
                     let mut to_prev = previous.outgoing() - position;
                     let previous_length = to_prev.normalize_length();
-                    let next = vertices[(index + 1) % length];
+                    let next =
+                        Self::read_vertex(&vertices[(index + 1) % length], VertexRead::Incoming)
+                            .expect("live Path vertex");
                     let mut to_next = next.incoming() - position;
                     let next_length = to_next.normalize_length();
-                    let render_radius =
-                        (previous_length / 2.0).min((next_length / 2.0).min(radius.abs()));
+                    let render_radius = cpp_min(
+                        previous_length / 2.0,
+                        cpp_min(
+                            next_length / 2.0,
+                            if radius > 0.0 { radius } else { -radius },
+                        ),
+                    );
                     let ideal =
                         Self::compute_ideal_control_point_distance(to_prev, to_next, render_radius);
                     let translation = Vec2D::scale_and_add(position, to_prev, render_radius);
@@ -525,7 +570,14 @@ impl Path {
             None => self.deformer(),
         };
         if let Some(deformer) = deformer {
-            let transform = self.path_transform();
+            // PointsPath::pathTransform is identity for skinned geometry.
+            // Classify under the caller's existing owner borrow, but read the
+            // world matrix only here, after vertex evaluation, as upstream does.
+            let transform = if skinned {
+                Mat2D::identity()
+            } else {
+                self.path_transform()
+            };
             deformer.with(|deformer| {
                 deformer.render_path_deformer_deform_local(
                     raw_path,
@@ -702,7 +754,7 @@ impl Path {
             self.deferred_path_dirt = false;
             let mut path = std::mem::take(&mut self.raw_path);
             path.rewind();
-            self.build_path(&mut path, closed);
+            self.build_path(&mut path, closed, active_points_path_has_skin == Some(true));
             self.raw_path = path;
             self.geometry_version = self.geometry_version.wrapping_add(1);
         }
@@ -891,11 +943,20 @@ impl FlattenedPath {
 
 #[cfg(feature = "tools")]
 impl Path {
-    pub fn make_flat(&self, transform_to_parent: bool) -> Option<FlattenedPath> {
+    pub fn make_flat(
+        &self,
+        transform_to_parent: bool,
+        closed: bool,
+        skinned: bool,
+    ) -> Option<FlattenedPath> {
         if self.vertices.is_empty() {
             return None;
         }
-        let mut transform = self.path_transform();
+        let mut transform = if skinned {
+            Mat2D::identity()
+        } else {
+            self.path_transform()
+        };
         if transform_to_parent {
             if let Some(world) = self.base.parent_handle().and_then(|parent| {
                 parent
@@ -912,28 +973,33 @@ impl Path {
         let mut flat = FlattenedPath {
             vertices: Vec::new(),
         };
-        let vertices = self
-            .vertices
-            .iter()
-            .map(Self::render_vertex)
-            .collect::<Option<Vec<_>>>()?;
+        let vertices = &self.vertices;
         let length = vertices.len();
-        let mut previous = self.is_path_closed().then(|| vertices[length - 1]);
-        for (index, vertex) in vertices.iter().copied().enumerate() {
+        let mut previous_index = closed.then_some(length - 1);
+        let mut previous_generated: Option<RenderVertex> = None;
+        for index in 0..length {
+            let vertex = Self::render_vertex(&vertices[index])?;
             if let RenderVertex::Straight {
                 translation: position,
                 radius,
             } = vertex
                 && radius > 0.0
-                && (self.is_path_closed() || (index != 0 && index != length - 1))
+                && (closed || (index != 0 && index != length - 1))
             {
-                let next = vertices[(index + 1) % length];
-                let previous_vertex = previous.unwrap();
+                let previous_vertex = match previous_generated {
+                    Some(vertex) => vertex,
+                    None => Self::read_vertex(
+                        &vertices[previous_index.expect("rounded vertex has predecessor")],
+                        VertexRead::Outgoing,
+                    )?,
+                };
+                let next =
+                    Self::read_vertex(&vertices[(index + 1) % length], VertexRead::Incoming)?;
                 let mut to_prev = previous_vertex.outgoing() - position;
                 let previous_length = to_prev.normalize_length();
                 let mut to_next = next.incoming() - position;
                 let next_length = to_next.normalize_length();
-                let radius = (previous_length / 2.0).min((next_length / 2.0).min(radius));
+                let radius = cpp_min(previous_length / 2.0, cpp_min(next_length / 2.0, radius));
                 let ideal = Self::compute_ideal_control_point_distance(to_prev, to_next, radius);
                 let translation = Vec2D::scale_and_add(position, to_prev, radius);
                 let out = Vec2D::scale_and_add(position, to_prev, radius - ideal);
@@ -953,12 +1019,104 @@ impl Path {
                     out_point: translation,
                 };
                 flat.add_vertex(generated, transform);
-                previous = Some(generated);
+                previous_generated = Some(generated);
+                previous_index = None;
             } else {
-                previous = Some(vertex);
+                previous_generated = None;
+                previous_index = Some(index);
                 flat.add_vertex(vertex, transform);
             }
         }
         Some(flat)
+    }
+}
+
+#[cfg(test)]
+mod path_owner_tests {
+    use super::*;
+
+    fn straight(x: f32, y: f32) -> Rc<RefCell<StraightVertex>> {
+        let mut vertex = StraightVertex::default();
+        vertex.vertex_mut().base.set_x_value(x);
+        vertex.vertex_mut().base.set_y_value(y);
+        Rc::new(RefCell::new(vertex))
+    }
+
+    #[test]
+    fn single_vertex_returns_before_reading_live_vertex() {
+        let vertex = straight(1.0, 2.0);
+        let mut path = Path::default();
+        path.add_runtime_straight_vertex(vertex.clone());
+        let mut output = RawPath::default();
+        output.move_to(10.0, 20.0);
+        let before = output.clone();
+        // Upstream checks length before invoking any vertex getter. Holding
+        // this actual borrow detects accidental eager materialization.
+        let _borrow = vertex.borrow_mut();
+        path.build_path(&mut output, true, false);
+        assert_eq!(output, before);
+    }
+
+    #[test]
+    fn build_appends_open_and_closed_geometry_without_snapshots() {
+        let mut path = Path::default();
+        path.add_runtime_straight_vertex(straight(1.0, 2.0));
+        path.add_runtime_straight_vertex(straight(3.0, 4.0));
+        for closed in [false, true] {
+            let mut output = RawPath::default();
+            output.move_to(10.0, 20.0);
+            output.close();
+            path.build_path(&mut output, closed, false);
+            let mut expected = RawPath::default();
+            expected.move_to(10.0, 20.0);
+            expected.close();
+            expected.move_to(1.0, 2.0);
+            expected.line_to(3.0, 4.0);
+            if closed {
+                expected.line_to(1.0, 2.0);
+                expected.close();
+            }
+            assert_eq!(output, expected);
+        }
+    }
+
+    #[test]
+    fn neighbour_read_does_not_compute_unused_cubic_control() {
+        let vertex = Rc::new(RefCell::new(CubicDetachedVertex::default()));
+        let occurrence = PathVertexOccurrence::RuntimeCubicDetached(vertex.clone());
+        assert!(!vertex.borrow().cubic_vertex().state.in_valid);
+        assert!(!vertex.borrow().cubic_vertex().state.out_valid);
+        Path::read_vertex(&occurrence, VertexRead::Incoming).unwrap();
+        assert!(vertex.borrow().cubic_vertex().state.in_valid);
+        assert!(!vertex.borrow().cubic_vertex().state.out_valid);
+        Path::read_vertex(&occurrence, VertexRead::Outgoing).unwrap();
+        assert!(vertex.borrow().cubic_vertex().state.out_valid);
+    }
+
+    #[test]
+    fn source_min_keeps_first_operand_for_nan_and_equal_zero() {
+        let nan = f32::from_bits(0x7fc0_1234);
+        assert_eq!(cpp_min(nan, 1.0).to_bits(), nan.to_bits());
+        assert_eq!(cpp_min(1.0, nan), 1.0);
+        assert_eq!(cpp_min(-0.0, 0.0).to_bits(), (-0.0f32).to_bits());
+        assert_eq!(cpp_min(0.0, -0.0).to_bits(), 0.0f32.to_bits());
+    }
+
+    #[cfg(feature = "tools")]
+    #[test]
+    fn flat_path_uses_explicit_open_virtual_context() {
+        let mut path = Path::default();
+        path.add_runtime_straight_vertex(straight(1.0, 2.0));
+        path.add_runtime_straight_vertex(straight(3.0, 4.0));
+        let flat = path.make_flat(false, false, false).unwrap();
+        assert_eq!(flat.vertices().len(), 2);
+        assert_eq!(
+            flat.vertices()[0].render_translation(),
+            Vec2D::new(1.0, 2.0)
+        );
+        assert_eq!(
+            flat.vertices()[1].render_translation(),
+            Vec2D::new(3.0, 4.0)
+        );
     }
 }

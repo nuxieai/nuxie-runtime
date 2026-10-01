@@ -45,13 +45,29 @@ pub struct Shape {
 }
 
 impl Shape {
-    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
-        let mut bounds=self.world_bounds();
-        if bounds.is_empty_or_nan() { *out=Default::default(); return crate::mechanical_port::source::drawable::BoundsFidelity::Exact; }
-        let reach=crate::mechanical_port::source::shapes::paint::paint_outset::shape_paints_world_reach(Some(&self.paint_container),self.base.world_transform());
-        if reach.world_outset>0.0 {bounds=bounds.outset(reach.world_outset,reach.world_outset);}
-        *out=bounds;
-        if reach.trustworthy {crate::mechanical_port::source::drawable::BoundsFidelity::Exact}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+    pub fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        let mut bounds = self.world_bounds();
+        if bounds.is_empty_or_nan() {
+            *out = Default::default();
+            return crate::mechanical_port::source::drawable::BoundsFidelity::Exact;
+        }
+        let reach =
+            crate::mechanical_port::source::shapes::paint::paint_outset::shape_paints_world_reach(
+                Some(&self.paint_container),
+                self.base.world_transform(),
+            );
+        if reach.world_outset > 0.0 {
+            bounds = bounds.outset(reach.world_outset, reach.world_outset);
+        }
+        *out = bounds;
+        if reach.trustworthy {
+            crate::mechanical_port::source::drawable::BoundsFidelity::Exact
+        } else {
+            crate::mechanical_port::source::drawable::BoundsFidelity::Approximate
+        }
     }
     pub fn shape_world_transform(&self) -> &Mat2D {
         self.base.world_transform()
@@ -155,6 +171,7 @@ impl Shape {
                             path.build_path_from_shape(
                                 &mut temporary,
                                 Path::is_path_closed_for(object),
+                                object.as_points_path().is_some_and(|points| crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(points).is_some()),
                                 self,
                             );
                             &temporary
@@ -546,6 +563,7 @@ impl Shape {
                         path.build_path_from_shape(
                             &mut pending,
                             Path::is_path_closed_for(object),
+                            object.as_points_path().is_some_and(|points| crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(points).is_some()),
                             self,
                         );
                         pending.precise_bounds_with_transform(*path.base.transform())
@@ -806,5 +824,73 @@ impl std::ops::Deref for Shape {
 impl std::ops::DerefMut for Shape {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+#[cfg(test)]
+mod path_deformer_virtual_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        bones::{skin::Skin, skinnable::SkinnableBehavior},
+        core::CoreArena,
+        generated::core_registry::CoreCapabilities,
+        layout::n_sliced_node::NSlicedNode,
+        math::mat2d::Mat2D,
+        shapes::{
+            points_path::PointsPath, straight_vertex::StraightVertex, vertex::VertexBehavior,
+        },
+    };
+    use std::{cell::RefCell, rc::Rc};
+
+    #[test]
+    fn shape_measurement_dispatches_skinned_path_identity_to_real_deformer() {
+        // The vertices represent already-skinned world coordinates. Upstream
+        // PointsPath::pathTransform returns identity, even when the inherited
+        // world transform is nonidentity. Exercise Shape's real pending-path
+        // measurement caller and concrete NSlicedNode deformation machinery.
+        for skinned in [false, true] {
+            let arena = CoreArena::default();
+            let seen = Rc::new(RefCell::new(Vec::new()));
+            let capture = seen.clone();
+            let mut deformer = NSlicedNode::new(Default::default());
+            deformer.map_world_point = Box::new(move |point| {
+                capture.borrow_mut().push(*point);
+                point.x *= point.x;
+            });
+            let deformer = arena.insert(deformer);
+            let mut path = PointsPath::default();
+            if skinned {
+                path.set_skin(arena.insert(Skin::default()));
+            }
+            *path
+                .as_world_transform_component_mut()
+                .unwrap()
+                .mutable_world_transform() = Mat2D::new(1.0, 0.0, 0.0, 1.0, 10.0, 0.0);
+            path.as_component_mut()
+                .unwrap()
+                // Shape::length uses Component::hasDirt's all-bits check.
+                // Exercise the pending-build branch, not the cached raw path.
+                .set_dirt(
+                    ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
+                );
+            for x in [1.0, 3.0] {
+                let mut vertex = StraightVertex::default();
+                vertex.vertex_mut().base.set_x_value(x);
+                path.add_runtime_straight_vertex(Rc::new(RefCell::new(vertex)));
+            }
+            assert!(!path.is_path_closed());
+            let path = arena.insert(path);
+            let mut shape = Shape::new();
+            shape.deformer = Some(deformer);
+            shape.add_path(path);
+            let length = shape.length();
+            let expected_points = if skinned {
+                [Vec2D::new(1.0, 0.0), Vec2D::new(3.0, 0.0)]
+            } else {
+                [Vec2D::new(11.0, 0.0), Vec2D::new(13.0, 0.0)]
+            };
+            assert_eq!(seen.borrow().as_slice(), expected_points.as_slice());
+            assert_eq!(length, if skinned { 8.0 } else { 48.0 });
+        }
     }
 }

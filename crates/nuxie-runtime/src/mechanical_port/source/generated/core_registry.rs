@@ -74662,7 +74662,9 @@ impl crate::mechanical_port::source::generated::shapes::points_common_path_base:
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::points_path::PointsPath
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -74861,7 +74863,9 @@ impl crate::mechanical_port::source::generated::shapes::parametric_path_base::Pa
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::rectangle::Rectangle
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -75051,7 +75055,9 @@ impl crate::mechanical_port::source::generated::shapes::parametric_path_base::Pa
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::triangle::Triangle
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -75212,7 +75218,9 @@ impl crate::mechanical_port::source::generated::shapes::parametric_path_base::Pa
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::ellipse::Ellipse
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -75379,7 +75387,9 @@ impl crate::mechanical_port::source::generated::shapes::points_common_path_base:
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::list_path::ListPath
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -75564,7 +75574,9 @@ impl crate::mechanical_port::source::generated::shapes::parametric_path_base::Pa
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::polygon::Polygon
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
     }
@@ -75741,7 +75753,9 @@ impl crate::mechanical_port::source::generated::shapes::parametric_path_base::Pa
 impl crate::mechanical_port::source::generated::shapes::path_base::PathBaseCallbacks
     for crate::mechanical_port::source::shapes::star::Star
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::path::Path; is_hole_changed);
+    fn is_hole_changed(&mut self) {
+        crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_for(self, true);
+    }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::node::Node as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base.base.base, property_key)
     }

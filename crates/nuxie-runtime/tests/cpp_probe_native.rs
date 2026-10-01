@@ -1346,13 +1346,13 @@ fn state_machine_added_phases_match_cpp() {
     // suppression; the focused Rust unit test records the retained earlier
     // callbacks to prove the documented no-rollback adaptation.
     let label = "synthetic/fl_c5_added_dirty_invalid_layer.riv";
-    let bytes = synthetic_state_machine_missing_system_state(90_505, "ExitState");
+    let bytes = synthetic_state_machine_missing_system_state(90_505, "EntryState");
     assert!(!cpp_probe_accepts_bytes(&probe, label, &bytes));
     assert!(!rust_accepts_artboard_instance(&bytes));
 }
 
 #[test]
-fn state_machine_required_system_states_reject_like_cpp_probe() {
+fn state_machine_only_requires_entry_state_like_cpp_probe() {
     let Some(probe) = probe_path() else {
         eprintln!("skipping C++ runtime comparison; set RIVE_CPP_PROBE to enable");
         return;
@@ -1364,13 +1364,18 @@ fn state_machine_required_system_states_reject_like_cpp_probe() {
     {
         let label = format!("synthetic/runtime_state_machine_missing_{missing}_cpp.riv");
         let bytes = synthetic_state_machine_missing_system_state(8270 + index as u64, missing);
-        assert!(
-            !cpp_probe_accepts_bytes(&probe, &label, &bytes),
-            "pinned C++ must reject a layer missing {missing}"
+        // Pinned StateMachineLayer::onAddedDirty requires Entry only.
+        // Unused Any and Exit states may be omitted by the exporter.
+        let should_accept = missing != "EntryState";
+        assert_eq!(
+            cpp_probe_accepts_bytes(&probe, &label, &bytes),
+            should_accept,
+            "pinned C++ acceptance for a layer missing {missing}"
         );
-        assert!(
-            !rust_accepts_artboard_instance(&bytes),
-            "Rust must reject a layer missing {missing}"
+        assert_eq!(
+            rust_accepts_artboard_instance(&bytes),
+            should_accept,
+            "Rust acceptance for a layer missing {missing}"
         );
     }
 }

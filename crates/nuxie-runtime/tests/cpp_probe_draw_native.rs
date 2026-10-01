@@ -359,11 +359,11 @@ fn observe_paints(
                     ShapePaintType::Stroke => PaintKind::Stroke,
                 },
                 path_kind,
-                blend_mode_value: blend,
+                blend_mode_value: u32::from(blend),
                 render_blend_mode_value: if blend == 127 {
                     u32::from(shape_blend)
                 } else {
-                    blend
+                    u32::from(blend)
                 },
                 paint_state,
                 feather_state,

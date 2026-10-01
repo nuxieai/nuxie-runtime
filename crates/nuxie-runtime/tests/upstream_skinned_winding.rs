@@ -67,6 +67,7 @@ fn winding(skin: &CoreHandle) -> i32 {
     skin.with_downcast::<Skin, _>(Skin::winding_sign).unwrap()
 }
 
+#[cfg(any(feature = "testing", feature = "tools"))]
 struct QuadRig {
     _arena: CoreArena,
     artboard: CoreHandle,
@@ -77,6 +78,7 @@ struct QuadRig {
     skin: CoreHandle,
     vertices: Vec<CoreHandle>,
 }
+#[cfg(any(feature = "testing", feature = "tools"))]
 impl QuadRig {
     fn new(clockwise: bool) -> Self {
         Self::with_top_start_y(clockwise, 0.0)
@@ -245,6 +247,7 @@ impl QuadRig {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn unskinned_and_resting_skinned_quads_compose_clockwise() {
     for clockwise in [true, false] {
         let rig = QuadRig::new(clockwise);
@@ -254,6 +257,7 @@ fn unskinned_and_resting_skinned_quads_compose_clockwise() {
     }
 }
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn collapsed_first_frame_is_not_cached_as_winding() {
     let rig = QuadRig::new(false);
     scale(&rig.top, 0.0, 0.0);
@@ -267,6 +271,7 @@ fn collapsed_first_frame_is_not_cached_as_winding() {
     assert!(rig.deformed_area() < 0.0);
 }
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn collapsed_bone_does_not_vote_on_mirroring() {
     let rig = QuadRig::new(true);
     assert!(rig.composed_area() > 0.0);
@@ -280,6 +285,7 @@ fn collapsed_bone_does_not_vote_on_mirroring() {
     assert_eq!(winding(&rig.skin), -1);
 }
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn mixed_first_frame_leaves_nothing_wrong_cached() {
     let rig = QuadRig::new(false);
     scale(&rig.top, -1.5, 1.0);
@@ -297,6 +303,7 @@ fn mixed_first_frame_leaves_nothing_wrong_cached() {
     assert!(rig.deformed_area() > 0.0);
 }
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn rig_far_from_origin_still_measures_winding() {
     let rig = QuadRig::new(false);
     for bone in [&rig.top, &rig.bottom] {
@@ -315,6 +322,7 @@ fn rig_far_from_origin_still_measures_winding() {
     assert!((rig.deformed_area() - 10000.0).abs() <= 10000.0 * f32::EPSILON * 100.0);
 }
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn moving_vertex_measures_winding_again() {
     let rig = QuadRig::new(true);
     assert!(rig.composed_area() > 0.0);
@@ -329,6 +337,7 @@ fn moving_vertex_measures_winding_again() {
     assert!(rig.deformed_area() < 0.0);
 }
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn fold_without_mirroring_keeps_bound_winding() {
     let rig = QuadRig::new(true);
     assert!(rig.composed_area() > 0.0);
@@ -340,6 +349,7 @@ fn fold_without_mirroring_keeps_bound_winding() {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn folded_first_frame_is_not_cached_as_winding() {
     for clockwise in [true, false] {
         let rig = QuadRig::with_top_start_y(clockwise, 200.0);
@@ -354,6 +364,7 @@ fn folded_first_frame_is_not_cached_as_winding() {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn curved_path_takes_its_bound_winding_from_its_handles() {
     for clockwise in [true, false] {
         let rig = QuadRig::with_options(clockwise, 200.0, true, 100.0);
@@ -366,6 +377,7 @@ fn curved_path_takes_its_bound_winding_from_its_handles() {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn small_curved_path_follows_mirroring_from_its_handles() {
     for clockwise in [true, false] {
         let rig = QuadRig::with_options(clockwise, 0.0, true, 8.0);
@@ -391,6 +403,7 @@ fn small_curved_path_follows_mirroring_from_its_handles() {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn small_curved_path_measures_its_pose_from_its_handles() {
     for clockwise in [true, false] {
         let rig = QuadRig::with_options(clockwise, 8.0, true, 4.0);

@@ -232,6 +232,14 @@ size_t randomProviderTotalCalls();
 #include "rive/drawable.hpp"
 #include "rive/event.hpp"
 #include "rive/foreground_layout_drawable.hpp"
+// The rendererless archive is built without TESTING. LayerMask's TESTING
+// observers require canvas-only fields and add test-only storage; this probe
+// does not use them. Keep its declaration identical to that archive while
+// retaining the testing accessors used by the other already-included owners.
+#pragma push_macro("TESTING")
+#undef TESTING
+#include "rive/layer_mask.hpp"
+#pragma pop_macro("TESTING")
 #include "rive/generated/core_registry.hpp"
 #include "rive/generated/event_base.hpp"
 #include "rive/math/path_types.hpp"
@@ -10829,7 +10837,7 @@ void write_sorted_drawable_order(std::ostream& out,
             << (drawable->isClipStart() ? "true" : "false");
         out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");
         out << ",\"needsSaveOperation\":"
-            << (drawable->m_needsSaveOperation ? "true" : "false");
+            << (drawable->needsSaveOperation() ? "true" : "false");
         out << '}';
     }
     out << ']';
@@ -11077,7 +11085,7 @@ void write_shape_paint_commands(std::ostream& out,
     auto shape = drawable->as<rive::Shape>();
     bool first = true;
     auto needsSaveOperation =
-        drawable->m_needsSaveOperation || shape->m_ShapePaints.size() > 1;
+        drawable->needsSaveOperation() || shape->m_ShapePaints.size() > 1;
     for (auto shapePaint : shape->m_ShapePaints)
     {
         if (!shapePaint->isVisible())
@@ -11100,7 +11108,8 @@ void write_shape_paint_commands(std::ostream& out,
         write_local_id_or_null(out, localIds, shapePaint->paint());
         out << ",\"paintType\":\"" << shape_paint_type_name(shapePaint) << "\"";
         out << ",\"pathKind\":\"" << shape_paint_path_kind(shape, path) << "\"";
-        auto blendModeValue = shapePaint->blendModeValue();
+        // The upstream accessor is uint8_t; emit a JSON number, not a char.
+        uint32_t blendModeValue = shapePaint->blendModeValue();
         out << ",\"blendModeValue\":" << blendModeValue;
         out << ",\"renderBlendModeValue\":"
             << (blendModeValue == 127 ? shape->blendModeValue() : blendModeValue);
@@ -11133,7 +11142,7 @@ void write_draw_command(std::ostream& out,
         << (drawable->isClipStart() ? "true" : "false");
     out << ",\"isClipEnd\":" << (drawable->isClipEnd() ? "true" : "false");
     out << ",\"needsSaveOperation\":"
-        << (drawable->m_needsSaveOperation ? "true" : "false");
+        << (drawable->needsSaveOperation() ? "true" : "false");
     write_shape_paint_commands(out, localIds, drawable);
     out << '}';
 }
@@ -11205,7 +11214,7 @@ void write_clipping_shape(std::ostream& out,
     out << ",\"sourceId\":" << clippingShape->sourceId();
     out << ",\"sourceLocal\":";
     write_local_id_or_null(out, localIds, clippingShape->source());
-    out << ",\"fillRule\":" << clippingShape->fillRule();
+    out << ",\"fillRule\":" << static_cast<uint32_t>(clippingShape->fillRule());
     out << ",\"isVisible\":" << (clippingShape->isVisible() ? "true" : "false");
 
     out << ",\"shapeLocals\":[";

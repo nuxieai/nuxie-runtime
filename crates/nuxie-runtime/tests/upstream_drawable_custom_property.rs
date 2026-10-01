@@ -45,11 +45,13 @@ fn advance(root: &CoreHandle) {
     );
 }
 
+#[cfg(any(feature = "testing", feature = "tools"))]
 struct ArtboardBuilder {
     arena: CoreArena,
     artboard: CoreHandle,
     next_id: u32,
 }
+#[cfg(any(feature = "testing", feature = "tools"))]
 impl ArtboardBuilder {
     fn new() -> Self {
         let arena = CoreArena::default();
@@ -140,6 +142,7 @@ impl Renderer for ModulationRecorder {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn draw_visitor_sees_only_drawables_tagged_with_custom_properties() {
     let mut builder = ArtboardBuilder::new();
     builder.add_shape();
@@ -205,6 +208,7 @@ fn draw_visitor_sees_only_drawables_tagged_with_custom_properties() {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn draw_modulated_sets_the_color_from_each_tagged_drawable() {
     let mut builder = ArtboardBuilder::new();
     builder.add_shape();
@@ -327,6 +331,7 @@ fn property_key_does_not_reach_into_artboard_from_another_file() {
 /// Supplemental Rust ownership regression: the hosted visitor can access the
 /// node whose draw is still on the stack, just as the C++ visitor can.
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn hosted_visitor_can_reborrow_its_nested_host() {
     use nuxie_runtime::source::{generated::node_base::NodeBase, nested_artboard::NestedArtboard};
     let file = read_file("drawable_custom_properties.riv");

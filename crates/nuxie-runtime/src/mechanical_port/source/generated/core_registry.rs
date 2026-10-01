@@ -3286,7 +3286,11 @@ pub fn component_update_handle(
     let super_dirt = if is_layout && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
         && handle.with(|object| object.component_parent_handle().is_some()).unwrap_or(false)
     { dirt | ComponentDirt::TRANSFORM } else { dirt };
-    handle.with_mut(|object| component_update_before_transform(object, super_dirt));
+    handle.with_mut(|object| {
+        if object.as_path().is_some() {
+            component_update_before_transform(object, super_dirt);
+        }
+    });
     if super_dirt.contains(ComponentDirt::TRANSFORM) {
         handle.with_mut(|object| {
             if object.as_artboard().is_some() {
@@ -3377,12 +3381,14 @@ pub fn component_update_handle(
         });
     }
 
-    handle.with_mut(|object| {
-        let child_opacity = object.world_transform_child_opacity();
-        if let Some(layout) = object.as_layout_component_mut() {
-            layout.update_after_transform_super(dirt, child_opacity.expect("LayoutComponent opacity"));
-        }
-    });
+    if is_layout {
+        handle.with_mut(|object| {
+            let child_opacity = object.world_transform_child_opacity();
+            if let Some(layout) = object.as_layout_component_mut() {
+                layout.update_after_transform_super(dirt, child_opacity.expect("LayoutComponent opacity"));
+            }
+        });
+    }
     handle.with_mut(|object| {
         if object.as_layout_component().is_some() {
             if dirt.intersects(

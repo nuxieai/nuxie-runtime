@@ -922,7 +922,9 @@ mod dirt_dispatch_tests {
     fn update_preparation_preserves_shared_clean_and_collapsed_borrows_for_all_occurrences() {
         use crate::mechanical_port::source::{
             shapes::path_composer::RuntimePathComposerHandle,
-            text::{text_style::TextStyle, text_variation_helper::RuntimeTextVariationHelperHandle},
+            text::{
+                text_style::TextStyle, text_variation_helper::RuntimeTextVariationHelperHandle,
+            },
         };
         let arena = CoreArena::default();
         let node = arena.insert(Node::default());

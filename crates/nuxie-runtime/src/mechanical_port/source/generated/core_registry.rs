@@ -2141,6 +2141,12 @@ impl crate::mechanical_port::source::core::CoreObject
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_scripted_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
@@ -3360,371 +3366,19 @@ pub fn component_update_handle(
     handle: &CoreHandle,
     dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
 ) -> bool {
-    use crate::mechanical_port::source::component_dirt::ComponentDirt;
-    // These are immutable receiver capabilities, not state cached across a
-    // callback. Resolve them under one checked shared borrow; keep every
-    // subsequent state read and callback borrow at its original boundary.
-    let Some((is_transform, is_layout, is_path)) = handle.with(|object| {
-        let is_transform = object.as_transform_component().is_some();
-        (
-            is_transform,
-            is_transform && object.as_layout_component().is_some(),
-            is_transform && object.as_path().is_some(),
-        )
-    }) else {
+    let Some(handler) = handle.with(|object| object.component_update_handler()) else {
         return false;
     };
-    if !is_transform {
-        return handle
-            .with_mut(|object| object.component_update(dirt))
-            .unwrap_or(false);
-    }
-
-    if is_layout && dirt == ComponentDirt::FILTHY {
-        crate::mechanical_port::source::layout_component::LayoutComponent::interrupt_animation_occurrence(handle);
-    }
-    // LayoutComponent passes augmented dirt into Super so a solved pivot is
-    // rebuilt before the single world-transform/constraint pass.
-    let super_dirt = if is_layout && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
-        && handle.with(|object| object.component_parent_handle().is_some()).unwrap_or(false)
-    { dirt | ComponentDirt::TRANSFORM } else { dirt };
-    if is_path {
-        handle.with_mut(|object| component_update_before_transform(object, super_dirt));
-    }
-    if super_dirt.contains(ComponentDirt::TRANSFORM) {
-        handle.with_mut(|object| {
-            if object.as_artboard().is_some() {
-                let (origin_x, origin_y) = object
-                    .as_artboard()
-                    .map(|artboard| (artboard.pivot_origin_x(), artboard.pivot_origin_y()))
-                    .expect("Artboard virtual receiver");
-                object
-                    .as_artboard_mut()
-                    .expect("Artboard virtual receiver")
-                    .base
-                    .base
-                    .update_transform_for_artboard(origin_x, origin_y);
-            } else if let Some(layout) = object.as_layout_component_mut() {
-                layout.update_transform();
-            } else {
-                let translation = object.transform_component_translation();
-                let (x, y) = (translation.x, translation.y);
-                object
-                    .as_transform_component_mut()
-                    .unwrap()
-                    .update_transform_state(x, y);
-            }
-            if let Some(image) = object
-                .as_any_mut()
-                .downcast_mut::<crate::mechanical_port::source::shapes::image::Image>(
-            ) {
-                image.update_transform_after_super();
-            } else if let Some(video) = object.as_any_mut().downcast_mut::<crate::video::Video>() {
-                video.update_transform_after_super();
-            }
-        });
-    }
-    if dirt.contains(ComponentDirt::WORLD_TRANSFORM) {
-        let compose = handle.with_mut(|object| {
-            // Artboard explicitly overrides updateWorldTransform with no work.
-            if object.as_artboard().is_some() {
-                return false;
-            }
-            if let Some(list) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
-                list.update_world_transform_before_super();
-            }
-            if let Some(node) = object.as_node_mut() {
-                node.update_world_transform_before_super();
-            }
-            let overridden = if let Some(layout) = object.as_layout_component_mut() {
-                layout.compose_world_transform();
-                true
-            } else if let Some(text) = object.as_text_mut() {
-                text.try_compose_world_transform_override()
-            } else if let Some(shape) = object.as_shape_mut() {
-                shape.try_compose_world_transform_override()
-            } else if let Some(image) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::image::Image>() {
-                image.try_compose_world_transform_override()
-            } else if let Some(video)=object.as_any_mut().downcast_mut::<crate::video::Video>() {
-                video.try_compose_world_transform_override()
-            } else {
-                false
-            };
-            if !overridden {
-                object.as_transform_component_mut().unwrap().compose_world_transform();
-            }
-            true
-        }).unwrap_or(false);
-        if compose {
-            component_update_constraints_handle(handle);
-        }
-    }
-    if dirt.contains(ComponentDirt::RENDER_OPACITY) {
-        let parent = handle
-            .with(|object| {
-                object
-                    .as_transform_component()
-                    .unwrap()
-                    .parent_transform_component()
-            })
-            .flatten();
-        let parent_opacity = parent.and_then(|parent| {
-            parent
-                .with(|object| object.world_transform_child_opacity())
-                .flatten()
-        });
-        handle.with_mut(|object| {
-            object
-                .as_transform_component_mut()
-                .unwrap()
-                .update_render_opacity_state(parent_opacity)
-        });
-    }
-
-    if is_layout {
-        handle.with_mut(|object| {
-            let child_opacity = object.world_transform_child_opacity();
-            if let Some(layout) = object.as_layout_component_mut() {
-                layout.update_after_transform_super(dirt, child_opacity.expect("LayoutComponent opacity"));
-            }
-        });
-    }
-    handle.with_mut(|object| {
-        if object.as_layout_component().is_some() {
-            if dirt.intersects(
-                ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::LAYOUT_STYLE,
-            ) {
-                if let Some(artboard) = object.as_artboard_mut() {
-                    artboard.update_render_path();
-                } else {
-                    object
-                        .as_layout_component_mut()
-                        .unwrap()
-                        .update_render_path();
-                }
-            }
-            object
-                .as_layout_component_mut()
-                .unwrap()
-                .reset_update_flags();
-        }
-        component_update_after_transform(object, dirt);
-    });
-    // Classify the live virtual receiver once after Super using its existing
-    // registration metadata, without retaining an object borrow across callbacks.
-    let Some((text_input, list, nested, nested_leaf, artboard, scripted, transition)) =
-        handle.type_metadata().map(|(kind, is_type_of)| {
-            (
-                is_type_of(crate::mechanical_port::source::text::text_input::TextInput::TYPE_KEY),
-                kind == crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY,
-                is_type_of(crate::mechanical_port::source::nested_artboard::NestedArtboard::TYPE_KEY),
-                kind == crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY,
-                is_type_of(crate::mechanical_port::source::artboard::Artboard::TYPE_KEY),
-                is_type_of(crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::TYPE_KEY),
-                kind == crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY,
-            )
-        })
-    else {
-        return true;
-    };
-    let mut callback_ran = false;
-    if text_input {
-        crate::mechanical_port::source::text::text_input::TextInput::update_after_transform_occurrence(handle, dirt);
-        callback_ran = true;
-    }
-    if list && (!callback_ran || handle.is_alive()) {
-        crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::update_after_transform_occurrence(handle, dirt);
-        callback_ran = true;
-    }
-    if nested && (!callback_ran || handle.is_alive()) {
-        crate::mechanical_port::source::nested_artboard::NestedArtboard::update_after_transform_occurrence(handle, dirt);
-        if nested_leaf && handle.is_alive() {
-            crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf::update_after_nested_artboard_super_occurrence(handle, dirt);
-        }
-        callback_ran = true;
-    }
-    if artboard && (!callback_ran || handle.is_alive()) {
-        crate::mechanical_port::source::artboard::Artboard::update_after_layout_super_handle(
-            handle, dirt,
-        );
-        callback_ran = true;
-    }
-    if scripted && (!callback_ran || handle.is_alive()) {
-        crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::update_after_super_occurrence(handle, dirt);
-        callback_ran = true;
-    }
-    if transition && (!callback_ran || handle.is_alive()) {
-        crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::update_after_super_occurrence(handle, dirt);
-    }
-    true
-}
-
-fn component_update_before_transform(
-    object: &mut dyn crate::mechanical_port::source::core::CoreObject,
-    dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
-) {
-    use crate::mechanical_port::source::shapes::{
-        ellipse::Ellipse, polygon::Polygon, rectangle::Rectangle, star::Star, triangle::Triangle,
-    };
-    if let Some(owner) = object.as_any_mut().downcast_mut::<Rectangle>() {
-        owner.update_before_path_super(dirt);
-    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Triangle>() {
-        owner.update_before_path_super(dirt);
-    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Ellipse>() {
-        owner.update_before_path_super(dirt);
-    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Star>() {
-        owner.update_before_path_super(dirt);
-    } else if let Some(owner) = object.as_any_mut().downcast_mut::<Polygon>() {
-        owner.update_before_path_super(dirt);
-    }
-    if let Some(points) = object.as_points_path_mut() {
-        points.update_before_path_super(dirt);
-    }
-    if let Some(path) = object.as_path_mut() {
-        path.update_before_transform_super();
+    match handler {
+        Some(update) => update(handle, dirt),
+        // Non-transform owners already expose the source virtual update.
+        None => handle.with_mut(|object| object.component_update(dirt)).unwrap_or(false),
     }
 }
 
-fn component_update_after_transform(
-    object: &mut dyn crate::mechanical_port::source::core::CoreObject,
-    dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
-) {
-    use crate::mechanical_port::source::{
-        artboard_component_list::ArtboardComponentList,
-        foreground_layout_drawable::ForegroundLayoutDrawable, layout::n_sliced_node::NSlicedNode,
-    };
-    let path_closed = object
-        .as_path()
-        .map(|_| crate::mechanical_port::source::shapes::path::Path::is_path_closed_for(object));
-    let points_path_has_skin = object.as_points_path().map(|path| {
-        crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(path).is_some()
-    });
-    if let Some(path) = object.as_path_mut() {
-        path.update_after_transform_super(
-            dirt,
-            path_closed.expect("Path virtual receiver"),
-            points_path_has_skin,
-        );
-    }
-    if let Some(shape) = object.as_shape_mut() {
-        shape.update_after_transform_super(dirt);
-    }
-    if let Some(text) = object.as_text_mut() {
-        text.update_after_transform_super(dirt);
-    }
-    if let Some(owner) = object
-        .as_any_mut()
-        .downcast_mut::<ForegroundLayoutDrawable>()
-    {
-        owner.update_after_transform_super(dirt);
-    } else if let Some(owner) = object.as_any_mut().downcast_mut::<NSlicedNode>() {
-        owner.update_after_transform_super(dirt);
-    }
-}
-
-/// The three concrete overrides have different constraint ordering. Snapshot
-/// only their handle lists, release the component slot, then invoke each action.
 pub fn component_update_constraints_handle(handle: &CoreHandle) {
-    use crate::mechanical_port::source::{
-        artboard_component_list::ArtboardComponentList,
-        layout::layout_participant::LayoutParticipant,
-        nested_artboard_layout::NestedArtboardLayout,
-    };
-    fn snapshot(
-        object: &mut dyn crate::mechanical_port::source::core::CoreObject,
-    ) -> (
-        Vec<CoreHandle>,
-        Vec<CoreHandle>,
-        Vec<CoreHandle>,
-        bool,
-        bool,
-    ) {
-        let transforms = object
-            .as_transform_component()
-            .map(|owner| owner.constraints().to_vec())
-            .unwrap_or_default();
-        if let Some(owner) = object.as_any_mut().downcast_mut::<ArtboardComponentList>() {
-            (
-                owner.layout_constraint_handles(),
-                owner.active_list_constraint_handles(),
-                transforms,
-                true,
-                false,
-            )
-        } else if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
-            (
-                owner.layout_constraint_handles(),
-                Vec::new(),
-                transforms,
-                false,
-                true,
-            )
-        } else if let Some(owner) = object.as_layout_component() {
-            (
-                owner.layout_constraint_handles(),
-                Vec::new(),
-                transforms,
-                false,
-                false,
-            )
-        } else {
-            (Vec::new(), Vec::new(), transforms, false, false)
-        }
-    }
-    let Some(preparation) = handle.with_mut(|object| {
-        let participant = if object.as_shape().is_some()
-            || object.as_text().is_some()
-            || object
-                .as_any()
-                .is::<crate::mechanical_port::source::shapes::image::Image>()
-        {
-            object.layout_provider_handle()
-        } else {
-            None
-        };
-        // With no participant callback there is no intervening mutation:
-        // prepare the existing lists under this same short checked borrow.
-        match participant {
-            Some(participant) => Err(participant),
-            None => Ok(snapshot(object)),
-        }
-    }) else {
-        return;
-    };
-    let (layout, list, transforms, skip_lists, nested_placement) = match preparation {
-        Ok(prepared) => prepared,
-        Err(participant) => {
-            LayoutParticipant::apply_layout_constraints(&participant);
-            // A participant may mutate constraints; capture only after it runs.
-            let Some(prepared) = handle.with_mut(snapshot) else {
-                return;
-            };
-            prepared
-        }
-    };
-    for constraint in layout {
-        let constrain = constraint
-            .with(|object| object.layout_constraint_child_handler())
-            .flatten()
-            .expect("registered LayoutConstraint exposes its child action");
-        constrain(&constraint, handle.clone());
-    }
-    for constraint in list {
-        constraint.with_mut(|object| object.list_constraint_constrain_list(handle.clone()));
-    }
-    for constraint in transforms {
-        constraint.with_mut(|object| {
-            if !skip_lists || object.as_list_constraint().is_none() {
-                object.constraint_apply(handle.clone());
-            }
-        });
-    }
-    if nested_placement {
-        handle.with_mut(|object| {
-            if let Some(nested) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
-                nested.apply_layout_placement();
-            }
-        });
+    if let Some(update) = handle.with(|object| object.component_constraints_handler()).flatten() {
+        update(handle);
     }
 }
 
@@ -3743,6 +3397,59 @@ mod update_dispatch_tests {
         },
         text::text_input::TextInput,
     };
+
+    #[test]
+    fn every_registered_transform_has_explicit_occurrence_dispatch() {
+        let mut transforms = 0;
+        for key in 0..=u16::MAX {
+            let Some(object) = CoreRegistry::make_core_box(i32::from(key)) else { continue; };
+            let transform = object.as_transform_component().is_some();
+            assert_eq!(object.component_update_handler().is_some(), transform, "update registration {key}");
+            assert_eq!(object.component_constraints_handler().is_some(), transform, "constraint registration {key}");
+            transforms += usize::from(transform);
+        }
+        assert!(transforms > 25, "exercise the whole concrete family");
+        let video = crate::video::Video::default();
+        assert!(video.component_update_handler().is_some());
+        assert!(video.component_constraints_handler().is_some());
+    }
+
+    #[test]
+    fn text_input_drawables_inherit_node_without_a_text_input_tail() {
+        use crate::mechanical_port::source::text::{
+            text_input_cursor::TextInputCursor, text_input_text::TextInputText,
+            text_input_selected_text::TextInputSelectedText, text_input_selection::TextInputSelection,
+        };
+        let arena = CoreArena::default();
+        let handles = [arena.insert(TextInputCursor::default()), arena.insert(TextInputText::default()),
+            arena.insert(TextInputSelectedText::default()), arena.insert(TextInputSelection::default())];
+        for owner in handles {
+            // No TextInput parent is required to execute these inherited Node
+            // operations. A mistaken TextInput tail would enter its owner API.
+            owner.with_mut(|object| object.as_node_mut().unwrap().base.set_x_value(17.0));
+            assert!(component_update_handle(&owner, ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::RENDER_OPACITY));
+            owner.with(|object| {
+                assert_eq!(object.as_world_transform_component().unwrap().world_transform()[4], 17.0);
+                assert_eq!(object.as_transform_component().unwrap().render_opacity(), 1.0);
+            }).unwrap();
+        }
+    }
+
+    #[test]
+    fn root_bone_uses_root_translation_without_a_node_override() {
+        use crate::mechanical_port::source::bones::root_bone::RootBone;
+        let mut bone = RootBone::default();
+        bone.base.set_x_value(13.0);
+        bone.base.set_y_value(29.0);
+        let arena = CoreArena::default();
+        let owner = arena.insert(bone);
+        assert!(component_update_handle(&owner, ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM));
+        owner.with(|object| {
+            assert!(object.as_node().is_none());
+            let world = object.as_world_transform_component().unwrap().world_transform();
+            assert_eq!((world[4], world[5]), (13.0,29.0));
+        }).unwrap();
+    }
 
     #[test]
     fn borrowed_receiver_metadata_matches_registered_predicates() {
@@ -5854,6 +5561,12 @@ pub trait CoreCapabilities: Any {
     {
         self.as_text()
             .and_then(|text| text.inferred_semantic_data())
+    }
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        None
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        None
     }
     fn component_update(
         &mut self,
@@ -56721,6 +56434,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::node::Node {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::transform_component::TransformComponent::build_dependencies(
             &mut self.base.base,
@@ -56811,6 +56530,12 @@ impl CoreCapabilities for crate::mechanical_port::source::node::Node {
 impl CoreCapabilities
     for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_shape_paint_container(
         &self,
     ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
@@ -57003,6 +56728,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::NestedArtboard {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_nested_artboard(
         &self,
     ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
@@ -57212,6 +56943,12 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
 impl CoreCapabilities
     for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_artboard_component_list_mut(
         &mut self,
     ) -> Option<&mut crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>
@@ -57500,6 +57237,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_collapse_post(&mut self, value: bool) -> bool {
         self.collapse_after_component(value);
         true
@@ -57591,6 +57334,12 @@ impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_scripted_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable>
@@ -57988,6 +57737,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_scripted_layout(
         &self,
     ) -> Option<&crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout> {
@@ -58453,6 +58208,12 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_number::S
 impl CoreCapabilities
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn is_resetting_component(&self) -> bool {
         true
     }
@@ -59234,6 +58995,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_intrinsically_sizeable_mut(
         &mut self,
     ) -> Option<
@@ -63407,6 +63174,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh_vertex::M
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_shape_paint_container(
         &self,
     ) -> Option<&crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer>
@@ -63872,6 +63645,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::PointsPath {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_skinnable_behavior(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::bones::skinnable::SkinnableBehavior> {
@@ -64162,6 +63941,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rectangle {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::path::Path::build_dependencies(
             &mut self.base.base.base.base,
@@ -64446,6 +64231,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Triangle {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::path::Path::build_dependencies(
             &mut self.base.base.base.base,
@@ -64652,6 +64443,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Tria
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellipse {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::path::Path::build_dependencies(
             &mut self.base.base.base.base,
@@ -64858,6 +64655,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::ListPath {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
         self.update_list(list);
         true
@@ -65134,6 +64937,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::clipping_shape
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polygon {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::path::Path::build_dependencies(
             &mut self.base.base.base.base,
@@ -65340,6 +65149,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polyg
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::path::Path::build_dependencies(
             &mut self.base.base.base.base.base.base,
@@ -65560,6 +65375,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn file_asset_referencer_asset_id(&self) -> Option<u32> {
         Some(self.asset_id())
     }
@@ -66243,6 +66064,12 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_rules::DrawRules 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout_component::LayoutComponent {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -66530,6 +66357,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_layout_style_applier(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::layout::layout_style_applier::LayoutStyleApplier>
@@ -67490,6 +67323,12 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::bindable_property_viewmodel::BindablePropertyViewModel {
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn is_resetting_component(&self) -> bool {
         true
     }
@@ -67785,6 +67624,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::weight::Weight 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::bone::Bone {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::transform_component::TransformComponent::build_dependencies(
             &mut self.base.base.base.base,
@@ -67871,6 +67716,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::bone::Bone {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::RootBone {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::transform_component::TransformComponent::build_dependencies(
             &mut self.base.base.base.base.base.base,
@@ -68330,6 +68181,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_text_input_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
@@ -68562,6 +68419,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_curso
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text::TextInputText {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_text_input_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
@@ -69169,6 +69032,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_text_input_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
@@ -69401,6 +69270,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input::TextInput {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn is_advancing_component(&self) -> bool {
         true
     }
@@ -69636,6 +69511,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_axis:
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_input_selection::TextInputSelection
 {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn as_text_input_drawable(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_input_drawable::TextInputDrawable> {
@@ -69868,6 +69749,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
+    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
         self.update_list(Some(list));
         true

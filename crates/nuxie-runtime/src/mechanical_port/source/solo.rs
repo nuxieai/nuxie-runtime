@@ -26,6 +26,15 @@ fn is_solo_set_member(child: &CoreHandle) -> bool {
         || child.is_type_of(SemanticDataBase::TYPE_KEY))
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    Solo,
+    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl Solo {
     fn set_active_component_id_occurrence(owner: &CoreHandle, value: u32) {
         let changed = owner

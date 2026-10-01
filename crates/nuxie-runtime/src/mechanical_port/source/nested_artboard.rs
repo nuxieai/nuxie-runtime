@@ -142,6 +142,22 @@ impl Drop for NestedArtboard {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    NestedArtboard,
+    |owner, dirt| {
+        crate::mechanical_port::source::transform_component::update_transform_super::<Self>(
+            owner, dirt,
+        );
+        if owner.is_alive() {
+            crate::mechanical_port::source::nested_artboard::NestedArtboard::update_after_transform_occurrence(owner, dirt);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl NestedArtboard {
     pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
         let Some(nested)=self.artboard_instance_default() else {return crate::mechanical_port::source::drawable::BoundsFidelity::None};
@@ -791,12 +807,27 @@ impl NestedArtboard {
         if read(|this| this.needs_save_operation()) {
             renderer.save();
         }
-        let transform = owner.with(|object| *object.as_nested_artboard().expect("nested artboard").world_transform().values()).expect("live nested artboard");
+        let transform = owner
+            .with(|object| {
+                *object
+                    .as_nested_artboard()
+                    .expect("nested artboard")
+                    .world_transform()
+                    .values()
+            })
+            .expect("live nested artboard");
         renderer.transform(nuxie_render_api::Mat2D(transform));
-        let hosted = owner.with(|object| {
-            let this = object.as_nested_artboard().expect("nested artboard");
-            this.instance.as_ref().map(|instance| (this.artboard_handle().expect("nested artboard owner"), instance.core_handle()))
-        }).expect("live nested artboard");
+        let hosted = owner
+            .with(|object| {
+                let this = object.as_nested_artboard().expect("nested artboard");
+                this.instance.as_ref().map(|instance| {
+                    (
+                        this.artboard_handle().expect("nested artboard owner"),
+                        instance.core_handle(),
+                    )
+                })
+            })
+            .expect("live nested artboard");
         if let Some((host, hosted)) = hosted {
             Artboard::draw_hosted_handle(&host, &hosted, renderer);
         }

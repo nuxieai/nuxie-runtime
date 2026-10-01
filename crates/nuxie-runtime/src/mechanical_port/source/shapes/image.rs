@@ -58,6 +58,22 @@ impl std::ops::DerefMut for Image {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    Image,
+    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    |object: &mut Self| {
+        crate::mechanical_port::source::transform_component::update_local_transform(object);
+        object.update_transform_after_super();
+    },
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    |object: &mut Self| {
+        if !object.try_compose_world_transform_override() {
+            crate::mechanical_port::source::transform_component::compose_world_transform(object);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_participant_constraints::<Self>
+);
+
 impl Image {
     pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
         if self.mesh.is_some() {return crate::mechanical_port::source::drawable::BoundsFidelity::None;}

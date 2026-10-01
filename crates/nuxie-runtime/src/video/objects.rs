@@ -391,7 +391,31 @@ impl CoreObject for Video {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    Video,
+    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    |object: &mut Self| {
+        crate::mechanical_port::source::transform_component::update_local_transform(object);
+        object.update_transform_after_super();
+    },
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    |object: &mut Self| {
+        if !object.try_compose_world_transform_override() {
+            crate::mechanical_port::source::transform_component::compose_world_transform(object);
+        }
+    },
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl CoreCapabilities for Video {
+    fn component_update_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::source::component_dirt::ComponentDirt) -> bool> {
+        Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
+    }
+    fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
+        Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
     fn file_asset_referencer_asset_id(&self) -> Option<u32> {
         Some(self.asset_id())
     }

@@ -9,6 +9,15 @@ use crate::mechanical_port::source::{
 pub struct TextInputSelection {
     pub base: TextInputSelectionBase,
 }
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    TextInputSelection,
+    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl TextInputSelection {
     pub fn hit_test(&self, _transform: &Mat2D) -> Option<CoreHandle> {
         None

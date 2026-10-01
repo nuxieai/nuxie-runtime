@@ -197,7 +197,13 @@ fn intrinsic_measure_axis(
     available: taffy::style::AvailableSpace,
 ) -> (f32, LayoutMeasureMode) {
     use taffy::style::AvailableSpace;
-    let bounded = |value: f32| if value.is_nan() { value } else { value.max(0.0) };
+    let bounded = |value: f32| {
+        if value.is_nan() {
+            value
+        } else {
+            value.max(0.0)
+        }
+    };
     if let Some(outer) = known {
         // Taffy's known dimension is the outer box. Its Definite available
         // size already excludes the inset: use it without subtracting again.
@@ -350,7 +356,85 @@ impl ProxyDrawing for LayoutProxy {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(LayoutComponent,
+    |owner, dirt| { crate::mechanical_port::source::layout_component::LayoutComponent::update_occurrence::<Self>(owner, dirt, |object| object.update_render_path()); },
+    |object: &mut Self| object.update_transform(),
+    crate::mechanical_port::source::node::Node::update_world_transform_occurrence::<Self>,
+    |object: &mut Self| object.compose_world_transform(),
+    crate::mechanical_port::source::layout_component::LayoutComponent::update_constraints_occurrence::<Self>);
+
 impl LayoutComponent {
+    pub(crate) fn update_constraints_occurrence<
+        T: crate::mechanical_port::source::transform_component::TransformUpdate,
+    >(
+        owner: &CoreHandle,
+    ) {
+        let Some((layout, transforms)) = owner.with_downcast::<T, _>(|object| {
+            (
+                object
+                    .as_layout_component()
+                    .expect("LayoutComponent receiver")
+                    .layout_constraint_handles(),
+                object
+                    .as_transform_component()
+                    .expect("transform receiver")
+                    .constraints()
+                    .to_vec(),
+            )
+        }) else {
+            return;
+        };
+        crate::mechanical_port::source::transform_component::apply_constraint_lists(
+            owner,
+            layout,
+            Vec::new(),
+            transforms,
+            false,
+        );
+    }
+    pub(crate) fn update_occurrence<
+        T: crate::mechanical_port::source::transform_component::TransformUpdate,
+    >(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        render_path: fn(&mut T),
+    ) {
+        if dirt == ComponentDirt::FILTHY {
+            Self::interrupt_animation_occurrence(owner);
+        }
+        let super_dirt = if dirt.contains(ComponentDirt::WORLD_TRANSFORM)
+            && owner
+                .with_downcast::<T, _>(|object| object.component_parent_handle().is_some())
+                .unwrap_or(false)
+        {
+            dirt | ComponentDirt::TRANSFORM
+        } else {
+            dirt
+        };
+        crate::mechanical_port::source::transform_component::update_transform_super::<T>(
+            owner, super_dirt,
+        );
+        owner.with_downcast_mut::<T, _>(|object| {
+            let opacity = object
+                .world_transform_child_opacity()
+                .expect("LayoutComponent opacity");
+            object
+                .as_layout_component_mut()
+                .expect("LayoutComponent receiver")
+                .update_after_transform_super(dirt, opacity);
+        });
+        owner.with_downcast_mut::<T, _>(|object| {
+            if dirt.intersects(
+                ComponentDirt::PATH | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::LAYOUT_STYLE,
+            ) {
+                render_path(object);
+            }
+            object
+                .as_layout_component_mut()
+                .expect("LayoutComponent receiver")
+                .reset_update_flags();
+        });
+    }
     pub fn painted_world_bounds(
         &mut self,
         out: &mut crate::mechanical_port::source::math::aabb::Aabb,
@@ -3826,8 +3910,12 @@ mod packed_layout_tests {
 
     #[test]
     fn padded_taffy_leaf_measures_inner_exact_axes_but_keeps_outer_box() {
-        use taffy::{geometry::{Rect, Size}, style::{AvailableSpace, Style}, tree::{LayoutInput, RunMode, SizingMode}};
         use taffy::style_helpers::length;
+        use taffy::{
+            geometry::{Rect, Size},
+            style::{AvailableSpace, Style},
+            tree::{LayoutInput, RunMode, SizingMode},
+        };
         let style: Style = Style {
             padding: Rect { left: length(10.0), right: length(10.0), top: length(2.0), bottom: length(2.0) },
             ..Style::default()
@@ -3864,9 +3952,13 @@ mod packed_layout_tests {
 
     #[test]
     fn rive_style_exact_axis_survives_hug_normalization_and_completed_reuse() {
-        use taffy::{geometry::{Rect, Size}, style::{AvailableSpace, Style}, tree::RiveMeasureMetadata};
-        use taffy::style_helpers::length;
         use crate::mechanical_port::source::layout::layout_measure_mode::unbound_measure_mode;
+        use taffy::style_helpers::length;
+        use taffy::{
+            geometry::{Rect, Size},
+            style::{AvailableSpace, Style},
+            tree::RiveMeasureMetadata,
+        };
         for horizontal in [true, false] {
             let mut tree = taffy::TaffyTree::<()>::new();
             tree.disable_rounding();

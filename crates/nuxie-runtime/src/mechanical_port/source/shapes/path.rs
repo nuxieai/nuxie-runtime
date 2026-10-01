@@ -115,6 +115,33 @@ impl std::ops::DerefMut for Path {
 }
 
 impl Path {
+    pub(crate) fn update_occurrence<
+        T: crate::mechanical_port::source::transform_component::TransformUpdate,
+    >(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+    ) {
+        owner.with_downcast_mut::<T, _>(|object| {
+            object
+                .as_path_mut()
+                .expect("Path receiver")
+                .update_before_transform_super();
+        });
+        crate::mechanical_port::source::transform_component::update_transform_super::<T>(
+            owner, dirt,
+        );
+        owner.with_downcast_mut::<T, _>(|object| {
+            let closed = Self::is_path_closed_for(object);
+            let skin = object.as_points_path().map(|path| {
+                crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(path)
+                    .is_some()
+            });
+            object
+                .as_path_mut()
+                .expect("Path receiver")
+                .update_after_transform_super(dirt, closed, skin);
+        });
+    }
     pub const TYPE_KEY: u16 = PathBase::TYPE_KEY;
 }
 

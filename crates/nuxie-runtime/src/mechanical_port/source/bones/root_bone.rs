@@ -28,6 +28,15 @@ impl Default for RootBone {
     }
 }
 
+crate::mechanical_port::source::transform_component::impl_transform_update!(
+    RootBone,
+    crate::mechanical_port::source::transform_component::update_transform_super::<Self>,
+    crate::mechanical_port::source::transform_component::update_local_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_world_transform_super::<Self>,
+    crate::mechanical_port::source::transform_component::compose_world_transform::<Self>,
+    crate::mechanical_port::source::transform_component::update_constraints_super::<Self>
+);
+
 impl RootBone {
     pub fn x(&self) -> f32 {
         self.base.x()

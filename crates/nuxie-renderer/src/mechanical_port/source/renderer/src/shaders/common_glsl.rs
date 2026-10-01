@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/common.glsl.
  *
- * Upstream source revision: 57dddb3727306e284773ec20c653cf686c45abee
+ * Upstream source revision: 0aadd4c65084a38dbeae3bd05814ead3f743ed77
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "57dddb3727306e284773ec20c653cf686c45abee";
+pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/common.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "890749dc58a9dc4fe18c9242dd852abe198f2b130362c20744524b9d045f201f";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 525;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 17962;
+    "ee9d8efa482164ab747f47cf5c1beb0d43fada40a13e4b99473b5e00a1ce3e53";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 503;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 17400;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_COMMON_GLSL_SOURCE: &str = r###"/*
@@ -492,28 +492,6 @@ INLINE void set_clip_rect_plane_distances(float2x2 clipRectInverseMatrix,
 
 #endif // @RENDER_MODE_DEPTH_STENCIL
 #endif // VERTEX
-
-#ifdef @FRAGMENT
-#ifdef @NEEDS_GAMMA_CORRECTION
-INLINE half gamma_to_linear(half color)
-{
-    return (color <= 0.04045) ? color / 12.92
-                              : pow(abs((color + 0.055) / 1.055), 2.4);
-}
-
-INLINE half3 gamma_to_linear(half3 color)
-{
-    return make_half3(gamma_to_linear(color.r),
-                      gamma_to_linear(color.g),
-                      gamma_to_linear(color.b));
-}
-
-INLINE half4 gamma_to_linear(half4 color)
-{
-    return make_half4(gamma_to_linear(color.rgb), color.a);
-}
-#endif // NEEDS_GAMMA_CORRECTION
-#endif // FRAGMENT
 
 // The Qualcomm compiler can't handle line breaks in #ifs.
 // clang-format off

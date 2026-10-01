@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/atomic_draw.glsl.
  *
- * Upstream source revision: 4921ab8169d2d8bfc4d2d25761b99689bc85a72d
+ * Upstream source revision: 0aadd4c65084a38dbeae3bd05814ead3f743ed77
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4921ab8169d2d8bfc4d2d25761b99689bc85a72d";
+pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/atomic_draw.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "52c0304be74b8776c20f73d94d7925b547182712ae0f7a0fbef468905c55d275";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 1193;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 41656;
+    "54e6f127d211a3d95e3fd30ee50f8859569ae91f5f8d6201b0a7517d712d1f6b";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 1180;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 41111;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_ATOMIC_DRAW_SOURCE: &str = r###"/*
@@ -740,15 +740,6 @@ INLINE void resolve_paint(uint pathID,
     }
 #endif // !FIXED_FUNCTION_COLOR_OUTPUT && ENABLE_ADVANCED_BLEND
     fragColorOut *= coverage;
-
-// Certain platforms give us less control of the format of what we are
-// rendering too. Specifically, we are auto converted from linear -> sRGB on
-// render target writes in unreal. In those cases we made need to end up in
-// linear color space
-#if defined(@NEEDS_GAMMA_CORRECTION) &&                                        \
-    (defined(@FIXED_FUNCTION_COLOR_OUTPUT) || defined(@RESOLVE_PLS))
-    fragColorOut = gamma_to_linear(fragColorOut);
-#endif
 }
 
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT) &&                                  \
@@ -1101,10 +1092,6 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
     }
 #endif // !FIXED_FUNCTION_COLOR_OUTPUT && ENABLE_ADVANCED_BLEND
     imageColor *= imageCoverage;
-
-#if defined(@NEEDS_GAMMA_CORRECTION)
-    imageColor = gamma_to_linear(imageColor);
-#endif
 
     // Leverage the property that premultiplied src-over blending is associative
     // and blend the imageColor and fragColorOut before passing them on to the

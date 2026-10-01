@@ -2,7 +2,7 @@
  * Upstream-derived shader with a local Metal blend-contraction adaptation:
  * renderer/src/shaders/draw_raster_order_path.frag.
  *
- * Upstream source revision: 8398db3199cea4cd3eba53747aac562b5c0df3da
+ * Upstream source revision: 0aadd4c65084a38dbeae3bd05814ead3f743ed77
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
+pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_raster_order_path.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "bf0da3019985a1ebfd0faf8f9db544f5c59d24aecd6456955cef8198fb38c4e3";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 268;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 9648;
+    "f2485e48efb969f0df1d4d8eb5a127c3839d19108242ba897a1656e37bbf8253";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 257;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 9198;
 
 /// Upstream source with the retained Metal blend-contraction adaptation.
 pub const PINNED_DRAW_RASTER_ORDER_PATH_FRAG_SOURCE: &str = r###"/*
@@ -250,17 +250,6 @@ PLS_MAIN(@drawFragmentMain)
             }
 #endif
             color *= coverage;
-
-            // Certain platforms give us less control of the format of what we
-            // are rendering too. Specifically, we are auto converted from
-            // linear -> sRGB on render target writes in unreal. In those cases
-            // we made need to end up in linear color space
-#ifdef @NEEDS_GAMMA_CORRECTION
-            if (@NEEDS_GAMMA_CORRECTION)
-            {
-                color = gamma_to_linear(color);
-            }
-#endif
 
             // Save paint alpha before destructively updating it with the
             // dstColor.

@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_depthstencil_object.frag.
  *
- * Upstream source revision: 2579994c59cff57ac04d3a38401fa37ad1315425
+ * Upstream source revision: 0aadd4c65084a38dbeae3bd05814ead3f743ed77
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "2579994c59cff57ac04d3a38401fa37ad1315425";
+pub const PINNED_UPSTREAM_COMMIT: &str = "0aadd4c65084a38dbeae3bd05814ead3f743ed77";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_depthstencil_object.frag";
 pub const PINNED_SOURCE_SHA256: &str =
-    "38469362a3888c5c70d042e3b9929e3e3cc8732ad0fb8099ef4dcf6e760510a5";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 112;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 3403;
+    "e62f45bc3e811a504e1bf844ae579fb16173e742e530bffbd459eeff0c8c11d6";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 101;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 3017;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_DEPTHSTENCIL_OBJECT_FRAG_SOURCE: &str = r###"/*
@@ -107,17 +107,6 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 
 #ifndef @DRAW_IMAGE_MESH
     color *= coverage;
-#endif
-
-    // Certain platforms give us less control of the format of what we are
-    // rendering too. Specifically, we are auto converted from linear -> sRGB on
-    // render target writes in unreal. In those cases we made need to end up in
-    // linear color space
-#ifdef @NEEDS_GAMMA_CORRECTION
-    if (@NEEDS_GAMMA_CORRECTION)
-    {
-        color = gamma_to_linear(color);
-    }
 #endif
 
     color.rgb = add_dither_if_alpha_nonzero(color.rgb,

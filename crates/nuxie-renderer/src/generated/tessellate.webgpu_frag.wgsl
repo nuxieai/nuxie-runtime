@@ -1,36 +1,36 @@
 struct UB {
-    Rc: f32,
-    Ud: f32,
+    Qc: f32,
+    Td: f32,
+    bg: f32,
     cg: f32,
-    dg: f32,
-    B6_: u32,
-    Y9_: u32,
-    Of: u32,
-    Pf: u32,
-    k8_: vec4<i32>,
-    Mh: vec2<f32>,
-    Vd: vec2<f32>,
-    j2_: u32,
-    Qh: f32,
-    U4_: u32,
-    c3_: f32,
-    Wd: f32,
-    If: u32,
-    M3_: f32,
-    N3_: f32,
-    Xd: f32,
-    Jh: u32,
+    A6_: u32,
     X9_: u32,
+    Nf: u32,
+    Of: u32,
+    j8_: vec4<i32>,
+    Lh: vec2<f32>,
+    Ud: vec2<f32>,
+    j2_: u32,
+    Ph: f32,
+    T4_: u32,
+    a3_: f32,
+    Vd: f32,
+    Hf: u32,
+    L3_: f32,
+    M3_: f32,
+    Wd: f32,
+    Ih: u32,
+    W9_: u32,
+    wc: f32,
     xc: f32,
-    yc: f32,
 }
 
+var<private> L6_1: vec4<f32>;
 var<private> M6_1: vec4<f32>;
-var<private> N6_1: vec4<f32>;
-var<private> a5_1: vec4<f32>;
-var<private> T7_1: u32;
-var<private> c5_1: vec3<f32>;
-var<private> Th: vec4<u32>;
+var<private> Z4_1: vec4<f32>;
+var<private> S7_1: u32;
+var<private> a5_1: vec3<f32>;
+var<private> Sh: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: UB;
 
@@ -77,10 +77,10 @@ fn main_1() {
     var phi_1173_: vec4<u32>;
     var local_2: f32;
 
-    let _e45 = M6_1;
+    let _e45 = L6_1;
     let _e46 = _e45.xy;
     let _e47 = _e45.zw;
-    let _e48 = N6_1;
+    let _e48 = M6_1;
     let _e49 = _e48.xy;
     let _e50 = _e48.zw;
     if any((_e46 != _e47)) {
@@ -96,14 +96,14 @@ fn main_1() {
     }
     let _e67 = phi_931_;
     let _e68 = (_e50 - _e67);
-    let _e71 = a5_1[0u];
+    let _e71 = Z4_1[0u];
     let _e73 = max(floor(_e71), 0f);
-    let _e75 = a5_1[1u];
-    let _e77 = a5_1[2u];
+    let _e75 = Z4_1[1u];
+    let _e77 = Z4_1[2u];
     let _e78 = u32(_e77);
     let _e83 = f32((_e78 >> bitcast<u32>(10i)));
-    let _e85 = a5_1[3u];
-    let _e86 = T7_1;
+    let _e85 = Z4_1[3u];
+    let _e86 = S7_1;
     let _e87 = (_e75 - _e83);
     let _e88 = (_e73 <= _e87);
     if _e88 {
@@ -113,9 +113,9 @@ fn main_1() {
         phi_950_ = _e87;
         phi_946_ = _e73;
     } else {
-        let _e90 = c5_1;
+        let _e90 = a5_1;
         let _e95 = (_e73 - _e87);
-        let _e97 = c5_1[2u];
+        let _e97 = a5_1[2u];
         let _e98 = (_e86 & 469762048u);
         if (_e98 > 134217728u) {
             phi_936_ = _e86;
@@ -197,7 +197,7 @@ fn main_1() {
         if ((_e136 & 2147483648u) != 0u) {
             phi_1054_ = select(select(_e143, _e144, vec2((_e140 >= 8f))), _e142, vec2((_e140 >= 12f)));
             if (_e140 >= 14f) {
-                let _e180 = c5_1;
+                let _e180 = a5_1;
                 phi_1054_ = _e180.xy;
             }
             let _e183 = phi_1054_;
@@ -333,18 +333,18 @@ fn main_1() {
         phi_1173_ = vec4<u32>(_e339.x, _e339.y, (((bitcast<u32>(i32(round((_e324 * 10430.378f)))) & 65535u) << bitcast<u32>(16i)) | _e378), _e339.w);
     }
     let _e388 = phi_1173_;
-    Th = vec4<u32>(_e388.x, _e388.y, _e388.z, _e136);
+    Sh = vec4<u32>(_e388.x, _e388.y, _e388.z, _e136);
     return;
 }
 
 @fragment
-fn main(@location(0) M6_: vec4<f32>, @location(1) N6_: vec4<f32>, @location(2) a5_: vec4<f32>, @location(4) @interpolate(flat, either) T7_: u32, @location(3) c5_: vec3<f32>) -> @location(0) vec4<u32> {
+fn main(@location(0) L6_: vec4<f32>, @location(1) M6_: vec4<f32>, @location(2) Z4_: vec4<f32>, @location(4) @interpolate(flat, either) S7_: u32, @location(3) a5_: vec3<f32>) -> @location(0) vec4<u32> {
+    L6_1 = L6_;
     M6_1 = M6_;
-    N6_1 = N6_;
+    Z4_1 = Z4_;
+    S7_1 = S7_;
     a5_1 = a5_;
-    T7_1 = T7_;
-    c5_1 = c5_;
     main_1();
-    let _e11 = Th;
+    let _e11 = Sh;
     return _e11;
 }

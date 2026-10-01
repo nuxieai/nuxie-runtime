@@ -133,3 +133,128 @@ fn a_zero_strength_ik_leaves_a_rotation_constrained_chain_bone_alone() {
         .unwrap();
     assert!((rotation - 0.7853982f32).abs() <= 0.001);
 }
+
+#[test]
+fn ik_inherited_dirty_callbacks_invalidate_the_entire_initialized_chain() {
+    use nuxie_runtime::source::{
+        component::ComponentOccurrenceHandle, component_dirt::ComponentDirt,
+        generated::constraints::ik_constraint_base::IKConstraintBase,
+    };
+    let (_file, artboard) = load("ik_stacked_constraints.riv");
+    advance(&artboard);
+    let (root, tip, objects) = artboard
+        .with_downcast::<Artboard, _>(|artboard| {
+            (
+                artboard
+                    .find_handle::<RootBone>("Root Bone")
+                    .expect("Root Bone"),
+                artboard.find_handle::<Bone>("Bone 1").expect("Bone 1"),
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .unwrap();
+    let ik = constraints(&tip)[0].clone();
+    let clear = || {
+        for object in &objects {
+            object.with_mut(|object| {
+                if let Some(component) = object.as_component_mut() {
+                    component.set_dirt(ComponentDirt::NONE);
+                }
+            });
+        }
+    };
+    let transform_dirty = |owner: &CoreHandle| {
+        owner
+            .with(|owner| {
+                owner
+                    .as_component()
+                    .unwrap()
+                    .has_dirt(ComponentDirt::TRANSFORM)
+            })
+            .unwrap()
+    };
+
+    // Constraint::onDirty excludes opacity-only work, including the retained
+    // Collapsed bit. Neither the tip nor IK's ancestor override should run.
+    for opacity in [
+        ComponentDirt::RENDER_OPACITY,
+        ComponentDirt::RENDER_OPACITY | ComponentDirt::COLLAPSED,
+    ] {
+        clear();
+        assert!(ComponentOccurrenceHandle::Authored(ik.clone()).add_dirt(opacity, false));
+        assert!(!transform_dirty(&tip));
+        assert!(!transform_dirty(&root));
+    }
+
+    clear();
+    assert!(
+        ComponentOccurrenceHandle::Authored(ik.clone())
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, false)
+    );
+    assert!(transform_dirty(&tip), "base callback invalidates tip");
+    assert!(
+        transform_dirty(&root),
+        "virtual IK override invalidates ancestor"
+    );
+
+    clear();
+    assert!(CoreRegistry::set_double_handle(
+        &ik,
+        ConstraintBase::STRENGTH_PROPERTY_KEY.into(),
+        0.5
+    ));
+    assert_eq!(strength(&ik), 0.5);
+    assert!(transform_dirty(&tip));
+    assert!(transform_dirty(&root));
+
+    clear();
+    assert!(CoreRegistry::set_double_handle(
+        &ik,
+        ConstraintBase::STRENGTH_PROPERTY_KEY.into(),
+        0.5,
+    ));
+    assert!(!transform_dirty(&tip), "unchanged strength has no callback");
+    assert!(!transform_dirty(&root));
+
+    clear();
+    let invert =
+        CoreRegistry::get_bool_handle(&ik, IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY.into())
+            .unwrap();
+    assert!(CoreRegistry::set_bool_handle(
+        &ik,
+        IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY.into(),
+        !invert
+    ));
+    assert_eq!(
+        CoreRegistry::get_bool_handle(&ik, IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY.into()),
+        Some(!invert)
+    );
+    assert!(transform_dirty(&tip));
+    assert!(transform_dirty(&root));
+}
+
+#[test]
+fn ik_handle_setters_reject_expired_owners() {
+    use nuxie_runtime::source::{
+        core::CoreArena, generated::constraints::ik_constraint_base::IKConstraintBase,
+    };
+    let expired = {
+        let arena = CoreArena::default();
+        arena.insert(IKConstraint::default())
+    };
+    assert!(!CoreRegistry::set_double_handle(
+        &expired,
+        ConstraintBase::STRENGTH_PROPERTY_KEY.into(),
+        0.5
+    ));
+    assert!(!CoreRegistry::set_bool_handle(
+        &expired,
+        IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY.into(),
+        true
+    ));
+}

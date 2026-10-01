@@ -173,6 +173,68 @@ impl IKConstraint {
         }
     }
 
+    pub(crate) fn ancestor_bones(&self) -> Vec<CoreHandle> {
+        self.fk_chain[..self.fk_chain.len().saturating_sub(1)]
+            .iter()
+            .map(|link| link.bone.clone())
+            .collect()
+    }
+
+    pub fn on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) {
+        use crate::mechanical_port::source::component_dirt::ComponentDirt;
+        if (dirt & !ComponentDirt::COLLAPSED) != ComponentDirt::RENDER_OPACITY {
+            self.mark_constraint_dirty();
+        }
+    }
+
+    pub fn strength_changed(&mut self) {
+        self.mark_constraint_dirty();
+    }
+
+    pub(crate) fn set_strength_occurrence(owner: &CoreHandle, value: f32) -> bool {
+        use crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBase;
+        let Some(changed) = owner.with_downcast_mut::<Self, _>(|constraint| {
+            constraint
+                .base
+                .base
+                .base
+                .base
+                .base
+                .set_strength_value(value)
+        }) else {
+            return false;
+        };
+        if changed {
+            super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
+            owner.with_mut(|owner| {
+                owner
+                    .core_mut()
+                    .notify_property_changed(ConstraintBase::STRENGTH_PROPERTY_KEY)
+            });
+        }
+        true
+    }
+
+    pub(crate) fn set_invert_direction_occurrence(owner: &CoreHandle, value: bool) -> bool {
+        let Some(changed) = owner.with_downcast_mut::<Self, _>(|constraint| {
+            constraint.base.set_invert_direction_value(value)
+        }) else {
+            return false;
+        };
+        if changed {
+            super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
+            owner.with_mut(|owner| {
+                owner
+                    .core_mut()
+                    .notify_property_changed(IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY)
+            });
+        }
+        true
+    }
+
     fn solve1(&mut self, first: usize, world_target_translation: Vec2D) {
         let inverse_world = self.fk_chain[first].parent_world_inverse;
         let p_a = Self::with_bone(&self.fk_chain[first].bone, |bone| bone.world_translation());

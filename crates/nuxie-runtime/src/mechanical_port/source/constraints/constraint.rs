@@ -102,16 +102,30 @@ impl Constraint {
     }
 
     pub(crate) fn mark_constraint_dirty_occurrence(owner: &CoreHandle) {
-        let parent = owner
+        for target in Self::dirty_targets(owner) {
+            TransformComponent::mark_transform_dirty_occurrence(&target);
+        }
+    }
+
+    // C++ onDirty/strengthChanged dispatch markConstraintDirty virtually.
+    // Capture handles, then release the owner before recursive dirt callbacks.
+    fn dirty_targets(owner: &CoreHandle) -> impl Iterator<Item = CoreHandle> {
+        let (parent, ancestors) = owner
             .with(|owner| {
-                owner
+                let parent = owner
                     .as_component()
                     .expect("Constraint component")
                     .parent_handle()
+                    .expect("Constraint parent was validated");
+                let ancestors = owner
+                    .as_any()
+                    .downcast_ref::<super::ik_constraint::IKConstraint>()
+                    .map(super::ik_constraint::IKConstraint::ancestor_bones)
+                    .unwrap_or_default();
+                (parent, ancestors)
             })
-            .flatten()
-            .expect("Constraint parent was validated");
-        TransformComponent::mark_transform_dirty_occurrence(&parent);
+            .expect("Constraint owner remains live");
+        std::iter::once(parent).chain(ancestors)
     }
 
     pub fn build_dependencies(&mut self) {
@@ -156,16 +170,9 @@ impl Constraint {
         // A path composer can dirty a constraint while its Shape is active.
         // Release the constraint before synchronously dirtying its parent:
         // that parent's dependents can lead back to the same Shape's paths.
-        let parent = owner
-            .with(|owner| {
-                owner
-                    .as_component()
-                    .expect("Constraint inherits Component")
-                    .parent_handle()
-            })
-            .flatten()
-            .expect("Constraint parent was validated");
-        TransformComponent::mark_transform_dirty_from_shape(&parent, active_shape);
+        for target in Self::dirty_targets(owner) {
+            TransformComponent::mark_transform_dirty_from_shape(&target, active_shape);
+        }
     }
 
     pub(crate) fn on_dirty_from_layout(
@@ -180,16 +187,9 @@ impl Constraint {
         // Release this Constraint's arena slot before dirtying its parent. In
         // C++ the parent can be the Layout object whose setter is already on
         // the stack; the active-owner path preserves that reentrant call.
-        let parent = owner
-            .with(|owner| {
-                owner
-                    .as_component()
-                    .expect("Constraint inherits Component")
-                    .parent_handle()
-            })
-            .flatten()
-            .expect("Constraint parent was validated");
-        TransformComponent::mark_transform_dirty_from_layout(&parent, active, active_handle);
+        for target in Self::dirty_targets(owner) {
+            TransformComponent::mark_transform_dirty_from_layout(&target, active, active_handle);
+        }
     }
 
     pub fn handle(&self) -> Option<CoreHandle> {

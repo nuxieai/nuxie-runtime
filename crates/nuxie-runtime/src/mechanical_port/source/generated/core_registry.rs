@@ -9739,6 +9739,12 @@ impl CoreRegistry {
     }
 
     pub fn set_bool_handle(handle: &CoreHandle, property_key: i32, value: bool) -> bool {
+        use crate::mechanical_port::source::generated::constraints::ik_constraint_base::IKConstraintBase;
+        if handle.is_type_of(IKConstraintBase::TYPE_KEY)
+            && property_key == i32::from(IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY)
+        {
+            return crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::set_invert_direction_occurrence(handle, value);
+        }
         use crate::mechanical_port::source::generated::constraints::follow_path_constraint_base::FollowPathConstraintBase;
         if property_key == i32::from(FollowPathConstraintBase::ORIENT_PROPERTY_KEY)
             && handle.is_type_of(FollowPathConstraintBase::TYPE_KEY)
@@ -9757,6 +9763,12 @@ impl CoreRegistry {
     }
 
     pub fn set_double_handle(handle: &CoreHandle, property_key: i32, value: f32) -> bool {
+        use crate::mechanical_port::source::generated::constraints::ik_constraint_base::IKConstraintBase;
+        if handle.is_type_of(IKConstraintBase::TYPE_KEY)
+            && property_key == i32::from(ConstraintBase::STRENGTH_PROPERTY_KEY)
+        {
+            return crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::set_strength_occurrence(handle, value);
+        }
         use crate::mechanical_port::source::generated::constraints::{
             constraint_base::ConstraintBase, follow_path_constraint_base::FollowPathConstraintBase,
             list_follow_path_constraint_base::ListFollowPathConstraintBase,
@@ -55897,10 +55909,7 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constr
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty(
-            &mut self.base.base.base.base,
-            dirt,
-        );
+        crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::on_dirty(self, dirt);
         true
     }
     fn constraint_apply(
@@ -71365,9 +71374,7 @@ impl
     for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint
 {
     fn strength_changed(&mut self) {
-        crate::mechanical_port::source::constraints::constraint::Constraint::strength_changed(
-            &mut self.base.base.base.base,
-        );
+        crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::strength_changed(self);
     }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)

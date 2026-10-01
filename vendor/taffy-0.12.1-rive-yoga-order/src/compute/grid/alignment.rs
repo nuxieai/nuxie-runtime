@@ -75,8 +75,14 @@ pub(super) fn align_and_position_item(
     container_alignment_styles: InBothAbsAxis<Option<AlignItems>>,
     baseline_shim: f32,
     direction: Direction,
+    rive_absolute_percentage_basis: Size<Option<f32>>,
+    rive_container_is_row: bool,
 ) -> (Size<f32>, f32, f32) {
     let grid_area_size = Size { width: grid_area.right - grid_area.left, height: grid_area.bottom - grid_area.top };
+    // Yoga's grid absolute pass retains finite Undefined offers for resolving
+    // percentages, independently of the content-sized positioning rectangle.
+    // Inflow items and ordinary CSS layouts pass Size::NONE.
+    let percentage_basis = rive_absolute_percentage_basis.unwrap_or(grid_area_size);
 
     let style = tree.get_grid_child_style(node);
 
@@ -87,18 +93,20 @@ pub(super) fn align_and_position_item(
     let align_self = style.align_self();
 
     let position = style.position();
+    let rive_absolute = position == Position::Absolute
+        && (rive_absolute_percentage_basis.width.is_some() || rive_absolute_percentage_basis.height.is_some());
     let inset_horizontal = style
         .inset()
         .horizontal_components()
-        .map(|size| size.resolve_to_option(grid_area_size.width, |val, basis| tree.calc(val, basis)));
+        .map(|size| size.resolve_to_option(percentage_basis.width, |val, basis| tree.calc(val, basis)));
     let inset_vertical = style
         .inset()
         .vertical_components()
-        .map(|size| size.resolve_to_option(grid_area_size.height, |val, basis| tree.calc(val, basis)));
-    let padding =
-        style.padding().map(|p| p.resolve_or_zero(Some(grid_area_size.width), |val, basis| tree.calc(val, basis)));
-    let border =
-        style.border().map(|p| p.resolve_or_zero(Some(grid_area_size.width), |val, basis| tree.calc(val, basis)));
+        .map(|size| size.resolve_to_option(percentage_basis.height, |val, basis| tree.calc(val, basis)));
+    let mut padding =
+        style.padding().map(|p| p.resolve_or_zero(Some(percentage_basis.width), |val, basis| tree.calc(val, basis)));
+    let mut border =
+        style.border().map(|p| p.resolve_or_zero(Some(percentage_basis.width), |val, basis| tree.calc(val, basis)));
     let padding_border_size = (padding + border).sum_axes();
 
     let box_sizing_adjustment =
@@ -106,19 +114,19 @@ pub(super) fn align_and_position_item(
 
     let inherent_size = style
         .size()
-        .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+        .maybe_resolve(percentage_basis, |val, basis| tree.calc(val, basis))
         .maybe_apply_aspect_ratio(aspect_ratio)
         .maybe_add(box_sizing_adjustment);
     let min_size = style
         .min_size()
-        .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+        .maybe_resolve(percentage_basis, |val, basis| tree.calc(val, basis))
         .maybe_add(box_sizing_adjustment)
         .or(padding_border_size.map(Some))
         .maybe_max(padding_border_size)
         .maybe_apply_aspect_ratio(aspect_ratio);
     let max_size = style
         .max_size()
-        .maybe_resolve(grid_area_size, |val, basis| tree.calc(val, basis))
+        .maybe_resolve(percentage_basis, |val, basis| tree.calc(val, basis))
         .maybe_apply_aspect_ratio(aspect_ratio)
         .maybe_add(box_sizing_adjustment);
 
@@ -145,98 +153,190 @@ pub(super) fn align_and_position_item(
 
     // Note: This is not a bug. It is part of the CSS spec that both horizontal and vertical margins
     // resolve against the WIDTH of the grid area.
-    let margin =
-        style.margin().map(|margin| margin.resolve_to_option(grid_area_size.width, |val, basis| tree.calc(val, basis)));
+    let margin = style
+        .margin()
+        .map(|margin| margin.resolve_to_option(percentage_basis.width, |val, basis| tree.calc(val, basis)));
+    let margin = if rive_absolute { margin.map(|value| Some(value.unwrap_or(0.0))) } else { margin };
 
     let grid_area_minus_item_margins_size = Size {
         width: grid_area_size.width.maybe_sub(margin.left).maybe_sub(margin.right),
         height: grid_area_size.height.maybe_sub(margin.top).maybe_sub(margin.bottom) - baseline_shim,
     };
 
-    // If node is absolutely positioned and width is not set explicitly, then deduce it
-    // from left, right and container_content_box if both are set.
-    let width = inherent_size.width.or_else(|| {
-        // Apply width derived from both the left and right properties of an absolutely
-        // positioned element being set
-        if position == Position::Absolute {
+    let Size { width, height } = if rive_absolute {
+        // YGNodeAbsoluteLayoutChild resolves both authored/inset axes before
+        // deriving a missing axis from aspect ratio. Initial style dimensions
+        // are not clamped here: the child applies its bounds with its own
+        // requested dimensions as the owner basis during layout below.
+        let mut requested = style
+            .size()
+            .maybe_resolve(percentage_basis, |val, basis| tree.calc(val, basis))
+            .maybe_add(box_sizing_adjustment);
+        let source_min = style.min_size().maybe_resolve(percentage_basis, |val, basis| tree.calc(val, basis));
+        let source_max = style.max_size().maybe_resolve(percentage_basis, |val, basis| tree.calc(val, basis));
+        if requested.width.is_none() {
             if let (Some(left), Some(right)) = (inset_horizontal.start, inset_horizontal.end) {
-                return Some(f32_max(grid_area_minus_item_margins_size.width - left - right, 0.0));
+                requested.width = Some(
+                    (grid_area_size.width - left - right)
+                        .maybe_clamp(source_min.width, source_max.width)
+                        .max(padding_border_size.width)
+                        .maybe_sub(margin.left)
+                        .maybe_sub(margin.right),
+                );
             }
         }
-
-        // Apply width based on stretch alignment if:
-        //  - Alignment style is "stretch"
-        //  - The node is not absolutely positioned
-        //  - The node does not have auto margins in this axis.
-        if margin.left.is_some()
-            && margin.right.is_some()
-            && alignment_styles.horizontal == AlignSelf::STRETCH
-            && position != Position::Absolute
-        {
-            return Some(grid_area_minus_item_margins_size.width);
-        }
-
-        None
-    });
-
-    // Reapply aspect ratio after stretch and absolute position width adjustments
-    let Size { width, height } = Size { width, height: inherent_size.height }.maybe_apply_aspect_ratio(aspect_ratio);
-
-    let height = height.or_else(|| {
-        if position == Position::Absolute {
+        if requested.height.is_none() {
             if let (Some(top), Some(bottom)) = (inset_vertical.start, inset_vertical.end) {
-                return Some(f32_max(grid_area_minus_item_margins_size.height - top - bottom, 0.0));
+                requested.height = Some(
+                    (grid_area_size.height - top - bottom)
+                        .maybe_clamp(source_min.height, source_max.height)
+                        .max(padding_border_size.height)
+                        .maybe_sub(margin.top)
+                        .maybe_sub(margin.bottom),
+                );
             }
         }
+        requested.maybe_apply_aspect_ratio(aspect_ratio)
+    } else {
+        // If node is absolutely positioned and width is not set explicitly, then deduce it
+        // from left, right and container_content_box if both are set.
+        let width = inherent_size.width.or_else(|| {
+            // Apply width derived from both the left and right properties of an absolutely
+            // positioned element being set
+            if position == Position::Absolute {
+                if let (Some(left), Some(right)) = (inset_horizontal.start, inset_horizontal.end) {
+                    return Some(f32_max(grid_area_minus_item_margins_size.width - left - right, 0.0));
+                }
+            }
 
-        // Apply height based on stretch alignment if:
-        //  - Alignment style is "stretch"
-        //  - The node is not absolutely positioned
-        //  - The node does not have auto margins in this axis.
-        if margin.top.is_some()
-            && margin.bottom.is_some()
-            && alignment_styles.vertical == AlignSelf::STRETCH
-            && position != Position::Absolute
-        {
-            return Some(grid_area_minus_item_margins_size.height);
-        }
+            // Apply width based on stretch alignment if:
+            //  - Alignment style is "stretch"
+            //  - The node is not absolutely positioned
+            //  - The node does not have auto margins in this axis.
+            if margin.left.is_some()
+                && margin.right.is_some()
+                && alignment_styles.horizontal == AlignSelf::STRETCH
+                && position != Position::Absolute
+            {
+                return Some(grid_area_minus_item_margins_size.width);
+            }
 
-        None
-    });
-    // Reapply aspect ratio after stretch and absolute position height adjustments
-    let Size { width, height } = Size { width, height }.maybe_apply_aspect_ratio(aspect_ratio);
+            None
+        });
 
-    // Clamp size by min and max width/height
-    let Size { width, height } = Size { width, height }.maybe_clamp(min_size, max_size);
+        // Reapply aspect ratio after stretch and absolute position width adjustments
+        let Size { width, height } =
+            Size { width, height: inherent_size.height }.maybe_apply_aspect_ratio(aspect_ratio);
+
+        let height = height.or_else(|| {
+            if position == Position::Absolute {
+                if let (Some(top), Some(bottom)) = (inset_vertical.start, inset_vertical.end) {
+                    return Some(f32_max(grid_area_minus_item_margins_size.height - top - bottom, 0.0));
+                }
+            }
+
+            // Apply height based on stretch alignment if:
+            //  - Alignment style is "stretch"
+            //  - The node is not absolutely positioned
+            //  - The node does not have auto margins in this axis.
+            if margin.top.is_some()
+                && margin.bottom.is_some()
+                && alignment_styles.vertical == AlignSelf::STRETCH
+                && position != Position::Absolute
+            {
+                return Some(grid_area_minus_item_margins_size.height);
+            }
+
+            None
+        });
+        // Reapply aspect ratio after stretch and absolute position height adjustments
+        let Size { width, height } = Size { width, height }.maybe_apply_aspect_ratio(aspect_ratio);
+
+        // Clamp size by min and max width/height
+        Size { width, height }.maybe_clamp(min_size, max_size)
+    };
 
     // Layout node
     drop(style);
 
-    let size = if position == Position::Absolute && (width.is_none() || height.is_none()) {
-        tree.measure_child_size_both(
+    let mut rive_layout_margins = None;
+    let (layout_output, size) = if rive_absolute {
+        // Yoga's request includes margins, and its owner basis is that same
+        // request, not the grid's resolution basis. Re-resolve child margins
+        // against it before mapping to Taffy's margin-excluded known sizes.
+        let initial_margins = margin.map(|value| value.unwrap_or(0.0)).sum_axes();
+        let mut request = Size { width, height }.maybe_add(initial_margins);
+        if width.is_none() || height.is_none() {
+            let constrain_width = !rive_container_is_row
+                && width.is_none()
+                && rive_absolute_percentage_basis.width.is_none()
+                && percentage_basis.width > 0.0;
+            if constrain_width {
+                request.width = Some(percentage_basis.width);
+            }
+            let child_style = tree.get_grid_child_style(node);
+            let child_margins =
+                child_style.margin().resolve_or_zero(request.width, |val, basis| tree.calc(val, basis)).sum_axes();
+            let mut known = request.maybe_sub(child_margins);
+            if constrain_width {
+                known.width = None;
+            }
+            drop(child_style);
+            let measured = tree.measure_child_size_both(
+                node,
+                known,
+                request,
+                request.map(|value| value.map(AvailableSpace::Definite).unwrap_or(AvailableSpace::MaxContent)),
+                SizingMode::InherentSize,
+                Line::FALSE,
+            );
+            request = (measured + initial_margins).map(Some);
+        }
+        let child_style = tree.get_grid_child_style(node);
+        let resolved_child_margins =
+            child_style.margin().resolve_or_zero(request.width, |val, basis| tree.calc(val, basis));
+        let child_margins = resolved_child_margins.sum_axes();
+        rive_layout_margins = Some(resolved_child_margins);
+        padding = child_style.padding().resolve_or_zero(request.width, |val, basis| tree.calc(val, basis));
+        border = child_style.border().resolve_or_zero(request.width, |val, basis| tree.calc(val, basis));
+        drop(child_style);
+        let output = tree.perform_child_layout(
             node,
-            Size { width, height },
-            grid_area_size.map(Option::Some),
+            request.maybe_sub(child_margins),
+            request,
+            request.map(|value| value.map(AvailableSpace::Definite).unwrap_or(AvailableSpace::MaxContent)),
+            SizingMode::InherentSize,
+            Line::FALSE,
+        );
+        (output, output.size)
+    } else {
+        let size = if position == Position::Absolute && (width.is_none() || height.is_none()) {
+            tree.measure_child_size_both(
+                node,
+                Size { width, height },
+                percentage_basis.map(Option::Some),
+                grid_area_minus_item_margins_size.map(AvailableSpace::Definite),
+                SizingMode::InherentSize,
+                Line::FALSE,
+            )
+            .map(Some)
+        } else {
+            Size { width, height }
+        };
+
+        let layout_output = tree.perform_child_layout(
+            node,
+            size,
+            percentage_basis.map(Option::Some),
             grid_area_minus_item_margins_size.map(AvailableSpace::Definite),
             SizingMode::InherentSize,
             Line::FALSE,
-        )
-        .map(Some)
-    } else {
-        Size { width, height }
+        );
+
+        // Resolve final size
+        (layout_output, size.unwrap_or(layout_output.size).maybe_clamp(min_size, max_size))
     };
-
-    let layout_output = tree.perform_child_layout(
-        node,
-        size,
-        grid_area_size.map(Option::Some),
-        grid_area_minus_item_margins_size.map(AvailableSpace::Definite),
-        SizingMode::InherentSize,
-        Line::FALSE,
-    );
-
-    // Resolve final size
-    let Size { width, height } = size.unwrap_or(layout_output.size).maybe_clamp(min_size, max_size);
+    let Size { width, height } = size;
 
     let (x, x_margin) = align_item_within_area(
         Line { start: grid_area.left, end: grid_area.right },
@@ -277,7 +377,7 @@ pub(super) fn align_and_position_item(
             scrollbar_size,
             padding,
             border,
-            margin: resolved_margin,
+            margin: rive_layout_margins.unwrap_or(resolved_margin),
         },
     );
 

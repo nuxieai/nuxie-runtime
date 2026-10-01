@@ -131,6 +131,10 @@ pub struct LayoutInput {
     /// Available space represents an amount of space to layout into, and is used as a soft constraint
     /// for the purpose of wrapping.
     pub available_space: Size<AvailableSpace>,
+    /// Rive/Yoga can retain a numeric outer offer with Undefined measure mode.
+    /// The mode stays MaxContent in available_space; this separate offer is
+    /// used for descendant percentage resolution and child offers, not as an own-size cap.
+    pub rive_undefined_available: Size<Option<f32>>,
     /// Specific to CSS Block layout. Used for correctly computing margin collapsing. You probably want to set this to `Line::FALSE`.
     pub vertical_margins_are_collapsible: Line<bool>,
 }
@@ -144,6 +148,7 @@ impl LayoutInput {
         known_dimensions: Size::NONE,
         parent_size: Size::NONE,
         available_space: Size::MAX_CONTENT,
+        rive_undefined_available: Size::NONE,
         sizing_mode: SizingMode::InherentSize,
         axis: RequestedAxis::Both,
         vertical_margins_are_collapsible: Line::FALSE,

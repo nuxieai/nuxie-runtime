@@ -10,6 +10,8 @@ use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
 use crate::{BoxSizing, CoreStyle};
 use core::unreachable;
+use crate::tree::rive_measure_cache::{MeasureGeometry, MeasureRequest, RiveMeasureCache};
+use crate::tree::RiveMeasureMetadata;
 
 /// Compute the size of a leaf node (node with no children)
 pub fn compute_leaf_layout<MeasureFunction>(
@@ -36,6 +38,20 @@ pub(crate) fn compute_leaf_layout_with_rive_measurement<MeasureFunction>(
 where
     MeasureFunction: FnOnce(Size<Option<f32>>, Size<AvailableSpace>) -> Size<f32>,
 {
+    compute_leaf_layout_cached(inputs, style, resolve_calc_value, measure_function, rive_measured_leaf, None)
+}
+
+pub(crate) fn compute_leaf_layout_cached<MeasureFunction>(
+    inputs: LayoutInput,
+    style: &impl CoreStyle,
+    resolve_calc_value: impl Fn(*const (), f32) -> f32,
+    measure_function: MeasureFunction,
+    rive_measured_leaf: bool,
+    mut cache: Option<(&mut RiveMeasureCache, RiveMeasureMetadata, u64)>,
+) -> LayoutOutput
+where
+    MeasureFunction: FnOnce(Size<Option<f32>>, Size<AvailableSpace>) -> Size<f32>,
+{
     let LayoutInput { known_dimensions, parent_size, available_space, sizing_mode, run_mode, .. } = inputs;
 
     // Note: both horizontal and vertical percentage padding/borders are resolved against the container's inline size (i.e. width).
@@ -49,7 +65,7 @@ where
 
     // Resolve node's preferred/min/max sizes (width/heights) against the available space (percentages resolve to pixel values)
     // For ContentSize mode, we pretend that the node has no size styles as these should be ignored.
-    let (node_size, node_min_size, node_max_size, aspect_ratio) = match sizing_mode {
+    let (mut node_size, node_min_size, node_max_size, aspect_ratio) = match sizing_mode {
         SizingMode::ContentSize => {
             let node_size = known_dimensions;
             let node_min_size = Size::NONE;
@@ -75,6 +91,9 @@ where
             (node_size, style_min_size, style_max_size, aspect_ratio)
         }
     };
+
+    if inputs.rive_undefined_available.width.is_some() { node_size.width = None; }
+    if inputs.rive_undefined_available.height.is_some() { node_size.height = None; }
 
     // Scrollbar gutters are reserved when the `overflow` property is set to `Overflow::Scroll`.
     // However, the axis are switched (transposed) because a node that scrolls vertically needs
@@ -104,13 +123,40 @@ where
     debug_log!("min_size ", dbg:node_min_size);
     debug_log!("max_size ", dbg:node_max_size);
 
+    // The cache sees Yoga's outer available dimensions, not the inset-stripped
+    // callback offers. Exact dimensions include margins in that coordinate.
+    let axis = |known: Option<f32>, available: AvailableSpace, margin: f32| {
+        if let Some(size) = known { (1, size + margin) } else {
+            match available {
+                AvailableSpace::MaxContent => (0, f32::NAN),
+                AvailableSpace::MinContent => (2, 0.0),
+                AvailableSpace::Definite(size) => (2, size),
+            }
+        }
+    };
+    let margins = margin.sum_axes();
+    let (wm, w) = inputs.rive_undefined_available.width.map(|v| (0, v))
+        .unwrap_or_else(|| axis(node_size.width, available_space.width, margins.width));
+    let (hm, h) = inputs.rive_undefined_available.height.map(|v| (0, v))
+        .unwrap_or_else(|| axis(node_size.height, available_space.height, margins.height));
+    let request = MeasureRequest {
+        modes: Size { width: wm, height: hm }, available: Size { width: w, height: h }, margin: margins,
+        geometry: MeasureGeometry { min: node_min_size, max: node_max_size, inset: content_box_inset, padding, border, aspect: aspect_ratio },
+    };
+    if let Some((cache, metadata, generation)) = cache.as_mut() {
+        if let Some(output) = cache.get(request, *metadata, *generation) {
+            cache.finish(request, output, run_mode, *generation, true);
+            return output;
+        }
+    }
+
     // Return early if both width and height are known
     if run_mode == RunMode::ComputeSize && has_styles_preventing_being_collapsed_through {
         if let Size { width: Some(width), height: Some(height) } = node_size {
             let size = Size { width, height }
                 .maybe_clamp(node_min_size, node_max_size)
                 .maybe_max(padding_border.sum_axes().map(Some));
-            return LayoutOutput {
+            let output = LayoutOutput {
                 size,
                 #[cfg(feature = "content_size")]
                 content_size: Size::ZERO,
@@ -119,6 +165,10 @@ where
                 bottom_margin: CollapsibleMarginSet::ZERO,
                 margins_can_collapse_through: false,
             };
+            if let Some((cache, _, generation)) = cache.as_mut() {
+                cache.finish(request, output, run_mode, *generation, false);
+            }
+            return output;
         };
     }
 
@@ -159,10 +209,18 @@ where
         Size::ZERO
     } else {
         measure_function(
-            match run_mode {
-                RunMode::ComputeSize => known_dimensions,
-                RunMode::PerformLayout => Size::NONE,
-                RunMode::PerformHiddenLayout => unreachable!(),
+            if rive_measured_leaf && !style.is_block() {
+                // The completed cache and Yoga callback must agree about
+                // Exactly axes, including dimensions resolved from style.
+                // These remain outer dimensions; available_space below has
+                // already had padding/border removed for the intrinsic offer.
+                node_size
+            } else {
+                match run_mode {
+                    RunMode::ComputeSize => known_dimensions,
+                    RunMode::PerformLayout => Size::NONE,
+                    RunMode::PerformHiddenLayout => unreachable!(),
+                }
             },
             available_space,
         )
@@ -177,7 +235,7 @@ where
     };
     let size = size.maybe_max(padding_border.sum_axes().map(Some));
 
-    LayoutOutput {
+    let output = LayoutOutput {
         size,
         #[cfg(feature = "content_size")]
         content_size: measured_size + padding.sum_axes(),
@@ -187,5 +245,9 @@ where
         margins_can_collapse_through: !has_styles_preventing_being_collapsed_through
             && size.height == 0.0
             && measured_size.height == 0.0,
+    };
+    if let Some((cache, _, generation)) = cache.as_mut() {
+        cache.finish(request, output, run_mode, *generation, false);
     }
+    output
 }

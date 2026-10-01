@@ -5,8 +5,12 @@
 
 // Submodules
 mod cache;
+pub(crate) mod rive_measure_cache;
+pub use rive_measure_cache::RiveMeasureMetadata;
 mod layout;
 mod node;
+#[cfg(all(test, feature = "taffy_tree", feature = "flexbox"))]
+mod rive_measure_cache_tests;
 pub mod traits;
 
 pub use cache::{Cache, ClearState};

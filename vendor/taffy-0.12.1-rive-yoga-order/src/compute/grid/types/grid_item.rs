@@ -453,7 +453,7 @@ impl GridItem {
                 )
                 .size
                 .get(axis);
-            tree.end_min_content_probe();
+            tree.end_min_content_probe(self.node);
             return contribution;
         }
         // The child sees the grid area as its containing block during intrinsic measurement, so

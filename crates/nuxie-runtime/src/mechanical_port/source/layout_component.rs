@@ -218,43 +218,6 @@ fn intrinsic_measure_axis(
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct IntrinsicMeasureKey {
-    specs: [u32; 6],
-    probing: bool,
-}
-
-#[derive(Default)]
-struct SolveIntrinsicMeasurements {
-    direction: Option<LayoutDirection>,
-    probing: Option<bool>,
-    entries: [Option<(IntrinsicMeasureKey, Vec2D)>; 8],
-    len: usize,
-}
-
-impl SolveIntrinsicMeasurements {
-    fn get(&mut self, key: IntrinsicMeasureKey, direction: LayoutDirection) -> Option<Vec2D> {
-        if self.direction != Some(direction) || self.probing != Some(key.probing) {
-            self.direction = Some(direction);
-            self.probing = Some(key.probing);
-            self.len = 0;
-        }
-        self.entries[..self.len].iter().flatten().find_map(|(stored, size)| {
-            // Yoga rejects negative computed dimensions (NaN remains eligible).
-            (*stored == key && !(size.x < 0.0 || size.y < 0.0)).then_some(*size)
-        })
-    }
-
-    fn store(&mut self, key: IntrinsicMeasureKey, size: Vec2D) {
-        // Pinned Yoga resets its searchable measurement prefix when full.
-        if self.len == self.entries.len() {
-            self.len = 0;
-        }
-        self.entries[self.len] = Some((key, size));
-        self.len += 1;
-    }
-}
-
 /// Allocated on the first retarget or non-default inherited style and retained
 /// until destruction. Presence does not mean an animation is in flight.
 struct LayoutAnimation {
@@ -2428,13 +2391,6 @@ impl LayoutComponent {
                 .set_style(root, root_style)
                 .expect("valid calculation root");
         }
-        // One calculation is one reuse generation. Nested calculations receive
-        // independent caches; only completed callback results are inserted.
-        // As in Yoga, dirt raised again within this generation does not itself
-        // invalidate measurements. Nothing survives into the next calculation.
-        let mut intrinsic_measurements = std::collections::HashMap::<
-            taffy::prelude::NodeId, SolveIntrinsicMeasurements,
-        >::new();
         let mut parents = vec![None; cache.nodes.len()];
         for (index, node) in cache.nodes.iter().enumerate() {
             for child in &node.children {
@@ -2473,18 +2429,28 @@ impl LayoutComponent {
                     AvailableSpace::Definite(size.y)
                 },
             },
-            |known, available, node, context, _, probing| {
-                let (width, width_mode) = intrinsic_measure_axis(known.width, available.width);
-                let (height, height_mode) = intrinsic_measure_axis(known.height, available.height);
-                let request_key = |effective_width: LayoutMeasureMode, effective_height: LayoutMeasureMode| IntrinsicMeasureKey {
-                    specs: [width.to_bits(), height.to_bits(), width_mode as u32, height_mode as u32,
-                        effective_width as u32, effective_height as u32],
-                    probing,
-                };
+            |node, context, _probing| {
                 // The upstream root calculation explicitly passes Inherit.
                 let direction = direction_owners.get(&node).and_then(|owner| owner.as_ref())
                     .and_then(|owner| owner.with(|object| object.as_layout_component().unwrap().actual_direction()))
                     .unwrap_or(LayoutDirection::Inherit);
+                let (width, height) = match context {
+                    Some(LayoutMeasureContext::Participant(owner)) => owner.with(|object| {
+                        let participant = object.as_any().downcast_ref::<LayoutParticipant>().expect("participant measurement owner");
+                        (participant.hug_unbounded() && participant.layout_width_scale_type() == LayoutScaleType::Hug as u8,
+                         participant.hug_unbounded() && participant.layout_height_scale_type() == LayoutScaleType::Hug as u8)
+                    }).expect("live participant measurement owner"),
+                    Some(LayoutMeasureContext::Layout(owner)) => owner.with(|object| {
+                        let modes = object.as_layout_component().unwrap().content_measure_modes(LayoutMeasureMode::AtMost, LayoutMeasureMode::AtMost);
+                        (modes.0 == LayoutMeasureMode::Undefined, modes.1 == LayoutMeasureMode::Undefined)
+                    }).expect("live layout measurement owner"),
+                    None => (false, false),
+                };
+                taffy::tree::RiveMeasureMetadata { owner_direction: direction as u8, normalization: u8::from(width) | (u8::from(height) << 1) }
+            },
+            |known, available, _node, context, _, probing| {
+                let (width, width_mode) = intrinsic_measure_axis(known.width, available.width);
+                let (height, height_mode) = intrinsic_measure_axis(known.height, available.height);
                 let measured = match context {
                     Some(LayoutMeasureContext::Participant(owner)) => {
                         use crate::mechanical_port::source::layout::layout_measure_mode::{
@@ -2509,16 +2475,7 @@ impl LayoutComponent {
                             .expect("live participant measurement owner");
                         width_mode = measure_mode_for_content(width_mode, width, probing);
                         height_mode = measure_mode_for_content(height_mode, height, probing);
-                        let key = request_key(width_mode, height_mode);
-                        let measurements = intrinsic_measurements.entry(node).or_default();
-                        if let Some(size) = measurements.get(key, direction) {
-                            size
-                        } else {
-                            let size = host.map(|host| measure_host(&host, width, width_mode, height, height_mode))
-                                .unwrap_or_default();
-                            measurements.store(key, size);
-                            size
-                        }
+                        host.map(|host| measure_host(&host, width, width_mode, height, height_mode)).unwrap_or_default()
                     }
                     Some(LayoutMeasureContext::Layout(owner)) => {
                         use crate::mechanical_port::source::layout::layout_measure_mode::measure_mode_for_content;
@@ -2531,11 +2488,6 @@ impl LayoutComponent {
                                  layout.content_measure_modes(width_mode, height_mode))
                             })
                             .expect("measurement owner");
-                        let key = request_key(width_mode, height_mode);
-                        let measurements = intrinsic_measurements.entry(node).or_default();
-                        if let Some(size) = measurements.get(key, direction) {
-                            size
-                        } else {
                         let mut measured = Vec2D::default();
                         for child in children {
                             let is_layout = child
@@ -2551,9 +2503,7 @@ impl LayoutComponent {
                                 measured.y = next.y;
                             }
                         }
-                        measurements.store(key, measured);
                         measured
-                        }
                     }
                     None => Vec2D::default(),
                 };
@@ -3906,40 +3856,42 @@ mod packed_layout_tests {
     }
 
     #[test]
-    fn solve_intrinsic_measurements_preserve_exact_specs_and_reset_boundaries() {
-        let key = IntrinsicMeasureKey { specs: [0; 6], probing: false };
-        let size = Vec2D::new(12.0, 34.0);
-        let mut cache = SolveIntrinsicMeasurements::default();
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), None);
-        cache.store(key, size);
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), Some(size));
-        for field in 0..6 {
-            let mut different = key;
-            different.specs[field] = 1;
-            assert_eq!(cache.get(different, LayoutDirection::Ltr), None);
+    fn rive_style_exact_axis_survives_hug_normalization_and_completed_reuse() {
+        use taffy::{geometry::{Rect, Size}, style::{AvailableSpace, Style}, tree::RiveMeasureMetadata};
+        use taffy::style_helpers::length;
+        use crate::mechanical_port::source::layout::layout_measure_mode::unbound_measure_mode;
+        for horizontal in [true, false] {
+            let mut tree = taffy::TaffyTree::<()>::new();
+            tree.disable_rounding();
+            let node = tree.new_leaf_with_context(Style {
+                size: if horizontal { Size { width: length(100.0), height: taffy::style_helpers::auto() } }
+                    else { Size { width: taffy::style_helpers::auto(), height: length(100.0) } },
+                padding: Rect { left: length(10.0), right: length(10.0), top: length(10.0), bottom: length(10.0) },
+                ..Style::default()
+            }, ()).unwrap();
+            let mut calls = 0;
+            for bound in [150.0, 120.0] {
+                tree.compute_layout_with_measure_and_probe(node,
+                    Size { width: AvailableSpace::Definite(bound), height: AvailableSpace::Definite(bound) },
+                    |_, _, _| RiveMeasureMetadata { owner_direction: 0, normalization: 3 },
+                    |known, available, _, _, _, _| {
+                        calls += 1;
+                        let (value, mode) = if horizontal {
+                            intrinsic_measure_axis(known.width, available.width)
+                        } else {
+                            intrinsic_measure_axis(known.height, available.height)
+                        };
+                        assert_eq!(value, 80.0);
+                        // Hug removes AtMost only. A style-authored exact axis
+                        // must never reach the host as Undefined.
+                        assert!(unbound_measure_mode(mode) == LayoutMeasureMode::Exactly);
+                        Size { width: known.width.unwrap_or(8.0), height: known.height.unwrap_or(8.0) }
+                    }).unwrap();
+                let size = tree.layout(node).unwrap().size;
+                assert_eq!(size, if horizontal { Size { width: 100.0, height: 28.0 } } else { Size { width: 28.0, height: 100.0 } });
+            }
+            assert_eq!(calls, 1);
         }
-        assert_eq!(cache.get(key, LayoutDirection::Rtl), None);
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), None);
-        cache.store(key, size);
-        assert_eq!(cache.get(IntrinsicMeasureKey { probing: true, ..key }, LayoutDirection::Ltr), None);
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), None);
-
-        for index in 0..8 {
-            let mut entry = key;
-            entry.specs[0] = index;
-            cache.store(entry, size);
-        }
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), Some(size));
-        let mut ninth = key;
-        ninth.specs[0] = 8;
-        cache.store(ninth, size);
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), None);
-        assert_eq!(cache.get(ninth, LayoutDirection::Ltr), Some(size));
-        cache.store(key, Vec2D::new(-1.0, 0.0));
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), None);
-        cache.store(key, size);
-        assert_eq!(cache.get(key, LayoutDirection::Ltr), Some(size));
-        assert_eq!(SolveIntrinsicMeasurements::default().get(key, LayoutDirection::Ltr), None);
     }
 
     #[test]

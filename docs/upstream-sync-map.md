@@ -89,6 +89,45 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   discrepancies and profile measured Rust overhead (starting with data-viz,
   Spotify and car-widget fixtures); keep upstream algorithms unchanged and
   optimize only proven translation overhead or explicit Rust adaptation seams.
+- Longer-frame follow-up at the same pin restores the production C++ contracted
+  arithmetic at the proven `KeyFrameDouble`, `Mat2D::decompose`, and IK sites;
+  this is not a blanket floating-point policy change. The 100-frame
+  `virtualize_blendmode` comparison now passes, bringing the longer-frame sweep
+  to 24/25 matching fixtures. `zombie_skins` still differs in
+  its accumulated replay at 0.9 seconds; a single jump to that time passes, so
+  this remains unresolved rather than a tolerance waiver. Source-equivalence
+  and separate Rust-integration reviews covered each correction. The unchanged
+  one-iteration and 1,000-iteration upstream IK assertions pass; their test
+  target needed only a stale trigger caller migrated to the existing
+  callback-safe handle API. Focused runtime/math/interpolation/host tests pass
+  183 with two existing ignores, the C API clip-budget recovery test passes,
+  and scripted Golden processes 364 entries without failures, retaining two
+  recorded divergences. WebGPU/WebGL2 with scripting compiles for
+  `wasm32-unknown-unknown`. In the remaining zombie trace, the first four IK
+  solves agree bit-for-bit; the next receives different bone-world positions
+  while parent inverse and target still agree. Continue at animated bone/local
+  pose composition before `solve2`, not by changing its cosine equations or
+  loosening assertions.
+  Profiling also identified a semantic subtree invalidation in
+  `ClippingShape` absent from upstream. Removing it preserves the separate
+  live host geometry checks and passes clipping/semantic/video tests. Its
+  contribution was visible in the advancing Spotify profile; no post-change
+  release timing or speedup is claimed yet. Handle upgrades and borrow checks
+  seen in other profiles are not, by themselves, evidence of removable work.
+  This candidate is not cleared for merge: full runtime Silver reports 85
+  byte-exact, 116 epsilon matches, seven recorded divergences, 17 unsupported
+  skips, and six failures. A controlled build reverting only the keyframe
+  fallback to separate multiplication/addition restores all six:
+  `artboard_list_overrides_horizontal`, `artboard_list_overrides_vertical`,
+  `computed_values_test`, `data_converter_to_number`, `layout_paint`, and
+  `transition_artboard_condition_test`. Upstream's unit-test build requests
+  `-ffp-model=strict` and `--no_ffp_contract`, unlike the production archive
+  used for Golden. The converter difference changes path field count, not
+  merely a coordinate; numeric formatting may explain it, but that mechanism
+  has not been traced directly. Next validation must execute the existing C++
+  producers under identified matching arithmetic configurations. Do not
+  downgrade these cases, relax tolerances, or regenerate stored outputs to
+  conceal the disagreement. The diagnostic unfused build is not the candidate.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not

@@ -40,6 +40,57 @@ pub enum ComponentOccurrenceHandle {
     ),
 }
 
+/// Owned dependency traversal across reentrant callbacks. Cloning the handles
+/// still happens before releasing the owner borrow; only their storage differs.
+/// The common single-dependent case needs no heap allocation. Keep larger
+/// snapshots on the heap rather than growing every recursive dirt stack frame.
+pub struct DependencySnapshot(DependencySnapshotStorage);
+
+enum DependencySnapshotStorage {
+    Single(Option<ComponentOccurrenceHandle>),
+    Multiple(std::vec::IntoIter<ComponentOccurrenceHandle>),
+}
+
+impl Default for DependencySnapshot {
+    fn default() -> Self {
+        Self(DependencySnapshotStorage::Single(None))
+    }
+}
+
+impl DependencySnapshot {
+    fn from_slice(dependents: &[ComponentOccurrenceHandle]) -> Self {
+        match dependents {
+            [] => Self::default(),
+            [dependent] => Self(DependencySnapshotStorage::Single(Some(dependent.clone()))),
+            _ => Self(DependencySnapshotStorage::Multiple(
+                dependents.to_vec().into_iter(),
+            )),
+        }
+    }
+}
+
+impl Iterator for DependencySnapshot {
+    type Item = ComponentOccurrenceHandle;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.0 {
+            DependencySnapshotStorage::Single(dependent) => dependent.take(),
+            DependencySnapshotStorage::Multiple(dependents) => dependents.next(),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = match &self.0 {
+            DependencySnapshotStorage::Single(dependent) => usize::from(dependent.is_some()),
+            DependencySnapshotStorage::Multiple(dependents) => dependents.len(),
+        };
+        (len, Some(len))
+    }
+}
+
+impl ExactSizeIterator for DependencySnapshot {}
+impl std::iter::FusedIterator for DependencySnapshot {}
+
 /// The most-derived owner of an active C++ `LayoutComponent` occurrence.
 ///
 /// C++ dirt callbacks are reentrant through raw object pointers. Rust keeps
@@ -740,8 +791,8 @@ impl Component {
         self.collapsables.clone()
     }
 
-    pub fn dependents_snapshot(&self) -> Vec<ComponentOccurrenceHandle> {
-        self.dependency_helper.dependents().to_vec()
+    pub fn dependents_snapshot(&self) -> DependencySnapshot {
+        DependencySnapshot::from_slice(self.dependency_helper.dependents())
     }
 
     pub fn add_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {
@@ -849,15 +900,80 @@ impl std::ops::DerefMut for Component {
 
 #[cfg(test)]
 mod dirt_dispatch_tests {
-    use super::{ComponentDirt, ComponentOccurrenceHandle};
+    use super::{Component, ComponentDirt, ComponentOccurrenceHandle, DependencySnapshot};
     use crate::mechanical_port::source::{core::CoreArena, node::Node};
+
+    #[test]
+    fn dependency_snapshot_owns_the_original_order_across_owner_mutation() {
+        for count in [0, 1, 3] {
+            let arena = CoreArena::default();
+            let owner = arena.insert(Node::default());
+            let handles: Vec<_> = (0..count).map(|_| arena.insert(Node::default())).collect();
+            owner.with_mut(|object| {
+                let component = object.as_component_mut().unwrap();
+                for handle in &handles {
+                    component.add_dependent(handle.clone());
+                }
+            });
+            let mut snapshot = owner
+                .with(|object| object.as_component().unwrap().dependents_snapshot())
+                .unwrap();
+            assert_eq!(snapshot.len(), count);
+            // This is the reentrant boundary: no owner borrow remains, and
+            // graph edits must not change the already-owned traversal.
+            owner.with_mut(|object| {
+                let component = object.as_component_mut().unwrap();
+                for handle in &handles {
+                    component.remove_dependent(handle);
+                }
+                component.add_dependent(owner.clone());
+            });
+            for (index, handle) in handles.iter().enumerate() {
+                assert!(snapshot.next().unwrap().authored() == Some(handle));
+                assert_eq!(snapshot.len(), count - index - 1);
+            }
+            assert!(snapshot.next().is_none());
+            assert!(snapshot.next().is_none());
+        }
+    }
+
+    #[test]
+    fn dependency_snapshot_releases_consumed_and_unvisited_weak_handles() {
+        use crate::mechanical_port::source::shapes::path_composer::RuntimePathComposerHandle;
+        for count in [1, 3] {
+            let helper = RuntimePathComposerHandle::new();
+            let occurrence = helper.occurrence();
+            let ComponentOccurrenceHandle::PathComposer(weak) = &occurrence else {
+                unreachable!()
+            };
+            let baseline = weak.weak_count();
+            let mut owner = Component::default();
+            // Construct the exact snapshot storage, including its multi-item
+            // path, without graph deduplication obscuring clone/drop counts.
+            let inputs = vec![occurrence.clone(); count];
+            let mut snapshot = DependencySnapshot::from_slice(&inputs);
+            assert_eq!(weak.weak_count(), baseline + 2 * count);
+            drop(snapshot.next());
+            assert_eq!(weak.weak_count(), baseline + 2 * count - 1);
+            drop(snapshot);
+            assert_eq!(weak.weak_count(), baseline + count);
+            owner.add_dependent(occurrence.clone());
+            let mut snapshot = owner.dependents_snapshot();
+            drop(helper);
+            assert!(weak.upgrade().is_none());
+            assert!(!snapshot.next().unwrap().add_dirt(ComponentDirt::PATH, true));
+        }
+    }
 
     #[test]
     fn dirt_dispatch_checks_the_live_generation_before_using_type_metadata() {
         let arena = CoreArena::default();
         let original = arena.insert(Node::default());
         original.with_mut(|object| {
-            object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+            object
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE);
         });
         let occurrence = ComponentOccurrenceHandle::Authored(original.clone());
         assert!(occurrence.add_dirt(ComponentDirt::RENDER_OPACITY, false));
@@ -867,7 +983,10 @@ mod dirt_dispatch_tests {
         let replacement = arena.insert(Node::default());
         assert_eq!(original.identity_key().1, replacement.identity_key().1);
         replacement.with_mut(|object| {
-            object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+            object
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE);
         });
         assert!(!occurrence.add_dirt(ComponentDirt::WORLD_TRANSFORM, true));
         assert_eq!(
@@ -875,7 +994,9 @@ mod dirt_dispatch_tests {
             Some(ComponentDirt::NONE)
         );
         drop(arena);
-        assert!(!ComponentOccurrenceHandle::Authored(replacement)
-            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true));
+        assert!(
+            !ComponentOccurrenceHandle::Authored(replacement)
+                .add_dirt(ComponentDirt::WORLD_TRANSFORM, true)
+        );
     }
 }

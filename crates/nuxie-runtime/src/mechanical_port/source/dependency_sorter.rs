@@ -12,7 +12,7 @@ impl DependencySorter {
     pub fn sort_with_root_dependents(
         &mut self,
         root: ComponentOccurrenceHandle,
-        dependents: Vec<ComponentOccurrenceHandle>,
+        dependents: impl IntoIterator<Item = ComponentOccurrenceHandle>,
         order: &mut Vec<ComponentOccurrenceHandle>,
     ) {
         order.clear();

@@ -528,11 +528,15 @@ fn main() {
 /// Harness-owned handles only. Import, scripting, dependency updates, resource
 /// creation, and drawing all run through the translated native owners.
 struct LoadedScene {
-    _file: RuntimeFileHandle,
-    artboard: RuntimeArtboardInstanceHandle,
+    // Rust drops fields in declaration order. Mirror RIVLoader's reverse C++
+    // member destruction: view model, scene, artboard, then file. Scenes retain
+    // weak artboard links, and script unbinding must run before the file arena
+    // is released, not inside the destruction of one of its converters.
+    main: Option<ViewModelInstanceRuntime>,
     machine: Option<RuntimeStateMachineInstanceHandle>,
     static_scene: Option<StaticScene>,
-    main: Option<ViewModelInstanceRuntime>,
+    artboard: RuntimeArtboardInstanceHandle,
+    _file: RuntimeFileHandle,
     artboard_index: usize,
     machine_index: Option<usize>,
     artboard_name: String,
@@ -593,7 +597,11 @@ impl LoadedScene {
         // Match the C++ occurrence boundary: definitions have already imported,
         // but the selected ArtboardInstance has not yet been cloned.
         reset_coverage_profile_for_occurrence_if_requested();
-        let artboard = Artboard::instance_from_handle(&definitions[artboard_index])
+        let artboard = file
+            .with_file(|file| match options.artboard.as_deref() {
+                Some(name) => file.artboard_named(name),
+                None => file.artboard_default(),
+            })
             .context("failed to instantiate selected native artboard")?;
         let root = artboard.core_handle();
         let artboard_name = artboard.with_artboard(|artboard| artboard.name().to_owned());
@@ -2286,6 +2294,10 @@ mod tests {
 
     #[cfg(feature = "scripting")]
     impl nuxie_runtime::ScriptingVm for CountingVm {
+        fn script_backend(&self) -> &nuxie_runtime::source::scripted::script_backend::ScriptBackend {
+            nuxie_runtime::ScriptingVm::script_backend(&self.vm)
+        }
+
         fn install_native_file_assets(
             &self,
             file: nuxie_runtime::source::file::RuntimeFileWeakHandle,

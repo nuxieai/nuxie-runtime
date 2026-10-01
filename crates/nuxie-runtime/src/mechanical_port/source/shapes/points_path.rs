@@ -11,6 +11,104 @@ use crate::mechanical_port::source::{
     },
 };
 static IDENTITY: Mat2D = Mat2D::identity();
+#[cfg(test)]
+mod hole_callback_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::{CoreArena, CoreHandle},
+        core_context::CoreContext,
+        generated::{core_registry::CoreRegistry, shapes::path_base::PathBase},
+        status_code::StatusCode,
+    };
+
+    struct Context<'a> {
+        arena: &'a CoreArena,
+        parent: CoreHandle,
+    }
+    impl CoreContext for Context<'_> {
+        fn core_arena(&self) -> &CoreArena {
+            self.arena
+        }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            (id == 1).then(|| self.parent.clone())
+        }
+    }
+
+    #[test]
+    fn registry_hole_change_invalidates_skinned_winding_and_skin() {
+        let arena = CoreArena::default();
+        let path = arena.insert(PointsPath::default());
+        let skin = arena.insert(Skin::default());
+        skin.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .base
+                .set_parent_id_value(1);
+        });
+        let mut context = Context {
+            arena: &arena,
+            parent: path.clone(),
+        };
+        assert_eq!(
+            skin.with_downcast_mut::<Skin, _>(|owner| {
+                owner.on_added_dirty(skin.clone(), &mut context)
+            }),
+            Some(StatusCode::Ok)
+        );
+        path.with_downcast_mut::<PointsPath, _>(|owner| {
+            owner.winding_reference = 1;
+            owner.set_dirt(ComponentDirt::NONE);
+        });
+        skin.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE)
+        });
+
+        assert!(CoreRegistry::set_bool_handle(
+            &path,
+            i32::from(PathBase::IS_HOLE_PROPERTY_KEY),
+            true
+        ));
+        assert_eq!(
+            path.with_downcast::<PointsPath, _>(|owner| owner.winding_reference),
+            Some(0)
+        );
+        assert!(
+            skin.with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::SKIN))
+                .unwrap()
+        );
+        assert!(
+            path.with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::PATH))
+                .unwrap()
+        );
+
+        // An unchanged generated property must not dispatch the callback.
+        path.with_downcast_mut::<PointsPath, _>(|owner| owner.winding_reference = -1);
+        skin.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE)
+        });
+        assert!(CoreRegistry::set_bool_handle(
+            &path,
+            i32::from(PathBase::IS_HOLE_PROPERTY_KEY),
+            true
+        ));
+        assert_eq!(
+            path.with_downcast::<PointsPath, _>(|owner| owner.winding_reference),
+            Some(-1)
+        );
+        assert!(
+            !skin
+                .with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::SKIN))
+                .unwrap()
+        );
+    }
+}
 impl std::ops::Deref for PointsPath {
     type Target = PointsPathBase;
     fn deref(&self) -> &Self::Target {

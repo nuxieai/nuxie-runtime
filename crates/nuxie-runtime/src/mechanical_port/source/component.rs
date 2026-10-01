@@ -394,11 +394,7 @@ impl ComponentOccurrenceHandle {
                 .with_component(Component::collapsables_snapshot)
                 .expect("live collapse owner");
             for collapsable in collapsables {
-                collapsable.with_mut(|object| {
-                    if let Some(bind) = object.as_data_bind_mut() {
-                        bind.collapse(value);
-                    }
-                });
+                crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, value);
             }
             if handle.is_type_of(
                 crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
@@ -677,11 +673,7 @@ impl Component {
 
     pub fn add_collapsable(&mut self, collapsable: CoreHandle) {
         if let Some(collapsed) = self.register_collapsable(collapsable.clone()) {
-            collapsable.with_mut(|collapsable| {
-                if let Some(collapsable) = collapsable.as_data_bind_mut() {
-                    collapsable.collapse(collapsed);
-                }
-            });
+            crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, collapsed);
         }
     }
 
@@ -816,11 +808,7 @@ impl Component {
     pub(crate) fn update_collapsables(&mut self) {
         let collapsed = self.is_collapsed();
         for collapsable in self.collapsables.iter().cloned() {
-            collapsable.with_mut(|collapsable| {
-                if let Some(collapsable) = collapsable.as_data_bind_mut() {
-                    collapsable.collapse(collapsed);
-                }
-            });
+            crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, collapsed);
         }
     }
 

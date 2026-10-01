@@ -100,10 +100,19 @@ impl Default for TextInput {
 
 impl TextInput {
     pub fn set_select_all_on_focus(&mut self, value: bool) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_select_all_on_focus_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    pub(crate) fn set_select_all_on_focus_with_completion(
+        &mut self,
+        value: bool,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if self.base.set_select_all_on_focus_value(value) {
             TextInputBaseCallbacks::select_all_on_focus_changed(self);
-            TextInputBaseCallbacks::notify_property_changed(
-                self,
+            completion.record(
+                crate::source::core::CoreObject::core(self),
                 TextInputBase::SELECT_ALL_ON_FOCUS_PROPERTY_KEY,
             );
         }

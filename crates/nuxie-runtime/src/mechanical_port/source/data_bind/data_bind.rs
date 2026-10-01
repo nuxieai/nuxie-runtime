@@ -170,6 +170,28 @@ impl Default for DataBind {
 }
 
 impl DataBind {
+    /// DataBind may itself be an observed target. Complete its generated
+    /// no-op changed callback before releasing the owner for notification.
+    pub(crate) fn set_uint_handle(owner: &CoreHandle, property_key: u16, value: u32) -> bool {
+        let changed = owner.with_mut(|owner| {
+            let Some(bind) = owner.as_data_bind_mut() else {
+                return false;
+            };
+            match property_key {
+                DataBindBase::PROPERTY_KEY_PROPERTY_KEY => bind.base.set_property_key_value(value),
+                DataBindBase::FLAGS_PROPERTY_KEY => bind.base.set_flags_value(value),
+                DataBindBase::CONVERTER_ID_PROPERTY_KEY => bind.base.set_converter_id_value(value),
+                _ => false,
+            }
+        });
+        if changed == Some(true) {
+            if let Some(observers) = owner.property_observers() {
+                observers.notify(property_key);
+            }
+        }
+        changed.is_some()
+    }
+
     pub fn import_handle(
         owner: &CoreHandle,
         stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
@@ -199,7 +221,7 @@ impl DataBind {
             .with(|owner| owner.as_data_bind().unwrap().target())
             .flatten()
         {
-            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().initialize());
+            Self::initialize_handle(owner);
             if let Some(scripted_object) =
                 with_script_input(&target, |input| input.script_input().scripted_object())
             {
@@ -317,37 +339,21 @@ impl DataBind {
                     .reset()
             });
         }
-        let observing = owner
-            .with(|owner| {
-                let bind = owner.as_data_bind().unwrap();
-                bind.has_flag(OBSERVING).then(|| bind.target()).flatten()
-            })
-            .flatten();
-        if let Some(target) = observing {
-            target.with_mut(|target| target.core_mut().remove_property_observer(owner));
-            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_flag(OBSERVING, false));
-        }
-        let subscribe = owner
-            .with(|owner| {
-                let bind = owner.as_data_bind().unwrap();
-                (bind.to_source() && bind.target_supports_push())
-                    .then(|| bind.target())
-                    .flatten()
-            })
-            .flatten();
-        if let Some(target) = subscribe {
-            target.with_mut(|target| target.core_mut().add_property_observer(owner.clone()));
-            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_flag(OBSERVING, true));
-        }
-        owner.with_mut(|owner| {
+        let dirt = owner.with_mut(|owner| {
             let bind = owner.as_data_bind_mut().unwrap();
-            bind.add_dirt(bind.reconcile_dirt(), true);
+            bind.unsubscribe_target();
+            bind.subscribe_target();
+            bind.reconcile_dirt()
         });
+        if let Some(dirt) = dirt {
+            Self::add_dirt_handle(owner, dirt, true);
+        }
     }
 
     pub fn update_data_bind_handle(owner: &CoreHandle, apply_target_to_source: bool) {
         #[cfg(any(test, feature = "testing"))]
-        super::data_bind_container::SM_DATA_BIND_UPDATES.with(|count| count.set(count.get().wrapping_add(1)));
+        super::data_bind_container::SM_DATA_BIND_UPDATES
+            .with(|count| count.set(count.get().wrapping_add(1)));
         let dirt = owner
             .with(|owner| owner.as_data_bind().unwrap().dirt())
             .expect("live DataBind");
@@ -480,17 +486,11 @@ impl DataBind {
         if let Some(source) = source {
             source.with_mut(|source| source.as_view_model_instance_value_mut().unwrap().remove_dependent(&crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ValueDependentHandle::core(owner.clone())));
         }
-        let observing = owner
-            .with_mut(|owner| {
-                let bind = owner.as_data_bind_mut().unwrap();
-                bind.source = None;
-                bind.has_flag(OBSERVING).then(|| bind.target()).flatten()
-            })
-            .flatten();
-        if let Some(target) = observing {
-            target.with_mut(|target| target.core_mut().remove_property_observer(owner));
-            owner.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_flag(OBSERVING, false));
-        }
+        owner.with_mut(|owner| {
+            let bind = owner.as_data_bind_mut().unwrap();
+            bind.source = None;
+            bind.unsubscribe_target();
+        });
         if let Some(converter) = owner
             .with(|owner| owner.as_data_bind().unwrap().converter())
             .flatten()
@@ -619,15 +619,7 @@ impl DataBind {
         if self.target == value {
             return;
         }
-        let bind = self.handle();
-        if self.has_flag(OBSERVING) {
-            if let (Some(target), Some(bind)) = (self.target.as_ref(), bind.as_ref()) {
-                target.with_mut(|target| {
-                    target.core_mut().remove_property_observer(bind);
-                });
-                self.set_flag(OBSERVING, false);
-            }
-        }
+        self.unsubscribe_target();
         self.target = value;
         if self.property_key() == u32::from(crate::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY) {
             if let Some(target) = &self.target {
@@ -638,13 +630,38 @@ impl DataBind {
                 });
             }
         }
-        if self.to_source() && self.target_supports_push() {
-            if let (Some(target), Some(bind)) = (self.target.as_ref(), bind) {
-                target.with_mut(|target| {
-                    target.core_mut().add_property_observer(bind.clone());
-                });
-                self.set_flag(OBSERVING, true);
+        self.subscribe_target();
+    }
+
+    fn subscribe_target(&mut self) {
+        if !self.to_source() || !self.target_supports_push() || self.handle().is_none() {
+            return;
+        }
+        let Some(target) = self.target.clone() else {
+            return;
+        };
+        let observers = if self.handle().as_ref() == Some(&target) {
+            Some(self.base.base.ensure_property_observers())
+        } else {
+            target.ensure_property_observers()
+        };
+        if let Some(observers) = observers {
+            observers.add(self);
+            self.set_flag(OBSERVING, true);
+        }
+    }
+
+    pub(crate) fn unsubscribe_target(&mut self) {
+        if !self.has_flag(OBSERVING) {
+            return;
+        }
+        if let Some(target) = &self.target {
+            if let Some(observers) = target.property_observers() {
+                // The active bind may already be retired or mutably borrowed.
+                // Its own next link is read directly, never through its handle.
+                observers.remove(self);
             }
+            self.set_flag(OBSERVING, false);
         }
     }
 
@@ -661,16 +678,8 @@ impl DataBind {
     }
 
     pub fn unbind(&mut self) {
-        let bind = self.handle();
         self.clear_source();
-        if self.has_flag(OBSERVING) {
-            if let (Some(target), Some(bind)) = (self.target.as_ref(), bind.as_ref()) {
-                target.with_mut(|target| {
-                    target.core_mut().remove_property_observer(bind);
-                });
-                self.set_flag(OBSERVING, false);
-            }
-        }
+        self.unsubscribe_target();
         if let Some(converter) = self.converter.as_ref() {
             super::converters::data_converter::DataConverter::unbind_handle(converter);
         }
@@ -792,8 +801,42 @@ impl DataBind {
     }
 
     pub fn add_dirt(&mut self, value: u32, _recurse: bool) {
-        if self.has_flag(SUPPRESS_DIRT) || self.dirt & value == value {
+        let Some(callback) = self.begin_add_dirt(value) else {
             return;
+        };
+        if let Some(callback) = callback {
+            callback();
+        }
+        if let Some(container) = self.finish_add_dirt() {
+            container.add_dirty_data_bind_borrowed(self);
+        }
+    }
+
+    pub(crate) fn add_dirt_handle(owner: &CoreHandle, value: u32, _recurse: bool) {
+        let callback = owner
+            .with_mut(|owner| owner.as_data_bind_mut()?.begin_add_dirt(value))
+            .flatten();
+        let Some(callback) = callback else {
+            return;
+        };
+        if let Some(callback) = callback {
+            callback();
+        }
+        // Read live state after the callback, matching addDirt's source order.
+        // Generation checks reject a retired/replaced observer.
+        let container = owner
+            .with_mut(|owner| owner.as_data_bind_mut()?.finish_add_dirt())
+            .flatten();
+        if let Some(container) = container {
+            // The converter's parent notification can inspect this child.
+            // No child borrow spans that callback or the subsequent enqueue.
+            container.add_dirty_data_bind(owner.clone());
+        }
+    }
+
+    fn begin_add_dirt(&mut self, value: u32) -> Option<Option<fn()>> {
+        if self.has_flag(SUPPRESS_DIRT) || self.dirt & value == value {
+            return None;
         }
         let source = value & BINDINGS != 0;
         let target = value & BINDINGS_TARGET != 0;
@@ -805,19 +848,18 @@ impl DataBind {
             self.set_flag(TARGET_ORIGIN, false);
         }
         self.dirt |= value;
-        if let Some(callback) = self.changed_callback {
-            callback();
-        }
+        Some(self.changed_callback)
+    }
+
+    fn finish_add_dirt(&mut self) -> Option<DataBindContainerOwner> {
         if self.dirt & DEPENDENTS != 0
             && let Some(context) = self.context_value.as_mut()
         {
             context.invalidate();
         }
-        if !self.has_flag(COLLAPSED)
-            && let Some(container) = self.container.clone()
-        {
-            container.add_dirty_data_bind_borrowed(self);
-        }
+        (!self.has_flag(COLLAPSED))
+            .then(|| self.container.clone())
+            .flatten()
     }
 
     pub fn relink_data_bind(&mut self) {
@@ -861,20 +903,32 @@ impl DataBind {
     }
 
     pub fn collapse(&mut self, collapsed: bool) {
+        if let Some(container) = self.collapse_state(collapsed) {
+            container.add_dirty_data_bind_borrowed(self);
+        }
+    }
+
+    pub(crate) fn collapse_handle(owner: &CoreHandle, collapsed: bool) {
+        let container = owner
+            .with_mut(|owner| owner.as_data_bind_mut()?.collapse_state(collapsed))
+            .flatten();
+        if let Some(container) = container {
+            container.add_dirty_data_bind(owner.clone());
+        }
+    }
+
+    fn collapse_state(&mut self, collapsed: bool) -> Option<DataBindContainerOwner> {
         if self.has_flag(COLLAPSED) == collapsed
             || self.base.property_key()
                 == u32::from(LayoutSizingStyleBase::DISPLAY_VALUE_PROPERTY_KEY)
             || !self.target_supports_push()
         {
-            return;
+            return None;
         }
         self.set_flag(COLLAPSED, collapsed);
-        if !collapsed
-            && self.dirt != 0
-            && let Some(container) = self.container.clone()
-        {
-            container.add_dirty_data_bind_borrowed(self);
-        }
+        (!collapsed && self.dirt != 0)
+            .then(|| self.container.clone())
+            .flatten()
     }
 
     pub fn clone_with_target_handle(
@@ -900,8 +954,8 @@ impl DataBind {
             let bind = cloned.as_data_bind_mut().unwrap();
             bind.set_target(target);
             bind.set_file(file);
-            bind.initialize();
         });
+        Self::initialize_handle(&cloned);
         if let Some(converter) = converter {
             let converter = converter.clone_occurrence_into(arena)?;
             cloned.with_mut(|cloned| {
@@ -934,6 +988,24 @@ impl DataBind {
                 .flatten();
             if let Some(collapsed) = collapsed {
                 self.collapse(collapsed);
+            }
+        }
+    }
+
+    pub(crate) fn initialize_handle(owner: &CoreHandle) {
+        let target = owner
+            .with(|owner| owner.as_data_bind().and_then(DataBind::target))
+            .flatten();
+        if let Some(target) = target {
+            let collapsed = target
+                .with_mut(|target| {
+                    target
+                        .as_component_mut()
+                        .and_then(|target| target.register_collapsable(owner.clone()))
+                })
+                .flatten();
+            if let Some(collapsed) = collapsed {
+                Self::collapse_handle(owner, collapsed);
             }
         }
     }
@@ -1044,5 +1116,762 @@ impl Drop for DataBind {
         if let Some(converter) = self.converter.take() {
             converter.remove_occurrence();
         }
+    }
+}
+
+#[cfg(test)]
+mod observer_tests {
+    use super::*;
+    use crate::source::{generated::core_registry::CoreRegistry, node::Node};
+
+    thread_local! {
+        static EVENTS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+        static ACTION: RefCell<Option<Box<dyn FnOnce()>>> = const { RefCell::new(None) };
+    }
+    fn first_changed() {
+        EVENTS.with(|events| events.borrow_mut().push(1));
+        let action = ACTION.with(|action| action.borrow_mut().take());
+        if let Some(action) = action {
+            action();
+        }
+    }
+    fn second_changed() {
+        EVENTS.with(|events| events.borrow_mut().push(2));
+    }
+    fn third_changed() {
+        EVENTS.with(|events| events.borrow_mut().push(3));
+    }
+    fn fourth_changed() {
+        EVENTS.with(|events| events.borrow_mut().push(4));
+    }
+
+    fn scene() -> (CoreArena, CoreHandle, [CoreHandle; 3]) {
+        EVENTS.with(|events| events.borrow_mut().clear());
+        ACTION.with(|action| *action.borrow_mut() = None);
+        let arena = CoreArena::default();
+        let target = arena.insert(Node::default());
+        let binds = [first_changed as fn(), second_changed, third_changed].map(|callback| {
+            let mut bind = DataBind::new(TO_SOURCE, NodeBase::X_PROPERTY_KEY.into(), 0);
+            bind.changed_callback = Some(callback);
+            arena.insert(bind)
+        });
+        // Registration prepends, so register 3,2,1 to produce 1 -> 2 -> 3.
+        for bind in binds.iter().rev() {
+            bind.with_mut(|owner| {
+                owner
+                    .as_data_bind_mut()
+                    .unwrap()
+                    .set_target(Some(target.clone()))
+            });
+        }
+        (arena, target, binds)
+    }
+    fn notify(target: &CoreHandle, value: f32) {
+        assert!(CoreRegistry::set_double_handle(
+            target,
+            NodeBase::X_PROPERTY_KEY.into(),
+            value
+        ));
+    }
+    fn events() -> Vec<u8> {
+        EVENTS.with(|events| events.borrow().clone())
+    }
+
+    #[test]
+    fn property_observers_preserve_prepend_order_and_skip_unchanged_values() {
+        let (_arena, target, _binds) = scene();
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 2, 3]);
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn duplicate_observer_registration_preserves_chain_in_both_build_modes() {
+        let (_arena, target, binds) = scene();
+        let observers = target.property_observers().unwrap();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            binds[1].with_mut(|owner| observers.add(owner.as_data_bind_mut().unwrap()));
+        }));
+        // Core::addPropertyObserver asserts in debug, but still returns without
+        // inserting the duplicate when C++ is built with NDEBUG.
+        assert_eq!(result.is_err(), cfg!(debug_assertions));
+        // Check the links before notifying so a future cycle fails boundedly.
+        for index in 0..binds.len() {
+            assert_eq!(
+                binds[index]
+                    .with(|owner| owner.as_data_bind().unwrap().next_observer())
+                    .flatten(),
+                binds.get(index + 1).cloned()
+            );
+        }
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn target_observer_callback_reads_published_node_property() {
+        let (_arena, target, _binds) = scene();
+        let callback_target = target.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                assert_eq!(
+                    callback_target.with_downcast::<Node, _>(|node| node.base.x()),
+                    Some(4.0)
+                );
+            }));
+        });
+        // A read of the published property mutates neither C++ observer links
+        // nor the dependency vector traversed by xChanged().
+        notify(&target, 4.0);
+        assert_eq!(events(), [1, 2, 3]);
+    }
+
+    fn observe_read(
+        arena: &CoreArena,
+        target: &CoreHandle,
+        key: u16,
+        read: impl FnOnce() + 'static,
+    ) -> CoreHandle {
+        EVENTS.with(|events| events.borrow_mut().clear());
+        ACTION.with(|action| *action.borrow_mut() = Some(Box::new(read)));
+        let mut bind = DataBind::new(TO_SOURCE, u32::from(key), 0);
+        bind.changed_callback = Some(first_changed);
+        let bind = arena.insert(bind);
+        bind.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(target.clone()))
+        });
+        bind
+    }
+
+    #[test]
+    fn every_scalar_registry_family_releases_target_before_final_notification() {
+        use crate::source::animation::{
+            keyed_object::KeyedObject, keyframe_bool::KeyFrameBool, keyframe_color::KeyFrameColor,
+            keyframe_int::KeyFrameInt, keyframe_string::KeyFrameString, keyframe_uint::KeyFrameUint,
+        };
+        macro_rules! check {
+            ($owner:ty, $key:expr, $set:ident, $get:ident, $value:expr) => {{
+                let arena = CoreArena::default();
+                let target = arena.insert(<$owner>::default());
+                let read_target = target.clone();
+                let value = $value;
+                let expected = value.clone();
+                let bind = observe_read(&arena, &target, $key, move || {
+                    assert_eq!(
+                        CoreRegistry::$get(&read_target, i32::from($key)),
+                        Some(expected)
+                    );
+                });
+                assert!(CoreRegistry::$set(&target, i32::from($key), value.clone()));
+                assert_eq!(events(), [1]);
+                // Remove the dirt latch so an erroneous unchanged notification
+                // cannot hide behind DataBind's already-dirty short circuit.
+                bind.with_mut(|owner| owner.as_data_bind_mut().unwrap().dirt = 0);
+                assert!(CoreRegistry::$set(&target, i32::from($key), value));
+                assert_eq!(events(), [1]);
+            }};
+        }
+        check!(KeyFrameBool, 181u16, set_bool_handle, get_bool_handle, true);
+        check!(
+            KeyFrameString,
+            280u16,
+            set_string_handle,
+            get_string_handle,
+            String::from("published")
+        );
+        check!(
+            KeyFrameColor,
+            88u16,
+            set_color_handle,
+            get_color_handle,
+            0x12345678i32
+        );
+        check!(
+            KeyFrameUint,
+            631u16,
+            set_uint_handle,
+            get_uint_handle,
+            17u32
+        );
+        check!(KeyFrameInt, 1068u16, set_int_handle, get_int_handle, -17i32);
+        check!(KeyedObject, 51u16, set_id_handle, get_id_handle, 17u32);
+    }
+
+    #[test]
+    fn registry_aliases_notify_actual_underlying_property_after_release() {
+        let (_arena, target, _binds) = scene();
+        let read_target = target.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                assert_eq!(CoreRegistry::get_double_handle(&read_target, 13), Some(8.0));
+            }))
+        });
+        assert!(CoreRegistry::set_double_handle(&target, 9, 8.0));
+        assert_eq!(events(), [1, 2, 3]);
+
+        let arena = CoreArena::default();
+        let color = arena.insert(crate::source::shapes::paint::solid_color::SolidColor::default());
+        CoreRegistry::set_color_handle(&color, 37, 0);
+        let read_color = color.clone();
+        let _bind = observe_read(&arena, &color, 37, move || {
+            assert_eq!(
+                CoreRegistry::get_color_handle(&read_color, 37),
+                Some(0x00550000)
+            );
+        });
+        assert!(CoreRegistry::set_uint_handle(&color, 118, 0x55));
+        assert_eq!(events(), [1]);
+    }
+
+    #[test]
+    fn animated_bool_and_string_notification_releases_target() {
+        use crate::source::{
+            animation::{keyframe_bool::KeyFrameBool, keyframe_string::KeyFrameString},
+            generated::core_registry::CoreCapabilities,
+        };
+        let arena = CoreArena::default();
+        let target = arena.insert(KeyFrameBool::default());
+        let read_target = target.clone();
+        let _bind = observe_read(&arena, &target, 181, move || {
+            assert_eq!(CoreRegistry::get_bool_handle(&read_target, 181), Some(true));
+        });
+        let mut frame = KeyFrameBool::default();
+        frame.base.set_value_value(true);
+        assert!(frame.keyframe_apply(target, 181, 1.0, None));
+        assert_eq!(events(), [1]);
+
+        let target = arena.insert(KeyFrameString::default());
+        let read_target = target.clone();
+        let _bind = observe_read(&arena, &target, 280, move || {
+            assert_eq!(
+                CoreRegistry::get_string_handle(&read_target, 280),
+                Some(String::from("animated"))
+            );
+        });
+        let mut frame = KeyFrameString::default();
+        frame.base.set_value_value(String::from("animated"));
+        let next = arena.insert(KeyFrameString::default());
+        assert!(frame.keyframe_interpolate(target, 280, 0.5, next, 1.0, None));
+        assert_eq!(events(), [1]);
+    }
+
+    #[test]
+    fn callback_registry_trigger_releases_target_before_property_notification() {
+        use crate::source::{
+            core::field_types::core_callback_type::CallbackData,
+            generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase,
+            viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger,
+        };
+        let arena = CoreArena::default();
+        let target = arena.insert(ViewModelInstanceTrigger::default());
+        let read_target = target.clone();
+        let _bind = observe_read(
+            &arena,
+            &target,
+            ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY,
+            move || {
+                assert_eq!(
+                    CoreRegistry::get_uint_handle(
+                        &read_target,
+                        i32::from(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
+                    ),
+                    Some(1)
+                );
+            },
+        );
+        assert!(CoreRegistry::set_callback_handle(
+            &target,
+            1016,
+            CallbackData::new(None, 0.0)
+        ));
+        assert_eq!(events(), [1]);
+    }
+
+    #[test]
+    fn computed_scroll_index_notifies_x_before_publishing_y() {
+        use crate::source::{
+            constraints::scrolling::scroll_constraint::ScrollConstraint,
+            generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase,
+        };
+        let arena = CoreArena::default();
+        // Imported authored offsets can precede initial derived-offset update.
+        let mut scroll = ScrollConstraint::default();
+        scroll.base.set_direction_value_value(2);
+        scroll.base.set_scroll_offset_x_value(10.0);
+        scroll.base.set_scroll_offset_y_value(20.0);
+        let target = arena.insert(scroll);
+        let _y = observe_read(
+            &arena,
+            &target,
+            ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY,
+            || {},
+        );
+        let read_target = target.clone();
+        let _x = observe_read(
+            &arena,
+            &target,
+            ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY,
+            move || {
+                assert_eq!(
+                    CoreRegistry::get_double_handle(
+                        &read_target,
+                        i32::from(ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY)
+                    ),
+                    Some(0.0)
+                );
+                assert_eq!(
+                    CoreRegistry::get_double_handle(
+                        &read_target,
+                        i32::from(ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY)
+                    ),
+                    Some(20.0)
+                );
+                ACTION.with(|action| {
+                    *action.borrow_mut() = Some(Box::new(move || {
+                        assert_eq!(
+                            CoreRegistry::get_double_handle(
+                                &read_target,
+                                i32::from(ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY)
+                            ),
+                            Some(0.0)
+                        );
+                    }))
+                });
+            },
+        );
+        // The upstream NaN index branch resolves to zero before consulting layout.
+        assert!(CoreRegistry::set_double_handle(
+            &target,
+            i32::from(ScrollConstraintBase::SCROLL_INDEX_PROPERTY_KEY),
+            f32::NAN
+        ));
+        assert_eq!(events(), [1, 1]);
+    }
+
+    #[test]
+    fn removing_current_observer_in_callback_ends_live_traversal() {
+        let (_arena, target, binds) = scene();
+        let current = binds[0].clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || DataBind::unbind_handle(&current)))
+        });
+        notify(&target, 1.0);
+        assert_eq!(events(), [1]);
+        assert!(
+            binds[0]
+                .with(|owner| owner.as_data_bind().unwrap().next_observer())
+                .flatten()
+                .is_none()
+        );
+        assert_eq!(
+            binds[1].with(|owner| owner.as_data_bind().unwrap().dirt()),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn removing_successor_in_callback_splices_live_traversal() {
+        let (_arena, target, binds) = scene();
+        let successor = binds[1].clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || DataBind::unbind_handle(&successor)))
+        });
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 3]);
+        assert_eq!(
+            binds[1].with(|owner| owner.as_data_bind().unwrap().dirt()),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn prepending_in_callback_does_not_visit_new_head_until_next_notification() {
+        let (arena, target, binds) = scene();
+        let mut new_bind = DataBind::new(TO_SOURCE, NodeBase::X_PROPERTY_KEY.into(), 0);
+        new_bind.changed_callback = Some(fourth_changed);
+        let added = arena.insert(new_bind);
+        let (added_action, target_action) = (added.clone(), target.clone());
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                added_action.with_mut(|owner| {
+                    owner
+                        .as_data_bind_mut()
+                        .unwrap()
+                        .set_target(Some(target_action))
+                });
+            }))
+        });
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 2, 3]);
+        for bind in binds.iter().chain(std::iter::once(&added)) {
+            bind.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_dirt(0));
+        }
+        EVENTS.with(|events| events.borrow_mut().clear());
+        notify(&target, 2.0);
+        assert_eq!(events(), [4, 1, 2, 3]);
+    }
+
+    #[test]
+    fn destroying_target_detaches_every_observer_and_rebinding_remains_valid() {
+        let (arena, target, binds) = scene();
+        let removed = arena.remove(&target).unwrap();
+        for bind in &binds {
+            bind.with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                assert!(bind.target().is_none());
+                assert!(bind.next_observer().is_none());
+                assert!(!bind.has_flag(OBSERVING));
+            });
+        }
+        let replacement = arena.insert(Node::default());
+        assert_eq!(replacement.identity_key().1, target.identity_key().1);
+        assert!(target.property_observers().is_none());
+        binds[0].with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(replacement.clone()))
+        });
+        drop(removed); // Old Core destruction must not detach the replacement.
+        notify(&replacement, 1.0);
+        assert_eq!(events(), [1]);
+    }
+
+    #[test]
+    fn retiring_observer_splices_before_its_box_is_dropped_and_slot_is_reused() {
+        let (arena, target, binds) = scene();
+        let removed = arena.remove(&binds[1]).unwrap();
+        let replacement = arena.insert(Node::default());
+        assert_eq!(replacement.identity_key().1, binds[1].identity_key().1);
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 3]);
+        drop(removed);
+        assert!(replacement.is_alive());
+    }
+
+    #[test]
+    fn core_clone_starts_empty_and_assignment_preserves_destination_observers() {
+        let (arena, target, _binds) = scene();
+        let cloned = target.clone_occurrence().unwrap();
+        assert!(cloned.property_observers().is_none());
+        let source = arena.insert(Node::default());
+        target.with_mut(|destination| {
+            source.with(|source| destination.core_mut().clone_from(source.core()))
+        });
+        notify(&target, 1.0);
+        assert_eq!(events(), [1, 2, 3]);
+        drop(arena.remove(&cloned).unwrap());
+        assert!(target.property_observers().is_some());
+    }
+
+    #[test]
+    fn self_target_registry_setter_releases_bind_before_changed_callback() {
+        EVENTS.with(|events| events.borrow_mut().clear());
+        let arena = CoreArena::default();
+        let mut bind = DataBind::new(TO_SOURCE, DataBindBase::CONVERTER_ID_PROPERTY_KEY.into(), 0);
+        bind.changed_callback = Some(first_changed);
+        let bind = arena.insert(bind);
+        bind.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(bind.clone()))
+        });
+        let callback_bind = bind.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || DataBind::unbind_handle(&callback_bind)))
+        });
+        assert!(CoreRegistry::set_id_handle(
+            &bind,
+            DataBindBase::CONVERTER_ID_PROPERTY_KEY.into(),
+            3
+        ));
+        assert_eq!(events(), [1]);
+        bind.with(|owner| {
+            let bind = owner.as_data_bind().unwrap();
+            assert!(!bind.has_flag(OBSERVING));
+            assert!(bind.next_observer().is_none());
+        });
+    }
+
+    #[test]
+    fn value_bind_insertion_notifies_self_observed_flags_through_released_owner() {
+        use crate::source::viewmodel::viewmodel_instance::ViewModelInstance;
+        EVENTS.with(|events| events.borrow_mut().clear());
+        let arena = CoreArena::default();
+        let mut bind = DataBind::new(TWO_WAY, DataBindBase::FLAGS_PROPERTY_KEY.into(), 0);
+        bind.changed_callback = Some(first_changed);
+        let bind = arena.insert(bind);
+        bind.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(bind.clone()))
+        });
+        let callback_bind = bind.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                callback_bind.with(|owner| {
+                    let bind = owner.as_data_bind().unwrap();
+                    assert!(bind.source_to_target_runs_first());
+                    assert!(bind.has_flag(OBSERVING));
+                });
+                DataBind::unbind_handle(&callback_bind);
+            }))
+        });
+        let mut instance = ViewModelInstance::default();
+        assert!(instance.value_data_binds().is_empty());
+        instance.add_value_data_bind(bind.clone());
+        assert_eq!(events(), [1]);
+        assert_eq!(instance.value_data_binds(), &[bind.clone()]);
+        bind.with(|owner| {
+            let bind = owner.as_data_bind().unwrap();
+            assert!(!bind.has_flag(OBSERVING));
+            assert!(bind.next_observer().is_none());
+        });
+    }
+
+    fn context_scene() -> (
+        CoreArena,
+        CoreHandle,
+        CoreHandle,
+        super::super::data_context::RuntimeDataContextHandle,
+    ) {
+        use crate::source::{
+            data_bind::{
+                data_bind_context::DataBindContext,
+                data_context::{DataContext, RuntimeDataContextHandle},
+            },
+            viewmodel::{
+                viewmodel_instance::ViewModelInstance,
+                viewmodel_instance_number::ViewModelInstanceNumber,
+            },
+        };
+        EVENTS.with(|events| events.borrow_mut().clear());
+        ACTION.with(|action| *action.borrow_mut() = None);
+        let arena = CoreArena::default();
+        let mut number = ViewModelInstanceNumber::default();
+        number.base.base.base.set_view_model_property_id_value(1);
+        let source = arena.insert(number);
+        let instance = arena.insert(ViewModelInstance::default());
+        instance.with_mut(|owner| {
+            owner
+                .as_view_model_instance_mut()
+                .unwrap()
+                .add_value(source.clone())
+        });
+        let target = arena.insert(Node::default());
+        let mut bind = DataBindContext::default();
+        bind.base.base = DataBind::new(TWO_WAY, NodeBase::X_PROPERTY_KEY.into(), 0);
+        bind.decode_source_path_ids(&[0, 1]);
+        let bind = arena.insert(bind);
+        bind.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_target(Some(target)));
+        let context = RuntimeDataContextHandle::new(DataContext::new(Some(instance)));
+        DataBindContext::bind_from_context_handle(&bind, Some(context.clone()));
+        bind.with_mut(|owner| {
+            let bind = owner.as_data_bind_mut().unwrap();
+            assert!(bind.source().as_ref() == Some(&source));
+            bind.set_dirt(0);
+            bind.changed_callback = Some(first_changed);
+        });
+        (arena, source, bind, context)
+    }
+
+    #[test]
+    fn unchanged_source_reconcile_callback_can_unbind_and_retire_bind() {
+        use crate::source::data_bind::data_bind_context::DataBindContext;
+        let (arena, _source, bind, context) = context_scene();
+        let callback_bind = bind.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                DataBind::unbind_handle(&callback_bind);
+                assert!(callback_bind.remove_occurrence());
+            }))
+        });
+        DataBindContext::bind_from_context_handle(&bind, Some(context));
+        assert_eq!(events(), [1]);
+        assert!(!arena.contains(&bind));
+    }
+
+    #[test]
+    fn host_transaction_source_notification_releases_bind_for_unbind_and_retirement() {
+        use crate::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber;
+        use crate::view_model_cell::{
+            RuntimeHostMutationNotifications, RuntimeHostTransactionPublication,
+            RuntimeTransactionKind,
+        };
+        let (arena, source, bind, _context) = context_scene();
+        let callback_bind = bind.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                DataBind::unbind_handle(&callback_bind);
+                assert!(callback_bind.remove_occurrence());
+            }))
+        });
+        let publication =
+            RuntimeHostTransactionPublication::begin(RuntimeTransactionKind::HostMutation).unwrap();
+        let notifications = RuntimeHostMutationNotifications::begin().unwrap();
+        source.with_downcast_mut::<ViewModelInstanceNumber, _>(|source| source.set_value(4.0));
+        assert!(events().is_empty());
+        notifications.commit();
+        drop(publication);
+        assert_eq!(events(), [1]);
+        assert!(!arena.contains(&bind));
+    }
+
+    #[test]
+    fn converter_parent_callback_can_read_and_unbind_live_child_before_enqueue() {
+        use crate::source::data_bind::converters::data_converter_formula::DataConverterFormula;
+        EVENTS.with(|events| events.borrow_mut().clear());
+        let arena = CoreArena::default();
+        let converter = arena.insert(DataConverterFormula::default());
+        let parent = arena.insert(DataBind::default());
+        let child = arena.insert(DataBind::default());
+        let container = converter.data_bind_container().unwrap();
+        container.set_parent_data_bind(Some(parent.clone()));
+        container.add_data_bind(child.clone());
+        parent.with_mut(|owner| {
+            let bind = owner.as_data_bind_mut().unwrap();
+            bind.set_dirt(0);
+            bind.changed_callback = Some(first_changed);
+        });
+        child.with_mut(|owner| owner.as_data_bind_mut().unwrap().set_dirt(0));
+        let callback_child = child.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                callback_child
+                    .with(|owner| {
+                        let child = owner.as_data_bind().unwrap();
+                        assert_eq!(child.dirt() & BINDINGS, BINDINGS);
+                        assert!(
+                            !child.in_dirty_list(),
+                            "upstream notifies parent before inserting child"
+                        );
+                    })
+                    .expect("callback child remains live");
+                DataBind::unbind_handle(&callback_child);
+            }))
+        });
+        DataBind::add_dirt_handle(&child, BINDINGS, false);
+        assert_eq!(events(), [1]);
+        assert!(child.is_alive());
+        assert_eq!(
+            child.with(|owner| owner.as_data_bind().unwrap().in_dirty_list()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn component_uncollapse_releases_child_before_converter_parent_callback() {
+        use crate::source::{
+            component::{ComponentDirt, ComponentOccurrenceHandle},
+            data_bind::converters::data_converter_formula::DataConverterFormula,
+        };
+        EVENTS.with(|events| events.borrow_mut().clear());
+        let arena = CoreArena::default();
+        let component = arena.insert(Node::default());
+        component.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE)
+        });
+        let converter = arena.insert(DataConverterFormula::default());
+        let parent = arena.insert(DataBind::default());
+        let child = arena.insert(DataBind::new(0, NodeBase::X_PROPERTY_KEY.into(), 0));
+        child.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(component.clone()))
+        });
+        DataBind::initialize_handle(&child);
+        let container = converter.data_bind_container().unwrap();
+        container.set_parent_data_bind(Some(parent.clone()));
+        container.add_data_bind(child.clone());
+        assert!(ComponentOccurrenceHandle::Authored(component.clone()).collapse(true));
+        DataBind::add_dirt_handle(&child, BINDINGS, false);
+        assert_eq!(
+            child.with(|owner| owner.as_data_bind().unwrap().in_dirty_list()),
+            Some(false)
+        );
+        parent.with_mut(|owner| {
+            let bind = owner.as_data_bind_mut().unwrap();
+            bind.set_dirt(0);
+            bind.changed_callback = Some(first_changed);
+        });
+        let callback_child = child.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                callback_child
+                    .with(|owner| {
+                        let child = owner.as_data_bind().unwrap();
+                        assert!(!child.has_flag(COLLAPSED));
+                        assert!(!child.in_dirty_list());
+                    })
+                    .expect("uncollapsed child remains readable");
+                DataBind::unbind_handle(&callback_child);
+            }))
+        });
+        assert!(ComponentOccurrenceHandle::Authored(component).collapse(false));
+        assert_eq!(events(), [1]);
+        assert_eq!(
+            child.with(|owner| owner.as_data_bind().unwrap().in_dirty_list()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn number_occurrence_notification_callback_reads_published_source() {
+        use crate::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase;
+        use crate::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber;
+        let (_arena, source, _bind, _context) = context_scene();
+        let callback_source = source.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                assert_eq!(
+                    callback_source
+                        .with_downcast::<ViewModelInstanceNumber, _>(|source| source.value()),
+                    Some(4.0)
+                );
+            }))
+        });
+        // Defined upstream: merely read the already-published value. Never
+        // mutate the live dependency vector being traversed by the source.
+        assert!(CoreRegistry::set_double_handle(
+            &source,
+            ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY.into(),
+            4.0
+        ));
+        assert_eq!(events(), [1]);
+    }
+
+    #[cfg(feature = "tools")]
+    #[test]
+    fn number_tools_callback_and_value_are_read_after_dependencies() {
+        use crate::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber;
+        fn changed(number: &mut ViewModelInstanceNumber, value: f32) {
+            assert_eq!(number.value(), 7.0);
+            assert_eq!(value, 7.0);
+            EVENTS.with(|events| events.borrow_mut().push(7));
+        }
+        let (_arena, source, _bind, _context) = context_scene();
+        let callback_source = source.clone();
+        ACTION.with(|action| {
+            *action.borrow_mut() = Some(Box::new(move || {
+                callback_source.with_downcast_mut::<ViewModelInstanceNumber, _>(|number| {
+                    number.on_changed(Some(changed));
+                });
+                // Re-enter the value setter without changing the dependency list.
+                assert!(ViewModelInstanceNumber::set_value_handle(&callback_source, 7.0));
+            }));
+        });
+        assert!(ViewModelInstanceNumber::set_value_handle(&source, 4.0));
+        // Inner write, then the outer write's live post-dependency callback.
+        assert_eq!(events(), [1, 7, 7]);
     }
 }

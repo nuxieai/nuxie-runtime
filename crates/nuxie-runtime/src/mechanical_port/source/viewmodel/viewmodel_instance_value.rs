@@ -55,10 +55,18 @@ impl ValueDependentHandle {
     fn add_dirt(&self, value: ComponentDirt) {
         match self {
             Self::Core(dependent) => {
+                if dependent.is_type_of(
+                    crate::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY,
+                ) {
+                    crate::source::data_bind::data_bind::DataBind::add_dirt_handle(
+                        dependent,
+                        u32::from(value.0),
+                        true,
+                    );
+                    return;
+                }
                 dependent.with_mut(|dependent| {
-                    if let Some(dependent) = dependent.as_data_bind_mut() {
-                        dependent.add_dirt(u32::from(value.0), true);
-                    } else if let Some(formula) = dependent.as_any_mut().downcast_mut::<crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula>() {
+                    if let Some(formula) = dependent.as_any_mut().downcast_mut::<crate::mechanical_port::source::data_bind::converters::data_converter_formula::DataConverterFormula>() {
                         formula.add_dirt(u32::from(value.0), true);
                     }
                 });
@@ -309,6 +317,24 @@ impl ViewModelInstanceValue {
         }
     }
 
+    pub(crate) fn add_dirt_handle(owner: &CoreHandle, value: ComponentDirt) {
+        let Some(dependents) = owner
+            .with_mut(|owner| {
+                let value = owner.as_view_model_instance_value_mut()?;
+                value.dependents.retain(ValueDependentHandle::is_alive);
+                Some(value.dependents.clone())
+            })
+            .flatten()
+        else {
+            return;
+        };
+        crate::view_model_cell::dispatch_transaction_dependency_notification(move || {
+            for dependent in dependents {
+                dependent.add_dirt(value);
+            }
+        });
+    }
+
     pub(crate) fn add_dirt_from_number(&mut self, value: ComponentDirt, number_value: f32) {
         self.dependents.retain(ValueDependentHandle::is_alive);
         if self.dependents.is_empty() {
@@ -484,6 +510,41 @@ impl ViewModelInstanceValue {
             }
         }
         self.clear_flag(ValueFlags::Delegating);
+    }
+
+    pub(crate) fn on_value_changed_handle(owner: &CoreHandle) {
+        let Some(delegates) = owner
+            .with_mut(|owner| {
+                let value = owner.as_view_model_instance_value_mut()?;
+                value.set_flag(ValueFlags::ValueChanged);
+                value
+                    .delegates
+                    .retain(|delegate| delegate.strong_count() != 0);
+                if value.delegates.is_empty() {
+                    return None;
+                }
+                if value.has_flag(ValueFlags::DelegatesChanged) {
+                    value.delegates_copy.clone_from(&value.delegates);
+                    value.clear_flag(ValueFlags::DelegatesChanged);
+                }
+                if value.has_flag(ValueFlags::Delegating) {
+                    return None;
+                }
+                Some(value.delegates_copy.clone())
+            })
+            .flatten()
+        else {
+            return;
+        };
+        let owner = owner.clone();
+        crate::view_model_cell::dispatch_transaction_notification(move || {
+            let _suppress = SuppressDelegation::new(owner);
+            for delegate in delegates {
+                if let Some(delegate) = delegate.upgrade() {
+                    delegate.borrow_mut().value_changed();
+                }
+            }
+        });
     }
 
     pub fn dependents(&self) -> Vec<ValueDependentHandle> {

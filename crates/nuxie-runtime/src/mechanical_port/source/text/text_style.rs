@@ -306,7 +306,7 @@ impl TextStyle {
         } else {
             text.with_mut(|object| object.text_interface_mark_shape_dirty());
         }
-        owner.with_mut(|object| object.core_mut().notify_property_changed(key));
+        owner.notify_property_changed(key);
         true
     }
     pub fn line_height_changed(&mut self) {

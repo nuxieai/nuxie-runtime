@@ -641,12 +641,7 @@ impl RuntimeOwnedViewModelInstance {
         if previous == value {
             return false;
         }
-        mutate(|| {
-            property.with_downcast_mut::<ViewModelInstanceNumber, _>(|property| {
-                property.set_value(value);
-            })
-        })
-        .is_some()
+        mutate(|| ViewModelInstanceNumber::set_value_handle(&property, value))
     }
 
     pub fn boolean_source_handle_by_property_name(

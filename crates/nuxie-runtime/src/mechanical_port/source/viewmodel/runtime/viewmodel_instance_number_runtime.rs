@@ -19,9 +19,7 @@ impl ViewModelInstanceNumberRuntime {
     }
 
     pub fn set_value(&self, value: f32) {
-        self.base
-            .handle()
-            .with_downcast_mut::<ViewModelInstanceNumber, _>(|property| property.set_value(value));
+        ViewModelInstanceNumber::set_value_handle(&self.base.handle(), value);
     }
 
     pub fn data_type(&self) -> DataType {

@@ -209,11 +209,7 @@ impl IKConstraint {
         };
         if changed {
             super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
-            owner.with_mut(|owner| {
-                owner
-                    .core_mut()
-                    .notify_property_changed(ConstraintBase::STRENGTH_PROPERTY_KEY)
-            });
+            owner.notify_property_changed(ConstraintBase::STRENGTH_PROPERTY_KEY);
         }
         true
     }
@@ -226,11 +222,7 @@ impl IKConstraint {
         };
         if changed {
             super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
-            owner.with_mut(|owner| {
-                owner
-                    .core_mut()
-                    .notify_property_changed(IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY)
-            });
+            owner.notify_property_changed(IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY);
         }
         true
     }

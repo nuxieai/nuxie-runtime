@@ -41,9 +41,8 @@ impl ViewModelInstanceTrigger {
         }
         owner.with_downcast_mut::<Self, _>(|value| {
             value.base.on_value_changed();
-            crate::mechanical_port::source::core::CoreObject::core_mut(value)
-                .notify_property_changed(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY);
         });
+        owner.notify_property_changed(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY);
         true
     }
 
@@ -119,11 +118,8 @@ impl ViewModelInstanceTrigger {
             }
             owner.with_downcast_mut::<Self, _>(|value| {
                 value.base.on_value_changed();
-                crate::mechanical_port::source::core::CoreObject::core_mut(value)
-                    .notify_property_changed(
-                        ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY,
-                    );
             });
+            owner.notify_property_changed(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY);
         }
         owner.with_downcast_mut::<Self, _>(|value| {
             value.base.advanced();

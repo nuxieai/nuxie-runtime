@@ -51,22 +51,36 @@ impl Node {
         }
     }
     pub fn set_x(&mut self, value: f32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_x_with_completion(value, &mut completion);
+        completion.finish();
+    }
+
+    pub(crate) fn set_x_with_completion(
+        &mut self,
+        value: f32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if self.base.set_x_value(value) {
             self.x_changed();
-            crate::mechanical_port::source::core::Core::notify_property_changed(
-                &mut self.base,
-                NodeBase::X_PROPERTY_KEY,
-            );
+            completion.record(&self.base, NodeBase::X_PROPERTY_KEY);
         }
     }
 
     pub fn set_y(&mut self, value: f32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_y_with_completion(value, &mut completion);
+        completion.finish();
+    }
+
+    pub(crate) fn set_y_with_completion(
+        &mut self,
+        value: f32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if self.base.set_y_value(value) {
             self.y_changed();
-            crate::mechanical_port::source::core::Core::notify_property_changed(
-                &mut self.base,
-                NodeBase::Y_PROPERTY_KEY,
-            );
+            completion.record(&self.base, NodeBase::Y_PROPERTY_KEY);
         }
     }
 

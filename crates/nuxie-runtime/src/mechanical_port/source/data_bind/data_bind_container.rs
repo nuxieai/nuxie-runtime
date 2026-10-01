@@ -134,18 +134,27 @@ impl DataBindContainerOwner {
     }
 
     pub fn add_dirty_data_bind(&self, bind: CoreHandle) {
-        bind.with_mut(|bind| self.add_dirty_data_bind_borrowed(bind.as_data_bind_mut().unwrap()));
+        if let Some(container) = self.prepare_dirty_data_bind(|| {
+            bind.with(|owner| owner.as_data_bind().and_then(DataBind::target)).flatten()
+        }) {
+            // Preserve the entered container, but read the child's live flags
+            // after its converter parent's callback, as upstream does.
+            container.add_dirty_data_bind(bind);
+        }
     }
 
     pub fn add_dirty_data_bind_borrowed(&self, bind: &mut DataBind) {
-        let Some(container) = self.container() else {
-            return;
-        };
+        if let Some(container) = self.prepare_dirty_data_bind(|| bind.target()) {
+            container.add_dirty_data_bind_borrowed(bind);
+        }
+    }
+
+    fn prepare_dirty_data_bind(&self, target: impl FnOnce() -> Option<CoreHandle>) -> Option<DataBindContainer> {
+        let container = self.container()?;
         if let Self::Authored(owner) = self {
             if let Some(dirty) = owner.artboard_dirty_handle() {
                 dirty.wake_if_quiet_row();
-                if let Some(order) = bind
-                    .target()
+                if let Some(order) = target()
                     .and_then(|target| target.component_graph_order())
                 {
                     dirty.on_component_dirty_at(order);
@@ -156,22 +165,17 @@ impl DataBindContainerOwner {
                 // accessible without borrowing the converter during a setter.
                 let parent = container.0.borrow().parent_data_bind.clone();
                 if let Some(parent) = parent {
-                    parent.with_mut(|parent| {
-                        let parent = parent.as_data_bind_mut().unwrap();
-                        parent.add_dirt(
-                            DEPENDENTS
-                                | if parent.target_origin() {
-                                    BINDINGS_TARGET
-                                } else {
-                                    BINDINGS
-                                },
-                            false,
-                        );
+                    let dirt = parent.with(|owner| {
+                        let parent = owner.as_data_bind().unwrap();
+                        DEPENDENTS | if parent.target_origin() { BINDINGS_TARGET } else { BINDINGS }
                     });
+                    if let Some(dirt) = dirt {
+                        DataBind::add_dirt_handle(&parent, dirt, false);
+                    }
                 }
             }
         }
-        container.add_dirty_data_bind_borrowed(bind);
+        Some(container)
     }
 
     pub fn rebuild_data_bind(&self, bind: CoreHandle) {

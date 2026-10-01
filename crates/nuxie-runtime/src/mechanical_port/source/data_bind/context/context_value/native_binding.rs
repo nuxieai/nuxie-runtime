@@ -281,6 +281,11 @@ impl ContextBinding for CoreBinding {
         let Some(source) = self.source() else {
             return false;
         };
+        if source.with_downcast::<ViewModelInstanceNumber, _>(|_| ()).is_some() {
+            return value.as_any().downcast_ref::<DataValueNumber>().is_some_and(|value| {
+                mutate(|| ViewModelInstanceNumber::set_value_handle(&source, value.value()))
+            });
+        }
         if source.with_downcast::<ViewModelInstanceTrigger, _>(|_| ()).is_some() {
             return integer_value(value).is_some_and(|value| {
                 mutate(|| ViewModelInstanceTrigger::apply_value_handle(&source, &DataValueInteger::new(value)))
@@ -308,7 +313,6 @@ impl ContextBinding for CoreBinding {
                     return value.as_any().downcast_ref::<$data>().is_some_and(|value| { source.apply_value(value); true });
                 }
             }; }
-            typed!(ViewModelInstanceNumber, DataValueNumber);
             typed!(ViewModelInstanceString, DataValueString);
             typed!(ViewModelInstanceColor, DataValueColor);
             typed!(ViewModelInstanceBoolean, DataValueBoolean);

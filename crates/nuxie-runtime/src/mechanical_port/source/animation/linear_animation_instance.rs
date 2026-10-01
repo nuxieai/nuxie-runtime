@@ -361,8 +361,8 @@ impl LinearAnimationInstance {
             let bind = object.as_data_bind_mut().expect("cloned DataBind");
             bind.set_file(file);
             bind.configure_target(holder.clone(), property_key as u32);
-            bind.initialize();
         });
+        crate::source::data_bind::data_bind::DataBind::initialize_handle(&clone);
         if let Some(converter) = converter {
             let converter = converter.clone_occurrence();
             clone.with_mut(|object| object.as_data_bind_mut().unwrap().set_converter(converter));

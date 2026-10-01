@@ -223,11 +223,20 @@ impl NativeScriptViewModel {
             .with_downcast::<ViewModelInstanceNumber, _>(ViewModelInstanceNumber::value)
     }
     pub fn set_number(&self, name: &str, value: f32) -> bool {
-        self.mutate::<ViewModelInstanceNumber>(name, |owner| {
-            let changed = owner.value() != value;
-            owner.set_value(value);
-            changed
-        })
+        let Some(property) = self.property(name) else {
+            return false;
+        };
+        let Some(previous) =
+            property.with_downcast::<ViewModelInstanceNumber, _>(ViewModelInstanceNumber::value)
+        else {
+            return false;
+        };
+        let notifications = RuntimeHostMutationNotifications::begin();
+        ViewModelInstanceNumber::set_value_handle(&property, value);
+        if let Some(notifications) = notifications {
+            notifications.commit();
+        }
+        previous != value
     }
     pub fn color(&self, name: &str) -> Option<u32> {
         self.property(name)?
@@ -269,10 +278,14 @@ impl NativeScriptViewModel {
             })
     }
     pub fn fire_trigger(&self, name: &str) -> bool {
-        let Some(property) = self.property(name) else { return false; };
+        let Some(property) = self.property(name) else {
+            return false;
+        };
         let notifications = RuntimeHostMutationNotifications::begin();
         let changed = ViewModelInstanceTrigger::trigger_handle(&property);
-        if let Some(notifications) = notifications { notifications.commit(); }
+        if let Some(notifications) = notifications {
+            notifications.commit();
+        }
         changed
     }
 

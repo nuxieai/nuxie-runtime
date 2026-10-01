@@ -184,11 +184,9 @@ impl ListenerViewModelChange {
             );
         }
         if let Some(to_target) = to_target {
-            to_target.with_mut(|bind| {
-                bind.as_data_bind_mut()
-                    .expect("an owned target binding remains DataBind")
-                    .add_dirt(ComponentDirt::BINDINGS.0 as u32, true)
-            });
+            crate::source::data_bind::data_bind::DataBind::add_dirt_handle(
+                &to_target, ComponentDirt::BINDINGS.0 as u32, true,
+            );
         }
     }
 }

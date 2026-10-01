@@ -49,19 +49,25 @@ impl ColorChannelsBase {
 pub trait ColorChannels {
     fn color_value(&self) -> i32;
     fn set_color_value(&mut self, value: i32);
+    fn set_color_value_with_completion(&mut self, value: i32, completion: &mut crate::source::core::PropertySetterCompletion);
 
     fn color_red(&self) -> u32 {
         ((self.color_value() as u32) >> ColorChannelsBase::COLOR_RED_BIT_OFFSET) & 255
     }
 
     fn set_color_red(&mut self, value: u32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_color_red_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    fn set_color_red_with_completion(&mut self, value: u32, completion: &mut crate::source::core::PropertySetterCompletion) {
         let value = value.min(255);
         let current = self.color_value();
         let mask = ColorChannelsBase::COLOR_RED_FIELD_MASK as i32;
         let next = (current & !mask)
             | (((value << ColorChannelsBase::COLOR_RED_BIT_OFFSET) as i32) & mask);
         if current != next {
-            self.set_color_value(next);
+            self.set_color_value_with_completion(next, completion);
         }
     }
 
@@ -70,13 +76,18 @@ pub trait ColorChannels {
     }
 
     fn set_color_green(&mut self, value: u32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_color_green_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    fn set_color_green_with_completion(&mut self, value: u32, completion: &mut crate::source::core::PropertySetterCompletion) {
         let value = value.min(255);
         let current = self.color_value();
         let mask = ColorChannelsBase::COLOR_GREEN_FIELD_MASK as i32;
         let next = (current & !mask)
             | (((value << ColorChannelsBase::COLOR_GREEN_BIT_OFFSET) as i32) & mask);
         if current != next {
-            self.set_color_value(next);
+            self.set_color_value_with_completion(next, completion);
         }
     }
 
@@ -85,13 +96,18 @@ pub trait ColorChannels {
     }
 
     fn set_color_blue(&mut self, value: u32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_color_blue_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    fn set_color_blue_with_completion(&mut self, value: u32, completion: &mut crate::source::core::PropertySetterCompletion) {
         let value = value.min(255);
         let current = self.color_value();
         let mask = ColorChannelsBase::COLOR_BLUE_FIELD_MASK as i32;
         let next = (current & !mask)
             | (((value << ColorChannelsBase::COLOR_BLUE_BIT_OFFSET) as i32) & mask);
         if current != next {
-            self.set_color_value(next);
+            self.set_color_value_with_completion(next, completion);
         }
     }
 
@@ -100,13 +116,18 @@ pub trait ColorChannels {
     }
 
     fn set_color_alpha(&mut self, value: u32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_color_alpha_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    fn set_color_alpha_with_completion(&mut self, value: u32, completion: &mut crate::source::core::PropertySetterCompletion) {
         let value = value.min(255);
         let current = self.color_value();
         let mask = ColorChannelsBase::COLOR_ALPHA_FIELD_MASK as i32;
         let next = (current & !mask)
             | (((value << ColorChannelsBase::COLOR_ALPHA_BIT_OFFSET) as i32) & mask);
         if current != next {
-            self.set_color_value(next);
+            self.set_color_value_with_completion(next, completion);
         }
     }
 }

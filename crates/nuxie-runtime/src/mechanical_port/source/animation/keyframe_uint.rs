@@ -19,16 +19,23 @@ fn round_to_uint(value: f32) -> u32 {
     }
 }
 
-fn apply_uint(object: &mut dyn CoreRegistryObject, property_key: i32, mix: f32, value: u32) {
+fn apply_uint_with_completion(
+    object: &mut dyn CoreRegistryObject,
+    property_key: i32,
+    mix: f32,
+    value: u32,
+    completion: &mut crate::source::core::PropertySetterCompletion,
+) {
     if mix == 1.0 {
-        CoreRegistry::set_uint(object, property_key, value);
+        CoreRegistry::set_uint_with_completion(object, property_key, value, completion);
     } else {
         let mixi = 1.0 - mix;
         let current = CoreRegistry::get_uint(object, property_key);
-        CoreRegistry::set_uint(
+        CoreRegistry::set_uint_with_completion(
             object,
             property_key,
             round_to_uint(current as f32 * mixi + value as f32 * mix),
+            completion,
         );
     }
 }
@@ -41,11 +48,23 @@ impl KeyFrameUint {
         mix: f32,
         _context: Option<&dyn KeyFrameValueContext>,
     ) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.apply_with_completion(object, property_key, mix, _context, &mut completion);
+        completion.finish();
+    }
+    pub fn apply_with_completion(
+        &self,
+        object: &mut dyn CoreRegistryObject,
+        property_key: i32,
+        mix: f32,
+        _context: Option<&dyn KeyFrameValueContext>,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if CoreRegistry::is_interpolatable_uint(property_key as u32) {
-            apply_uint(object, property_key, mix, self.base.value());
+            apply_uint_with_completion(object, property_key, mix, self.base.value(), completion);
             return;
         }
-        CoreRegistry::set_uint(object, property_key, self.base.value());
+        CoreRegistry::set_uint_with_completion(object, property_key, self.base.value(), completion);
     }
 
     pub fn apply_interpolation(
@@ -57,8 +76,35 @@ impl KeyFrameUint {
         mix: f32,
         context: Option<&dyn KeyFrameValueContext>,
     ) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.apply_interpolation_with_completion(
+            object,
+            property_key,
+            current_time,
+            next_frame,
+            mix,
+            context,
+            &mut completion,
+        );
+        completion.finish();
+    }
+    pub fn apply_interpolation_with_completion(
+        &self,
+        object: &mut dyn CoreRegistryObject,
+        property_key: i32,
+        current_time: f32,
+        next_frame: &KeyFrame,
+        mix: f32,
+        context: Option<&dyn KeyFrameValueContext>,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if !CoreRegistry::is_interpolatable_uint(property_key as u32) {
-            CoreRegistry::set_uint(object, property_key, self.base.value());
+            CoreRegistry::set_uint_with_completion(
+                object,
+                property_key,
+                self.base.value(),
+                completion,
+            );
             return;
         }
 
@@ -80,6 +126,12 @@ impl KeyFrameUint {
             .transform_value(context, from_value, to_value, f)
             .unwrap_or_else(|| from_value + (to_value - from_value) * f);
 
-        apply_uint(object, property_key, mix, round_to_uint(frame_value));
+        apply_uint_with_completion(
+            object,
+            property_key,
+            mix,
+            round_to_uint(frame_value),
+            completion,
+        );
     }
 }

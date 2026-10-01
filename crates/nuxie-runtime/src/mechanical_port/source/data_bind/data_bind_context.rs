@@ -86,10 +86,9 @@ impl DataBindContext {
                 super::data_bind::DataBind::unbind_handle(owner);
             }
         } else {
-            owner.with_mut(|owner| {
-                let bind = owner.as_data_bind_mut().unwrap();
-                bind.add_dirt(bind.reconcile_dirt(), true);
-            });
+            if let Some(dirt) = owner.with(|owner| owner.as_data_bind().unwrap().reconcile_dirt()) {
+                super::data_bind::DataBind::add_dirt_handle(owner, dirt, true);
+            }
         }
         let converter = owner
             .with(|owner| owner.as_data_bind().unwrap().converter())

@@ -411,19 +411,12 @@ impl DataConverter {
 
     pub fn mark_converter_dirty(&mut self) {
         if let Some(parent) = self.data_binds.parent_data_bind() {
-            parent.with_mut(|parent| {
-                if let Some(parent) = parent.as_data_bind_mut() {
-                    parent.add_dirt(
-                        DEPENDENTS
-                            | if parent.target_origin() {
-                                BINDINGS_TARGET
-                            } else {
-                                BINDINGS
-                            },
-                        false,
-                    );
-                }
-            });
+            let dirt = parent.with(|owner| owner.as_data_bind().map(|parent| {
+                DEPENDENTS | if parent.target_origin() { BINDINGS_TARGET } else { BINDINGS }
+            })).flatten();
+            if let Some(dirt) = dirt {
+                crate::source::data_bind::data_bind::DataBind::add_dirt_handle(&parent, dirt, false);
+            }
         }
     }
 

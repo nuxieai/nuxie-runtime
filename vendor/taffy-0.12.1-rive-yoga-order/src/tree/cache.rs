@@ -229,11 +229,16 @@ impl Cache {
         match input.run_mode {
             RunMode::PerformLayout => self.final_layout_entry.filter(|entry| entry.key == key).map(|e| e.content),
             RunMode::ComputeSize => {
-                for entry in self.measure_entries.iter().flatten().flatten() {
-                    if entry.key.kd_available_space == key.kd_available_space
-                        && (entry.key.x_axis_parent_size() == key.x_axis_parent_size())
-                    {
-                        return Some(LayoutOutput::from_outer_size(entry.content));
+                for entries in &self.measure_entries {
+                    // Store fills the first empty slot, and only replaces entries
+                    // once the category is full. Clear empties the whole cache.
+                    for entry in entries {
+                        let Some(entry) = entry else { break };
+                        if entry.key.kd_available_space == key.kd_available_space
+                            && (entry.key.x_axis_parent_size() == key.x_axis_parent_size())
+                        {
+                            return Some(LayoutOutput::from_outer_size(entry.content));
+                        }
                     }
                 }
 
@@ -293,6 +298,79 @@ pub enum ClearState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn occupied_prefix_lookup_matches_full_scan_through_cache_lifecycle() {
+        fn assert_matches_full_scan(cache: &Cache, inputs: &[LayoutInput]) {
+            for entries in &cache.measure_entries {
+                let occupied = entries.iter().take_while(|entry| entry.is_some()).count();
+                assert!(entries[occupied..].iter().all(Option::is_none));
+            }
+            for input in inputs {
+                let key = CacheKey::from(input);
+                let expected = cache
+                    .measure_entries
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .find(|entry| {
+                        entry.key.kd_available_space == key.kd_available_space
+                            && entry.key.x_axis_parent_size() == key.x_axis_parent_size()
+                    });
+                assert_eq!(
+                    cache.get(input).map(|output| output.size),
+                    expected.map(|entry| entry.content)
+                );
+            }
+        }
+
+        let mut cache = Cache::new();
+        let inputs: [_; CACHE_WAYS + 3] = core::array::from_fn(|index| {
+            let mut input = LayoutInput::HIDDEN;
+            input.run_mode = RunMode::ComputeSize;
+            input.known_dimensions.width = Some(index as f32 + 1.0);
+            input
+        });
+        let output = LayoutOutput::from_outer_size(Size {
+            width: 123.0,
+            height: 456.0,
+        });
+        assert_matches_full_scan(&cache, &inputs);
+
+        // A later occupied category must remain reachable past empty categories.
+        let mut later = inputs[0];
+        later.known_dimensions = Size {
+            width: None,
+            height: None,
+        };
+        later.available_space = Size {
+            width: AvailableSpace::MinContent,
+            height: AvailableSpace::MinContent,
+        };
+        cache.store(&later, output);
+        assert_eq!(cache.get(&later).unwrap().size, output.size);
+
+        // Observe partial prefixes, a full category, and its replacement policy.
+        for (index, input) in inputs[..CACHE_WAYS + 2].iter().enumerate() {
+            cache.store(
+                input,
+                LayoutOutput::from_outer_size(Size {
+                    width: index as f32,
+                    height: 1.0,
+                }),
+            );
+            assert_matches_full_scan(&cache, &inputs);
+            assert_eq!(cache.get(&later).unwrap().size, output.size);
+        }
+
+        assert!(matches!(cache.clear(), ClearState::Cleared));
+        assert_matches_full_scan(&cache, &inputs);
+        assert!(cache.get(&later).is_none());
+        assert!(matches!(cache.clear(), ClearState::AlreadyEmpty));
+        cache.store(&inputs[2], output);
+        assert_matches_full_scan(&cache, &inputs);
+        assert_eq!(cache.get(&inputs[2]).unwrap().size, output.size);
+    }
 
     #[test]
     fn retains_multiple_exact_measurements_in_one_constraint_category() {

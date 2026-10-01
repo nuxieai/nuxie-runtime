@@ -2337,9 +2337,6 @@ impl Artboard {
         paths.local.add_rect(background, PathDirection::Clockwise);
         paths.world.rewind();
         paths.world.add_rect(clip, PathDirection::Clockwise);
-        crate::mechanical_port::source::semantic::semantic_provider::invalidate_clipped_semantics(
-            self.base.base.children(),
-        );
     }
 
     pub(crate) fn update_after_layout_super_handle(root: &CoreHandle, value: ComponentDirt) {

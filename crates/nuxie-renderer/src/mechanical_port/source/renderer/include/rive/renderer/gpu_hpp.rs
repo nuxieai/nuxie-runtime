@@ -3742,6 +3742,10 @@ impl TriangleVertex {
     }
 }
 
+// Mali shades vertices in index aligned groups of this size, loads included, so
+// a draw also runs up to 3 vertices on either side of its range.
+pub const kTriangleVertexGroupSize: usize = 4;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ImageDrawInstanceBase {
@@ -4002,6 +4006,14 @@ impl<T> WriteOnlyMappedMemory<T> {
     }
     pub unsafe fn skip_back(&mut self) {
         let _ = unsafe { self.push_ptr() };
+    }
+    /// # Safety
+    /// The cursor must retain a live writable mapping, and zero bytes must be
+    /// valid for the unwritten storage's eventual use.
+    pub unsafe fn zero_unwritten(&mut self) {
+        let byte_count =
+            (self.m_mappingEnd as usize).wrapping_sub(self.m_nextMappedItem as usize);
+        unsafe { core::ptr::write_bytes(self.m_nextMappedItem.cast::<u8>(), 0, byte_count) };
     }
 }
 

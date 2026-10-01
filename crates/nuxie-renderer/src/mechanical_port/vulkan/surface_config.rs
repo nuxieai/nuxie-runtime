@@ -97,19 +97,14 @@ impl SurfaceConfig {
                 "invalid Vulkan surface image count bounds".into(),
             ));
         }
-        // The renderer produces upright TextureView coordinates. When identity
-        // is advertised, let the presentation engine apply currentTransform.
-        // Setting currentTransform here would falsely claim our pixels were
-        // already pre-rotated. Native pre-rotation remains a separate path.
+        // We never draw prerotated, so the compositor has to rotate our frames.
         let transform = if capabilities
             .supported_transforms
             .contains(vk::SurfaceTransformFlagsKHR::IDENTITY)
         {
             vk::SurfaceTransformFlagsKHR::IDENTITY
         } else {
-            return Err(RendererError::Unsupported(
-                "upright Vulkan surface presentation",
-            ));
+            capabilities.current_transform
         };
         let desired = min.saturating_add(1);
         let image_count = if max == 0 { desired } else { desired.min(max) };
@@ -204,7 +199,10 @@ mod tests {
         }
         let mut caps = capabilities();
         caps.supported_transforms = vk::SurfaceTransformFlagsKHR::ROTATE_90;
-        assert!(SurfaceConfig::choose(&caps, &formats(), REQUESTED, false).is_err());
+        let config = SurfaceConfig::choose(&caps, &formats(), REQUESTED, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(config.transform, caps.current_transform);
     }
 
     #[test]

@@ -1779,6 +1779,14 @@ unsafe fn wrapCanvasTextureCurrent(
     debug_assert!(!canvas.is_null());
     let canvas = unsafe { canvas.cast::<RenderCanvas>().as_mut() }?;
     let target = unsafe { canvas.renderTarget().as_ref() }?;
+    unsafe { glWrapTarget(context, target, false) }
+}
+
+unsafe fn glWrapTarget(
+    context: &mut ContextGL,
+    target: &crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget,
+    requireTopDown: bool,
+) -> Option<AnyResourceHandle> {
     let execution = context.executionStamp();
     if !target.belongs_to_owner_thread_execution(execution.domain().key(), execution.generation()) {
         reject(
@@ -1799,16 +1807,18 @@ unsafe fn wrapCanvasTextureCurrent(
         return None;
     }
     let target = unsafe { &*(targetGL as *const _ as *const TextureRenderTargetGL) };
+    if requireTopDown && target.bottomUp() {
+        return None;
+    }
     target.assertSameExecution(execution);
     let textureID = target.externalTextureID();
-    debug_assert_ne!(textureID, 0);
     if textureID == 0 {
         return None;
     }
 
     let desc = TextureDesc {
-        width: canvas.width(),
-        height: canvas.height(),
+        width: target.width(),
+        height: target.height(),
         format: TextureFormat::rgba8unorm,
         r#type: TextureType::texture2D,
         renderTarget: true,
@@ -2000,6 +2010,13 @@ pub(crate) unsafe fn wrapRiveTexture(
 }
 
 impl ContextApi for ContextGL {
+    unsafe fn wrapRenderTarget(
+        &mut self,
+        target: nuxie_ore_metal::context::RenderTargetInfo,
+    ) -> Option<AnyResourceHandle> {
+        let target = unsafe { target.target.cast::<crate::mechanical_port::source::renderer::include::rive::renderer::render_target_hpp::RenderTarget>().as_ref() }?;
+        withCurrentContext(self, |context| unsafe { glWrapTarget(context, target, true) })
+    }
     fn usesDeferredFrameReplay(&self) -> bool {
         false
     }
@@ -2097,9 +2114,9 @@ impl ContextApi for ContextGL {
 }
 
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
-pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 22;
+pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 24;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 51329] = [(); PINNED_SOURCE.len()];
+const _: [(); 51589] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2587,9 +2604,9 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1419);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1427);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
-        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 22);
+        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 24);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
     }
 

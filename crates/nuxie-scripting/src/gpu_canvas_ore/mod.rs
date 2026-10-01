@@ -16,6 +16,8 @@ mod pass;
 mod pipeline;
 mod resources;
 pub(super) mod shader;
+mod target;
+pub(crate) use target::target_userdata;
 #[cfg(all(test, feature = "compiler"))]
 mod tests;
 pub(super) use canvas::Canvas;
@@ -136,6 +138,9 @@ fn constructor(
 pub(super) fn install(lua: &Lua) -> Result<()> {
     resources::install(lua)?;
     shader::install(lua)?;
+    let target = lua.create_table();
+    target.set_readonly(true);
+    lua.globals().set("GPUTarget", target)?;
     pipeline::install(lua)
 }
 

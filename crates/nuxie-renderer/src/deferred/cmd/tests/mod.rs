@@ -51,6 +51,7 @@ mod deferred_source_equivalence_test;
 mod deferred_transform_shadow_test;
 mod foreign_image_registry_test;
 mod gpu_census_test;
+mod ore_deferred_target_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(

@@ -81,6 +81,7 @@ pub(crate) struct WebGpuProductBackend {
     height: u32,
     frame_number: u64,
     active_frame: bool,
+    target_preserved: bool,
     adapter_name: String,
 }
 
@@ -331,6 +332,7 @@ impl WebGpuProductBackend {
             height,
             frame_number: 0,
             active_frame: false,
+            target_preserved: false,
             adapter_name,
         })
     }
@@ -542,6 +544,36 @@ impl WebGpuProductBackend {
 }
 
 impl ExactSourceBackend for WebGpuProductBackend {
+    fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        let target = unsafe { &*self.target.get() };
+        match target.framebufferFormat() {
+            TextureFormat::RGBA8Unorm => nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, false),
+            TextureFormat::BGRA8Unorm => nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, true),
+            _ => Default::default(),
+        }
+    }
+
+    fn ore_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        if self.ore_target_desc().width == 0 { return None; }
+        Some(nuxie_ore_metal::context::RenderTargetInfo {
+            target: self.target.get().cast(),
+            width: self.width,
+            height: self.height,
+            owner: Some(Rc::new(self.target.clone())),
+        })
+    }
+
+    fn set_target_preserved(&mut self, preserved: bool) {
+        self.target_preserved = preserved;
+        if self.active_frame {
+            unsafe { Pin::get_unchecked_mut(self.context_pin()) }.m_frame_descriptor.loadAction =
+                if preserved {
+                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
+                } else {
+                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
+                };
+        }
+    }
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
     }
@@ -607,6 +639,11 @@ impl ExactSourceBackend for WebGpuProductBackend {
             renderTargetWidth: self.width,
             renderTargetHeight: self.height,
             clearColor: clear_color,
+            loadAction: if self.target_preserved {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
+            } else {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
+            },
             ..FrameDescriptor::default()
         };
         match mode {

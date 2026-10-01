@@ -1,7 +1,8 @@
 //! tests/gm/ore_render_deferred_canvas.cpp through 34f6df47.
 use super::ore_gm_helper::*;
+use super::ore_gm_sink::GMFrameSink;
 use crate::deferred::cmd::{
-    deferred_replayer::{snapshot_frame, DeferredReplayer},
+    deferred_replayer::{DeferredReplayer, snapshot_frame},
     deferred_session::{DeferredSession, ReplayCaps},
 };
 fn record_clear(ctx: &mut dyn ContextApi, view: &AnyResourceHandle) {
@@ -35,7 +36,13 @@ fn scene(deferred: bool) -> Vec<u8> {
             !canvas.borrow().is_backed(),
             "recording must not allocate canvas backing"
         );
-        DeferredReplayer::default().replay_frame(&frame, &mut host);
+        DeferredReplayer::default().replay_frame(
+            &frame,
+            &mut GMFrameSink {
+                host: &mut host,
+                target: None,
+            },
+        );
         assert!(
             canvas.borrow().is_backed(),
             "the replaying context must back the canvas"

@@ -3,16 +3,16 @@ use super::{
     canvas_schedule::schedule_canvases,
     deferred_cmd::replay_render_commands_with_optional_factory,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{take_gpu_census, GpuCensus},
+    gpu_census::{GpuCensus, take_gpu_census},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE},
     render_replay::*,
 };
 use crate::deferred::ore::{ore_make_replay::OreResident, ore_replay::replayOreStream};
-use nuxie_ore_metal::context::ReplayCaps;
+use nuxie_ore_metal::context::{RenderTargetInfo, ReplayCaps};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer::OreCommandReader,
-    ore_commands::{CommandType, DestroyResourcePOD},
+    ore_commands::{CommandType, DestroyResourcePOD, packTargetSize},
 };
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -43,6 +43,10 @@ pub trait DeferredFrameSink {
         0
     }
     fn begin_ore_frame(&mut self) {}
+    fn target_render_target(&mut self) -> Option<RenderTargetInfo> {
+        None
+    }
+    fn set_target_preserved(&mut self, _preserved: bool) {}
     fn end_ore_frame(&mut self) {}
     fn after_ore_frame(&mut self) {
         self.factory()
@@ -77,6 +81,7 @@ pub struct DeferredFrame {
     pub ore_commands: Vec<u8>,
     pub ore_blobs: Vec<u8>,
     pub ore_caps: ReplayCaps,
+    pub ore_target_size: u32,
 }
 pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
     session.close_open_range();
@@ -99,6 +104,7 @@ pub fn snapshot_frame(session: &mut DeferredSession) -> DeferredFrame {
         ore_reals,
         segments,
         ore_caps,
+        ore_target_size: ore.drawnTargetSize(),
     }
 }
 pub fn take_frame(session: &mut DeferredSession) -> DeferredFrame {
@@ -173,6 +179,7 @@ impl DeferredReplayer {
             sink,
             &segments,
             ore.caps(),
+            ore.drawnTargetSize(),
         );
     }
     pub fn replay_frame(&mut self, frame: &DeferredFrame, sink: &mut dyn DeferredFrameSink) {
@@ -187,6 +194,7 @@ impl DeferredReplayer {
             sink,
             &frame.segments,
             &frame.ore_caps,
+            frame.ore_target_size,
         );
     }
     fn replay(
@@ -201,8 +209,19 @@ impl DeferredReplayer {
         sink: &mut dyn DeferredFrameSink,
         segments: &[DeferredSegment],
         ore_caps: &ReplayCaps,
+        ore_target_size: u32,
     ) {
         self.stats = ReplayStats::default();
+        let target = if ore_target_size != 0 && sink.ore_context().is_some() {
+            sink.target_render_target()
+        } else {
+            None
+        };
+        sink.set_target_preserved(
+            target.is_some_and(|target| {
+                packTargetSize(target.width, target.height) == ore_target_size
+            }),
+        );
         self.table.clear_version_aliases();
         // The proxy borrows only for individual Factory operations, leaving
         // sink callbacks free to access the same retained concrete factory.
@@ -384,6 +403,8 @@ fn open_screen_and_ore(
                     debug_assert!(false, "replay device does not match declared caps");
                 }
                 sink.borrow_mut().begin_ore_frame();
+                real.borrow()
+                    .setRenderTarget(sink.borrow_mut().target_render_target());
                 replayOreStream(
                     &mut *real.borrow_mut(),
                     commands,
@@ -408,7 +429,9 @@ fn open_screen_and_ore(
                             .and_then(|image| image.ore_texture_info())
                     },
                 );
+                real.borrow().setRenderTarget(None);
                 sink.borrow_mut().end_ore_frame();
+                ore.releaseFrameTargets();
                 sink.borrow_mut().after_ore_frame();
             } else {
                 static COUNT: std::sync::atomic::AtomicUsize =

@@ -31,8 +31,14 @@ pub struct OreResident {
     pub generations: Vec<u32>,
     pub kinds: Vec<OreKind>,
     pub failureNotes: HashMap<u32, String>,
+    pub frameTargets: Vec<u32>,
 }
 impl OreResident {
+    pub fn releaseFrameTargets(&mut self) {
+        for id in self.frameTargets.drain(..) {
+            self.objects[id as usize] = None;
+        }
+    }
     pub fn noteFailure(&mut self, id: u32, note: String) {
         self.failureNotes.insert(id, note);
     }
@@ -533,6 +539,18 @@ pub fn replayOreLifecycle(
         }
         CommandType::wrapCanvasView => {
             let p: WrapCanvasViewPOD = reader.read();
+            if p.mode == WrapCanvasViewMode::targetView as u32 {
+                let wrapped = ctx
+                    .renderTarget()
+                    .filter(|target| packTargetSize(target.width, target.height) == p.canvasId)
+                    .and_then(|target| unsafe { ctx.wrapRenderTarget(target) });
+                if wrapped.is_none() {
+                    return skipUnresolvedMake(table, p.id, p.generation, "targetView", None);
+                }
+                table.set(p.id, wrapped, p.generation, OreKind::textureView);
+                table.frameTargets.push(p.id);
+                return true;
+            }
             if table.alive(p.id, p.generation) {
                 return true;
             }

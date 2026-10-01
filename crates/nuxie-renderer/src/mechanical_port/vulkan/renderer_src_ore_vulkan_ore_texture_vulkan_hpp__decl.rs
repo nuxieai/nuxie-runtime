@@ -29,6 +29,7 @@ pub(crate) struct TextureVulkan {
     pub(crate) m_vkImage: vk::Image,
     pub(crate) m_vmaAllocation: Option<Box<vk_mem::Allocation>>,
     pub(crate) m_vkLayout: Cell<vk::ImageLayout>,
+    pub(crate) m_vkSampleable: bool,
     // One flag per mip and layer, including pending uploads.
     pub(crate) m_vkWritten: RefCell<Vec<bool>>,
     pub(crate) m_vkDevice: vk::Device,
@@ -51,6 +52,7 @@ impl TextureVulkan {
             m_vkImage: vk::Image::null(),
             m_vmaAllocation: None,
             m_vkLayout: Cell::new(vk::ImageLayout::UNDEFINED),
+            m_vkSampleable: true,
             m_vkWritten: RefCell::new(Vec::new()),
             m_vkDevice: context.m_vk.device,
             m_vk: ManuallyDrop::new(Some(Arc::clone(&context.m_vk))),

@@ -18,6 +18,14 @@ impl NativeMetalFactory {
         drawable: &ProtocolObject<dyn CAMetalDrawable>,
         clear_color: u32,
     ) -> Result<NativeMetalDrawableFrame, RendererError> {
-        self.begin_drawable_frame_parts(drawable.as_ref(), drawable.texture(), clear_color)
+        self.begin_drawable_frame_parts(drawable.as_ref(), drawable.texture(), clear_color, false)
+    }
+
+    pub fn begin_drawable_frame_preserving(
+        &self,
+        drawable: &ProtocolObject<dyn CAMetalDrawable>,
+        clear_color: u32,
+    ) -> Result<NativeMetalDrawableFrame, RendererError> {
+        self.begin_drawable_frame_parts(drawable.as_ref(), drawable.texture(), clear_color, true)
     }
 }

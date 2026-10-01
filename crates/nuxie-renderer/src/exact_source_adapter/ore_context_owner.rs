@@ -1,7 +1,8 @@
 //! The public ORE handle retains its host; the host keeps only its bare context.
 use nuxie_ore_metal::{
     context::{
-        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor, ShaderTarget,
+        CanvasImageInfo, CanvasTextureInfo, Context, ContextApi, FrameDescriptor, RenderTargetInfo,
+        ShaderTarget,
     },
     gpu_resource::AnyResourceHandle,
     ore_cmd::ore_command_buffer::SharedOreCommandBuffer,
@@ -113,6 +114,12 @@ impl ContextApi for OwnedContext {
         canvas: CanvasTextureInfo,
     ) -> Option<AnyResourceHandle> {
         unsafe { self.context.borrow_mut().wrapCanvasTextureInfo(canvas) }
+    }
+    unsafe fn wrapRenderTarget(&mut self, target: RenderTargetInfo) -> Option<AnyResourceHandle> {
+        unsafe { self.context.borrow_mut().wrapRenderTarget(target) }
+    }
+    fn targetView(&mut self) -> Option<AnyResourceHandle> {
+        self.context.borrow_mut().targetView()
     }
     unsafe fn wrapImageSampleView(
         &mut self,

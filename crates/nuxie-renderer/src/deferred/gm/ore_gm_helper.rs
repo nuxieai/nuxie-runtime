@@ -276,6 +276,7 @@ pub(super) struct GmHost {
     window: NativeMetalTestingWindow,
     clear: u32,
     screen_initialized: bool,
+    target_preserved: bool,
     // Offscreen frames opened while replaying, i.e. how many times content
     // was actually rasterized into a canvas (a4dbc3ff TestingWindowFrameSink).
     canvas_frames: usize,
@@ -324,6 +325,7 @@ impl GmHost {
             window,
             clear,
             screen_initialized: open,
+            target_preserved: false,
             canvas_frames: 0,
             frame_mode_override: None,
         }
@@ -332,6 +334,17 @@ impl GmHost {
         assert!(!self.screen_initialized);
         self.factory.borrow().testing_set_frame_mode(mode);
         self.frame_mode_override = Some(mode);
+    }
+    /// GM FrameOptions::doClear = false: the ORE pass supplies the background.
+    pub fn open_preserving_screen(&mut self) {
+        assert!(!self.screen_initialized);
+        let frame = self
+            .factory
+            .borrow()
+            .begin_frame_preserving()
+            .expect("GM preserving frame");
+        *self.screen.borrow_mut() = Some(Frame::Screen(frame));
+        self.screen_initialized = true;
     }
     pub fn canvas_frames(&self) -> usize {
         self.canvas_frames
@@ -399,12 +412,18 @@ impl DeferredFrameSink for GmHost {
     fn render_context(&mut self) -> Option<PersistentFactoryContext> {
         self.factory.persistent_context()
     }
+    fn target_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        self.factory.borrow().ore_render_target()
+    }
+    fn set_target_preserved(&mut self, preserved: bool) {
+        self.target_preserved = preserved;
+    }
     fn begin_screen_frame(&mut self, target: u64) -> Option<RendererOwner> {
         assert_eq!(target, 0);
         // TestingWindowFrameSink flushes any open main bracket and resumes that same
         // target with preserve. Only the first bracket performs its clear.
         self.flush_screen();
-        let frame = if self.screen_initialized {
+        let frame = if self.screen_initialized || self.target_preserved {
             self.factory.borrow().begin_frame_preserving()
         } else {
             self.factory.borrow().begin_frame(self.clear)
@@ -523,6 +542,9 @@ pub(super) fn triangle_bytes() -> Vec<u8> {
     .collect()
 }
 pub(super) fn vertex_buffer(ctx: &mut dyn ContextApi, label: &str) -> AnyResourceHandle {
+    try_vertex_buffer(ctx, label).expect("GM vertex buffer")
+}
+pub(super) fn try_vertex_buffer(ctx: &mut dyn ContextApi, label: &str) -> Option<AnyResourceHandle> {
     let bytes = triangle_bytes();
     ctx.makeBuffer(&BufferDesc {
         usage: BufferUsage::vertex,
@@ -531,11 +553,13 @@ pub(super) fn vertex_buffer(ctx: &mut dyn ContextApi, label: &str) -> AnyResourc
         immutable: false,
         label: Some(label),
     })
-    .expect("GM vertex buffer")
 }
 pub(super) const K_DEPTH_SAMPLE_WITNESS: u32 = 13;
 
 pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
+    try_shader(ctx, id).unwrap_or_else(|| panic!("GM shader: {}", ctx.lastError()))
+}
+pub(super) fn try_shader(ctx: &mut dyn ContextApi, id: u32) -> Option<AnyResourceHandle> {
     use nuxie_runtime::source::{assets::shader_asset::ShaderAsset, factory::RuntimeFactoryHandle};
     let header = fixture("gm/ore_gm_shaders.rstb.hpp");
     assert_eq!(
@@ -609,7 +633,6 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
         shaderAssetId: 0x80000000 + id,
         ..Default::default()
     })
-    .unwrap_or_else(|| panic!("GM shader: {}", ctx.lastError()))
 }
 pub(super) fn triangle_pipeline(
     ctx: &mut dyn ContextApi,
@@ -626,6 +649,16 @@ pub(super) fn triangle_pipeline_with_stride(
     label: &str,
     stride: u32,
 ) -> AnyResourceHandle {
+    try_triangle_pipeline_with_stride(ctx, module, format, label, stride)
+        .unwrap_or_else(|| panic!("GM pipeline: {}", ctx.lastError()))
+}
+pub(super) fn try_triangle_pipeline_with_stride(
+    ctx: &mut dyn ContextApi,
+    module: &AnyResourceHandle,
+    format: TextureFormat,
+    label: &str,
+    stride: u32,
+) -> Option<AnyResourceHandle> {
     let attrs = [
         VertexAttribute {
             offset: 0,
@@ -656,7 +689,6 @@ pub(super) fn triangle_pipeline_with_stride(
     };
     desc.colorTargets[0].format = format;
     ctx.makePipeline(&desc, None)
-        .unwrap_or_else(|| panic!("GM pipeline: {}", ctx.lastError()))
 }
 pub(super) fn pass_desc<'a>(
     view: &'a AnyResourceHandle,

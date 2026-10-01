@@ -832,10 +832,17 @@ VkRenderPass ContextVulkan::getOrCreateRenderPass(const VKRenderPassKey& key)
     VkSubpassDependency deps[2]{};
     deps[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     deps[0].dstSubpass = 0;
+    // A prior frame may still be sampling or copying these attachments when
+    // this pass clears them.
     deps[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+                           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+                           VK_PIPELINE_STAGE_TRANSFER_BIT;
     deps[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     deps[0].srcAccessMask = 0;
     deps[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -843,7 +850,8 @@ VkRenderPass ContextVulkan::getOrCreateRenderPass(const VKRenderPassKey& key)
     deps[1].srcSubpass = 0;
     deps[1].dstSubpass = VK_SUBPASS_EXTERNAL;
     deps[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
     // Include VERTEX_SHADER so a subsequent pass that samples this
     // attachment from a vertex shader (legal in WGSL) sees the writes
     // with proper visibility. Fragment is the common case; vertex is
@@ -1413,8 +1421,6 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
     const RenderPassDesc& desc,
     std::string* outError)
 {
-    finishActiveRenderPass();
-
     std::unique_ptr<RenderPassVulkan> pass =
         std::make_unique<RenderPassVulkan>();
     pass->m_context = this;
@@ -1643,12 +1649,57 @@ std::unique_ptr<RenderPass> ContextVulkan::beginRenderPass(
 // wrapCanvasTexture
 // ============================================================================
 
+static TextureFormat oreFormatFor(VkFormat vkFmt)
+{
+    switch (vkFmt)
+    {
+        case VK_FORMAT_B8G8R8A8_UNORM:
+            return TextureFormat::bgra8unorm;
+        case VK_FORMAT_R16G16B16A16_SFLOAT:
+            return TextureFormat::rgba16float;
+        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+            return TextureFormat::rgb10a2unorm;
+        default:
+            return TextureFormat::rgba8unorm;
+    }
+}
+
 rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
 {
     assert(canvas != nullptr);
+    return wrapTargetImage(canvas->renderTarget(),
+                           canvas->width(),
+                           canvas->height(),
+                           VK_IMAGE_LAYOUT_UNDEFINED);
+}
 
-    auto* vkTarget =
-        static_cast<gpu::RenderTargetVulkan*>(canvas->renderTarget());
+// A host target may change image every frame, so its view starts in the
+// layout Rive's tracker left it in and a load keeps what is there.
+rcp<TextureView> ContextVulkan::wrapRenderTarget(gpu::RenderTarget* target)
+{
+    auto* vkTarget = static_cast<gpu::RenderTargetVulkan*>(target);
+    if (vkTarget == nullptr)
+    {
+        return nullptr;
+    }
+    rcp<TextureView> view =
+        wrapTargetImage(target,
+                        target->width(),
+                        target->height(),
+                        vkTarget->targetLastAccess().layout);
+    if (view != nullptr)
+    {
+        static_cast<TextureVulkan*>(view->texture())->m_vkSampleable = false;
+    }
+    return view;
+}
+
+rcp<TextureView> ContextVulkan::wrapTargetImage(gpu::RenderTarget* target,
+                                                uint32_t width,
+                                                uint32_t height,
+                                                VkImageLayout layout)
+{
+    auto* vkTarget = static_cast<gpu::RenderTargetVulkan*>(target);
 
     VkImage image = vkTarget->targetImage();
     VkImageView imageView = vkTarget->targetImageView();
@@ -1658,28 +1709,10 @@ rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     // Derive the ore format from the actual Vulkan surface format so any MSAA
     // texture created from this descriptor matches the resolve target exactly
     // (Vulkan requires identical formats for MSAA resolve).
-    auto vkFmt = vkTarget->framebufferFormat();
-    TextureFormat oreFormat;
-    switch (vkFmt)
-    {
-        case VK_FORMAT_B8G8R8A8_UNORM:
-            oreFormat = TextureFormat::bgra8unorm;
-            break;
-        case VK_FORMAT_R16G16B16A16_SFLOAT:
-            oreFormat = TextureFormat::rgba16float;
-            break;
-        case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
-            oreFormat = TextureFormat::rgb10a2unorm;
-            break;
-        default:
-            oreFormat = TextureFormat::rgba8unorm;
-            break;
-    }
-
     TextureDesc texDesc{};
-    texDesc.width = canvas->width();
-    texDesc.height = canvas->height();
-    texDesc.format = oreFormat;
+    texDesc.width = width;
+    texDesc.height = height;
+    texDesc.format = oreFormatFor(vkTarget->framebufferFormat());
     texDesc.type = TextureType::texture2D;
     texDesc.renderTarget = true;
     texDesc.numMipmaps = 1;
@@ -1691,7 +1724,7 @@ rcp<TextureView> ContextVulkan::wrapCanvasTexture(gpu::RenderCanvas* canvas)
     texture->m_vk = m_vk;
     // Mark as not VMA-owned so the destructor skips the VMA free.
     texture->m_vmaAllocation = VK_NULL_HANDLE;
-    texture->m_vkLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    texture->m_vkLayout = layout;
     // Rive's tracker still says undefined until something draws the canvas
     if (vkTarget->targetLastAccess().layout != VK_IMAGE_LAYOUT_UNDEFINED)
     {

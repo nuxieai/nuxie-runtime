@@ -9740,8 +9740,8 @@ impl CoreRegistry {
 
     pub fn set_bool_handle(handle: &CoreHandle, property_key: i32, value: bool) -> bool {
         use crate::mechanical_port::source::generated::constraints::ik_constraint_base::IKConstraintBase;
-        if handle.is_type_of(IKConstraintBase::TYPE_KEY)
-            && property_key == i32::from(IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY)
+        if property_key == i32::from(IKConstraintBase::INVERT_DIRECTION_PROPERTY_KEY)
+            && handle.is_type_of(IKConstraintBase::TYPE_KEY)
         {
             return crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::set_invert_direction_occurrence(handle, value);
         }
@@ -9764,8 +9764,8 @@ impl CoreRegistry {
 
     pub fn set_double_handle(handle: &CoreHandle, property_key: i32, value: f32) -> bool {
         use crate::mechanical_port::source::generated::constraints::ik_constraint_base::IKConstraintBase;
-        if handle.is_type_of(IKConstraintBase::TYPE_KEY)
-            && property_key == i32::from(ConstraintBase::STRENGTH_PROPERTY_KEY)
+        if property_key == i32::from(ConstraintBase::STRENGTH_PROPERTY_KEY)
+            && handle.is_type_of(IKConstraintBase::TYPE_KEY)
         {
             return crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::set_strength_occurrence(handle, value);
         }
@@ -9773,43 +9773,43 @@ impl CoreRegistry {
             constraint_base::ConstraintBase, follow_path_constraint_base::FollowPathConstraintBase,
             list_follow_path_constraint_base::ListFollowPathConstraintBase,
         };
-        if (handle.is_type_of(FollowPathConstraintBase::TYPE_KEY)
-            && [
-                FollowPathConstraintBase::DISTANCE_PROPERTY_KEY,
-                ConstraintBase::STRENGTH_PROPERTY_KEY,
+        if ([
+            FollowPathConstraintBase::DISTANCE_PROPERTY_KEY,
+            ConstraintBase::STRENGTH_PROPERTY_KEY,
+        ]
+        .into_iter()
+        .any(|key| i32::from(key) == property_key)
+            && handle.is_type_of(FollowPathConstraintBase::TYPE_KEY))
+            || ([
+                ListFollowPathConstraintBase::DISTANCE_END_PROPERTY_KEY,
+                ListFollowPathConstraintBase::DISTANCE_OFFSET_PROPERTY_KEY,
             ]
             .into_iter()
-            .any(|key| i32::from(key) == property_key))
-            || (handle.is_type_of(ListFollowPathConstraintBase::TYPE_KEY)
-                && [
-                    ListFollowPathConstraintBase::DISTANCE_END_PROPERTY_KEY,
-                    ListFollowPathConstraintBase::DISTANCE_OFFSET_PROPERTY_KEY,
-                ]
-                .into_iter()
-                .any(|key| i32::from(key) == property_key))
+            .any(|key| i32::from(key) == property_key)
+                && handle.is_type_of(ListFollowPathConstraintBase::TYPE_KEY))
         {
             return crate::mechanical_port::source::constraints::follow_path_constraint::FollowPathConstraint::set_double_occurrence(handle, property_key as u16, value);
         }
         use crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase;
-        if handle.is_type_of(LayoutComponentBase::TYPE_KEY)
-            && [
-                LayoutComponentBase::WIDTH_PROPERTY_KEY,
-                LayoutComponentBase::HEIGHT_PROPERTY_KEY,
-            ]
-            .into_iter()
-            .any(|key| i32::from(key) == property_key)
+        if [
+            LayoutComponentBase::WIDTH_PROPERTY_KEY,
+            LayoutComponentBase::HEIGHT_PROPERTY_KEY,
+        ]
+        .into_iter()
+        .any(|key| i32::from(key) == property_key)
+            && handle.is_type_of(LayoutComponentBase::TYPE_KEY)
         {
             return crate::mechanical_port::source::layout_component::LayoutComponent::set_dimension_occurrence(handle, property_key as u16, value);
         }
         use crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase;
-        if handle.is_type_of(TextStyleBase::TYPE_KEY)
-            && [
-                TextStyleBase::FONT_SIZE_PROPERTY_KEY,
-                TextStyleBase::LINE_HEIGHT_PROPERTY_KEY,
-                TextStyleBase::LETTER_SPACING_PROPERTY_KEY,
-            ]
-            .into_iter()
-            .any(|key| i32::from(key) == property_key)
+        if [
+            TextStyleBase::FONT_SIZE_PROPERTY_KEY,
+            TextStyleBase::LINE_HEIGHT_PROPERTY_KEY,
+            TextStyleBase::LETTER_SPACING_PROPERTY_KEY,
+        ]
+        .into_iter()
+        .any(|key| i32::from(key) == property_key)
+            && handle.is_type_of(TextStyleBase::TYPE_KEY)
         {
             return crate::mechanical_port::source::text::text_style::TextStyle::set_double_occurrence(handle, property_key as u16, value);
         }

@@ -12,6 +12,7 @@ use crate::mechanical_port::source::{
         core_registry::CoreCapabilities,
     },
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
+    lazy_vector::{LazyVector, LazyVectorSnapshot},
     math::vec2d::Vec2D,
     status_code::StatusCode,
     text::text_modifier_range::TextModifierRange,
@@ -40,56 +41,10 @@ pub enum ComponentOccurrenceHandle {
     ),
 }
 
-/// Owned dependency traversal across reentrant callbacks. Cloning the handles
-/// still happens before releasing the owner borrow; only their storage differs.
-/// The common single-dependent case needs no heap allocation. Keep larger
-/// snapshots on the heap rather than growing every recursive dirt stack frame.
-pub struct DependencySnapshot(DependencySnapshotStorage);
-
-enum DependencySnapshotStorage {
-    Single(Option<ComponentOccurrenceHandle>),
-    Multiple(std::vec::IntoIter<ComponentOccurrenceHandle>),
-}
-
-impl Default for DependencySnapshot {
-    fn default() -> Self {
-        Self(DependencySnapshotStorage::Single(None))
-    }
-}
-
-impl DependencySnapshot {
-    fn from_slice(dependents: &[ComponentOccurrenceHandle]) -> Self {
-        match dependents {
-            [] => Self::default(),
-            [dependent] => Self(DependencySnapshotStorage::Single(Some(dependent.clone()))),
-            _ => Self(DependencySnapshotStorage::Multiple(
-                dependents.to_vec().into_iter(),
-            )),
-        }
-    }
-}
-
-impl Iterator for DependencySnapshot {
-    type Item = ComponentOccurrenceHandle;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.0 {
-            DependencySnapshotStorage::Single(dependent) => dependent.take(),
-            DependencySnapshotStorage::Multiple(dependents) => dependents.next(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = match &self.0 {
-            DependencySnapshotStorage::Single(dependent) => usize::from(dependent.is_some()),
-            DependencySnapshotStorage::Multiple(dependents) => dependents.len(),
-        };
-        (len, Some(len))
-    }
-}
-
-impl ExactSizeIterator for DependencySnapshot {}
-impl std::iter::FusedIterator for DependencySnapshot {}
+/// Retains the dependency list across reentrant callbacks without copying it.
+/// Entries remain weak occurrences and are generation-checked when visited.
+pub type DependencySnapshot =
+    crate::mechanical_port::source::lazy_vector::LazyVectorSnapshot<ComponentOccurrenceHandle>;
 
 /// The most-derived owner of an active C++ `LayoutComponent` occurrence.
 ///
@@ -543,7 +498,7 @@ pub struct Component {
     parent: Option<CoreHandle>,
     graph_order: u32,
     artboard: Option<CoreHandle>,
-    collapsables: Vec<CoreHandle>,
+    collapsables: LazyVector<CoreHandle>,
     dirt: ComponentDirt,
     runtime_occurrence: Option<ComponentOccurrenceHandle>,
 }
@@ -557,7 +512,7 @@ impl Default for Component {
             // No dependency order can assign the unsorted sentinel.
             graph_order: u32::MAX,
             artboard: None,
-            collapsables: Vec::new(),
+            collapsables: LazyVector::default(),
             dirt: ComponentDirt::FILTHY,
             runtime_occurrence: None,
         }
@@ -731,10 +686,11 @@ impl Component {
     }
 
     pub(crate) fn register_collapsable(&mut self, collapsable: CoreHandle) -> Option<bool> {
-        if self.collapsables.contains(&collapsable) {
+        let size_before = self.collapsables.size();
+        self.collapsables.push_unique(collapsable);
+        if self.collapsables.size() == size_before {
             return None;
         }
-        self.collapsables.push(collapsable);
         Some(self.is_collapsed())
     }
 
@@ -787,12 +743,12 @@ impl Component {
         Some(self.dirt)
     }
 
-    pub fn collapsables_snapshot(&self) -> Vec<CoreHandle> {
-        self.collapsables.clone()
+    pub fn collapsables_snapshot(&self) -> LazyVectorSnapshot<CoreHandle> {
+        self.collapsables.snapshot()
     }
 
     pub fn dependents_snapshot(&self) -> DependencySnapshot {
-        DependencySnapshot::from_slice(self.dependency_helper.dependents())
+        self.dependency_helper.dependents_snapshot()
     }
 
     pub fn add_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {
@@ -900,7 +856,7 @@ impl std::ops::DerefMut for Component {
 
 #[cfg(test)]
 mod dirt_dispatch_tests {
-    use super::{Component, ComponentDirt, ComponentOccurrenceHandle, DependencySnapshot};
+    use super::{Component, ComponentDirt, ComponentOccurrenceHandle};
     use crate::mechanical_port::source::{core::CoreArena, node::Node};
 
     #[test]
@@ -938,31 +894,113 @@ mod dirt_dispatch_tests {
     }
 
     #[test]
-    fn dependency_snapshot_releases_consumed_and_unvisited_weak_handles() {
+    fn dependency_read_view_does_not_retain_runtime_owners() {
         use crate::mechanical_port::source::shapes::path_composer::RuntimePathComposerHandle;
         for count in [1, 3] {
-            let helper = RuntimePathComposerHandle::new();
-            let occurrence = helper.occurrence();
-            let ComponentOccurrenceHandle::PathComposer(weak) = &occurrence else {
-                unreachable!()
-            };
-            let baseline = weak.weak_count();
             let mut owner = Component::default();
-            // Construct the exact snapshot storage, including its multi-item
-            // path, without graph deduplication obscuring clone/drop counts.
-            let inputs = vec![occurrence.clone(); count];
-            let mut snapshot = DependencySnapshot::from_slice(&inputs);
-            assert_eq!(weak.weak_count(), baseline + 2 * count);
-            drop(snapshot.next());
-            assert_eq!(weak.weak_count(), baseline + 2 * count - 1);
-            drop(snapshot);
-            assert_eq!(weak.weak_count(), baseline + count);
-            owner.add_dependent(occurrence.clone());
+            let helpers: Vec<_> = (0..count)
+                .map(|_| RuntimePathComposerHandle::new())
+                .collect();
+            for helper in &helpers {
+                owner.add_dependent(helper.occurrence());
+            }
             let mut snapshot = owner.dependents_snapshot();
-            drop(helper);
-            assert!(weak.upgrade().is_none());
-            assert!(!snapshot.next().unwrap().add_dirt(ComponentDirt::PATH, true));
+            // Vector storage can outlive its owning Component. Its elements
+            // remain weak; neither consumed nor unvisited entries own helpers.
+            drop(owner);
+            drop(helpers);
+            for occurrence in &mut snapshot {
+                let ComponentOccurrenceHandle::PathComposer(weak) = &occurrence else {
+                    unreachable!()
+                };
+                assert!(weak.upgrade().is_none());
+                assert!(!occurrence.add_dirt(ComponentDirt::PATH, true));
+            }
+            assert_eq!(snapshot.len(), 0);
         }
+    }
+
+    #[test]
+    fn retained_dependency_views_allow_recursive_cascades_and_later_graph_edits() {
+        let arena = CoreArena::default();
+        let root = arena.insert(Node::default());
+        let first = arena.insert(Node::default());
+        let second = arena.insert(Node::default());
+        let added = arena.insert(Node::default());
+        for handle in [&root, &first, &second, &added] {
+            handle.with_mut(|owner| {
+                owner
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::NONE)
+            });
+        }
+        root.with_mut(|owner| {
+            let component = owner.as_component_mut().unwrap();
+            component.add_dependent(first.clone());
+            component.add_dependent(second.clone());
+            component.add_dependent(first.clone()); // upstream pushUnique
+        });
+        first.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .add_dependent(root.clone())
+        });
+        assert!(
+            ComponentOccurrenceHandle::Authored(root.clone()).add_dirt(ComponentDirt::PATH, true)
+        );
+        for handle in [&root, &first, &second] {
+            assert!(
+                handle
+                    .with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::PATH))
+                    .unwrap()
+            );
+        }
+        let snapshot = root
+            .with(|owner| owner.as_component().unwrap().dependents_snapshot())
+            .unwrap();
+        assert_eq!(snapshot.len(), 2);
+        root.with_mut(|owner| {
+            let component = owner.as_component_mut().unwrap();
+            component.remove_dependent(&second);
+            component.add_dependent(added.clone());
+        });
+        // The retained traversal uses the old membership while still applying
+        // actual recursive dirt. Its first edge re-enters the edited root.
+        for dependent in snapshot {
+            dependent.add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+        }
+        for handle in [&root, &first, &second, &added] {
+            assert!(
+                handle
+                    .with(|owner| owner
+                        .as_component()
+                        .unwrap()
+                        .has_dirt(ComponentDirt::WORLD_TRANSFORM))
+                    .unwrap()
+            );
+        }
+        // A view retains the captured generation, never the replacement slot.
+        let stale_view = root
+            .with(|owner| owner.as_component().unwrap().dependents_snapshot())
+            .unwrap();
+        drop(arena.remove(&added).unwrap());
+        let replacement = arena.insert(Node::default());
+        assert_eq!(replacement.identity_key().1, added.identity_key().1);
+        replacement.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE)
+        });
+        for dependent in stale_view {
+            dependent.add_dirt(ComponentDirt::RENDER_OPACITY, true);
+        }
+        assert_eq!(
+            replacement.with(|owner| owner.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
     }
 
     #[test]

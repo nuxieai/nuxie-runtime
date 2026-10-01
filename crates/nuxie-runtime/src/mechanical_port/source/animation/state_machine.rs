@@ -5,6 +5,94 @@ use crate::mechanical_port::source::{
     importers::{artboard_importer::ArtboardImporter, import_stack::ImportStack},
     status_code::StatusCode,
 };
+use std::collections::HashSet;
+
+fn is_tracked_comparator(comparator: Option<CoreHandle>, untracked: &HashSet<CoreHandle>) -> bool {
+    use crate::mechanical_port::source::generated::{animation::*, data_bind::*};
+    let Some(comparator) = comparator else {
+        return true;
+    };
+    if untracked.contains(&comparator) {
+        return false;
+    }
+    match comparator.core_type() {
+        Some(transition_property_viewmodel_comparator_base::TransitionPropertyViewModelComparatorBase::TYPE_KEY) => {
+            let Some(bindable) = comparator.with(|c| c.transition_comparator_bindable_property()).flatten() else { return false };
+            if untracked.contains(&bindable) { return false; }
+            matches!(bindable.core_type(),
+                Some(bindable_property_number_base::BindablePropertyNumberBase::TYPE_KEY
+                | bindable_property_integer_base::BindablePropertyIntegerBase::TYPE_KEY
+                | bindable_property_boolean_base::BindablePropertyBooleanBase::TYPE_KEY
+                | bindable_property_string_base::BindablePropertyStringBase::TYPE_KEY
+                | bindable_property_color_base::BindablePropertyColorBase::TYPE_KEY
+                | bindable_property_enum_base::BindablePropertyEnumBase::TYPE_KEY
+                | bindable_property_trigger_base::BindablePropertyTriggerBase::TYPE_KEY))
+        }
+        Some(transition_value_number_comparator_base::TransitionValueNumberComparatorBase::TYPE_KEY
+        | transition_value_boolean_comparator_base::TransitionValueBooleanComparatorBase::TYPE_KEY
+        | transition_value_string_comparator_base::TransitionValueStringComparatorBase::TYPE_KEY
+        | transition_value_color_comparator_base::TransitionValueColorComparatorBase::TYPE_KEY
+        | transition_value_enum_comparator_base::TransitionValueEnumComparatorBase::TYPE_KEY
+        | transition_value_trigger_comparator_base::TransitionValueTriggerComparatorBase::TYPE_KEY
+        | transition_value_asset_comparator_base::TransitionValueAssetComparatorBase::TYPE_KEY
+        | transition_value_artboard_comparator_base::TransitionValueArtboardComparatorBase::TYPE_KEY
+        | transition_self_comparator_base::TransitionSelfComparatorBase::TYPE_KEY) => true,
+        _ => false,
+    }
+}
+
+fn is_tracked_condition(condition: Option<CoreHandle>, untracked: &HashSet<CoreHandle>) -> bool {
+    use crate::mechanical_port::source::{
+        animation::transition_viewmodel_condition::TransitionViewModelCondition,
+        generated::animation::transition_viewmodel_condition_base::TransitionViewModelConditionBase,
+    };
+    let Some(condition) = condition else {
+        return false;
+    };
+    if condition.core_type() != Some(TransitionViewModelConditionBase::TYPE_KEY) {
+        return false;
+    }
+    condition
+        .with_downcast::<TransitionViewModelCondition, _>(|condition| {
+            is_tracked_comparator(condition.left_comparator(), untracked)
+                && is_tracked_comparator(condition.right_comparator(), untracked)
+        })
+        .unwrap_or(false)
+}
+
+fn classify_state(state: &CoreHandle, untracked: &HashSet<CoreHandle>) -> (bool, bool) {
+    let (flags, transitions) = state
+        .with(|state| {
+            (
+                state.layer_state_flags().expect("LayerState flags"),
+                (0..state
+                    .layer_state_transition_count()
+                    .expect("LayerState transitions"))
+                    .filter_map(|i| state.layer_state_transition(i))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .expect("live layer state");
+    let mut safe = flags & 1 == 0;
+    let mut ignore_time = true;
+    for transition in transitions {
+        transition.with(|transition| {
+            let transition = transition.as_state_transition().expect("StateTransition");
+            if transition.is_disabled() {
+                return;
+            }
+            if transition.enable_exit_time() {
+                ignore_time = false;
+            }
+            for i in 0..transition.condition_count() {
+                if !is_tracked_condition(transition.condition(i), untracked) {
+                    safe = false;
+                }
+            }
+        });
+    }
+    (safe, ignore_time)
+}
 
 #[derive(Default)]
 pub struct StateMachine {
@@ -82,6 +170,26 @@ impl StateMachine {
                 .unwrap_or(StatusCode::MissingObject);
             if code != StatusCode::Ok {
                 return code;
+            }
+        }
+        let mut untracked = HashSet::new();
+        for data_bind in &self.data_binds {
+            data_bind.with(|data_bind| {
+                let data_bind = data_bind.as_data_bind().expect("StateMachine DataBind");
+                if let Some(target) = data_bind.target() {
+                    if data_bind.flags() & 4 != 0 || !target.is_type_of(crate::mechanical_port::source::generated::data_bind::bindable_property_base::BindablePropertyBase::TYPE_KEY) {
+                        untracked.insert(target);
+                    }
+                }
+            });
+        }
+        for layer in &self.layers {
+            let states = layer.with_downcast::<crate::mechanical_port::source::animation::state_machine_layer::StateMachineLayer, _>(|layer| {
+                (0..layer.state_count()).filter_map(|i| layer.state(i)).collect::<Vec<_>>()
+            }).expect("StateMachineLayer");
+            for state in states {
+                let (safe, ignore_time) = classify_state(&state, &untracked);
+                state.with_mut(|state| state.set_layer_state_settle_flags(safe, ignore_time));
             }
         }
         StatusCode::Ok

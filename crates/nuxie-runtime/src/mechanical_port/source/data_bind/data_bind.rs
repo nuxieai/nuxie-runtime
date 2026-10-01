@@ -346,6 +346,8 @@ impl DataBind {
     }
 
     pub fn update_data_bind_handle(owner: &CoreHandle, apply_target_to_source: bool) {
+        #[cfg(any(test, feature = "testing"))]
+        super::data_bind_container::SM_DATA_BIND_UPDATES.with(|count| count.set(count.get().wrapping_add(1)));
         let dirt = owner
             .with(|owner| owner.as_data_bind().unwrap().dirt())
             .expect("live DataBind");

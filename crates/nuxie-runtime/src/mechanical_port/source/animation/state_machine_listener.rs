@@ -113,6 +113,7 @@ impl StateMachineListener {
             &ListenerInvocation,
         ),
     ) {
+        machine.wake_row();
         for action in &self.actions {
             dispatch(action, machine, invocation);
         }

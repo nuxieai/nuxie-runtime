@@ -3160,6 +3160,15 @@ impl LayoutComponent {
             false
         }
     }
+    pub fn quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        use crate::source::advancing_component::QuietState;
+        let Some(animation) = &self.animation else { return QuietState::Quiet; };
+        let data = if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) { &animation.b } else { &animation.a };
+        if self.is_collapsed() || !self.animates() || self.style.is_none() || data.to == self.layout {
+            QuietState::Quiet
+        } else { QuietState::Busy }
+    }
+
     pub fn advance_component(&mut self, elapsed: f32, flags: AdvanceFlags) -> bool {
         if flags.0 & AdvanceFlags::NEW_FRAME.0 == 0 || self.is_collapsed() {
             return false;
@@ -3706,6 +3715,9 @@ impl LayoutComponentBaseCallbacks for LayoutComponent {
     }
 }
 impl AdvancingComponent for LayoutComponent {
+    fn quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        LayoutComponent::quiet_state(self)
+    }
     fn advance_component(&mut self, elapsed: f32, flags: AdvanceFlags) -> bool {
         LayoutComponent::advance_component(self, elapsed, flags)
     }

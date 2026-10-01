@@ -471,6 +471,8 @@ impl DataConverter {
             .copy(&object.base, &mut DataConverterCopyCallbacks);
     }
 
+    pub fn may_advance(&self) -> bool { false }
+
     pub fn advance(&mut self, _elapsed_time: f32) -> bool {
         false
     }

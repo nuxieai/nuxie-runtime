@@ -183,6 +183,8 @@ impl DataConverterInterpolator {
             .flatten()
             .unwrap_or(factor)
     }
+    pub fn may_advance(&self) -> bool { true }
+
     pub fn advance(&mut self, elapsed: f32) -> bool {
         if self.advance_count < 2 && elapsed > 0.0 {
             self.advance_count += 1;
@@ -372,4 +374,5 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }
+    fn may_advance(&self) -> bool { true }
 }

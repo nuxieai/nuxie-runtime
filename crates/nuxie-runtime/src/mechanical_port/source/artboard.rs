@@ -12,9 +12,12 @@ thread_local! {
     static LAYOUT_PASS_COUNT: Cell<u64> = const { Cell::new(0) };
 }
 
+#[cfg(any(test, feature = "testing"))]
+thread_local! { static DIRT_NOTIFICATIONS: Cell<u64> = const { Cell::new(0) }; }
+
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
-    advancing_component::{AdvancingComponent, AdvancingComponentHandle},
+    advancing_component::{AdvancingComponent, AdvancingComponentHandle, QuietState},
     animation::{
         keyed_object::{KeyedObject, KeyedObjectContext},
         linear_animation::{LinearAnimation, LinearAnimationArtboard},
@@ -88,6 +91,7 @@ struct ArtboardDirtyState {
     dirt: Cell<ComponentDirt>,
     did_change: Cell<bool>,
     host: RefCell<Option<ArtboardHostAttachment>>,
+    quiet_host_row: Cell<u32>,
 }
 
 /// One mount relation, shared with the dirty state rather than duplicated in
@@ -96,6 +100,8 @@ struct ArtboardDirtyState {
 struct ArtboardHostAttachment {
     host: CoreHandle,
     parent_artboard: Option<CoreHandle>,
+    artboard: Option<CoreHandle>,
+    quiet_rows: Option<crate::source::artboard_component_list::QuietRowHostState>,
 }
 /// The actual Artboard dirty fields live separately from its mutable geometry,
 /// so synchronous property callbacks can dirty the root currently being set.
@@ -108,10 +114,23 @@ impl Default for RuntimeArtboardDirtyHandle {
             dirt: Cell::new(ComponentDirt::FILTHY),
             did_change: Cell::new(true),
             host: RefCell::new(None),
+            quiet_host_row: Cell::new(u32::MAX),
         }))
     }
 }
 impl RuntimeArtboardDirtyHandle {
+    pub fn wake_if_quiet_row(&self) {
+        let row = self.0.quiet_host_row.replace(Artboard::NO_QUIET_ROW);
+        if row == Artboard::NO_QUIET_ROW { return; }
+        // Dispatch to the CURRENT host, not the list that originally marked
+        // this artboard quiet. The shared callback state performs the same
+        // current row identity check without borrowing a live layout host.
+        if let Some(host) = self.0.host.borrow().as_ref() {
+            if let (Some(rows), Some(artboard)) = (host.quiet_rows.as_ref(), host.artboard.as_ref()) {
+                rows.hosted_row_woke(artboard, row);
+            }
+        }
+    }
     pub fn changed(&self) {
         // Artboard::changed: guard, set, then notify the actual parent. Neither
         // the geometry root nor its host needs to be borrowed for this callback.
@@ -132,6 +151,9 @@ impl RuntimeArtboardDirtyHandle {
     }
 
     pub fn on_component_dirty_at(&self, graph_order: u32) {
+        #[cfg(any(test, feature = "testing"))]
+        DIRT_NOTIFICATIONS.with(|count| count.set(count.get() + 1));
+        self.wake_if_quiet_row();
         self.0.did_change.set(true);
         self.mark_components_dirty();
         if graph_order < self.0.depth.get() {
@@ -2030,11 +2052,45 @@ impl Artboard {
     }
 
     pub fn on_dirty(&mut self, _dirt: ComponentDirt) {
+        #[cfg(any(test, feature = "testing"))]
+        DIRT_NOTIFICATIONS.with(|count| count.set(count.get() + 1));
+        self.wake_if_quiet_row();
         self.dirty_state.mark_components_dirty();
     }
 
     pub fn has_component_dirt(&self) -> bool {
         self.dirty_state.has_component_dirt()
+    }
+
+    pub const NO_QUIET_ROW: u32 = u32::MAX;
+    pub fn quiet_host_row(&self) -> u32 { self.dirty_state.0.quiet_host_row.get() }
+    pub fn set_quiet_host_row(&self, row: u32) { self.dirty_state.0.quiet_host_row.set(row); }
+    pub fn wake_if_quiet_row(&self) { self.dirty_state.wake_if_quiet_row(); }
+    pub fn data_context_changed(&self) { self.wake_if_quiet_row(); }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn dirt_notifications() -> u64 { DIRT_NOTIFICATIONS.with(Cell::get) }
+    pub fn row_quiet_state(&self) -> QuietState {
+        if !self.artboard_hosts.is_empty() || !self.joysticks.is_empty()
+            || !self.resettables.is_empty() || !self.scripted_objects.is_empty() {
+            return QuietState::Never;
+        }
+        if self.has_component_dirt() || !self.dirty_layout.is_empty()
+            || self.host_transform_marked_dirty || self.instance_value_binds_pending
+            || self.data_bind_container.has_data_bind_work() {
+            return QuietState::Busy;
+        }
+        let mut state = QuietState::Quiet;
+        for advancing in &self.advancing_components {
+            match advancing.quiet_state() {
+                QuietState::Never => return QuietState::Never,
+                QuietState::Busy => state = QuietState::Busy,
+                QuietState::Quiet => {}
+            }
+        }
+        if state == QuietState::Quiet && self.data_bind_container.may_advance_data_binds() {
+            return QuietState::Never;
+        }
+        state
     }
 
     pub fn propagate_size(&mut self) {
@@ -2142,6 +2198,10 @@ impl Artboard {
     ) -> Option<CoreHandle> {
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
+            quiet_rows: if host.is_type_of(ArtboardComponentList::TYPE_KEY) {
+                Some(host.with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::quiet_row_host_state).expect("list host"))
+            } else { None },
+            artboard: crate::mechanical_port::source::core::CoreObject::core(self).handle(),
             host,
             parent_artboard,
         });
@@ -2317,6 +2377,7 @@ impl Artboard {
     }
 
     pub fn add_dirty_data_bind(&mut self, data_bind: CoreHandle) {
+        self.wake_if_quiet_row();
         let target = data_bind
             .with(|bind| {
                 bind.as_data_bind()
@@ -2441,6 +2502,7 @@ impl Artboard {
     }
 
     fn begin_layout_dirty(&mut self, layout_component: CoreHandle) -> bool {
+        self.wake_if_quiet_row();
         assert!(!self.is_cleaning_dirty_layouts);
         if self.is_cleaning_dirty_layouts {
             eprintln!(
@@ -2540,6 +2602,7 @@ impl Artboard {
     }
 
     fn begin_host_transform_dirty(&mut self) -> Option<CoreHandle> {
+        self.wake_if_quiet_row();
         #[cfg(feature = "tools")]
         if !self.host_transform_marked_dirty
             && let Some(callback) = self.transform_dirty_callback
@@ -4841,6 +4904,7 @@ impl Artboard {
     }
 
     pub fn main_view_model_instance_changed_handle(root: &CoreHandle) {
+        root.artboard_dirty_handle().expect("Artboard dirty state").wake_if_quiet_row();
         Self::sync_instance_value_binds_handle(root);
     }
 
@@ -5023,6 +5087,7 @@ impl Artboard {
     }
 
     pub fn relink_data_context_handle(root: &CoreHandle) {
+        root.artboard_dirty_handle().expect("Artboard dirty state").wake_if_quiet_row();
         let Some(context) = root
             .with_downcast::<Artboard, _>(Artboard::data_context)
             .flatten()

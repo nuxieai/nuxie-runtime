@@ -144,7 +144,13 @@ impl ComponentOccurrenceHandle {
     }
     pub fn add_dirt(&self, value: ComponentDirt, recurse: bool) -> bool {
         if let Self::Authored(handle) = self {
-            if handle.is_type_of(
+            // Both dispatch decisions precede callbacks. Resolve the live
+            // generation's immutable type predicate once; owner access below
+            // remains checked and no mutable borrow crosses a callback.
+            let Some((_, is_type_of)) = handle.type_metadata() else {
+                return false;
+            };
+            if is_type_of(
                 crate::mechanical_port::source::generated::text::text_style_base::TextStyleBase::TYPE_KEY,
             ) {
                 return crate::mechanical_port::source::text::text_style::TextStyle::add_dirt_occurrence(
@@ -153,7 +159,7 @@ impl ComponentOccurrenceHandle {
             }
             // Complete this owner's onDirty/artboard callbacks before visiting
             // dependents. They may synchronously call back into this owner.
-            let changed = if handle.is_type_of(
+            let changed = if is_type_of(
                 crate::mechanical_port::source::generated::constraints::constraint_base::ConstraintBase::TYPE_KEY,
             ) {
                 // Constraint::onDirty dirties its parent, whose dependents can
@@ -838,5 +844,38 @@ impl std::ops::Deref for Component {
 impl std::ops::DerefMut for Component {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.base
+    }
+}
+
+#[cfg(test)]
+mod dirt_dispatch_tests {
+    use super::{ComponentDirt, ComponentOccurrenceHandle};
+    use crate::mechanical_port::source::{core::CoreArena, node::Node};
+
+    #[test]
+    fn dirt_dispatch_checks_the_live_generation_before_using_type_metadata() {
+        let arena = CoreArena::default();
+        let original = arena.insert(Node::default());
+        original.with_mut(|object| {
+            object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+        });
+        let occurrence = ComponentOccurrenceHandle::Authored(original.clone());
+        assert!(occurrence.add_dirt(ComponentDirt::RENDER_OPACITY, false));
+        assert!(!occurrence.add_dirt(ComponentDirt::RENDER_OPACITY, false));
+
+        drop(arena.remove(&original).expect("live original"));
+        let replacement = arena.insert(Node::default());
+        assert_eq!(original.identity_key().1, replacement.identity_key().1);
+        replacement.with_mut(|object| {
+            object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+        });
+        assert!(!occurrence.add_dirt(ComponentDirt::WORLD_TRANSFORM, true));
+        assert_eq!(
+            replacement.with(|object| object.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
+        drop(arena);
+        assert!(!ComponentOccurrenceHandle::Authored(replacement)
+            .add_dirt(ComponentDirt::WORLD_TRANSFORM, true));
     }
 }

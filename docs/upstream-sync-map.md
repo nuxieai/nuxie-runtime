@@ -114,7 +114,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   contribution was visible in the advancing Spotify profile; no post-change
   release timing or speedup is claimed yet. Handle upgrades and borrow checks
   seen in other profiles are not, by themselves, evidence of removable work.
-  This candidate is not cleared for merge: full runtime Silver reports 85
+  The initial candidate was not cleared for merge: full runtime Silver reported 85
   byte-exact, 116 epsilon matches, seven recorded divergences, 17 unsupported
   skips, and six failures. A controlled build reverting only the keyframe
   fallback to separate multiplication/addition restores all six:
@@ -124,10 +124,38 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   `-ffp-model=strict` and `--no_ffp_contract`, unlike the production archive
   used for Golden. The converter difference changes path field count, not
   merely a coordinate; numeric formatting may explain it, but that mechanism
-  has not been traced directly. Next validation must execute the existing C++
-  producers under identified matching arithmetic configurations. Do not
+  has not been traced directly. Validation therefore used the existing C++
+  producers under identified arithmetic configurations, as described below. Do not
   downgrade these cases, relax tolerances, or regenerate stored outputs to
   conceal the disagreement. The diagnostic unfused build is not the candidate.
+  Follow-up source review found that the Rust SRIV comparator accidentally
+  required both vector coordinates to be bit-exact when either was negative
+  zero. The correction preserves per-coordinate signed-zero identity and the
+  existing nonfinite policy, while applying the unchanged upstream vector
+  distance/tolerance to a finite neighboring coordinate. Both review passes
+  are clean and all ten comparator tests pass. Full runtime Silver now reports
+  85 byte-exact, 121 epsilon matches, seven recorded divergences, 17 unsupported
+  skips, and only the unchanged converter failure. No manifest or tolerance
+  changed. A live strict pinned C++ replay of the six original producer tests
+  passes all 41 assertions against copied stored baselines. A second isolated
+  build of those same producers changes only generated floating-point flags
+  from strict to precise/contract-on (same debug optimization, source, and
+  `TESTING` defines). Five cases still pass; C++ itself fails the stored
+  converter assertion and emits a 1,338,671-byte stream instead of 1,338,818.
+  Rust matches that emitted stream within the unchanged comparator tolerance.
+  Thus the remaining stored-Silver failure is a demonstrated arithmetic-build
+  mismatch, not evidence of a Rust-only converter regression. This controlled
+  debug-build result is not a claim that it is the production archive.
+  The checked-in strict fixture and its failing classification remain intact;
+  only an isolated temporary copy was used for the matched-build comparison.
+  For reproduction: upstream `bbf3c4d8`, Apple Clang 21.0.0; strict binary SHA256
+  `f8ea004a6867ada79f2e50238d4c0013a65157263aa0a71bf53e43ec2f653b0b`,
+  contract-on binary `d915b362f9941d451a440acf1538953710dda25379ca046a99e9e3ee4c674693`,
+  emitted converter SRIV `eb895fd2c33cf1bb55fe3022ef61595bfe7535c7aa7fb8ec3d995cb80f1c4cba`.
+  The unresolved zombie trace is now narrower: all preceding numeric property
+  writes agree; the local bone pose already differs before solve 4. Continue
+  at IK pose-history detection (`holdsOurSolve`) and local rebuild, not by
+  assuming the later solver algebra caused the input drift.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not

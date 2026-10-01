@@ -2139,6 +2139,12 @@ impl crate::mechanical_port::source::core::CoreObject
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -3395,6 +3401,42 @@ mod update_dispatch_tests {
         },
         text::text_input::TextInput,
     };
+
+    #[test]
+    fn dirty_dispatch_preserves_empty_component_and_non_component_contracts() {
+        let mut owners: Vec<Box<dyn crate::source::core::CoreObject>> = vec![
+            Box::new(Node::default()),
+            Box::new(crate::source::shapes::shape::Shape::default()),
+            Box::new(crate::source::bones::root_bone::RootBone::default()),
+            Box::new(ScriptedLayout::default()),
+            Box::new(TextInput::default()),
+            Box::new(crate::source::text::text_style_background::TextStyleBackground::default()),
+            Box::new(crate::video::Video::default()),
+        ];
+        for owner in &mut owners {
+            owner.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+            assert!(owner.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
+            assert_eq!(owner.as_component().unwrap().dirt(), ComponentDirt::NONE);
+        }
+        let mut asset = crate::source::assets::image_asset::ImageAsset::default();
+        assert!(!asset.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
+    }
+
+    #[test]
+    fn artboard_dirty_override_does_not_run_layout_dirty_super() {
+        let mut layout = crate::source::layout_component::LayoutComponent::default();
+        layout.base.set_clip_value(true);
+        layout.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+        assert!(layout.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
+        assert!(layout.as_component().unwrap().dirt().contains(ComponentDirt::PATH));
+
+        let mut artboard = crate::source::artboard::Artboard::default();
+        artboard.as_layout_component_mut().unwrap().base.set_clip_value(true);
+        artboard.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+        assert!(artboard.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
+        assert!(!artboard.as_component().unwrap().dirt().contains(ComponentDirt::PATH));
+        assert!(artboard.has_component_dirt());
+    }
 
     #[test]
     fn every_registered_transform_has_explicit_occurrence_dispatch() {
@@ -5420,25 +5462,11 @@ pub trait CoreCapabilities: Any {
     }
     fn component_on_dirty(
         &mut self,
-        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        if let Some(layout) = self.as_layout_component_mut() {
-            layout.on_dirty(dirt);
-            return true;
-        }
-        if let Some(path) = self.as_path_mut() {
-            path.on_dirty(dirt);
-            return true;
-        }
-        if let Some(text) = self.as_text_mut() {
-            text.on_dirty(dirt);
-            return true;
-        }
-        if let Some(text_style) = self.as_text_style_mut() {
-            text_style.on_dirty(dirt);
-            return true;
-        }
-        self.as_component_mut().is_some()
+        // Concrete Component owners implement their inherited onDirty directly,
+        // including Component's empty default. Non-Component owners have none.
+        false
     }
     fn component_hit_test_point(
         &mut self,
@@ -54695,6 +54723,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -54737,6 +54771,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_color::ViewModelInstanceColor
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_color(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_color::ViewModelInstanceColor>{
         Some(self)
     }
@@ -54874,6 +54914,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_enum::ViewModelInstanceEnum
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_enum(
         &self,
     ) -> Option<
@@ -54939,6 +54985,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -54979,6 +55031,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_asset(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset> { Some(&self.base.base) }
     fn as_view_model_instance_asset_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset> { Some(&mut self.base.base) }
     fn as_view_model_instance_asset_blob(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob> { Some(self) }
@@ -55000,6 +55058,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_artboard(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard> { Some(self) }
     fn as_view_model_instance_artboard_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard> { Some(self) }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
@@ -55019,6 +55083,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_string::ViewModelInstanceString {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_string(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_string::ViewModelInstanceString> { Some(self) }
     fn as_view_model_instance_string_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_string::ViewModelInstanceString> { Some(self) }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
@@ -55142,6 +55212,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance::ViewModelInstance
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -55253,6 +55329,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
     fn as_view_model_property_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_boolean(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean> { Some(self) }
     fn as_view_model_instance_boolean_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_boolean::ViewModelInstanceBoolean> { Some(self) }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
@@ -55274,6 +55356,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
 impl CoreCapabilities
     for crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn data_bind_update_list(&mut self, list: &[CoreHandle]) -> bool {
         self.update_list(Some(list));
         true
@@ -55336,6 +55424,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_number(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber> { Some(self) }
     fn as_view_model_instance_number_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber> { Some(self) }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
@@ -55355,6 +55449,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_trigger(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger> { Some(self) }
     fn as_view_model_instance_trigger_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger> { Some(self) }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
@@ -55374,6 +55474,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_symbol_list_index(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex> { Some(self) }
     fn as_view_model_instance_symbol_list_index_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_symbol_list_index::ViewModelInstanceSymbolListIndex> { Some(self) }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
@@ -55393,6 +55499,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_i
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_font::ViewModelInstanceAssetFont {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_asset(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset> { Some(&self.base.base) }
     fn as_view_model_instance_asset_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset> { Some(&mut self.base.base) }
     fn as_view_model_instance_asset_font(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_font::ViewModelInstanceAssetFont> { Some(self) }
@@ -55422,6 +55534,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
     fn as_view_model_property_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty> { Some(&mut self.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
         Some(crate::mechanical_port::source::component::Component::validate(&mut self.base.base.base.base, context))
     }
@@ -55450,6 +55568,12 @@ impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_p
     fn as_view_model_property_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty> { Some(&mut self.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_image::ViewModelInstanceAssetImage {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_view_model_instance_asset(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset> { Some(&self.base.base) }
     fn as_view_model_instance_asset_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_asset::ViewModelInstanceAsset> { Some(&mut self.base.base) }
     fn as_view_model_instance_asset_image(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_asset_image::ViewModelInstanceAssetImage> { Some(self) }
@@ -55499,6 +55623,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_on_added_clean(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -55562,6 +55692,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_trigger::ScriptInputTrigger {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -55632,6 +55768,12 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_trigger::
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::draw_target::DrawTarget {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_draw_target(&self) -> Option<&crate::mechanical_port::source::draw_target::DrawTarget> {
         Some(self)
     }
@@ -55687,6 +55829,12 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_target::DrawTarge
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_number::CustomPropertyNumber
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_on_added_clean(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -55743,6 +55891,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_viewmodel_property::ScriptInputViewModelProperty {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
         Some(crate::mechanical_port::source::component::Component::validate(&mut self.base.base.base.base, context))
     }
@@ -56098,6 +56252,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling::clamped_scroll_physics::ClampedScrollPhysics {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::constraints::scrolling::scroll_physics::ScrollPhysics::import(&mut self.base.base, stack))
@@ -56206,6 +56366,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling::elastic_scroll_physics::ElasticScrollPhysics {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::constraints::scrolling::scroll_physics::ScrollPhysics::import(&mut self.base.base, stack))
@@ -56488,6 +56654,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::node::Node {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -56584,6 +56756,12 @@ impl CoreCapabilities for crate::mechanical_port::source::node::Node {
 impl CoreCapabilities
     for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -56782,6 +56960,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::NestedArtboard {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -56997,6 +57181,12 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
 impl CoreCapabilities
     for crate::mechanical_port::source::artboard_component_list::ArtboardComponentList
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -57235,6 +57425,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_color::CustomPropertyColor
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_on_added_clean(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -57291,6 +57487,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -57388,6 +57590,12 @@ impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -57791,6 +57999,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -58051,6 +58265,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::scripted::scripted_path_effect::ScriptedPathEffect
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_scripted_object(
         &self,
     ) -> Option<&crate::mechanical_port::source::scripted::scripted_object::ScriptedObject> {
@@ -58186,6 +58406,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_number::ScriptInputNumber {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -58262,6 +58488,12 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_number::S
 impl CoreCapabilities
     for crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -58523,6 +58755,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::layout::n_slicer_tile_mode::NSlicerTileMode
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -58562,6 +58800,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::grid_track::GridTrack {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -58608,6 +58852,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::grid_track::Gr
 impl CoreCapabilities
     for crate::mechanical_port::source::layout::grid_item_placement::GridItemPlacement
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_layout_style_applier(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::layout::layout_style_applier::LayoutStyleApplier>
@@ -58670,6 +58920,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::layout::layout_node_style::LayoutNodeStyle
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -58716,6 +58972,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::layout::layout_participant::LayoutParticipant
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn advancing_component_quiet_state(&self) -> crate::source::advancing_component::QuietState {
         self.quiet_state()
     }
@@ -58837,6 +59099,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::axis_y::AxisY {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -58879,6 +59147,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::axis_y::AxisY 
 impl CoreCapabilities
     for crate::mechanical_port::source::layout::layout_component_style::LayoutComponentStyle
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_layout_style_applier(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::layout::layout_style_applier::LayoutStyleApplier>
@@ -58924,6 +59198,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::axis_x::AxisX {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -58964,6 +59244,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::axis_x::AxisX 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSlicer {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn mesh_drawable_type(
         &self,
     ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
@@ -59049,6 +59335,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_slicer::NSli
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node::NSlicedNode {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -59171,6 +59463,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node:
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout::artboard_component_list_override::ArtboardComponentListOverride {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
         Some(crate::mechanical_port::source::component::Component::validate(&mut self.base.base, context))
     }
@@ -59185,6 +59483,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::artboard_compo
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::component_origin::ComponentOrigin {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -59375,6 +59679,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::nested_simple_animation::NestedSimpleAnimation
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_nested_linear_animation(
         &self,
     ) -> Option<
@@ -59595,6 +59905,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::nested_trigger::NestedTrigger {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -60654,6 +60970,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::cubic_interpolator_component::CubicInterpolatorComponent {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<bool> {
         Some(crate::mechanical_port::source::component::Component::validate(&mut self.base.base, context))
     }
@@ -60968,6 +61290,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::nested_bool::NestedBool {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -61548,6 +61876,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::nested_state_machine::NestedStateMachine
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn nested_animation_initializer(
         &self,
     ) -> Option<
@@ -61801,6 +62135,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::exit_state:
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::nested_number::NestedNumber {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -61893,6 +62233,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::transition_
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::nested_remap_animation::NestedRemapAnimation
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_nested_linear_animation(
         &self,
     ) -> Option<
@@ -62315,6 +62661,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::group_effect::GroupEffect {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_stroke_effect_mut(
         &mut self,
     ) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect>
@@ -62386,6 +62738,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::group_e
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::paint_image::PaintImage {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -62440,6 +62798,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::paint_i
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::target_effect::TargetEffect
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_stroke_effect_mut(
         &mut self,
     ) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect>
@@ -62496,6 +62860,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash_path::DashPath {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_stroke_effect_mut(
         &mut self,
     ) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect>
@@ -62568,6 +62938,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash_pa
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::linear_gradient::LinearGradient
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_shape_paint_mutator(
         &self,
     ) -> Option<
@@ -62642,6 +63018,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::radial_gradient::RadialGradient
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_shape_paint_mutator(
         &self,
     ) -> Option<
@@ -62712,6 +63094,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash::Dash {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_dash(&self) -> Option<&crate::mechanical_port::source::shapes::paint::dash::Dash> {
         Some(self)
     }
@@ -62774,6 +63162,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::dash::D
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::stroke::Stroke {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_shape_paint_behavior(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintBehavior>
@@ -62880,6 +63274,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::stroke:
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::solid_color::SolidColor {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_shape_paint_mutator(
         &self,
     ) -> Option<
@@ -62935,6 +63335,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::solid_c
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::paint::gradient_stop::GradientStop
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -62974,6 +63380,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::feather::Feather {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::paint::feather::Feather::build_dependencies(self);
         true
@@ -63037,6 +63449,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::feather
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::trim_path::TrimPath {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_stroke_effect_mut(
         &mut self,
     ) -> Option<&mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect>
@@ -63096,6 +63514,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::trim_pa
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::fill::Fill {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_shape_paint_behavior(
         &self,
     ) -> Option<&dyn crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintBehavior>
@@ -63202,6 +63626,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::fill::F
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh_vertex::MeshVertex {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -63276,6 +63706,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh_vertex::M
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -63497,6 +63933,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::straight_vertex::StraightVertex {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -63574,6 +64016,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::straight_verte
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::cubic_asymmetric_vertex::CubicAsymmetricVertex
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -63650,6 +64098,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn mesh_drawable_type(
         &self,
     ) -> Option<crate::mechanical_port::source::shapes::mesh_drawable::MeshType> {
@@ -63747,6 +64201,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::PointsPath {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -63968,6 +64429,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::P
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::contour_mesh_vertex::ContourMeshVertex
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -64043,6 +64510,13 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rectangle {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -64257,6 +64731,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rec
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::cubic_mirrored_vertex::CubicMirroredVertex
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -64333,6 +64813,13 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Triangle {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -64545,6 +65032,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Tria
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellipse {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -64757,6 +65251,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::ListPath {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -64963,6 +65464,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::Lis
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::clipping_shape::ClippingShape {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::clipping_shape::ClippingShape::build_dependencies(
             self,
@@ -65039,6 +65546,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::clipping_shape
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polygon {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -65251,6 +65765,13 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polyg
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base.base.base, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -65477,6 +65998,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -65668,6 +66195,12 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
 impl CoreCapabilities
     for crate::mechanical_port::source::shapes::cubic_detached_vertex::CubicDetachedVertex
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -65746,6 +66279,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_group::CustomPropertyGroup
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -65800,6 +66339,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::event::Event {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -65854,6 +66399,12 @@ impl CoreCapabilities for crate::mechanical_port::source::event::Event {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::focus_data::FocusData {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::focus_data::FocusData::build_dependencies(self);
         true
@@ -65911,6 +66462,12 @@ impl CoreCapabilities for crate::mechanical_port::source::focus_data::FocusData 
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_on_added_clean(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -65967,6 +66524,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_boolean::ScriptInputBoolean {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -66037,6 +66600,12 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_boolean::
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_color::ScriptInputColor {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -66111,6 +66680,12 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_color::Sc
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::draw_rules::DrawRules {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -66743,6 +67318,12 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::joystick::Joystick {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_intrinsically_sizeable_mut(
         &mut self,
     ) -> Option<
@@ -66813,6 +67394,12 @@ impl crate::mechanical_port::source::core::CoreType
 }
 impl CoreCapabilities for crate::mechanical_port::source::backboard::Backboard {}
 impl CoreCapabilities for crate::mechanical_port::source::open_url_event::OpenUrlEvent {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -66867,6 +67454,12 @@ impl CoreCapabilities for crate::mechanical_port::source::open_url_event::OpenUr
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::semantic::semantic_data::SemanticData {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update(
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -66941,6 +67534,12 @@ impl CoreCapabilities for crate::mechanical_port::source::semantic::semantic_dat
 impl CoreCapabilities
     for crate::mechanical_port::source::custom_property_string::CustomPropertyString
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_on_added_clean(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -66997,6 +67596,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::script_input_string::ScriptInputString {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -67425,6 +68030,12 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::data_bind::bindable_property_viewmodel::BindablePropertyViewModel {
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -67672,6 +68283,12 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::weight::Weight {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_weight(&self) -> Option<&crate::mechanical_port::source::bones::weight::Weight> {
         Some(self)
     }
@@ -67726,6 +68343,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::weight::Weight 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::bone::Bone {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -67818,6 +68441,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::bone::Bone {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::RootBone {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -68056,6 +68685,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::tendon::Tendon {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -68108,6 +68743,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::tendon::Tendon 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::cubic_weight::CubicWeight {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_weight(&self) -> Option<&crate::mechanical_port::source::bones::weight::Weight> {
         Some(&self.base.base)
     }
@@ -68166,6 +68807,12 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::cubic_weight::C
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_modifier_range::TextModifierRange
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -68217,6 +68864,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_follow_path_modifier::TextFollowPathModifier
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update(
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -68283,6 +68936,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_cursor::TextInputCursor {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -68521,6 +69180,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_curso
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text::TextInputText {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -68761,6 +69426,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text:
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_style_feature::TextStyleFeature
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -68802,6 +69473,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_variation_modifier::TextVariationModifier
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -68863,6 +69540,12 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_modifier_group::TextModifierGroup
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_text_modifier_group(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_modifier_group::TextModifierGroup> {
@@ -68923,6 +69606,13 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style::TextStyle {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::text::text_style::TextStyle::on_dirty(self, dirt);
+        true
+    }
     fn as_file_asset_referencer_mut(
         &mut self,
     ) -> Option<
@@ -69005,6 +69695,13 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style::Text
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint::TextStylePaint {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::text::text_style::TextStyle::on_dirty(&mut self.base.base, dirt);
+        true
+    }
     fn as_file_asset_referencer_mut(
         &mut self,
     ) -> Option<
@@ -69134,6 +69831,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -69372,6 +70075,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_input::TextInput {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -69568,6 +70277,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input::Text
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style_axis::TextStyleAxis {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -69613,6 +70328,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style_axis:
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_input_selection::TextInputSelection
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -69851,6 +70572,13 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
+    fn component_on_dirty(
+        &mut self,
+        dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        crate::mechanical_port::source::text::text::Text::on_dirty(self, dirt);
+        true
+    }
     fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
@@ -70035,6 +70763,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_value_run::TextValueRun {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_text_value_run(
         &self,
     ) -> Option<&crate::mechanical_port::source::text::text_value_run::TextValueRun> {
@@ -70100,6 +70834,12 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_value_run::
 impl CoreCapabilities
     for crate::mechanical_port::source::artboard_list_map_rule::ArtboardListMapRule
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -70139,6 +70879,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_on_added_clean(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -70466,6 +71212,12 @@ impl CoreCapabilities
 {
 }
 impl CoreCapabilities for crate::mechanical_port::source::audio_event::AudioEvent {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -70575,6 +71327,12 @@ impl CoreCapabilities for crate::mechanical_port::source::inputs::semantic_input
 impl CoreCapabilities
     for crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -70857,6 +71615,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::layer_state
 }
 
 impl CoreCapabilities for crate::mechanical_port::source::component::Component {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -70886,6 +71650,12 @@ impl CoreCapabilities for crate::mechanical_port::source::component::Component {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::container_component::ContainerComponent {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -70927,6 +71697,12 @@ impl CoreCapabilities for crate::mechanical_port::source::container_component::C
 impl CoreCapabilities
     for crate::mechanical_port::source::world_transform_component::WorldTransformComponent
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -70979,6 +71755,12 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::transform_component::TransformComponent {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -78863,6 +79645,12 @@ impl crate::mechanical_port::source::core::CoreObject
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
 {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::text::text_style_background::TextStyleBackground::build_dependencies(self);
         true
@@ -79342,6 +80130,12 @@ impl crate::mechanical_port::source::core::CoreObject
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bitmap_cache::BitmapCache {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -79573,6 +80367,12 @@ impl crate::mechanical_port::source::core::CoreObject for RegistryLayerMask {
     }
 }
 impl CoreCapabilities for RegistryLayerMask {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        true
+    }
     fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
         Some(&self.base.base)
     }

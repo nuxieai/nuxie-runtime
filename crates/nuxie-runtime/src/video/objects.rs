@@ -408,6 +408,13 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl CoreCapabilities for Video {
+    fn component_on_dirty(
+        &mut self,
+        _dirt: crate::source::component_dirt::ComponentDirt,
+    ) -> bool {
+        // Video inherits Image's empty Component::onDirty implementation.
+        true
+    }
     fn component_update_handler(
         &self,
     ) -> Option<fn(&CoreHandle, crate::source::component_dirt::ComponentDirt) -> bool> {

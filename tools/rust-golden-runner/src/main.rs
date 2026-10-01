@@ -78,6 +78,30 @@ static FRAME_LOOP_COUNTING_ALLOCATOR: FrameLoopCountingAllocator = FrameLoopCoun
 #[cfg(feature = "coverage-trace")]
 unsafe extern "C" {
     fn __llvm_profile_reset_counters();
+    fn __llvm_profile_write_file() -> std::ffi::c_int;
+    fn __llvm_profile_set_filename(filename: *const std::ffi::c_char);
+    fn __llvm_profile_is_continuous_mode_enabled() -> std::ffi::c_int;
+}
+
+fn finish_frame_loop_coverage_if_requested() -> Result<()> {
+    #[cfg(feature = "coverage-trace")]
+    if env::var_os("RIVE_GOLDEN_COVERAGE_FRAME_ONLY").is_some() {
+        // Snapshot before reporting and scene destruction. Otherwise the
+        // automatic exit flush includes teardown in a frame-only profile.
+        // SAFETY: coverage-trace links LLVM's profiling runtime; the filename
+        // has static storage and remains valid through the automatic flush.
+        unsafe {
+            let status = __llvm_profile_write_file();
+            #[cfg(windows)]
+            __llvm_profile_set_filename(c"NUL".as_ptr());
+            #[cfg(not(windows))]
+            __llvm_profile_set_filename(c"/dev/null".as_ptr());
+            if status != 0 {
+                bail!("failed to write frame-loop coverage profile");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn reset_coverage_profile_for_frame_loop_if_requested() {
@@ -126,6 +150,12 @@ fn validate_trace_options(options: &Options) -> Result<()> {
     let steady_only = env::var_os("RIVE_GOLDEN_COVERAGE_STEADY_ONLY").is_some();
     let occurrence_only = env::var_os("RIVE_GOLDEN_COVERAGE_OCCURRENCE_ONLY").is_some();
     let mechanism_input = env::var_os("RIVE_GOLDEN_COVERAGE_MECHANISM_INPUT").is_some();
+
+    #[cfg(feature = "coverage-trace")]
+    // SAFETY: linked LLVM profiling runtime, with no arguments or borrowed data.
+    if frame_only && unsafe { __llvm_profile_is_continuous_mode_enabled() != 0 } {
+        bail!("frame-only coverage does not support continuous profiling");
+    }
 
     #[cfg(not(feature = "coverage-trace"))]
     if frame_only || allocations || occurrence_only || mechanism_input {
@@ -846,6 +876,7 @@ fn run() -> Result<String> {
     }
     let elapsed = started.elapsed();
     let allocations = stop_frame_loop_allocation_counter();
+    finish_frame_loop_coverage_if_requested()?;
     if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
         eprintln!("frame_loop_allocations={allocations}");
     }
@@ -891,6 +922,7 @@ fn run_benchmark_repeat_pass(
     }
     let elapsed = started.elapsed();
     let allocations = stop_frame_loop_allocation_counter();
+    finish_frame_loop_coverage_if_requested()?;
     if env::var_os("RIVE_GOLDEN_ALLOCATION_COUNTER").is_some() {
         eprintln!("frame_loop_allocations={allocations}");
     }

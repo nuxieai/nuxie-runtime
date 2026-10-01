@@ -5357,7 +5357,11 @@ pub trait CoreCapabilities: Any {
                 component.base.base.handle(),
                 component.artboard_handle(),
                 component.graph_order(),
-                component.dependents_snapshot(),
+                if recurse {
+                    component.dependents_snapshot()
+                } else {
+                    Vec::new()
+                },
             ))
         })() else {
             return false;

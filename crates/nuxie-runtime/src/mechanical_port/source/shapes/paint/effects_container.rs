@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::{
-    component::{Component, ComponentOccurrenceHandle},
+    component::{Component, ComponentOccurrenceHandle, DependencySnapshot},
     component_dirt::ComponentDirt,
-    core::CoreHandle,
+    core::{CoreHandle, CoreObject},
     shapes::paint::{
         group_effect::GroupEffect,
         shape_paint_path::ShapePaintPath,
@@ -117,6 +117,17 @@ pub(crate) fn invalidate_effects_handle(container: &CoreHandle, invalidating: Op
     invalidate_effects_handle_with_active(container, invalidating, &mut None);
 }
 
+fn invalidate_paint_effects(container: &mut dyn CoreObject) -> Option<DependencySnapshot> {
+    let paint = container.as_shape_paint_mut()?;
+    paint.invalidate_effect_feather();
+    // Finish this paint's synchronous dirty callbacks before releasing
+    // it to traverse dependents, including the active source effect.
+    if !paint.base.add_dirt(ComponentDirt::PATH, false) {
+        return None;
+    }
+    Some(paint.base.dependents_snapshot())
+}
+
 pub(crate) fn invalidate_effects_handle_with_active(
     container: &CoreHandle,
     invalidating: Option<CoreHandle>,
@@ -131,14 +142,23 @@ pub(crate) fn invalidate_effects_handle_with_active(
         }
     }
 
-    let effects = container
+    let (effects, mut dependents) = container
         .with_mut(|container| {
-            container
+            let effects = container
                 .as_effects_container_mut()
                 .map(|container| container.effects_state().effects.clone())
+                .unwrap_or_default();
+            // With no effects there are no intervening callbacks. Finish
+            // the paint tail using this already checked owner borrow.
+            let dependents = if effects.is_empty() {
+                invalidate_paint_effects(container)
+            } else {
+                None
+            };
+            (effects, dependents)
         })
-        .flatten()
         .unwrap_or_default();
+    let has_effects = !effects.is_empty();
     let mut found = invalidating.is_none();
     for effect in effects {
         if found {
@@ -149,18 +169,11 @@ pub(crate) fn invalidate_effects_handle_with_active(
         }
     }
 
-    let dependents = container
-        .with_mut(|container| {
-            let paint = container.as_shape_paint_mut()?;
-            paint.invalidate_effect_feather();
-            // Finish this paint's synchronous dirty callbacks before releasing
-            // it to traverse dependents, including the active source effect.
-            if !paint.base.add_dirt(ComponentDirt::PATH, false) {
-                return None;
-            }
-            Some(paint.base.dependents_snapshot())
-        })
-        .flatten();
+    if has_effects {
+        // Effect callbacks may re-enter or change owners. Revalidate and
+        // borrow the paint only after all of those callbacks have finished.
+        dependents = container.with_mut(invalidate_paint_effects).flatten();
+    }
     if let Some(dependents) = dependents {
         for dependent in dependents {
             add_dirt_with_active(&dependent, ComponentDirt::PATH, active);
@@ -198,5 +211,74 @@ pub trait EffectsContainer {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::{core::CoreArena, node::Node, shapes::paint::fill::Fill};
+
+    #[test]
+    fn empty_effects_still_dirty_paint_and_dependents_after_releasing_owner() {
+        let arena = CoreArena::default();
+        let paint = arena.insert(Fill::default());
+        let dependent = arena.insert(Node::default());
+        for handle in [&paint, &dependent] {
+            handle.with_mut(|object| {
+                object
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::NONE)
+            });
+        }
+        paint.with_mut(|object| {
+            let component = object.as_component_mut().unwrap();
+            // Re-entering the paint as a dependent must happen after its
+            // invalidation borrow is released, even on the empty-effects lane.
+            component.add_dependent(paint.clone());
+            component.add_dependent(dependent.clone());
+        });
+        invalidate_effects_handle(&paint, None);
+        for handle in [&paint, &dependent] {
+            assert!(handle
+                .with(|object| object
+                    .as_component()
+                    .unwrap()
+                    .dirt()
+                    .contains(ComponentDirt::PATH))
+                .unwrap());
+        }
+        // Already-dirty paints must not propagate dirt again.
+        dependent.with_mut(|object| {
+            object
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE)
+        });
+        invalidate_effects_handle(&paint, Some(dependent.clone()));
+        assert_eq!(
+            dependent.with(|object| object.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
+    }
+
+    #[test]
+    fn empty_effects_stale_handle_does_not_invalidate_replacement() {
+        let arena = CoreArena::default();
+        let stale = arena.insert(Fill::default());
+        drop(arena.remove(&stale));
+        let replacement = arena.insert(Fill::default());
+        replacement.with_mut(|object| {
+            object
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE)
+        });
+        invalidate_effects_handle(&stale, None);
+        assert_eq!(
+            replacement.with(|object| object.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
     }
 }

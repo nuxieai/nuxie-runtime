@@ -3268,7 +3268,17 @@ pub fn component_update_handle(
     dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
 ) -> bool {
     use crate::mechanical_port::source::component_dirt::ComponentDirt;
-    let Some(is_transform) = handle.with(|object| object.as_transform_component().is_some()) else {
+    // These are immutable receiver capabilities, not state cached across a
+    // callback. Resolve them under one checked shared borrow; keep every
+    // subsequent state read and callback borrow at its original boundary.
+    let Some((is_transform, is_layout, is_path)) = handle.with(|object| {
+        let is_transform = object.as_transform_component().is_some();
+        (
+            is_transform,
+            is_transform && object.as_layout_component().is_some(),
+            is_transform && object.as_path().is_some(),
+        )
+    }) else {
         return false;
     };
     if !is_transform {
@@ -3277,7 +3287,6 @@ pub fn component_update_handle(
             .unwrap_or(false);
     }
 
-    let is_layout = handle.with(|object| object.as_layout_component().is_some()).unwrap_or(false);
     if is_layout && dirt == ComponentDirt::FILTHY {
         crate::mechanical_port::source::layout_component::LayoutComponent::interrupt_animation_occurrence(handle);
     }
@@ -3286,11 +3295,9 @@ pub fn component_update_handle(
     let super_dirt = if is_layout && dirt.contains(ComponentDirt::WORLD_TRANSFORM)
         && handle.with(|object| object.component_parent_handle().is_some()).unwrap_or(false)
     { dirt | ComponentDirt::TRANSFORM } else { dirt };
-    handle.with_mut(|object| {
-        if object.as_path().is_some() {
-            component_update_before_transform(object, super_dirt);
-        }
-    });
+    if is_path {
+        handle.with_mut(|object| component_update_before_transform(object, super_dirt));
+    }
     if super_dirt.contains(ComponentDirt::TRANSFORM) {
         handle.with_mut(|object| {
             if object.as_artboard().is_some() {

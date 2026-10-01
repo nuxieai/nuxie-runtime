@@ -62,6 +62,8 @@ struct FlexItem {
 
     /// The default size of this item
     flex_basis: f32,
+    /// Yoga's selected single flexible child retains a raw zero basis.
+    rive_zero_basis: bool,
     /// The default size of this item, minus padding and border
     inner_flex_basis: f32,
     /// The amount by which this item has deviated from its target size
@@ -296,6 +298,26 @@ fn compute_preliminary(tree: &mut impl LayoutFlexboxContainer, node: NodeId, inp
 
     // 3. Determine the flex base size and hypothetical main size of each item.
     debug_log!("determine_flex_base_size");
+    let mut single_flex_child = None;
+    if tree.uses_rive_layout() && constants.node_outer_size.main(constants.dir).is_some() {
+        // Yoga scans before filtering hidden children. Absolute children are
+        // never flexible; a hidden flexible sibling still disables the shortcut.
+        for index in 0..tree.child_count(node) {
+            let child = tree.get_child_id(node, index);
+            let style = tree.get_flexbox_child_style(child);
+            let (grow, shrink) = (style.flex_grow(), style.flex_shrink());
+            if style.position() != Position::Absolute && (grow != 0.0 || shrink != 0.0) {
+                if single_flex_child.is_some() || grow.abs() < 0.0001 || shrink.abs() < 0.0001 {
+                    single_flex_child = None;
+                    break;
+                }
+                single_flex_child = Some(child);
+            }
+        }
+    }
+    for child in &mut flex_items {
+        child.rive_zero_basis = Some(child.node) == single_flex_child;
+    }
     determine_flex_base_size(tree, &constants, available_space, &mut flex_items);
 
     // Yoga captures main-axis overflow before collecting lines or resolving
@@ -653,6 +675,7 @@ fn generate_anonymous_flex_items(
                 flex_grow: child_style.flex_grow(),
                 flex_shrink: child_style.flex_shrink(),
                 flex_basis: 0.0,
+                rive_zero_basis: false,
                 inner_flex_basis: 0.0,
                 violation: 0.0,
                 frozen: false,
@@ -814,6 +837,9 @@ fn determine_flex_base_size(
         drop(child_style);
 
         child.flex_basis = 'flex_basis: {
+            if child.rive_zero_basis {
+                break 'flex_basis 0.0;
+            }
             // A. If the item has a definite used flex basis, that’s the flex base size.
 
             // B. If the flex item has an intrinsic aspect ratio,
@@ -889,13 +915,16 @@ fn determine_flex_base_size(
         // Spec: https://www.w3.org/TR/css-flexbox-1/#intrinsic-item-contributions
         // Spec: https://www.w3.org/TR/css-flexbox-1/#change-2016-max-contribution
         let padding_border_sum = child.padding.main_axis_sum(constants.dir) + child.border.main_axis_sum(constants.dir);
-        child.flex_basis = child.flex_basis.max(padding_border_sum);
+        if !child.rive_zero_basis {
+            child.flex_basis = child.flex_basis.max(padding_border_sum);
+        }
 
         // The hypothetical main size is the item’s flex base size clamped according to its
         // used min and max main sizes (and flooring the content box size at zero).
 
-        child.inner_flex_basis =
-            child.flex_basis - child.padding.main_axis_sum(constants.dir) - child.border.main_axis_sum(constants.dir);
+        child.inner_flex_basis = if child.rive_zero_basis { 0.0 } else {
+            child.flex_basis - child.padding.main_axis_sum(constants.dir) - child.border.main_axis_sum(constants.dir)
+        };
 
         let padding_border_axes_sums = (child.padding + child.border).sum_axes().map(Some);
 
@@ -931,10 +960,16 @@ fn determine_flex_base_size(
             clamped_min_content_size.maybe_max(padding_border_axes_sums.main(dir))
         });
 
-        let hypothetical_inner_min_main =
-            child.resolved_minimum_main_size.maybe_max(padding_border_axes_sums.main(constants.dir));
-        let hypothetical_inner_size =
-            child.flex_basis.maybe_clamp(Some(hypothetical_inner_min_main), child.max_size.main(constants.dir));
+        let hypothetical_inner_min_main = if child.rive_zero_basis {
+            child.resolved_minimum_main_size
+        } else {
+            child.resolved_minimum_main_size.maybe_max(padding_border_axes_sums.main(constants.dir))
+        };
+        let hypothetical_inner_size = if child.rive_zero_basis {
+            rive_bound_axis(child, constants.dir, child.flex_basis)
+        } else {
+            child.flex_basis.maybe_clamp(Some(hypothetical_inner_min_main), child.max_size.main(constants.dir))
+        };
         let hypothetical_outer_size = hypothetical_inner_size + child.margin.main_axis_sum(constants.dir);
 
         child.hypothetical_inner_size.set_main(constants.dir, hypothetical_inner_size);
@@ -1312,12 +1347,83 @@ fn determine_container_main_size(
     constants.node_inner_size.set_main(constants.dir, Some(inner_main_size));
 }
 
+/// YGNodeBoundAxisWithinMinAndMax: maximum wins before minimum is tested.
+#[inline]
+fn rive_bound_axis(child: &FlexItem, dir: FlexDirection, value: f32) -> f32 {
+    if let Some(maximum) = child.max_size.main(dir) {
+        if maximum >= 0.0 && value > maximum { return maximum; }
+    }
+    if let Some(minimum) = child.min_size.main(dir) {
+        if minimum >= 0.0 && value < minimum { return minimum; }
+    }
+    value
+}
+
+fn resolve_rive_zero_basis_line(line: &mut FlexLine, constants: &AlgoConstants) {
+    // YGCollectFlexItemsRowValues and YGDistributeFreeSpace{First,Second}Pass.
+    // Keep raw basis for shrink factors but bounded basis for consumed space.
+    let dir = constants.dir;
+    let basis = |child: &FlexItem| rive_bound_axis(child, dir, child.flex_basis);
+    let bound = |child: &FlexItem, size: f32| rive_bound_axis(child, dir, size)
+        .max((child.padding + child.border).main_axis_sum(dir));
+    let mut grow = 0.0;
+    let mut shrink = 0.0;
+    for child in line.items.iter() {
+        if child.flex_grow != 0.0 || child.flex_shrink != 0.0 {
+            grow += child.flex_grow;
+            shrink += -child.flex_shrink * child.flex_basis;
+        }
+    }
+    if grow > 0.0 && grow < 1.0 { grow = 1.0; }
+    if shrink > 0.0 && shrink < 1.0 { shrink = 1.0; }
+    let mut consumed = 0.0;
+    for (index, child) in line.items.iter().enumerate() {
+        let gap = if index == 0 { 0.0 } else { constants.gap.main(dir) };
+        consumed += basis(child) + child.margin.main_axis_sum(dir) + gap;
+    }
+    let mut remaining = constants.inner_container_size.main(dir) - consumed;
+    let mut delta = 0.0;
+    for child in line.items.iter() {
+        let b = basis(child);
+        let factor = if remaining < 0.0 { -child.flex_shrink * b } else { child.flex_grow };
+        if (remaining < 0.0 || remaining > 0.0) && !factor.is_nan() && factor != 0.0 {
+            let proposed = b + remaining / if remaining < 0.0 { shrink } else { grow } * factor;
+            let bounded = bound(child, proposed);
+            if !proposed.is_nan() && !bounded.is_nan() && proposed != bounded {
+                delta += bounded - b;
+                if remaining < 0.0 { shrink -= -child.flex_shrink * child.flex_basis; }
+                else { grow -= factor; }
+            }
+        }
+    }
+    remaining -= delta;
+    for child in line.items.iter_mut() {
+        let b = basis(child);
+        let mut size = b;
+        if remaining < 0.0 {
+            let factor = -child.flex_shrink * b;
+            if factor != 0.0 {
+                size = bound(child, if shrink == 0.0 { b + factor } else { b + remaining / shrink * factor });
+            }
+        } else if remaining > 0.0 && !child.flex_grow.is_nan() && child.flex_grow != 0.0 {
+            size = bound(child, b + remaining / grow * child.flex_grow);
+        }
+        child.target_size.set_main(dir, size);
+        child.outer_target_size.set_main(dir, size + child.margin.main_axis_sum(dir));
+        child.frozen = true;
+    }
+}
+
 /// Resolve the flexible lengths of the items within a flex line.
-/// Sets the `main` component of each item's `target_size` and `outer_target_size`
+/// Sets the `main` component of each item's `target_size` and `outer_target_size`.
 ///
 /// # [9.7. Resolving Flexible Lengths](https://www.w3.org/TR/css-flexbox-1/#resolve-flexible-lengths)
 #[inline]
 fn resolve_flexible_lengths(line: &mut FlexLine, constants: &AlgoConstants) {
+    if line.items.iter().any(|child| child.rive_zero_basis) {
+        resolve_rive_zero_basis_line(line, constants);
+        return;
+    }
     let total_main_axis_gap = sum_axis_gaps(constants.gap.main(constants.dir), line.items.len());
 
     // 1. Determine the used flex factor. Sum the outer hypothetical main sizes of all

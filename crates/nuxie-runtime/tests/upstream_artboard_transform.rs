@@ -491,6 +491,7 @@ fn collapsing_an_artboard_mid_click_drops_the_held_press() {
 }
 
 #[test]
+#[cfg(feature = "tools")]
 fn collapsing_an_artboard_exits_what_the_pointer_was_over() {
     use nuxie_runtime::source::animation::{
         animation_state::AnimationState, linear_animation::LinearAnimation,

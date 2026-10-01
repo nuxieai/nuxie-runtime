@@ -232,6 +232,7 @@ fn host_rendered_geometry_follows_registered_custom_clip_paths() {
 }
 
 #[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
 fn custom_clip_changes_preserve_native_semantic_snapshots() {
     use nuxie_runtime::source::{
         generated::{

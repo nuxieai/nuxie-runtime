@@ -517,15 +517,50 @@ pub(super) fn cpp_probe_accepts_bytes(probe: &Path, label: &str, bytes: &[u8]) -
     let path = cpp_probe_temp_path("rive-rust-runtime", label);
     std::fs::write(&path, bytes)
         .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
-    let status = Command::new(probe)
+    let output = Command::new(probe)
         .arg("--no-advance")
         .arg("--instance-artboards")
         .arg("--file")
         .arg(&path)
-        .status()
+        .output()
         .unwrap_or_else(|err| panic!("failed to run {}: {err}", probe.display()));
     let _ = std::fs::remove_file(path);
-    status.success()
+    if !output.status.success() {
+        return false;
+    }
+    // The probe can exit successfully with a null instance. Match the Rust
+    // helper's first-artboard instantiation, not merely successful import.
+    probe_has_first_artboard_instance(&output.stdout, label)
+}
+
+fn probe_has_first_artboard_instance(output: &[u8], label: &str) -> bool {
+    let report: serde_json::Value = serde_json::from_slice(output)
+        .unwrap_or_else(|error| panic!("invalid probe JSON for {label}: {error}"));
+    report["artboards"]
+        .as_array()
+        .expect("probe artboards array")
+        .first()
+        .is_some_and(serde_json::Value::is_object)
+}
+
+#[test]
+fn probe_acceptance_requires_a_non_null_first_instance() {
+    assert!(!probe_has_first_artboard_instance(
+        br#"{"artboards":[null]}"#,
+        "null"
+    ));
+    assert!(!probe_has_first_artboard_instance(
+        br#"{"artboards":[]}"#,
+        "empty"
+    ));
+    assert!(!probe_has_first_artboard_instance(
+        br#"{"artboards":[null,{}]}"#,
+        "first failed"
+    ));
+    assert!(probe_has_first_artboard_instance(
+        br#"{"artboards":[{}]}"#,
+        "instance"
+    ));
 }
 
 pub(super) fn assert_close(actual: f32, expected: f32, label: &str) {

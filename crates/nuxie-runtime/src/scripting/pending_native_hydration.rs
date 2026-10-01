@@ -27,6 +27,7 @@ enum LifecycleEvent {
     Generate { context_present: bool },
     Input(String, ScriptValue),
     Init,
+    ReleaseFailedInit,
     Invalidate,
 }
 
@@ -60,6 +61,21 @@ impl ScriptInstance for RecordingScript {
 
     fn get_input(&self, _name: &str) -> Result<ScriptValue, ScriptError> {
         Ok(ScriptValue::Nil)
+    }
+
+    fn call_init(&mut self, host: &mut dyn ScriptHost) -> Result<bool, ScriptError> {
+        let value = self.call_method(ScriptMethod::Init, &[], host)?;
+        let initialized = !matches!(value, ScriptValue::Nil | ScriptValue::Bool(false));
+        if !initialized {
+            // The concrete Luau backend releases self/context on failed init.
+            // This is not full invalidation: upstream tryUserInit leaves the
+            // object's tracked properties alive until scriptDispose.
+            self.live = false;
+            self.events
+                .borrow_mut()
+                .push(LifecycleEvent::ReleaseFailedInit);
+        }
+        Ok(initialized)
     }
 
     fn set_input(&mut self, name: &str, value: ScriptValue) -> Result<(), ScriptError> {
@@ -343,10 +359,23 @@ fn native_hydration_writes_inputs_before_one_time_user_init() {
 }
 
 #[test]
-fn failed_native_init_disposes_before_retry_recreates_and_rehydrates() {
+fn failed_native_init_releases_before_retry_without_disposing_tracked_properties() {
     let fixture = NativeHydration::new();
     fixture.add_number();
     fixture.init_succeeds.set(false);
+    let tracked_cleanup_count = Rc::new(Cell::new(0));
+    let cleanup_count = tracked_cleanup_count.clone();
+    fixture
+        .owner
+        .with_mut(|owner| {
+            owner
+                .as_scripted_object_mut()
+                .unwrap()
+                .retain_failed_script_property_cleanup(Rc::new(move || {
+                    cleanup_count.set(cleanup_count.get() + 1)
+                }));
+        })
+        .unwrap();
 
     assert!(!fixture.reinit());
     assert!(!fixture.user_init_done());
@@ -358,9 +387,10 @@ fn failed_native_init_disposes_before_retry_recreates_and_rehydrates() {
             },
             LifecycleEvent::Input("before".into(), ScriptValue::Number(7.0)),
             LifecycleEvent::Init,
-            LifecycleEvent::Invalidate,
+            LifecycleEvent::ReleaseFailedInit,
         ]
     );
+    assert_eq!(tracked_cleanup_count.get(), 0);
     assert_eq!(
         fixture
             .owner
@@ -372,6 +402,7 @@ fn failed_native_init_disposes_before_retry_recreates_and_rehydrates() {
     fixture.init_succeeds.set(true);
     assert!(fixture.reinit());
     assert!(fixture.user_init_done());
+    assert_eq!(tracked_cleanup_count.get(), 0);
     assert_eq!(
         &*fixture.events.borrow(),
         &[
@@ -381,6 +412,24 @@ fn failed_native_init_disposes_before_retry_recreates_and_rehydrates() {
             LifecycleEvent::Input("before".into(), ScriptValue::Number(7.0)),
             LifecycleEvent::Init,
         ]
+    );
+    fixture
+        .owner
+        .with_mut(|owner| {
+            owner.as_scripted_object_mut().unwrap().script_dispose();
+        })
+        .unwrap();
+    assert_eq!(tracked_cleanup_count.get(), 1);
+    fixture
+        .owner
+        .with_mut(|owner| {
+            owner.as_scripted_object_mut().unwrap().script_dispose();
+        })
+        .unwrap();
+    assert_eq!(
+        tracked_cleanup_count.get(),
+        1,
+        "tracked properties dispose once"
     );
 }
 

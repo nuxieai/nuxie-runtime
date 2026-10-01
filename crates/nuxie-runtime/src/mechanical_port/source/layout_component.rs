@@ -609,7 +609,7 @@ impl LayoutComponent {
         crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
             owner.clone(),
         )
-        .add_dirt(ComponentDirt::PATH, true);
+        .add_dirt(ComponentDirt::PATH, false);
         owner.with_mut(|object| {
             object
                 .core_mut()
@@ -3404,7 +3404,7 @@ impl LayoutComponent {
     }
     pub fn clip_changed(&mut self) {
         self.mark_layout_node_dirty(false);
-        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, true);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
     }
     pub fn set_clip(&mut self, value: bool) {
         if self.base.set_clip_value(value) {
@@ -3744,6 +3744,47 @@ use std::{cell::RefCell, rc::Rc};
 #[cfg(test)]
 mod packed_layout_tests {
     use super::*;
+
+    #[test]
+    fn clip_change_dirties_layout_path_without_invalidating_dependent_text() {
+        use crate::mechanical_port::source::{
+            core::CoreArena, generated::core_registry::CoreRegistry, text::text::Text,
+        };
+
+        for occurrence_dispatch in [false, true] {
+            let arena = CoreArena::default();
+            let layout = arena.insert(LayoutComponent::default());
+            let text = arena.insert(Text::default());
+            layout.with_mut(|owner| {
+                owner.component_add_dependent(text.clone());
+                owner.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+                owner.as_layout_component_mut().unwrap().layout_data.dirty = false;
+            });
+            text.with_mut(|owner| {
+                owner.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+            });
+
+            if occurrence_dispatch {
+                assert!(CoreRegistry::set_bool_handle(
+                    &layout,
+                    i32::from(LayoutComponentBase::CLIP_PROPERTY_KEY),
+                    true,
+                ));
+            } else {
+                layout.with_downcast_mut::<LayoutComponent, _>(|owner| owner.set_clip(true));
+            }
+
+            assert!(layout
+                .with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::PATH))
+                .unwrap());
+            assert!(!text
+                .with(|owner| owner.as_component().unwrap().has_dirt(ComponentDirt::PATH))
+                .unwrap());
+            assert!(layout
+                .with_downcast::<LayoutComponent, _>(|owner| owner.layout_data.dirty)
+                .unwrap());
+        }
+    }
 
     #[test]
     fn plain_container_paths_and_proxy_are_lazy() {

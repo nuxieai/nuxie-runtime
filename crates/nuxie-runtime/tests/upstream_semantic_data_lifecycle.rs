@@ -114,7 +114,7 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
 }
 
 #[test]
-fn disabled_and_hidden_semantic_nodes_do_not_execute_taps() {
+fn semantic_actions_use_registration_at_enqueue_without_rechecking_state() {
     for (hidden, queued) in [(false, false), (true, false), (false, true), (true, true)] {
         let fixture = dropdown();
         let Dropdown {
@@ -148,10 +148,11 @@ fn disabled_and_hidden_semantic_nodes_do_not_execute_taps() {
         for _ in 0..10 {
             machine.advance_and_apply(0.1);
         }
-        assert!(
+        assert_eq!(
             data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
                 .unwrap(),
-            "ineligible semantic tap must not close the dropdown (hidden={hidden}, queued={queued})"
+            hidden && !queued,
+            "Hidden removes the node before lookup; already queued actions and Disabled still execute (hidden={hidden}, queued={queued})"
         );
     }
 }
@@ -205,7 +206,7 @@ fn full_snapshot_survives_diff_drain_and_tracks_authored_actions() {
 }
 
 #[test]
-fn queued_semantic_action_rechecks_ancestor_eligibility() {
+fn queued_semantic_action_survives_ancestor_state_and_membership_changes() {
     use nuxie_runtime::source::semantic::semantic_node::SemanticNode;
     for state in [0, 1, 2, 3, 4] {
         let fixture = dropdown();
@@ -237,8 +238,8 @@ fn queued_semantic_action_rechecks_ancestor_eligibility() {
         assert_eq!(
             data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
                 .unwrap(),
-            state != 0,
-            "only an attached eligible ancestor permits queued activation (state={state})"
+            false,
+            "upstream executes the retained queued listener without ancestor revalidation (state={state})"
         );
     }
 }
@@ -362,7 +363,7 @@ fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
 }
 
 #[test]
-fn invisible_controls_leave_semantics_and_return_when_visible() {
+fn zero_opacity_controls_remain_in_semantic_tree_and_execute_actions() {
     use nuxie_runtime::source::generated::{
         core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
     };
@@ -402,16 +403,19 @@ fn invisible_controls_leave_semantics_and_return_when_visible() {
             .manager
             .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
         assert!(
-            !hidden.iter().any(|node| node.id == fixture.button_id),
-            "zero-opacity control remains accessible"
+            hidden.iter().any(|node| node.id == fixture.button_id),
+            "upstream retains zero-opacity controls in the semantic tree"
         );
-        fixture
-            .machine
-            .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
-        fixture.machine.advance_and_apply(0.0);
+        if !queued {
+            fixture
+                .machine
+                .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+            fixture.machine.advance_and_apply(0.0);
+        }
         assert!(
-            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
-                .unwrap()
+            !data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            "direct and queued taps execute even when the control or ancestor has zero opacity"
         );
         assert!(CoreRegistry::set_double_handle(
             &parent,
@@ -428,7 +432,7 @@ fn invisible_controls_leave_semantics_and_return_when_visible() {
             .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
         fixture.machine.advance_and_apply(0.0);
         assert!(
-            !data
+            data
                 .with_downcast::<SemanticData, _>(|data| data.is_expanded())
                 .unwrap()
         );
@@ -436,11 +440,11 @@ fn invisible_controls_leave_semantics_and_return_when_visible() {
 }
 
 #[test]
-fn fresh_semantic_registration_uses_authored_opacity_before_the_first_advance() {
+fn fresh_semantic_registration_excludes_hidden_not_zero_opacity() {
     use nuxie_runtime::source::generated::{
         core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
     };
-    for opacity in [1.0, 0.0] {
+    for (opacity, semantic_hidden) in [(1.0, false), (0.0, false), (1.0, true), (0.0, true)] {
         let mut factory = PersistentFactory::new(RecordingFactory::default());
         let file = File::import(
             &pinned_fixture("simpsons.riv"),
@@ -461,7 +465,7 @@ fn fresh_semantic_registration_uses_authored_opacity_before_the_first_advance() 
         data.with_downcast_mut::<SemanticData, _>(|data| {
             data.set_label("Fresh semantic control".to_owned());
             data.set_role(1);
-            data.set_is_hidden(false);
+            data.set_is_hidden(semantic_hidden);
         })
         .unwrap();
         let owner = data
@@ -482,22 +486,22 @@ fn fresh_semantic_registration_uses_authored_opacity_before_the_first_advance() 
             nodes
                 .iter()
                 .any(|node| node.label == "Fresh semantic control"),
-            opacity > 0.0
+            !semantic_hidden
         );
     }
 }
 
 #[test]
-fn artboard_clipping_retires_semantics_and_restores_them_on_return() {
-    assert_clipping_retires_semantics(false);
+fn artboard_clipping_preserves_semantic_tree_membership() {
+    assert_clipping_preserves_semantic_tree_membership(false);
 }
 
 #[test]
-fn nested_layout_clipping_retires_semantics_and_restores_them_on_return() {
-    assert_clipping_retires_semantics(true);
+fn nested_layout_clipping_preserves_semantic_tree_membership() {
+    assert_clipping_preserves_semantic_tree_membership(true);
 }
 
-fn assert_clipping_retires_semantics(nested_layout: bool) {
+fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
     use nuxie_runtime::source::generated::core_registry::CoreRegistry;
     let fixture = dropdown();
     let data = fixture
@@ -584,8 +588,8 @@ fn assert_clipping_retires_semantics(nested_layout: bool) {
         .manager
         .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
     assert!(
-        !hidden.iter().any(|node| node.id == fixture.button_id),
-        "clipped control remains accessible"
+        hidden.iter().any(|node| node.id == fixture.button_id),
+        "upstream retains clipped controls in the semantic tree"
     );
 
     assert!(CoreRegistry::set_bool_handle(&clip_owner, clip_key, false));
@@ -595,19 +599,24 @@ fn assert_clipping_retires_semantics(nested_layout: bool) {
         .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
     assert!(
         unclipped.iter().any(|node| node.id == fixture.button_id),
-        "disabling clipping did not restore semantics"
+        "disabling clipping must preserve semantics"
     );
     fixture
         .machine
         .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
     assert!(CoreRegistry::set_bool_handle(&clip_owner, clip_key, true));
-    fixture._artboard.advance_default(0.0);
+    fixture.machine.advance_and_apply(0.0);
     let reclipped = fixture
         .manager
         .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
     assert!(
-        !reclipped.iter().any(|node| node.id == fixture.button_id),
-        "enabling clipping did not retire semantics"
+        reclipped.iter().any(|node| node.id == fixture.button_id),
+        "enabling clipping must preserve semantics"
+    );
+    assert!(
+        !data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            .unwrap(),
+        "a queued semantic action executes after clipping changes"
     );
     fixture
         .machine

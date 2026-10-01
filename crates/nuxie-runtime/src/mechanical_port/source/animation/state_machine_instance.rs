@@ -87,7 +87,7 @@ use crate::mechanical_port::source::{
     semantic::{
         semantic_data::SemanticData,
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
-        semantic_node::{SemanticNode, SemanticNodeRef},
+        semantic_node::SemanticNodeRef,
     },
     sidecar::Sidecar,
     view_model_type::ViewModelType,
@@ -2518,14 +2518,6 @@ impl RuntimeStateMachineInstanceHandle {
             let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
                 return;
             };
-            if semantic_data.is_disabled()
-                || semantic_data.is_hidden()
-                || !semantic_data
-                    .existing_semantic_node()
-                    .is_some_and(|node| SemanticNode::is_action_eligible(&node))
-            {
-                return;
-            }
             match SemanticActionType::from_raw(action_type as u32) {
                 Some(SemanticActionType::Tap) => semantic_data.fire_semantic_tap(),
                 Some(SemanticActionType::Increase) => semantic_data.fire_semantic_increase(),
@@ -4175,20 +4167,6 @@ impl StateMachineInstance {
             std::mem::take(&mut extras.queued_semantic_events)
         };
         for event in events {
-            let eligible = event
-                .group
-                .with_group(|group| group.semantic_data())
-                .with_downcast::<SemanticData, _>(|data| {
-                    !data.is_disabled()
-                        && !data.is_hidden()
-                        && data
-                            .existing_semantic_node()
-                            .is_some_and(|node| SemanticNode::is_action_eligible(&node))
-                })
-                .unwrap_or(false);
-            if !eligible {
-                continue;
-            }
             let listener = event.group.with_group(|group| group.listener());
             let Some(listener_index) = self.input_extras().and_then(|extras| {
                 extras

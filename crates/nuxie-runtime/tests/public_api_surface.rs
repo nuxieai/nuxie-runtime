@@ -13,6 +13,7 @@ use nuxie_runtime::{
         },
         hit_result::HitResult,
         math::vec2d::Vec2D,
+        pointer_button::PointerButton,
         renderer::Renderer,
         viewmodel::runtime::{
             viewmodel_instance_boolean_runtime::ViewModelInstanceBooleanRuntime,
@@ -60,9 +61,9 @@ fn native_state_machine_inputs_and_pointer_signatures_are_public() {
         RuntimeStateMachineInstanceHandle::set_bool;
     let _: fn(&RuntimeStateMachineInstanceHandle, &str, f32) =
         RuntimeStateMachineInstanceHandle::set_number;
-    let _: fn(&mut StateMachineInstance, Vec2D, i32) -> HitResult =
+    let _: fn(&mut StateMachineInstance, Vec2D, i32, PointerButton) -> HitResult =
         StateMachineInstance::pointer_down;
-    let _: fn(&mut StateMachineInstance, Vec2D, i32) -> HitResult =
+    let _: fn(&mut StateMachineInstance, Vec2D, i32, PointerButton) -> HitResult =
         StateMachineInstance::pointer_up;
     let _: fn(&mut StateMachineInstance, Vec2D, f32, i32) -> HitResult =
         StateMachineInstance::pointer_move;

@@ -6,6 +6,29 @@
 
 use crate::prelude::*;
 
+#[test]
+fn rive_bounded_cross_offer_is_not_an_exact_stretch_basis() {
+    let mut tree = TaffyTree::new();
+    tree.disable_rounding();
+    let child = tree.new_leaf_with_context(yoga_style(), ()).unwrap();
+    let root = tree.new_with_children(Style {
+        max_size: Size { width: length(100.0), height: length(100.0) },
+        ..yoga_style()
+    }, &[child]).unwrap();
+    let mut requests = Vec::new();
+    tree.compute_layout_with_measure_and_probe(
+        root, Size { width: AvailableSpace::Definite(100.0), height: AvailableSpace::Definite(100.0) }, |_, _, _| Default::default(),
+        |known, available, _, _, _, _| {
+            requests.push((known, available));
+            Size { width: known.width.unwrap_or(20.0), height: known.height.unwrap_or(10.0) }
+        },
+    ).unwrap();
+    // YGNodeComputeFlexBasisForChild requires hasExactWidth for stretch.
+    // A max-width constrains the offer but does not decide the child's width.
+    assert_eq!(requests[0].0.width, None);
+    assert_eq!(requests[0].1.width, AvailableSpace::Definite(100.0));
+}
+
 fn yoga_style() -> Style {
     Style {
         flex_direction: FlexDirection::Column,

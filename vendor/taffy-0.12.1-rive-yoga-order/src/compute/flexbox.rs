@@ -781,6 +781,9 @@ fn determine_flex_base_size(
         let child_known_dimensions = {
             let mut ckd = child.size.with_main(dir, None);
             if child.align_self == AlignSelf::STRETCH
+                // Yoga's flex-basis stretch requires an exact parent cross
+                // size; a finite AtMost offer alone must remain a bound.
+                && (!tree.uses_rive_layout() || constants.node_outer_size.cross(dir).is_some())
                 && constants.rive_child_basis.cross(dir).is_none()
                 && !child.margin_is_auto.cross_start(constants.dir)
                 && !child.margin_is_auto.cross_end(constants.dir)

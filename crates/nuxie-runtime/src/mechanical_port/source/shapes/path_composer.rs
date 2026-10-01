@@ -289,23 +289,25 @@ impl PathComposer {
             return None;
         }
         let shape_handle = self.shape();
-        let (can_defer, local, clockwise, world, transform, paths) = shape_handle
+        let inputs = shape_handle
             .with(|shape| {
                 let shape = shape.as_shape().expect("PathComposer Shape");
-                (
-                    shape.can_defer_path_update(),
+                if shape.can_defer_path_update() {
+                    return None;
+                }
+                Some((
                     shape.is_flagged(PathFlags::LOCAL),
                     shape.is_flagged(PathFlags::LOCAL_CLOCKWISE),
                     shape.is_flagged(PathFlags::WORLD),
                     *shape.world_transform(),
                     shape.paths(),
-                )
+                ))
             })
             .expect("live PathComposer Shape");
-        if can_defer {
+        let Some((local, clockwise, world, transform, paths)) = inputs else {
             self.deferred_path_dirt = true;
             return None;
-        }
+        };
         self.deferred_path_dirt = false;
         let rebuild_local = (local || clockwise) && self.local_inputs_changed();
         if local && rebuild_local {
@@ -391,5 +393,36 @@ impl PathComposer {
     }
     pub fn local_clockwise_path(&mut self) -> &mut ShapePaintPath {
         &mut self.local_clockwise_path
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::{core::CoreArena, shapes::shape::Shape};
+
+    #[test]
+    fn deferred_update_preserves_one_notification_per_update() {
+        let arena = CoreArena::default();
+        let shape = arena.insert(Shape::default());
+        assert!(
+            shape
+                .with_downcast::<Shape, _>(Shape::can_defer_path_update)
+                .unwrap()
+        );
+        let composer = RuntimePathComposerHandle::new();
+        composer.bind_shape(shape.clone());
+        composer.with_mut(|composer| {
+            assert!(composer.update(ComponentDirt::PATH).is_none());
+            assert!(composer.deferred_path_dirt);
+            assert!(!composer.shape_notified);
+            assert_eq!(composer.dirty_shape(), Some(shape.clone()));
+            assert!(composer.dirty_shape().is_none());
+            assert!(composer.update(ComponentDirt::N_SLICER).is_none());
+            assert!(composer.deferred_path_dirt);
+            assert!(!composer.shape_notified);
+            assert_eq!(composer.dirty_shape(), Some(shape));
+            assert!(composer.dirty_shape().is_none());
+        });
     }
 }

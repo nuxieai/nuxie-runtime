@@ -225,6 +225,71 @@ fn draw_modulated_sets_the_color_from_each_tagged_drawable() {
     assert_eq!(renderer.depth, 0);
 }
 
+#[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
+fn draw_visitor_draw_order_update_changes_the_next_drawable() {
+    use nuxie_runtime::source::{
+        draw_rules::DrawRules,
+        draw_target::DrawTarget,
+        generated::{draw_rules_base::DrawRulesBase, draw_target_base::DrawTargetBase},
+    };
+    let mut builder = ArtboardBuilder::new();
+    let mut shapes = Vec::new();
+    for _ in 0..3 {
+        let (id, shape) = builder.add_shape();
+        let property = builder.property(3, 0.5);
+        builder.add(&property, id);
+        shapes.push((id, shape));
+    }
+    let rules = builder.arena.insert(DrawRules::default());
+    let rules_id = builder.add(&rules, shapes[1].0);
+    let target = builder.arena.insert(DrawTarget::default());
+    uint(
+        &target,
+        DrawTargetBase::DRAWABLE_ID_PROPERTY_KEY,
+        shapes[0].0,
+    );
+    uint(&target, DrawTargetBase::PLACEMENT_VALUE_PROPERTY_KEY, 0);
+    let target_id = builder.add(&target, rules_id);
+    builder.initialize();
+
+    let visits = Rc::new(RefCell::new(Vec::new()));
+    let recorded = visits.clone();
+    let root = builder.artboard.clone();
+    let first = shapes[2].1.clone();
+    let changed = Cell::new(false);
+    let visitor: RuntimeDrawVisitor = Rc::new(move |drawable, _| {
+        recorded.borrow_mut().push(drawable.clone());
+        if drawable == &first && !changed.replace(true) {
+            // Move the middle shape before the bottom shape while the
+            // top shape's visitor is running. C++'s for-loop increment
+            // follows the freshly relinked prev pointer after this callback.
+            uint(
+                &rules,
+                DrawRulesBase::DRAW_TARGET_ID_PROPERTY_KEY,
+                target_id,
+            );
+            Artboard::update_components_handle(&root);
+        }
+    });
+    let mut renderer = ModulationRecorder::default();
+    Artboard::draw_internal_with_visitor_handle(
+        &builder.artboard,
+        &mut renderer,
+        Some(visitor),
+        None,
+    );
+    assert_eq!(
+        *visits.borrow(),
+        vec![
+            shapes[2].1.clone(),
+            shapes[0].1.clone(),
+            shapes[1].1.clone(),
+        ]
+    );
+    assert_eq!(renderer.depth, 0);
+}
+
 fn read_file(name: &str) -> RuntimeFileHandle {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .map(|root| std::path::PathBuf::from(root).join("tests/unit_tests/assets"))

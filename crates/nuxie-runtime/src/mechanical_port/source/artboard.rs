@@ -3149,62 +3149,65 @@ impl Artboard {
         let mut empty_clips = 0;
         let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();
         let mut drawable = first_drawable;
-        while let Some(current) = drawable {
+        while let Some(mut current) = drawable {
             if stop.as_ref() == Some(&current) {
                 break;
             }
-            drawable = current.with(Drawable::prev_drawable).flatten();
-            let previous_clips = empty_clips;
-            empty_clips += current.empty_clip_count();
-            if !current.will_draw() || empty_clips != previous_clips || empty_clips > 0 {
-                continue;
-            }
-            if current.is_clip_start() {
-                pending_clip_operations.push(current);
-                continue;
-            } else if !pending_clip_operations.is_empty() {
-                if current.is_clip_end() {
-                    pending_clip_operations.pop();
-                    continue;
+            'draw: {
+                let previous_clips = empty_clips;
+                empty_clips += current.empty_clip_count();
+                if !current.will_draw() || empty_clips != previous_clips || empty_clips > 0 {
+                    break 'draw;
                 }
-                for pending in pending_clip_operations.drain(..) {
-                    pending.draw(renderer);
-                }
-            }
-            if current.is_mask_start() {
-                let end = current
-                    .layer_mask_marker()
-                    .unwrap()
-                    .borrow()
-                    .paired_end
-                    .as_ref()
-                    .and_then(|p| p.upgrade())
-                    .expect("paired mask end");
-                if Self::draw_masked_handle(root, renderer, &current, &end) {
-                    drawable = end.with(Drawable::prev_drawable).flatten();
-                }
-                continue;
-            }
-            if current.is_mask_end() {
-                continue;
-            }
-            let visitor = root
-                .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
-                .flatten();
-            if let Some(visitor) = visitor.as_ref() {
-                if current
-                    .with(Drawable::has_custom_properties)
-                    .unwrap_or(false)
-                {
-                    if let Some(handle) = current.authored_handle() {
-                        renderer.save();
-                        visitor(&handle, renderer);
-                        renderer.restore();
-                        continue;
+                if current.is_clip_start() {
+                    pending_clip_operations.push(current.clone());
+                    break 'draw;
+                } else if !pending_clip_operations.is_empty() {
+                    if current.is_clip_end() {
+                        pending_clip_operations.pop();
+                        break 'draw;
+                    }
+                    for pending in pending_clip_operations.drain(..) {
+                        pending.draw(renderer);
                     }
                 }
+                if current.is_mask_start() {
+                    let end = current
+                        .layer_mask_marker()
+                        .unwrap()
+                        .borrow()
+                        .paired_end
+                        .as_ref()
+                        .and_then(|p| p.upgrade())
+                        .expect("paired mask end");
+                    if Self::draw_masked_handle(root, renderer, &current, &end) {
+                        current = end;
+                    }
+                    break 'draw;
+                }
+                if current.is_mask_end() {
+                    break 'draw;
+                }
+                let visitor = root
+                    .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+                    .flatten();
+                if let Some(visitor) = visitor.as_ref() {
+                    if current
+                        .with(Drawable::has_custom_properties)
+                        .unwrap_or(false)
+                    {
+                        if let Some(handle) = current.authored_handle() {
+                            renderer.save();
+                            visitor(&handle, renderer);
+                            renderer.restore();
+                            break 'draw;
+                        }
+                    }
+                }
+                current.draw(renderer);
             }
-            current.draw(renderer);
+            // Match C++'s for-loop increment: callbacks may relink the list.
+            drawable = current.with(Drawable::prev_drawable).flatten();
         }
     }
 

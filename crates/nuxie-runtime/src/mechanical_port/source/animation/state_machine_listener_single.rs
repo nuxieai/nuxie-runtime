@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     data_bind_path_referencer::DataBindPathReferencer,
     generated::animation::state_machine_listener_single_base::StateMachineListenerSingleBase,
     importers::import_stack::ImportStack, listener_type::ListenerType, status_code::StatusCode,
+    pointer_button::PointerButton,
 };
 
 #[derive(Default)]
@@ -31,6 +32,12 @@ impl StateMachineListenerSingle {
 
     pub fn has_listener(&self, listener_type: ListenerType) -> bool {
         self.base.listener_type_value() == listener_type as u32
+    }
+    pub fn has_listener_button(&self, listener_type: ListenerType, button: PointerButton) -> bool {
+        button == PointerButton::Primary && self.has_listener(listener_type)
+    }
+    pub fn listens_to_button(&self, button: PointerButton) -> bool {
+        button == PointerButton::Primary && self.has_pointer_listeners()
     }
 
     pub fn decode_view_model_path_ids(&mut self, value: &[u8]) {

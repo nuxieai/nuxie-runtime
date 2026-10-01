@@ -5,6 +5,7 @@ use crate::mechanical_port::source::{
         standard_gamepad::{StandardGamepadAxis, StandardGamepadButton},
     },
     math::vec2d::Vec2D,
+    pointer_button::PointerButton,
 };
 
 #[repr(u8)]
@@ -30,6 +31,7 @@ pub struct PointerInvocation {
     pub pointer_id: i32,
     pub hit_event: u32,
     pub time_stamp: f32,
+    pub button: PointerButton,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct KeyboardInvocation {
@@ -214,6 +216,7 @@ impl ListenerInvocation {
         pointer_id: i32,
         hit_event: u32,
         time_stamp: f32,
+        button: PointerButton,
     ) -> Self {
         Self {
             storage: ListenerInvocationStorage::Pointer(PointerInvocation {
@@ -222,6 +225,7 @@ impl ListenerInvocation {
                 pointer_id,
                 hit_event,
                 time_stamp,
+                button,
             }),
         }
     }

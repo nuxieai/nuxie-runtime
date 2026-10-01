@@ -142,7 +142,7 @@ fn run_exact_scripted_silver(
                     artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
                 let (x, y) = resolve_pointer_pair(&x, &y, width, height)?;
                 machine.with_instance_mut(|machine| {
-                    machine.pointer_down(Vec2D::new(x, y), pointer_id);
+                    machine.pointer_down(Vec2D::new(x, y), pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary);
                 });
             }
             Action::PointerUp { x, y, pointer_id } => {
@@ -150,7 +150,7 @@ fn run_exact_scripted_silver(
                     artboard.with_artboard(|artboard| (artboard.width(), artboard.height()));
                 let (x, y) = resolve_pointer_pair(&x, &y, width, height)?;
                 machine.with_instance_mut(|machine| {
-                    machine.pointer_up(Vec2D::new(x, y), pointer_id);
+                    machine.pointer_up(Vec2D::new(x, y), pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary);
                 });
             }
             Action::FireViewModelTrigger { property } => {

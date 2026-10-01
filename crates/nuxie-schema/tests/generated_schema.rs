@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    // Reconciled upstream through 7e450bdc; forward overlays remain.
-    assert_eq!(DEFINITIONS.len(), 357);
+    // Reconciled upstream through 2dbbfe18; forward overlays remain.
+    assert_eq!(DEFINITIONS.len(), 358);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
     assert_eq!(
@@ -34,7 +34,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 672);
+    assert_eq!(runtime_property_count, 673);
 
     let animatable_property_count = DEFINITIONS
         .iter()
@@ -63,6 +63,29 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .filter(|property| property.description.is_some())
         .count();
     assert_eq!(described_property_count, 468);
+}
+
+#[test]
+fn pointer_button_definition_matches_upstream_2dbbfe18() {
+    let definition = definition_by_type_key(155).expect("pointer button input");
+    assert_eq!(definition.name, "ListenerInputTypePointerButton");
+    let property = definition
+        .property_by_key(468)
+        .expect("pointer button value");
+    assert_eq!(property.name, "pointerButtonValue");
+    assert_eq!(property.runtime_type, FieldKind::Uint);
+    assert_eq!(property.uint_storage(), Some(UintStorage::Uint8));
+    assert_eq!(
+        property.stored_field_initializer(),
+        Some(StoredFieldInitializer::Uint(0))
+    );
+    assert!(object_supports_property(155, 468));
+    assert!(object_supports_property(155, 965));
+    assert!(!object_supports_property(658, 468));
+    assert_eq!(
+        core_registry_field_kind_by_property_key(468),
+        Some(CoreRegistryFieldKind::Uint)
+    );
 }
 
 #[test]

@@ -111,8 +111,8 @@ fn set_image(property: &CoreHandle, image: Option<Rc<dyn nuxie_render_api::Rende
 }
 
 fn click(machine: &RuntimeStateMachineInstanceHandle, point: Vec2D) {
-    machine.with_instance_mut(|machine| machine.pointer_down(point, 0));
-    machine.with_instance_mut(|machine| machine.pointer_up(point, 0));
+    machine.with_instance_mut(|machine| machine.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| machine.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
 }
 
 struct SilverFixture {

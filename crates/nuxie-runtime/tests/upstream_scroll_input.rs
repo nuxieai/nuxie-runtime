@@ -509,13 +509,13 @@ fn wheel_idle_does_not_end_pointer_drag() {
     assert!(s.get(ScrollConstraint::is_scrolling));
     s.smi.with_instance_mut(|m| {
         m.pointer_move(over, 0.0, 0);
-        m.pointer_down(over, 0);
+        m.pointer_down(over, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
     });
     assert!(s.get(ScrollConstraint::is_dragging));
     s.idle();
     assert!(!s.get(ScrollConstraint::is_scrolling));
     assert!(s.get(ScrollConstraint::is_dragging));
-    s.smi.with_instance_mut(|m| m.pointer_up(over, 0));
+    s.smi.with_instance_mut(|m| m.pointer_up(over, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(!s.get(ScrollConstraint::is_dragging));
 }
 #[test]
@@ -534,10 +534,10 @@ fn wheel_can_be_disabled_while_drag_works() {
     assert_eq!(s.get(ScrollConstraint::offset_y), 0.0);
     s.smi.with_instance_mut(|m| {
         m.pointer_move(over, 0.0, 0);
-        m.pointer_down(over, 0);
+        m.pointer_down(over, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
         m.pointer_move(Vec2D::new(50.0, 150.0), 0.0, 0);
     });
     assert!(s.get(ScrollConstraint::offset_y) < 0.0);
     s.smi
-        .with_instance_mut(|m| m.pointer_up(Vec2D::new(50.0, 150.0), 0));
+        .with_instance_mut(|m| m.pointer_up(Vec2D::new(50.0, 150.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
 }

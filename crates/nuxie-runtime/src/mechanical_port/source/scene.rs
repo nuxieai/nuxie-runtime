@@ -8,6 +8,7 @@ use crate::mechanical_port::source::{
     generated::core_registry::CoreRegistry,
     hit_result::HitResult,
     math::{aabb::Aabb, vec2d::Vec2D},
+    pointer_button::PointerButton,
     renderer::Renderer,
     scroll_event::ScrollEvent,
     viewmodel::runtime::viewmodel_instance_runtime::RuntimeViewModelInstanceHandle,
@@ -19,6 +20,16 @@ pub struct Scene {
 }
 
 impl Scene {
+    // Internal animation owners already carry the typed runtime-artboard link.
+    // Store it without borrowing the artboard: an animation can be constructed
+    // during an artboard callback. Detached arithmetic instances keep an empty
+    // link, and artboard-dependent operations retain their existing checks.
+    pub(crate) fn from_runtime_artboard_link(
+        artboard_instance: RuntimeArtboardInstanceWeakHandle,
+    ) -> Self {
+        Self { artboard_instance }
+    }
+
     pub fn new(artboard_instance: RuntimeArtboardInstanceWeakHandle) -> Self {
         assert!(
             artboard_instance
@@ -90,7 +101,7 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
 
     fn bind_view_model_instance(&mut self, _view_model_instance: RuntimeViewModelInstanceHandle) {}
 
-    fn pointer_down(&mut self, _position: Vec2D, _pointer_id: i32) -> HitResult {
+    fn pointer_down(&mut self, _position: Vec2D, _pointer_id: i32, _button: PointerButton) -> HitResult {
         HitResult::None
     }
 
@@ -98,7 +109,7 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
         HitResult::None
     }
 
-    fn pointer_up(&mut self, _position: Vec2D, _pointer_id: i32) -> HitResult {
+    fn pointer_up(&mut self, _position: Vec2D, _pointer_id: i32, _button: PointerButton) -> HitResult {
         HitResult::None
     }
 

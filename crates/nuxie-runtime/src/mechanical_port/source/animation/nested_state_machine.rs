@@ -18,6 +18,7 @@ use crate::mechanical_port::source::{
     hit_result::HitResult,
     math::vec2d::Vec2D,
     nested_artboard::NestedArtboard,
+    pointer_button::PointerButton,
     scroll_event::ScrollEvent,
 };
 #[derive(Default)]
@@ -125,15 +126,15 @@ impl NestedStateMachine {
         })
     }
 
-    pub fn pointer_down(&mut self, position: Vec2D, pointer_id: i32) -> HitResult {
+    pub fn pointer_down(&mut self, position: Vec2D, pointer_id: i32, button: PointerButton) -> HitResult {
         self.instance.as_ref().map_or(HitResult::None, |instance| {
-            instance.with_instance_mut(|instance| instance.pointer_down(position, pointer_id))
+            instance.with_instance_mut(|instance| instance.pointer_down(position, pointer_id, button))
         })
     }
 
-    pub fn pointer_up(&mut self, position: Vec2D, pointer_id: i32) -> HitResult {
+    pub fn pointer_up(&mut self, position: Vec2D, pointer_id: i32, button: PointerButton) -> HitResult {
         self.instance.as_ref().map_or(HitResult::None, |instance| {
-            instance.with_instance_mut(|instance| instance.pointer_up(position, pointer_id))
+            instance.with_instance_mut(|instance| instance.pointer_up(position, pointer_id, button))
         })
     }
 
@@ -169,6 +170,12 @@ impl NestedStateMachine {
         })
     }
 
+    pub fn listens_to_button_at(&mut self, position: Vec2D, button: PointerButton) -> bool {
+        self.instance.as_ref().is_some_and(|instance| {
+            instance.with_instance_mut(|instance| instance.listens_to_button_at(position, button))
+        })
+    }
+
     pub fn scroll_occluded_at(&mut self, position: Vec2D) -> bool {
         self.instance.as_ref().is_some_and(|instance| {
             instance.with_instance_mut(|instance| instance.scroll_occluded_at(position))
@@ -187,18 +194,18 @@ impl NestedStateMachine {
         }
     }
 
-    pub fn drag_start(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32) -> HitResult {
+    pub fn drag_start(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32, button: PointerButton) -> HitResult {
         self.instance.as_ref().map_or(HitResult::None, |instance| {
             instance.with_instance_mut(|instance| {
-                instance.drag_start(position, timestamp, true, pointer_id)
+                instance.drag_start(position, timestamp, true, pointer_id, button)
             })
         })
     }
 
-    pub fn drag_end(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32) -> HitResult {
+    pub fn drag_end(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32, button: PointerButton) -> HitResult {
         self.instance.as_ref().map_or(HitResult::None, |instance| {
             instance
-                .with_instance_mut(|instance| instance.drag_end(position, timestamp, pointer_id))
+                .with_instance_mut(|instance| instance.drag_end(position, timestamp, pointer_id, button))
         })
     }
 

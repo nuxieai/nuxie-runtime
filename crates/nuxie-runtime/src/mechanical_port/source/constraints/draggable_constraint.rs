@@ -255,10 +255,17 @@ impl DraggableConstraintListenerGroup {
         position: Vec2D,
         pointer_id: i32,
         hit_event: ListenerType,
+        button: crate::mechanical_port::source::pointer_button::PointerButton,
         can_hit: bool,
         time_stamp: f32,
         state_machine_instance: &mut StateMachineInstance,
     ) -> ProcessEventResult {
+        use crate::mechanical_port::source::pointer_button::PointerButton;
+        if matches!(hit_event, ListenerType::Down | ListenerType::Up)
+            && button != PointerButton::Primary
+        {
+            return ProcessEventResult::None;
+        }
         let pointer = self.base.pointer_data(pointer_id);
         let previous_phase = pointer.phase.get();
         self.base.process_event(
@@ -266,6 +273,7 @@ impl DraggableConstraintListenerGroup {
             position,
             pointer_id,
             hit_event,
+            button,
             can_hit,
             time_stamp,
             state_machine_instance,
@@ -276,7 +284,7 @@ impl DraggableConstraintListenerGroup {
         {
             self.draggable.borrow_mut().end_drag(position, time_stamp);
             if self.scrolling_pointer_id.get() == pointer_id {
-                state_machine_instance.drag_end(position, time_stamp, pointer_id);
+                state_machine_instance.drag_end(position, time_stamp, pointer_id, PointerButton::Primary);
                 self.scrolling_pointer_id.set(-1);
                 return ProcessEventResult::Scroll;
             }
@@ -287,7 +295,7 @@ impl DraggableConstraintListenerGroup {
             let has_dragged = self.draggable.borrow_mut().drag(position, time_stamp);
             if has_dragged {
                 if self.scrolling_pointer_id.get() != pointer_id {
-                    state_machine_instance.drag_start(position, time_stamp, false, pointer_id);
+                    state_machine_instance.drag_start(position, time_stamp, false, pointer_id, PointerButton::Primary);
                 }
                 self.scrolling_pointer_id.set(pointer_id);
                 return ProcessEventResult::Scroll;

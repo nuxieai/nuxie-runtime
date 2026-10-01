@@ -76,6 +76,7 @@ pub mod layout_component;
 pub mod lazy_vector;
 pub mod listener_group;
 pub mod listener_type;
+pub mod pointer_button;
 pub mod logging_scripting_context;
 pub mod lua;
 pub mod manifest_sections;

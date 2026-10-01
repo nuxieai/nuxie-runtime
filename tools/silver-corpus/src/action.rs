@@ -1161,7 +1161,7 @@ impl Execution {
                 Action::PointerDown { x, y, pointer_id } => {
                     let position = pointer_position(x, y, &instance)?;
                     machine(&state_machine)?
-                        .with_instance_mut(|machine| machine.pointer_down(position, *pointer_id));
+                        .with_instance_mut(|machine| machine.pointer_down(position, *pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
                 }
                 Action::PointerMove {
                     x,
@@ -1177,7 +1177,7 @@ impl Execution {
                 Action::PointerUp { x, y, pointer_id } => {
                     let position = pointer_position(x, y, &instance)?;
                     machine(&state_machine)?
-                        .with_instance_mut(|machine| machine.pointer_up(position, *pointer_id));
+                        .with_instance_mut(|machine| machine.pointer_up(position, *pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
                 }
                 Action::PointerExit { x, y, pointer_id } => {
                     let position = pointer_position(x, y, &instance)?;
@@ -1199,7 +1199,7 @@ impl Execution {
                     let machine = machine(&state_machine)?;
                     factory.borrow_mut().add_frame();
                     machine.with_instance_mut(|machine| {
-                        machine.pointer_down(Vec2D::new(x, y), *pointer_id)
+                        machine.pointer_down(Vec2D::new(x, y), *pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary)
                     });
                     machine.advance_and_apply(*advance_seconds);
                     instance.draw(&mut renderer);
@@ -1214,7 +1214,7 @@ impl Execution {
                     }
                     factory.borrow_mut().add_frame();
                     machine.with_instance_mut(|machine| {
-                        machine.pointer_up(Vec2D::new(x, y), *pointer_id)
+                        machine.pointer_up(Vec2D::new(x, y), *pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary)
                     });
                     machine.advance_and_apply(*advance_seconds);
                     instance.draw(&mut renderer);
@@ -1307,8 +1307,8 @@ impl Execution {
                                 (bounds.min_y + bounds.max_y) * 0.5,
                             );
                             machine.with_instance_mut(|m| {
-                                m.pointer_down(center, 0);
-                                m.pointer_up(center, 0);
+                                m.pointer_down(center, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+                                m.pointer_up(center, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
                             });
                         }
                         Action::AssertFocusOrder { paths, reverse } => {

@@ -232,9 +232,9 @@ fn apply_pointer_event(state: &mut LuaState, atom: LuaAtoms) -> i32 {
     let (artboard, event) = state.rive2_mut::<ScriptedArtboard, ScriptedPointerEvent>();
     let result = if let Some(machine) = artboard.state_machine_mut() {
         match atom {
-            LuaAtoms::PointerDown => machine.pointer_down(event.position, event.id),
+            LuaAtoms::PointerDown => machine.pointer_down(event.position, event.id, crate::source::pointer_button::PointerButton::Primary),
             LuaAtoms::PointerMove => machine.pointer_move(event.position, 0, event.id),
-            LuaAtoms::PointerUp => machine.pointer_up(event.position, event.id),
+            LuaAtoms::PointerUp => machine.pointer_up(event.position, event.id, crate::source::pointer_button::PointerButton::Primary),
             LuaAtoms::PointerExit => machine.pointer_exit(event.position, event.id),
             _ => 0,
         }

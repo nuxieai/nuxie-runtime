@@ -26,6 +26,7 @@ use crate::mechanical_port::source::{
         },
     },
     scripted::scripted_interpolator::ScriptedInterpolator,
+    scene::{Scene, SceneBehavior},
 };
 use std::{
     cell::{RefCell, RefMut},
@@ -49,7 +50,7 @@ impl KeyedCallbackReporter for PendingKeyedCallbacks {
 pub struct LinearAnimationInstance {
     blend_accumulator: std::rc::Weak<RefCell<super::blend_accumulator::BlendAccumulator>>,
     animation: LinearAnimationOwner,
-    artboard: RuntimeArtboardInstanceWeakHandle,
+    scene: Scene,
     nested_event_notifier: NestedEventNotifier,
     time: f32,
     speed_direction: f32,
@@ -115,7 +116,7 @@ impl LinearAnimationInstance {
         Self {
             animation,
             blend_accumulator: std::rc::Weak::new(),
-            artboard,
+            scene: Scene::from_runtime_artboard_link(artboard),
             nested_event_notifier: NestedEventNotifier::default(),
             time,
             speed_direction: if speed_multiplier >= 0.0 { 1.0 } else { -1.0 },
@@ -206,7 +207,7 @@ impl LinearAnimationInstance {
         self.direction = 1.0
     }
     pub fn apply(&self, mix: f32) {
-        if let Some(artboard) = self.artboard.upgrade() {
+        if let Some(artboard) = self.scene.artboard_instance().upgrade() {
             self.with_animation_mut(|animation| {
                 artboard.apply_linear_animation(animation, self.time, mix, Some(self));
             });
@@ -305,7 +306,7 @@ impl LinearAnimationInstance {
             return Some(holder);
         }
         let source = self
-            .artboard
+            .scene.artboard_instance()
             .with_artboard(|artboard| artboard.base.artboard_source_handle())
             .flatten()?;
         let bind = source
@@ -367,7 +368,7 @@ impl LinearAnimationInstance {
             clone.with_mut(|object| object.as_data_bind_mut().unwrap().set_converter(converter));
         }
         let container = self
-            .artboard
+            .scene.artboard_instance()
             .with_artboard(|artboard| artboard.base.data_bind_container.clone())
             .expect("live animation artboard");
         self.ensure_binding_extras().bind_container = container.downgrade();
@@ -384,7 +385,7 @@ impl LinearAnimationInstance {
         binds: Vec<CoreHandle>,
     ) {
         let container = self
-            .artboard
+            .scene.artboard_instance()
             .with_artboard(|artboard| artboard.base.data_bind_container.downgrade());
         let mut extras = self.ensure_binding_extras();
         extras.scripted_interpolators.insert(key, value);
@@ -417,15 +418,15 @@ impl LinearAnimationInstance {
             ScriptUpdateRequestHost, ScriptedObject,
         };
         let owner = ScriptedInterpolator::clone_scripted_occurrence(&shared, |bind| {
-            self.artboard
+            self.scene.artboard_instance()
                 .with_artboard_mut(|artboard| artboard.add_data_bind(bind))
                 .expect("the animation retains its artboard while cloning an interpolator");
         })?;
         let context = self
-            .artboard
+            .scene.artboard_instance()
             .with_artboard(|artboard| artboard.data_context())?;
         self.ensure_binding_extras().bind_container = self
-            .artboard
+            .scene.artboard_instance()
             .with_artboard(|artboard| artboard.base.data_bind_container.downgrade())?;
         let (properties, needs_init) =
             owner.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
@@ -464,7 +465,7 @@ impl LinearAnimationInstance {
         }
         self.apply(1.0);
         if self
-            .artboard
+            .scene.artboard_instance()
             .upgrade()
             .is_some_and(|artboard| artboard.advance_default(seconds))
         {
@@ -610,7 +611,7 @@ impl LinearAnimationInstance {
         self.keep_going_with_multiplier(elapsed)
     }
     pub fn is_translucent(&self) -> bool {
-        self.artboard
+        self.scene.artboard_instance()
             .with_artboard(|artboard| artboard.is_animation_instance_translucent(self))
             .unwrap_or(false)
     }
@@ -619,6 +620,40 @@ impl LinearAnimationInstance {
     }
 }
 impl CallbackContext for LinearAnimationInstance {}
+impl SceneBehavior for LinearAnimationInstance {
+    fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    fn scene_mut(&mut self) -> &mut Scene {
+        &mut self.scene
+    }
+
+    fn name(&self) -> String {
+        LinearAnimationInstance::name(self)
+    }
+
+    fn loop_(&self) -> Loop {
+        match self.loop_value() {
+            0 => Loop::OneShot,
+            1 => Loop::Loop,
+            2 => Loop::PingPong,
+            value => panic!("invalid animation loop value: {value}"),
+        }
+    }
+
+    fn is_translucent(&self) -> bool {
+        LinearAnimationInstance::is_translucent(self)
+    }
+
+    fn duration_seconds(&self) -> f32 {
+        LinearAnimationInstance::duration_seconds(self)
+    }
+
+    fn advance_and_apply(&mut self, elapsed_seconds: f32) -> bool {
+        LinearAnimationInstance::advance_and_apply(self, elapsed_seconds)
+    }
+}
 impl KeyFrameValueContext for LinearAnimationInstance {
     fn blend_accumulator(&self) -> Option<Rc<RefCell<super::blend_accumulator::BlendAccumulator>>> {
         self.blend_accumulator.upgrade()
@@ -673,7 +708,7 @@ impl KeyFrameValueContext for LinearAnimationInstance {
 }
 impl KeyedCallbackReporter for LinearAnimationInstance {
     fn report_keyed_callback(&mut self, object_id: u32, property_key: u32, elapsed_seconds: f32) {
-        let artboard = self.artboard.clone();
+        let artboard = self.scene.artboard_instance();
         if let Some(target) = artboard
             .with_artboard(|artboard| artboard.base.resolve_handle(object_id))
             .flatten()
@@ -688,7 +723,7 @@ impl Clone for LinearAnimationInstance {
             animation: self.animation.clone(),
             // Upstream's explicit copy constructor leaves this pointer null.
             blend_accumulator: std::rc::Weak::new(),
-            artboard: self.artboard.clone(),
+            scene: self.scene.clone(),
             nested_event_notifier: self.nested_event_notifier.clone(),
             time: self.time,
             speed_direction: self.speed_direction,

@@ -168,8 +168,8 @@ fn upstream_simpsons_tabs_produce_two_three_and_five_list_items() {
     for tab in tab_nodes {
         let x = (tab.min_x + tab.max_x) * 0.5;
         let y = (tab.min_y + tab.max_y) * 0.5;
-        machine.with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), 0));
-        machine.with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), 0));
+        machine.with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        machine.with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
         settle(&machine);
         let update = drain(&machine);
         apply_semantic_diff(&mut snapshot, &update);

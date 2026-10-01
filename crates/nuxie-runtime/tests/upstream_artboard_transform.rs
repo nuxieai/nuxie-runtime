@@ -230,11 +230,11 @@ fn artboard_rotation_is_honored_in_state_machine_hit_testing() {
         frame + artboard.self_transform() * (green_content - frame)
     });
     assert!((green_world - green_content).length() > 1.0);
-    machine.with_instance_mut(|machine| machine.pointer_down(green_content, 0));
+    machine.with_instance_mut(|machine| machine.pointer_down(green_content, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(
         !machine.with_instance(|machine| machine.get_bool("toGreen").expect("toGreen").value())
     );
-    machine.with_instance_mut(|machine| machine.pointer_down(green_world, 0));
+    machine.with_instance_mut(|machine| machine.pointer_down(green_world, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(machine.with_instance(|machine| machine.get_bool("toGreen").expect("toGreen").value()));
 }
 
@@ -296,8 +296,8 @@ fn artboard_transform_and_opacity() {
                 .with_downcast::<ViewModelInstanceNumber, _>(ViewModelInstanceNumber::value)
                 .expect("yPos number"),
         );
-        machine.with_instance_mut(|machine| machine.pointer_down(position, 0));
-        machine.with_instance_mut(|machine| machine.pointer_up(position, 0));
+        machine.with_instance_mut(|machine| machine.pointer_down(position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        machine.with_instance_mut(|machine| machine.pointer_up(position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
         artboard.draw(&mut renderer);
     }
     let path = pinned_path("silvers/artboard_opacity_and_transform_test.sriv");
@@ -364,19 +364,19 @@ fn zero_scale_artboard_takes_no_listener_hits() {
     let f = fixture("opaque_hit_test.riv", Some("main"));
     let m = machine_named(&f, "main-state-machine");
     m.advance_and_apply(0.0);
-    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 250.0), 0));
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 250.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(bool_value(&m, "toGreen"));
     let gray = bool_value(&m, "grayToggle");
     for (x, y) in [(0.0, 0.0), (1.0, 0.0)] {
         scale(&f.artboard, x, y);
         f.artboard.advance_default(0.0);
-        m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+        m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
         assert!(bool_value(&m, "toGreen"));
         assert_eq!(bool_value(&m, "grayToggle"), gray);
     }
     scale(&f.artboard, 1.0, 1.0);
     f.artboard.advance_default(0.0);
-    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(!bool_value(&m, "toGreen"));
     assert_ne!(bool_value(&m, "grayToggle"), gray);
 }
@@ -443,13 +443,13 @@ fn zero_scale_mounted_artboard_takes_no_pointer_events() {
             .unwrap()
     );
     let gray = bool_value(&m, "second-gray-toggle");
-    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(!bool_value(&nested_machine, "bool-target"));
     assert_ne!(bool_value(&m, "second-gray-toggle"), gray);
     scale(&mounted, 1.0, 1.0);
     mounted.advance_default(0.0);
     let gray = bool_value(&m, "second-gray-toggle");
-    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0));
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(100.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(bool_value(&nested_machine, "bool-target"));
     assert_eq!(bool_value(&m, "second-gray-toggle"), gray);
 }
@@ -468,25 +468,25 @@ fn collapsing_an_artboard_mid_click_drops_the_held_press() {
     let (f, m) = click_fixture("art-1");
     let point = Vec2D::new(75.0, 75.0);
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
-    m.with_instance_mut(|m| m.pointer_down(point, 0));
+    m.with_instance_mut(|m| m.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     scale(&f.artboard, 0.0, 0.0);
     f.artboard.advance_default(0.0);
-    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    m.with_instance_mut(|m| m.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
     scale(&f.artboard, 1.0, 1.0);
     f.artboard.advance_default(0.0);
-    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    m.with_instance_mut(|m| m.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
-    m.with_instance_mut(|m| m.pointer_down(point, 0));
-    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    m.with_instance_mut(|m| m.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    m.with_instance_mut(|m| m.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 1);
-    m.with_instance_mut(|m| m.pointer_down(point, 0));
+    m.with_instance_mut(|m| m.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     scale(&f.artboard, 0.0, 0.0);
     f.artboard.advance_default(0.0);
     m.with_instance_mut(|m| m.pointer_move(point, 0.0, 0));
     scale(&f.artboard, 1.0, 1.0);
     f.artboard.advance_default(0.0);
-    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    m.with_instance_mut(|m| m.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 1);
 }
 
@@ -547,7 +547,7 @@ fn collapsing_an_artboard_mid_drag_ends_the_drag() {
             .unwrap()
     };
     let resting_x = position().0;
-    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(250.0, 250.0), 0));
+    m.with_instance_mut(|m| m.pointer_down(Vec2D::new(250.0, 250.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     m.advance_and_apply(0.1);
     m.with_instance_mut(|m| m.pointer_move(Vec2D::new(250.0, 250.0), 0.0, 0));
     m.advance_and_apply(0.1);
@@ -559,7 +559,7 @@ fn collapsing_an_artboard_mid_drag_ends_the_drag() {
     m.with_instance_mut(|m| m.pointer_move(Vec2D::new(150.0, 150.0), 0.0, 0));
     m.advance_and_apply(0.1);
     assert_eq!(position(), collapsed);
-    m.with_instance_mut(|m| m.pointer_up(Vec2D::new(200.0, 200.0), 0));
+    m.with_instance_mut(|m| m.pointer_up(Vec2D::new(200.0, 200.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     m.advance_and_apply(0.1);
     scale(&f.artboard, 1.0, 1.0);
     let released = position();
@@ -573,18 +573,18 @@ fn collapsing_an_artboard_cancels_every_pointer() {
     let (f, m) = click_fixture("art-1");
     let point = Vec2D::new(75.0, 75.0);
     for id in [0, 1] {
-        m.with_instance_mut(|m| m.pointer_down(point, id));
+        m.with_instance_mut(|m| m.pointer_down(point, id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     }
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
     scale(&f.artboard, 0.0, 0.0);
     f.artboard.advance_default(0.0);
-    m.with_instance_mut(|m| m.pointer_up(point, 0));
+    m.with_instance_mut(|m| m.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
     scale(&f.artboard, 1.0, 1.0);
     f.artboard.advance_default(0.0);
-    m.with_instance_mut(|m| m.pointer_up(point, 1));
+    m.with_instance_mut(|m| m.pointer_up(point, 1, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 0);
-    m.with_instance_mut(|m| m.pointer_down(point, 1));
-    m.with_instance_mut(|m| m.pointer_up(point, 1));
+    m.with_instance_mut(|m| m.pointer_down(point, 1, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    m.with_instance_mut(|m| m.pointer_up(point, 1, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert_eq!(m.with_instance(|m| m.reported_event_count()), 1);
 }

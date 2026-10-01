@@ -790,6 +790,13 @@ impl LayoutParticipant {
             .and_then(|value| value.interpolator.clone())
     }
 
+    pub fn quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        use crate::source::advancing_component::QuietState;
+        let Some(animation) = &self.animation else { return QuietState::Quiet; };
+        let data = if animation.is_smoothing { &animation.b } else { &animation.a };
+        if data.to == animation.animated_layout { QuietState::Quiet } else { QuietState::Busy }
+    }
+
     pub fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         if self.animation.is_none() || !flags.contains(AdvanceFlags::NEW_FRAME) {
             return false;

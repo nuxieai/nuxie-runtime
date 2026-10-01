@@ -7,18 +7,24 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6`
+- LAST_SYNCED_SHA: `3330baec48641c87330b24268e403349f02c38fe`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6` (refreshed 2026-09-30 after PR #888 merged).
+- Current target: `0aadd4c65084a38dbeae3bd05814ead3f743ed77` (refreshed 2026-10-01 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 0 upstream commits after the checkpoint at this fetched target.
-  All 170 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (192 after `5892bb05`); this
+  There are 2 upstream commits after the checkpoint at this fetched target.
+  All 171 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (193 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- `3330baec` was integrated atop downstream `ca4c9ebb` without discarding its
+  drawable-dispatch preparation. Focused source-level integration review is
+  clean; the combined tree passes 109 runtime library tests (two ignored) and
+  all six newly translated tests. The full Golden/Silver sweeps recorded in
+  its row ran before this downstream-only rebase; they are not claimed as a
+  second full sweep of the combined tree.
 - Catch-up baseline validation at `bbf3c4d8`: 832 renderer tests pass (11 ignored), with
   live Metal required and the documented serial test configuration; 330 scripting
   tests pass (one ignored), and 11 Apple host tests pass. wasm32-unknown-unknown
@@ -202,6 +208,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `3330baec48641c87330b24268e403349f02c38fe` | Translate settled/frozen state-machine layers, exact transition eligibility, wake notifications and destruction suppression; converter advance predicates and data-context notification ordering; quiet-row classification, all five skip/verification traversals, bitset reset and current-host/generation-aware row identity, layout wake behavior and pool destruction order. Port all five settled-layer tests and the quiet-row resize test. Translation froze before independent source-equivalence and separate Rust-integration reviews; proven callback/cfg/test-invocation corrections were rereviewed. Six new tests, 108 runtime library tests (two ignored), 45 existing focused integration tests, wasm32-unknown-unknown WebGPU/WebGL2/scripting compilation, 27 manifest tests and seven structural tests pass. Both fresh pinned Golden comparisons cover 364 entries with zero failures and the existing one ordinary/two scripted divergences. Testing-enabled runtime Silver covers 231 cases: 85 byte-exact, 121 unchanged-epsilon, seven recorded divergences, 17 unsupported and the same strict-versus-contracted `data_converter_to_number` fixture failure; no new failures or weakened assertions. Structural correspondence remains 1,055 mirrored/ten adapted, not behavior proof. The public delta has no new renderer/device changes; no new hardware or pixel coverage is claimed. Private `.rive_head` metadata is not imported. | — |
 | `bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6` | Translate four-vertex triangle-group allocation/alignment and zero the unwritten mapped tail without advancing the cursor; preserve cleanup behavior for partial mapping failures. Prefer Vulkan identity presentation transform when supported and otherwise use currentTransform, removing the downstream transfer guard that would reject that newly accepted fallback. Advertise half-float color buffers in Vulkan and WebGPU. Independent source review and separate Rust-integration review, including the integration correction, are clean. Full results and known failures are recorded above. Active oracle pins and Silver provenance advance to this source; checked-in backend snapshots match upstream. D3D backends are absent and not introduced. Private WGSL compiler bounds and Android surface-polling changes mentioned by the commit message are absent from the public delta and are not claimed imported. | — |
 | `69f70e1afdd777d2af0ed97e987f46454a5fbe97` | Rename the shared ScriptModuleAsset language enum to AnimaScript while preserving serialized value one, Luau/default zero and the generated language property. Update the deserialization assertion without retaining an old-name alias. Independent source review and separate Rust-integration review are clean. All three asset tests, wasm32 WebGPU/WebGL2/scripting compilation and 26 manifest tests pass; structural correspondence remains 1,055 mirrored/ten adapted. Guest ABI-generator paths and WAMR build-help renaming belong to the parked execution lane. Private compiler/editor/repl changes are absent from the public delta and not claimed imported. Historical schema text and renderer capture provenance remain unchanged. Full Golden/Silver and hardware/browser pixels were not rerun for this naming-only change. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` | Translate script GPU passes into the host target: target descriptors/views, hidden and resized/stale lifecycle, sampling refusal, per-frame wrapping/release, clear/preserve decisions, native Luau GPUTarget and Canvas fields, Metal/Vulkan/WebGPU/top-down-GL wrapping, and Apple/Android host publication. The shipped default-framebuffer WebGL2 host correctly remains hidden. Parallel translation was globally frozen before independent source reviews and separate Rust-integration reviews; corrections and validation metadata were rereviewed. All eight shared target and six Lua target cases are ported. Validation: 832 renderer tests pass (11 ignored) with Metal/Vulkan/WebGL2/tools serial configuration; 330 scripting tests pass (one existing ignored); 11 Apple host tests pass; Apple/Vulkan host checks, Android arm64 compilation and wasm32 WebGPU/WebGL2/scripting compilation pass. A fresh pinned C++ Metal target GM and immediate/deferred parity pass. Rust immediate/deferred bytes match exactly; the strict C++ fixture matches exactly with the two previously approved Metal FMA/coverage adaptations. Preserve the pristine capture's 864-pixel/max-one difference and both binaries' provenance; no tolerance changed. Manifest tests pass 26 and structural source tests seven (1,055 mirrored/ten adapted). Initial parallel Metal ownership-audit tests interleaved global records and failed three cases; the documented serial configuration passes. An additional combined native WebGPU test build lacks optional Dawn link symbols, so no native Dawn execution is claimed. Full Golden/Silver and Android hardware/browser pixels were not rerun for this commit. Guest Wasm/AS ABI and execution changes remain parked; absent D3D backends and private host/compiler changes are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
@@ -602,3 +609,12 @@ are not current pins. Never blanket-replace old SHAs or relabel stale artifacts.
 This guide does not activate or modify scheduled jobs. A scheduled inspection is
 read-only unless separately authorized; it must not infer write or merge
 permission from this manual update. Follow the repository's PR/merge policy.
+
+On 2026-09-30 the user separately authorized the daily upstream sync in this
+chat. That job follows the translation, independent source review, separate
+Rust-integration review and applicable validation sequence above, then opens
+and merges narrow PRs without waiting for CI. It continues oldest-first until
+the refreshed upstream tip is accounted for. This replaces neither the scope
+boundaries nor the parked guest-execution decision, and does not authorize
+unrelated optimization, consumer migration, releases or deployment. The old
+Phase S worker and drift-scout jobs remain paused.

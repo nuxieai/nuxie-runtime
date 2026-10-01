@@ -16,8 +16,22 @@ use crate::mechanical_port::source::{
 pub struct LayerState {
     pub base: LayerStateBase,
     transitions: Vec<CoreHandle>,
+    transitions_settle_safe: bool,
+    transitions_ignore_time: bool,
 }
 impl LayerState {
+    pub fn transitions_settle_safe(&self) -> bool {
+        self.transitions_settle_safe
+    }
+    pub fn transitions_ignore_time(&self) -> bool {
+        self.transitions_ignore_time
+    }
+    pub fn set_transitions_settle_safe(&mut self, value: bool) {
+        self.transitions_settle_safe = value;
+    }
+    pub fn set_transitions_ignore_time(&mut self, value: bool) {
+        self.transitions_ignore_time = value;
+    }
     pub fn transition_count(&self) -> usize {
         self.transitions.len()
     }

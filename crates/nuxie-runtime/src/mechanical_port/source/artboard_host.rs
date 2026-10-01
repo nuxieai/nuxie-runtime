@@ -20,6 +20,7 @@ pub trait ArtboardHost {
     fn clear_data_context(&mut self);
     fn unbind(&mut self);
     fn update_data_binds(&mut self);
+    fn hosted_row_woke(&mut self, _artboard: &CoreHandle, _row: u32) {}
     fn mark_hosting_layout_dirty(&mut self, artboard_instance: RuntimeArtboardInstanceWeakHandle);
     fn parent_artboard(&self) -> Option<CoreHandle>;
     fn hit_test_host(

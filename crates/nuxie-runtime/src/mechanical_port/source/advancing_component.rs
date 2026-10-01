@@ -1,7 +1,15 @@
 use crate::mechanical_port::source::{advance_flags::AdvanceFlags, core::CoreHandle};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuietState {
+    Never,
+    Busy,
+    Quiet,
+}
+
 pub trait AdvancingComponent {
     fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool;
+    fn quiet_state(&self) -> QuietState { QuietState::Never }
 }
 
 /// Retains the actual owner while allowing its borrow to end during callbacks.
@@ -50,6 +58,9 @@ impl AdvancingComponentHandle {
 }
 
 impl AdvancingComponent for AdvancingComponentHandle {
+    fn quiet_state(&self) -> QuietState {
+        self.owner.with(|owner| owner.advancing_component_quiet_state()).expect("live advancing component")
+    }
     fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         (self.advance)(&self.owner, elapsed_seconds, flags)
     }

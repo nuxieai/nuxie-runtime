@@ -115,6 +115,38 @@ pub enum RuntimeComparisonValue {
     ViewModel(CoreHandle),
 }
 
+#[cfg(feature = "testing")]
+thread_local! {
+    static SETTLED_LAYER_SKIPS: Cell<u64> = const { Cell::new(0) };
+    static FROZEN_LAYER_ADVANCES: Cell<u64> = const { Cell::new(0) };
+}
+
+#[derive(Default)]
+struct LayerSettling {
+    binds_pending: Cell<bool>,
+    any_settled: Cell<bool>,
+    destroying: Cell<bool>,
+    layers: RefCell<Vec<Rc<Cell<bool>>>>,
+    row: Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle>,
+}
+impl LayerSettling {
+    fn wake_row(&self) {
+        if !self.destroying.get() {
+            if let Some(row) = &self.row {
+                row.wake_if_quiet_row();
+            }
+        }
+    }
+    fn unsettle(&self) {
+        self.wake_row();
+        if self.any_settled.replace(false) {
+            for layer in self.layers.borrow().iter() {
+                layer.set(false);
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct EventReport {
     pub event: Option<CoreHandle>,
@@ -194,6 +226,7 @@ pub struct StateMachineLayerInstance {
     hold_animation_from: bool,
     state_machine_changed_on_advance: bool,
     waiting_for_exit: bool,
+    settled: Rc<Cell<bool>>,
 }
 
 #[derive(Clone)]
@@ -255,6 +288,7 @@ impl Default for StateMachineLayerInstance {
             mix_from: 1.0,
             state_machine_changed_on_advance: false,
             waiting_for_exit: false,
+            settled: Rc::new(Cell::new(false)),
             hold_animation: None,
             hold_time: 0.0,
         }
@@ -300,6 +334,7 @@ impl StateMachineLayerInstance {
     }
 
     fn reset_state(&mut self, machine: &mut StateMachineInstance) {
+        self.settled.set(false);
         self.state_from = None;
         self.current_state = None;
         let entry = self
@@ -388,6 +423,50 @@ impl StateMachineLayerInstance {
         }
     }
 
+    fn is_frozen(&self) -> bool {
+        if !self.settled.get()
+            || self.mix != 1.0
+            || self.animation_reset.is_some()
+            || self.hold_animation.is_some()
+            || (self.transition.is_some() && !self.transition_completed)
+        {
+            return false;
+        }
+        let Some(current) = &self.current_state else {
+            return false;
+        };
+        if current.with_state(|state| state.keep_going()) {
+            return false;
+        }
+        let state = current.definition();
+        if !state
+            .with(|state| {
+                state
+                    .layer_state_settle_flags()
+                    .expect("LayerState flags")
+                    .1
+            })
+            .unwrap()
+        {
+            return false;
+        }
+        use crate::mechanical_port::source::generated::animation::{
+            animation_state_base::AnimationStateBase, any_state_base::AnyStateBase,
+            entry_state_base::EntryStateBase, exit_state_base::ExitStateBase,
+        };
+        match state.core_type() {
+            Some(EntryStateBase::TYPE_KEY | ExitStateBase::TYPE_KEY | AnyStateBase::TYPE_KEY) => {
+                true
+            }
+            Some(AnimationStateBase::TYPE_KEY) => current
+                .first_animation(|animation| {
+                    animation.with_animation(LinearAnimation::num_keyed_objects) == 0
+                })
+                .expect("AnimationState instance"),
+            _ => false,
+        }
+    }
+
     fn advance(
         &mut self,
         machine: &mut StateMachineInstance,
@@ -396,6 +475,11 @@ impl StateMachineLayerInstance {
     ) -> bool {
         if new_frame {
             self.state_machine_changed_on_advance = false;
+        }
+        if self.is_frozen() {
+            #[cfg(feature = "testing")]
+            FROZEN_LAYER_ADVANCES.with(|count| count.set(count.get() + 1));
+            return false;
         }
         if let Some(current) = self.current_state.clone() {
             current.with_state_mut(|state| state.advance(seconds, machine));
@@ -493,10 +577,82 @@ impl StateMachineLayerInstance {
         }
         self.waiting_for_exit = false;
         self.ensure_any_state_instance(machine);
+        if self.settled.get() {
+            #[cfg(feature = "testing")]
+            {
+                self.verify_settled(machine);
+                SETTLED_LAYER_SKIPS.with(|count| count.set(count.get() + 1));
+            }
+            return false;
+        }
         if self.try_change_state_from(machine, self.any_state_instance.clone()) {
             return true;
         }
-        self.try_change_state_from(machine, self.current_state.clone())
+        if self.try_change_state_from(machine, self.current_state.clone()) {
+            return true;
+        }
+        if !self.waiting_for_exit
+            && !machine.settling.binds_pending.get()
+            && Self::is_settle_safe(self.any_state_instance.as_ref())
+            && Self::is_settle_safe(self.current_state.as_ref())
+        {
+            self.settled.set(true);
+            machine.settling.any_settled.set(true);
+        }
+        false
+    }
+
+    fn is_settle_safe(state: Option<&RuntimeStateInstanceHandle>) -> bool {
+        state.is_none_or(|state| {
+            state
+                .definition()
+                .with(|state| {
+                    state
+                        .layer_state_settle_flags()
+                        .expect("LayerState flags")
+                        .0
+                })
+                .unwrap()
+        })
+    }
+
+    #[cfg(feature = "testing")]
+    fn verify_settled(&mut self, machine: &mut StateMachineInstance) {
+        for from in [self.any_state_instance.clone(), self.current_state.clone()]
+            .into_iter()
+            .flatten()
+        {
+            let state = from.definition();
+            let transitions = state
+                .with(|state| {
+                    (0..state.layer_state_transition_count().unwrap())
+                        .filter_map(|i| state.layer_state_transition(i))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap();
+            for transition in transitions {
+                let to = transition
+                    .with(|transition| transition.state_transition_state_to())
+                    .flatten();
+                if self.can_change_state(&to) {
+                    let allowed = transition
+                        .with_mut(|transition| {
+                            transition.state_transition_allowed(
+                                &from,
+                                machine,
+                                self.occurrence.clone(),
+                            )
+                        })
+                        .flatten()
+                        .unwrap();
+                    assert_eq!(
+                        allowed,
+                        AllowTransition::No,
+                        "settled layer would have taken a transition"
+                    );
+                }
+            }
+        }
     }
 
     fn fire_events(
@@ -559,6 +715,7 @@ impl StateMachineLayerInstance {
         {
             return;
         }
+        self.settled.set(false);
         if let Some(current) = self.current_state.clone() {
             let state = current.definition();
             let events = Self::layer_component_events(&state);
@@ -2279,6 +2436,7 @@ impl ViewModelValueDependent for ListenerViewModelPropertyBinding {
 
 struct ListenerViewModel {
     occurrence: RuntimeListenerViewModelWeakHandle,
+    machine: RuntimeStateMachineInstanceWeakHandle,
     reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
     listener: CoreHandle,
     data_context: Option<RuntimeDataContextHandle>,
@@ -2331,9 +2489,11 @@ impl ListenerViewModel {
     fn new(
         reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
         listener: CoreHandle,
+        machine: RuntimeStateMachineInstanceWeakHandle,
     ) -> RuntimeListenerViewModelHandle {
         RuntimeListenerViewModelHandle::new(Self {
             occurrence: RuntimeListenerViewModelWeakHandle::default(),
+            machine,
             reported_listener_view_models,
             listener,
             data_context: None,
@@ -2403,6 +2563,7 @@ impl ListenerViewModel {
 
     fn report_to_state_machine(&mut self, trigger_value: Option<u32>) {
         if trigger_value.is_none_or(|value| value != 0) {
+            self.machine.wake_row();
             self.reported_listener_view_models
                 .borrow_mut()
                 .push(self.occurrence.clone());
@@ -2417,6 +2578,7 @@ pub struct RuntimeStateMachineInstanceHandle(
     RuntimeArtboardInstanceWeakHandle,
     Rc<RefCell<Sidecar<SMIInputExtras>>>,
     Rc<Cell<bool>>,
+    Rc<LayerSettling>,
 );
 
 #[derive(Clone, Default)]
@@ -2426,6 +2588,7 @@ pub struct RuntimeStateMachineInstanceWeakHandle(
     RuntimeArtboardInstanceWeakHandle,
     Weak<RefCell<Sidecar<SMIInputExtras>>>,
     Weak<Cell<bool>>,
+    Weak<LayerSettling>,
 );
 
 impl RuntimeStateMachineInstanceHandle {
@@ -2641,12 +2804,14 @@ impl RuntimeStateMachineInstanceHandle {
         let artboard = instance.artboard_instance.clone();
         let input_extras = instance.input_extras.clone();
         let needs_advance = instance.needs_advance.clone();
+        let settling = instance.settling.clone();
         Self(
             Rc::new(RefCell::new(instance)),
             container,
             artboard,
             input_extras,
             needs_advance,
+            settling,
         )
     }
 
@@ -2657,6 +2822,7 @@ impl RuntimeStateMachineInstanceHandle {
             self.2.clone(),
             Rc::downgrade(&self.3),
             Rc::downgrade(&self.4),
+            Rc::downgrade(&self.5),
         )
     }
 
@@ -2670,6 +2836,27 @@ impl RuntimeStateMachineInstanceHandle {
 }
 
 impl RuntimeStateMachineInstanceWeakHandle {
+    pub(crate) fn wake_row(&self) {
+        if let Some(settling) = self.5.upgrade() {
+            settling.wake_row();
+        }
+    }
+    pub(crate) fn data_bind_dirtied(&self) {
+        if let Some(settling) = self.5.upgrade() {
+            settling.binds_pending.set(true);
+            settling.unsettle();
+        }
+    }
+    pub(crate) fn data_binds_processing_started(&self) {
+        if let Some(settling) = self.5.upgrade() {
+            settling.binds_pending.set(false);
+        }
+    }
+    pub(crate) fn data_context_changed(&self) {
+        if let Some(settling) = self.5.upgrade() {
+            settling.unsettle();
+        }
+    }
     pub fn upgrade(&self) -> Option<RuntimeStateMachineInstanceHandle> {
         self.0.upgrade().map(|instance| {
             RuntimeStateMachineInstanceHandle(
@@ -2684,6 +2871,9 @@ impl RuntimeStateMachineInstanceWeakHandle {
                 self.4
                     .upgrade()
                     .expect("live machine owns its advance flag"),
+                self.5
+                    .upgrade()
+                    .expect("live machine owns its settling state"),
             )
         })
     }
@@ -2697,6 +2887,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
     }
 
     pub(crate) fn relink_data_context(&self) {
+        self.data_context_changed();
         // Pinned StateMachineInstance::relinkDataContext only forwards to its
         // constructor-bound Artboard. Retain the live machine, but do not
         // borrow it: a listener can replace a view model during pointerUp.
@@ -2709,6 +2900,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
     }
 
     pub(crate) fn main_view_model_instance_changed(&self) {
+        self.data_context_changed();
         let Some(machine) = self.upgrade() else {
             return;
         };
@@ -2750,6 +2942,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
             .queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
         machine.4.set(true);
+        machine.5.wake_row();
     }
 
     pub fn with_instance<R>(&self, f: impl FnOnce(&StateMachineInstance) -> R) -> Option<R> {
@@ -2773,6 +2966,7 @@ pub struct StateMachineInstance {
     machine: CoreHandle,
     artboard_instance: RuntimeArtboardInstanceWeakHandle,
     needs_advance: Rc<Cell<bool>>,
+    settling: Rc<LayerSettling>,
     input_instances: Vec<Option<InputInstance>>,
     layers: Vec<RuntimeStateMachineLayerInstanceHandle>,
     hit_components: Vec<Rc<dyn HitComponent>>,
@@ -2862,6 +3056,12 @@ impl StateMachineInstance {
             machine,
             artboard_instance: artboard_instance.clone(),
             needs_advance: Rc::new(Cell::new(false)),
+            settling: Rc::new(LayerSettling {
+                row: artboard_instance
+                    .upgrade()
+                    .and_then(|artboard| artboard.core_handle().artboard_dirty_handle()),
+                ..LayerSettling::default()
+            }),
             input_instances: Vec::new(),
             layers: Vec::new(),
             hit_components: Vec::new(),
@@ -2887,6 +3087,7 @@ impl StateMachineInstance {
                 .data_bind_container
                 .set_state_machine_owner(handle.downgrade());
             let mut input_notifier = InputInstanceNotifier::new(Rc::clone(&instance.needs_advance));
+            input_notifier.set_wake_machine(handle.downgrade());
             #[cfg(feature = "tools")]
             input_notifier.set_machine(handle.downgrade(), instance.input_changed_callback.clone());
 
@@ -2931,6 +3132,11 @@ impl StateMachineInstance {
                 );
                 layer_instance.with_layer_mut(|layer_instance| {
                     layer_instance.init(instance, layer);
+                    instance
+                        .settling
+                        .layers
+                        .borrow_mut()
+                        .push(layer_instance.settled.clone());
                 });
                 instance.layers.push(layer_instance);
             }
@@ -3027,6 +3233,7 @@ impl StateMachineInstance {
         listener: &CoreHandle,
         invocation: ListenerInvocation,
     ) {
+        self.wake_row();
         // Check authored state at dispatch, including when no accessibility
         // manager exists. Exit and move listeners still run for pointer cleanup.
         if invocation.as_pointer().is_some_and(|pointer| {
@@ -3105,7 +3312,6 @@ impl StateMachineInstance {
                     clone.set_converter(converter);
                 }
             });
-            self.add_data_bind(clone.clone());
             if original_target.is_type_of(BindablePropertyBase::TYPE_KEY) {
                 let property = if let Some(property) = self
                     .ensure_bindables()
@@ -3137,11 +3343,11 @@ impl StateMachineInstance {
                 if to_source {
                     self.ensure_bindables()
                         .data_binds_to_source
-                        .insert(property, clone);
+                        .insert(property, clone.clone());
                 } else {
                     self.ensure_bindables()
                         .data_binds_to_target
-                        .insert(property, clone);
+                        .insert(property, clone.clone());
                 }
             } else {
                 clone.with_mut(|clone| {
@@ -3176,6 +3382,7 @@ impl StateMachineInstance {
                     });
                 }
             }
+            self.add_data_bind(clone);
         }
     }
 
@@ -3197,10 +3404,12 @@ impl StateMachineInstance {
                 continue;
             }
             if self.listener_has(&listener, ListenerType::ViewModel) {
+                let machine = self.occurrence.clone();
                 let reporting = self.ensure_reporting();
                 reporting.listener_view_models.push(ListenerViewModel::new(
                     reporting.reported_listener_view_models.clone(),
                     listener,
+                    machine,
                 ));
                 continue;
             }
@@ -4026,7 +4235,7 @@ impl StateMachineInstance {
         self.ensure_input_extras()
             .queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
-        self.needs_advance.set(true);
+        self.mark_needs_advance();
     }
 
     pub fn set_focus(&mut self, focus_data: Option<CoreHandle>) {
@@ -4073,7 +4282,7 @@ impl StateMachineInstance {
         let node = focus_data.with_downcast_mut::<FocusData, _>(FocusData::focus_node);
         let root = self.root_artboard();
         manager.with_focus_manager_mut(|manager| manager.request_focus(node, root));
-        self.needs_advance.set(true);
+        self.mark_needs_advance();
     }
 
     pub fn queue_clear_focus(&mut self) {
@@ -4082,7 +4291,7 @@ impl StateMachineInstance {
         };
         let root = self.root_artboard();
         manager.with_focus_manager_mut(|manager| manager.request_clear_focus(root));
-        self.needs_advance.set(true);
+        self.mark_needs_advance();
     }
 
     pub fn queue_focus_traversal(&mut self, traversal_kind: u32) {
@@ -4091,7 +4300,7 @@ impl StateMachineInstance {
         };
         let root = self.root_artboard();
         manager.with_focus_manager_mut(|manager| manager.request_traversal(traversal_kind, root));
-        self.needs_advance.set(true);
+        self.mark_needs_advance();
     }
 
     pub fn focus_state(&self) -> FocusState {
@@ -4155,7 +4364,7 @@ impl StateMachineInstance {
         self.ensure_input_extras()
             .queued_semantic_events
             .push(QueuedSemanticEvent { group, action_type });
-        self.needs_advance.set(true);
+        self.mark_needs_advance();
     }
 
     fn process_semantic_events(&mut self) {
@@ -4251,6 +4460,65 @@ impl StateMachineInstance {
 
     pub fn mark_needs_advance(&mut self) {
         self.needs_advance.set(true);
+        self.wake_row();
+    }
+
+    pub fn wake_row(&self) {
+        self.settling.wake_row();
+    }
+
+    #[cfg(feature = "testing")]
+    pub fn settled_layer_skips() -> u64 {
+        SETTLED_LAYER_SKIPS.with(Cell::get)
+    }
+    #[cfg(feature = "testing")]
+    pub fn frozen_layer_advances() -> u64 {
+        FROZEN_LAYER_ADVANCES.with(Cell::get)
+    }
+
+    pub fn row_quiet_state(
+        &self,
+    ) -> crate::mechanical_port::source::advancing_component::QuietState {
+        use crate::mechanical_port::source::advancing_component::QuietState;
+        if self.scripting.get().is_some() {
+            return QuietState::Never;
+        }
+        if self.needs_advance.get()
+            || self.settling.binds_pending.get()
+            || self.data_bind_container.has_data_bind_work()
+            || self
+                .artboard_instance
+                .with_artboard(|artboard| artboard.draw_order_change_counter())
+                != Some(self.draw_order_change_counter)
+        {
+            return QuietState::Busy;
+        }
+        if self.reporting.get().is_some_and(|reporting| {
+            !reporting.reported_events.is_empty()
+                || !reporting.reporting_events.is_empty()
+                || !reporting.events_applied_during_loop.is_empty()
+                || !reporting.reported_listener_view_models.borrow().is_empty()
+                || !reporting.reporting_listener_view_models.is_empty()
+        }) {
+            return QuietState::Busy;
+        }
+        if self.input_extras().is_some_and(|extras| {
+            !extras.queued_focus_events.is_empty() || !extras.queued_semantic_events.is_empty()
+        }) {
+            return QuietState::Busy;
+        }
+        for layer in &self.layers {
+            if layer
+                .with_layer(|layer| !layer.is_frozen() || layer.state_machine_changed_on_advance)
+            {
+                return QuietState::Busy;
+            }
+        }
+        if self.data_bind_container.may_advance_data_binds() {
+            QuietState::Never
+        } else {
+            QuietState::Quiet
+        }
     }
 
     pub fn needs_advance(&self) -> bool {
@@ -4258,6 +4526,7 @@ impl StateMachineInstance {
     }
 
     pub fn reset_state(&mut self) {
+        self.wake_row();
         let layers = self.layers.clone();
         for layer in layers {
             layer.with_layer_mut(|layer| layer.reset_state(self));
@@ -4650,6 +4919,7 @@ impl StateMachineInstance {
     }
 
     pub fn report_event(&mut self, event: CoreHandle, seconds_delay: f32) {
+        self.wake_row();
         static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let report = EventReport {
             event: Some(event),
@@ -5276,12 +5546,14 @@ impl StateMachineInstance {
     }
 
     pub fn relink_data_context(&mut self) {
+        self.settling.unsettle();
         if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.relink_data_context();
         }
     }
 
     pub fn main_view_model_instance_changed(&self) {
+        self.settling.unsettle();
         if let Some(artboard) = self.artboard_instance.upgrade() {
             Artboard::main_view_model_instance_changed_handle(&artboard.core_handle());
         }
@@ -5540,6 +5812,7 @@ impl StateMachineInstance {
 
 impl Drop for StateMachineInstance {
     fn drop(&mut self) {
+        self.settling.destroying.set(true);
         let owns_semantic_manager = self.input_extras().is_some_and(|extras| {
             extras.external_semantic_manager.is_none() && extras.semantic_manager.is_some()
         });
@@ -5560,6 +5833,8 @@ impl Drop for StateMachineInstance {
             data_bind.remove_occurrence();
         }
         self.layers.clear();
+        self.settling.layers.borrow_mut().clear();
+        self.settling.any_settled.set(false);
         if let Some(bindables) = self.bindables.get_mut() {
             bindables.property_instances.for_each_instance(|property| {
                 property.remove_occurrence();

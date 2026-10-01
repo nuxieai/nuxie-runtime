@@ -4692,6 +4692,7 @@ pub trait FileAssetCapability {
 }
 
 pub trait DataConverterCapability {
+    fn may_advance(&self) -> bool { false }
     fn convert(
         &mut self,
         input: &dyn crate::mechanical_port::source::data_bind::data_values::data_value::DataValue,
@@ -5786,6 +5787,12 @@ pub trait CoreCapabilities: Any {
     fn is_advancing_component(&self) -> bool {
         false
     }
+    fn advancing_component_quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        if let Some(layout) = self.as_layout_component() {
+            return layout.quiet_state();
+        }
+        crate::source::advancing_component::QuietState::Never
+    }
     fn advancing_component_advance(
         &mut self,
         _elapsed_seconds: f32,
@@ -6402,6 +6409,8 @@ pub trait CoreCapabilities: Any {
     fn layer_state_flags(&self) -> Option<u32> {
         None
     }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> { None }
+    fn set_layer_state_settle_flags(&mut self, _safe: bool, _ignore_time: bool) {}
     fn layer_state_transition(
         &self,
         _index: usize,
@@ -58778,6 +58787,9 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::layout::layout_participant::LayoutParticipant
 {
+    fn advancing_component_quiet_state(&self) -> crate::source::advancing_component::QuietState {
+        self.quiet_state()
+    }
     fn is_advancing_component(&self) -> bool {
         true
     }
@@ -59595,6 +59607,13 @@ impl CoreCapabilities
     }
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.base.base.flags())
+    }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
     }
     fn layer_state_transition(
         &self,
@@ -60530,6 +60549,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::any_state::
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.flags())
     }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
+    }
     fn layer_state_transition(
         &self,
         index: usize,
@@ -60643,6 +60669,13 @@ impl CoreCapabilities
     }
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.base.base.base.base.base.flags())
+    }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
     }
     fn layer_state_transition(
         &self,
@@ -61289,6 +61322,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::entry_state
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.flags())
     }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
+    }
     fn layer_state_transition(
         &self,
         index: usize,
@@ -61477,6 +61517,13 @@ impl CoreCapabilities
     }
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.base.base.base.flags())
+    }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
     }
     fn layer_state_transition(
         &self,
@@ -61769,6 +61816,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::exit_state:
     }
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.flags())
+    }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
     }
     fn layer_state_transition(
         &self,
@@ -62087,6 +62141,13 @@ impl CoreCapabilities
     }
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.base.base.base.base.base.base.base.flags())
+    }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
     }
     fn layer_state_transition(
         &self,
@@ -70690,6 +70751,13 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::layer_state
     }
     fn layer_state_flags(&self) -> Option<u32> {
         Some(self.flags())
+    }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+    }
+    fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
+        self.set_transitions_settle_safe(safe);
+        self.set_transitions_ignore_time(ignore_time);
     }
     fn layer_state_transition(
         &self,

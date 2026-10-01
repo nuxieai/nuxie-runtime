@@ -20,7 +20,6 @@ pub trait StateMachineInputDefinition {
 #[derive(Clone)]
 pub struct InputInstanceNotifier {
     needs_advance: Rc<Cell<bool>>,
-    #[cfg(feature = "tools")]
     machine: Option<RuntimeStateMachineInstanceWeakHandle>,
     #[cfg(feature = "tools")]
     callback: InputChangedCallbackSlot,
@@ -29,11 +28,13 @@ impl InputInstanceNotifier {
     pub fn new(needs_advance: Rc<Cell<bool>>) -> Self {
         Self {
             needs_advance,
-            #[cfg(feature = "tools")]
             machine: None,
             #[cfg(feature = "tools")]
             callback: Default::default(),
         }
+    }
+    pub(crate) fn set_wake_machine(&mut self, machine: RuntimeStateMachineInstanceWeakHandle) {
+        self.machine = Some(machine);
     }
     #[cfg(feature = "tools")]
     pub(crate) fn set_machine(
@@ -46,6 +47,9 @@ impl InputInstanceNotifier {
     }
     fn value_changed(&self, index: u64) {
         self.needs_advance.set(true);
+        if let Some(machine) = &self.machine {
+            machine.wake_row();
+        }
         #[cfg(feature = "tools")]
         if let Some(machine) = self.machine.as_ref() {
             // SMIInput::valueChanged reads the owning machine's callback field,

@@ -588,30 +588,6 @@ fn collect_descendant_geometry(
     }
 }
 
-/// Recalculate semantic bounds after a rendered clip changes without dirtying
-/// unrelated text/paint dependencies in the clipped subtree.
-pub(crate) fn invalidate_clipped_semantics(children: &[CoreHandle]) {
-    let mut pending = children.to_vec();
-    let mut visited = std::collections::HashSet::new();
-    while let Some(handle) = pending.pop() {
-        if !visited.insert(handle.clone()) {
-            continue;
-        }
-        handle.with_mut(|object| {
-            if object
-                .as_any()
-                .is::<crate::mechanical_port::source::semantic::semantic_data::SemanticData>()
-            {
-                object.component_add_dirt(
-                    crate::mechanical_port::source::component_dirt::ComponentDirt::PATH,
-                    false,
-                );
-            }
-            append_semantic_children(object, &mut pending);
-        });
-    }
-}
-
 /// Reject incomplete geometry before exposing a semantic capture. Include
 /// excluded nodes: an over-budget clip must not masquerade as a hidden control.
 pub fn validate_semantic_geometry(root: &CoreHandle) -> Result<(), SemanticGeometryError> {

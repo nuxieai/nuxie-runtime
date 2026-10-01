@@ -156,11 +156,9 @@ fn swapping_data_bound_nested_artboard_rehomes_semantic_subtree() {
         .with_downcast::<ViewModelInstance, _>(|vmi| vmi.property_value_named("artboardProp"))
         .flatten()
         .expect("artboardProp");
-    assert!(
-        property
-            .with_downcast::<ViewModelInstanceArtboard, _>(|_| ())
-            .is_some()
-    );
+    assert!(property
+        .with_downcast::<ViewModelInstanceArtboard, _>(|_| ())
+        .is_some());
     let swap = |name: &str| {
         let source = file
             .with_file(|file| file.bindable_artboard_named(name))
@@ -193,8 +191,8 @@ fn swapping_data_bound_nested_artboard_rehomes_semantic_subtree() {
 
 #[test]
 fn swapped_in_nested_subtree_builds_semantics_outside_outer_host_borrow() {
-    use nuxie_runtime::Artboard;
     use nuxie_runtime::source::semantic::semantic_data::SemanticData;
+    use nuxie_runtime::Artboard;
     use std::rc::Rc;
 
     let (file, artboard, machine) = fixture();
@@ -263,17 +261,15 @@ fn swapped_in_nested_subtree_builds_semantics_outside_outer_host_borrow() {
         Rc::ptr_eq(&parent, &incoming_boundary),
         "grandchild boundary belongs under incoming boundary"
     );
-    assert!(
-        incoming_boundary
-            .borrow()
-            .children()
-            .iter()
-            .any(|node| Rc::ptr_eq(node, &child_boundary))
-    );
+    assert!(incoming_boundary
+        .borrow()
+        .children()
+        .iter()
+        .any(|node| Rc::ptr_eq(node, &child_boundary)));
 }
 
 #[test]
-fn root_frame_origin_updates_hosted_semantic_bounds() {
+fn root_frame_origin_preserves_native_bounds_but_moves_host_geometry() {
     use nuxie_runtime::source::{
         generated::{
             artboard_base::ArtboardBase, core_registry::CoreRegistry,
@@ -320,10 +316,18 @@ fn root_frame_origin_updates_hosted_semantic_bounds() {
         0.25
     ));
     let width = artboard.with_artboard(|artboard| artboard.layout_width());
+    let mut host_points = Vec::new();
     let mut snapshots = Vec::new();
     for frame_origin in [false, true] {
         artboard.with_artboard_mut(|artboard| artboard.set_frame_origin(frame_origin));
         artboard.advance_default(0.0);
+        host_points.push(
+            nuxie_runtime::source::semantic::semantic_provider::root_transform_point(
+                &root,
+                nuxie_runtime::source::math::vec2d::Vec2D::new(0.0, 0.0),
+            )
+            .unwrap(),
+        );
         snapshots.push(manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec()));
     }
     let before = snapshots[0]
@@ -334,8 +338,10 @@ fn root_frame_origin_updates_hosted_semantic_bounds() {
         .iter()
         .find(|node| node.id == before.id)
         .expect("same hosted control");
-    assert!(
-        (after.min_x - before.min_x - width * 0.25).abs() < 0.01,
-        "hosted bounds must follow the renderer's root translation: {before:?} -> {after:?}"
+    assert_eq!(
+        after.bounds(),
+        before.bounds(),
+        "upstream rootTransform excludes root frame origin"
     );
+    assert!((host_points[1].x - host_points[0].x - width * 0.25).abs() < 0.01);
 }

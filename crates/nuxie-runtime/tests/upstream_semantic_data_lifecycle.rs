@@ -9,7 +9,7 @@ use nuxie_runtime::source::{
         semantic_listener_group::SemanticActionType,
         state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
-    semantic::semantic_state::{SemanticState, has_semantic_state},
+    semantic::semantic_state::{has_semantic_state, SemanticState},
     semantic::{semantic_data::SemanticData, semantic_manager::RuntimeSemanticManagerHandle},
 };
 use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
@@ -192,11 +192,10 @@ fn full_snapshot_survives_diff_drain_and_tracks_authored_actions() {
     let diff = fixture
         .manager
         .with_semantic_manager_mut(|manager| manager.drain_diff());
-    assert!(
-        diff.updated_semantic
-            .iter()
-            .any(|node| node.id == fixture.button_id)
-    );
+    assert!(diff
+        .updated_semantic
+        .iter()
+        .any(|node| node.id == fixture.button_id));
     assert_eq!(
         fixture
             .manager
@@ -413,7 +412,8 @@ fn zero_opacity_controls_remain_in_semantic_tree_and_execute_actions() {
             fixture.machine.advance_and_apply(0.0);
         }
         assert!(
-            !data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            !data
+                .with_downcast::<SemanticData, _>(|data| data.is_expanded())
                 .unwrap(),
             "direct and queued taps execute even when the control or ancestor has zero opacity"
         );
@@ -431,11 +431,9 @@ fn zero_opacity_controls_remain_in_semantic_tree_and_execute_actions() {
             .machine
             .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
         fixture.machine.advance_and_apply(0.0);
-        assert!(
-            data
-                .with_downcast::<SemanticData, _>(|data| data.is_expanded())
-                .unwrap()
-        );
+        assert!(data
+            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            .unwrap());
     }
 }
 
@@ -614,7 +612,8 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
         "enabling clipping must preserve semantics"
     );
     assert!(
-        !data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+        !data
+            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
             .unwrap(),
         "a queued semantic action executes after clipping changes"
     );
@@ -622,10 +621,9 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
         .machine
         .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
     fixture.machine.advance_and_apply(0.0);
-    assert!(
-        data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
-            .unwrap()
-    );
+    assert!(data
+        .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+        .unwrap());
     assert!(CoreRegistry::set_double_handle(
         &position_owner,
         x_key,
@@ -653,7 +651,10 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
         .iter()
         .find(|node| node.id == fixture.button_id)
         .expect("partially visible control remains accessible");
-    assert!((partial.bounds().max_x - clip_bounds.max_x).abs() < 0.01);
+    assert!(
+        partial.bounds().max_x > clip_bounds.max_x,
+        "native semantic bounds are not clipped"
+    );
     assert!((partial.bounds().min_x - (clip_bounds.max_x - half_width)).abs() < 0.01);
     assert!(CoreRegistry::set_double_handle(
         &position_owner,
@@ -665,11 +666,9 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
         .machine
         .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
     fixture.machine.advance_and_apply(0.0);
-    assert!(
-        !data
-            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
-            .unwrap()
-    );
+    assert!(!data
+        .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+        .unwrap());
 }
 
 #[test]
@@ -677,7 +676,9 @@ fn rotated_target_cannot_use_its_empty_bounding_box_corner_as_visible_geometry()
     use nuxie_runtime::source::{
         generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
         math::{mat2d::Mat2D, vec2d::Vec2D},
-        semantic::semantic_provider::{semantic_bounds, semantic_source_is_visible},
+        semantic::semantic_provider::{
+            rendered_geometry_bounds as semantic_bounds, semantic_source_is_visible,
+        },
     };
     let fixture = dropdown();
     let data = fixture
@@ -765,7 +766,9 @@ fn rounded_layout_clip_rejects_a_control_inside_its_empty_corner() {
             mat2d::Mat2D,
             path_types::{FillRule, PathVerb},
         },
-        semantic::semantic_provider::{semantic_bounds, semantic_source_is_visible},
+        semantic::semantic_provider::{
+            rendered_geometry_bounds as semantic_bounds, semantic_source_is_visible,
+        },
     };
     let fixture = dropdown();
     let data = fixture
@@ -861,14 +864,14 @@ fn rounded_layout_clip_rejects_a_control_inside_its_empty_corner() {
 }
 
 #[test]
-fn authored_corner_radius_updates_stationary_semantic_snapshot() {
+fn authored_corner_radius_changes_host_geometry_not_native_semantic_bounds() {
     use nuxie_runtime::source::{
         generated::{
             core_registry::CoreRegistry,
             layout::layout_component_style_base::LayoutComponentStyleBase,
             layout_component_base::LayoutComponentBase,
         },
-        semantic::semantic_provider::semantic_bounds,
+        semantic::semantic_provider::{rendered_geometry_bounds, semantic_bounds},
     };
     let fixture = dropdown();
     let data = fixture
@@ -915,16 +918,11 @@ fn authored_corner_radius_updates_stationary_semantic_snapshot() {
             .manager
             .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
         let actual = snapshot.iter().find(|node| node.id == fixture.button_id);
-        if expected.is_empty_or_nan() {
-            assert!(actual.is_none(), "rounded clip must retire the control");
-        } else {
-            assert_eq!(
-                actual.expect("visible control").bounds(),
-                expected,
-                "snapshot must follow the rendered clip"
-            );
-        }
-        bounds.push(expected);
+        assert_eq!(
+            actual.expect("native control remains registered").bounds(),
+            expected
+        );
+        bounds.push(rendered_geometry_bounds(Some(&owner)));
         transforms.push(
             owner
                 .with(|object| *object.as_node().unwrap().world_transform())
@@ -944,7 +942,7 @@ fn authored_corner_radius_updates_stationary_semantic_snapshot() {
 }
 
 #[test]
-fn semantic_bounds_follow_artboard_frame_origin_translation() {
+fn native_bounds_ignore_root_frame_origin_while_host_projection_applies_it() {
     use nuxie_runtime::source::generated::{
         artboard_base::ArtboardBase, core_registry::CoreRegistry,
     };
@@ -964,11 +962,19 @@ fn semantic_bounds_follow_artboard_frame_origin_translation() {
         ._artboard
         .with_artboard(|artboard| (artboard.layout_width(), artboard.layout_height()));
     let mut bounds = Vec::new();
+    let mut host_points = Vec::new();
     for frame_origin in [false, true] {
         fixture
             ._artboard
             .with_artboard_mut(|artboard| artboard.set_frame_origin(frame_origin));
         fixture._artboard.advance_default(0.0);
+        host_points.push(
+            nuxie_runtime::source::semantic::semantic_provider::root_transform_point(
+                &root,
+                nuxie_runtime::source::math::vec2d::Vec2D::new(0.0, 0.0),
+            )
+            .unwrap(),
+        );
         let snapshot = fixture
             .manager
             .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
@@ -980,12 +986,10 @@ fn semantic_bounds_follow_artboard_frame_origin_translation() {
                 .bounds(),
         );
     }
-    assert!(
-        (bounds[1].min_x - bounds[0].min_x - width * 0.5).abs() < 0.01,
-        "semantic x must include the renderer's frame-origin translation: {bounds:?}"
+    assert_eq!(
+        bounds[0], bounds[1],
+        "upstream semantic bounds exclude root frame origin"
     );
-    assert!(
-        (bounds[1].min_y - bounds[0].min_y - height * 0.5).abs() < 0.01,
-        "semantic y must include the renderer's frame-origin translation: {bounds:?}"
-    );
+    assert!((host_points[1].x - host_points[0].x - width * 0.5).abs() < 0.01);
+    assert!((host_points[1].y - host_points[0].y - height * 0.5).abs() < 0.01);
 }

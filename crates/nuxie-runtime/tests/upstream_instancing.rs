@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory, RecordingRenderer};
 use nuxie_runtime::{
-    Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
     source::shapes::{clipping_shape::ClippingShape, shape::Shape},
+    Artboard, CoreHandle, File, ImportResult, RuntimeFactoryHandle, RuntimeFileHandle,
 };
 
 fn pinned_fixture(name: &str) -> Vec<u8> {
@@ -149,11 +149,13 @@ fn instancing_artboard_does_not_clone_animations() {
 }
 
 #[test]
-fn semantics_follow_registered_custom_clip_paths() {
+fn host_rendered_geometry_follows_registered_custom_clip_paths() {
     use nuxie_runtime::source::{
         generated::core_registry::CoreRegistry,
         generated::shapes::clipping_shape_base::ClippingShapeBase,
-        semantic::semantic_provider::{semantic_bounds, semantic_source_is_visible},
+        semantic::semantic_provider::{
+            rendered_geometry_bounds as semantic_bounds, semantic_source_is_visible,
+        },
     };
 
     let (file, _renderer) = load_file("circle_clips.riv");
@@ -230,7 +232,7 @@ fn semantics_follow_registered_custom_clip_paths() {
 }
 
 #[test]
-fn custom_clip_changes_refresh_stationary_semantic_snapshots() {
+fn custom_clip_changes_preserve_native_semantic_snapshots() {
     use nuxie_runtime::source::{
         generated::{
             component_base::ComponentBase, core_registry::CoreRegistry, node_base::NodeBase,
@@ -318,15 +320,18 @@ fn custom_clip_changes_refresh_stationary_semantic_snapshots() {
     );
     let hidden = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
     assert!(
-        !hidden.iter().any(|node| node.id == id),
-        "displaced custom clip must retire the stationary control"
+        hidden
+            .iter()
+            .find(|node| node.id == id)
+            .is_some_and(|node| node.bounds() == original),
+        "upstream semantic bounds ignore rendered clipping"
     );
     assert!(CoreRegistry::set_double_handle(&clip_source, x_key, x));
     instance.advance_default(0.0);
     let returned = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
     assert!(
         returned.iter().any(|node| node.id == id),
-        "moving the enabled clip back restores the same control"
+        "moving the enabled clip preserves the same control"
     );
     assert!(CoreRegistry::set_double_handle(
         &clip_source,
@@ -334,12 +339,8 @@ fn custom_clip_changes_refresh_stationary_semantic_snapshots() {
         x + 10000.0
     ));
     instance.advance_default(0.0);
-    assert!(
-        !manager.with_semantic_manager_mut(|manager| manager
-            .snapshot()
-            .iter()
-            .any(|node| node.id == id))
-    );
+    assert!(manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().iter().any(|node| node.id == id)));
     assert!(CoreRegistry::set_bool_handle(
         clip,
         ClippingShapeBase::IS_VISIBLE_PROPERTY_KEY.into(),
@@ -357,7 +358,7 @@ fn custom_clip_changes_refresh_stationary_semantic_snapshots() {
     );
     use nuxie_runtime::source::{
         math::{aabb::Aabb, path_types::PathDirection},
-        semantic::semantic_provider::{SemanticGeometryError, validate_semantic_geometry},
+        semantic::semantic_provider::{validate_semantic_geometry, SemanticGeometryError},
     };
     assert_eq!(validate_semantic_geometry(&instance.core_handle()), Ok(()));
     clip.with_downcast_mut::<ClippingShape, _>(|clip| {
@@ -384,7 +385,7 @@ fn custom_clip_changes_refresh_stationary_semantic_snapshots() {
     assert_eq!(
         validate_semantic_geometry(&instance.core_handle()),
         Err(SemanticGeometryError::LimitExceeded),
-        "an excluded control with an unsupported clip must fail capture validation"
+        "host capture validation still rejects an unsupported clip"
     );
     assert!(CoreRegistry::set_bool_handle(
         clip,

@@ -320,8 +320,8 @@ fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
         };
         let touch = || {
             fixture.machine.with_instance_mut(|machine| {
-                machine.pointer_down(point, 51);
-                machine.pointer_up(point, 51);
+                machine.pointer_down(point, 51, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+                machine.pointer_up(point, 51, nuxie_runtime::source::pointer_button::PointerButton::Primary);
             });
             for _ in 0..10 {
                 fixture.machine.advance_and_apply(0.1);

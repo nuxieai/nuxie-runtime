@@ -197,8 +197,8 @@ fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
     let mut bounds = Aabb::default();
     assert!(with_input(&input, |input| input.world_bounds(&mut bounds)));
     let press_position = Vec2D::new(bounds.left() + 8.0, bounds.top() + 8.0);
-    machine.with_instance_mut(|machine| machine.pointer_down(press_position, 0));
-    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0));
+    machine.with_instance_mut(|machine| machine.pointer_down(press_position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     machine.advance_and_apply(0.0);
     assert!(with_input(&input, |input| input.is_focused()));
     assert_eq!(
@@ -209,7 +209,7 @@ fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
     // Already focused, a press places the caret and a drag extends from it.
     // Far enough from the first press not to count as a double click.
     let second_press = Vec2D::new(bounds.left() + 40.0, bounds.top() + 8.0);
-    machine.with_instance_mut(|machine| machine.pointer_down(second_press, 0));
+    machine.with_instance_mut(|machine| machine.pointer_down(second_press, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     machine.advance_and_apply(0.0);
     assert!(with_input(&input, |input| input
         .raw_text_input()
@@ -225,7 +225,7 @@ fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
         with_input(&input, |input| input.raw_text_input().selected_text()),
         "hello world"
     );
-    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0));
+    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn collapsing_an_artboard_ends_a_text_input_drag() {
         input.raw_text_input().set_text("hello world".into())
     });
     machine.advance_and_apply(0.0);
-    machine.with_instance_mut(|m| m.pointer_down(Vec2D::new(8.0, 8.0), 0));
+    machine.with_instance_mut(|m| m.pointer_down(Vec2D::new(8.0, 8.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     assert!(with_input(&input, |input| input.is_dragging()));
     for key in [
         TransformComponentBase::SCALE_X_PROPERTY_KEY,

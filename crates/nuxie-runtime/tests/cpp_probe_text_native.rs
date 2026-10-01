@@ -196,8 +196,8 @@ fn upstream_text_input_double_and_triple_click_selection_is_ported() {
     machine.advance_and_apply(0.0);
     let click = world_point(&artboard, &input, 8.0, 8.0);
     let press_release = || {
-        machine.with_instance_mut(|machine| machine.pointer_down(click, 0));
-        machine.with_instance_mut(|machine| machine.pointer_up(click, 0));
+        machine.with_instance_mut(|machine| machine.pointer_down(click, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        machine.with_instance_mut(|machine| machine.pointer_up(click, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     };
     press_release();
     press_release();

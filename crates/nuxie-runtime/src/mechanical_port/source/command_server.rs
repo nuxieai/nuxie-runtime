@@ -604,7 +604,7 @@ impl CommandServer {
             .instance
             .with_instance(|instance| self.cursor_pos_for_pointer_event(instance, event));
         let mut instance = wrapper.lock();
-        let result = instance.pointer_down(position, event.pointer_id);
+        let result = instance.pointer_down(position, event.pointer_id, event.button);
         if result != HitResult::None {
             instance.advance_and_apply(0.0);
         }
@@ -720,7 +720,7 @@ impl CommandServer {
             .instance
             .with_instance(|instance| self.cursor_pos_for_pointer_event(instance, event));
         let mut instance = wrapper.lock();
-        let result = instance.pointer_up(position, event.pointer_id);
+        let result = instance.pointer_up(position, event.pointer_id, event.button);
         if result != HitResult::None {
             instance.advance_and_apply(0.0);
         }
@@ -2532,14 +2532,14 @@ impl CommandServer {
                                 instance.pointer_move(position, 0.0, event.pointer_id);
                             }
                             Command::PointerDown => {
-                                if instance.pointer_down(position, event.pointer_id)
+                                if instance.pointer_down(position, event.pointer_id, event.button)
                                     != HitResult::None
                                 {
                                     instance.advance_and_apply(0.0);
                                 }
                             }
                             Command::PointerUp => {
-                                if instance.pointer_up(position, event.pointer_id)
+                                if instance.pointer_up(position, event.pointer_id, event.button)
                                     != HitResult::None
                                 {
                                     instance.advance_and_apply(0.0);

@@ -443,6 +443,7 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
+        _button: crate::mechanical_port::source::pointer_button::PointerButton,
     ) -> crate::mechanical_port::source::hit_result::HitResult {
         machine.perform_scripted_pointer(
             &self.drawable,

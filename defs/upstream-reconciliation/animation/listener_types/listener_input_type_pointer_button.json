@@ -1,0 +1,8 @@
+{
+  "name": "ListenerInputTypePointerButton",
+  "key": { "int": 155, "string": "listenerinputtypepointerbutton" },
+  "extends": "animation/listener_types/listener_input_type.json",
+  "properties": {
+    "pointerButtonValue": { "type": "uint8", "initialValue": "0", "key": { "int": 468, "string": "pointerbuttonvalue" } }
+  }
+}

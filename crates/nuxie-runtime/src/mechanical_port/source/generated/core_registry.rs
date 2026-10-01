@@ -1,4 +1,96 @@
 use std::any::Any;
+impl CoreRegistryObject for crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton {
+    fn as_registry_any(&self) -> &dyn Any { self }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any { self }
+    fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_pointer_button_base::ListenerInputTypePointerButtonBase::is_type_of(type_key) }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::ListenerInputTypeListenerTypeValue => {
+                if self.base.base.base.set_listener_type_value_value(value) {
+                    <crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton as crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks>::listener_type_value_changed(self);
+                    <crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton as crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBase::LISTENER_TYPE_VALUE_PROPERTY_KEY);
+                }
+            },
+            CoreField::ListenerInputTypePointerButtonPointerButtonValue => {
+                if self.base.set_pointer_button_value_value(value as u8) {
+                    <Self as crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_pointer_button_base::ListenerInputTypePointerButtonBaseCallbacks>::pointer_button_value_changed(self);
+                    <Self as crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks>::notify_property_changed(self, 468);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        let _ = (field, value);
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        let _ = (field, value);
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        let _ = (field, value);
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ListenerInputTypeListenerTypeValue => self.base.base.base.listener_type_value(),
+            CoreField::ListenerInputTypePointerButtonPointerButtonValue => u32::from(self.base.pointer_button_value()),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        let _ = field; String::new()
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field; 0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field; false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        let _ = field; 0.0
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field; 0
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject for crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton {
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_pointer_button_base::ListenerInputTypePointerButtonBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core { &self.base.base.base.base }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core { &mut self.base.base.base.base }
+    fn core_type(&self) -> u16 { crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_pointer_button_base::ListenerInputTypePointerButtonBase::TYPE_KEY }
+    fn is_type_of(&self, type_key: u16) -> bool { crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_pointer_button_base::ListenerInputTypePointerButtonBase::is_type_of(type_key) }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        Some(Box::new(self.base.clone_into()))
+    }
+    fn deserialize(&mut self, property_key: u16, reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+impl crate::mechanical_port::source::core::CoreType for crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton {
+    const TYPE_KEY: u16 = 155;
+}
+impl crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks for crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton {
+    fn notify_property_changed(&mut self, property_key: u16) { self.base.base.base.notify_property_changed(property_key); }
+}
+impl crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_pointer_button_base::ListenerInputTypePointerButtonBaseCallbacks for crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton {}
+impl CoreCapabilities for crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton {
+    fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> { Some(self.base.base.import(stack)) }
+    fn listener_input_type_value(&self) -> Option<u32> { Some(self.base.base.listener_type_value()) }
+    fn listener_input_type_pointer_button(&self) -> Option<crate::mechanical_port::source::pointer_button::PointerButton> { Some(self.pointer_button()) }
+}
 
 use crate::mechanical_port::source::core::{
     CoreHandle, CoreType, field_types::core_callback_type::CallbackData,
@@ -3876,6 +3968,7 @@ pub enum CoreConcreteType {
     ListenerInputTypeGamepad,
     ListenerInputTypeKeyboard,
     ListenerInputTypeText,
+    ListenerInputTypePointerButton,
     ListenerInputTypeSemantic,
     ListenerInputTypeViewModel,
     ExitState,
@@ -4360,6 +4453,7 @@ pub enum CoreField {
     ListenerInputChangeNestedInputId,
     ListenerInputTypeEventEventId,
     ListenerInputTypeListenerTypeValue,
+    ListenerInputTypePointerButtonPointerButtonValue,
     ListenerNumberChangeValue,
     MeshVertexU,
     MeshVertexV,
@@ -6563,6 +6657,11 @@ pub trait CoreCapabilities: Any {
     fn listener_input_type_value(&self) -> Option<u32> {
         None
     }
+    fn listener_input_type_pointer_button(&self) -> Option<crate::mechanical_port::source::pointer_button::PointerButton> {
+        self.listener_input_type_value().map(|_| crate::mechanical_port::source::pointer_button::PointerButton::Primary)
+    }
+    fn state_machine_listener_has_button(&self, _kind: crate::mechanical_port::source::listener_type::ListenerType, _button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { None }
+    fn state_machine_listener_listens_to_button(&self, _button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { None }
     fn scripted_object_add_property(
         &mut self,
         _property: crate::mechanical_port::source::core::CoreHandle,
@@ -8100,6 +8199,7 @@ impl CoreRegistry {
             973 => CoreConcreteType::ListenerInputTypeGamepad,
             665 => CoreConcreteType::ListenerInputTypeKeyboard,
             666 => CoreConcreteType::ListenerInputTypeText,
+            155 => CoreConcreteType::ListenerInputTypePointerButton,
             669 => CoreConcreteType::ListenerInputTypeSemantic,
             660 => CoreConcreteType::ListenerInputTypeViewModel,
             64 => CoreConcreteType::ExitState,
@@ -8534,6 +8634,7 @@ impl CoreRegistry {
             978 => CoreField::TransitionPropertyComponentComparatorPropertyKey,
             405 => CoreField::ElasticInterpolatorEasingValue,
             965 => CoreField::ListenerInputTypeListenerTypeValue,
+            468 => CoreField::ListenerInputTypePointerButtonPointerButtonValue,
             962 => CoreField::ListenerInputTypeEventEventId,
             171 => CoreField::BlendStateTransitionExitBlendAnimationId,
             747 => CoreField::ShapePaintBlendModeValue,
@@ -9339,6 +9440,7 @@ impl CoreRegistry {
             978 => CoreField::TransitionPropertyComponentComparatorPropertyKey,
             405 => CoreField::ElasticInterpolatorEasingValue,
             965 => CoreField::ListenerInputTypeListenerTypeValue,
+            468 => CoreField::ListenerInputTypePointerButtonPointerButtonValue,
             962 => CoreField::ListenerInputTypeEventEventId,
             171 => CoreField::BlendStateTransitionExitBlendAnimationId,
             747 => CoreField::ShapePaintBlendModeValue,
@@ -10198,6 +10300,7 @@ impl CoreRegistry {
             978 => 0,
             405 => 0,
             965 => 0,
+            468 => 0,
             962 => 0,
             171 => 0,
             747 => 0,
@@ -10852,6 +10955,7 @@ impl CoreRegistry {
             978 => 667,
             405 => 174,
             965 => 658,
+            468 => 155,
             962 => 659,
             171 => 78,
             747 => 21,
@@ -59993,6 +60097,8 @@ impl CoreCapabilities
     ) -> Option<bool> {
         Some(crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener::has_listener(self, kind))
     }
+    fn state_machine_listener_has_button(&self, kind: crate::mechanical_port::source::listener_type::ListenerType, button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { Some(self.has_listener_button(kind, button)) }
+    fn state_machine_listener_listens_to_button(&self, button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { Some(self.listens_to_button(button)) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::state_machine_listener_single::StateMachineListenerSingle {
     fn as_state_machine_listener(&self) -> Option<&crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener> { Some(&self.base.base) }
@@ -60019,6 +60125,8 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::state_machi
     ) -> Option<bool> {
         Some(crate::mechanical_port::source::animation::state_machine_listener_single::StateMachineListenerSingle::has_listener(self, kind))
     }
+    fn state_machine_listener_has_button(&self, kind: crate::mechanical_port::source::listener_type::ListenerType, button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { Some(self.has_listener_button(kind, button)) }
+    fn state_machine_listener_listens_to_button(&self, button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { Some(self.listens_to_button(button)) }
 }
 impl CoreCapabilities
     for crate::mechanical_port::source::animation::cubic_value_interpolator::CubicValueInterpolator
@@ -78488,6 +78596,7 @@ impl CoreRegistry {
             973 => Some(Box::new(<crate::mechanical_port::source::animation::listener_types::listener_input_type_gamepad::ListenerInputTypeGamepad>::default())),
             665 => Some(Box::new(<crate::mechanical_port::source::animation::listener_types::listener_input_type_keyboard::ListenerInputTypeKeyboard>::default())),
             666 => Some(Box::new(<crate::mechanical_port::source::animation::listener_types::listener_input_type_text::ListenerInputTypeText>::default())),
+            155 => Some(Box::new(<crate::mechanical_port::source::animation::listener_types::listener_input_type_pointer_button::ListenerInputTypePointerButton>::default())),
             669 => Some(Box::new(<crate::mechanical_port::source::animation::listener_types::listener_input_type_semantic::ListenerInputTypeSemantic>::default())),
             660 => Some(Box::new(<crate::mechanical_port::source::animation::listener_types::listener_input_type_viewmodel::ListenerInputTypeViewModel>::default())),
             64 => Some(Box::new(<crate::mechanical_port::source::animation::exit_state::ExitState>::default())),

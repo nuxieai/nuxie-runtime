@@ -81,6 +81,7 @@ use crate::mechanical_port::source::{
     listener_group::{ListenerGroup, ListenerGroupProvider, RuntimeListenerGroupHandle},
     listener_type::ListenerType,
     math::{random::RandomProvider, vec2d::Vec2D},
+    pointer_button::PointerButton,
     process_event_result::ProcessEventResult,
     scripted::scripted_object::{ScriptUpdateRequestHost, ScriptedObject},
     scroll_event::ScrollEvent,
@@ -1393,6 +1394,7 @@ pub trait HitComponent {
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
+        button: PointerButton,
     ) -> HitResult;
     fn process_gamepad_invocation(
         &self,
@@ -1418,6 +1420,12 @@ pub trait HitComponent {
         false
     }
     fn occludes_scroll(&self, _position: Vec2D) -> bool {
+        false
+    }
+    fn listens_to_button_at(&self, _position: Vec2D, _button: PointerButton) -> bool {
+        false
+    }
+    fn occludes_pointer(&self, _position: Vec2D) -> bool {
         false
     }
     fn process_scroll(&self, _position: Vec2D, _event: &ScrollEvent, _timestamp: f32) -> HitResult {
@@ -1604,6 +1612,21 @@ impl HitDrawable {
 }
 
 impl HitComponent for HitDrawable {
+    fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
+        if !self.hit_test(position) {
+            return false;
+        }
+        self.listeners.borrow().iter().any(|group| {
+            group.with_group(|group| group.listener_handle()).is_some_and(|listener| {
+                listener.with(|listener| listener.state_machine_listener_listens_to_button(button))
+                    .flatten()
+                    .unwrap_or(false)
+            })
+        })
+    }
+    fn occludes_pointer(&self, position: Vec2D) -> bool {
+        (self.is_opaque.get() || self.drawable.is_target_opaque()) && self.hit_test(position)
+    }
     fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
         self.hit_test(position) && self.scroll_proxy_for(event).is_some()
     }
@@ -1706,6 +1729,7 @@ impl HitComponent for HitDrawable {
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
+        button: PointerButton,
     ) -> HitResult {
         if self.can_early_out.get()
             && (hit_type != ListenerType::Down || !self.has_down_listener.get())
@@ -1726,6 +1750,7 @@ impl HitComponent for HitDrawable {
                     position,
                     pointer_id,
                     hit_type,
+                    button,
                     can_hit,
                     timestamp,
                     machine,
@@ -1762,6 +1787,25 @@ struct HitNestedArtboard {
 }
 
 impl HitComponent for HitNestedArtboard {
+    fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
+        if component_is_collapsed(&self.component)
+            || component_is_hidden(&self.component)
+            || nested_is_paused(&self.component)
+        {
+            return false;
+        }
+        let Some(local) = nested_world_to_local(&self.component, position) else {
+            return false;
+        };
+        for animation in nested_animations(&self.component) {
+            if let Some(machine) = nested_state_machine(&animation) {
+                if machine.with_instance_mut(|machine| machine.listens_to_button_at(local, button)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
     fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
         if component_is_collapsed(&self.component) || nested_is_paused(&self.component) {
             return false;
@@ -1921,6 +1965,7 @@ impl HitComponent for HitNestedArtboard {
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
+        button: PointerButton,
     ) -> HitResult {
         if component_is_collapsed(&self.component)
             || component_is_hidden(&self.component)
@@ -1942,16 +1987,16 @@ impl HitComponent for HitNestedArtboard {
             instance.with_instance_mut(|nested| {
                 if can_hit {
                     result = match hit_type {
-                        ListenerType::Down => nested.pointer_down(local, pointer_id),
-                        ListenerType::Up => nested.pointer_up(local, pointer_id),
+                        ListenerType::Down => nested.pointer_down(local, pointer_id, button),
+                        ListenerType::Up => nested.pointer_up(local, pointer_id, button),
                         ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
                         ListenerType::Exit => nested.pointer_exit(local, pointer_id),
                         ListenerType::DragStart => {
-                            nested.drag_start(local, timestamp, true, pointer_id);
+                            nested.drag_start(local, timestamp, true, pointer_id, button);
                             result
                         }
                         ListenerType::DragEnd => {
-                            nested.drag_end(local, timestamp, pointer_id);
+                            nested.drag_end(local, timestamp, pointer_id, button);
                             result
                         }
                         _ => result,
@@ -1993,6 +2038,22 @@ struct HitComponentList {
 }
 
 impl HitComponent for HitComponentList {
+    fn listens_to_button_at(&self, position: Vec2D, button: PointerButton) -> bool {
+        if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
+            return false;
+        }
+        for index in component_list_indices(&self.component).into_iter().rev() {
+            let Some(local) = component_list_world_to_local(&self.component, position, index) else {
+                continue;
+            };
+            if let Some(machine) = component_list_state_machine(&self.component, index) {
+                if machine.with_instance_mut(|machine| machine.listens_to_button_at(local, button)) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
     fn wants_scroll(&self, position: Vec2D, event: &ScrollEvent) -> bool {
         if component_is_collapsed(&self.component) {
             return false;
@@ -2174,6 +2235,7 @@ impl HitComponent for HitComponentList {
         can_hit: bool,
         timestamp: f32,
         pointer_id: i32,
+        button: PointerButton,
     ) -> HitResult {
         if component_is_collapsed(&self.component) || component_is_hidden(&self.component) {
             return HitResult::None;
@@ -2191,16 +2253,16 @@ impl HitComponent for HitComponentList {
             let item = machine.with_instance_mut(|nested| {
                 if running_can_hit {
                     match hit_type {
-                        ListenerType::Down => nested.pointer_down(local, pointer_id),
-                        ListenerType::Up => nested.pointer_up(local, pointer_id),
+                        ListenerType::Down => nested.pointer_down(local, pointer_id, button),
+                        ListenerType::Up => nested.pointer_up(local, pointer_id, button),
                         ListenerType::Move => nested.pointer_move(local, timestamp, pointer_id),
                         ListenerType::Exit => nested.pointer_exit(local, pointer_id),
                         ListenerType::DragStart => {
-                            nested.drag_start(local, 0.0, true, pointer_id);
+                            nested.drag_start(local, 0.0, true, pointer_id, button);
                             HitResult::None
                         }
                         ListenerType::DragEnd => {
-                            nested.drag_end(local, 0.0, pointer_id);
+                            nested.drag_end(local, 0.0, pointer_id, button);
                             HitResult::None
                         }
                         _ => HitResult::None,
@@ -3923,6 +3985,21 @@ impl StateMachineInstance {
         false
     }
 
+    pub fn listens_to_button_at(&mut self, mut position: Vec2D, button: PointerButton) -> bool {
+        if !self.map_to_content_space(&mut position, None) {
+            return false;
+        }
+        for hit in &self.hit_components {
+            if hit.listens_to_button_at(position, button) {
+                return true;
+            }
+            if hit.occludes_pointer(position) {
+                return false;
+            }
+        }
+        false
+    }
+
     pub fn cancel_scroll(&mut self) {
         if let Some(target) = &self.scroll_latch {
             target.cancel_scroll();
@@ -3947,6 +4024,7 @@ impl StateMachineInstance {
         hit_type: ListenerType,
         pointer_id: i32,
         timestamp: f32,
+        button: PointerButton,
     ) -> HitResult {
         let (position, contents_collapsed) = self.normalize_pointer_position(position);
         for group in &self.listener_groups {
@@ -3975,14 +4053,15 @@ impl StateMachineInstance {
                 !hit_opaque && !contents_collapsed,
                 timestamp,
                 pointer_id,
+                button,
             );
             if result != HitResult::None {
                 hit_something = true;
                 hit_opaque |= result == HitResult::HitOpaque;
             }
         }
-        for ended_pointer_id in drag_ended {
-            self.drag_end(position, timestamp, ended_pointer_id);
+        for (ended_pointer_id, ended_button) in drag_ended {
+            self.drag_end(position, timestamp, ended_pointer_id, ended_button);
         }
         if hit_type == ListenerType::Exit {
             for group in &self.listener_groups {
@@ -4024,19 +4103,19 @@ impl StateMachineInstance {
     }
 
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, id: i32) -> HitResult {
-        self.update_listeners(position, ListenerType::Move, id, timestamp)
+        self.update_listeners(position, ListenerType::Move, id, timestamp, PointerButton::Primary)
     }
 
-    pub fn pointer_down(&mut self, position: Vec2D, id: i32) -> HitResult {
-        self.update_listeners(position, ListenerType::Down, id, 0.0)
+    pub fn pointer_down(&mut self, position: Vec2D, id: i32, button: PointerButton) -> HitResult {
+        self.update_listeners(position, ListenerType::Down, id, 0.0, button)
     }
 
-    pub fn pointer_up(&mut self, position: Vec2D, id: i32) -> HitResult {
-        self.update_listeners(position, ListenerType::Up, id, 0.0)
+    pub fn pointer_up(&mut self, position: Vec2D, id: i32, button: PointerButton) -> HitResult {
+        self.update_listeners(position, ListenerType::Up, id, 0.0, button)
     }
 
     pub fn pointer_exit(&mut self, position: Vec2D, id: i32) -> HitResult {
-        self.update_listeners(position, ListenerType::Exit, id, 0.0)
+        self.update_listeners(position, ListenerType::Exit, id, 0.0, PointerButton::Primary)
     }
 
     pub fn drag_start(
@@ -4045,16 +4124,17 @@ impl StateMachineInstance {
         _timestamp: f32,
         disable_pointer: bool,
         pointer_id: i32,
+        button: PointerButton,
     ) -> HitResult {
         if disable_pointer {
             self.disable_pointer_events(pointer_id);
         }
-        self.update_listeners(position, ListenerType::DragStart, pointer_id, 0.0)
+        self.update_listeners(position, ListenerType::DragStart, pointer_id, 0.0, button)
     }
 
-    pub fn drag_end(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32) -> HitResult {
+    pub fn drag_end(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32, button: PointerButton) -> HitResult {
         self.enable_pointer_events(pointer_id);
-        let hit = self.update_listeners(position, ListenerType::DragEnd, pointer_id, 0.0);
+        let hit = self.update_listeners(position, ListenerType::DragEnd, pointer_id, 0.0, button);
         self.pointer_move(position, timestamp, pointer_id);
         hit
     }

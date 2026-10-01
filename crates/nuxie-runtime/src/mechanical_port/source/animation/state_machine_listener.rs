@@ -7,6 +7,7 @@ use crate::mechanical_port::source::{
     },
     importers::{import_stack::ImportStack, state_machine_importer::StateMachineImporter},
     listener_type::ListenerType,
+    pointer_button::PointerButton,
     status_code::StatusCode,
 };
 const POINTER_HIT_LISTENER_TYPES: [ListenerType; 9] = [
@@ -74,6 +75,37 @@ impl StateMachineListener {
     pub fn has_listeners(&self, kinds: &[ListenerType]) -> bool {
         kinds.iter().copied().any(|kind| self.has_listener(kind))
     }
+    pub fn has_listener_button(&self, kind: ListenerType, button: PointerButton) -> bool {
+        if !listener_type_has_button(kind) {
+            return self.has_listener(kind);
+        }
+        self.listener_input_types.iter().any(|value| {
+            value.with(|value| {
+                value.listener_input_type_value() == Some(kind as u32)
+                    && value.listener_input_type_pointer_button() == Some(button)
+            }).unwrap_or(false)
+        })
+    }
+    pub fn listens_to_button(&self, button: PointerButton) -> bool {
+        self.listener_input_types.iter().any(|value| {
+            value.with(|value| {
+                value.listener_input_type_value().map(|kind| {
+                    [ListenerType::Down, ListenerType::Up, ListenerType::Click,
+                     ListenerType::Drag, ListenerType::DragStart, ListenerType::DragEnd]
+                        .iter().any(|candidate| *candidate as u32 == kind)
+                }).unwrap_or(false)
+                    && value.listener_input_type_pointer_button() == Some(button)
+            }).unwrap_or(false)
+        })
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn replace_listener_input_type_for_testing(&mut self, index: usize, value: CoreHandle) {
+        self.listener_input_types[index] = value;
+    }
+    #[cfg(any(test, feature = "testing"))]
+    pub fn add_listener_input_type_for_testing(&mut self, value: CoreHandle) {
+        self.listener_input_types.push(value);
+    }
     pub fn action_count(&self) -> usize {
         self.actions.len()
     }
@@ -118,6 +150,10 @@ impl StateMachineListener {
             dispatch(action, machine, invocation);
         }
     }
+}
+fn listener_type_has_button(kind: ListenerType) -> bool {
+    matches!(kind, ListenerType::Down | ListenerType::Up | ListenerType::Click |
+        ListenerType::Drag | ListenerType::DragStart | ListenerType::DragEnd)
 }
 impl std::ops::Deref for StateMachineListener {
     type Target = StateMachineListenerBase;

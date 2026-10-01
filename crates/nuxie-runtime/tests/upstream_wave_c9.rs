@@ -156,11 +156,11 @@ impl Fixture {
     }
     fn down(&self, x: f32, y: f32) {
         self.machine
-            .with_instance_mut(|m| m.pointer_down(Vec2D::new(x, y), 0));
+            .with_instance_mut(|m| m.pointer_down(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     }
     fn up(&self, x: f32, y: f32) {
         self.machine
-            .with_instance_mut(|m| m.pointer_up(Vec2D::new(x, y), 0));
+            .with_instance_mut(|m| m.pointer_up(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
     }
 }
 fn layer_shape(layer: &CoreHandle, count: usize) {

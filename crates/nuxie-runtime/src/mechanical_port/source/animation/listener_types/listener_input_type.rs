@@ -15,6 +15,9 @@ pub struct ListenerInputType {
 }
 
 impl ListenerInputType {
+    pub fn pointer_button(&self) -> crate::mechanical_port::source::pointer_button::PointerButton {
+        crate::mechanical_port::source::pointer_button::PointerButton::Primary
+    }
     pub fn listener_type_value(&self) -> u32 {
         self.base.listener_type_value()
     }

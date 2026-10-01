@@ -174,7 +174,7 @@ fn scripted_drawable_pointer_events_report_their_type_and_timestamp() {
         ),
     ] {
         fixture.machine.with_instance_mut(|machine| {
-            hit.process_event(machine, position, hit_type, can_hit, timestamp, 0);
+            hit.process_event(machine, position, hit_type, can_hit, timestamp, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
         });
         assert_eq!(
             fixture
@@ -426,6 +426,7 @@ fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
             true,
             0.0,
             0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
         );
     });
     assert_eq!(drawable.counter("getPointerDownCount"), 1);
@@ -517,6 +518,7 @@ fn missing_pointer_handler_does_not_wake_the_native_owner() {
             true,
             0.0,
             0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
         );
     });
     ScriptedDrawable::advance_occurrence(

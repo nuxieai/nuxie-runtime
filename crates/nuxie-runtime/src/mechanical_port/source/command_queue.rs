@@ -22,6 +22,7 @@ use crate::mechanical_port::source::{
     lua::scripting_vm::RuntimeScriptingVmHandle,
     math::vec2d::Vec2D,
     object_stream::{ObjectStream, PodStream},
+    pointer_button::PointerButton,
     semantic::semantic_snapshot::SemanticsDiff,
 };
 use crate::{RawTextFont, RuntimeBlobAsset};
@@ -817,6 +818,7 @@ pub struct PointerEvent {
     pub position: Vec2D,
     pub scale_factor: f32,
     pub pointer_id: i32,
+    pub button: PointerButton,
 }
 
 impl Default for PointerEvent {
@@ -828,6 +830,7 @@ impl Default for PointerEvent {
             position: Vec2D::default(),
             scale_factor: 1.0,
             pointer_id: 0,
+            button: PointerButton::Primary,
         }
     }
 }

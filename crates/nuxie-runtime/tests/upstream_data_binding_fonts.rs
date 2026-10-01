@@ -139,16 +139,16 @@ fn data_bind_font() {
     fixture.silver.borrow_mut().add_frame();
 
     fixture.machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(490.0, 490.0), 0);
-        machine.pointer_up(Vec2D::new(490.0, 490.0), 0);
+        machine.pointer_down(Vec2D::new(490.0, 490.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_up(Vec2D::new(490.0, 490.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
     });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     fixture.silver.borrow_mut().add_frame();
 
     fixture.machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(490.0, 20.0), 0);
-        machine.pointer_up(Vec2D::new(490.0, 20.0), 0);
+        machine.pointer_down(Vec2D::new(490.0, 20.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_up(Vec2D::new(490.0, 20.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
     });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);

@@ -5271,6 +5271,39 @@ fn pointer_input() {
 }
 
 #[test]
+fn pointer_buttons() {
+    use nuxie_runtime::source::pointer_button::PointerButton;
+    let upstream = std::env::var_os("RIVE_RUNTIME_DIR")
+        .expect("RIVE_RUNTIME_DIR points to pinned upstream");
+    let bytes = std::fs::read(std::path::PathBuf::from(upstream)
+        .join("tests/unit_tests/assets/pointer_button_secondary.riv")).unwrap();
+    let mut queue = CommandQueue::new();
+    let file = queue.load_file(bytes, None, 0, None);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    queue.advance_state_machine(machine, 0.0, 0);
+    let check_clicked = |queue: &mut CommandQueue, expected| {
+        queue.run_once(Box::new(move |server| {
+            assert_eq!(server.with_state_machine_instance_mut(machine, |machine| {
+                machine.get_bool("clicked").map(|input| input.value())
+            }).flatten(), Some(expected));
+        }));
+    };
+    check_clicked(&mut queue, false);
+    queue.pointer_down(machine, pointer_at(250.0, 250.0), 0);
+    queue.pointer_up(machine, pointer_at(250.0, 250.0), 0);
+    check_clicked(&mut queue, false);
+    let secondary = PointerEvent {
+        button: PointerButton::Secondary,
+        ..pointer_at(250.0, 250.0)
+    };
+    queue.pointer_down(machine, secondary, 0);
+    queue.pointer_up(machine, secondary, 0);
+    check_clicked(&mut queue, true);
+    assert!(server(&queue).process_commands());
+}
+
+#[test]
 fn pointer_down_advances_before_rapid_pointer_up() {
     let mut queue = CommandQueue::new();
     let (listener, log) = event_log();

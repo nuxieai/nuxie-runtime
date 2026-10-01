@@ -124,8 +124,8 @@ fn a_click_requests_focus_only_while_the_child_is_focusable() {
             (bounds.min_y + bounds.max_y) * 0.5,
         );
         fixture.machine.with_instance_mut(|machine| {
-            machine.pointer_down(center, 0);
-            machine.pointer_up(center, 0);
+            machine.pointer_down(center, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            machine.pointer_up(center, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
         });
         fixture.advance(0.016);
         fixture.advance(0.016);

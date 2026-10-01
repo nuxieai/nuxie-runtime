@@ -101,10 +101,16 @@ impl ListenerGroupBehavior for TextInputListenerGroup {
         position: Vec2D,
         pointer_id: i32,
         event: ListenerType,
+        button: crate::source::pointer_button::PointerButton,
         can_hit: bool,
         timestamp: f32,
         machine: &mut StateMachineInstance,
     ) -> ProcessEventResult {
+        if matches!(event, ListenerType::Down | ListenerType::Up)
+            && button != crate::source::pointer_button::PointerButton::Primary
+        {
+            return ProcessEventResult::None;
+        }
         let pointer = self.base.pointer_data(pointer_id);
         let previous = pointer.phase.get();
         if !can_hit && pointer.is_hovered.get() {

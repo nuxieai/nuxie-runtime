@@ -192,6 +192,32 @@ enum LayoutMeasureContext {
     Participant(CoreHandle),
 }
 
+fn intrinsic_measure_axis(
+    known: Option<f32>,
+    available: taffy::style::AvailableSpace,
+) -> (f32, LayoutMeasureMode) {
+    use taffy::style::AvailableSpace;
+    let bounded = |value: f32| if value.is_nan() { value } else { value.max(0.0) };
+    if let Some(outer) = known {
+        // Taffy's known dimension is the outer box. Its Definite available
+        // size already excludes the inset: use it without subtracting again.
+        let inner = match available {
+            AvailableSpace::Definite(value) => value,
+            // Resolved leaf known axes normally have Definite available space.
+            // Preserve the previous exact-mode fallback for other callers.
+            _ => outer,
+        };
+        return (bounded(inner), LayoutMeasureMode::Exactly);
+    }
+    match available {
+        // Yoga clamps bounded inner dimensions before invoking measureFunc.
+        AvailableSpace::Definite(value) => (bounded(value), LayoutMeasureMode::AtMost),
+        // Probe/hug normalization happens after this boundary, not here.
+        AvailableSpace::MinContent => (0.0, LayoutMeasureMode::AtMost),
+        AvailableSpace::MaxContent => (f32::NAN, LayoutMeasureMode::Undefined),
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct IntrinsicMeasureKey {
     specs: [u32; 6],
@@ -2283,18 +2309,6 @@ impl LayoutComponent {
             LayoutTreeCache { tree, nodes, root }
         }
 
-        fn axis(known: Option<f32>, available: AvailableSpace) -> (f32, LayoutMeasureMode) {
-            if let Some(value) = known {
-                return (value, LayoutMeasureMode::Exactly);
-            }
-            match available {
-                AvailableSpace::Definite(value) => (value, LayoutMeasureMode::AtMost),
-                // The separate probe flag widens this intrinsic request, not
-                // ordinary Definite(0), after per-axis hug handling.
-                AvailableSpace::MinContent => (0.0, LayoutMeasureMode::AtMost),
-                AvailableSpace::MaxContent => (f32::NAN, LayoutMeasureMode::Undefined),
-            }
-        }
         fn measure_host(
             host: &CoreHandle,
             width: f32,
@@ -2460,8 +2474,8 @@ impl LayoutComponent {
                 },
             },
             |known, available, node, context, _, probing| {
-                let (width, width_mode) = axis(known.width, available.width);
-                let (height, height_mode) = axis(known.height, available.height);
+                let (width, width_mode) = intrinsic_measure_axis(known.width, available.width);
+                let (height, height_mode) = intrinsic_measure_axis(known.height, available.height);
                 let request_key = |effective_width: LayoutMeasureMode, effective_height: LayoutMeasureMode| IntrinsicMeasureKey {
                     specs: [width.to_bits(), height.to_bits(), width_mode as u32, height_mode as u32,
                         effective_width as u32, effective_height as u32],
@@ -3834,6 +3848,62 @@ use std::{cell::RefCell, rc::Rc};
 #[cfg(test)]
 mod packed_layout_tests {
     use super::*;
+
+    #[test]
+    fn intrinsic_measure_axis_uses_inner_exact_size_and_clamps_bounded_offers() {
+        use taffy::style::AvailableSpace::{Definite, MaxContent, MinContent};
+        assert!(intrinsic_measure_axis(Some(4.0), Definite(0.0)) == (0.0, LayoutMeasureMode::Exactly));
+        assert!(intrinsic_measure_axis(None, Definite(-4.0)) == (0.0, LayoutMeasureMode::AtMost));
+        assert!(intrinsic_measure_axis(Some(4.0), Definite(-4.0)) == (0.0, LayoutMeasureMode::Exactly));
+        assert!(intrinsic_measure_axis(None, MinContent) == (0.0, LayoutMeasureMode::AtMost));
+        let (size, mode) = intrinsic_measure_axis(None, MaxContent);
+        assert!(size.is_nan());
+        assert!(mode == LayoutMeasureMode::Undefined);
+        assert!(intrinsic_measure_axis(Some(4.0), MaxContent) == (4.0, LayoutMeasureMode::Exactly));
+        assert!(intrinsic_measure_axis(None, Definite(f32::NAN)).0.is_nan());
+        let (size, mode) = intrinsic_measure_axis(None, Definite(-4.0));
+        use crate::mechanical_port::source::layout::layout_measure_mode::measure_mode_for_content;
+        assert!(measure_mode_for_content(mode, size, false) == LayoutMeasureMode::AtMost);
+        assert!(measure_mode_for_content(mode, size, true) == LayoutMeasureMode::Undefined);
+    }
+
+    #[test]
+    fn padded_taffy_leaf_measures_inner_exact_axes_but_keeps_outer_box() {
+        use taffy::{geometry::{Rect, Size}, style::{AvailableSpace, Style}, tree::{LayoutInput, RunMode, SizingMode}};
+        use taffy::style_helpers::length;
+        let style: Style = Style {
+            padding: Rect { left: length(10.0), right: length(10.0), top: length(2.0), bottom: length(2.0) },
+            ..Style::default()
+        };
+        for (known, expected_inner, expected_outer) in [
+            (Size { width: Some(100.0), height: None }, (80.0, LayoutMeasureMode::Exactly), Size { width: 100.0, height: 12.0 }),
+            (Size { width: None, height: Some(80.0) }, (76.0, LayoutMeasureMode::Exactly), Size { width: 28.0, height: 80.0 }),
+        ] {
+            let mut calls = 0;
+            let output = taffy::compute::compute_leaf_layout(
+                LayoutInput {
+                    run_mode: RunMode::ComputeSize,
+                    sizing_mode: SizingMode::InherentSize,
+                    known_dimensions: known,
+                    available_space: Size { width: AvailableSpace::MaxContent, height: AvailableSpace::MaxContent },
+                    ..LayoutInput::HIDDEN
+                },
+                &style,
+                |_, _| 0.0,
+                |known, available| {
+                    calls += 1;
+                    let width = intrinsic_measure_axis(known.width, available.width);
+                    let height = intrinsic_measure_axis(known.height, available.height);
+                    assert!((if known.width.is_some() { width } else { height }) == expected_inner);
+                    // The production callback preserves outer known dimensions
+                    // only at this final projection, not in the intrinsic offer.
+                    Size { width: known.width.unwrap_or(8.0), height: known.height.unwrap_or(8.0) }
+                },
+            );
+            assert_eq!(calls, 1);
+            assert_eq!(output.size, expected_outer);
+        }
+    }
 
     #[test]
     fn solve_intrinsic_measurements_preserve_exact_specs_and_reset_boundaries() {

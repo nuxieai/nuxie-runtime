@@ -3110,43 +3110,44 @@ pub fn drawable_draw_handle(
     handle: &CoreHandle,
     renderer: &mut crate::mechanical_port::source::renderer::Renderer,
 ) -> bool {
-    if handle.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
+    // Classification has no callbacks. Read this live generation's immutable
+    // registration once; each selected draw path still checks its owner afresh.
+    let Some((core_type, is_type_of)) = handle.type_metadata() else {
+        return false;
+    };
+    // The concrete Shape uses the ordinary virtual draw, not an occurrence-
+    // only protocol. Avoid probing unrelated protocols on this common owner.
+    if core_type == crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY {
+        return handle.with_mut(|owner| owner.drawable_draw(renderer)).unwrap_or(false);
+    }
+    if core_type == crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY {
         crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::draw_occurrence(handle, renderer);
         return true;
     }
-    if handle
-        .with(|owner| owner.as_nested_artboard().is_some())
-        .unwrap_or(false)
-    {
+    if is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY) {
         crate::mechanical_port::source::nested_artboard::NestedArtboard::draw_occurrence(
             handle, renderer,
         );
         return true;
     }
-    if handle.core_type() == Some(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
+    if core_type == crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY {
         crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::draw_occurrence(handle, renderer);
         return true;
     }
-    if handle.core_type() == Some(crate::video::Video::TYPE_KEY) {
+    if core_type == crate::video::Video::TYPE_KEY {
         crate::video::Video::draw_occurrence(handle, renderer);
         return true;
     }
-    if handle.core_type()
-        == Some(crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
+    if core_type
+        == crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY
     {
         crate::mechanical_port::source::shapes::image::Image::draw_occurrence(handle, renderer);
         return true;
     }
-    if handle
-        .with(|owner| owner.as_scripted_drawable().is_some())
-        .unwrap_or(false)
-    {
+    if is_type_of(crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::TYPE_KEY) {
         crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::draw_occurrence(handle, renderer);
         true
-    } else if handle
-        .with(|owner| owner.as_artboard().is_some())
-        .unwrap_or(false)
-    {
+    } else if is_type_of(crate::mechanical_port::source::generated::artboard_base::ArtboardBase::TYPE_KEY) {
         crate::mechanical_port::source::artboard::Artboard::draw_handle(handle, renderer);
         true
     } else {

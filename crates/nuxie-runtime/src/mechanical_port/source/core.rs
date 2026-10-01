@@ -720,6 +720,48 @@ mod tests {
     use crate::mechanical_port::source::{node::Node, shapes::shape::Shape};
 
     #[test]
+    fn draw_dispatch_metadata_matches_registered_owner_projections() {
+        use crate::mechanical_port::source::generated::{
+            artboard_base::ArtboardBase,
+            core_registry::CoreRegistry,
+            nested_artboard_base::NestedArtboardBase,
+            scripted::scripted_drawable_base::ScriptedDrawableBase,
+        };
+        let arena = CoreArena::default();
+        let mut checked = std::collections::BTreeSet::new();
+        let owners = (0..=u16::MAX)
+            .filter_map(|key| CoreRegistry::make_core_box(i32::from(key)))
+            .chain(std::iter::once(Box::new(crate::video::Video::default()) as Box<dyn super::CoreObject>));
+        for owner in owners {
+            let handle = arena.insert_boxed(owner);
+            let (key, predicate) = handle.type_metadata().expect("live registered owner");
+            let projections = handle.with(|owner| (
+                owner.core_type(),
+                owner.as_nested_artboard().is_some(),
+                owner.as_scripted_drawable().is_some(),
+                owner.as_artboard().is_some(),
+            )).unwrap();
+            if key == crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY {
+                assert_eq!(projections, (key, false, false, false), "Shape uses ordinary virtual draw");
+            }
+            assert_eq!(
+                (key, predicate(NestedArtboardBase::TYPE_KEY),
+                    predicate(ScriptedDrawableBase::TYPE_KEY), predicate(ArtboardBase::TYPE_KEY)),
+                projections,
+                "draw dispatch for registered type {key}",
+            );
+            checked.insert(key);
+            drop(arena.remove(&handle).unwrap());
+            assert!(handle.type_metadata().is_none());
+        }
+        for key in [1, 92, 451, 452, 603, 637, 110, 100, 559,
+            crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY,
+            crate::video::Video::TYPE_KEY] {
+            assert!(checked.contains(&key), "dispatch owner {key} was exercised");
+        }
+    }
+
+    #[test]
     fn reused_arena_slots_do_not_inherit_source_global_ids() {
         let arena = CoreArena::default();
         let authored = arena.insert(Shape::default());

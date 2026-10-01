@@ -3176,19 +3176,20 @@ impl Artboard {
             let visitor = root
                 .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
                 .flatten();
-            let tagged = current
-                .with(Drawable::has_custom_properties)
-                .unwrap_or(false);
-            if let (Some(visitor), Some(handle)) = (
-                visitor.as_ref().filter(|_| tagged),
-                current.authored_handle(),
-            ) {
-                renderer.save();
-                visitor(&handle, renderer);
-                renderer.restore();
-            } else {
-                current.draw(renderer);
+            if let Some(visitor) = visitor.as_ref() {
+                if current
+                    .with(Drawable::has_custom_properties)
+                    .unwrap_or(false)
+                {
+                    if let Some(handle) = current.authored_handle() {
+                        renderer.save();
+                        visitor(&handle, renderer);
+                        renderer.restore();
+                        continue;
+                    }
+                }
             }
+            current.draw(renderer);
         }
     }
 

@@ -21,6 +21,21 @@ pub fn compute_leaf_layout<MeasureFunction>(
 where
     MeasureFunction: FnOnce(Size<Option<f32>>, Size<AvailableSpace>) -> Size<f32>,
 {
+    compute_leaf_layout_with_rive_measurement(inputs, style, resolve_calc_value, measure_function, false)
+}
+
+/// Rive's Yoga boundary may omit a measured leaf callback when both axes are
+/// exact. Generic Taffy still measures to obtain CSS intrinsic content size.
+pub(crate) fn compute_leaf_layout_with_rive_measurement<MeasureFunction>(
+    inputs: LayoutInput,
+    style: &impl CoreStyle,
+    resolve_calc_value: impl Fn(*const (), f32) -> f32,
+    measure_function: MeasureFunction,
+    rive_measured_leaf: bool,
+) -> LayoutOutput
+where
+    MeasureFunction: FnOnce(Size<Option<f32>>, Size<AvailableSpace>) -> Size<f32>,
+{
     let LayoutInput { known_dimensions, parent_size, available_space, sizing_mode, run_mode, .. } = inputs;
 
     // Note: both horizontal and vertical percentage padding/borders are resolved against the container's inline size (i.e. width).
@@ -132,14 +147,26 @@ where
     };
 
     // Measure node
-    let measured_size = measure_function(
-        match run_mode {
-            RunMode::ComputeSize => known_dimensions,
-            RunMode::PerformLayout => Size::NONE,
-            RunMode::PerformHiddenLayout => unreachable!(),
-        },
-        available_space,
-    );
+    let measured_size = if rive_measured_leaf
+        && run_mode == RunMode::PerformLayout
+        && !style.is_block()
+        && node_size.width.is_some()
+        && node_size.height.is_some()
+    {
+        // Yoga::YGNodeWithMeasureFuncSetMeasuredDimensions skips measurement
+        // for Exactly/Exactly. Keep the normal final sizing path below; only
+        // intrinsic content size is omitted at this non-CSS runtime boundary.
+        Size::ZERO
+    } else {
+        measure_function(
+            match run_mode {
+                RunMode::ComputeSize => known_dimensions,
+                RunMode::PerformLayout => Size::NONE,
+                RunMode::PerformHiddenLayout => unreachable!(),
+            },
+            available_space,
+        )
+    };
     let clamped_size = known_dimensions
         .or(node_size)
         .unwrap_or(measured_size + content_box_inset.sum_axes())

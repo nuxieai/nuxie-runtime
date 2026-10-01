@@ -18,7 +18,7 @@ use crate::util::debug::{debug_log, debug_log_node};
 use crate::util::sys::{new_vec_with_capacity, ChildrenVec, Vec};
 
 use crate::compute::{
-    compute_cached_layout, compute_hidden_layout, compute_leaf_layout, compute_root_layout, round_layout,
+    compute_cached_layout, compute_hidden_layout, compute_root_layout, round_layout,
 };
 use crate::CacheTree;
 
@@ -353,11 +353,14 @@ where
                     let node_key = node_id.into();
                     let style = &tree.taffy.nodes[node_key].style;
                     let has_context = tree.taffy.nodes[node_key].has_context;
+                    let rive_measured_leaf = has_context && tree.min_content_probe_depth.is_some();
                     let node_context = has_context.then(|| tree.taffy.node_context_data.get_mut(node_key)).flatten();
                     let measure_function = |known_dimensions, available_space| {
                         (tree.measure_function)(known_dimensions, available_space, node_id, node_context, style)
                     };
-                    compute_leaf_layout(inputs, style, |_, _| 0.0, measure_function)
+                    crate::compute::leaf::compute_leaf_layout_with_rive_measurement(
+                        inputs, style, |_, _| 0.0, measure_function, rive_measured_leaf,
+                    )
                 }
             }
         })
@@ -971,6 +974,8 @@ impl<NodeContext> TaffyTree<NodeContext> {
     /// Rive: measure with the same nested min-content probe context exposed by
     /// Yoga's YGConfigIsMeasuringMinContent. Probe and ordinary cache entries
     /// cannot alias, even if descendants receive identical constraints.
+    /// Context-bearing non-block leaves also use Yoga's exact/exact shortcut:
+    /// final layout does not request intrinsic content size for fixed axes.
     pub fn compute_layout_with_measure_and_probe<MeasureFunction>(
         &mut self,
         node_id: NodeId,
@@ -1022,6 +1027,85 @@ mod tests {
     use crate::style::{Dimension, Display, FlexDirection};
     use crate::style_helpers::*;
     use crate::util::sys;
+
+    #[test]
+    fn rive_exact_leaf_skips_measurement_without_changing_final_box() {
+        fn run(style: Style, rive: bool, context: bool) -> (usize, Layout) {
+            let mut tree = TaffyTree::<()>::new();
+            let node = if context {
+                tree.new_leaf_with_context(style, ()).unwrap()
+            } else {
+                tree.new_leaf(style).unwrap()
+            };
+            let mut calls = 0;
+            if rive {
+                tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _, _, _, _| {
+                    calls += 1;
+                    Size { width: 33.0, height: 44.0 }
+                }).unwrap();
+            } else {
+                tree.compute_layout_with_measure(node, Size::MAX_CONTENT, |_, _, _, _, _| {
+                    calls += 1;
+                    Size { width: 33.0, height: 44.0 }
+                }).unwrap();
+            }
+            (calls, *tree.layout(node).unwrap())
+        }
+
+        let fixed = Style { size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() };
+        let bounded = Style {
+            min_size: Size { width: auto(), height: length(90.0) },
+            max_size: Size { width: length(60.0), height: auto() },
+            padding: crate::geometry::Rect { left: length(7.0), right: length(7.0), top: length(7.0), bottom: length(7.0) },
+            ..fixed.clone()
+        };
+        let aspect = Style { size: Size { width: length(100.0), height: length(10.0) }, aspect_ratio: Some(2.0), ..Style::default() };
+        let padding_floor = Style {
+            size: Size { width: length(1.0), height: length(1.0) },
+            padding: crate::geometry::Rect { left: length(10.0), right: length(10.0), top: length(10.0), bottom: length(10.0) },
+            ..Style::default()
+        };
+        for style in [fixed.clone(), bounded, aspect, padding_floor] {
+            let (generic_calls, generic) = run(style.clone(), false, true);
+            let (rive_calls, rive) = run(style, true, true);
+            assert!(generic_calls > 0);
+            assert_eq!(rive_calls, 0);
+            assert_eq!(rive.size, generic.size);
+            assert_eq!(rive.location, generic.location);
+            assert_eq!(rive.padding, generic.padding);
+            assert_eq!(rive.border, generic.border);
+        }
+
+        // No measured context means no Rive shortcut; generic callbacks retain
+        // their behavior. One definite axis or AtMost offers still need measure.
+        assert!(run(fixed, true, false).0 > 0);
+        assert!(run(Style { size: Size { width: length(100.0), height: auto() }, ..Style::default() }, true, true).0 > 0);
+        assert!(run(Style { max_size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() }, true, true).0 > 0);
+        #[cfg(feature = "block_layout")]
+        assert!(run(Style { display: Display::Block, size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() }, true, true).0 > 0);
+    }
+
+    #[test]
+    fn rive_exact_leaf_shortcut_does_not_leak_into_generic_cache() {
+        let mut tree = TaffyTree::<()>::new();
+        let node = tree.new_leaf_with_context(
+            Style { size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() }, (),
+        ).unwrap();
+        for _ in 0..2 {
+            let mut generic_calls = 0;
+            tree.compute_layout_with_measure(node, Size::MAX_CONTENT, |_, _, _, _, _| {
+                generic_calls += 1;
+                Size { width: 33.0, height: 44.0 }
+            }).unwrap();
+            assert!(generic_calls > 0);
+            let mut rive_calls = 0;
+            tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _, _, _, _| {
+                rive_calls += 1;
+                Size { width: 33.0, height: 44.0 }
+            }).unwrap();
+            assert_eq!(rive_calls, 0);
+        }
+    }
 
     fn size_measure_function(
         known_dimensions: Size<Option<f32>>,

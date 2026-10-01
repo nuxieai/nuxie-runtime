@@ -72,12 +72,8 @@ impl KeyedObject {
     }
     pub fn on_added_clean(&mut self, context: &mut dyn KeyedObjectContext) -> StatusCode {
         for property in &self.keyed_properties {
-            let code = property
-                .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_clean(context))
-                .unwrap_or(StatusCode::MissingObject);
-            if code != StatusCode::Ok {
-                return code;
-            }
+            property
+                .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_clean(context));
         }
         StatusCode::Ok
     }

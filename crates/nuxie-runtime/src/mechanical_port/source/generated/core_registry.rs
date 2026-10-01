@@ -9957,13 +9957,19 @@ impl CoreRegistry {
     /// Dispatch a generated unsigned property write through a stable object
     /// occurrence. A stale or currently borrowed occurrence is not writable.
     pub fn set_id_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
-        let written = handle
-            .with_mut(|object| Self::set_id(object, property_key, value))
-            .is_some();
-        if written {
+        let pending = handle.with_mut(|object| {
+            Self::set_id(object, property_key, value);
+            // Capture deferred setter work while this receiver is already
+            // borrowed; ordinary targets need no follow-up arena access.
+            object
+                .as_any()
+                .downcast_ref::<crate::source::scripted::scripted_transition::ScriptedTransition>()
+                .is_some_and(|transition| transition.has_pending_property_changes())
+        });
+        if pending == Some(true) {
             flush_scripted_transition_property_changes(handle);
         }
-        written
+        pending.is_some()
     }
 
     pub fn get_id_handle(handle: &CoreHandle, property_key: i32) -> Option<u32> {
@@ -9977,13 +9983,17 @@ impl CoreRegistry {
         {
             return crate::source::viewmodel::viewmodel_instance_trigger::ViewModelInstanceTrigger::set_property_value_handle(handle, value);
         }
-        let written = handle
-            .with_mut(|object| Self::set_uint(object, property_key, value))
-            .is_some();
-        if written {
+        let pending = handle.with_mut(|object| {
+            Self::set_uint(object, property_key, value);
+            object
+                .as_any()
+                .downcast_ref::<crate::source::scripted::scripted_transition::ScriptedTransition>()
+                .is_some_and(|transition| transition.has_pending_property_changes())
+        });
+        if pending == Some(true) {
             flush_scripted_transition_property_changes(handle);
         }
-        written
+        pending.is_some()
     }
 
     pub fn set_string_handle(handle: &CoreHandle, property_key: i32, value: String) -> bool {
@@ -59481,11 +59491,9 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        // Trigger counts are non-interpolatable uints. Publish their tools
-        // callbacks through the occurrence boundary, not a borrowed object.
-        if key == i32::from(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
-            && object.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY)
-        {
+        // The held uint branch is a generated setter. Complete its callbacks
+        // at that setter's released-borrow boundary, not in KeyedProperty.
+        if !CoreRegistry::is_interpolatable_uint(key as u32) {
             return CoreRegistry::set_uint_handle(&object, key, self.base.value());
         }
         object
@@ -59504,9 +59512,7 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
         mix: f32,
         context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        if key == i32::from(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
-            && object.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY)
-        {
+        if !CoreRegistry::is_interpolatable_uint(key as u32) {
             return CoreRegistry::set_uint_handle(&object, key, self.base.value());
         }
         next.with(|next| {
@@ -60248,36 +60254,22 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_id
         &self,
         object: crate::mechanical_port::source::core::CoreHandle,
         key: i32,
-        mix: f32,
-        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+        _mix: f32,
+        _context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        object
-            .with_mut(|object| {
-                self.apply(object, key, mix, context);
-                true
-            })
-            .unwrap_or(false)
+        CoreRegistry::set_id_handle(&object, key, self.base.value())
     }
     fn keyframe_interpolate(
         &self,
         object: crate::mechanical_port::source::core::CoreHandle,
         key: i32,
-        time: f32,
-        next: crate::mechanical_port::source::core::CoreHandle,
-        mix: f32,
-        context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
+        _time: f32,
+        _next: crate::mechanical_port::source::core::CoreHandle,
+        _mix: f32,
+        _context: Option<&dyn crate::mechanical_port::source::animation::interpolating_keyframe::KeyFrameValueContext>,
     ) -> bool {
-        next.with(|next| {
-            next.as_key_frame().is_some_and(|next| {
-                object
-                    .with_mut(|object| {
-                        self.apply_interpolation(object, key, time, next, mix, context);
-                        true
-                    })
-                    .unwrap_or(false)
-            })
-        })
-        .unwrap_or(false)
+        // Id interpolation holds the source value; upstream does not read next.
+        CoreRegistry::set_id_handle(&object, key, self.base.value())
     }
     fn lifecycle_import(
         &mut self,

@@ -443,6 +443,22 @@ impl CoreHandle {
             .is_some_and(|predicate| predicate(type_key))
     }
 
+    /// Existing immutable registration metadata, checked for this generation
+    /// and a live owner without borrowing the object's mutable contents.
+    pub(crate) fn type_metadata(&self) -> Option<(CoreTypeKey, fn(CoreTypeKey) -> bool)> {
+        let slot = self.slot()?;
+        let is_alive = slot.occupied.get()
+            && slot
+                .runtime_artboard
+                .borrow()
+                .as_ref()
+                .is_none_or(|root| root.strong_count() > 0);
+        if !is_alive {
+            return None;
+        }
+        Some((slot.core_type.get(), slot.type_predicate.get()?))
+    }
+
     pub fn core_type(&self) -> Option<CoreTypeKey> {
         let slot = self.slot()?;
         slot.occupied.get().then(|| slot.core_type.get())

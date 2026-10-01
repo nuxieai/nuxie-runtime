@@ -3410,34 +3410,50 @@ pub fn component_update_handle(
         }
         component_update_after_transform(object, dirt);
     });
-    if handle.is_type_of(crate::mechanical_port::source::text::text_input::TextInput::TYPE_KEY) {
+    // Classify the live virtual receiver once after Super using its existing
+    // registration metadata, without retaining an object borrow across callbacks.
+    let Some((text_input, list, nested, nested_leaf, artboard, scripted, transition)) =
+        handle.type_metadata().map(|(kind, is_type_of)| {
+            (
+                is_type_of(crate::mechanical_port::source::text::text_input::TextInput::TYPE_KEY),
+                kind == crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY,
+                is_type_of(crate::mechanical_port::source::nested_artboard::NestedArtboard::TYPE_KEY),
+                kind == crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY,
+                is_type_of(crate::mechanical_port::source::artboard::Artboard::TYPE_KEY),
+                is_type_of(crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::TYPE_KEY),
+                kind == crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY,
+            )
+        })
+    else {
+        return true;
+    };
+    let mut callback_ran = false;
+    if text_input {
         crate::mechanical_port::source::text::text_input::TextInput::update_after_transform_occurrence(handle, dirt);
+        callback_ran = true;
     }
-    if handle.core_type() == Some(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY) {
+    if list && (!callback_ran || handle.is_alive()) {
         crate::mechanical_port::source::artboard_component_list::ArtboardComponentList::update_after_transform_occurrence(handle, dirt);
+        callback_ran = true;
     }
-    if handle.is_type_of(crate::mechanical_port::source::nested_artboard::NestedArtboard::TYPE_KEY)
-    {
+    if nested && (!callback_ran || handle.is_alive()) {
         crate::mechanical_port::source::nested_artboard::NestedArtboard::update_after_transform_occurrence(handle, dirt);
-        if handle.core_type() == Some(crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY) {
+        if nested_leaf && handle.is_alive() {
             crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf::update_after_nested_artboard_super_occurrence(handle, dirt);
         }
+        callback_ran = true;
     }
-    if handle
-        .with(|owner| owner.as_artboard().is_some())
-        .unwrap_or(false)
-    {
+    if artboard && (!callback_ran || handle.is_alive()) {
         crate::mechanical_port::source::artboard::Artboard::update_after_layout_super_handle(
             handle, dirt,
         );
+        callback_ran = true;
     }
-    if handle
-        .with(|owner| owner.as_scripted_drawable().is_some())
-        .unwrap_or(false)
-    {
+    if scripted && (!callback_ran || handle.is_alive()) {
         crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable::update_after_super_occurrence(handle, dirt);
+        callback_ran = true;
     }
-    if handle.core_type() == Some(crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY) {
+    if transition && (!callback_ran || handle.is_alive()) {
         crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::update_after_super_occurrence(handle, dirt);
     }
     true
@@ -3514,24 +3530,15 @@ pub fn component_update_constraints_handle(handle: &CoreHandle) {
         layout::layout_participant::LayoutParticipant,
         nested_artboard_layout::NestedArtboardLayout,
     };
-    let participant = handle
-        .with(|object| {
-            if object.as_shape().is_some()
-                || object.as_text().is_some()
-                || object
-                    .as_any()
-                    .is::<crate::mechanical_port::source::shapes::image::Image>()
-            {
-                object.layout_provider_handle()
-            } else {
-                None
-            }
-        })
-        .flatten();
-    if let Some(participant) = participant {
-        LayoutParticipant::apply_layout_constraints(&participant);
-    }
-    let Some((layout, list, transforms, skip_lists)) = handle.with_mut(|object| {
+    fn snapshot(
+        object: &mut dyn crate::mechanical_port::source::core::CoreObject,
+    ) -> (
+        Vec<CoreHandle>,
+        Vec<CoreHandle>,
+        Vec<CoreHandle>,
+        bool,
+        bool,
+    ) {
         let transforms = object
             .as_transform_component()
             .map(|owner| owner.constraints().to_vec())
@@ -3542,6 +3549,7 @@ pub fn component_update_constraints_handle(handle: &CoreHandle) {
                 owner.active_list_constraint_handles(),
                 transforms,
                 true,
+                false,
             )
         } else if let Some(owner) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
             (
@@ -3549,6 +3557,7 @@ pub fn component_update_constraints_handle(handle: &CoreHandle) {
                 Vec::new(),
                 transforms,
                 false,
+                true,
             )
         } else if let Some(owner) = object.as_layout_component() {
             (
@@ -3556,12 +3565,42 @@ pub fn component_update_constraints_handle(handle: &CoreHandle) {
                 Vec::new(),
                 transforms,
                 false,
+                false,
             )
         } else {
-            (Vec::new(), Vec::new(), transforms, false)
+            (Vec::new(), Vec::new(), transforms, false, false)
+        }
+    }
+    let Some(preparation) = handle.with_mut(|object| {
+        let participant = if object.as_shape().is_some()
+            || object.as_text().is_some()
+            || object
+                .as_any()
+                .is::<crate::mechanical_port::source::shapes::image::Image>()
+        {
+            object.layout_provider_handle()
+        } else {
+            None
+        };
+        // With no participant callback there is no intervening mutation:
+        // prepare the existing lists under this same short checked borrow.
+        match participant {
+            Some(participant) => Err(participant),
+            None => Ok(snapshot(object)),
         }
     }) else {
         return;
+    };
+    let (layout, list, transforms, skip_lists, nested_placement) = match preparation {
+        Ok(prepared) => prepared,
+        Err(participant) => {
+            LayoutParticipant::apply_layout_constraints(&participant);
+            // A participant may mutate constraints; capture only after it runs.
+            let Some(prepared) = handle.with_mut(snapshot) else {
+                return;
+            };
+            prepared
+        }
     };
     for constraint in layout {
         let constrain = constraint
@@ -3580,11 +3619,103 @@ pub fn component_update_constraints_handle(handle: &CoreHandle) {
             }
         });
     }
-    handle.with_mut(|object| {
-        if let Some(nested) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
-            nested.apply_layout_placement();
+    if nested_placement {
+        handle.with_mut(|object| {
+            if let Some(nested) = object.as_any_mut().downcast_mut::<NestedArtboardLayout>() {
+                nested.apply_layout_placement();
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod update_dispatch_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
+        component_dirt::ComponentDirt,
+        core::CoreArena,
+        nested_artboard_leaf::NestedArtboardLeaf,
+        node::Node,
+        scripted::{
+            scripted_drawable::ScriptedDrawable, scripted_layout::ScriptedLayout,
+            scripted_transition::ScriptedTransition,
+        },
+        text::text_input::TextInput,
+    };
+
+    #[test]
+    fn borrowed_receiver_metadata_matches_registered_predicates() {
+        let arena = CoreArena::default();
+        let runtime = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let handles = [
+            arena.insert(TextInput::default()),
+            arena.insert(NestedArtboardLeaf::default()),
+            arena.insert(ScriptedTransition::default()),
+            arena.insert(ScriptedDrawable::default()),
+            arena.insert(ScriptedLayout::default()),
+            arena.insert(crate::mechanical_port::source::artboard::Artboard::default()),
+            arena.insert(Node::default()),
+            runtime.core_handle(),
+        ];
+        for handle in handles {
+            let (kind, predicate) = handle
+                .with(|object| (object.core_type(), object.type_predicate()))
+                .unwrap();
+            assert_eq!(Some(kind), handle.core_type());
+            handle
+                .with_mut(|object| {
+                    let (stored_kind, stored_predicate) = handle.type_metadata().unwrap();
+                    assert_eq!(stored_kind, kind);
+                    assert_eq!(
+                        stored_predicate(ScriptedDrawable::TYPE_KEY),
+                        object.as_scripted_drawable().is_some()
+                    );
+                    assert_eq!(
+                        stored_predicate(
+                            crate::mechanical_port::source::artboard::Artboard::TYPE_KEY
+                        ),
+                        object.as_artboard().is_some()
+                    );
+                })
+                .unwrap();
+            for key in [
+                TextInput::TYPE_KEY,
+                NestedArtboardLeaf::TYPE_KEY,
+                ScriptedTransition::TYPE_KEY,
+                crate::mechanical_port::source::nested_artboard::NestedArtboard::TYPE_KEY,
+                crate::mechanical_port::source::artboard::Artboard::TYPE_KEY,
+            ] {
+                assert_eq!(predicate(key), handle.is_type_of(key));
+            }
         }
-    });
+    }
+
+    #[test]
+    fn update_dispatch_does_not_follow_a_reused_arena_slot() {
+        let arena = CoreArena::default();
+        let stale = arena.insert(Node::default());
+        assert!(component_update_handle(&stale, ComponentDirt::NONE));
+        drop(arena.remove(&stale));
+        let live = arena.insert(Node::default());
+        assert!(stale.type_metadata().is_none());
+        assert!(!component_update_handle(
+            &stale,
+            ComponentDirt::WORLD_TRANSFORM
+        ));
+        component_update_constraints_handle(&stale);
+        assert!(component_update_handle(&live, ComponentDirt::NONE));
+    }
+
+    #[test]
+    fn metadata_rejects_a_dead_runtime_root() {
+        let runtime = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let root = runtime.core_handle();
+        let _arena = root.retain_arena().unwrap();
+        runtime.with_artboard_mut(|_| assert!(root.type_metadata().is_some()));
+        drop(runtime);
+        assert!(root.type_metadata().is_none());
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

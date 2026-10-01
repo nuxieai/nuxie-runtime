@@ -121,12 +121,15 @@ impl Default for RuntimeArtboardDirtyHandle {
 impl RuntimeArtboardDirtyHandle {
     pub fn wake_if_quiet_row(&self) {
         let row = self.0.quiet_host_row.replace(Artboard::NO_QUIET_ROW);
-        if row == Artboard::NO_QUIET_ROW { return; }
+        if row == Artboard::NO_QUIET_ROW {
+            return;
+        }
         // Dispatch to the CURRENT host, not the list that originally marked
         // this artboard quiet. The shared callback state performs the same
         // current row identity check without borrowing a live layout host.
         if let Some(host) = self.0.host.borrow().as_ref() {
-            if let (Some(rows), Some(artboard)) = (host.quiet_rows.as_ref(), host.artboard.as_ref()) {
+            if let (Some(rows), Some(artboard)) = (host.quiet_rows.as_ref(), host.artboard.as_ref())
+            {
                 rows.hosted_row_woke(artboard, row);
             }
         }
@@ -2076,20 +2079,36 @@ impl Artboard {
     }
 
     pub const NO_QUIET_ROW: u32 = u32::MAX;
-    pub fn quiet_host_row(&self) -> u32 { self.dirty_state.0.quiet_host_row.get() }
-    pub fn set_quiet_host_row(&self, row: u32) { self.dirty_state.0.quiet_host_row.set(row); }
-    pub fn wake_if_quiet_row(&self) { self.dirty_state.wake_if_quiet_row(); }
-    pub fn data_context_changed(&self) { self.wake_if_quiet_row(); }
+    pub fn quiet_host_row(&self) -> u32 {
+        self.dirty_state.0.quiet_host_row.get()
+    }
+    pub fn set_quiet_host_row(&self, row: u32) {
+        self.dirty_state.0.quiet_host_row.set(row);
+    }
+    pub fn wake_if_quiet_row(&self) {
+        self.dirty_state.wake_if_quiet_row();
+    }
+    pub fn data_context_changed(&self) {
+        self.wake_if_quiet_row();
+    }
     #[cfg(any(test, feature = "testing"))]
-    pub fn dirt_notifications() -> u64 { DIRT_NOTIFICATIONS.with(Cell::get) }
+    pub fn dirt_notifications() -> u64 {
+        DIRT_NOTIFICATIONS.with(Cell::get)
+    }
     pub fn row_quiet_state(&self) -> QuietState {
-        if !self.artboard_hosts.is_empty() || !self.joysticks.is_empty()
-            || !self.resettables.is_empty() || !self.scripted_objects.is_empty() {
+        if !self.artboard_hosts.is_empty()
+            || !self.joysticks.is_empty()
+            || !self.resettables.is_empty()
+            || !self.scripted_objects.is_empty()
+        {
             return QuietState::Never;
         }
-        if self.has_component_dirt() || !self.dirty_layout.is_empty()
-            || self.host_transform_marked_dirty || self.instance_value_binds_pending
-            || self.data_bind_container.has_data_bind_work() {
+        if self.has_component_dirt()
+            || !self.dirty_layout.is_empty()
+            || self.host_transform_marked_dirty
+            || self.instance_value_binds_pending
+            || self.data_bind_container.has_data_bind_work()
+        {
             return QuietState::Busy;
         }
         let mut state = QuietState::Quiet;
@@ -2212,8 +2231,15 @@ impl Artboard {
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
             quiet_rows: if host.is_type_of(ArtboardComponentList::TYPE_KEY) {
-                Some(host.with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::quiet_row_host_state).expect("list host"))
-            } else { None },
+                Some(
+                    host.with_downcast::<ArtboardComponentList, _>(
+                        ArtboardComponentList::quiet_row_host_state,
+                    )
+                    .expect("list host"),
+                )
+            } else {
+                None
+            },
             artboard: crate::mechanical_port::source::core::CoreObject::core(self).handle(),
             host,
             parent_artboard,
@@ -2478,7 +2504,8 @@ impl Artboard {
                 } else {
                     root.with_downcast::<Artboard, _>(|artboard| {
                         artboard.dirty_state.0.depth.get() < i as u32
-                    }).unwrap_or(false)
+                    })
+                    .unwrap_or(false)
                 };
                 if dirtied_earlier {
                     break;
@@ -4944,7 +4971,9 @@ impl Artboard {
     }
 
     pub fn main_view_model_instance_changed_handle(root: &CoreHandle) {
-        root.artboard_dirty_handle().expect("Artboard dirty state").wake_if_quiet_row();
+        root.artboard_dirty_handle()
+            .expect("Artboard dirty state")
+            .wake_if_quiet_row();
         Self::sync_instance_value_binds_handle(root);
     }
 
@@ -5127,7 +5156,9 @@ impl Artboard {
     }
 
     pub fn relink_data_context_handle(root: &CoreHandle) {
-        root.artboard_dirty_handle().expect("Artboard dirty state").wake_if_quiet_row();
+        root.artboard_dirty_handle()
+            .expect("Artboard dirty state")
+            .wake_if_quiet_row();
         let Some(context) = root
             .with_downcast::<Artboard, _>(Artboard::data_context)
             .flatten()
@@ -6247,7 +6278,10 @@ mod update_receiver_tests {
             node
         });
         assert!(Artboard::update_components_handle(&root));
-        assert_eq!(node.with(|object| object.as_component().unwrap().dirt()), Some(ComponentDirt::NONE));
+        assert_eq!(
+            node.with(|object| object.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
         assert!(!Artboard::update_components_handle(&root));
         assert_eq!(Rc::strong_count(&runtime.0), 1);
         drop(runtime);

@@ -983,6 +983,59 @@ impl ScrollConstraint {
             value,
         });
     }
+    /// Computed scroll writes can publish X and then Y. Complete X's observer
+    /// notification before inspecting Y's live enablement, as the source does.
+    pub(crate) fn set_scroll_value_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
+        let Some(proceed) = owner.with_downcast_mut::<Self, _>(|scroll| {
+            if scroll.is_dragging {
+                return false;
+            }
+            scroll.stop_physics();
+            true
+        }) else {
+            return false;
+        };
+        if !proceed {
+            return true;
+        }
+        let index = key == ScrollConstraintBase::SCROLL_INDEX_PROPERTY_KEY;
+        for is_x in [true, false] {
+            let mut completion = crate::source::core::PropertySetterCompletion::default();
+            owner.with_downcast_mut::<Self, _>(|scroll| {
+                let enabled = if index {
+                    if is_x {
+                        scroll.base.constrains_horizontal()
+                    } else {
+                        scroll.base.constrains_vertical()
+                    }
+                } else {
+                    key == if is_x {
+                        ScrollConstraintBase::SCROLL_PERCENT_X_PROPERTY_KEY
+                    } else {
+                        ScrollConstraintBase::SCROLL_PERCENT_Y_PROPERTY_KEY
+                    }
+                };
+                if !enabled {
+                    return;
+                }
+                let intent = ScrollAxisIntent {
+                    space: if index {
+                        ScrollSpace::Index
+                    } else {
+                        ScrollSpace::Percent
+                    },
+                    value,
+                };
+                if is_x {
+                    scroll.set_intent_x_with_completion(intent, &mut completion);
+                } else {
+                    scroll.set_intent_y_with_completion(intent, &mut completion);
+                }
+            });
+            completion.finish();
+        }
+        true
+    }
     pub fn set_scroll_percent_y(&mut self, value: f32) {
         if self.is_dragging {
             return;
@@ -1070,17 +1123,35 @@ impl ScrollConstraint {
         }
     }
     fn set_intent_x(&mut self, intent: ScrollAxisIntent) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_intent_x_with_completion(intent, &mut completion);
+        completion.finish();
+    }
+    fn set_intent_x_with_completion(
+        &mut self,
+        intent: ScrollAxisIntent,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if let Some(offset) = self.resolve_intent(intent, true) {
             self.intent_x.space = ScrollSpace::None;
-            self.set_authored_scroll_offset_x(offset);
+            self.set_authored_scroll_offset_x_with_completion(offset, completion);
         } else {
             self.intent_x = intent;
         }
     }
     fn set_intent_y(&mut self, intent: ScrollAxisIntent) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_intent_y_with_completion(intent, &mut completion);
+        completion.finish();
+    }
+    fn set_intent_y_with_completion(
+        &mut self,
+        intent: ScrollAxisIntent,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if let Some(offset) = self.resolve_intent(intent, false) {
             self.intent_y.space = ScrollSpace::None;
-            self.set_authored_scroll_offset_y(offset);
+            self.set_authored_scroll_offset_y_with_completion(offset, completion);
         } else {
             self.intent_y = intent;
         }
@@ -1462,15 +1533,33 @@ impl ScrollConstraint {
         self.base.scroll_offset_y()
     }
     pub fn set_authored_scroll_offset_x(&mut self, value: f32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_authored_scroll_offset_x_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    fn set_authored_scroll_offset_x_with_completion(
+        &mut self,
+        value: f32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if self.base.set_scroll_offset_x_value(value) {
             self.scroll_offset_x_changed();
-            Core::notify_property_changed(self, ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
+            completion.record(self, ScrollConstraintBase::SCROLL_OFFSET_X_PROPERTY_KEY);
         }
     }
     pub fn set_authored_scroll_offset_y(&mut self, value: f32) {
+        let mut completion = crate::source::core::PropertySetterCompletion::default();
+        self.set_authored_scroll_offset_y_with_completion(value, &mut completion);
+        completion.finish();
+    }
+    fn set_authored_scroll_offset_y_with_completion(
+        &mut self,
+        value: f32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
         if self.base.set_scroll_offset_y_value(value) {
             self.scroll_offset_y_changed();
-            Core::notify_property_changed(self, ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
+            completion.record(self, ScrollConstraintBase::SCROLL_OFFSET_Y_PROPERTY_KEY);
         }
     }
     pub fn scroll_offset_x_changed(&mut self) {

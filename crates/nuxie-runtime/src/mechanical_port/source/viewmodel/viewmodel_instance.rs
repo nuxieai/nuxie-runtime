@@ -536,19 +536,20 @@ impl ViewModelInstance {
     }
 
     pub fn add_value_data_bind(&mut self, bind: CoreHandle) {
-        bind.with_mut(|bind| {
-            let bind = bind.as_data_bind_mut().unwrap();
-            if bind.to_source() && bind.to_target() {
-                let flags = bind.base.flags() | SOURCE_TO_TARGET_FIRST;
-                if bind.base.set_flags_value(flags) {
-                    use crate::mechanical_port::source::generated::data_bind::data_bind_base::{
-                        DataBindBase, DataBindBaseCallbacks,
-                    };
-                    bind.flags_changed();
-                    bind.notify_property_changed(DataBindBase::FLAGS_PROPERTY_KEY);
-                }
-            }
-        });
+        let flags = bind.with(|owner| {
+            let bind = owner.as_data_bind().unwrap();
+            (bind.to_source() && bind.to_target())
+                .then(|| bind.base.flags() | SOURCE_TO_TARGET_FIRST)
+        }).flatten();
+        if let Some(flags) = flags {
+            // The source setter notifies before insertion. Release the bind
+            // first: its FLAGS observer may legally be the bind itself.
+            DataBind::set_uint_handle(
+                &bind,
+                crate::source::generated::data_bind::data_bind_base::DataBindBase::FLAGS_PROPERTY_KEY,
+                flags,
+            );
+        }
         self.value_data_binds.push_back(bind);
     }
 

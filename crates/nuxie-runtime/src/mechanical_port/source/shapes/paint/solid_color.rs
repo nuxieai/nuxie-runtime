@@ -118,6 +118,9 @@ impl ColorChannels for SolidColor {
     fn color_value(&self) -> i32 {
         self.base.color_value()
     }
+    fn set_color_value_with_completion(&mut self, value: i32, completion: &mut crate::source::core::PropertySetterCompletion) {
+        crate::source::generated::core_registry::CoreRegistryObject::set_color_with_completion(self, crate::source::generated::core_registry::CoreField::SolidColorColorValue, value, completion);
+    }
     fn set_color_value(&mut self, value: i32) {
         SolidColor::set_color_value(self, value);
     }

@@ -38,15 +38,45 @@ pub trait CoreType {
 /// arena is the owner; cross-object references retain only `CoreHandle`, so a
 /// graph cycle cannot keep an artboard occurrence alive.
 pub trait CoreObject: CoreRegistryObject + Any {
-    fn painted_world_bounds(&mut self, out: &mut crate::mechanical_port::source::math::aabb::Aabb) -> crate::mechanical_port::source::drawable::BoundsFidelity {
-        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::shape::Shape>() { return owner.painted_world_bounds(out); }
-        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::image::Image>() { return owner.painted_world_bounds(out); }
-        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::text::text::Text>() { return owner.painted_world_bounds(out); }
-        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::text::text_input::TextInput>() { return owner.painted_world_bounds(out); }
+    fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        if let Some(owner) = self
+            .as_registry_any_mut()
+            .downcast_mut::<crate::mechanical_port::source::shapes::shape::Shape>()
+        {
+            return owner.painted_world_bounds(out);
+        }
+        if let Some(owner) = self
+            .as_registry_any_mut()
+            .downcast_mut::<crate::mechanical_port::source::shapes::image::Image>()
+        {
+            return owner.painted_world_bounds(out);
+        }
+        if let Some(owner) = self
+            .as_registry_any_mut()
+            .downcast_mut::<crate::mechanical_port::source::text::text::Text>()
+        {
+            return owner.painted_world_bounds(out);
+        }
+        if let Some(owner) =
+            self.as_registry_any_mut()
+                .downcast_mut::<crate::mechanical_port::source::text::text_input::TextInput>()
+        {
+            return owner.painted_world_bounds(out);
+        }
         if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable>() { return owner.painted_world_bounds(out); }
-        if let Some(owner)=self.as_registry_any_mut().downcast_mut::<crate::mechanical_port::source::nested_artboard::NestedArtboard>() { return owner.painted_world_bounds(out); }
+        if let Some(owner) =
+            self.as_registry_any_mut()
+                .downcast_mut::<crate::mechanical_port::source::nested_artboard::NestedArtboard>()
+        {
+            return owner.painted_world_bounds(out);
+        }
         // Artboard inherits LayoutComponent's virtual bounds implementation.
-        if let Some(owner)=self.as_layout_component_mut() { return owner.painted_world_bounds(out); }
+        if let Some(owner) = self.as_layout_component_mut() {
+            return owner.painted_world_bounds(out);
+        }
         crate::mechanical_port::source::drawable::BoundsFidelity::None
     }
     fn core(&self) -> &Core;
@@ -131,6 +161,7 @@ pub trait CoreObject: CoreRegistryObject + Any {
 }
 
 struct CoreArenaSlot {
+    property_observers: RefCell<Weak<PropertyObservers>>,
     generation: Cell<u64>,
     occupied: Cell<bool>,
     source_global_id: Cell<Option<u32>>,
@@ -150,6 +181,7 @@ struct CoreArenaSlot {
 impl CoreArenaSlot {
     fn vacant() -> Self {
         Self {
+            property_observers: RefCell::new(Weak::new()),
             generation: Cell::new(0),
             occupied: Cell::new(false),
             source_global_id: Cell::new(None),
@@ -264,6 +296,7 @@ impl CoreArena {
             generation,
         };
         slot.source_global_id.set(None);
+        *slot.property_observers.borrow_mut() = Weak::new();
         slot.core_type.set(value.core_type());
         slot.type_predicate.set(Some(value.type_predicate()));
         slot.component_graph_order.set(
@@ -296,7 +329,14 @@ impl CoreArena {
         if slot.generation.get() != handle.generation {
             return None;
         }
-        let value = slot.object.borrow_mut().take()?;
+        let mut value = slot.object.borrow_mut().take()?;
+        // Intrusive links must be spliced while this generation is still
+        // resolvable. The removed box can outlive its arena identity.
+        if let Some(bind) = value.as_data_bind_mut() {
+            bind.unsubscribe_target();
+        }
+        value.core_mut().detach_property_observers();
+        *slot.property_observers.borrow_mut() = Weak::new();
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
         slot.component_graph_order.set(None);
@@ -360,6 +400,21 @@ pub struct CoreHandle {
 }
 
 impl CoreHandle {
+    pub(crate) fn notify_property_changed(&self, property_key: u16) {
+        if let Some(observers) = self.property_observers() {
+            observers.notify(property_key);
+        }
+    }
+    pub(crate) fn property_observers(&self) -> Option<Rc<PropertyObservers>> {
+        self.slot()?.property_observers.borrow().upgrade()
+    }
+
+    pub(crate) fn ensure_property_observers(&self) -> Option<Rc<PropertyObservers>> {
+        if let Some(observers) = self.property_observers() {
+            return Some(observers);
+        }
+        self.with_mut(|owner| owner.core_mut().ensure_property_observers())
+    }
     /// Stable allocation identity for source tables that hash object addresses.
     /// This does not dereference the slot; equality still checks its generation.
     pub(crate) fn slot_address(&self) -> usize {
@@ -591,7 +646,119 @@ impl std::fmt::Debug for CoreHandle {
 pub struct Core {
     handle: Option<CoreHandle>,
     type_metadata: Option<(CoreTypeKey, fn(CoreTypeKey) -> bool)>,
-    observers: Vec<CoreHandle>,
+    observers: Option<Rc<PropertyObservers>>,
+}
+
+/// A generated setter's final notification, completed by its caller after
+/// releasing the occurrence borrow. This is local to one write, never queued
+/// on the object. Borrowed setters finish it synchronously before returning.
+#[derive(Default)]
+pub struct PropertySetterCompletion {
+    notification: Option<(Rc<PropertyObservers>, u16)>,
+}
+
+impl PropertySetterCompletion {
+    pub(crate) fn record(&mut self, core: &Core, property_key: u16) {
+        debug_assert!(self.notification.is_none());
+        self.notification = core.observers.as_ref().map(|head| (head.clone(), property_key));
+    }
+
+    pub fn finish(self) {
+        if let Some((head, property_key)) = self.notification {
+            head.notify(property_key);
+        }
+    }
+}
+
+/// The single authoritative intrusive-list head. Separate borrowing permits an
+/// observer callback to unlink from a target whose generated setter is active.
+/// Arena metadata keeps only a weak alias; there is no copied membership list.
+#[derive(Default)]
+pub(crate) struct PropertyObservers {
+    first: RefCell<Option<CoreHandle>>,
+}
+
+impl PropertyObservers {
+    pub(crate) fn add(&self, observer: &mut DataBind) {
+        let handle = observer.base.base.handle().expect("registered DataBind");
+        let mut current = self.first.borrow().clone();
+        while let Some(link) = current {
+            if link == handle {
+                debug_assert!(false, "DataBind already subscribed");
+                return;
+            }
+            current = link
+                .with(|owner| owner.as_data_bind().and_then(DataBind::next_observer))
+                .flatten();
+        }
+        observer.set_next_observer(self.first.borrow().clone());
+        *self.first.borrow_mut() = Some(handle);
+    }
+
+    pub(crate) fn remove(&self, observer: &mut DataBind) {
+        let Some(handle) = observer.base.base.handle() else {
+            return;
+        };
+        let mut previous: Option<CoreHandle> = None;
+        let mut current = self.first.borrow().clone();
+        while let Some(link) = current {
+            if link == handle {
+                let next = observer.next_observer();
+                if let Some(previous) = previous {
+                    previous.with_mut(|owner| {
+                        if let Some(previous) = owner.as_data_bind_mut() {
+                            previous.set_next_observer(next);
+                        }
+                    });
+                } else {
+                    *self.first.borrow_mut() = next;
+                }
+                observer.set_next_observer(None);
+                return;
+            }
+            current = link
+                .with(|owner| owner.as_data_bind().and_then(DataBind::next_observer))
+                .flatten();
+            previous = Some(link);
+        }
+    }
+
+    pub(crate) fn notify(&self, property_key: u16) {
+        let mut current = self.first.borrow().clone();
+        while let Some(observer) = current {
+            if observer
+                .with(|owner| owner.as_data_bind().map(DataBind::property_key))
+                .flatten()
+                == Some(u32::from(property_key))
+            {
+                DataBind::add_dirt_handle(
+                    &observer,
+                    u32::from(ComponentDirt::BINDINGS_TARGET.0),
+                    false,
+                );
+            }
+            // Deliberately read AFTER addDirt: removing current clears this
+            // link; removing its successor splices the live next pointer.
+            current = observer
+                .with(|owner| owner.as_data_bind().and_then(DataBind::next_observer))
+                .flatten();
+        }
+    }
+
+    fn detach_all(&self) {
+        let mut current = self.first.borrow().clone();
+        while let Some(observer) = current {
+            current = observer
+                .with_mut(|owner| {
+                    let observer = owner.as_data_bind_mut()?;
+                    let next = observer.next_observer();
+                    observer.on_target_destroyed();
+                    next
+                })
+                .flatten();
+        }
+        *self.first.borrow_mut() = None;
+    }
 }
 
 impl Default for Core {
@@ -599,7 +766,7 @@ impl Default for Core {
         Self {
             handle: None,
             type_metadata: None,
-            observers: Vec::new(),
+            observers: None,
         }
     }
 }
@@ -607,6 +774,10 @@ impl Default for Core {
 impl Clone for Core {
     fn clone(&self) -> Self {
         Self::default()
+    }
+
+    fn clone_from(&mut self, _source: &Self) {
+        // C++ assignment preserves this occurrence and its observer list.
     }
 }
 
@@ -626,6 +797,9 @@ impl Core {
             slot.core_type.get(),
             slot.type_predicate.get().expect("concrete type predicate"),
         ));
+        if let Some(observers) = &self.observers {
+            *slot.property_observers.borrow_mut() = Rc::downgrade(observers);
+        }
         self.handle = Some(handle);
     }
 
@@ -667,49 +841,42 @@ impl Core {
     }
 
     pub fn notify_property_changed(&mut self, property_key: u16) {
-        // Clone the weak occurrence identities so a callback may detach itself
-        // without invalidating traversal. New observers are inserted at the
-        // front, matching the pinned linked-list callback order.
-        let observers = self.observers.clone();
-        for observer in observers {
-            observer.with_mut(|observer| {
-                let Some(observer) = observer.as_data_bind_mut() else {
-                    return;
-                };
-                if observer.property_key() == u32::from(property_key) {
-                    observer.add_dirt(u32::from(ComponentDirt::BINDINGS_TARGET.0), false);
-                }
-            });
+        if let Some(observers) = &self.observers {
+            observers.notify(property_key);
         }
     }
 
-    pub fn add_property_observer(&mut self, observer: CoreHandle) {
-        assert!(
-            !self.observers.contains(&observer),
-            "DataBind already subscribed"
-        );
-        self.observers.insert(0, observer);
+    pub(crate) fn ensure_property_observers(&mut self) -> Rc<PropertyObservers> {
+        let observers = self
+            .observers
+            .get_or_insert_with(|| Rc::new(PropertyObservers::default()));
+        if let Some(slot) = self.handle.as_ref().and_then(CoreHandle::slot) {
+            *slot.property_observers.borrow_mut() = Rc::downgrade(observers);
+        }
+        observers.clone()
     }
 
-    pub fn remove_property_observer(&mut self, observer: &CoreHandle) {
-        if let Some(index) = self
-            .observers
-            .iter()
-            .position(|candidate| candidate == observer)
-        {
-            self.observers.remove(index);
+    fn detach_property_observers(&mut self) {
+        if let Some(observers) = &self.observers {
+            observers.detach_all();
+        }
+    }
+
+    pub fn add_property_observer(&mut self, observer: &mut DataBind) {
+        self.ensure_property_observers().add(observer);
+    }
+
+    pub fn remove_property_observer(&mut self, observer: &mut DataBind) {
+        if let Some(observers) = &self.observers {
+            observers.remove(observer);
         }
     }
 }
 
 impl Drop for Core {
     fn drop(&mut self) {
-        for observer in std::mem::take(&mut self.observers) {
-            observer.with_mut(|observer| {
-                if let Some(observer) = observer.as_data_bind_mut() {
-                    observer.on_target_destroyed();
-                }
-            });
+        if let Some(observers) = self.observers.take() {
+            observers.detach_all();
         }
     }
 }
@@ -722,8 +889,7 @@ mod tests {
     #[test]
     fn draw_dispatch_metadata_matches_registered_owner_projections() {
         use crate::mechanical_port::source::generated::{
-            artboard_base::ArtboardBase,
-            core_registry::CoreRegistry,
+            artboard_base::ArtboardBase, core_registry::CoreRegistry,
             nested_artboard_base::NestedArtboardBase,
             scripted::scripted_drawable_base::ScriptedDrawableBase,
         };
@@ -731,22 +897,32 @@ mod tests {
         let mut checked = std::collections::BTreeSet::new();
         let owners = (0..=u16::MAX)
             .filter_map(|key| CoreRegistry::make_core_box(i32::from(key)))
-            .chain(std::iter::once(Box::new(crate::video::Video::default()) as Box<dyn super::CoreObject>));
+            .chain(std::iter::once(
+                Box::new(crate::video::Video::default()) as Box<dyn super::CoreObject>
+            ));
         for owner in owners {
             let handle = arena.insert_boxed(owner);
             let (key, predicate) = handle.type_metadata().expect("live registered owner");
-            let projections = handle.with(|owner| (
-                owner.core_type(),
-                owner.as_nested_artboard().is_some(),
-                owner.as_scripted_drawable().is_some(),
-                owner.as_artboard().is_some(),
-            )).unwrap();
+            let projections = handle
+                .with(|owner| {
+                    (
+                        owner.core_type(),
+                        owner.as_nested_artboard().is_some(),
+                        owner.as_scripted_drawable().is_some(),
+                        owner.as_artboard().is_some(),
+                    )
+                })
+                .unwrap();
             if key == crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY {
                 assert_eq!(projections, (key, false, false, false), "Shape uses ordinary virtual draw");
             }
             assert_eq!(
-                (key, predicate(NestedArtboardBase::TYPE_KEY),
-                    predicate(ScriptedDrawableBase::TYPE_KEY), predicate(ArtboardBase::TYPE_KEY)),
+                (
+                    key,
+                    predicate(NestedArtboardBase::TYPE_KEY),
+                    predicate(ScriptedDrawableBase::TYPE_KEY),
+                    predicate(ArtboardBase::TYPE_KEY)
+                ),
                 projections,
                 "draw dispatch for registered type {key}",
             );
@@ -754,9 +930,19 @@ mod tests {
             drop(arena.remove(&handle).unwrap());
             assert!(handle.type_metadata().is_none());
         }
-        for key in [1, 92, 451, 452, 603, 637, 110, 100, 559,
+        for key in [
+            1,
+            92,
+            451,
+            452,
+            603,
+            637,
+            110,
+            100,
+            559,
             crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY,
-            crate::video::Video::TYPE_KEY] {
+            crate::video::Video::TYPE_KEY,
+        ] {
             assert!(checked.contains(&key), "dispatch owner {key} was exercised");
         }
     }

@@ -84,7 +84,7 @@ impl FollowPathConstraint {
             // Each of these source changed callbacks calls markConstraintDirty.
             // Its parent/path callbacks can dirty this same constraint again.
             super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
-            owner.with_mut(|object| object.core_mut().notify_property_changed(key));
+            owner.notify_property_changed(key);
         }
         true
     }
@@ -111,11 +111,7 @@ impl FollowPathConstraint {
         };
         if changed {
             super::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
-            owner.with_mut(|object| {
-                object
-                    .core_mut()
-                    .notify_property_changed(FollowPathConstraintBase::ORIENT_PROPERTY_KEY)
-            });
+            owner.notify_property_changed(FollowPathConstraintBase::ORIENT_PROPERTY_KEY);
         }
         true
     }

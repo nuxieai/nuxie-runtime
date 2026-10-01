@@ -14,6 +14,51 @@ pub struct ViewModelInstanceNumber {
 }
 
 impl ViewModelInstanceNumber {
+    /// Registered values release the source before its synchronous dependents run.
+    pub fn set_value_handle(
+        owner: &crate::mechanical_port::source::core::CoreHandle,
+        value: f32,
+    ) -> bool {
+        let Some(changed) = owner.with_downcast_mut::<Self, _>(|number| {
+            let changed = number.base.set_property_value_value(value);
+            if changed {
+                crate::host_viewmodel::capture_native_change(
+                    owner.clone(),
+                    crate::RuntimeViewModelChangeValue::Number(value),
+                );
+            }
+            changed
+        }) else {
+            return false;
+        };
+        if !changed {
+            return true;
+        }
+        super::viewmodel_instance_value::ViewModelInstanceValue::add_dirt_handle(
+            owner,
+            ComponentDirt::BINDINGS,
+        );
+        // Both the callback and its argument are read AFTER dependency callbacks.
+        // Its explicit &mut Self API remains a borrowed callback boundary.
+        #[cfg(feature = "tools")]
+        owner.with_downcast_mut::<Self, _>(|number| {
+            if let Some(callback) = number.changed_callback {
+                let value = number.value();
+                if !crate::view_model_cell::defer_transaction_tools_callback(
+                    number,
+                    move |number| callback(number, value),
+                ) {
+                    callback(number, value);
+                }
+            }
+        });
+        super::viewmodel_instance_value::ViewModelInstanceValue::on_value_changed_handle(owner);
+        if let Some(observers) = owner.property_observers() {
+            observers.notify(ViewModelInstanceNumberBase::PROPERTY_VALUE_PROPERTY_KEY);
+        }
+        true
+    }
+
     pub fn value(&self) -> f32 {
         self.base.property_value()
     }

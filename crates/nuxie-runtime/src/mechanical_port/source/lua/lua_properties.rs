@@ -651,9 +651,7 @@ scalar_property!(
 impl ScriptedPropertyNumber {
     pub fn set_value(&mut self, value: f32) {
         if let Some(property) = self.property.instance_value_mut() {
-            property.with_downcast_mut::<ViewModelInstanceNumber, _>(|property| {
-                property.set_property_value(value)
-            });
+            ViewModelInstanceNumber::set_value_handle(&property, value);
         }
     }
 }

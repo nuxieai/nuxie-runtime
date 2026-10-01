@@ -226,26 +226,26 @@ macro_rules! inherited_fields {
             fn is_type_of(&self, key: u16) -> bool {
                 Self::subtype(key)
             }
-            fn set_uint(&mut self, f: CoreField, v: u32) {
-                self.$field.set_uint(f, v);
+            fn set_uint_with_completion(&mut self, f: CoreField, v: u32, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_uint_with_completion(f, v, completion);
             }
-            fn set_string(&mut self, f: CoreField, v: String) {
-                self.$field.set_string(f, v);
+            fn set_string_with_completion(&mut self, f: CoreField, v: String, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_string_with_completion(f, v, completion);
             }
-            fn set_color(&mut self, f: CoreField, v: i32) {
-                self.$field.set_color(f, v);
+            fn set_color_with_completion(&mut self, f: CoreField, v: i32, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_color_with_completion(f, v, completion);
             }
-            fn set_bool(&mut self, f: CoreField, v: bool) {
-                self.$field.set_bool(f, v);
+            fn set_bool_with_completion(&mut self, f: CoreField, v: bool, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_bool_with_completion(f, v, completion);
             }
-            fn set_double(&mut self, f: CoreField, v: f32) {
-                self.$field.set_double(f, v);
+            fn set_double_with_completion(&mut self, f: CoreField, v: f32, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_double_with_completion(f, v, completion);
             }
-            fn set_int(&mut self, f: CoreField, v: i32) {
-                self.$field.set_int(f, v);
+            fn set_int_with_completion(&mut self, f: CoreField, v: i32, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_int_with_completion(f, v, completion);
             }
-            fn set_callback(&mut self, f: CoreField, v: CallbackData<'_>) {
-                self.$field.set_callback(f, v);
+            fn set_callback_with_completion(&mut self, f: CoreField, v: CallbackData<'_>, completion: &mut crate::source::core::PropertySetterCompletion) {
+                self.$field.set_callback_with_completion(f, v, completion);
             }
             fn get_uint(&mut self, f: CoreField) -> u32 {
                 self.$field.get_uint(f)

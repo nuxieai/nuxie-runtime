@@ -720,11 +720,7 @@ impl LayoutComponent {
             owner.clone(),
         )
         .add_dirt(ComponentDirt::PATH, false);
-        owner.with_mut(|object| {
-            object
-                .core_mut()
-                .notify_property_changed(LayoutComponentBase::CLIP_PROPERTY_KEY);
-        });
+        owner.notify_property_changed(LayoutComponentBase::CLIP_PROPERTY_KEY);
     }
 
     pub(crate) fn set_dimension_occurrence(owner: &CoreHandle, key: u16, value: f32) -> bool {
@@ -750,7 +746,7 @@ impl LayoutComponent {
             // property notification. Release the owner for its root-layout
             // callback; for an Artboard, that root is this same occurrence.
             Self::mark_layout_node_dirty_occurrence(owner, false);
-            owner.with_mut(|object| object.core_mut().notify_property_changed(key));
+            owner.notify_property_changed(key);
         }
         true
     }
@@ -882,11 +878,7 @@ impl LayoutComponent {
             }
         }
         for collapsable in collapsables {
-            collapsable.with_mut(|object| {
-                if let Some(bind) = object.as_data_bind_mut() {
-                    bind.collapse(own_collapsed);
-                }
-            });
+            crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, own_collapsed);
         }
     }
 

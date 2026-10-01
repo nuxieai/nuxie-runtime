@@ -59,6 +59,34 @@ pub(crate) fn defer_transaction_dependency_notification(
         && defer_host_mutation_notification(notification)
 }
 
+/// Released-owner callers can transfer one notification payload instead of
+/// copying it to recover ownership when the transaction does not defer it.
+pub(crate) fn dispatch_transaction_notification(notification: impl FnOnce() + 'static) {
+    let defer = HOST_TRANSACTION_PUBLICATION.with(|active| active.get().is_some());
+    dispatch_or_defer_notification(defer, notification);
+}
+
+pub(crate) fn dispatch_transaction_dependency_notification(notification: impl FnOnce() + 'static) {
+    let defer = HOST_TRANSACTION_PUBLICATION
+        .with(|active| active.get() == Some(RuntimeTransactionKind::HostMutation));
+    dispatch_or_defer_notification(defer, notification);
+}
+
+fn dispatch_or_defer_notification(defer: bool, notification: impl FnOnce() + 'static) {
+    let mut notification = Some(notification);
+    if defer {
+        HOST_MUTATION_NOTIFICATIONS.with(|slot| {
+            if let Some(notifications) = slot.borrow_mut().as_mut() {
+                notifications.push(Box::new(notification.take().unwrap()));
+            }
+        });
+    }
+    // Never invoke a callback while holding the queue's RefCell borrow.
+    if let Some(notification) = notification {
+        notification();
+    }
+}
+
 /// Tools observers follow the explicit host transaction's publication boundary.
 /// Callers capture the callback and its typed argument at the write, while the
 /// callback still receives the original native owner on commit. Detached values

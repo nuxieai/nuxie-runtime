@@ -149,6 +149,56 @@ fn instancing_artboard_does_not_clone_animations() {
 }
 
 #[test]
+fn file_created_instance_retains_file_until_final_instance_release() {
+    let (file, _renderer) = load_file("juice.riv");
+    let weak_file = file.downgrade();
+    let instance = file.with_file(File::artboard_default).unwrap();
+    let root = instance.core_handle();
+    drop(file);
+    let retained = weak_file.upgrade().expect("ArtboardInstance owns its File");
+    assert!(
+        !retained
+            .with_file(|file| file.artboard_name_at(0))
+            .is_empty()
+    );
+    assert!(instance.with_artboard(|instance| instance.file().upgrade().is_some()));
+    drop(retained);
+    drop(instance);
+    assert!(!root.is_alive());
+    assert!(
+        weak_file.upgrade().is_none(),
+        "source arena must not retain its File"
+    );
+}
+
+#[test]
+fn ancestry_distinguishes_raw_source_and_handles_receiver_alias() {
+    let (file, _renderer) = load_file("juice.riv");
+    let source = file.with_file(File::artboard).unwrap();
+    let instance = file.with_file(File::artboard_default).unwrap();
+    let sibling = file.with_file(File::artboard_default).unwrap();
+    let root = instance.core_handle();
+    assert_eq!(
+        source.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.is_ancestor(Some(source.clone()))
+        }),
+        Some(false)
+    );
+    assert_eq!(
+        source.with_downcast_mut::<Artboard, _>(|artboard| {
+            artboard.is_ancestor(Some(root.clone()))
+        }),
+        Some(false)
+    );
+    assert!(instance.with_artboard_mut(|artboard| artboard.is_ancestor(Some(root.clone()))));
+    assert!(instance.with_artboard_mut(|artboard| artboard.is_ancestor(Some(source.clone()))));
+    assert!(
+        instance.with_artboard_mut(|artboard| artboard.is_ancestor(Some(sibling.core_handle())))
+    );
+    assert!(!instance.with_artboard_mut(|artboard| artboard.is_ancestor(None)));
+}
+
+#[test]
 fn host_rendered_geometry_follows_registered_custom_clip_paths() {
     use nuxie_runtime::source::{
         generated::core_registry::CoreRegistry,

@@ -226,6 +226,7 @@ pub(crate) fn Make(
     let enabled = &vk_context.features;
     let mut features = Features::default();
     features.colorBufferFloat = true;
+    features.colorBufferHalfFloat = true;
     features.perTargetBlend = enabled.independentBlend;
     features.perTargetWriteMask = enabled.independentBlend;
     features.textureViewSampling = true;

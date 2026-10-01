@@ -7,18 +7,40 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `69f70e1afdd777d2af0ed97e987f46454a5fbe97`
+- LAST_SYNCED_SHA: `bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6` (refreshed 2026-09-30 after PR #888 merged).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There is 1 upstream commit after the checkpoint at this fetched target.
-  All 169 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (191 after `5892bb05`); this
+  There are 0 upstream commits after the checkpoint at this fetched target.
+  All 170 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (192 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
-  is green. Continue oldest-first with `bbf3c4d8`, then refresh at catch-up;
-  final broad validation remains separate from this count.
+  is green. Refresh upstream after landing this checkpoint and continue if it
+  advances. The broad validation results below remain separate from this count.
+- Closeout validation at `bbf3c4d8`: 832 renderer tests pass (11 ignored), with
+  live Metal required and the documented serial test configuration; 330 scripting
+  tests pass (one ignored), and 11 Apple host tests pass. wasm32-unknown-unknown
+  WebGPU/WebGL2/scripting and Android arm64 Vulkan/scripting compilation pass.
+  Runtime library tests have 90 passes, two ignored, and the previously reproduced
+  native-hydration failure [UNIV-3788](https://universe.basis.dev/issue/UNIV-3788).
+  Fresh pinned ordinary and scripted C++/Rust Golden runs each cover 364 entries:
+  ordinary retains the three [UNIV-3793](https://universe.basis.dev/issue/UNIV-3793)
+  failures; scripted also retains the converter teardown abort
+  [UNIV-3795](https://universe.basis.dev/issue/UNIV-3795). Normalized failure and
+  summary lines match the `75a22f94` runs. Runtime Silver covers 231 cases:
+  92 byte-exact, 111 within existing epsilon, seven recorded divergences,
+  20 unsupported and the same `stateful_multi_property` failure (frame 16,
+  operation 1061, expected `drawPath`, got `makeRenderPath`). All case exit codes
+  match the prior sweep. `fill_trim_path`, `layout_paint` and
+  `stacked_path_effects` now reproducibly pass within existing epsilon rather
+  than byte-exactly; this is consistent with intervening upstream `43aa1025`
+  trim arithmetic and unchanged stored fixtures, not a proven causal attribution.
+  No assertion or tolerance was relaxed. Manifest tests pass 26 and structural
+  correspondence tests seven; the source check counts 1,055 mirrored and ten
+  adapted owners (structural coverage, not proof of behavior). Android hardware,
+  browser pixels and native Dawn execution are not claimed by compilation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -44,6 +66,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `bbf3c4d8ba7971ab3b5b453d148b5bba9ddf6eb6` | Translate four-vertex triangle-group allocation/alignment and zero the unwritten mapped tail without advancing the cursor; preserve cleanup behavior for partial mapping failures. Prefer Vulkan identity presentation transform when supported and otherwise use currentTransform, removing the downstream transfer guard that would reject that newly accepted fallback. Advertise half-float color buffers in Vulkan and WebGPU. Independent source review and separate Rust-integration review, including the integration correction, are clean. Full results and known failures are recorded above. Active oracle pins and Silver provenance advance to this source; checked-in backend snapshots match upstream. D3D backends are absent and not introduced. Private WGSL compiler bounds and Android surface-polling changes mentioned by the commit message are absent from the public delta and are not claimed imported. | — |
 | `69f70e1afdd777d2af0ed97e987f46454a5fbe97` | Rename the shared ScriptModuleAsset language enum to AnimaScript while preserving serialized value one, Luau/default zero and the generated language property. Update the deserialization assertion without retaining an old-name alias. Independent source review and separate Rust-integration review are clean. All three asset tests, wasm32 WebGPU/WebGL2/scripting compilation and 26 manifest tests pass; structural correspondence remains 1,055 mirrored/ten adapted. Guest ABI-generator paths and WAMR build-help renaming belong to the parked execution lane. Private compiler/editor/repl changes are absent from the public delta and not claimed imported. Historical schema text and renderer capture provenance remain unchanged. Full Golden/Silver and hardware/browser pixels were not rerun for this naming-only change. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `6a2e3ab71656709cbc2b1c21a8fa92f130c37464` | Translate script GPU passes into the host target: target descriptors/views, hidden and resized/stale lifecycle, sampling refusal, per-frame wrapping/release, clear/preserve decisions, native Luau GPUTarget and Canvas fields, Metal/Vulkan/WebGPU/top-down-GL wrapping, and Apple/Android host publication. The shipped default-framebuffer WebGL2 host correctly remains hidden. Parallel translation was globally frozen before independent source reviews and separate Rust-integration reviews; corrections and validation metadata were rereviewed. All eight shared target and six Lua target cases are ported. Validation: 832 renderer tests pass (11 ignored) with Metal/Vulkan/WebGL2/tools serial configuration; 330 scripting tests pass (one existing ignored); 11 Apple host tests pass; Apple/Vulkan host checks, Android arm64 compilation and wasm32 WebGPU/WebGL2/scripting compilation pass. A fresh pinned C++ Metal target GM and immediate/deferred parity pass. Rust immediate/deferred bytes match exactly; the strict C++ fixture matches exactly with the two previously approved Metal FMA/coverage adaptations. Preserve the pristine capture's 864-pixel/max-one difference and both binaries' provenance; no tolerance changed. Manifest tests pass 26 and structural source tests seven (1,055 mirrored/ten adapted). Initial parallel Metal ownership-audit tests interleaved global records and failed three cases; the documented serial configuration passes. An additional combined native WebGPU test build lacks optional Dawn link symbols, so no native Dawn execution is claimed. Full Golden/Silver and Android hardware/browser pixels were not rerun for this commit. Guest Wasm/AS ABI and execution changes remain parked; absent D3D backends and private host/compiler changes are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7e450bdcb03addcfc144c4f46a393f6a9b11f7d6` | Translate wheel/trackpad ScrollEvent dispatch, nested/list hit routing and occlusion, stable gesture latches, content-space delta mapping, wheel/precise/momentum physics and velocity priming, idle/cancel/overlapping-drag behavior, and scrollFlags/wheelInteractive properties 466/467. Add narrow forwarding through the existing Rust host state-machine boundary. Port all 25 upstream cases. Parallel translation was globally frozen before independent source reviews, followed by separate Rust-integration reviews; all clean after re-reviewed test-only Approx and replacement-physics lifecycle corrections. All 33 scroll/physics tests and 20 schema/CPP-ID checks pass; 15 scroll Silver cases pass (ten byte-exact, five existing-epsilon); wasm32 WebGPU/WebGL2/scripting compilation and 26 manifest tests pass. Structural correspondence is 1,055 mirrored/ten adapted. Stale schema inventory counts were corrected against independent HEAD/current/reconciled-def inventories without weakening assertions. Two pre-existing owner observations are tracked separately in UNIV-3806, not treated as wheel regressions. Full Golden/Silver and hardware suites were not rerun for this delta. | [UNIV-3806](https://universe.basis.dev/issue/UNIV-3806) |

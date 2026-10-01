@@ -5469,7 +5469,12 @@ impl RenderContext {
             gradSpanBufferCount: layout.gradSpanCount as usize
                 + layout.gradSpanPaddingCount as usize,
             tessSpanBufferCount: total.maxTessellatedSegmentCount,
-            triangleVertexBufferCount: total.maxTriangleVertexCount,
+            triangleVertexBufferCount: if total.maxTriangleVertexCount > 0 {
+                total.maxTriangleVertexCount
+                    + (self.m_logical_flushes.len() + 1) * (gpu::kTriangleVertexGroupSize - 1)
+            } else {
+                0
+            },
             imageRectInstanceBufferCount: total.imageRectCount,
             imageMeshInstanceBufferCount: total.imageMeshCount,
             gradTextureHeight: layout.maxGradTextureHeight as usize,
@@ -5601,7 +5606,9 @@ impl RenderContext {
                 self.m_tess_span_data.elementsWritten() <= total.maxTessellatedSegmentCount
             );
             debug_assert!(
-                self.m_triangle_vertex_data.elementsWritten() <= total.maxTriangleVertexCount
+                self.m_triangle_vertex_data.elementsWritten()
+                    <= total.maxTriangleVertexCount
+                        + self.m_logical_flushes.len() * (gpu::kTriangleVertexGroupSize - 1)
             );
             unsafe { self.unmapResourceBuffersExecutable(&requirements) };
             let members = &mut *self.members;
@@ -5856,6 +5863,9 @@ impl RenderContext {
             tessSpanBufferCount,
             unmapTessVertexSpanBuffer
         );
+        if self.members.m_triangle_vertex_data.is_mapped() {
+            unsafe { self.members.m_triangle_vertex_data.zero_unwritten() };
+        }
         unmap!(
             m_triangle_vertex_data,
             triangleVertexBufferCount,
@@ -7034,6 +7044,23 @@ impl LogicalFlush {
             u32::try_from(context.m_current_resource_allocations.gradTextureHeight)
                 .expect("gradient texture height fits u32");
         let first_tess_span = context.m_tess_span_data.elementsWritten();
+        if context.m_triangle_vertex_data.is_mapped() {
+            // Start on a vertex group, so neither this flush nor the one before it
+            // shades the other's vertices through the wrong path offsets.
+            let group_padding = padding_to_align_up(
+                context.m_triangle_vertex_data.elementsWritten(),
+                gpu::kTriangleVertexGroupSize,
+            );
+            for _ in 0..group_padding {
+                unsafe {
+                    context.m_triangle_vertex_data.emplace_back(gpu::TriangleVertex::new(
+                        nuxie_render_api::Vec2D::new(0.0, 0.0),
+                        0,
+                        0,
+                    ));
+                }
+            }
+        }
         let initial_triangle_bytes = context.m_triangle_vertex_data.bytesWritten();
         let tess_alignment_padding =
             padding_to_align_up(first_tess_span, gpu::kTessVertexBufferAlignmentInElements);

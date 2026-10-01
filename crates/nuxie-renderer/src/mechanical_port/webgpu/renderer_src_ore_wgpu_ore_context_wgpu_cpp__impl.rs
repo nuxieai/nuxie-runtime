@@ -1188,6 +1188,7 @@ pub(crate) unsafe fn wrapRiveTexture(
 fn webGPUFeatures() -> Features {
     let mut f = Features::default();
     f.colorBufferFloat = true;
+    f.colorBufferHalfFloat = true;
     f.perTargetBlend = true;
     f.perTargetWriteMask = true;
     f.textureViewSampling = true;
@@ -1340,8 +1341,8 @@ impl ContextApi for ContextWGPU {
 
 pub(crate) const SOURCE_CONVERSION_HELPER_COUNT: usize = 20;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 17;
-pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 21;
-const _: [(); 47097] = [(); PINNED_SOURCE.len()];
+pub(crate) const SOURCE_FEATURE_ASSIGNMENT_COUNT: usize = 22;
+const _: [(); 47132] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -1349,12 +1350,13 @@ mod tests {
 
     #[test]
     fn complete_source_byte_and_feature_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1275);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1276);
         assert_eq!(SOURCE_CONVERSION_HELPER_COUNT, 20);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 17);
-        assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 21);
+        assert_eq!(SOURCE_FEATURE_ASSIGNMENT_COUNT, 22);
         let features = webGPUFeatures();
         assert!(features.colorBufferFloat);
+        assert!(features.colorBufferHalfFloat);
         assert!(features.etc2);
         assert!(!features.bc);
         assert!(!features.astc);

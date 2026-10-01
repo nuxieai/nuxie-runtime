@@ -670,11 +670,6 @@ impl VulkanProductBackend {
                 "surface and render-target extent agreement",
             ));
         }
-        if config.transform != vk::SurfaceTransformFlagsKHR::IDENTITY {
-            return Err(RendererError::Unsupported(
-                "rotated Vulkan surface transfer",
-            ));
-        }
         let source_features = unsafe {
             self.instance
                 .get_physical_device_format_properties(self.physical_device, TARGET_FORMAT)

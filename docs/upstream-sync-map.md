@@ -152,10 +152,31 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   `f8ea004a6867ada79f2e50238d4c0013a65157263aa0a71bf53e43ec2f653b0b`,
   contract-on binary `d915b362f9941d451a440acf1538953710dda25379ca046a99e9e3ee4c674693`,
   emitted converter SRIV `eb895fd2c33cf1bb55fe3022ef61595bfe7535c7aa7fb8ec3d995cb80f1c4cba`.
-  The unresolved zombie trace is now narrower: all preceding numeric property
-  writes agree; the local bone pose already differs before solve 4. Continue
-  at IK pose-history detection (`holdsOurSolve`) and local rebuild, not by
-  assuming the later solver algebra caused the input drift.
+  The subsequent zombie trace narrowed further: all preceding numeric property
+  writes agree; the local bone pose already differs before solve 4. That led
+  to IK pose-history detection (`holdsOurSolve`) and local rebuild, rather
+  than assuming the later solver algebra caused the input drift.
+- Zombie follow-up restores a missing virtual dispatch rather than changing
+  IK arithmetic. C++ `Constraint::onDirty` reaches
+  `IKConstraint::markConstraintDirty`, which invalidates the tip and then the
+  ancestor FK bones. The Rust handle path invoked only the base operation,
+  leaving an ancestor's previous solved local pose in place. Disabling only
+  the C++ ancestor loop in the debugger reproduced Rust's pose-history
+  decisions and matrices. The correction restores ordinary and active
+  Shape/Layout dirt dispatch, concrete IK callbacks, and borrow-released
+  strength/inversion setters. Source-equivalence and independent Rust
+  integration reviews are clean; ordinary constraints gain no heap allocation.
+  All 25 fixtures now match the unchanged 100-frame C++ comparison. Scripted
+  Golden processes 364 entries with zero failures and its two existing recorded
+  divergences. Runtime library tests pass 93 with two existing ignores; four
+  IK stacking/dispatch tests and the unchanged one-iteration and 1,000-iteration
+  IK regressions pass. WebGPU/WebGL2 with scripting compiles for
+  `wasm32-unknown-unknown`. No arithmetic, tolerance, manifest, or fixture changed.
+  The full 231-case runtime Silver sweep is unchanged: 85 byte-exact, 121
+  epsilon matches, seven recorded divergences, 17 unsupported skips, and the
+  one documented strict-baseline converter mismatch. The converter continues
+  to pass against matched contracted C++ output. There are no new failures;
+  25/25 longer-frame agreement is not a whole-runtime or speed-parity claim.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not

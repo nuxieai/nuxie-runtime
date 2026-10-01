@@ -73,7 +73,7 @@ pub fn root_transform_aabb(artboard: &CoreHandle, bounds: Bounds) -> Bounds {
         (bounds.min_x, bounds.max_y),
     ];
     let mapped = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-        points.map(|(x, y)| artboard.semantic_root_transform(Vec2D::new(x, y)))
+        points.map(|(x, y)| artboard.root_transform(Vec2D::new(x, y)))
     });
     let Some(mapped) = mapped else {
         return bounds;
@@ -306,7 +306,88 @@ fn polygon_has_area(polygon: &[Vec2D]) -> bool {
     twice_area.is_finite() && twice_area != 0.0
 }
 
+fn try_node_world_bounds(component: &CoreHandle) -> Option<Bounds> {
+    // Upstream filters non-Node descendants before reading their bounds.
+    // In Rust this also avoids borrowing the active SemanticData callback owner.
+    if !component.is_type_of(NodeBase::TYPE_KEY) {
+        return None;
+    }
+    component.with(|object| {
+        let node = object.as_node()?;
+        let local = object.semantic_provider_local_bounds()?;
+        if local.is_empty_or_nan() {
+            return None;
+        }
+        let world = node.world_transform().map_bounding_box(local);
+        if world.is_empty_or_nan() {
+            return None;
+        }
+        Some(Bounds {
+            min_x: world.min_x,
+            min_y: world.min_y,
+            max_x: world.max_x,
+            max_y: world.max_y,
+        })
+    })?
+}
+
+/// Native upstream bounds in the outermost artboard's coordinate space.
+/// Rendered clipping and host frame-origin projection are separate operations.
 pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
+    let Some(component) = component.filter(|component| component.is_type_of(NodeBase::TYPE_KEY))
+    else {
+        return Bounds::default();
+    };
+    let (point, artboard) = component
+        .with(|object| {
+            let node = object.as_node().expect("Node owner");
+            (
+                Vec2D::new(node.world_transform()[4], node.world_transform()[5]),
+                node.artboard_handle(),
+            )
+        })
+        .expect("live Node owner");
+    if let Some(bounds) = try_node_world_bounds(component) {
+        return artboard
+            .as_ref()
+            .map_or(bounds, |artboard| root_transform_aabb(artboard, bounds));
+    }
+    if component.is_type_of(ContainerComponentBase::TYPE_KEY) {
+        let mut merged = Bounds::for_expansion();
+        let mut has_descendant_bounds = false;
+        crate::mechanical_port::source::container_component::ContainerComponent::for_each_child(
+            component,
+            |child| {
+                if let Some(bounds) = try_node_world_bounds(&child) {
+                    merged.expand((bounds.min_x, bounds.min_y));
+                    merged.expand((bounds.max_x, bounds.max_y));
+                    has_descendant_bounds = true;
+                }
+                true
+            },
+        );
+        if has_descendant_bounds {
+            return artboard
+                .as_ref()
+                .map_or(merged, |artboard| root_transform_aabb(artboard, merged));
+        }
+    }
+    let point = artboard.as_ref().map_or(point, |artboard| {
+        artboard
+            .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point))
+            .expect("live Artboard owner")
+    });
+    Bounds {
+        min_x: point.x,
+        min_y: point.y,
+        max_x: point.x,
+        max_y: point.y,
+    }
+}
+
+/// Host-only visible geometry, including rendered clipping and frame origins.
+/// This is not the native SemanticProvider::semanticBounds contract.
+pub fn rendered_geometry_bounds(component: Option<&CoreHandle>) -> Bounds {
     let Some(component) = component else {
         return Bounds::default();
     };
@@ -336,15 +417,25 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
     else {
         return Bounds::default();
     };
-    let point = Bounds {
+    let bounds = Bounds {
         min_x: point.x,
         min_y: point.y,
         max_x: point.x,
         max_y: point.y,
     };
-    artboard
-        .as_ref()
-        .map_or(point, |artboard| root_transform_aabb(artboard, point))
+    let Some(artboard) = artboard else {
+        return bounds;
+    };
+    let Some(points) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+        [point; 4].map(|point| artboard.semantic_root_transform(point))
+    }) else {
+        return bounds;
+    };
+    let mut result = Bounds::for_expansion();
+    for point in points {
+        result.expand((point.x, point.y));
+    }
+    result
 }
 
 /// Test rendered geometry against a root-artboard-space viewport, preserving

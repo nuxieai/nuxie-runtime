@@ -2355,6 +2355,10 @@ impl Artboard {
     }
 
     pub fn update_components_handle(root: &CoreHandle) -> bool {
+        // The C++ method requires a live receiver. Retain the Rust runtime
+        // handle once (including its final focus cleanup), not a
+        // naked Rc, and never retain a RefCell borrow across component updates.
+        let runtime_receiver = root.runtime_artboard_instance();
         let Some((dirty, count)) = root.with_downcast::<Artboard, _>(|artboard| {
             (
                 artboard.has_component_dirt(),
@@ -2380,12 +2384,18 @@ impl Artboard {
                     .set(artboard.dirty_state.0.dirt.get() & !ComponentDirt::COMPONENTS)
             });
             for i in 0..count {
-                let component = root
-                    .with_downcast_mut::<Artboard, _>(|artboard| {
+                let component = if let Some(receiver) = runtime_receiver.as_ref() {
+                    receiver.with_artboard(|instance| {
+                        instance.dirty_state.0.depth.set(i as u32);
+                        instance.dependency_order[i].clone()
+                    })
+                } else {
+                    root.with_downcast_mut::<Artboard, _>(|artboard| {
                         artboard.dirty_state.0.depth.set(i as u32);
                         artboard.dependency_order[i].clone()
                     })
-                    .expect("live Artboard dependency walk");
+                    .expect("live Artboard dependency walk")
+                };
                 let dirt = component
                     .with_component(|component| component.dirt())
                     .expect("live component in dependency graph");
@@ -6025,6 +6035,44 @@ impl Default for ArtboardInstance {
             base: Artboard::default(),
             host_nested_event_sequence: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod update_receiver_tests {
+    use super::*;
+
+    #[test]
+    fn runtime_update_releases_scoped_receiver_and_preserves_last_owner_cleanup() {
+        let runtime = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let root = runtime.core_handle();
+        let weak = runtime.downgrade();
+        // Install an owned manager so final handle drop takes the focus cleanup
+        // path, which must run after every checked root borrow has ended.
+        let _manager = runtime.ensure_focus_manager();
+        runtime.with_artboard_mut(|instance| {
+            let node = instance.core_arena.insert(crate::mechanical_port::source::node::Node::default());
+            node.with_mut(|object| object.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE));
+            instance.dependency_order.push(node.into());
+        });
+        assert!(Artboard::update_components_handle(&root));
+        assert!(!Artboard::update_components_handle(&root));
+        assert_eq!(Rc::strong_count(&runtime.0), 1);
+        drop(runtime);
+        assert!(weak.upgrade().is_none());
+        assert!(!root.is_alive());
+        assert!(!Artboard::update_components_handle(&root));
+    }
+
+    #[test]
+    fn authored_update_keeps_non_runtime_receiver_path() {
+        let arena = CoreArena::default();
+        let root = arena.insert(Artboard::default());
+        assert!(root.runtime_artboard_instance().is_none());
+        assert!(Artboard::update_components_handle(&root));
+        assert!(!Artboard::update_components_handle(&root));
+        drop(arena.remove(&root));
+        assert!(!Artboard::update_components_handle(&root));
     }
 }
 

@@ -1,6 +1,6 @@
 //! Direct parity coverage for pinned `logging_scripting_context.cpp` and
-//! `lua_rive_base.cpp`. Upstream has no asserted host-sink test, so this pins
-//! the observable callback contract at the Rust host boundary.
+//! `lua_rive_base.cpp`, including the upstream scripting-context print case.
+//! Also pins the observable callback contract at the Rust host boundary.
 #![cfg(feature = "luau")]
 
 use std::cell::RefCell;
@@ -9,6 +9,23 @@ use std::rc::Rc;
 use luaur_rt::{Error, Table};
 use nuxie_runtime::{NoopScriptHost, ScriptInstance, ScriptMethod};
 use nuxie_scripting::vm::{ScriptVm, ScriptingLogLevel};
+
+// tests/unit_tests/runtime/scripting/scripting_context_test.cpp at
+// 3b4af2e20bf50e222c2cfd5a22b5d9a4e70d2b8b.
+#[test]
+fn print_separates_its_arguments_with_tabs() {
+    let lines = Rc::new(RefCell::new(Vec::new()));
+    let captured = Rc::clone(&lines);
+    let vm = ScriptVm::new_with_log_sink(move |_, line| {
+        captured.borrow_mut().push(line.to_vec());
+    });
+    vm.install_rive_globals().expect("Rive globals install");
+    vm.eval::<()>(r#"print("alpha", 1, true, nil, 2.5)"#)
+        .expect("print script runs");
+
+    assert_eq!(lines.borrow().len(), 1);
+    assert_eq!(lines.borrow()[0], b"alpha\t1\ttrue\tnil\t2.5");
+}
 
 #[test]
 fn host_sink_receives_one_complete_info_line_per_nonempty_print_call() {
@@ -34,7 +51,7 @@ fn host_sink_receives_one_complete_info_line_per_nonempty_print_call() {
 
     assert_eq!(
         lines.borrow().as_slice(),
-        [(ScriptingLogLevel::Info, b"alpha7truecustom".to_vec())]
+        [(ScriptingLogLevel::Info, b"alpha\t7\ttrue\tcustom".to_vec())]
     );
 }
 
@@ -64,7 +81,7 @@ fn reentrant_print_from_tostring_uses_the_context_owned_line_buffer() {
         lines.borrow().as_slice(),
         [
             (ScriptingLogLevel::Info, b"inner".to_vec()),
-            (ScriptingLogLevel::Info, b"objectsuffix".to_vec()),
+            (ScriptingLogLevel::Info, b"\tobject\tsuffix".to_vec()),
         ]
     );
 }

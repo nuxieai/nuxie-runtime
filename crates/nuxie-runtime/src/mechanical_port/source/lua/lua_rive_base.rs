@@ -11,6 +11,9 @@ fn lua_print(state: &mut LuaState) -> i32 {
     context.print_begin_line(state);
     for index in 1..=count {
         let string = state.to_l_string(index);
+        if index > 1 {
+            context.print(b"\t");
+        }
         context.print(string.as_bytes());
         state.pop(1);
     }

@@ -16,8 +16,11 @@ pub(super) fn install_host_print(lua: &Lua, logging: LoggingScriptingContext) ->
         // the main thread cannot be called safely from an async coroutine.
         let tostring: Function = lua.globals().get("tostring")?;
         logging.begin_line();
-        for value in args {
+        for (index, value) in args.into_iter().enumerate() {
             let value: LuaString = tostring.call(value)?;
+            if index > 0 {
+                logging.append(b"\t");
+            }
             logging.append(&value.as_bytes());
         }
         logging.end_line();

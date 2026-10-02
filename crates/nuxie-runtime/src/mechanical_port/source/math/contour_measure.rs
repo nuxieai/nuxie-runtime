@@ -5,6 +5,7 @@ use super::path_types::PathVerb;
 use super::raw_path::RawPath;
 use super::raw_path_utils::{EvalCubic, EvalQuad, cubic_extract, line_extract, quad_extract};
 use super::vec2d::Vec2D;
+use super::wangs_formula::{self, VectorXform};
 
 const MAX_DOT30: u32 = (1 << 30) - 1;
 const INV_SCALE_D30: f32 = 1.0 / MAX_DOT30 as f32;
@@ -107,6 +108,64 @@ mod tests {
             [0xc2da_38af, 0xc335_cd98]
         );
     }
+
+    #[test]
+    fn line_pos_tan_keeps_the_pinned_separate_lerp() {
+        let p0 = Vec2D::new(39.608627, -64.03908);
+        let p1 = Vec2D::new(12.428378, -185.07193);
+        let mut path = RawPath::default();
+        path.move_to_point(p0);
+        path.line_to_point(p1);
+        let contour = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE)
+            .next()
+            .unwrap();
+        let distance = contour.length() * 0.37239173;
+        let ratio = distance / contour.length();
+        let expected = p0 + (p1 - p0) * ratio;
+
+        let actual = contour.get_pos_tan(distance);
+
+        assert_eq!(actual.pos.x.to_bits(), expected.x.to_bits());
+        assert_eq!(actual.pos.y.to_bits(), expected.y.to_bits());
+    }
+
+    #[test]
+    fn curve_distance_interpolation_obeys_its_pinned_scalar_mode() {
+        let points = [
+            Vec2D::new(39.608627, -64.03908),
+            Vec2D::new(12.428378, -185.07193),
+            Vec2D::new(96.2807, 71.687096),
+        ];
+        let mut path = RawPath::default();
+        path.move_to_point(points[0]);
+        path.quad_to_points(points[1], points[2]);
+        let contour = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE)
+            .next()
+            .unwrap();
+        assert!(contour.segments.len() > 1);
+        for index in 1..contour.segments.len() {
+            let previous = contour.segments[index - 1];
+            let segment = contour.segments[index];
+            let distance = previous.distance + (segment.distance - previous.distance) * 0.37239173;
+            let ratio = (distance - previous.distance) / (segment.distance - previous.distance);
+            #[cfg(feature = "strict-fp")]
+            let t = previous.get_t() * (1.0 - ratio) + segment.get_t() * ratio;
+            #[cfg(not(feature = "strict-fp"))]
+            let t = previous
+                .get_t()
+                .mul_add(1.0 - ratio, segment.get_t() * ratio);
+            let eval = EvalQuad::new(&points);
+            let expected = (eval.a * t + eval.b) * t + eval.c;
+            let expected_tangent = ((eval.a + eval.a) * t + eval.b).normalized();
+
+            assert_eq!(contour.compute_t(index, distance).to_bits(), t.to_bits());
+            let actual = contour.get_pos_tan(distance);
+            assert_eq!(actual.pos.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.pos.y.to_bits(), expected.y.to_bits());
+            assert_eq!(actual.tan.x.to_bits(), expected_tangent.x.to_bits());
+            assert_eq!(actual.tan.y.to_bits(), expected_tangent.y.to_bits());
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -197,7 +256,9 @@ impl ContourMeasure {
             let p0 = self.points[point_index];
             let p1 = self.points[point_index + 1];
             return PosTan {
-                pos: Vec2D::lerp(p0, p1, relative_distance),
+                // This Vec2D::lerp call remains separate in the pinned
+                // shipping owner; the shared geometry helper contracts.
+                pos: p0 + (p1 - p0) * relative_distance,
                 tan: (p1 - p0).normalized(),
             };
         }
@@ -207,7 +268,7 @@ impl ContourMeasure {
         } else {
             0.0
         };
-        let t = previous_t * (1.0 - relative_distance) + segment.get_t() * relative_distance;
+        let t = interpolate_segment_t(previous_t, segment.get_t(), relative_distance);
         assert!((0.0..=1.0).contains(&t));
         if segment.segment_type == SegmentType::Quad {
             eval_quad(
@@ -277,7 +338,7 @@ impl ContourMeasure {
             (0.0, 0.0)
         };
         let ratio = (distance - previous_distance) / (segment.distance - previous_distance);
-        let t = previous_t * (1.0 - ratio) + segment.get_t() * ratio;
+        let t = interpolate_segment_t(previous_t, segment.get_t(), ratio);
         math_types::clamp(t, previous_t, segment.get_t())
     }
     pub fn warp(&self, source: Vec2D) -> Vec2D {
@@ -371,9 +432,10 @@ fn cpp_g(value: f32) -> String {
 fn eval_quad(points: &[Vec2D; 3], t: f32) -> PosTan {
     assert!((0.0..=1.0).contains(&t));
     let eval = EvalQuad::new(points);
+    let a = eval.a + eval.a;
     PosTan {
-        pos: eval.at(t),
-        tan: Vec2D::scale_and_add(eval.b, 2.0 * eval.a, t).normalized(),
+        pos: (eval.a * t + eval.b) * t + eval.c,
+        tan: (a * t + eval.b).normalized(),
     }
 }
 fn eval_cubic(points: &[Vec2D; 4], t: f32) -> PosTan {
@@ -404,10 +466,25 @@ fn eval_cubic(points: &[Vec2D; 4], t: f32) -> PosTan {
         };
     }
     let eval = EvalCubic::new(points);
-    let tangent = Vec2D::scale_and_add(2.0 * eval.b, 3.0 * eval.a, t);
+    let a = eval.a * 3.0;
+    let b = eval.b + eval.b;
     PosTan {
         pos: eval.at(t),
-        tan: Vec2D::scale_and_add(eval.c, tangent, t).normalized(),
+        tan: ((a * t + b) * t + eval.c).normalized(),
+    }
+}
+
+#[inline]
+fn interpolate_segment_t(previous: f32, next: f32, ratio: f32) -> f32 {
+    #[cfg(feature = "strict-fp")]
+    {
+        previous * (1.0 - ratio) + next * ratio
+    }
+    #[cfg(not(feature = "strict-fp"))]
+    {
+        // C++ rive::lerp rounds its right product, then contracts the left
+        // product and final sum in this shipping scalar call context.
+        previous.mul_add(1.0 - ratio, next * ratio)
     }
 }
 fn next_segment_beginning(segments: &[Segment], mut index: usize) -> usize {
@@ -470,13 +547,24 @@ impl ContourMeasureIter {
                     line_count += usize::from(Vec2D::distance_squared(points[1], points[0]) > 0.0)
                 }
                 SourceElement::Quad(points) => {
-                    let count = quadratic_wangs(points, self.inverse_tolerance).ceil() as u32;
+                    let count = wangs_formula::quadratic(
+                        points,
+                        self.inverse_tolerance,
+                        VectorXform::default(),
+                    )
+                    .ceil() as u32;
                     let count = count.min(100);
                     curve_segments += count as usize;
                     segment_counts.push(count);
                 }
                 SourceElement::Cubic(points) => {
-                    let count = cubic_wangs(points, self.inverse_tolerance).ceil().ceil() as u32;
+                    let count = wangs_formula::cubic(
+                        points,
+                        self.inverse_tolerance,
+                        VectorXform::default(),
+                    )
+                    .ceil()
+                    .ceil() as u32;
                     let count = count.min(100);
                     curve_segments += count as usize;
                     segment_counts.push(count);
@@ -629,7 +717,7 @@ fn add_quad_segments(
     let mut t = delta;
     let mut previous = points[0];
     for _ in 1..count {
-        let next = eval.at(t);
+        let next = (eval.a * t + eval.b) * t + eval.c;
         distance += (next - previous).length();
         output.push(Segment {
             distance,
@@ -680,19 +768,6 @@ fn add_cubic_segments(
         segment_type: SegmentType::Cubic,
     });
     distance
-}
-fn quadratic_wangs(points: &[Vec2D; 3], precision: f32) -> f32 {
-    let v = points[0] - 2.0 * points[1] + points[2];
-    let length_term_pow2 = (1.0 / 16.0) * (precision * precision);
-    (v.length_squared() * length_term_pow2).sqrt().sqrt()
-}
-fn cubic_wangs(points: &[Vec2D; 4], precision: f32) -> f32 {
-    let v0 = points[0] - 2.0 * points[1] + points[2];
-    let v1 = points[1] - 2.0 * points[2] + points[3];
-    let length_term_pow2 = (9.0 / 16.0) * (precision * precision);
-    (cpp_max(v0.length_squared(), v1.length_squared()) * length_term_pow2)
-        .sqrt()
-        .sqrt()
 }
 fn cpp_min(first: f32, second: f32) -> f32 {
     if second < first { second } else { first }

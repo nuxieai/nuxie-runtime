@@ -53,6 +53,7 @@ operations! {
     SET_IMAGE_MESH_INSTANCES_DATA = setImageMeshInstancesData = 40,
     DRAW_IMAGE_MESH_INSTANCED = drawImageMeshInstanced = 41,
     APPLY_LAYER_MASK = applyLayerMask = 42,
+    STROKE_POSITION = strokePosition = 43,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {

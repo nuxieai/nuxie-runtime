@@ -67,6 +67,7 @@ pub enum OpKind {
     SetImageMeshInstancesData = 40,
     DrawImageMeshInstanced = 41,
     ApplyLayerMask = 42,
+    StrokePosition = 43,
 }
 
 impl OpKind {
@@ -113,6 +114,7 @@ impl OpKind {
             40 => Self::SetImageMeshInstancesData,
             41 => Self::DrawImageMeshInstanced,
             42 => Self::ApplyLayerMask,
+            43 => Self::StrokePosition,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -167,6 +169,7 @@ impl Display for OpKind {
             Self::SetImageMeshInstancesData => "setImageMeshInstancesData",
             Self::DrawImageMeshInstanced => "drawImageMeshInstanced",
             Self::ApplyLayerMask => "applyLayerMask",
+            Self::StrokePosition => "strokePosition",
         })
     }
 }
@@ -508,6 +511,10 @@ fn parse_fields(
         OpKind::ClipPath => {
             push_uint(reader, fields, "path_id")?;
         }
+        OpKind::StrokePosition => {
+            push_uint(reader, fields, "strokeposition_paint_id")?;
+            push_uint(reader, fields, "strokeposition_value")?;
+        }
         OpKind::ApplyLayerMask => {
             push_uint(reader, fields, "layermask_id")?;
             push_uint(reader, fields, "layermask_mode")?;
@@ -826,6 +833,27 @@ mod tests {
 
     fn float(value: f32) -> [u8; 4] {
         value.to_bits().to_le_bytes()
+    }
+
+    #[test]
+    fn stroke_position_comparison_preserves_both_exact_uint_fields() {
+        let mut bytes = header();
+        bytes.extend([43, 9, 2]);
+        let expected = parse_sriv(&bytes).unwrap();
+        assert_eq!(expected.operations[0].kind, OpKind::StrokePosition);
+        assert_eq!(expected.operations[0].kind.to_string(), "strokePosition");
+        assert!(compare_sriv(&expected, &expected).is_ok());
+        for (index, name) in ["strokeposition_paint_id", "strokeposition_value"]
+            .into_iter()
+            .enumerate()
+        {
+            let mut actual = expected.clone();
+            actual.operations[0].fields[index].value = Value::Uint(1);
+            assert_eq!(
+                compare_sriv(&expected, &actual).unwrap_err().field,
+                Some(name)
+            );
+        }
     }
 
     #[test]

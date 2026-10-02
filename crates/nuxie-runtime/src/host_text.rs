@@ -100,6 +100,7 @@ pub enum RuntimeColorGlyphPaint {
         x1: f32,
         y1: f32,
         r1: f32,
+        radial_transform: nuxie_render_api::Mat2D,
         stops: Vec<RuntimeColorGlyphGradientStop>,
     },
     SweepGradient {
@@ -329,7 +330,7 @@ impl RawTextFont {
                     .map(|s| RuntimeColorGlyphGradientStop {
                         offset: s.offset,
                         color: s.color,
-                        uses_foreground: l.use_foreground,
+                        uses_foreground: s.is_foreground,
                     })
                     .collect();
                 let paint = match l.paint_type {
@@ -353,6 +354,7 @@ impl RawTextFont {
                             x1: l.x1,
                             y1: l.y1,
                             r1: l.r1,
+                            radial_transform: nuxie_render_api::Mat2D(*l.radial_transform.values()),
                             stops,
                         }
                     }

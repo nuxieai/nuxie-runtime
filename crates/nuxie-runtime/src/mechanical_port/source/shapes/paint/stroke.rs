@@ -13,7 +13,7 @@ use crate::mechanical_port::source::{
         path_flags::PathFlags,
     },
 };
-use nuxie_render_api::{RenderPaint, RenderPaintStyle};
+use nuxie_render_api::{RenderPaint, RenderPaintStyle, StrokePosition};
 
 impl std::ops::Deref for Stroke {
     type Target = StrokeBase;
@@ -58,11 +58,13 @@ impl Stroke {
         let cap: nuxie_render_api::StrokeCap = StrokeCap::from(u32::from(self.base.cap())).into();
         let join: nuxie_render_api::StrokeJoin =
             StrokeJoin::from(u32::from(self.base.join())).into();
+        let position = self.stroke_position();
         self.base.with_render_paint_mut(|paint| {
             paint.style(RenderPaintStyle::Stroke);
             paint.thickness(thickness);
             paint.cap(cap);
             paint.join(join);
+            paint.stroke_position(position);
         });
         true
     }
@@ -72,6 +74,7 @@ impl Stroke {
         paint.thickness(self.base.thickness());
         paint.cap(StrokeCap::from(u32::from(self.base.cap())).into());
         paint.join(StrokeJoin::from(u32::from(self.base.join())).into());
+        paint.stroke_position(self.stroke_position());
         paint.shader(None);
         let path_flags = self.path_flags();
         if let Some(mutator) = self.base.paint() {
@@ -99,6 +102,28 @@ impl Stroke {
         self.base.add_dirt(ComponentDirt::PAINT, false);
     }
 
+    pub fn position_changed(&mut self) {
+        self.base.add_dirt(ComponentDirt::PAINT, false);
+    }
+
+    pub fn stroke_position(&self) -> StrokePosition {
+        match self.base.position() {
+            0 => StrokePosition::Inside,
+            2 => StrokePosition::Outside,
+            _ => StrokePosition::Center,
+        }
+    }
+
+    pub fn set_position(&mut self, value: u8) {
+        if self.base.set_position_value(value) {
+            self.position_changed();
+            crate::mechanical_port::source::core::Core::notify_property_changed(
+                self,
+                StrokeBase::POSITION_PROPERTY_KEY,
+            );
+        }
+    }
+
     pub fn update(&mut self, value: ComponentDirt) {
         let kind = self.pick_path_kind();
         let stroke = Some((
@@ -111,10 +136,12 @@ impl Stroke {
             let thickness = self.base.thickness();
             let cap = StrokeCap::from(u32::from(self.base.cap())).into();
             let join = StrokeJoin::from(u32::from(self.base.join())).into();
+            let position = self.stroke_position();
             self.base.with_render_paint_mut(|paint| {
                 paint.thickness(thickness);
                 paint.cap(cap);
                 paint.join(join);
+                paint.stroke_position(position);
             });
         }
     }

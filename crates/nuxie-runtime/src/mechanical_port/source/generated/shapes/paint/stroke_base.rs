@@ -11,6 +11,7 @@ pub trait StrokeBaseCallbacks:
     fn cap_changed(&mut self) {}
     fn join_changed(&mut self) {}
     fn transform_affects_stroke_changed(&mut self) {}
+    fn position_changed(&mut self) {}
 }
 
 pub struct StrokeBase {
@@ -19,6 +20,7 @@ pub struct StrokeBase {
     cap: u8,
     join: u8,
     transform_affects_stroke: bool,
+    position: u8,
 }
 
 impl Default for StrokeBase {
@@ -29,6 +31,7 @@ impl Default for StrokeBase {
             cap: 0,
             join: 0,
             transform_affects_stroke: true,
+            position: 1,
         }
     }
 }
@@ -39,6 +42,7 @@ impl StrokeBase {
     pub const CAP_PROPERTY_KEY: u16 = 48;
     pub const JOIN_PROPERTY_KEY: u16 = 49;
     pub const TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY: u16 = 50;
+    pub const POSITION_PROPERTY_KEY: u16 = 470;
 
     pub fn is_type_of(type_key: u16) -> bool {
         matches!(type_key, Self::TYPE_KEY | 21 | 11 | 10)
@@ -125,6 +129,23 @@ impl StrokeBase {
         self.transform_affects_stroke = value;
         true
     }
+    pub fn position(&self) -> u8 {
+        self.position
+    }
+    pub fn set_position(&mut self, value: u8, callbacks: &mut impl StrokeBaseCallbacks) {
+        if !self.set_position_value(value) {
+            return;
+        }
+        callbacks.position_changed();
+        StrokeBaseCallbacks::notify_property_changed(callbacks, Self::POSITION_PROPERTY_KEY);
+    }
+    pub(crate) fn set_position_value(&mut self, value: u8) -> bool {
+        if self.position == value {
+            return false;
+        }
+        self.position = value;
+        true
+    }
     pub fn clone_into(&self, callbacks: &mut impl StrokeBaseCallbacks) -> Stroke {
         let mut cloned = Stroke::default();
         cloned.base.copy(self, callbacks);
@@ -135,6 +156,7 @@ impl StrokeBase {
         self.cap = object.cap;
         self.join = object.join;
         self.transform_affects_stroke = object.transform_affects_stroke;
+        self.position = object.position;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -158,6 +180,10 @@ impl StrokeBase {
             }
             Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY => {
                 self.transform_affects_stroke = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
+            Self::POSITION_PROPERTY_KEY => {
+                self.position = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

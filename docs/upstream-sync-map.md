@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7f45ad14e45da6320361810113a23da73207ab0a`
+- LAST_SYNCED_SHA: `aaa91101383b6e1aadc18fcd556f61016b46b600`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `820cc19bd8405f84a8f85f9f388a133d6a2c7511` (refreshed 2026-10-02 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are three upstream commits after the checkpoint at this fetched target.
-  All 177 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (199 after `5892bb05`); this
+  There are two upstream commits after the checkpoint at this fetched target.
+  All 178 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (200 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -208,6 +208,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `aaa91101383b6e1aadc18fcd556f61016b46b600` | Translate FocusData's node-only detach operation and invoke it during Artboard's pre-deletion pass over valid and invalid objects, before any component can be deleted. Preserve adopted-manager lifetime and the subsequent blur/manager cleanup sequence. Port the upstream regression holding nested-artboard focus in an external manager and destroying machine before artboard. Independent source and separate Rust-integration reviews precede validation; results are recorded in the PR. Private metadata is excluded. No new hardware or full-corpus claim. | — |
 | `7f45ad14e45da6320361810113a23da73207ab0a` | Add CommandServer's synchronized button-interest query, preserving retained-wrapper lookup, access-lock release, coordinate conversion, instance locking, exact button forwarding and false for missing handles. Synchronized down/up already forward event.button from the earlier pointer port and are source-verified equivalent. Supplemental existing command-queue coverage exercises matching/nonmatching buttons, outside/missing/deleted targets and actual synchronized click dispatch. Independent source and separate Rust-integration reviews precede validation. The public delta contains no new Unreal host implementation or fixtures; private metadata is not imported. Validation is recorded in the PR; no new device/full-corpus claim. | — |
 | `07311aeba0d2f57b60de97f000c92cc5a798fbbc` | Inapplicable test-player/display-host configuration: add fixed60/fixed120/variable refresh options to upstream TestingWindow backend parameters and parse/apply the Player CLI's --refresh flag. The Rust offscreen GM TestingWindow owns command-flush lifetime, not that display-selection interface; no corresponding Player CLI is shipped. No runtime, renderer, schema or fixture behavior changes, and no public platform refresh implementation is present. Active pins advance after source and separate integration scope review; shader and historical fixture identities remain unchanged. No 120 Hz/VRR support or new device coverage is claimed. | — |
 | `3b4af2e20bf50e222c2cfd5a22b5d9a4e70d2b8b` | Translate Luau print separators in both correspondence and live owners: convert each argument first, then append the tab for nonfirst arguments, preserving reentrant context-buffer behavior. Port the exact upstream print regression and update existing source-derived logging assertions. The archival CPPRuntimeScriptingContext correspondence now captures/restores the outer interrupt with nested depth; its opaque LuaState is not a newly compiled execution backend. The approved live luaur VM already retains its persistent host interrupt across protected calls, verified by a supplemental nested success/caught-error regression instead of introducing another timeout engine. Independent source-equivalence and separate Rust-integration reviews cover the changed owners. Wasm thrown-message, budget/trap classification, boot-time error handling and IDL/native/web wrappers remain parked. Private compiler/test-runner changes absent from the public delta are not claimed imported. Validation is recorded in the PR; no new device or full-corpus claim. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

@@ -727,6 +727,22 @@ impl CommandServer {
         result
     }
 
+    /// Whether a listener under the event position responds to its button.
+    pub fn listens_to_button_at_synchronized(
+        &self,
+        handle: StateMachineHandle,
+        event: &PointerEvent,
+    ) -> bool {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return false;
+        };
+        let position = wrapper
+            .instance
+            .with_instance(|instance| self.cursor_pos_for_pointer_event(instance, event));
+        let mut instance = wrapper.lock();
+        instance.listens_to_button_at(position, event.button)
+    }
+
     fn error<H: Copy + Send + fmt::Display + 'static>(
         &self,
         handle: H,

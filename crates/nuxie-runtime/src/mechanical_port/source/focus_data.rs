@@ -216,12 +216,6 @@ fn component_allows_focus_traversal(
 }
 
 impl FocusData {
-    pub fn detach_focusable(&mut self) {
-        if let Some(node) = &self.focus_node {
-            node.borrow_mut().clear_focusable();
-        }
-    }
-
     pub fn is_eligible_for_focus_traversal(&self) -> bool {
         if self.component().is_collapsed() {
             return false;

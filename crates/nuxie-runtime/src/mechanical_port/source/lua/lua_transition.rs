@@ -2,32 +2,32 @@
 //! The compiled native Luau registration and scoped invalidation live in
 //! `nuxie-scripting/src/vm/lua_transition.rs`, through the existing backend seam.
 use crate::mechanical_port::source::{
+    artboard::Artboard,
     lua::rive_lua_libs::{LuaAtoms, LuaState, LuaType, ScriptedRenderer, TransitionChild},
     renderer::Renderer,
-    scripted::script_backend::TransitionChildRef,
 };
 
 impl TransitionChild {
     pub fn draw(&self, renderer: &mut Renderer) {
-        TransitionChildRef {
-            artboard: self.artboard.clone(),
-            transform: nuxie_render_api::Mat2D(*self.world_transform.values()),
-        }
-        .draw(renderer);
+        let Some(artboard) = &self.artboard else {
+            return;
+        };
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(*self.world_transform.values()));
+        Artboard::draw_internal_handle(artboard, renderer);
+        renderer.restore();
     }
     pub fn width(&self) -> f32 {
-        TransitionChildRef {
-            artboard: self.artboard.clone(),
-            transform: nuxie_render_api::Mat2D(*self.world_transform.values()),
-        }
-        .width()
+        self.artboard
+            .as_ref()
+            .and_then(|artboard| artboard.with_downcast::<Artboard, _>(Artboard::width))
+            .unwrap_or(0.0)
     }
     pub fn height(&self) -> f32 {
-        TransitionChildRef {
-            artboard: self.artboard.clone(),
-            transform: nuxie_render_api::Mat2D(*self.world_transform.values()),
-        }
-        .height()
+        self.artboard
+            .as_ref()
+            .and_then(|artboard| artboard.with_downcast::<Artboard, _>(Artboard::height))
+            .unwrap_or(0.0)
     }
 }
 

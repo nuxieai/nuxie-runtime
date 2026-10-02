@@ -6,4 +6,3 @@ pub mod scripted_layout;
 pub mod scripted_object;
 pub mod scripted_path_effect;
 pub mod scripted_transition;
-pub mod transition_child_ref;

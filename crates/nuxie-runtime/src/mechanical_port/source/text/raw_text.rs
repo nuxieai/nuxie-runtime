@@ -1,4 +1,4 @@
-use super::text::{StyledText, Text, draw_color_glyph_layer};
+use super::text::{StyledText, Text};
 use super::{glyph_lookup::GlyphLookup, text_layout_view::TextLayoutView};
 use std::{cell::RefCell, rc::Rc};
 
@@ -695,8 +695,15 @@ impl RawText {
         }
         renderer.save();
         renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-        for mut layer in layers {
-            draw_color_glyph_layer(renderer, &self.factory, &mut layer, 1.0);
+        for layer in layers {
+            let mut path = ShapePaintPath::with_fill_rule(true, FillRule::NonZero);
+            path.add_path(&layer.path, None);
+            let mut paint = self
+                .factory
+                .with_factory_mut(|factory| factory.make_render_paint());
+            paint.style(RenderPaintStyle::Fill);
+            paint.color(layer.color);
+            renderer.draw_path(path.render_path(&self.factory), paint.as_ref());
         }
         renderer.restore();
     }

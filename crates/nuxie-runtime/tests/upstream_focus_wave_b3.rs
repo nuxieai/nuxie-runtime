@@ -718,46 +718,6 @@ fn focus_manager(machine: &RuntimeStateMachineInstanceHandle) -> RuntimeFocusMan
         .with_instance(|machine| machine.focus_manager())
         .expect("artboard focus manager")
 }
-// focus_test.cpp at aaa91101383b6e1aadc18fcd556f61016b46b600.
-#[test]
-fn destroying_artboard_on_adopted_manager_with_focus_held_in_nested_artboard() {
-    let external = RuntimeFocusManagerHandle::new(FocusManager::new());
-    let file = import_fixture("assets/swappable_artboards_focus.riv");
-    let artboard = instance(&file, Some("Main"));
-    artboard.adopt_focus_manager(Some(external.clone()));
-    let machine = artboard
-        .state_machine_instance_handle(0)
-        .expect("state machine 0");
-    assert!(focus_manager(&machine).ptr_eq(&external));
-    let vmi = file
-        .with_file_mut(|file| {
-            file.create_default_view_model_instance_for_artboard(artboard.core_handle())
-        })
-        .expect("default view-model instance");
-    machine.with_instance_mut(|machine| machine.bind_view_model_instance(vmi));
-    machine.advance_and_apply(0.016);
-    machine.advance_and_apply(0.016);
-    assert!(machine.with_instance_mut(|machine| machine.focus_next()));
-    assert!(machine.with_instance_mut(|machine| machine.focus_next()));
-    assert!(machine.with_instance_mut(|machine| machine.focus_next()));
-    let focused_artboard = external
-        .with_focus_manager(|manager| manager.primary_focus_immediate_artboard())
-        .expect("focused nested artboard");
-    assert_eq!(
-        focused_artboard
-            .with_downcast::<nuxie_runtime::source::artboard::Artboard, _>(|artboard| {
-                artboard.name().to_owned()
-            })
-            .as_deref(),
-        Some("StaticNestWithFocusable")
-    );
-
-    drop(machine);
-    drop(artboard);
-    assert!(external.with_focus_manager(|manager| manager.primary_focus().is_none()));
-    assert!(!external.with_focus_manager_mut(|manager| manager.has_focusable_content()));
-}
-
 fn real_focus_fixture(
     asset: &str,
     name: Option<&str>,

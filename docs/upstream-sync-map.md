@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `caeae0e723f646ee853461b61e18e04a3081fc1d`
+- LAST_SYNCED_SHA: `820cc19bd8405f84a8f85f9f388a133d6a2c7511`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `820cc19bd8405f84a8f85f9f388a133d6a2c7511` (refreshed 2026-10-02 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There is one upstream commit after the checkpoint at this fetched target.
-  All 179 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (201 after `5892bb05`); this
+  There are no upstream commits after the checkpoint at this fetched target.
+  All 180 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (202 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -208,6 +208,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `820cc19bd8405f84a8f85f9f388a133d6a2c7511` | Translate owned-buffer font decoding without copying its allocation; mapped file probes with collection face selection, nominal glyph coverage and one-shot promotion retaining the mapping; Factory/proxy and CommandServer ownership paths; and upstream font regressions. Apply the actual public reversals of low-byte color coercion, shared transition owner, Lua print separators/timed-context restoration, synchronized pointer query/button forwarding, focus detachment, stroke property/outset/GM additions, SRIV opcode 43, audio release and COLRv1 changes. Synchronized pointer calls again use the upstream primary-button default; queued dispatch still forwards buttons. Preserve existing renderer stroke-position support/opcode 42 and the approved persistent luaur host-budget boundary (its supplemental test is not C++ interrupt-restoration equivalence). Reversed standalone player refresh settings remain inapplicable; Wasm guest-lane reversals remain parked under UNIV-3728. Private changes absent from the public delta are not claimed. Independent source and separate Rust-integration reviews and applicable validation are recorded in the PR; no full-corpus/device claim. | — |
 | `caeae0e723f646ee853461b61e18e04a3081fc1d` | Translate stroke position property/registry/paint propagation and outset sizing; the three source GM scenes and upstream stroke/outset tests; SRIV opcode 43 writer, replay, exact integer comparison and regressions; color-glyph gradient/clip transforms, foreground-stop refresh and clamp/sort behavior through the approved Rust text backend, with upstream tests; and audio singleton release without stopping retained engines. Independent source and separate Rust-integration reviews precede validation, recorded in the PR. Private editor/Dart viewer/SystemEnum and Windows host teardown changes, and GM golden PNGs, are absent from the public delta and are not claimed imported. No new device/full-corpus claim. | — |
 | `aaa91101383b6e1aadc18fcd556f61016b46b600` | Translate FocusData's node-only detach operation and invoke it during Artboard's pre-deletion pass over valid and invalid objects, before any component can be deleted. Preserve adopted-manager lifetime and the subsequent blur/manager cleanup sequence. Port the upstream regression holding nested-artboard focus in an external manager and destroying machine before artboard. Independent source and separate Rust-integration reviews precede validation; results are recorded in the PR. Private metadata is excluded. No new hardware or full-corpus claim. | — |
 | `7f45ad14e45da6320361810113a23da73207ab0a` | Add CommandServer's synchronized button-interest query, preserving retained-wrapper lookup, access-lock release, coordinate conversion, instance locking, exact button forwarding and false for missing handles. Synchronized down/up already forward event.button from the earlier pointer port and are source-verified equivalent. Supplemental existing command-queue coverage exercises matching/nonmatching buttons, outside/missing/deleted targets and actual synchronized click dispatch. Independent source and separate Rust-integration reviews precede validation. The public delta contains no new Unreal host implementation or fixtures; private metadata is not imported. Validation is recorded in the PR; no new device/full-corpus claim. | — |

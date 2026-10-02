@@ -100,7 +100,6 @@ pub enum RuntimeColorGlyphPaint {
         x1: f32,
         y1: f32,
         r1: f32,
-        radial_transform: nuxie_render_api::Mat2D,
         stops: Vec<RuntimeColorGlyphGradientStop>,
     },
     SweepGradient {
@@ -195,6 +194,14 @@ impl std::fmt::Debug for RawTextFont {
     }
 }
 impl RawTextFont {
+    pub fn decode_owned(bytes: Vec<u8>) -> Result<Self, RawTextFontError> {
+        HbFont::decode_owned(bytes)
+            .map(Self::from_native)
+            .ok_or(RawTextFontError {
+                message: "font bytes are invalid",
+            })
+    }
+
     pub fn decode(bytes: impl Into<Arc<[u8]>>) -> Result<Self, RawTextFontError> {
         Self::decode_face(bytes, 0)
     }
@@ -330,7 +337,7 @@ impl RawTextFont {
                     .map(|s| RuntimeColorGlyphGradientStop {
                         offset: s.offset,
                         color: s.color,
-                        uses_foreground: s.is_foreground,
+                        uses_foreground: l.use_foreground,
                     })
                     .collect();
                 let paint = match l.paint_type {
@@ -354,7 +361,6 @@ impl RawTextFont {
                             x1: l.x1,
                             y1: l.y1,
                             r1: l.r1,
-                            radial_transform: nuxie_render_api::Mat2D(*l.radial_transform.values()),
                             stops,
                         }
                     }

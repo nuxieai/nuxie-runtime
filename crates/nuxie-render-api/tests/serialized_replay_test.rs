@@ -141,7 +141,6 @@ fn serialized_2d_commands_replay_byte_identically() {
     paint.blend_mode(BlendMode::Multiply);
     paint.feather(2.0);
     paint.additiveness(0.375);
-    paint.stroke_position(StrokePosition::Outside);
 
     let mut rp = RawPath::new();
     rp.move_to(0.0, 0.0);
@@ -291,59 +290,6 @@ fn serialized_2d_commands_replay_byte_identically() {
     let sb = b.bytes();
     assert_eq!(sa.len(), sb.len());
     assert_eq!(&*sa, &*sb);
-}
-
-// caeae0e7: the upstream serialization regressions for stroke position.
-#[test]
-fn a_centered_stroke_records_no_stroke_position_op() {
-    let mut plain = SerializingFactory::default();
-    let mut plain_paint = plain.make_render_paint();
-    plain_paint.style(RenderPaintStyle::Stroke);
-    let mut centered = SerializingFactory::default();
-    let mut centered_paint = centered.make_render_paint();
-    centered_paint.style(RenderPaintStyle::Stroke);
-    centered_paint.stroke_position(StrokePosition::Center);
-    assert_eq!(&*plain.bytes(), &*centered.bytes());
-}
-
-#[test]
-fn a_replayed_paint_keeps_its_stroke_position() {
-    let mut a = SerializingFactory::default();
-    let mut paint = a.make_render_paint();
-    paint.style(RenderPaintStyle::Stroke);
-    paint.stroke_position(StrokePosition::Inside);
-    let recorded = a.bytes().len();
-    paint.stroke_position(StrokePosition::Inside);
-    assert_eq!(a.bytes().len(), recorded);
-    paint.stroke_position(StrokePosition::Outside);
-    assert!(a.bytes().len() > recorded);
-    let mut b = SerializingFactory::default();
-    let mut renderer = b.make_renderer();
-    assert!(replay_serialized_commands(
-        &a.bytes(),
-        &mut b,
-        &mut renderer,
-        &mut Default::default()
-    ));
-    assert_eq!(&*a.bytes(), &*b.bytes());
-}
-
-#[test]
-fn an_unknown_stroke_position_fails_replay() {
-    let mut a = SerializingFactory::default();
-    let mut paint = a.make_render_paint();
-    paint.stroke_position(StrokePosition::Outside);
-    let mut stream = a.bytes().to_vec();
-    assert_eq!(stream.last(), Some(&(StrokePosition::Outside as u8)));
-    *stream.last_mut().unwrap() = 7;
-    let mut b = SerializingFactory::default();
-    let mut renderer = b.make_renderer();
-    assert!(!replay_serialized_commands(
-        &stream,
-        &mut b,
-        &mut renderer,
-        &mut Default::default()
-    ));
 }
 
 // An unbacked RenderCanvas has an image identity before GPU allocation, just

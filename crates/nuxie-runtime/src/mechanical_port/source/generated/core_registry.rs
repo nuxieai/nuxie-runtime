@@ -4369,7 +4369,6 @@ pub enum CoreField {
     StraightVertexRadius,
     StrokeCap,
     StrokeJoin,
-    StrokePosition,
     StrokeThickness,
     StrokeTransformAffectsStroke,
     TargetEffectTargetId,
@@ -8419,7 +8418,6 @@ impl CoreRegistry {
             922 => CoreField::TargetEffectTargetId,
             48 => CoreField::StrokeCap,
             49 => CoreField::StrokeJoin,
-            470 => CoreField::StrokePosition,
             748 => CoreField::FeatherSpaceValue,
             117 => CoreField::TrimPathModeValue,
             40 => CoreField::FillFillRule,
@@ -9251,7 +9249,6 @@ impl CoreRegistry {
             922 => CoreField::TargetEffectTargetId,
             48 => CoreField::StrokeCap,
             49 => CoreField::StrokeJoin,
-            470 => CoreField::StrokePosition,
             748 => CoreField::FeatherSpaceValue,
             117 => CoreField::TrimPathModeValue,
             40 => CoreField::FillFillRule,
@@ -10157,7 +10154,6 @@ impl CoreRegistry {
             922 => 0,
             48 => 0,
             49 => 0,
-            470 => 0,
             748 => 0,
             117 => 0,
             40 => 0,
@@ -10813,7 +10809,6 @@ impl CoreRegistry {
             922 => 644,
             48 => 24,
             49 => 24,
-            470 => 24,
             748 => 533,
             117 => 47,
             40 => 20,
@@ -34466,12 +34461,6 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBase::JOIN_PROPERTY_KEY);
                 }
             }
-            CoreField::StrokePosition => {
-                if self.base.set_position_value(value as u8) {
-                    <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBaseCallbacks>::position_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBase::POSITION_PROPERTY_KEY);
-                }
-            }
             _ => {}
         }
     }
@@ -34539,7 +34528,6 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
             CoreField::ShapePaintAdditiveAmount => self.base.base.base.additive_amount() as u32,
             CoreField::StrokeCap => self.base.cap() as u32,
             CoreField::StrokeJoin => self.base.join() as u32,
-            CoreField::StrokePosition => self.base.position() as u32,
             _ => 0,
         }
     }
@@ -75053,7 +75041,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBaseCallbacks
     for crate::mechanical_port::source::shapes::paint::stroke::Stroke
 {
-    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::stroke::Stroke; cap_changed, join_changed, thickness_changed, position_changed);
+    forward_callback_methods!(crate::mechanical_port::source::shapes::paint::stroke::Stroke; cap_changed, join_changed, thickness_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         crate::mechanical_port::source::core::Core::notify_property_changed(self, property_key)
     }

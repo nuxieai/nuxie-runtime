@@ -5304,6 +5304,58 @@ fn pointer_buttons() {
 }
 
 #[test]
+fn synchronized_pointer_button_query_and_dispatch() {
+    use nuxie_runtime::source::pointer_button::PointerButton;
+    let upstream =
+        std::env::var_os("RIVE_RUNTIME_DIR").expect("RIVE_RUNTIME_DIR points to pinned upstream");
+    let bytes = std::fs::read(
+        std::path::PathBuf::from(upstream)
+            .join("tests/unit_tests/assets/pointer_button_secondary.riv"),
+    )
+    .unwrap();
+    let mut queue = CommandQueue::new();
+    let file = queue.load_file(bytes, None, 0, None);
+    let artboard = queue.instantiate_default_artboard(file, None, 0);
+    let machine = queue.instantiate_default_state_machine(artboard, None, 0);
+    queue.advance_state_machine(machine, 0.0, 0);
+    let mut server = server(&queue);
+    assert!(server.process_commands());
+
+    let primary = pointer_at(250.0, 250.0);
+    let secondary = PointerEvent {
+        button: PointerButton::Secondary,
+        ..primary
+    };
+    assert!(!server.listens_to_button_at_synchronized(machine, &primary));
+    assert!(server.listens_to_button_at_synchronized(machine, &secondary));
+    assert!(!server.listens_to_button_at_synchronized(
+        machine,
+        &PointerEvent {
+            position: nuxie::Vec2D::new(-50.0, -50.0),
+            ..secondary
+        }
+    ));
+    assert!(!server.listens_to_button_at_synchronized(StateMachineHandle::default(), &secondary));
+    let clicked = || {
+        server
+            .with_state_machine_instance_mut(machine, |instance| {
+                instance.get_bool("clicked").map(|input| input.value())
+            })
+            .flatten()
+    };
+    assert_eq!(clicked(), Some(false));
+    server.pointer_down_synchronized(machine, &primary);
+    server.pointer_up_synchronized(machine, &primary);
+    assert_eq!(clicked(), Some(false));
+    server.pointer_down_synchronized(machine, &secondary);
+    server.pointer_up_synchronized(machine, &secondary);
+    assert_eq!(clicked(), Some(true));
+    queue.delete_state_machine(machine, 0);
+    assert!(server.process_commands());
+    assert!(!server.listens_to_button_at_synchronized(machine, &secondary));
+}
+
+#[test]
 fn pointer_down_advances_before_rapid_pointer_up() {
     let mut queue = CommandQueue::new();
     let (listener, log) = event_log();

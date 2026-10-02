@@ -1,4 +1,5 @@
 use super::viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime};
+use crate::mechanical_port::source::shapes::paint::color::color_argb;
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_color::ViewModelInstanceColor;
 
 #[derive(Clone)]
@@ -30,9 +31,7 @@ impl ViewModelInstanceColorRuntime {
         self.argb(a, (color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff);
     }
     pub fn argb(&self, a: i32, r: i32, g: i32, b: i32) {
-        self.set_value(
-            (((a as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | b as u32) as i32,
-        );
+        self.set_value(color_argb(a, r, g, b) as i32);
     }
     pub fn data_type(&self) -> DataType {
         DataType::Color

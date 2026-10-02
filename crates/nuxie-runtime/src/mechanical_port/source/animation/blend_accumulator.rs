@@ -1,6 +1,7 @@
 //! Source-paired translation of animation/blend_accumulator.hpp and .cpp.
 use crate::mechanical_port::source::{
-    core::CoreHandle, generated::core_registry::CoreRegistry, shapes::paint::color::color_lerp,
+    core::CoreHandle, generated::core_registry::CoreRegistry, math::FloatContract,
+    shapes::paint::color::color_lerp,
 };
 
 struct Value {
@@ -129,7 +130,7 @@ impl BlendAccumulator {
             current.double_value = value;
         } else {
             let mixi = 1.0 - mix;
-            current.double_value = current.double_value * mixi + value * mix;
+            current.double_value = current.double_value.contracted_mul_add(mixi, value * mix);
         }
     }
     pub fn apply_color(&mut self, object: &CoreHandle, property_key: i32, mix: f32, value: u32) {
@@ -165,5 +166,53 @@ impl BlendAccumulator {
             }
             self.frame = 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::CoreArena, custom_property_number::CustomPropertyNumber,
+        generated::custom_property_number_base::CustomPropertyNumberBase,
+    };
+
+    #[test]
+    fn seeded_mixing_and_flush_preserve_the_mode_specific_value() {
+        let arena = CoreArena::default();
+        let object = arena.insert(CustomPropertyNumber::default());
+        let key = i32::from(CustomPropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY);
+        let current = f32::from_bits(0x3d82_a90a);
+        let value = f32::from_bits(0x3f14_7ae1);
+        let mix = f32::from_bits(0x3ed0_f81d);
+        let mut accumulator = BlendAccumulator::default();
+        accumulator.seed_double(&object, key, current);
+        accumulator.apply_double(&object, key, mix, value);
+        #[cfg(feature = "strict-fp")]
+        let expected = current * (1.0 - mix) + value * mix;
+        #[cfg(not(feature = "strict-fp"))]
+        let expected = current.mul_add(1.0 - mix, value * mix);
+        assert_eq!(
+            accumulator.values[0].double_value.to_bits(),
+            expected.to_bits()
+        );
+        assert_eq!(accumulator.written, [0]);
+        accumulator.flush();
+        assert_eq!(
+            CoreRegistry::get_double_handle(&object, key)
+                .unwrap()
+                .to_bits(),
+            expected.to_bits()
+        );
+        assert!(accumulator.written.is_empty());
+        assert_eq!(accumulator.frame, 2);
+        accumulator.apply_double(&object, key, 1.0, value);
+        accumulator.flush();
+        assert_eq!(
+            CoreRegistry::get_double_handle(&object, key)
+                .unwrap()
+                .to_bits(),
+            value.to_bits()
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 use luaur_rt::{Error, Lua, MultiValue, Result, Value};
 use nuxie_render_api::ColorInt;
+use nuxie_runtime::source::shapes::paint::color::color_lerp;
 
 pub(super) fn install_color_global(lua: &Lua) -> Result<()> {
     let table = lua.create_table();
@@ -143,22 +144,6 @@ fn opacity_to_alpha(opacity: f32) -> u32 {
     (255.0 * opacity).round() as u32
 }
 
-fn color_lerp(from: ColorInt, to: ColorInt, mix: f32) -> ColorInt {
-    fn lerp_component(from: u32, to: u32, mix: f32) -> u32 {
-        let value = from as f32 * (1.0 - mix) + to as f32 * mix;
-        let value = if value < 255.0 { value } else { 255.0 };
-        let value = if 0.0 < value { value } else { 0.0 };
-        value.round() as u32
-    }
-
-    rgba(
-        lerp_component(color_component(from, 16), color_component(to, 16), mix),
-        lerp_component(color_component(from, 8), color_component(to, 8), mix),
-        lerp_component(color_component(from, 0), color_component(to, 0), mix),
-        lerp_component(color_component(from, 24), color_component(to, 24), mix),
-    )
-}
-
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use luaur_rt::Table;
@@ -260,5 +245,23 @@ mod tests {
         assert_eq!(floats.get::<f64>(2).unwrap(), 128.0 / 255.0);
         assert_eq!(floats.get::<f64>(3).unwrap(), 0.0);
         assert_eq!(floats.get::<f64>(4).unwrap(), 64.0 / 255.0);
+    }
+
+    #[test]
+    fn installed_color_lerp_uses_the_shared_source_arithmetic_mode() {
+        let lua = color_lua();
+        let colors = lua.globals().get::<Table>("Color").unwrap();
+        let lerp = colors.get::<luaur_rt::Function>("lerp").unwrap();
+        let from = 0xff65_677a_u32;
+        let to = 0xff68_fa2f_u32;
+        for mix in [f32::from_bits(0x3e99_9998), f32::NAN] {
+            let actual = lerp
+                .call::<f64>((from as f64, to as f64, mix as f64))
+                .unwrap();
+            assert_eq!(actual as u32, color_lerp(from, to, mix));
+            if mix.is_nan() {
+                assert_eq!(actual as u32, 0xffff_ffff);
+            }
+        }
     }
 }

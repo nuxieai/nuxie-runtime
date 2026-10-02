@@ -3,7 +3,14 @@ use crate::mechanical_port::source::generated::animation::cubic_ease_interpolato
 
 #[inline]
 fn transformed_value(value_from: f32, value_to: f32, transformed_factor: f32) -> f32 {
-    (value_to - value_from).mul_add(transformed_factor, value_from)
+    #[cfg(feature = "strict-fp")]
+    {
+        value_from + (value_to - value_from) * transformed_factor
+    }
+    #[cfg(not(feature = "strict-fp"))]
+    {
+        (value_to - value_from).mul_add(transformed_factor, value_from)
+    }
 }
 
 #[derive(Default)]
@@ -30,6 +37,34 @@ mod tests {
     use super::transformed_value;
 
     #[test]
+    #[cfg(feature = "strict-fp")]
+    fn transformed_value_matches_pinned_source_expression_bits() {
+        let value_from = f32::from_bits(0x3d82_a90a);
+        let value_to = f32::from_bits(0x0000_0000);
+        let transformed_factor = f32::from_bits(0x3ed0_f81d);
+
+        assert_eq!(
+            transformed_value(value_from, value_to, transformed_factor).to_bits(),
+            // valueFrom + (valueTo - valueFrom) * transformedFactor.
+            // Preserve each source float operation, not a forced fused result.
+            0x3d1a_aa1a
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "strict-fp"))]
+    fn transformed_value_matches_the_shipping_subtraction_then_fma() {
+        let from = f32::from_bits(0x3d82_a90a);
+        let to = f32::from_bits(0x0000_0000);
+        let factor = f32::from_bits(0x3ed0_f81d);
+        assert_eq!(
+            transformed_value(from, to, factor).to_bits(),
+            (to - from).mul_add(factor, from).to_bits()
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "strict-fp"))]
     fn transformed_value_matches_pinned_fused_bits() {
         let value_from = f32::from_bits(0x3d82_a90a);
         let value_to = f32::from_bits(0x0000_0000);

@@ -1,3 +1,5 @@
+use crate::mechanical_port::source::math::FloatContract;
+
 pub type ColorInt = u32;
 pub fn color_argb(a: i32, r: i32, g: i32, b: i32) -> ColorInt {
     ((((a & 0xff) << 24) | ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff)) as u32)
@@ -25,10 +27,10 @@ pub fn unpack_color_to_rgba8(color: ColorInt, out: &mut [u8; 4]) {
 }
 pub fn unpack_color_to_rgba32f(color: ColorInt, out: &mut [f32; 4]) {
     *out = [
-        color_red(color) as f32 / 255.0,
-        color_green(color) as f32 / 255.0,
-        color_blue(color) as f32 / 255.0,
-        color_alpha(color) as f32 / 255.0,
+        color_red(color) as f32 * (1.0 / 255.0),
+        color_green(color) as f32 * (1.0 / 255.0),
+        color_blue(color) as f32 * (1.0 / 255.0),
+        color_alpha(color) as f32 * (1.0 / 255.0),
     ];
 }
 pub fn unpack_color_to_rgba32f_premul(color: ColorInt, out: &mut [f32; 4]) {
@@ -71,9 +73,12 @@ pub fn color_modulate(value: ColorInt, color: ColorInt, opacity: f32) -> ColorIn
     )
 }
 fn lerp(a: u32, b: u32, mix: f32) -> u32 {
-    (a as f32 * (1.0 - mix) + b as f32 * mix)
-        .clamp(0.0, 255.0)
-        .round() as u32
+    // Shipping C++ rounds b * mix, then contracts the left product and sum.
+    let value = (a as f32).contracted_mul_add(1.0 - mix, b as f32 * mix);
+    // std::min/max select their first operand for unordered comparisons.
+    let upper = if value < 255.0 { value } else { 255.0 };
+    let bounded = if 0.0 < upper { upper } else { 0.0 };
+    bounded.round() as u32
 }
 pub fn color_lerp(from: ColorInt, to: ColorInt, mix: f32) -> ColorInt {
     color_argb(
@@ -82,4 +87,53 @@ pub fn color_lerp(from: ColorInt, to: ColorInt, mix: f32) -> ColorInt {
         lerp(color_green(from), color_green(to), mix) as i32,
         lerp(color_blue(from), color_blue(to), mix) as i32,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn float_unpacking_uses_the_source_rounded_reciprocal_before_premul() {
+        let reciprocal = 1.0_f32 / 255.0;
+        for channel in 0..=255 {
+            let color = color_argb(37, channel, 89, 117);
+            let normalized = [
+                channel as f32 * reciprocal,
+                89.0 * reciprocal,
+                117.0 * reciprocal,
+                37.0 * reciprocal,
+            ];
+            let mut unpacked = [0.0; 4];
+            unpack_color_to_rgba32f(color, &mut unpacked);
+            assert_eq!(unpacked.map(f32::to_bits), normalized.map(f32::to_bits));
+
+            unpack_color_to_rgba32f_premul(color, &mut unpacked);
+            let expected = [
+                normalized[0] * normalized[3],
+                normalized[1] * normalized[3],
+                normalized[2] * normalized[3],
+                normalized[3],
+            ];
+            assert_eq!(unpacked.map(f32::to_bits), expected.map(f32::to_bits));
+        }
+    }
+
+    #[test]
+    fn unordered_channel_interpolation_selects_the_source_upper_bound() {
+        assert_eq!(color_lerp(0, 0, f32::NAN), 0xffff_ffff);
+        assert_eq!(opacity_to_alpha(f32::NAN), 255);
+    }
+
+    #[test]
+    fn channel_interpolation_rounds_the_mode_specific_source_stages() {
+        let mix = f32::from_bits(0x3ed0_f81d);
+        for (a, b) in [(101, 104), (47, 250), (255, 0)] {
+            #[cfg(feature = "strict-fp")]
+            let value = a as f32 * (1.0 - mix) + b as f32 * mix;
+            #[cfg(not(feature = "strict-fp"))]
+            let value = (a as f32).mul_add(1.0 - mix, b as f32 * mix);
+            assert_eq!(lerp(a, b, mix), value.round() as u32);
+        }
+    }
 }

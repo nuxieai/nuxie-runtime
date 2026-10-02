@@ -45,6 +45,7 @@ fn apply_linear_pair(from_value: f32, to_value: f32, current_time: f32) -> f32 {
 }
 
 #[test]
+#[cfg(not(feature = "strict-fp"))]
 fn linear_keyframe_preserves_production_contracted_rounding() {
     // Captured from virtualize_blendmode's 82-frame replay at 1.35 seconds.
     // C++ rounds (to-from), then uses fmadd; separate mul/add loses one ULP,
@@ -52,6 +53,16 @@ fn linear_keyframe_preserves_production_contracted_rounding() {
     let actual = apply_linear_pair(100.0, 0.0, f32::from_bits(0x3f333334));
     assert_eq!(actual.to_bits(), 0x41effffe);
     assert_eq!((actual / 100.0).to_bits(), 0x3e999998);
+}
+
+#[test]
+#[cfg(feature = "strict-fp")]
+fn linear_keyframe_preserves_strict_source_rounding() {
+    let factor = f32::from_bits(0x3f333334);
+    let actual = apply_linear_pair(100.0, 0.0, factor);
+    let expected = 100.0_f32 + (0.0_f32 - 100.0_f32) * factor;
+    assert_eq!(actual.to_bits(), expected.to_bits());
+    assert_eq!((actual / 100.0).to_bits(), (expected / 100.0).to_bits());
 }
 
 #[test]

@@ -1,4 +1,5 @@
 use super::{data_type::DataType, data_value::DataValue};
+use crate::mechanical_port::source::shapes::paint::color::color_lerp;
 use core::any::Any;
 #[derive(Clone, Debug, Default)]
 pub struct DataValueColor {
@@ -41,17 +42,6 @@ impl DataValueColor {
         self.value = ((self.value as u32 & 0xffff_ff00) | value as u32) as i32
     }
 }
-fn lerp_channel(a: u32, b: u32, mix: f32) -> u32 {
-    (a as f32 * (1.0 - mix) + b as f32 * mix)
-        .clamp(0.0, 255.0)
-        .round() as u32
-}
-fn color_lerp(from: u32, to: u32, mix: f32) -> u32 {
-    (lerp_channel(from >> 24, to >> 24, mix) << 24)
-        | (lerp_channel((from >> 16) & 255, (to >> 16) & 255, mix) << 16)
-        | (lerp_channel((from >> 8) & 255, (to >> 8) & 255, mix) << 8)
-        | lerp_channel(from & 255, to & 255, mix)
-}
 impl DataValue for DataValueColor {
     fn as_any(&self) -> &dyn Any {
         self
@@ -83,6 +73,28 @@ impl DataValue for DataValueColor {
     fn copy_value(&self, destination: Option<&mut dyn DataValue>) {
         if let Some(destination) = destination.and_then(|v| v.as_any_mut().downcast_mut::<Self>()) {
             destination.value = self.value;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn interpolation_delegates_to_the_shared_color_owner_in_both_modes() {
+        let from = DataValueColor::new(0xff65_677a_u32 as i32);
+        let to = DataValueColor::new(0xff68_fa2f_u32 as i32);
+        for mix in [0.0, f32::from_bits(0x3e99_9998), 1.0, f32::NAN] {
+            let mut destination = DataValueColor::default();
+            from.interpolate(Some(&to), Some(&mut destination), mix);
+            assert_eq!(
+                destination.value() as u32,
+                color_lerp(from.value() as u32, to.value() as u32, mix)
+            );
+            if mix.is_nan() {
+                assert_eq!(destination.value(), -1);
+            }
         }
     }
 }

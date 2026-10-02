@@ -110,7 +110,7 @@ impl ScriptedDataValue {
     fn set_color_channel(&mut self, shift: u32, channel: i32) {
         if let ScriptValue::Color(value) = &mut self.value {
             let mask = !(0xff_u32 << shift);
-            *value = (*value & mask) | (((channel as u32) & 0xff) << shift);
+            *value = (*value & mask) | (channel.wrapping_shl(shift) as u32);
         }
     }
 }

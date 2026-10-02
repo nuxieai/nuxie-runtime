@@ -59,7 +59,7 @@ pub fn shape_paint_outset(paint: Option<&dyn CoreObject>) -> ShapePaintOutset {
                 thickness: stroke.base.thickness(),
                 join: StrokeJoin::from(u32::from(stroke.base.join())).into(),
                 cap: StrokeCap::from(u32::from(stroke.base.cap())).into(),
-                position: stroke.stroke_position(),
+                position: nuxie_render_api::StrokePosition::Center,
             }
         });
     let shape_paint = behavior.shape_paint();

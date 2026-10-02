@@ -6129,7 +6129,7 @@ fn wave_b_font_test_005_direct_port_expected_red() {
 fn wave_b_font_test_006_mapped_font_decodes_equivalently_to_a_copied_one() {
     let path = binding_path("assets/fonts/Inter_18pt-Regular.ttf");
     // SAFETY: the pinned fixture remains unchanged for every font/shape owner.
-    let mapped = unsafe { HbFont::decode_file(Some(&path)) };
+    let mapped = unsafe { HbFont::decode_file(Some(&path), 0) };
     if !cfg!(any(
         target_vendor = "apple",
         target_os = "linux",
@@ -6178,7 +6178,7 @@ fn wave_b_font_test_007_mapped_font_outlives_the_call_that_created_it() {
         let path = binding_path("assets/fonts/Inter_18pt-Regular.ttf");
         // SAFETY: dropping this local path does not mutate the pinned file;
         // the file stays unchanged until the mapped font and shaping drop.
-        unsafe { HbFont::decode_file(Some(&path)) }
+        unsafe { HbFont::decode_file(Some(&path), 0) }
     };
     if !cfg!(any(
         target_vendor = "apple",
@@ -6211,7 +6211,8 @@ fn wave_b_font_test_007_mapped_font_outlives_the_call_that_created_it() {
 #[test]
 fn wave_b_font_test_008_decode_file_returns_null_rather_than_failing_hard() {
     // SAFETY: no file exists for the null path.
-    assert!(unsafe { HbFont::decode_file(None) }.is_none());
+    assert!(unsafe { HbFont::decode_file(None, 0) }.is_none());
+    assert!(unsafe { HbFont::probe_file(None, 0) }.is_none());
     // Own a unique directory rather than racing on upstream's fixed temp name.
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let dir = loop {
@@ -6226,7 +6227,8 @@ fn wave_b_font_test_008_decode_file_returns_null_rather_than_failing_hard() {
     };
     let missing = dir.join("does_not_exist.ttf");
     // SAFETY: this test exclusively owns the directory and never creates this file.
-    assert!(unsafe { HbFont::decode_file(Some(&missing)) }.is_none());
+    assert!(unsafe { HbFont::decode_file(Some(&missing), 0) }.is_none());
+    assert!(unsafe { HbFont::probe_file(Some(&missing), 0) }.is_none());
     let empty = dir.join("empty_font_test_file.tmp");
     drop(
         std::fs::OpenOptions::new()
@@ -6237,9 +6239,113 @@ fn wave_b_font_test_008_decode_file_returns_null_rather_than_failing_hard() {
     );
     // SAFETY: the empty file remains unchanged through decode and its returned
     // owner drops before cleanup. Upstream rejects its zero size before mapping.
-    assert!(unsafe { HbFont::decode_file(Some(&empty)) }.is_none());
+    assert!(unsafe { HbFont::decode_file(Some(&empty), 0) }.is_none());
+    assert!(unsafe { HbFont::probe_file(Some(&empty), 0) }.is_none());
     std::fs::remove_file(&empty).expect("remove owned empty font");
     std::fs::remove_dir(&dir).expect("remove owned empty test directory");
+}
+
+#[test]
+fn mapped_font_opens_requested_collection_face() {
+    let path = binding_path("assets/fonts/two_faces.ttc");
+    // SAFETY: the pinned local fixture remains stable for all mapped owners.
+    let second = unsafe { HbFont::decode_file(Some(&path), 1) };
+    if !cfg!(any(
+        target_vendor = "apple",
+        target_os = "linux",
+        target_os = "android"
+    )) {
+        assert!(second.is_none());
+        return;
+    }
+    let first = unsafe { HbFont::decode_file(Some(&path), 0) }.expect("first face");
+    let second = second.expect("second face");
+    assert!(first.has_glyph(u32::from('b')));
+    assert!(second.has_glyph(u32::from('a')));
+    assert!(!second.has_glyph(u32::from('b')));
+    assert_ne!(first.get_weight(), second.get_weight());
+    assert!(unsafe { HbFont::decode_file(Some(&path), 2) }.is_none());
+}
+
+fn assert_single_glyph_shapes_and_draws(font: &FontRef, character: char) {
+    let text = [u32::from(character)];
+    let runs = [TextRun {
+        font: Some(font.clone()),
+        size: 32.0,
+        line_height: -1.0,
+        letter_spacing: 0.0,
+        unichar_count: 1,
+        script: 0,
+        style_id: 0,
+        level: 0,
+    }];
+    let shape = font.shape_text(&text, &runs, -1);
+    assert_eq!(shape.len(), 1);
+    assert_eq!(shape[0].runs[0].glyphs.len(), 1);
+    assert!(!font.get_path(shape[0].runs[0].glyphs[0]).verbs().is_empty());
+}
+
+#[test]
+fn mapped_coverage_probes_respect_collection_faces_and_promote_safely() {
+    let path = binding_path("assets/fonts/two_faces.ttc");
+    // SAFETY: fixture pages remain stable after probe promotion and release.
+    let first = unsafe { HbFont::probe_file(Some(&path), 0) };
+    if !cfg!(any(
+        target_vendor = "apple",
+        target_os = "linux",
+        target_os = "android"
+    )) {
+        assert!(first.is_none());
+        return;
+    }
+    let mut first = first.expect("first probe");
+    let second = unsafe { HbFont::probe_file(Some(&path), 1) }.expect("second probe");
+    assert!(first.has_glyph(u32::from('b')));
+    assert!(second.has_glyph(u32::from('a')));
+    assert!(!second.has_glyph(u32::from('b')));
+    assert!(!first.has_glyph(0x10FFFF));
+    assert!(unsafe { HbFont::probe_file(Some(&path), 2) }.is_none());
+    let font = first.make_font().expect("promoted font");
+    assert!(!first.has_glyph(u32::from('b')));
+    assert!(first.make_font().is_none());
+    drop(first);
+    drop(second);
+    assert!(font.has_glyph(u32::from('b')));
+    assert_eq!(font.get_weight(), 400);
+    assert_single_glyph_shapes_and_draws(&font, 'b');
+}
+
+#[test]
+fn owned_font_bytes_are_adopted_rather_than_copied() {
+    let (font, data) = {
+        let bytes = std::fs::read(binding_path("assets/fonts/Inter_18pt-Regular.ttf")).unwrap();
+        let data = bytes.as_ptr();
+        (HbFont::decode_owned(bytes).expect("owned font"), data)
+    };
+    assert_eq!(
+        font.as_any().downcast_ref::<HbFont>().unwrap().bytes().as_ptr(),
+        data
+    );
+    assert_single_glyph_shapes_and_draws(&font, 'A');
+    assert!(HbFont::decode_owned(Vec::new()).is_none());
+}
+
+#[test]
+fn factory_owned_font_bytes_keep_the_allocation_through_runtime_promotion() {
+    let bytes = std::fs::read(binding_path("assets/fonts/Inter_18pt-Regular.ttf")).unwrap();
+    let data = bytes.as_ptr();
+    let mut factory = PersistentFactory::new(nuxie_render_api::NullFactory);
+    let context = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let decoded = context
+        .with_factory_mut(|factory| factory.decode_font_owned(bytes))
+        .unwrap();
+    assert_eq!(decoded.bytes().as_ptr(), data);
+    let font = HbFont::from_decoded_font(decoded).expect("promoted factory font");
+    assert_eq!(
+        font.as_any().downcast_ref::<HbFont>().unwrap().bytes().as_ptr(),
+        data
+    );
+    assert_single_glyph_shapes_and_draws(&font, 'A');
 }
 
 fn binding_gamepad_ready() -> BindingSilver {

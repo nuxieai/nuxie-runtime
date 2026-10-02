@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    // Reconciled upstream through caeae0e7; forward overlays remain.
+    // Reconciled upstream through 820cc19b; forward overlays remain.
     assert_eq!(DEFINITIONS.len(), 358);
     assert!(definition_by_name("Folder").is_none());
     assert!(definition_by_type_key(102).is_none());
@@ -34,15 +34,14 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    // caeae0e7 adds Stroke.position (470), an animatable uint8 property.
-    assert_eq!(runtime_property_count, 674);
+    assert_eq!(runtime_property_count, 673);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 234);
+    assert_eq!(animatable_property_count, 233);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -64,26 +63,6 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .filter(|property| property.description.is_some())
         .count();
     assert_eq!(described_property_count, 468);
-}
-
-#[test]
-fn stroke_position_definition_matches_upstream_caeae0e7() {
-    let definition = definition_by_type_key(24).expect("stroke");
-    let property = definition.property_by_key(470).expect("stroke position");
-    assert_eq!(property.name, "position");
-    assert_eq!(property.runtime_type, FieldKind::Uint);
-    assert_eq!(property.uint_storage(), Some(UintStorage::Uint8));
-    assert_eq!(
-        property.stored_field_initializer(),
-        Some(StoredFieldInitializer::Uint(1))
-    );
-    assert!(property.animates);
-    assert!(property.bindable);
-    assert!(object_supports_property(24, 470));
-    assert_eq!(
-        core_registry_field_kind_by_property_key(470),
-        Some(CoreRegistryFieldKind::Uint)
-    );
 }
 
 #[test]

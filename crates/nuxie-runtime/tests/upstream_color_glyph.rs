@@ -1,5 +1,4 @@
-//! Direct ports of all 22 original color_glyph_test.cpp cases, four additions
-//! at caeae0e723f646ee853461b61e18e04a3081fc1d, plus the retained
+//! Direct ports of all 22 pinned color_glyph_test.cpp cases, plus the retained
 //! Rust color-render regression using a character in the fixture's repertoire.
 //! Queries and repeated layer extraction use one retained native Font owner;
 //! shaping and rendering use translated text owners and the approved backend.
@@ -359,89 +358,4 @@ fn raw_text_at_small_font_size_with_emoji_does_not_crash() {
 fn raw_text_at_large_font_size_with_emoji_does_not_crash() {
     let emoji = font(&emoji_bytes());
     let _ = render("❤", &emoji, 200.0, 2000.0);
-}
-
-fn colrv1_font() -> FontRef {
-    font(&asset("NotoColorEmojiCOLRv1.subset.ttf"))
-}
-
-fn catch_approx(actual: f32, expected: f32) {
-    assert!(
-        (f64::from(actual) - f64::from(expected)).abs()
-            <= f64::from(100.0 * f32::EPSILON) * f64::from(expected).abs(),
-        "{actual} != Approx({expected})"
-    );
-}
-
-#[test]
-fn colrv1_radial_gradient_maps_to_glyph_space() {
-    let font = colrv1_font();
-    let mut layers = Vec::new();
-    assert_eq!(font.get_color_layers(2, &mut layers, 0xff000000), 10);
-    let face = &layers[0];
-    assert_eq!(face.paint_type, ColorGlyphPaintType::RadialGradient);
-    assert_eq!(face.stops.len(), 3);
-    assert_eq!(face.stops[0].color, 0xFFFDE030);
-    catch_approx(face.x1, 630.0 / 1024.0);
-    catch_approx(face.y1, -360.0 / 1024.0);
-    catch_approx(face.r1, 534.0 / 1024.0);
-    assert!(face.path.bounds().contains(
-        nuxie_runtime::source::math::vec2d::Vec2D::new(face.x1, face.y1)
-    ));
-}
-
-#[test]
-fn colrv1_transformed_clip_glyphs_keep_their_transform() {
-    let font = colrv1_font();
-    let mut layers = Vec::new();
-    assert_eq!(font.get_color_layers(2, &mut layers, 0xff000000), 10);
-    let left = layers[2].path.bounds();
-    let right = layers[4].path.bounds();
-    catch_approx(right.left() - left.left(), (317.625 + 41.906) / 1024.0);
-    catch_approx(right.top(), left.top());
-}
-
-#[test]
-fn colrv1_radial_gradients_keep_their_ellipse() {
-    use nuxie_runtime::source::math::vec2d::Vec2D;
-    let font = colrv1_font();
-    let mut layers = Vec::new();
-    assert!(font.get_color_layers(3, &mut layers, 0xff000000) > 0);
-    let mut saw_ellipse = false;
-    for layer in layers {
-        if layer.paint_type != ColorGlyphPaintType::RadialGradient {
-            continue;
-        }
-        let m = layer.radial_transform;
-        let center = m * Vec2D::new(0.0, 0.0);
-        catch_approx(center.x, layer.x1);
-        catch_approx(center.y, layer.y1);
-        let sx = Vec2D::new(m[0], m[1]).length();
-        let sy = Vec2D::new(m[2], m[3]).length();
-        saw_ellipse |= (sx - sy).abs() > 0.2 * sx.max(sy);
-    }
-    assert!(saw_ellipse);
-}
-
-#[test]
-fn raw_text_draws_colrv1_gradient_layers_with_gradient_shaders() {
-    let font = colrv1_font();
-    // The existing recording factory counts the same allocation calls as
-    // upstream's GradientCountingFactory, without introducing another factory.
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let mut raw_text = RawText::new(
-        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
-    );
-    raw_text.append("🎉😀", None, font, 32.0, -1.0, 0.0, 0xff000000);
-    let mut renderer = nuxie_render_api::NullRenderer::new();
-    raw_text.render(&mut renderer, None);
-    let stream = factory.borrow().stream();
-    assert_eq!(
-        stream.lines().filter(|line| line.starts_with("makeLinearGradient ")).count(),
-        1
-    );
-    assert_eq!(
-        stream.lines().filter(|line| line.starts_with("makeRadialGradient ")).count(),
-        1
-    );
 }

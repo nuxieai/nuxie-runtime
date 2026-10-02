@@ -5,10 +5,6 @@ pub struct DataValueColor {
     value: i32,
 }
 impl DataValueColor {
-    fn set_channel(&mut self, shift: i32, value: i32) {
-        let mask = 0xffu32 << shift;
-        self.value = ((self.value as u32 & !mask) | (((value as u32) & 0xff) << shift)) as i32;
-    }
     pub const TYPE_KEY: DataType = DataType::Color;
     pub const DEFAULT_VALUE: i32 = 0;
     pub fn new(value: i32) -> Self {
@@ -33,16 +29,16 @@ impl DataValueColor {
         self.value & 0xff
     }
     pub fn set_alpha(&mut self, value: i32) {
-        self.set_channel(24, value);
+        self.value = ((self.value as u32 & 0x00ff_ffff) | ((value as u32) << 24)) as i32
     }
     pub fn set_red(&mut self, value: i32) {
-        self.set_channel(16, value);
+        self.value = ((self.value as u32 & 0xff00_ffff) | ((value as u32) << 16)) as i32
     }
     pub fn set_green(&mut self, value: i32) {
-        self.set_channel(8, value);
+        self.value = ((self.value as u32 & 0xffff_00ff) | ((value as u32) << 8)) as i32
     }
     pub fn set_blue(&mut self, value: i32) {
-        self.set_channel(0, value);
+        self.value = ((self.value as u32 & 0xffff_ff00) | value as u32) as i32
     }
 }
 fn lerp_channel(a: u32, b: u32, mix: f32) -> u32 {

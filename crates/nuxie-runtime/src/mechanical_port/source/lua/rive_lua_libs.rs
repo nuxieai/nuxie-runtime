@@ -2978,8 +2978,6 @@ pub struct CPPRuntimeScriptingContext {
     pub context: ScriptingContextData,
     pub execution_time: Instant,
     timeout_ms: i32,
-    timed_depth: i32,
-    outer_interrupt: Option<fn(&mut LuaState, i32)>,
     #[cfg(feature = "tools")]
     console_callback: Option<ConsoleCallback>,
     #[cfg(feature = "tools")]
@@ -2994,8 +2992,6 @@ impl CPPRuntimeScriptingContext {
             context: ScriptingContextData::new(factory),
             execution_time: Instant::now(),
             timeout_ms: 200,
-            timed_depth: 0,
-            outer_interrupt: None,
             #[cfg(feature = "tools")]
             console_callback: None,
             #[cfg(feature = "tools")]
@@ -3034,29 +3030,13 @@ impl CPPRuntimeScriptingContext {
         if self.timeout_ms == 0 {
             return;
         }
-        let previous_depth = self.timed_depth;
-        self.timed_depth += 1;
-        if previous_depth == 0 {
-            self.outer_interrupt = state.interrupt_callback();
-        }
         state.set_interrupt_callback(interrupt_cpp);
         self.execution_time = Instant::now();
     }
 
     pub fn end_timed_execution(&mut self, state: &mut LuaState) {
-        if self.timeout_ms == 0 {
-            return;
-        }
-        self.timed_depth -= 1;
-        // Restore the host interrupt only after the outermost timed call.
-        if self.timed_depth == 0 {
-            if let Some(callback) = self.outer_interrupt {
-                state.set_interrupt_callback(callback);
-            } else {
-                state.clear_interrupt_callback();
-            }
-        } else {
-            state.set_interrupt_callback(interrupt_cpp);
+        if self.timeout_ms != 0 {
+            state.clear_interrupt_callback();
         }
     }
 

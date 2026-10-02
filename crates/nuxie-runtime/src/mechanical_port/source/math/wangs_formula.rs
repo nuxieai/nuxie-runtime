@@ -1,3 +1,4 @@
+use super::FloatContract;
 use super::mat2d::Mat2D;
 use super::simd::{self, Float2, Float4, GVec};
 use super::vec2d::Vec2D;
@@ -80,7 +81,12 @@ pub fn quadratic_pow4_points(
     precision: f32,
     vector_xform: VectorXform,
 ) -> f32 {
-    let mut v = GVec::splat(-2.0) * p1 + p0 + p2;
+    // The shipping ContourMeasure SIMD expression contracts -2*p1+p0;
+    // p2, its default transform, and squared-lane reduction stay separate.
+    let mut v = GVec::from_array([
+        (-2.0_f32).contracted_mul_add(p1[0], p0[0]),
+        (-2.0_f32).contracted_mul_add(p1[1], p0[1]),
+    ]) + p2;
     v = vector_xform.transform2(v);
     let vv = v * v;
     (vv[0] + vv[1]) * length_term_pow2::<2>(precision)
@@ -108,7 +114,12 @@ pub fn cubic_pow4(pts: &[Vec2D], precision: f32, vector_xform: VectorXform) -> f
     let p01 = GVec::from_array([pts[0].x, pts[0].y, pts[1].x, pts[1].y]);
     let p12 = GVec::from_array([pts[1].x, pts[1].y, pts[2].x, pts[2].y]);
     let p23 = GVec::from_array([pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
-    let mut v = GVec::splat(-2.0) * p12 + p01 + p23;
+    let mut v = GVec::from_array([
+        (-2.0_f32).contracted_mul_add(p12[0], p01[0]),
+        (-2.0_f32).contracted_mul_add(p12[1], p01[1]),
+        (-2.0_f32).contracted_mul_add(p12[2], p01[2]),
+        (-2.0_f32).contracted_mul_add(p12[3], p01[3]),
+    ]) + p23;
     v = vector_xform.transform4(v);
     let vv = v * v;
     std_max(vv[0] + vv[1], vv[2] + vv[3]) * length_term_pow2::<3>(precision)
@@ -182,4 +193,31 @@ pub fn conic(pts: &[Vec2D], tolerance: f32, w: f32, vector_xform: VectorXform) -
 
 pub fn conic_log2(pts: &[Vec2D], tolerance: f32, w: f32, vector_xform: VectorXform) -> i32 {
     nextlog4(conic_pow2(pts, tolerance, w, vector_xform))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subdivision_rounds_lane_products_before_reduction() {
+        let point = Vec2D::new(96.2807, 71.687096);
+        let squared_lanes = point.x * point.x + point.y * point.y;
+        let quadratic_points = [Vec2D::new(0.0, 0.0), Vec2D::new(0.0, 0.0), point];
+        let cubic_points = [
+            point,
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(0.0, 0.0),
+        ];
+
+        assert_eq!(
+            quadratic_pow4(&quadratic_points, 1.0, VectorXform::default()).to_bits(),
+            (squared_lanes * (1.0 / 16.0)).to_bits(),
+        );
+        assert_eq!(
+            cubic_pow4(&cubic_points, 1.0, VectorXform::default()).to_bits(),
+            (squared_lanes * (9.0 / 16.0)).to_bits(),
+        );
+    }
 }

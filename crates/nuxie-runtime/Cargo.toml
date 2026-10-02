@@ -7,6 +7,10 @@ repository.workspace = true
 
 [features]
 testing = [] # Upstream TESTING observations; test harnesses only.
+# Mirrors upstream --no_ffp_contract for the strict unit/Silver lane.
+# Shipping consumers, including default-features=false hosts, keep the
+# production contraction boundaries unless this feature is explicitly selected.
+strict-fp = []
 tools = []
 threading = []
 # Mirrors upstream WITH_RIVE_TEST_SIGNATURE, independently of WITH_RIVE_TOOLS.

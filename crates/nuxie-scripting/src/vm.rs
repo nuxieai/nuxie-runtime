@@ -5217,6 +5217,42 @@ mod context_init_tests {
     }
 
     #[test]
+    fn host_interrupt_survives_nested_protected_calls_and_caught_errors() {
+        let vm = ScriptVm::new();
+        let interrupts = Rc::new(Cell::new(0_u32));
+        let observed = interrupts.clone();
+        vm.lua.set_interrupt(move |_| {
+            observed.set(observed.get() + 1);
+            Ok(VmState::Continue)
+        });
+        let nested = vm.lua.create_function(|lua, fail: bool| {
+            let function: Function = lua.globals().get("nestedBody")?;
+            function.protected_call::<()>(fail)
+        }).unwrap();
+        vm.lua.globals().set("nestedHostCall", nested).unwrap();
+        vm.eval::<()>(r#"
+            function nestedBody(fail)
+                if fail then error("expected nested failure") end
+            end
+            function boundedWorkAfterNestedCall(fail)
+                local ok = pcall(nestedHostCall, fail)
+                assert(ok ~= fail)
+                local total = 0
+                for index = 1, 1000 do total += index end
+                return total
+            end
+        "#).unwrap();
+        for fail in [false, true] {
+            let before = interrupts.get();
+            let total: f64 = vm.call_global("boundedWorkAfterNestedCall", fail).unwrap();
+            assert_eq!(total, 500500.0);
+            // The loop executes after the nested protected return, including
+            // an error swallowed by pcall; the host callback must stay armed.
+            assert!(interrupts.get() > before + 100);
+        }
+    }
+
+    #[test]
     fn trusted_callbacks_do_not_accumulate_safepoints_without_an_explicit_host_cycle() {
         let vm = ScriptVm::new_with_execution_limits(
             ScriptExecutionLimits::new().with_max_interrupts_per_callback(80_000),

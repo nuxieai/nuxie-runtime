@@ -6230,8 +6230,15 @@ mod update_receiver_tests {
                 || arena.insert(Artboard::default()),
                 RuntimeArtboardInstanceHandle::core_handle,
             );
+            let mut context = ArtboardObjectContext {
+                arena: root.retain_arena().unwrap(),
+                objects: vec![Some(root.clone())],
+            };
             let dirty = root.artboard_dirty_handle().unwrap();
             root.with_mut(|owner| {
+                let component = owner.as_component_mut().unwrap();
+                assert_eq!(component.on_added_dirty(&mut context), StatusCode::Ok);
+                assert_eq!(component.dependency_root().as_ref(), Some(&root));
                 owner
                     .as_component_mut()
                     .unwrap()
@@ -6274,28 +6281,39 @@ mod update_receiver_tests {
 
     #[test]
     fn root_collapse_publishes_the_same_dirt_seen_by_scheduling() {
-        let mut artboard = Artboard::default();
-        let dirty = artboard.dirty_handle();
-        assert_eq!(
-            artboard.as_component().unwrap().dirt(),
-            ComponentDirt::FILTHY
-        );
-        artboard
-            .as_component_mut()
-            .unwrap()
-            .set_dirt(ComponentDirt::NONE);
-        assert!(artboard.component_collapse(true));
-        assert_eq!(
-            artboard.as_component().unwrap().dirt(),
-            ComponentDirt::COLLAPSED | ComponentDirt::COMPONENTS
-        );
-        assert!(dirty.has_component_dirt());
-        assert!(!artboard.component_collapse(true));
-        assert!(artboard.component_collapse(false));
-        assert_eq!(
-            artboard.as_component().unwrap().dirt(),
-            ComponentDirt::COMPONENTS
-        );
+        let arena = CoreArena::default();
+        let root = arena.insert(Artboard::default());
+        let mut context = ArtboardObjectContext {
+            arena: arena.clone(),
+            objects: vec![Some(root.clone())],
+        };
+        let dirty = root.artboard_dirty_handle().unwrap();
+        root.with_downcast_mut::<Artboard, _>(|artboard| {
+            let component = artboard.as_component_mut().unwrap();
+            assert_eq!(component.on_added_dirty(&mut context), StatusCode::Ok);
+            assert_eq!(component.dependency_root().as_ref(), Some(&root));
+            assert_eq!(
+                artboard.as_component().unwrap().dirt(),
+                ComponentDirt::FILTHY
+            );
+            artboard
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE);
+            assert!(artboard.component_collapse(true));
+            assert_eq!(
+                artboard.as_component().unwrap().dirt(),
+                ComponentDirt::COLLAPSED | ComponentDirt::COMPONENTS
+            );
+            assert!(dirty.has_component_dirt());
+            assert!(!artboard.component_collapse(true));
+            assert!(artboard.component_collapse(false));
+            assert_eq!(
+                artboard.as_component().unwrap().dirt(),
+                ComponentDirt::COMPONENTS
+            );
+        })
+        .unwrap();
     }
 
     #[test]

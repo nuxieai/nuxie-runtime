@@ -42,7 +42,40 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::rc::{Rc, Weak as RcWeak};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
+
+#[derive(Clone, Debug)]
+pub struct GpuPassTiming {
+    pub label: String,
+    pub milliseconds: f64,
+}
+
+pub const kGpuProfileReportFrames: u32 = 120;
+
+fn profile_env_enabled() -> bool {
+    context_env_enabled("RIVE_ORE_GPU_PROFILE")
+}
+
+fn context_env_enabled(name: &str) -> bool {
+    #[cfg(feature = "no-getenv")]
+    {
+        let _ = name;
+        false
+    }
+    #[cfg(not(feature = "no-getenv"))]
+    {
+        std::env::var_os(name).is_some()
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct GpuProfileState {
+    pub(crate) totals: HashMap<String, f64>,
+    pub(crate) frames: u32,
+}
+
+pub use crate::mechanical_port::source::renderer::src::ore::ore_context_cpp::gpuPassLabel;
 
 use super::super::gpu_resource_hpp::{
     AnyResourceHandle, GPUResourceManager, ResourceDomain, ResourceFinalReleaseDrain,
@@ -197,6 +230,8 @@ impl OpenRenderPassRegistry {
 /// Cross-cutting Context state. Resources receive only a weak error sink
 /// plus cloned manager; recorded passes use the separate weak registry.
 pub struct ContextState {
+    gpuProfiling: AtomicBool,
+    pub(crate) gpuProfile: Mutex<GpuProfileState>,
     // Rust safety sidecars. Identity remains tied to this source Context;
     // a concrete backend may clone only the drain into its execution root so
     // destruction can finish after the ORE Context has gone away.
@@ -220,6 +255,8 @@ impl ContextState {
         domainFinalReleases: ResourceFinalReleaseDrain,
     ) -> Arc<Self> {
         Arc::new(Self {
+            gpuProfiling: AtomicBool::new(profile_env_enabled()),
+            gpuProfile: Mutex::new(GpuProfileState::default()),
             domainIdentity: Arc::new(()),
             domainFinalReleases,
             manager,
@@ -239,6 +276,21 @@ impl ContextState {
             .features
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub fn gpuProfiling(&self) -> bool {
+        self.gpuProfiling.load(Ordering::Relaxed)
+    }
+
+    pub fn setGpuProfiling(&self, on: bool) {
+        self.gpuProfiling.store(on, Ordering::Relaxed);
+    }
+
+    pub fn clearGpuPassTimings(&self) {
+        *self
+            .gpuProfile
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = GpuProfileState::default();
     }
 
     pub fn manager(&self) -> Option<GPUResourceManager> {
@@ -276,6 +328,15 @@ impl BufferErrorSink for ContextState {
 
 pub trait ContextApi {
     fn contextBase(&self) -> &Context;
+    fn gpuProfiling(&self) -> bool {
+        self.contextBase().gpuProfiling()
+    }
+    fn setGpuProfiling(&self, on: bool) {
+        self.contextBase().setGpuProfiling(on);
+    }
+    fn publishGpuPassTimings(&self, rows: &[GpuPassTiming]) {
+        self.contextBase().state.publishGpuPassTimings(rows);
+    }
     unsafe fn wrapRenderTarget(&mut self, _target: RenderTargetInfo) -> Option<AnyResourceHandle> {
         None
     }
@@ -459,6 +520,21 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn clearGpuPassTimings(&self) {
+        self.state.clearGpuPassTimings();
+    }
+    pub fn gpuProfiling(&self) -> bool {
+        self.state.gpuProfiling()
+    }
+    pub fn setGpuProfiling(&self, on: bool) {
+        self.state.setGpuProfiling(on);
+    }
+    pub fn gpuPassLabel(desc: &RenderPassDesc<'_>) -> String {
+        gpuPassLabel(desc)
+    }
+    pub fn publishGpuPassTimings(&self, rows: &[GpuPassTiming]) {
+        self.state.publishGpuPassTimings(rows);
+    }
     // A host forwarding owner needs a stable base reference without escaping
     // its native context's RefCell borrow. This projects the same state, not
     // a second backend or independent open-pass registry.
@@ -653,7 +729,7 @@ impl Context {
             state: ContextState::newWithFinalReleaseDrain(features, manager, domainFinalReleases),
             openRenderPasses: Rc::new(OpenRenderPassRegistry::default()),
             ownsOpenRenderPasses: true,
-            deferredRecording: Rc::new(Cell::new(std::env::var_os("RIVE_ORE_DEFER").is_some())),
+            deferredRecording: Rc::new(Cell::new(context_env_enabled("RIVE_ORE_DEFER"))),
             renderTarget: Rc::new(RefCell::new(None)),
             pendingFrame: Rc::new(RefCell::new(
                 crate::ore_cmd::ore_command_buffer::OreCommandBuffer::default(),

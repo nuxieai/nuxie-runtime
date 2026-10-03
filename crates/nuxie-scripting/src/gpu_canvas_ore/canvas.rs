@@ -1,9 +1,9 @@
 //! ScriptedGPUCanvas backing and render-pass creation from lua_gpu.cpp.
 use super::pass::Pass;
 use super::*;
-use luaur_rt::FromLua;
 use crate::vm::lua_canvas::allocate_script_render_canvas;
 use crate::vm::lua_image::ScriptedImage;
+use luaur_rt::FromLua;
 use nuxie_render_api::{PersistentFactoryContext, RenderCanvasHandle};
 
 pub(crate) struct Canvas {
@@ -222,6 +222,8 @@ pub(super) fn begin_pass(
 ) -> Result<AnyUserData> {
     let context = check_begin_pass(lua, type_name)?;
     let mut dropped = false;
+    // lua_isstring accepts strings and numbers, and ignores other values.
+    let label = string(table, "label")?;
     let mut sample_count = None;
     let mut sample_label = String::new();
     let mut record_sample = |samples: u32, label: &str| -> Result<()> {
@@ -340,10 +342,12 @@ pub(super) fn begin_pass(
             sample_count: 1,
             pipeline_set: false,
             draw_call_count: 0,
+            label: String::new(),
         });
     }
     depth_desc.view = depth.as_ref().map(|view| &view.resource);
     let mut desc = RenderPassDesc {
+        label: label.as_deref(),
         colorCount: colors.len() as u32,
         depthStencil: depth_desc,
         ..RenderPassDesc::default()
@@ -374,5 +378,6 @@ pub(super) fn begin_pass(
         sample_count: sample_count.unwrap_or(1).max(1),
         pipeline_set: false,
         draw_call_count: 0,
+        label: label.unwrap_or_default(),
     })
 }

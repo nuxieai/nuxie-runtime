@@ -71,6 +71,7 @@ fn update_buffer(buffer: &AnyResourceHandle) {
 #[derive(Default)]
 struct LiveLog {
     ops: Vec<Op>,
+    labels: Vec<String>,
     open: usize,
     max_open: usize,
 }
@@ -197,11 +198,12 @@ impl ContextApi for LiveStubContext {
     }
     fn beginRenderPass(
         &mut self,
-        _: &RenderPassDesc<'_>,
+        desc: &RenderPassDesc<'_>,
         _: Option<&mut String>,
     ) -> Option<Box<dyn RenderPassApi>> {
         {
             let mut log = self.log.borrow_mut();
+            log.labels.push(desc.label.unwrap_or("").to_owned());
             log.ops.push(begin());
             log.open += 1;
             log.max_open = log.max_open.max(log.open);
@@ -553,4 +555,26 @@ fn frame_replay_backends_settle_nested_passes_in_pending_frame() {
         ]
     );
     assert_eq!(log.borrow().max_open, 1);
+}
+
+#[test]
+fn a_pass_label_survives_the_deferred_stream() {
+    let ctx = Rc::new(RefCell::new(LiveStubContext::new()));
+    ctx.borrow_mut().frame_replay = true;
+    ctx.borrow().setDeferredRecording(true);
+    let log = ctx.borrow().log.clone();
+    let labeled = RenderPassDesc {
+        label: Some("shadow"),
+        ..Default::default()
+    };
+    beginRecordedRenderPass(ctx.clone(), &labeled)
+        .unwrap()
+        .finish();
+    beginRecordedRenderPass(ctx.clone(), &RenderPassDesc::default())
+        .unwrap()
+        .finish();
+    assert!(log.borrow().labels.is_empty());
+    let pending = ctx.borrow().pendingFrame();
+    replayCommandBuffer(&mut *ctx.borrow_mut(), &pending.borrow(), None);
+    assert_eq!(log.borrow().labels, ["shadow", ""]);
 }

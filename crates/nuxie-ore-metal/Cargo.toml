@@ -16,6 +16,7 @@ default = ["metal-backend"]
 metal-backend = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-metal"]
 with-rive-tools = []
 tools = ["with-rive-tools"]
+no-getenv = []
 track-rive-shader-id = []
 rive-objc-exceptions = ["metal-backend", "objc2/exception"]
 

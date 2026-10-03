@@ -107,12 +107,13 @@ fn blob<'a>(reader: &OreCommandReader<'a>, r: BlobRef) -> Option<&'a [u8]> {
         Some(reader.blob_at(r.offset, r.size))
     }
 }
-fn cstr<'a>(reader: &OreCommandReader<'a>, r: BlobRef) -> Option<&'a str> {
+pub fn blobCString<'a>(reader: &OreCommandReader<'a>, r: BlobRef) -> Option<&'a str> {
     blob(reader, r).map(|b| {
         std::str::from_utf8(b.split(|v| *v == 0).next().unwrap())
             .expect("recorded C string is UTF-8")
     })
 }
+use blobCString as cstr;
 pub fn decodePods<T: WirePod>(bytes: &[u8], count: u32) -> Vec<T> {
     (0..count as usize)
         .map(|i| T::decode(&bytes[i * T::SIZE..(i + 1) * T::SIZE]))

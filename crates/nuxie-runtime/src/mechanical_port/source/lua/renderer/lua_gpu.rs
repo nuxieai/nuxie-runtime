@@ -16,8 +16,8 @@ use crate::mechanical_port::source::{
     },
 };
 
-use std::collections::BTreeSet;
 use nuxie_ore_metal::{script_guards::*, types::kMaxVertexBufferSlots};
+use std::collections::BTreeSet;
 
 fn buffer_usage_from_string(state: &mut LuaState, value: &str) -> BufferUsage {
     match value {
@@ -1733,6 +1733,8 @@ pub fn gpu_canvas_begin_render_pass(state: &mut LuaState) -> i32 {
     }
     state.check_type(2, LuaType::Table);
     let mut desc = RenderPassDesc::default();
+    let label = optional_string_field(state, 2, "label");
+    desc.label = label.clone();
     let mut pass_sample_count = None;
     let mut sample_count_source = String::new();
     let mut record_sample_count = |state: &mut LuaState, count: u32, label: &str| {
@@ -1884,7 +1886,7 @@ pub fn gpu_canvas_begin_render_pass(state: &mut LuaState) -> i32 {
         finished: false,
         pipeline_set: false,
         sample_count: pass_sample_count.unwrap_or(1).max(1),
-        label: String::new(),
+        label: label.unwrap_or_default(),
         draw_call_count: 0,
     });
     1
@@ -2307,10 +2309,7 @@ pub fn rive_lua_enter_script_call_gpu_scope(state: &mut LuaState) -> ScriptCallG
     scope
 }
 
-fn close_orphan_render_pass(
-    state: &mut LuaState,
-    token: u64,
-) {
+fn close_orphan_render_pass(state: &mut LuaState, token: u64) {
     let Some(context) = state.thread_data_optional::<dyn ScriptingContext>() else {
         return;
     };

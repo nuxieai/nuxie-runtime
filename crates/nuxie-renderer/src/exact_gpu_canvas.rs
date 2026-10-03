@@ -13,14 +13,14 @@ use std::sync::{Arc, Weak};
 use nuxie_ore_metal::context::{ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BlendFactor, BlendOp, BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment,
-    ColorTargetState, ColorWriteMask, CompareFunction, CullMode, DepthStencilAttachment,
-    DepthStencilState, Filter, IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology,
-    RenderPassDesc, SampEntry, SampleType, SamplerDesc, StageVisibility, StencilFaceState,
-    StencilOp, StoreOp, TexEntry, TextureAspect, TextureDataDesc, TextureDesc, TextureFormat,
-    TextureType, TextureViewDesc, TextureViewDimension, UBOEntry, VertexAttribute,
-    VertexBufferLayout, VertexFormat, VertexStepMode, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BlendFactor, BlendOp,
+    BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment, ColorTargetState,
+    ColorWriteMask, CompareFunction, CullMode, DepthStencilAttachment, DepthStencilState, Filter,
+    IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology, RenderPassDesc, SampEntry, SampleType,
+    SamplerDesc, StageVisibility, StencilFaceState, StencilOp, StoreOp, TexEntry, TextureAspect,
+    TextureDataDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
+    TextureViewDimension, UBOEntry, VertexAttribute, VertexBufferLayout, VertexFormat,
+    VertexStepMode, WrapMode, kMaxBindGroups,
 };
 use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment,
@@ -718,7 +718,9 @@ fn make_layouts(
     vertex: Option<&nuxie_ore_metal::shader_module::ShaderModule>,
     fragment: Option<&nuxie_ore_metal::shader_module::ShaderModule>,
 ) -> Result<Vec<Option<AnyResourceHandle>>, GpuCanvasError> {
-    use nuxie_ore_metal::bind_group_layout::{bindingMapForStages, makeBindGroupLayoutFromBindingMap};
+    use nuxie_ore_metal::bind_group_layout::{
+        bindingMapForStages, makeBindGroupLayoutFromBindingMap,
+    };
     let bindings = bindingMapForStages(vertex, fragment);
     let Some(max_group) = (0..bindings.size()).map(|i| bindings.at(i).group).max() else {
         return Ok(Vec::new());
@@ -732,9 +734,14 @@ fn make_layouts(
             continue;
         }
         let layout = makeBindGroupLayoutFromBindingMap(
-                context, &bindings, u32::from(group), &[], vertex, fragment,
-            )
-            .ok_or_else(|| rejected(context_error(context, "create bind-group layout")))?;
+            context,
+            &bindings,
+            u32::from(group),
+            &[],
+            vertex,
+            fragment,
+        )
+        .ok_or_else(|| rejected(context_error(context, "create bind-group layout")))?;
         layouts[usize::from(group)] = Some(layout);
     }
     Ok(layouts)
@@ -877,7 +884,8 @@ fn make_pipeline_resources(
         let mut samp = Vec::new();
         // The layout is the shared builder's merged stage declaration. Use
         // that same declaration for resources, including fragment-only pairs.
-        let layout_base = layout.bindGroupLayoutBase()
+        let layout_base = layout
+            .bindGroupLayoutBase()
             .ok_or_else(|| rejected("bind-group layout has no source layout base"))?;
         for binding in layout_base.entries() {
             let identity = (group_index_u32, u32::from(binding.binding));
@@ -917,8 +925,7 @@ fn make_pipeline_resources(
                         view: Some(view),
                     });
                 }
-                BindingKind::sampler
-                | BindingKind::comparisonSampler => {
+                BindingKind::sampler | BindingKind::comparisonSampler => {
                     let sampler = sampler_resources.get(&identity).ok_or_else(|| {
                         rejected(format!(
                             "sampler group {} binding {} is missing",
@@ -1037,7 +1044,7 @@ fn execute_pass(
                 colorCount: u32::try_from(authored.color_attachments.len())
                     .map_err(|_| rejected("color attachment count exceeds u32"))?,
                 depthStencil: depth,
-                label: Some("authored GPU-canvas render pass"),
+                label: authored.label.as_deref(),
             },
             Some(&mut pass_error),
         )
@@ -1309,6 +1316,7 @@ fn materialize_render_passes(plan: &GpuCanvasPlan) -> Vec<GpuCanvasRenderPass> {
         return plan.render_passes.clone();
     }
     vec![GpuCanvasRenderPass {
+        label: None,
         color_attachments: vec![GpuCanvasColorAttachment {
             view: GpuCanvasAttachmentView::Canvas,
             resolve_target: None,

@@ -796,6 +796,7 @@ impl UserData for GpuCanvas {
                 &["color", "depthStencil", "label"],
                 "GPU render-pass descriptor",
             )?;
+            let label = ore::string(&descriptor, "label")?;
             let mut sample_count = None;
             let mut color_attachments = Vec::new();
             if let Some(colors) = descriptor.get::<Option<Table>>("color")? {
@@ -911,6 +912,7 @@ impl UserData for GpuCanvas {
                     .ok_or_else(|| Error::runtime("GPU render-pass count overflow"))?;
             }
             lua.create_userdata(GpuRenderPass {
+                label,
                 state: Rc::clone(&this.state),
                 color_attachments,
                 depth_stencil_attachment,
@@ -1428,6 +1430,7 @@ enum GpuDrawCall {
 
 #[derive(Debug)]
 struct GpuRenderPass {
+    label: Option<String>,
     state: Rc<RefCell<GpuCanvasState>>,
     color_attachments: Vec<GpuCanvasColorAttachment>,
     depth_stencil_attachment: Option<GpuCanvasDepthStencilAttachment>,
@@ -1721,6 +1724,7 @@ impl UserData for GpuRenderPass {
                     ));
                 }
                 let render_pass = GpuCanvasRenderPass {
+                    label: this.label.clone(),
                     color_attachments: this.color_attachments.clone(),
                     depth_stencil_attachment: this.depth_stencil_attachment.clone(),
                     draws: Vec::new(),
@@ -1924,6 +1928,7 @@ impl UserData for GpuRenderPass {
                         format: format.clone(),
                     });
             let render_pass = GpuCanvasRenderPass {
+                label: this.label.clone(),
                 color_attachments: this.color_attachments.clone(),
                 depth_stencil_attachment: this.depth_stencil_attachment.clone(),
                 draws,

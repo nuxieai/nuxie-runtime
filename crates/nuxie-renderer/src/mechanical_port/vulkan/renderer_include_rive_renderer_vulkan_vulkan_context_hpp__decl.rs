@@ -7,7 +7,10 @@
 use ash::vk;
 use nuxie_ore_metal::gpu_resource::{GPUResourceManager, GPUResourceManagerOwner};
 use std::mem::ManuallyDrop;
-use std::sync::{Arc, atomic::{AtomicBool, AtomicU32, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU32, Ordering},
+};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,31 +52,80 @@ impl Default for VulkanFeatures {
     }
 }
 
-pub(crate) const RIVE_VULKAN_INSTANCE_COMMANDS: [&str; 4] = [
+pub(crate) const RIVE_VULKAN_INSTANCE_COMMANDS: [&str; 5] = [
     "GetDeviceProcAddr",
     "GetPhysicalDeviceFormatProperties",
     "GetPhysicalDeviceProperties",
+    "GetPhysicalDeviceQueueFamilyProperties",
     "GetPhysicalDeviceFeatures",
 ];
 
-pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 60] = [
-    "AllocateCommandBuffers", "AllocateDescriptorSets", "BeginCommandBuffer",
-    "CmdBeginRenderPass", "CmdBindDescriptorSets", "CmdBindIndexBuffer",
-    "CmdBindPipeline", "CmdBindVertexBuffers", "CmdBlitImage", "CmdClearColorImage",
-    "CmdCopyBufferToImage", "CmdDraw", "CmdDrawIndexed", "CmdEndRenderPass",
-    "CmdFillBuffer", "CmdNextSubpass", "CmdPipelineBarrier", "CmdPushConstants", "CmdSetBlendConstants",
-    "CmdSetColorWriteEnableEXT", "CmdSetCullMode", "CmdSetDepthWriteEnable",
-    "CmdSetScissor", "CmdSetStencilCompareMask", "CmdSetStencilOp",
-    "CmdSetStencilReference", "CmdSetStencilWriteMask", "CmdSetViewport",
-    "CreateCommandPool", "CreateDescriptorPool", "CreateDescriptorSetLayout",
-    "CreateFramebuffer", "CreateFence", "CreateGraphicsPipelines", "CreateImageView",
-    "CreatePipelineLayout", "CreateRenderPass", "CreateSampler", "CreateShaderModule",
-    "DestroyCommandPool", "DestroyDescriptorPool", "DestroyDescriptorSetLayout",
-    "DestroyFence", "DestroyFramebuffer", "DestroyImageView", "DestroyPipeline",
-    "DestroyPipelineLayout", "DestroyRenderPass", "DestroySampler", "DestroyShaderModule",
-    "EndCommandBuffer", "FreeCommandBuffers", "FreeDescriptorSets", "QueueSubmit",
-    "QueueWaitIdle", "ResetCommandBuffer", "ResetDescriptorPool", "ResetFences",
-    "UpdateDescriptorSets", "WaitForFences",
+pub(crate) const RIVE_VULKAN_DEVICE_COMMANDS: [&str; 65] = [
+    "AllocateCommandBuffers",
+    "AllocateDescriptorSets",
+    "BeginCommandBuffer",
+    "CmdBeginRenderPass",
+    "CmdBindDescriptorSets",
+    "CmdBindIndexBuffer",
+    "CmdBindPipeline",
+    "CmdBindVertexBuffers",
+    "CmdBlitImage",
+    "CmdClearColorImage",
+    "CmdCopyBufferToImage",
+    "CmdDraw",
+    "CmdDrawIndexed",
+    "CmdEndRenderPass",
+    "CmdFillBuffer",
+    "CmdNextSubpass",
+    "CmdPipelineBarrier",
+    "CmdPushConstants",
+    "CmdResetQueryPool",
+    "CmdSetBlendConstants",
+    "CmdSetColorWriteEnableEXT",
+    "CmdSetCullMode",
+    "CmdSetDepthWriteEnable",
+    "CmdSetScissor",
+    "CmdSetStencilCompareMask",
+    "CmdSetStencilOp",
+    "CmdSetStencilReference",
+    "CmdSetStencilWriteMask",
+    "CmdSetViewport",
+    "CmdWriteTimestamp",
+    "CreateCommandPool",
+    "CreateDescriptorPool",
+    "CreateDescriptorSetLayout",
+    "CreateFramebuffer",
+    "CreateFence",
+    "CreateGraphicsPipelines",
+    "CreateImageView",
+    "CreatePipelineLayout",
+    "CreateQueryPool",
+    "CreateRenderPass",
+    "CreateSampler",
+    "CreateShaderModule",
+    "DestroyCommandPool",
+    "DestroyDescriptorPool",
+    "DestroyDescriptorSetLayout",
+    "DestroyFence",
+    "DestroyFramebuffer",
+    "DestroyImageView",
+    "DestroyPipeline",
+    "DestroyPipelineLayout",
+    "DestroyQueryPool",
+    "DestroyRenderPass",
+    "DestroySampler",
+    "DestroyShaderModule",
+    "EndCommandBuffer",
+    "FreeCommandBuffers",
+    "FreeDescriptorSets",
+    "GetQueryPoolResults",
+    "QueueSubmit",
+    "QueueWaitIdle",
+    "ResetCommandBuffer",
+    "ResetDescriptorPool",
+    "ResetFences",
+    "UpdateDescriptorSets",
+    "WaitForFences",
 ];
 
 pub(crate) struct VulkanContext {
@@ -81,8 +133,11 @@ pub(crate) struct VulkanContext {
     pub(crate) physicalDevice: vk::PhysicalDevice,
     pub(crate) device: vk::Device,
     pub(crate) GetDeviceProcAddr: Option<vk::PFN_vkGetDeviceProcAddr>,
-    pub(crate) GetPhysicalDeviceFormatProperties: Option<vk::PFN_vkGetPhysicalDeviceFormatProperties>,
+    pub(crate) GetPhysicalDeviceFormatProperties:
+        Option<vk::PFN_vkGetPhysicalDeviceFormatProperties>,
     pub(crate) GetPhysicalDeviceProperties: Option<vk::PFN_vkGetPhysicalDeviceProperties>,
+    pub(crate) GetPhysicalDeviceQueueFamilyProperties:
+        Option<vk::PFN_vkGetPhysicalDeviceQueueFamilyProperties>,
     pub(crate) GetPhysicalDeviceFeatures: Option<vk::PFN_vkGetPhysicalDeviceFeatures>,
     pub(crate) SetDebugUtilsObjectNameEXT: Option<vk::PFN_vkSetDebugUtilsObjectNameEXT>,
     pub(crate) AllocateCommandBuffers: Option<vk::PFN_vkAllocateCommandBuffers>,
@@ -103,6 +158,7 @@ pub(crate) struct VulkanContext {
     pub(crate) CmdNextSubpass: Option<vk::PFN_vkCmdNextSubpass>,
     pub(crate) CmdPipelineBarrier: Option<vk::PFN_vkCmdPipelineBarrier>,
     pub(crate) CmdPushConstants: Option<vk::PFN_vkCmdPushConstants>,
+    pub(crate) CmdResetQueryPool: Option<vk::PFN_vkCmdResetQueryPool>,
     pub(crate) CmdSetBlendConstants: Option<vk::PFN_vkCmdSetBlendConstants>,
     pub(crate) CmdSetColorWriteEnableEXT: Option<vk::PFN_vkCmdSetColorWriteEnableEXT>,
     pub(crate) CmdSetCullMode: Option<vk::PFN_vkCmdSetCullMode>,
@@ -113,6 +169,7 @@ pub(crate) struct VulkanContext {
     pub(crate) CmdSetStencilReference: Option<vk::PFN_vkCmdSetStencilReference>,
     pub(crate) CmdSetStencilWriteMask: Option<vk::PFN_vkCmdSetStencilWriteMask>,
     pub(crate) CmdSetViewport: Option<vk::PFN_vkCmdSetViewport>,
+    pub(crate) CmdWriteTimestamp: Option<vk::PFN_vkCmdWriteTimestamp>,
     pub(crate) CreateCommandPool: Option<vk::PFN_vkCreateCommandPool>,
     pub(crate) CreateDescriptorPool: Option<vk::PFN_vkCreateDescriptorPool>,
     pub(crate) CreateDescriptorSetLayout: Option<vk::PFN_vkCreateDescriptorSetLayout>,
@@ -121,6 +178,7 @@ pub(crate) struct VulkanContext {
     pub(crate) CreateGraphicsPipelines: Option<vk::PFN_vkCreateGraphicsPipelines>,
     pub(crate) CreateImageView: Option<vk::PFN_vkCreateImageView>,
     pub(crate) CreatePipelineLayout: Option<vk::PFN_vkCreatePipelineLayout>,
+    pub(crate) CreateQueryPool: Option<vk::PFN_vkCreateQueryPool>,
     pub(crate) CreateRenderPass: Option<vk::PFN_vkCreateRenderPass>,
     pub(crate) CreateSampler: Option<vk::PFN_vkCreateSampler>,
     pub(crate) CreateShaderModule: Option<vk::PFN_vkCreateShaderModule>,
@@ -132,12 +190,14 @@ pub(crate) struct VulkanContext {
     pub(crate) DestroyImageView: Option<vk::PFN_vkDestroyImageView>,
     pub(crate) DestroyPipeline: Option<vk::PFN_vkDestroyPipeline>,
     pub(crate) DestroyPipelineLayout: Option<vk::PFN_vkDestroyPipelineLayout>,
+    pub(crate) DestroyQueryPool: Option<vk::PFN_vkDestroyQueryPool>,
     pub(crate) DestroyRenderPass: Option<vk::PFN_vkDestroyRenderPass>,
     pub(crate) DestroySampler: Option<vk::PFN_vkDestroySampler>,
     pub(crate) DestroyShaderModule: Option<vk::PFN_vkDestroyShaderModule>,
     pub(crate) EndCommandBuffer: Option<vk::PFN_vkEndCommandBuffer>,
     pub(crate) FreeCommandBuffers: Option<vk::PFN_vkFreeCommandBuffers>,
     pub(crate) FreeDescriptorSets: Option<vk::PFN_vkFreeDescriptorSets>,
+    pub(crate) GetQueryPoolResults: Option<vk::PFN_vkGetQueryPoolResults>,
     pub(crate) QueueSubmit: Option<vk::PFN_vkQueueSubmit>,
     pub(crate) QueueWaitIdle: Option<vk::PFN_vkQueueWaitIdle>,
     pub(crate) ResetCommandBuffer: Option<vk::PFN_vkResetCommandBuffer>,
@@ -160,12 +220,22 @@ pub(crate) struct VulkanContext {
 }
 
 impl VulkanContext {
-    pub(crate) fn allocationFailureCount(&self) -> u32 { self.m_allocationFailureCount.load(Ordering::Relaxed) }
-    pub(crate) fn reportAllocationFailure(&self) {
-        self.m_allocationFailureCount.fetch_add(1, Ordering::Relaxed);
-        if self.m_abortsOnAllocationFailure.load(Ordering::Relaxed) { std::process::abort(); }
+    pub(crate) fn allocationFailureCount(&self) -> u32 {
+        self.m_allocationFailureCount.load(Ordering::Relaxed)
     }
-    pub(crate) fn createHandle<T: vk::Handle>(&self, result: Result<T, vk::Result>, file: &str, line: u32) -> T {
+    pub(crate) fn reportAllocationFailure(&self) {
+        self.m_allocationFailureCount
+            .fetch_add(1, Ordering::Relaxed);
+        if self.m_abortsOnAllocationFailure.load(Ordering::Relaxed) {
+            std::process::abort();
+        }
+    }
+    pub(crate) fn createHandle<T: vk::Handle>(
+        &self,
+        result: Result<T, vk::Result>,
+        file: &str,
+        line: u32,
+    ) -> T {
         match result {
             Ok(handle) => handle,
             Err(error) => {
@@ -175,11 +245,21 @@ impl VulkanContext {
             }
         }
     }
-    pub(crate) fn manager(&self) -> GPUResourceManager { self.m_managerOwner.manager() }
-    pub(crate) fn allocator(&self) -> &vk_mem::Allocator { &self.m_vmaAllocator }
-    pub(crate) fn supportsD24S8(&self) -> bool { self.m_supportsD24S8 }
-    pub(crate) fn ashDevice(&self) -> &ash::Device { &self.m_ashDevice }
-    pub(crate) fn ashInstance(&self) -> &ash::Instance { &self.m_ashInstance }
+    pub(crate) fn manager(&self) -> GPUResourceManager {
+        self.m_managerOwner.manager()
+    }
+    pub(crate) fn allocator(&self) -> &vk_mem::Allocator {
+        &self.m_vmaAllocator
+    }
+    pub(crate) fn supportsD24S8(&self) -> bool {
+        self.m_supportsD24S8
+    }
+    pub(crate) fn ashDevice(&self) -> &ash::Device {
+        &self.m_ashDevice
+    }
+    pub(crate) fn ashInstance(&self) -> &ash::Instance {
+        &self.m_ashInstance
+    }
 }
 
 pub(crate) struct AllocationFailureScope {
@@ -189,14 +269,28 @@ pub(crate) struct AllocationFailureScope {
 impl AllocationFailureScope {
     pub(crate) fn new(vk: Arc<VulkanContext>) -> Self {
         let initial = vk.allocationFailureCount();
-        assert!(vk.m_abortsOnAllocationFailure.swap(false, Ordering::Relaxed), "allocation failure scopes cannot nest");
-        Self { m_vk: vk, m_initialFailureCount: initial }
+        assert!(
+            vk.m_abortsOnAllocationFailure
+                .swap(false, Ordering::Relaxed),
+            "allocation failure scopes cannot nest"
+        );
+        Self {
+            m_vk: vk,
+            m_initialFailureCount: initial,
+        }
     }
-    pub(crate) fn anyFailed(&self) -> bool { self.m_vk.allocationFailureCount() != self.m_initialFailureCount }
+    pub(crate) fn anyFailed(&self) -> bool {
+        self.m_vk.allocationFailureCount() != self.m_initialFailureCount
+    }
 }
 impl Drop for AllocationFailureScope {
     fn drop(&mut self) {
-        assert!(!self.m_vk.m_abortsOnAllocationFailure.swap(true, Ordering::Relaxed));
+        assert!(
+            !self
+                .m_vk
+                .m_abortsOnAllocationFailure
+                .swap(true, Ordering::Relaxed)
+        );
     }
 }
 
@@ -206,12 +300,21 @@ mod tests {
 
     #[test]
     fn complete_source_command_denominators_are_frozen() {
-        assert_eq!(RIVE_VULKAN_INSTANCE_COMMANDS, [
-            "GetDeviceProcAddr", "GetPhysicalDeviceFormatProperties",
-            "GetPhysicalDeviceProperties", "GetPhysicalDeviceFeatures",
-        ]);
-        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 60);
-        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.first(), Some(&"AllocateCommandBuffers"));
+        assert_eq!(
+            RIVE_VULKAN_INSTANCE_COMMANDS,
+            [
+                "GetDeviceProcAddr",
+                "GetPhysicalDeviceFormatProperties",
+                "GetPhysicalDeviceProperties",
+                "GetPhysicalDeviceQueueFamilyProperties",
+                "GetPhysicalDeviceFeatures",
+            ]
+        );
+        assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.len(), 65);
+        assert_eq!(
+            RIVE_VULKAN_DEVICE_COMMANDS.first(),
+            Some(&"AllocateCommandBuffers")
+        );
         assert_eq!(RIVE_VULKAN_DEVICE_COMMANDS.last(), Some(&"WaitForFences"));
     }
 

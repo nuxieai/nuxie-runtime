@@ -2594,7 +2594,7 @@ impl std::error::Error for ImageDecodeError {}
 /// Factory-owned encoded font data validated by the runtime's HarfBuzz port.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedFont {
-    bytes: Arc<Vec<u8>>,
+    bytes: Arc<[u8]>,
 }
 
 impl DecodedFont {
@@ -2602,7 +2602,7 @@ impl DecodedFont {
         &self.bytes
     }
 
-    pub fn into_bytes(self) -> Arc<Vec<u8>> {
+    pub fn into_bytes(self) -> Arc<[u8]> {
         self.bytes
     }
 }
@@ -2623,11 +2623,6 @@ impl std::error::Error for FontDecodeError {}
 /// exact HarfRust validation and byte-retention behavior.
 pub fn decode_font_bytes(data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
     factory::decode_font(data)
-}
-
-/// Decode an owned font allocation without copying its byte buffer.
-pub fn decode_font_owned_bytes(data: Vec<u8>) -> Result<DecodedFont, FontDecodeError> {
-    factory::decode_font_owned(data)
 }
 
 /// Backend-independent implementation of pinned `Factory::decodeAudio`.
@@ -3129,10 +3124,6 @@ pub trait Factory {
         factory::decode_font(data)
     }
 
-    fn decode_font_owned(&mut self, data: Vec<u8>) -> Result<DecodedFont, FontDecodeError> {
-        factory::decode_font_owned(data)
-    }
-
     /// Validate and take ownership of encoded audio bytes.
     ///
     /// This is the Rust counterpart of C++ `Factory::decodeAudio`: a
@@ -3321,9 +3312,6 @@ impl Factory for PersistentFactoryContext {
     }
     fn decode_font(&mut self, data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
         self.with_factory(|factory| factory.decode_font(data))
-    }
-    fn decode_font_owned(&mut self, data: Vec<u8>) -> Result<DecodedFont, FontDecodeError> {
-        self.with_factory(|factory| factory.decode_font_owned(data))
     }
     fn decode_audio(&mut self, data: &[u8]) -> Result<Arc<AudioSource>, AudioDecodeError> {
         self.with_factory(|factory| factory.decode_audio(data))

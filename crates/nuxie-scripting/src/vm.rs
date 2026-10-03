@@ -5218,8 +5218,8 @@ mod context_init_tests {
 
     #[test]
     fn host_interrupt_survives_nested_protected_calls_and_caught_errors() {
-        // Approved luaur host-budget boundary. This does not claim the C++
-        // timed-context interrupt restoration reverted by upstream 820cc19b.
+    // Approved luaur host-budget boundary: the production callback remains
+    // installed across nested calls without C++ callback swapping.
         let vm = ScriptVm::new();
         let interrupts = Rc::new(Cell::new(0_u32));
         let observed = interrupts.clone();

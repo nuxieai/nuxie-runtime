@@ -2,7 +2,7 @@ use super::{
     encoded_image_dimensions, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError,
     ImageSampler, LayerMaskMode, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
     RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
-    StrokeCap, StrokeJoin,
+    StrokeCap, StrokeJoin, StrokePosition,
 };
 use crate::{
     DeferredCanvasHost, DeferredCanvasHostHandle, ImageMeshInstanceData, ImageMeshInstances,
@@ -381,6 +381,7 @@ impl Factory for SerializingFactory {
             thickness: 1.0,
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
+            stroke_position: StrokePosition::Center,
             feather: 0.0,
             additiveness: 0.0,
             blend_mode: BlendMode::SrcOver,
@@ -492,6 +493,7 @@ struct SerializingRenderPaint {
     thickness: f32,
     join: StrokeJoin,
     cap: StrokeCap,
+    stroke_position: StrokePosition,
     feather: f32,
     additiveness: f32,
     blend_mode: BlendMode,
@@ -558,6 +560,14 @@ impl RenderPaint for SerializingRenderPaint {
             self.cap = value;
             self.write_uint(CAP, value as u64);
         }
+    }
+
+    fn stroke_position(&mut self, value: StrokePosition) {
+        if self.stroke_position == value {
+            return;
+        }
+        self.stroke_position = value;
+        self.write_uint(STROKE_POSITION, value as u64);
     }
 
     fn feather(&mut self, value: f32) {

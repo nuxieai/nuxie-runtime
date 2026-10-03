@@ -19,14 +19,7 @@ pub(super) fn make_render_path_from_aabb<F: Factory + ?Sized>(
 pub(super) fn decode_font(data: &[u8]) -> Result<DecodedFont, FontDecodeError> {
     harfrust::FontRef::new(data).map_err(|_| FontDecodeError)?;
     Ok(DecodedFont {
-        bytes: Arc::new(data.to_vec()),
-    })
-}
-
-pub(super) fn decode_font_owned(data: Vec<u8>) -> Result<DecodedFont, FontDecodeError> {
-    harfrust::FontRef::new(&data).map_err(|_| FontDecodeError)?;
-    Ok(DecodedFont {
-        bytes: Arc::new(data),
+        bytes: Arc::from(data),
     })
 }
 

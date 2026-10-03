@@ -8,7 +8,7 @@ use luaur_rt::{
     Value,
 };
 use nuxie_render_api::Renderer;
-use nuxie_runtime::{ScriptTransitionChildRef, source::artboard::Artboard};
+use nuxie_runtime::ScriptTransitionChildRef;
 use std::{cell::RefCell, rc::Rc};
 
 struct TransitionChild(Rc<RefCell<Option<ScriptTransitionChildRef>>>);
@@ -55,17 +55,13 @@ fn prepare_metatable(lua: &Lua, userdata: AnyUserData) -> Result<()> {
                         .0
                         .borrow()
                         .as_ref()
-                        .and_then(|child| child.artboard.as_ref())
-                        .and_then(|artboard| artboard.with_downcast::<Artboard, _>(Artboard::width))
+                        .map(ScriptTransitionChildRef::width)
                         .unwrap_or(0.0),
                     "height" => child
                         .0
                         .borrow()
                         .as_ref()
-                        .and_then(|child| child.artboard.as_ref())
-                        .and_then(|artboard| {
-                            artboard.with_downcast::<Artboard, _>(Artboard::height)
-                        })
+                        .map(ScriptTransitionChildRef::height)
                         .unwrap_or(0.0),
                     _ => {
                         return Err(Error::runtime(format!(
@@ -89,8 +85,7 @@ impl UserData for TransitionChild {
                 .0
                 .borrow()
                 .as_ref()
-                .and_then(|child| child.artboard.as_ref())
-                .and_then(|artboard| artboard.with_downcast::<Artboard, _>(Artboard::width))
+                .map(ScriptTransitionChildRef::width)
                 .unwrap_or(0.0))
         });
         fields.add_field_method_get("height", |_, this| {
@@ -98,8 +93,7 @@ impl UserData for TransitionChild {
                 .0
                 .borrow()
                 .as_ref()
-                .and_then(|child| child.artboard.as_ref())
-                .and_then(|artboard| artboard.with_downcast::<Artboard, _>(Artboard::height))
+                .map(ScriptTransitionChildRef::height)
                 .unwrap_or(0.0))
         });
     }
@@ -130,13 +124,8 @@ impl UserData for TransitionChild {
             // Validate the renderer even when this child has expired.
             renderer.with_renderer_mut(|renderer| {
                 let child = this.0.borrow().clone();
-                if let Some(child) = child
-                    && let Some(artboard) = child.artboard
-                {
-                    renderer.save();
-                    renderer.transform(child.transform);
-                    Artboard::draw_internal_handle(&artboard, renderer);
-                    renderer.restore();
+                if let Some(child) = child {
+                    child.draw(renderer);
                 }
                 Ok(())
             })

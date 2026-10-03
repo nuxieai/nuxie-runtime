@@ -37,7 +37,6 @@ use crate::mechanical_port::source::{
     },
     layout::Alignment,
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
-    pointer_button::PointerButton,
     renderer::RenderImageRef,
     renderer::compute_alignment,
     semantic::semantic_snapshot::{SemanticsBoundsUpdate, SemanticsDiff, SemanticsDiffNode},
@@ -605,7 +604,7 @@ impl CommandServer {
             .instance
             .with_instance(|instance| self.cursor_pos_for_pointer_event(instance, event));
         let mut instance = wrapper.lock();
-        let result = instance.pointer_down(position, event.pointer_id, PointerButton::Primary);
+        let result = instance.pointer_down(position, event.pointer_id, event.button);
         if result != HitResult::None {
             instance.advance_and_apply(0.0);
         }
@@ -721,11 +720,27 @@ impl CommandServer {
             .instance
             .with_instance(|instance| self.cursor_pos_for_pointer_event(instance, event));
         let mut instance = wrapper.lock();
-        let result = instance.pointer_up(position, event.pointer_id, PointerButton::Primary);
+        let result = instance.pointer_up(position, event.pointer_id, event.button);
         if result != HitResult::None {
             instance.advance_and_apply(0.0);
         }
         result
+    }
+
+    /// Whether a listener under the event position responds to its button.
+    pub fn listens_to_button_at_synchronized(
+        &self,
+        handle: StateMachineHandle,
+        event: &PointerEvent,
+    ) -> bool {
+        let Some(wrapper) = self.get_state_machine_wrapper_synchronized(handle) else {
+            return false;
+        };
+        let position = wrapper
+            .instance
+            .with_instance(|instance| self.cursor_pos_for_pointer_event(instance, event));
+        let mut instance = wrapper.lock();
+        instance.listens_to_button_at(position, event.button)
     }
 
     fn error<H: Copy + Send + fmt::Display + 'static>(
@@ -1141,7 +1156,7 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
-                    if let Some(font) = HbFont::decode_owned(bytes) {
+                    if let Some(font) = HbFont::decode(&bytes) {
                         self.assets.fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);

@@ -1,9 +1,12 @@
-//! All four attachment cases from upstream 9e6a97ff, plus the shared Rust
+//! Attachment cases through upstream 115c4862, plus the shared Rust
 //! session-handle lifetime regression. Weak references replace raw pointers.
 use super::super::{
+    deferred_replayer::{DeferredFrameSink, DeferredReplayer, snapshot_frame},
     deferred_session::{DeferredSession, DeferredSessionAttachment},
     render_replay::RendererOwner,
 };
+use super::TestSink;
+use nuxie_render_api::{Factory, OreContextHandle, PersistentFactoryContext, RenderCanvasHandle};
 use std::{
     cell::{Cell, RefCell},
     rc::{Rc, Weak},
@@ -144,4 +147,109 @@ fn cloned_session_handles_notify_only_on_the_last_drop() {
     assert_eq!(second.attachment_count(), 1);
     drop(second);
     assert_eq!(host.notices.get(), 1);
+}
+
+#[test]
+fn abandoning_every_open_frame_lets_the_next_target_close_the_window() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    session.begin_target_frame(0);
+    session.begin_target_frame(1);
+    assert_eq!(session.open_target_count(), 2);
+    session.abandon_open_target_frames();
+    assert_eq!(session.open_target_count(), 0);
+    session.begin_target_frame(2);
+    assert!(session.end_target_frame(2));
+}
+
+#[derive(Default)]
+struct TargetSink {
+    inner: TestSink,
+    opened: Vec<u64>,
+}
+impl DeferredFrameSink for TargetSink {
+    fn factory(&mut self) -> PersistentFactoryContext {
+        self.inner.factory()
+    }
+    fn ore_context(&mut self) -> Option<OreContextHandle> {
+        self.inner.ore_context()
+    }
+    fn begin_screen_frame(&mut self, target: u64) -> Option<RendererOwner> {
+        self.opened.push(target);
+        self.inner.begin_screen_frame(target)
+    }
+    fn begin_canvas_content(
+        &mut self,
+        canvas: RenderCanvasHandle,
+        clear: u32,
+    ) -> Option<RendererOwner> {
+        self.inner.begin_canvas_content(canvas, clear)
+    }
+}
+
+#[test]
+fn an_abandoned_frames_draws_never_reach_the_next_targets_frame() {
+    for abandon_all in [false, true] {
+        let mut session = DeferredSession::with_caps(Default::default());
+        let a = session.acquire_screen_target();
+        let b = session.acquire_screen_target();
+        let paint = session.make_render_paint();
+        let path = session.make_empty_render_path();
+
+        session.begin_target_frame(a);
+        session
+            .screen_renderer(a)
+            .borrow_mut()
+            .draw_path(path.as_ref(), paint.as_ref());
+        if abandon_all {
+            session.abandon_open_target_frames();
+        } else {
+            session.abandon_target_frame(a);
+        }
+        session.release_screen_target(a);
+
+        session.begin_target_frame(b);
+        session
+            .screen_renderer(b)
+            .borrow_mut()
+            .draw_path(path.as_ref(), paint.as_ref());
+        assert!(session.end_target_frame(b));
+        session.close_open_range();
+
+        let frame = snapshot_frame(&mut session);
+        let mut sink = TargetSink::default();
+        DeferredReplayer::default().replay_frame(&frame, &mut sink);
+        assert_eq!(sink.opened, vec![b]);
+    }
+}
+
+#[test]
+fn a_leaving_targets_finished_frame_never_replays_under_its_id() {
+    let mut session = DeferredSession::with_caps(Default::default());
+    let a = session.acquire_screen_target();
+    let b = session.acquire_screen_target();
+    let paint = session.make_render_paint();
+    let path = session.make_empty_render_path();
+
+    session.begin_target_frame(a);
+    session.begin_target_frame(b);
+    session
+        .screen_renderer(a)
+        .borrow_mut()
+        .draw_path(path.as_ref(), paint.as_ref());
+    assert!(!session.end_target_frame(a));
+    session.discard_target_frame(a);
+    session.release_screen_target(a);
+    assert_eq!(session.acquire_screen_target(), a);
+
+    session
+        .screen_renderer(b)
+        .borrow_mut()
+        .draw_path(path.as_ref(), paint.as_ref());
+    assert!(session.end_target_frame(b));
+    session.close_open_range();
+
+    let frame = snapshot_frame(&mut session);
+    let mut sink = TargetSink::default();
+    DeferredReplayer::default().replay_frame(&frame, &mut sink);
+    assert_eq!(sink.opened, vec![b]);
 }

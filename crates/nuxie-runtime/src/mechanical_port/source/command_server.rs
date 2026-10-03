@@ -1156,7 +1156,7 @@ impl CommandServer {
                     let request_id: u64 = self.command_queue.read();
                     let bytes = self.command_queue.pop_bytes();
                     lock.unlock();
-                    if let Some(font) = HbFont::decode(&bytes) {
+                    if let Some(font) = HbFont::decode_owned(bytes) {
                         self.assets.fonts.insert(handle, font);
                         let mut messages = self.command_queue.message_lock();
                         messages.write(Message::FontDecoded);

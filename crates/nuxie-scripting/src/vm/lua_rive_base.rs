@@ -19,7 +19,7 @@ pub(super) fn install_host_print(lua: &Lua, logging: LoggingScriptingContext) ->
         for (index, value) in args.into_iter().enumerate() {
             let value: LuaString = tostring.call(value)?;
             if index > 0 {
-                logging.append(b"\t");
+                logging.print_separator();
             }
             logging.append(&value.as_bytes());
         }

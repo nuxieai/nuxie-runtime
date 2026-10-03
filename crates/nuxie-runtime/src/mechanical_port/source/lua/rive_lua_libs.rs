@@ -2505,6 +2505,9 @@ pub trait ScriptingContext {
     fn print_error(&mut self, state: &mut LuaState);
     fn print_begin_line(&mut self, state: &mut LuaState);
     fn print(&mut self, data: &[u8]);
+    fn print_separator(&mut self) {
+        self.print(b"\t");
+    }
     fn print_end_line(&mut self);
 
     fn p_call(&mut self, state: &mut LuaState, argument_count: i32, result_count: i32) -> i32 {
@@ -3112,6 +3115,14 @@ impl ScriptingContext for CPPRuntimeScriptingContext {
             }
         }
         print!("{}", String::from_utf8_lossy(data));
+    }
+
+    fn print_separator(&mut self) {
+        #[cfg(feature = "tools")]
+        if self.console_callback.is_some() {
+            return;
+        }
+        print!("\t");
     }
 
     fn print_end_line(&mut self) {

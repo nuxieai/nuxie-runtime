@@ -91,6 +91,9 @@ pub trait ShapePaintBehavior {
 pub struct ShapePaint {
     pub base: ShapePaintBase,
     pub effects_container: EffectsContainerState,
+    // The concrete C++ virtual identity exists before Core registration and is
+    // not copied or deserialized with the authored ShapePaintBase properties.
+    paint_type: ShapePaintType,
     path_provider: PathProvider,
     render_paint: Option<RuntimeRenderPaintHandle>,
     paint_mutator: Option<CoreHandle>,
@@ -104,11 +107,12 @@ pub struct ShapePaint {
     script_paint_scope: Option<Rc<crate::scripting::ScriptPaint>>,
 }
 
-impl Default for ShapePaint {
-    fn default() -> Self {
+impl ShapePaint {
+    pub(crate) fn new(paint_type: ShapePaintType) -> Self {
         Self {
             base: ShapePaintBase::default(),
             effects_container: EffectsContainerState::default(),
+            paint_type,
             path_provider: PathProvider::default(),
             render_paint: None,
             paint_mutator: None,
@@ -129,21 +133,7 @@ impl ShapePaint {
     }
 
     pub fn paint_type(&self) -> ShapePaintType {
-        use crate::mechanical_port::source::generated::shapes::paint::{
-            fill_base::FillBase, stroke_base::StrokeBase,
-        };
-        // The cached type is immutable, so effects can inspect their active
-        // parent paint without reborrowing the Fill/Stroke occurrence.
-        match self
-            .base
-            .handle()
-            .expect("installed ShapePaint occurrence")
-            .core_type()
-        {
-            Some(FillBase::TYPE_KEY) => ShapePaintType::Fill,
-            Some(StrokeBase::TYPE_KEY) => ShapePaintType::Stroke,
-            type_key => panic!("abstract ShapePaint has no paint type: {type_key:?}"),
-        }
+        self.paint_type
     }
 
     pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {

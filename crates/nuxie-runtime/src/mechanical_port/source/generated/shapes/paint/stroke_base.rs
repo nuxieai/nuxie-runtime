@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, shapes::paint::shape_paint::ShapePaint,
+    core::binary_reader::BinaryReader,
+    shapes::paint::shape_paint::{ShapePaint, ShapePaintType},
     shapes::paint::stroke::Stroke,
 };
 
@@ -24,7 +25,7 @@ pub struct StrokeBase {
 impl Default for StrokeBase {
     fn default() -> Self {
         Self {
-            base: ShapePaint::default(),
+            base: ShapePaint::new(ShapePaintType::Stroke),
             thickness: 1.0,
             cap: 0,
             join: 0,

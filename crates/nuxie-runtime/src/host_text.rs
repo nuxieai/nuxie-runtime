@@ -195,6 +195,14 @@ impl std::fmt::Debug for RawTextFont {
     }
 }
 impl RawTextFont {
+    pub fn decode_owned(bytes: Vec<u8>) -> Result<Self, RawTextFontError> {
+        HbFont::decode_owned(bytes)
+            .map(Self::from_native)
+            .ok_or(RawTextFontError {
+                message: "font bytes are invalid",
+            })
+    }
+
     pub fn decode(bytes: impl Into<Arc<[u8]>>) -> Result<Self, RawTextFontError> {
         Self::decode_face(bytes, 0)
     }

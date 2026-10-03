@@ -95,6 +95,19 @@ impl SessionRouting {
         self.active_routed = self.has_open_screen;
         self.active_begin = self.stream_size();
     }
+    // Only unroute this screen's draws. Resource creates and destroys retain
+    // their bytes and replay from the whole stream.
+    fn drop_screen_segments(&mut self, target: u64) {
+        if self.active_routed && self.active_target == screen_target(target) {
+            self.active_routed = false;
+        }
+        if self.has_open_screen && self.open_screen == target {
+            self.has_open_screen = false;
+        }
+        self.segments.retain(|segment| {
+            segment.target != SegmentTarget::Screen || segment.target_id != target
+        });
+    }
     fn close_active_range(&mut self) {
         if !self.active_routed {
             return;
@@ -368,7 +381,27 @@ impl DeferredSession {
         let mut targets = self.targets.borrow_mut();
         if let Some(index) = targets.open.iter().position(|&id| id == target) {
             targets.open.remove(index);
+            self.routing.borrow_mut().drop_screen_segments(target);
         }
+    }
+    // A leaving host discards its draws even if it already finished recording
+    // while another target still holds the session's frame window open.
+    pub fn discard_target_frame(&mut self, target: u64) {
+        let mut targets = self.targets.borrow_mut();
+        if let Some(index) = targets.open.iter().position(|&id| id == target) {
+            targets.open.remove(index);
+        }
+        self.routing.borrow_mut().drop_screen_segments(target);
+    }
+    pub fn abandon_open_target_frames(&mut self) {
+        let mut targets = self.targets.borrow_mut();
+        for &target in &targets.open {
+            self.routing.borrow_mut().drop_screen_segments(target);
+        }
+        targets.open.clear();
+    }
+    pub fn open_target_count(&self) -> usize {
+        self.targets.borrow().open.len()
     }
     pub fn close_open_range(&mut self) {
         self.routing.borrow_mut().close_open_range();

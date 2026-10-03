@@ -30,6 +30,7 @@ const KERN_TAG: u32 = u32::from_be_bytes(*b"kern");
 #[derive(Clone)]
 enum FontBytes {
     Owned(Arc<[u8]>),
+    Adopted(Arc<Vec<u8>>),
     #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
     Mapped(Arc<FontFileMapping>),
 }
@@ -39,6 +40,7 @@ impl std::ops::Deref for FontBytes {
     fn deref(&self) -> &[u8] {
         match self {
             Self::Owned(bytes) => bytes,
+            Self::Adopted(bytes) => bytes,
             #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
             Self::Mapped(mapping) => {
                 // decode_file's caller guarantees immutable, live file pages;
@@ -114,16 +116,65 @@ pub struct HbFont {
     color_layer_cache: Mutex<HashMap<GlyphId, Vec<ColorGlyphLayer>>>,
 }
 
+/// A mapped face for nominal coverage, without font metrics or drawing setup.
+pub struct FileProbe {
+    bytes: Option<FontBytes>,
+    face_index: u32,
+}
+
+impl FileProbe {
+    pub fn has_glyph(&self, codepoint: Unichar) -> bool {
+        self.bytes.as_ref().is_some_and(|bytes| {
+            OutlineFont::from_index(bytes, self.face_index)
+                .expect("probe retains its validated face")
+                .charmap()
+                .map(codepoint)
+                .is_some_and(|glyph| glyph.to_u32() != 0)
+        })
+    }
+
+    pub fn make_font(&mut self) -> Option<FontRef> {
+        let bytes = self.bytes.take()?;
+        Some(Arc::new(HbFont::with_stored_options(
+            bytes,
+            self.face_index,
+            HashMap::new(),
+            HashMap::new(),
+        )))
+    }
+}
+
 impl HbFont {
     pub fn source_bytes(&self) -> Arc<[u8]> {
         match &self.bytes {
             FontBytes::Owned(bytes) => bytes.clone(),
+            FontBytes::Adopted(bytes) => Arc::from(bytes.as_slice()),
             #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
             FontBytes::Mapped(_) => Arc::from(&*self.bytes),
         }
     }
     pub fn face_index(&self) -> u32 {
         self.face_index
+    }
+    /// Borrow the retained allocation, without materializing a byte snapshot.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    pub fn decode_owned(bytes: Vec<u8>) -> Option<FontRef> {
+        Self::from_decoded_font(nuxie_render_api::decode_font_owned_bytes(bytes).ok()?)
+    }
+
+    pub fn from_decoded_font(decoded: nuxie_render_api::DecodedFont) -> Option<FontRef> {
+        let bytes = decoded.into_bytes();
+        ShapingFont::from_index(&bytes, 0).ok()?;
+        OutlineFont::from_index(&bytes, 0).ok()?;
+        Some(Arc::new(Self::with_stored_options(
+            FontBytes::Adopted(bytes),
+            0,
+            HashMap::new(),
+            HashMap::new(),
+        )))
     }
     pub fn decode(bytes: &[u8]) -> Option<FontRef> {
         Self::decode_face(bytes, 0)
@@ -151,7 +202,17 @@ impl HbFont {
     /// (including through `with_options`). Truncation or vanished storage can
     /// cause SIGBUS on later access. Do not use untrusted paths, removable media,
     /// or network volumes. Mapping ownership alone cannot enforce this contract.
-    pub unsafe fn decode_file(path: Option<&std::path::Path>) -> Option<FontRef> {
+    pub unsafe fn decode_file(path: Option<&std::path::Path>, face_index: u32) -> Option<FontRef> {
+        // SAFETY: the caller supplies the same stable-file contract as probe_file.
+        unsafe { Self::probe_file(path, face_index) }?.make_font()
+    }
+
+    /// Map a font face for nominal coverage without full font initialization.
+    ///
+    /// # Safety
+    /// The trusted file must remain unchanged and available until this probe
+    /// and every font promoted or derived from it have been dropped.
+    pub unsafe fn probe_file(path: Option<&std::path::Path>, face_index: u32) -> Option<FileProbe> {
         #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
         {
             use std::os::fd::AsRawFd;
@@ -184,18 +245,16 @@ impl HbFont {
             let bytes = FontBytes::Mapped(mapping);
             // Preserve the approved harfrust/skrifa validation boundary rather
             // than introducing a HarfBuzz face or a different shaping backend.
-            ShapingFont::from_index(&bytes, 0).ok()?;
-            OutlineFont::from_index(&bytes, 0).ok()?;
-            Some(Arc::new(Self::with_stored_options(
-                bytes,
-                0,
-                HashMap::new(),
-                HashMap::new(),
-            )))
+            ShapingFont::from_index(&bytes, face_index).ok()?;
+            OutlineFont::from_index(&bytes, face_index).ok()?;
+            Some(FileProbe {
+                bytes: Some(bytes),
+                face_index,
+            })
         }
         #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
         {
-            let _ = path;
+            let _ = (path, face_index);
             None
         }
     }

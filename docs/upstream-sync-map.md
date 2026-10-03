@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `cdeabe75935085cea27ae93392b6af5d350d8971`
+- LAST_SYNCED_SHA: `115c48623dc5de51cda9850f1ffa9263ba1dc6e7`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1c54a97c8411a92b824b903fe083d3ba45a204ab` (refreshed 2026-10-03 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are seven upstream commits after the checkpoint at this fetched target.
-  All 181 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (203 after `5892bb05`); this
+  There are six upstream commits after the checkpoint at this fetched target.
+  All 182 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (204 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -208,6 +208,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `115c48623dc5de51cda9850f1ffa9263ba1dc6e7` | Translate separate print-separator dispatch (stdout-only for discrete console spans, tab in line-oriented logging); synchronize state-machine data binds once after matching listener actions; reintroduce owned font allocation decoding, mapped face selection and one-shot coverage probes; and discard abandoned/detached screen-target segments without dropping resource stream bytes. Port the new font, state-action and deferred attachment regressions. Retain COLRv1 corrections and approved Rust text/luaur boundaries. Private Flutter/Android/Dart changes described in metadata but absent from the public delta are not claimed. Reviews and validation recorded in PR. | — |
 | `cdeabe75935085cea27ae93392b6af5d350d8971` | Translate the explicit revert of upstream's stale mirror: restore masked color channels, shared transition drawing, Lua print separators and nested timed callback restoration, button-aware synchronized pointer dispatch/query, pre-delete focus detachment, stroke property 470/outset/three GM scenes, SRIV opcode 43, audio release and COLRv1 corrections. Remove the owned-font/probe/collection-face APIs and associated tests removed upstream. Preserve all intervening downstream source corrections, including shared color arithmetic, root dirt, Stroke identity/EffectsContainer access, and shape ordering. Standalone player refresh selection remains inapplicable; Wasm guest-lane changes remain deferred under UNIV-3728. The persistent luaur host-budget callback remains an explicit approved adaptation. Both reviews and applicable validation are recorded in the PR; no private metadata, full-corpus or hardware claim. | — |
 | `820cc19bd8405f84a8f85f9f388a133d6a2c7511` | Translate owned-buffer font decoding without copying its allocation; mapped file probes with collection face selection, nominal glyph coverage and one-shot promotion retaining the mapping; Factory/proxy and CommandServer ownership paths; and upstream font regressions. Apply the actual public reversals of low-byte color coercion, shared transition owner, Lua print separators/timed-context restoration, synchronized pointer query/button forwarding, focus detachment, stroke property/outset/GM additions, SRIV opcode 43, audio release and COLRv1 changes. Synchronized pointer calls again use the upstream primary-button default; queued dispatch still forwards buttons. Preserve existing renderer stroke-position support/opcode 42 and the approved persistent luaur host-budget boundary (its supplemental test is not C++ interrupt-restoration equivalence). Reversed standalone player refresh settings remain inapplicable; Wasm guest-lane reversals remain parked under UNIV-3728. Private changes absent from the public delta are not claimed. Independent source and separate Rust-integration reviews and applicable validation are recorded in the PR; no full-corpus/device claim. | — |
 | `caeae0e723f646ee853461b61e18e04a3081fc1d` | Translate stroke position property/registry/paint propagation and outset sizing; the three source GM scenes and upstream stroke/outset tests; SRIV opcode 43 writer, replay, exact integer comparison and regressions; color-glyph gradient/clip transforms, foreground-stop refresh and clamp/sort behavior through the approved Rust text backend, with upstream tests; and audio singleton release without stopping retained engines. Independent source and separate Rust-integration reviews precede validation, recorded in the PR. Private editor/Dart viewer/SystemEnum and Windows host teardown changes, and GM golden PNGs, are absent from the public delta and are not claimed imported. No new device/full-corpus claim. | — |

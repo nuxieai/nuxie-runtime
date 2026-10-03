@@ -682,6 +682,7 @@ impl StateMachineLayerInstance {
         occurrence: u8,
         actions: &[CoreHandle],
     ) {
+        let mut performed_any = false;
         for action in actions {
             let scheduled = crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance(occurrence);
             let matches = action
@@ -694,7 +695,11 @@ impl StateMachineLayerInstance {
                     .with_mut(|action| action.listener_action_perform(machine, &invocation))
                     .unwrap_or(false);
                 assert!(performed, "an authored listener action must expose perform");
+                performed_any = true;
             }
+        }
+        if performed_any {
+            machine.data_bind_container.update_data_binds(false);
         }
     }
 
@@ -5838,7 +5843,7 @@ impl StateMachineInstance {
         self.hit_components.get(index).map(Rc::as_ref)
     }
 
-    #[cfg(any(test, feature = "tools"))]
+    #[cfg(any(test, feature = "testing", feature = "tools"))]
     pub fn layer_state(&mut self, index: usize) -> Option<CoreHandle> {
         self.layers
             .get(index)

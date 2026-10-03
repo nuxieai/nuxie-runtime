@@ -35,6 +35,10 @@ impl LoggingScriptingContext {
         self.line.borrow_mut().extend_from_slice(data);
     }
 
+    pub fn print_separator(&self) {
+        self.append(b"\t");
+    }
+
     pub fn end_line(&self) {
         // Release the actual line borrow before invoking host code. The clear
         // remains after the callback, matching the pinned context's ordering.

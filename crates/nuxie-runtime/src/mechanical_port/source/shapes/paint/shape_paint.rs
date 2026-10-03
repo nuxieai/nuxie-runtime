@@ -23,6 +23,21 @@ use std::{cell::RefCell, rc::Rc};
 
 pub type RuntimeRenderPaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
 
+/// The callback phase of the live invalidateRendering override. No dirt or
+/// dependent state is captured before the renderer has finished this call.
+pub enum ShapePaintRenderingInvalidation {
+    Base,
+    Stroke(RuntimeRenderPaintHandle),
+}
+
+impl ShapePaintRenderingInvalidation {
+    pub(crate) fn before_dirt(self) {
+        if let Self::Stroke(paint) = self {
+            paint.borrow_mut().invalidate_stroke();
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShapePaintType {
     Fill,
@@ -43,6 +58,19 @@ pub trait ShapePaintBehavior {
     fn paint_type(&self) -> ShapePaintType;
     fn pick_path_kind(&self) -> ShapePaintPathKind;
     fn is_visible(&self) -> bool;
+    fn prepare_rendering_invalidation(&self) -> ShapePaintRenderingInvalidation {
+        ShapePaintRenderingInvalidation::Base
+    }
+    fn invalidate_rendering(&mut self) {
+        self.shape_paint_mut().invalidate_rendering_base();
+    }
+    fn invalidate_effects_from(&mut self, effect: Option<&CoreHandle>) {
+        self.shape_paint_mut()
+            .effects_container
+            .invalidate_effects(effect);
+        self.shape_paint_mut().invalidate_effect_feather();
+        self.invalidate_rendering();
+    }
     fn should_draw(&self) -> bool {
         self.is_visible() && self.shape_paint().mutator_is_visible()
     }
@@ -510,7 +538,29 @@ impl ShapePaint {
     }
 
     pub fn invalidate_rendering(&mut self) {
+        // An explicit base projection still denotes the live Fill/Stroke.
+        // The immutable class selects its override without reborrowing that
+        // occurrence; Stroke's qualified superclass call uses the method below.
+        self.prepare_rendering_invalidation().before_dirt();
+        self.invalidate_rendering_base();
+    }
+
+    pub(crate) fn prepare_rendering_invalidation(&self) -> ShapePaintRenderingInvalidation {
+        match self.paint_type() {
+            ShapePaintType::Fill => ShapePaintRenderingInvalidation::Base,
+            ShapePaintType::Stroke => ShapePaintRenderingInvalidation::Stroke(
+                self.render_paint_handle()
+                    .expect("initialized Stroke render paint"),
+            ),
+        }
+    }
+
+    pub(crate) fn invalidate_rendering_base(&mut self) {
         self.base.add_dirt(ComponentDirt::PATH, true);
+    }
+
+    pub(crate) fn feather_handle(&self) -> Option<CoreHandle> {
+        self.feather.clone()
     }
 
     fn apply_modulated_image(&mut self, path: &ShapePaintPath) {

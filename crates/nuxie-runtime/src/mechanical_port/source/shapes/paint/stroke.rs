@@ -5,7 +5,11 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     shapes::{
         paint::{
-            shape_paint::{ShapePaint, ShapePaintBehavior, ShapePaintPathKind, ShapePaintType},
+            effects_container::{EffectsContainer, EffectsContainerState},
+            shape_paint::{
+                ShapePaint, ShapePaintBehavior, ShapePaintPathKind,
+                ShapePaintRenderingInvalidation, ShapePaintType,
+            },
             shape_paint_mutator::ShapePaintMutator,
             stroke_cap::StrokeCap,
             stroke_join::StrokeJoin,
@@ -120,9 +124,16 @@ impl Stroke {
     }
 
     pub fn invalidate_rendering(&mut self) {
-        self.base
-            .with_render_paint_mut(nuxie_render_api::RenderPaint::invalidate_stroke);
-        self.base.invalidate_rendering();
+        self.prepare_rendering_invalidation().before_dirt();
+        self.base.invalidate_rendering_base();
+    }
+
+    pub fn invalidate_effects_from(&mut self, effect: Option<&CoreHandle>) {
+        ShapePaintBehavior::invalidate_effects_from(self, effect);
+    }
+
+    pub fn invalidate_effects(&mut self) {
+        self.invalidate_effects_from(None);
     }
 
     pub fn build_dependencies(&mut self) {
@@ -139,6 +150,18 @@ impl Stroke {
 }
 
 impl ShapePaintBehavior for Stroke {
+    fn prepare_rendering_invalidation(&self) -> ShapePaintRenderingInvalidation {
+        ShapePaintRenderingInvalidation::Stroke(
+            self.base
+                .render_paint_handle()
+                .expect("initialized Stroke render paint"),
+        )
+    }
+
+    fn invalidate_rendering(&mut self) {
+        Stroke::invalidate_rendering(self);
+    }
+
     fn is_visible(&self) -> bool {
         Stroke::is_visible(self)
     }
@@ -176,5 +199,23 @@ impl ShapePaintBehavior for Stroke {
 
     fn apply_to(&mut self, paint: &mut dyn RenderPaint, opacity: f32) {
         Stroke::apply_to(self, paint, opacity);
+    }
+}
+
+impl EffectsContainer for Stroke {
+    fn effects_state(&mut self) -> &mut EffectsContainerState {
+        &mut self.base.base.effects_container
+    }
+
+    fn invalidate_effects(&mut self, effect: Option<&CoreHandle>) {
+        ShapePaintBehavior::invalidate_effects_from(self, effect);
+    }
+
+    fn add_stroke_effect(
+        &mut self,
+        identity: CoreHandle,
+        effect: &mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect,
+    ) {
+        self.base.base.add_stroke_effect(identity, effect);
     }
 }

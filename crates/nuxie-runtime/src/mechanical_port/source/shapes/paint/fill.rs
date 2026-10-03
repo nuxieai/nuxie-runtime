@@ -4,6 +4,7 @@ use crate::mechanical_port::source::{
     generated::shapes::paint::fill_base::FillBase,
     shapes::{
         paint::{
+            effects_container::{EffectsContainer, EffectsContainerState},
             shape_paint::{ShapePaint, ShapePaintBehavior, ShapePaintPathKind, ShapePaintType},
             shape_paint_mutator::ShapePaintMutator,
         },
@@ -26,7 +27,37 @@ impl std::ops::DerefMut for Fill {
 }
 
 impl Fill {
+    pub fn invalidate_rendering(&mut self) {
+        ShapePaintBehavior::invalidate_rendering(self);
+    }
+
+    pub fn invalidate_effects_from(&mut self, effect: Option<&CoreHandle>) {
+        ShapePaintBehavior::invalidate_effects_from(self, effect);
+    }
+
+    pub fn invalidate_effects(&mut self) {
+        self.invalidate_effects_from(None);
+    }
+
     pub const TYPE_KEY: u16 = FillBase::TYPE_KEY;
+}
+
+impl EffectsContainer for Fill {
+    fn effects_state(&mut self) -> &mut EffectsContainerState {
+        &mut self.base.base.effects_container
+    }
+
+    fn invalidate_effects(&mut self, effect: Option<&CoreHandle>) {
+        ShapePaintBehavior::invalidate_effects_from(self, effect);
+    }
+
+    fn add_stroke_effect(
+        &mut self,
+        identity: CoreHandle,
+        effect: &mut dyn crate::mechanical_port::source::shapes::paint::stroke_effect::StrokeEffect,
+    ) {
+        self.base.base.add_stroke_effect(identity, effect);
+    }
 }
 
 #[derive(Default)]

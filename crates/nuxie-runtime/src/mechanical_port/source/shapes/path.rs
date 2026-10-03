@@ -649,37 +649,73 @@ impl Path {
     }
 
     pub(crate) fn mark_path_dirty_base_occurrence(owner: &CoreHandle) {
-        Self::add_path_dirt_occurrence(owner);
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt(ComponentDirt::PATH, false);
         Self::send_shape_notification_occurrence(owner);
     }
 
-    fn add_path_dirt_occurrence(owner: &CoreHandle) {
-        let dirt = owner
-            .with_mut(|object| {
-                object
-                    .as_component_mut()
-                    .expect("Path Component")
-                    .add_dirt_state(ComponentDirt::PATH)
-            })
-            .flatten();
-        if let Some(dirt) = dirt {
-            // Component::addDirt invokes onDirty before notifying the artboard.
-            if has_dirt(
-                dirt,
-                ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
-            ) {
-                Self::send_shape_notification_occurrence(owner);
-            }
-            let deferred = owner
-                .with(|object| object.as_path().expect("Path").deferred_path_dirt)
-                .expect("live Path");
-            if deferred {
-                Self::add_path_dirt_occurrence(owner);
-            }
+    pub(crate) fn mark_path_dirty_base_from_shape(owner: &CoreHandle, active_shape: &mut Shape) {
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt_from_shape(active_shape, ComponentDirt::PATH, false);
+        Self::send_shape_notification_from_shape(owner, active_shape);
+    }
+
+    pub(crate) fn mark_path_dirty_base_from_layout(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt_from_layout(active, active_handle, ComponentDirt::PATH, false);
+        Self::send_shape_notification_from_layout(owner, active, active_handle);
+    }
+
+    pub(crate) fn on_dirty_from_layout(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        if has_dirt(
+            dirt,
+            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
+        ) {
+            Self::send_shape_notification_from_layout(owner, active, active_handle);
+        }
+        let deferred = owner
+            .with(|object| object.as_path().expect("Path").deferred_path_dirt)
+            .unwrap_or(false);
+        if deferred {
             crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
                 owner.clone(),
             )
-            .notify_artboard();
+            .add_dirt_from_layout(active, active_handle, ComponentDirt::PATH, false);
+        }
+    }
+
+    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+        if has_dirt(
+            dirt,
+            ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
+        ) {
+            Self::send_shape_notification_occurrence(owner);
+        }
+        // pathChanged may enter a renderer and mutate or retire this Path.
+        // Read deferred dirt only after that call returns, with no old guard.
+        let deferred = owner
+            .with(|object| object.as_path().expect("Path").deferred_path_dirt)
+            .unwrap_or(false);
+        if deferred {
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            )
+            .add_dirt(ComponentDirt::PATH, false);
         }
     }
 
@@ -693,7 +729,31 @@ impl Path {
             })
             .flatten();
         if let Some(shape) = shape {
-            shape.with_mut(|object| object.as_shape_mut().expect("Shape").path_changed());
+            Shape::path_changed_occurrence(&shape);
+        }
+    }
+    fn send_shape_notification_from_shape(owner: &CoreHandle, active_shape: &mut Shape) {
+        let shape = owner
+            .with_mut(|object| object.as_path_mut().and_then(Path::take_shape_notification))
+            .flatten();
+        if let Some(shape) = shape {
+            if active_shape.base.handle().as_ref() == Some(&shape) {
+                active_shape.path_changed();
+            } else {
+                Shape::path_changed_occurrence(&shape);
+            }
+        }
+    }
+    fn send_shape_notification_from_layout(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        let shape = owner
+            .with_mut(|object| object.as_path_mut().and_then(Path::take_shape_notification))
+            .flatten();
+        if let Some(shape) = shape {
+            Shape::path_changed_from_layout_occurrence(&shape, active, active_handle);
         }
     }
     fn take_shape_notification(&mut self) -> Option<CoreHandle> {
@@ -733,16 +793,7 @@ impl Path {
             value,
             ComponentDirt::WORLD_TRANSFORM | ComponentDirt::N_SLICER,
         ) {
-            let shape = owner
-                .with_mut(|owner| owner.as_path_mut().and_then(Path::take_shape_notification))
-                .flatten();
-            if let Some(shape) = shape {
-                if active_shape.base.handle().as_ref() == Some(&shape) {
-                    active_shape.path_changed();
-                } else {
-                    shape.with_mut(|shape| shape.as_shape_mut().map(|shape| shape.path_changed()));
-                }
-            }
+            Self::send_shape_notification_from_shape(owner, active_shape);
         }
         let deferred = owner
             .with(|owner| {
@@ -751,7 +802,7 @@ impl Path {
                     .expect("Path onDirty occurrence")
                     .deferred_path_dirt
             })
-            .expect("live Path onDirty occurrence");
+            .unwrap_or(false);
         if deferred {
             // Source addDirt runs synchronously after pathChanged, including
             // the recursive onDirty call if this adds the Path dirt bit.
@@ -804,6 +855,28 @@ impl Path {
                     shape.path_collapse_changed();
                 }
             });
+        }
+    }
+
+    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle) {
+        let shape = owner
+            .with(|object| object.as_path().and_then(Path::shape_handle))
+            .flatten();
+        if let Some(shape) = shape {
+            Shape::path_collapse_changed_occurrence(&shape);
+        }
+    }
+
+    pub(crate) fn collapse_after_super_from_layout_occurrence(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        let shape = owner
+            .with(|object| object.as_path().and_then(Path::shape_handle))
+            .flatten();
+        if let Some(shape) = shape {
+            Shape::path_collapse_changed_from_layout_occurrence(&shape, active, active_handle);
         }
     }
 }

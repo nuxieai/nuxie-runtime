@@ -291,6 +291,22 @@ impl ArtboardComponentList {
         self.base.core_type()
     }
 
+    pub fn collapse(&mut self, value: bool) -> bool {
+        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::component_collapse(
+            self, value,
+        )
+    }
+
+    pub(crate) fn collapse_after_super(&mut self, value: bool) {
+        let mut index = 0;
+        while index < self.artboard_count() {
+            if let Some(artboard) = self.artboard_instance(index as i32) {
+                artboard.collapse_semantic_boundary(value);
+            }
+            index += 1;
+        }
+    }
+
     pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
         let mut index = 0;
         loop {

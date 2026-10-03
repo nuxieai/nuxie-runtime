@@ -50,7 +50,7 @@ impl<U: DirtDependent> DependencyHelper<U> {
         if self.dependents.empty() {
             return;
         }
-        for dependent in self.dependents.iter().cloned() {
+        for dependent in self.dependents.iter() {
             dependent.add_dirt(value, true);
         }
     }

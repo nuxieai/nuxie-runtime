@@ -980,11 +980,7 @@ impl DataBind {
             && let Some(bind) = self.handle()
         {
             let collapsed = target
-                .with_mut(|target| {
-                    target
-                        .as_component_mut()
-                        .and_then(|target| target.register_collapsable(bind))
-                })
+                .with_mut(|target| target.component_register_collapsable(bind))
                 .flatten();
             if let Some(collapsed) = collapsed {
                 self.collapse(collapsed);
@@ -998,11 +994,7 @@ impl DataBind {
             .flatten();
         if let Some(target) = target {
             let collapsed = target
-                .with_mut(|target| {
-                    target
-                        .as_component_mut()
-                        .and_then(|target| target.register_collapsable(owner.clone()))
-                })
+                .with_mut(|target| target.component_register_collapsable(owner.clone()))
                 .flatten();
             if let Some(collapsed) = collapsed {
                 Self::collapse_handle(owner, collapsed);

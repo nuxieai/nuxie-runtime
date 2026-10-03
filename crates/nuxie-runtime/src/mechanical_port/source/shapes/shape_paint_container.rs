@@ -76,6 +76,25 @@ impl ShapePaintContainer {
         }
     }
 
+    pub(crate) fn invalidate_stroke_effects_occurrence(owner: &CoreHandle) {
+        let mut index = 0;
+        while let Some(paint) = owner
+            .with(|object| {
+                object
+                    .as_shape_paint_container()?
+                    .shape_paints
+                    .get(index)
+                    .cloned()
+            })
+            .flatten()
+        {
+            crate::mechanical_port::source::shapes::paint::effects_container::invalidate_effects_handle(
+                &paint, None,
+            );
+            index += 1;
+        }
+    }
+
     pub fn propagate_opacity(&mut self, opacity: f32) {
         for paint in self.shape_paints.iter().cloned() {
             paint.with_mut(|paint| {

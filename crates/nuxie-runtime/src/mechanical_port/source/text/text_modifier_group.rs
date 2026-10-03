@@ -108,25 +108,32 @@ impl TextModifierGroup {
         }
     }
     pub fn range_type_changed(&mut self) {
-        self.with_text_mut(Text::modifier_shape_dirty);
-        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, true);
+        self.add_text_dirt(ComponentDirt::PATH);
+        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, false);
     }
-    pub fn shape_modifier_changed(&mut self) {
-        self.with_text_mut(Text::mark_shape_dirty);
+    pub fn shape_modifier_changed(owner: &CoreHandle) {
+        let text = owner
+            .with(|object| object.as_text_modifier_group().and_then(Self::text_component))
+            .flatten();
+        if let Some(text) = text {
+            // Text clears registered groups' range maps, including this group's.
+            // Release the group loan before entering that callback sequence.
+            Text::mark_shape_dirty_occurrence(&text, true);
+        }
     }
     pub fn range_changed(&mut self) {
         if self.shape_modifiers.is_empty() {
-            self.with_text_mut(Text::mark_paint_dirty);
+            self.add_text_dirt(ComponentDirt::PAINT);
         } else {
-            self.with_text_mut(Text::modifier_shape_dirty);
+            self.add_text_dirt(ComponentDirt::PATH);
         }
-        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, true);
+        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, false);
     }
     pub fn clear_range_maps(&mut self) {
         for r in &mut self.ranges {
             r.with_downcast_mut::<TextModifierRange, _>(TextModifierRange::clear_range_map);
         }
-        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, true);
+        self.base.add_dirt(ComponentDirt::TEXT_COVERAGE, false);
     }
     pub fn compute_range_map(
         &mut self,
@@ -167,17 +174,38 @@ impl TextModifierGroup {
         c / count as f32
     }
     pub fn on_text_world_transform_dirty(owner: &CoreHandle, parent_text: &mut Text) {
-        let (follows_path, text) = owner
-            .with(|owner| {
-                let group = owner
-                    .as_text_modifier_group()
-                    .expect("TextModifierGroup owner");
-                (
-                    !group.follow_path_modifiers.is_empty(),
-                    group.text_component(),
-                )
-            })
-            .expect("live TextModifierGroup");
+        Self::on_text_world_transform_dirty_with_group(owner, parent_text, None);
+    }
+    pub(crate) fn on_text_world_transform_dirty_from_group(
+        owner: &CoreHandle,
+        parent_text: &mut Text,
+        active_group: &mut Self,
+    ) {
+        Self::on_text_world_transform_dirty_with_group(owner, parent_text, Some(active_group));
+    }
+    fn on_text_world_transform_dirty_with_group(
+        owner: &CoreHandle,
+        parent_text: &mut Text,
+        active_group: Option<&mut Self>,
+    ) {
+        let read = |group: &Self| {
+            (
+                !group.follow_path_modifiers.is_empty(),
+                group.text_component(),
+            )
+        };
+        let (follows_path, text) = if let Some(group) = active_group
+            .as_deref()
+            .filter(|group| group.base.handle().as_ref() == Some(owner))
+        {
+            read(group)
+        } else {
+            owner
+                .with(|owner| {
+                    read(owner.as_text_modifier_group().expect("TextModifierGroup owner"))
+                })
+                .expect("live TextModifierGroup")
+        };
         if follows_path {
             assert_eq!(
                 parent_text.base.handle(),
@@ -185,8 +213,34 @@ impl TextModifierGroup {
                 "actual TextModifierGroup parent"
             );
             // addDirt can re-enter Text::onDirty and this same modifier group.
-            // Keep the live Text borrow, but release the group before callback.
-            parent_text.component_add_dirt(ComponentDirt::PATH, false);
+            // The internal group loan ended above; a caller-owned group stays
+            // explicit through the nested callback instead of being reacquired.
+            if let Some(active_group) = active_group {
+                // Any group's follow-path callback can enter Text::onDirty
+                // again, so retain the original active group across that call.
+                parent_text.add_dirt_from_modifier_group(ComponentDirt::PATH, active_group);
+            } else {
+                parent_text.component_add_dirt(ComponentDirt::PATH, false);
+            }
+        }
+    }
+    pub(crate) fn on_text_world_transform_dirty_occurrence(owner: &CoreHandle) {
+        let text = owner
+            .with(|object| {
+                let group = object
+                    .as_text_modifier_group()
+                    .expect("TextModifierGroup owner");
+                if group.follow_path_modifiers.is_empty() {
+                    return None;
+                }
+                group.text_component()
+            })
+            .flatten();
+        if let Some(text) = text {
+            // Text::onDirty can reenter this group. Both internal receivers
+            // are released before the synchronous Component::addDirt call.
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(text)
+                .add_dirt(ComponentDirt::PATH, false);
         }
     }
     pub fn reset_text_follow_path(&mut self, parent_text: &Text) {
@@ -291,14 +345,14 @@ impl TextModifierGroup {
         }
     }
     fn mark_paint(&mut self) {
-        self.with_text_mut(Text::mark_paint_dirty);
+        self.add_text_dirt(ComponentDirt::PAINT);
     }
 
-    fn with_text_mut(&self, use_text: impl FnOnce(&mut Text)) {
+    fn add_text_dirt(&mut self, value: ComponentDirt) {
         if let Some(text) = self.text_component() {
             text.with_mut(|text| {
                 if let Some(text) = text.as_text_mut() {
-                    use_text(text);
+                    text.add_dirt_from_modifier_group(value, self);
                 }
             });
         }

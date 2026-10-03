@@ -345,6 +345,73 @@ impl Skin {
         }
     }
 
+    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+        Self::on_dirty_with_path(
+            owner,
+            dirt,
+            crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_base_occurrence,
+        );
+    }
+
+    pub(crate) fn on_dirty_from_shape(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        active_shape: &mut crate::mechanical_port::source::shapes::shape::Shape,
+    ) {
+        Self::on_dirty_with_path(owner, dirt, |path| {
+            crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_base_from_shape(
+                path,
+                active_shape,
+            );
+        });
+    }
+
+    pub(crate) fn on_dirty_from_layout(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::on_dirty_with_path(owner, dirt, |path| {
+            crate::mechanical_port::source::shapes::path::Path::mark_path_dirty_base_from_layout(
+                path,
+                active,
+                active_handle,
+            );
+        });
+    }
+
+    fn on_dirty_with_path(
+        owner: &CoreHandle,
+        dirt: ComponentDirt,
+        mut mark_path_dirty: impl FnMut(&CoreHandle),
+    ) {
+        if (dirt & !ComponentDirt::COLLAPSED) == ComponentDirt::RENDER_OPACITY {
+            return;
+        }
+        let skinnable = owner
+            .with_downcast::<Self, _>(|skin| skin.skinnable.clone())
+            .flatten();
+        if let Some(skinnable) = skinnable {
+            if skinnable
+                .with(|object| object.as_points_path().is_some())
+                .unwrap_or(false)
+            {
+                // PointsPath::markSkinDirty calls Path::markPathDirty directly;
+                // its virtual markPathDirty would dirty this Skin again and
+                // reset winding. Release both receivers before Path callouts.
+                mark_path_dirty(&skinnable);
+            } else {
+                skinnable.with_mut(|object| {
+                    object
+                        .as_skinnable_behavior_mut()
+                        .expect("the retained Skinnable must retain its capability")
+                        .mark_skin_dirty();
+                });
+            }
+        }
+    }
+
     pub(crate) fn add_dirt_from_points_path(
         &mut self,
         path: &mut crate::mechanical_port::source::shapes::points_path::PointsPath,

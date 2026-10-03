@@ -842,27 +842,36 @@ impl LayoutComponent {
         let own_collapsed =
             owner.with(|object| object.as_layout_component().unwrap().is_collapsed());
         if let Some(own_collapsed) = own_collapsed {
+            Self::propagate_resolved_collapse_occurrence(owner, value || own_collapsed, None, None);
+        }
+    }
+    pub(crate) fn propagate_collapse_from_layout_occurrence(
+        owner: &CoreHandle,
+        value: bool,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        if let Some(own_collapsed) = owner.with(|object| object.component_is_collapsed()) {
             Self::propagate_resolved_collapse_occurrence(
                 owner,
                 value || own_collapsed,
-                own_collapsed,
                 None,
+                Some((active, active_handle)),
             );
         }
     }
     fn propagate_resolved_collapse_occurrence(
         owner: &CoreHandle,
         collapsed: bool,
-        own_collapsed: bool,
         mut active_style: Option<&mut LayoutComponentStyle>,
+        mut active_layout: Option<(
+            &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+            &CoreHandle,
+        )>,
     ) {
-        let Some((children, collapsables)) = owner.with(|object| {
-            let component = object.as_component().unwrap();
-            (
-                object.as_container_component().unwrap().children().to_vec(),
-                component.collapsables_snapshot(),
-            )
-        }) else {
+        let Some(children) =
+            owner.with(|object| object.as_container_component().unwrap().children().to_vec())
+        else {
             return;
         };
         for child in children {
@@ -873,12 +882,27 @@ impl LayoutComponent {
                 // The source calls this same child while its style setter is
                 // active. Use that actual owner, not a second arena borrow.
                 CoreCapabilities::component_collapse(style, collapsed);
+            } else if let Some((active, active_handle)) = active_layout.as_mut() {
+                ComponentOccurrenceHandle::Authored(child)
+                    .collapse_from_layout(collapsed, active, active_handle);
             } else {
                 ComponentOccurrenceHandle::Authored(child).collapse(collapsed);
             }
         }
-        for collapsable in collapsables {
-            crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, own_collapsed);
+        // propagateCollapse calls updateCollapsables after the children. Both
+        // the virtual collapsed state and membership are current at that site.
+        if let Some((own_collapsed, collapsables)) = owner.with(|object| {
+            (
+                object.component_is_collapsed(),
+                object.as_component().unwrap().collapsables_snapshot(),
+            )
+        }) {
+            for collapsable in collapsables.iter() {
+                crate::source::data_bind::data_bind::DataBind::collapse_handle(
+                    collapsable,
+                    own_collapsed,
+                );
+            }
         }
     }
 
@@ -1571,13 +1595,11 @@ impl LayoutComponent {
         self.style_display_hidden()
     }
     pub(crate) fn collapse_after_component(&mut self, value: bool) {
-        let collapsed = value || self.is_collapsed();
-        for child in self.base.base.base.base.base.children() {
-            child.with_mut(|child| {
-                child.component_collapse(collapsed);
-            });
-        }
-        self.base.base.base.base.base.update_collapsables();
+        crate::mechanical_port::source::component::ActiveLayoutOwner::Layout(self)
+            .collapse_after_component(value);
+    }
+    pub fn add_collapsable(&mut self, collapsable: CoreHandle) {
+        CoreCapabilities::component_add_collapsable(self, collapsable);
     }
     pub fn collapse(&mut self, value: bool) -> bool {
         CoreCapabilities::component_collapse(self, value)
@@ -3498,12 +3520,7 @@ impl LayoutComponent {
                         || display_hidden
                 })
                 .expect("live layout owner");
-            Self::propagate_resolved_collapse_occurrence(
-                owner,
-                collapsed,
-                collapsed,
-                Some(active_style),
-            );
+            Self::propagate_resolved_collapse_occurrence(owner, collapsed, Some(active_style), None);
             Self::mark_layout_node_dirty_occurrence(owner, false);
         }
     }

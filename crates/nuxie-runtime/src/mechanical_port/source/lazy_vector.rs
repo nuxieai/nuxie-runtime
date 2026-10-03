@@ -90,6 +90,17 @@ impl<T> Default for LazyVectorSnapshot<T> {
         }
     }
 }
+impl<T> LazyVectorSnapshot<T> {
+    /// Borrow the unconsumed entries from the retained backing. Reentrant owner
+    /// edits copy that backing, so these references keep the traversal's order
+    /// without cloning each weak occurrence on the way to its callback.
+    pub fn iter(&self) -> std::slice::Iter<'_, T> {
+        self.values
+            .as_ref()
+            .map_or(&[][..], |values| &values[self.index..])
+            .iter()
+    }
+}
 impl<T: Clone> Iterator for LazyVectorSnapshot<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {

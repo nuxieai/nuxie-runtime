@@ -261,6 +261,68 @@ impl TransformComponent {
         }
     }
 
+    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle) -> bool {
+        Self::collapse_after_super_with_layout_occurrence(owner, None)
+    }
+
+    pub(crate) fn collapse_after_super_from_layout_occurrence(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) -> bool {
+        Self::collapse_after_super_with_layout_occurrence(owner, Some((active, active_handle)))
+    }
+
+    fn collapse_after_super_with_layout_occurrence(
+        owner: &CoreHandle,
+        mut active_layout: Option<(
+            &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+            &CoreHandle,
+        )>,
+    ) -> bool {
+        let dependents = owner
+            .with(|object| {
+                object.as_transform_component()?;
+                Some(object.as_component()?.dependents_snapshot())
+            })
+            .flatten();
+        let Some(dependents) = dependents else {
+            return false;
+        };
+        for dependent in dependents.iter() {
+            let Some(handle) = dependent.authored() else {
+                continue;
+            };
+            let constrained = if let Some((active, _)) = active_layout
+                .as_ref()
+                .filter(|(_, active_handle)| *active_handle == handle)
+            {
+                active.is_constrained()
+            } else {
+                handle
+                    .with(|object| {
+                        object
+                            .as_transform_component()
+                            .is_some_and(|transform| !transform.constraints().is_empty())
+                    })
+                    .unwrap_or(false)
+            };
+            if constrained {
+                if let Some((active, active_handle)) = active_layout.as_mut() {
+                    dependent.add_dirt_from_layout(
+                        active,
+                        active_handle,
+                        ComponentDirt::WORLD_TRANSFORM,
+                        true,
+                    );
+                } else {
+                    dependent.add_dirt(ComponentDirt::WORLD_TRANSFORM, true);
+                }
+            }
+        }
+        true
+    }
+
     pub fn mark_dirty_if_constrained(&mut self) {
         if !self.constraints.is_empty() {
             CoreCapabilities::world_transform_mark_dirty(self);
@@ -307,6 +369,20 @@ impl TransformComponent {
             );
         if occurrence.add_dirt_from_shape(active_shape, ComponentDirt::TRANSFORM, false) {
             occurrence.add_dirt_from_shape(active_shape, ComponentDirt::WORLD_TRANSFORM, true);
+        }
+    }
+
+    pub(crate) fn mark_transform_dirty_from_text(
+        owner: &CoreHandle,
+        active_text: &mut crate::mechanical_port::source::text::text::Text,
+    ) {
+        assert!(owner.is_type_of(TransformComponentBase::TYPE_KEY));
+        let occurrence =
+            crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+                owner.clone(),
+            );
+        if occurrence.add_dirt_from_text(active_text, ComponentDirt::TRANSFORM, false) {
+            occurrence.add_dirt_from_text(active_text, ComponentDirt::WORLD_TRANSFORM, true);
         }
     }
 

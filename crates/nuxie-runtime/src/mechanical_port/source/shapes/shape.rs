@@ -172,6 +172,34 @@ impl Shape {
         self.invalidate_intrinsic_bounds();
     }
 
+    pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
+        Self::collapse_after_super_with(owner, |composer| {
+            composer.collapse(value);
+        });
+    }
+
+    pub(crate) fn collapse_after_super_from_layout_occurrence(
+        owner: &CoreHandle,
+        value: bool,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::collapse_after_super_with(owner, |composer| {
+            composer.collapse_from_layout(value, active, active_handle);
+        });
+    }
+
+    fn collapse_after_super_with(
+        owner: &CoreHandle,
+        collapse: impl FnOnce(&ComponentOccurrenceHandle),
+    ) {
+        let composer = owner.with_downcast::<Self, _>(|shape| shape.path_composer.occurrence());
+        if let Some(composer) = composer {
+            collapse(&composer);
+            owner.with_downcast_mut::<Self, _>(Self::invalidate_intrinsic_bounds);
+        }
+    }
+
     pub fn length(&mut self) -> f32 {
         if self.world_length < 0.0 {
             let mut length = 0.0;
@@ -227,6 +255,57 @@ impl Shape {
             .add_dirt_from_shape(self, ComponentDirt::PATH, false);
         }
         self.paint_container.invalidate_stroke_effects();
+    }
+
+    pub(crate) fn path_changed_occurrence(owner: &CoreHandle) {
+        Self::path_changed_with(owner, |occurrence, dirt, recurse| {
+            occurrence.add_dirt(dirt, recurse);
+        });
+    }
+
+    pub(crate) fn path_changed_from_layout_occurrence(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::path_changed_with(owner, |occurrence, dirt, recurse| {
+            occurrence.add_dirt_from_layout(active, active_handle, dirt, recurse);
+        });
+    }
+
+    fn path_changed_with(
+        owner: &CoreHandle,
+        mut add_dirt: impl FnMut(&ComponentOccurrenceHandle, ComponentDirt, bool),
+    ) {
+        let Some(composer) =
+            owner.with_downcast::<Self, _>(|shape| shape.path_composer.occurrence())
+        else {
+            return;
+        };
+        add_dirt(&composer, ComponentDirt::PATH, true);
+        if owner
+            .with_downcast_mut::<Self, _>(|shape| {
+                shape.world_length = -1.0;
+                shape.local_bounds_clean.set(false);
+                shape.invalidate_intrinsic_bounds();
+            })
+            .is_none()
+        {
+            return;
+        }
+        let mut index = 0;
+        while let Some(constraint) = owner
+            .with_downcast::<Self, _>(|shape| shape.base.constraints().get(index).cloned())
+            .flatten()
+        {
+            add_dirt(
+                &ComponentOccurrenceHandle::Authored(constraint),
+                ComponentDirt::PATH,
+                false,
+            );
+            index += 1;
+        }
+        ShapePaintContainer::invalidate_stroke_effects_occurrence(owner);
     }
 
     pub fn add_to_render_path(&mut self, path: &mut RenderPath, transform: Mat2D) {
@@ -468,6 +547,43 @@ impl Shape {
             .unwrap_or_default()
         {
             dependent.add_dirt(ComponentDirt::PATH, true);
+        }
+    }
+
+    pub(crate) fn path_collapse_changed_occurrence(owner: &CoreHandle) {
+        Self::path_collapse_changed_with(owner, |occurrence, dirt, recurse| {
+            occurrence.add_dirt(dirt, recurse);
+        });
+    }
+
+    pub(crate) fn path_collapse_changed_from_layout_occurrence(
+        owner: &CoreHandle,
+        active: &mut crate::mechanical_port::source::component::ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::path_collapse_changed_with(owner, |occurrence, dirt, recurse| {
+            occurrence.add_dirt_from_layout(active, active_handle, dirt, recurse);
+        });
+    }
+
+    fn path_collapse_changed_with(
+        owner: &CoreHandle,
+        mut add_dirt: impl FnMut(&ComponentOccurrenceHandle, ComponentDirt, bool),
+    ) {
+        let composer = owner.with_downcast_mut::<Self, _>(|shape| {
+            shape.local_bounds_clean.set(false);
+            shape.path_composer.occurrence()
+        });
+        if let Some(composer) = composer {
+            // PathComposer::pathCollapseChanged visits dependents even when
+            // its Path bit was already set while the Shape was collapsed.
+            add_dirt(&composer, ComponentDirt::PATH, false);
+            let dependents = composer
+                .with_component(Component::dependents_snapshot)
+                .unwrap_or_default();
+            for dependent in dependents.iter() {
+                add_dirt(dependent, ComponentDirt::PATH, true);
+            }
         }
     }
 

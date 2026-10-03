@@ -43,7 +43,7 @@ use crate::mechanical_port::source::{
     draw_rules::DrawRules,
     draw_target::DrawTarget,
     draw_target_placement::DrawTargetPlacement,
-    drawable::{Drawable, RuntimeDrawableOccurrence},
+    drawable::{DrawRangePrelude, Drawable, RuntimeDrawableOccurrence},
     factory::RuntimeFactoryHandle,
     file::{RuntimeFileHandle, RuntimeFileWeakHandle},
     focus_data::FocusData,
@@ -3259,6 +3259,11 @@ impl Artboard {
         first_drawable: Option<RuntimeDrawableOccurrence>,
         stop: Option<RuntimeDrawableOccurrence>,
     ) {
+        // Like the C++ method's live `this`, retain the existing runtime root
+        // for this range, including its final focus cleanup. Every visitor
+        // read below is still fresh, and no root borrow crosses a draw call.
+        // Source artboards stay on the generation-checked arena access path.
+        let runtime_receiver = root.runtime_artboard_instance();
         let mut empty_clips = 0;
         let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();
         let mut drawable = first_drawable;
@@ -3269,17 +3274,24 @@ impl Artboard {
             'draw: {
                 let previous_clips = empty_clips;
                 empty_clips += current.empty_clip_count();
-                if !current.will_draw() || empty_clips != previous_clips || empty_clips > 0 {
-                    break 'draw;
-                }
-                if current.is_clip_start() {
-                    pending_clip_operations.push(current.clone());
-                    break 'draw;
-                } else if !pending_clip_operations.is_empty() {
-                    if current.is_clip_end() {
+                match current.draw_range_prelude(
+                    empty_clips != previous_clips || empty_clips > 0,
+                    !pending_clip_operations.is_empty(),
+                ) {
+                    DrawRangePrelude::Skip => {
+                        break 'draw;
+                    }
+                    DrawRangePrelude::ClipStart => {
+                        pending_clip_operations.push(current.clone());
+                        break 'draw;
+                    }
+                    DrawRangePrelude::ClipEnd => {
                         pending_clip_operations.pop();
                         break 'draw;
                     }
+                    DrawRangePrelude::Draw => {}
+                }
+                if !pending_clip_operations.is_empty() {
                     for pending in pending_clip_operations.drain(..) {
                         pending.draw(renderer);
                     }
@@ -3301,9 +3313,12 @@ impl Artboard {
                 if current.is_mask_end() {
                     break 'draw;
                 }
-                let visitor = root
-                    .with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
-                    .flatten();
+                let visitor = if let Some(receiver) = runtime_receiver.as_ref() {
+                    receiver.with_artboard(|instance| instance.draw_visitor.clone())
+                } else {
+                    root.with_downcast::<Artboard, _>(|a| a.draw_visitor.clone())
+                        .flatten()
+                };
                 if let Some(visitor) = visitor.as_ref() {
                     if current
                         .with(Drawable::has_custom_properties)

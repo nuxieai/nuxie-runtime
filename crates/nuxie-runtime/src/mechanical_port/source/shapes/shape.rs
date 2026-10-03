@@ -362,8 +362,16 @@ impl Shape {
                 let kind = behavior.pick_path_kind();
                 let fill_rule = behavior.fill_rule();
                 self.with_path_mut(kind, |path| {
-                    behavior.shape_paint_mut().draw_with_fill_rule(
-                        renderer, path, transform, false, None, needs_save, fill_rule,
+                    behavior.shape_paint_mut().draw_with_active_container(
+                        renderer,
+                        path,
+                        transform,
+                        false,
+                        None,
+                        needs_save,
+                        fill_rule,
+                        &|| transform,
+                        None,
                     );
                 });
             });

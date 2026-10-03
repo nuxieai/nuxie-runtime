@@ -76,6 +76,28 @@ impl TextStylePaint {
         blend: nuxie_render_api::BlendMode,
         additive_amount: u8,
     ) {
+        let parent = self.base.parent_handle();
+        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| {
+            Self::parent_world_transform(parent.as_ref().expect("TextStylePaint parent is Text"))
+        });
+    }
+    pub(crate) fn draw_with_active_text(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        world: &Mat2D,
+        blend: nuxie_render_api::BlendMode,
+        additive_amount: u8,
+    ) {
+        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| *world);
+    }
+    fn draw_with_container_transform(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        world: &Mat2D,
+        blend: nuxie_render_api::BlendMode,
+        additive_amount: u8,
+        container_transform: &dyn Fn() -> Mat2D,
+    ) {
         let mut paint_index = 0;
         while let Some(handle) = self.paints.shape_paints().get(paint_index).cloned() {
             paint_index += 1;
@@ -89,9 +111,17 @@ impl TextStylePaint {
                 let fill_rule = paint.fill_rule();
                 paint.shape_paint_mut().blend_mode(blend, additive_amount);
                 if let Some(path) = self.opacity_paths.get_mut(&Opacity(1.0)) {
-                    paint
-                        .shape_paint_mut()
-                        .draw_with_fill_rule(renderer, path, *world, true, None, true, fill_rule);
+                    paint.shape_paint_mut().draw_with_active_container(
+                        renderer,
+                        path,
+                        *world,
+                        true,
+                        None,
+                        true,
+                        fill_rule,
+                        container_transform,
+                        None,
+                    );
                 }
                 if self.paint_pool.len() < self.opacity_paths.len() {
                     let factory = self
@@ -120,7 +150,7 @@ impl TextStylePaint {
                         })
                         .unwrap_or(0.0);
                     pooled.feather(strength);
-                    paint.shape_paint_mut().draw_with_fill_rule(
+                    paint.shape_paint_mut().draw_with_active_container(
                         renderer,
                         path,
                         *world,
@@ -128,6 +158,8 @@ impl TextStylePaint {
                         Some(pooled),
                         true,
                         fill_rule,
+                        container_transform,
+                        None,
                     );
                 }
             });
@@ -150,13 +182,17 @@ impl TextStylePaint {
         0xff000000
     }
     pub fn shape_world_transform(&self) -> Mat2D {
-        self.base
-            .parent_handle()
-            .and_then(|parent| {
-                parent
-                    .with(|parent| parent.as_text().map(|text| *text.shape_world_transform()))
-                    .flatten()
-            })
+        Self::parent_world_transform(
+            &self
+                .base
+                .parent_handle()
+                .expect("TextStylePaint parent is Text"),
+        )
+    }
+    fn parent_world_transform(parent: &CoreHandle) -> Mat2D {
+        parent
+            .with(|parent| parent.as_text().map(|text| *text.shape_world_transform()))
+            .flatten()
             .expect("TextStylePaint parent is Text")
     }
     pub fn path_builder(&self) -> CoreHandle {

@@ -137,6 +137,7 @@ impl ForegroundLayoutDrawable {
                 }
                 let kind = paint.pick_path_kind();
                 let fill_rule = paint.fill_rule();
+                let container_transform = self.shape_world_transform();
                 parent.with_mut(|parent| {
                     let Some(parent) = parent.as_layout_component_mut() else {
                         return;
@@ -150,9 +151,17 @@ impl ForegroundLayoutDrawable {
                     let Some(path) = path else {
                         return;
                     };
-                    paint
-                        .shape_paint_mut()
-                        .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
+                    paint.shape_paint_mut().draw_with_active_container(
+                        renderer,
+                        path,
+                        world,
+                        false,
+                        None,
+                        true,
+                        fill_rule,
+                        &|| container_transform,
+                        None,
+                    );
                 });
             });
         }

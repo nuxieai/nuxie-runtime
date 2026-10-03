@@ -351,14 +351,7 @@ impl ShapePaint {
         needs_save_operation: bool,
         fill_rule: Option<u32>,
     ) {
-        let Some(factory) = self
-            .base
-            .with_artboard(|artboard| artboard.factory())
-            .flatten()
-        else {
-            return;
-        };
-        self.draw_with_factory(
+        self.draw_with_context(
             renderer,
             shape_paint_path,
             transform,
@@ -366,7 +359,8 @@ impl ShapePaint {
             override_paint,
             needs_save_operation,
             fill_rule,
-            &factory,
+            None,
+            None,
         );
     }
 
@@ -379,31 +373,101 @@ impl ShapePaint {
         override_paint: Option<&mut dyn RenderPaint>,
         needs_save_operation: bool,
         fill_rule: Option<u32>,
-        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+        factory: &RuntimeFactoryHandle,
+    ) {
+        self.draw_with_context(
+            renderer,
+            shape_paint_path,
+            transform,
+            use_path_fill_rule,
+            override_paint,
+            needs_save_operation,
+            fill_rule,
+            None,
+            Some(factory),
+        );
+    }
+
+    /// Mediate a container that is already borrowed by its draw method. Its
+    /// world transform is independent of the matrix used to draw this path.
+    /// Invoke its getter only at the inner-feather rebuild. A caller-held
+    /// transform owner supplies its stable value; a TextStyle whose Text is
+    /// not borrowed instead reads that Text live. The optional factory belongs
+    /// to an already-borrowed Artboard.
+    pub(crate) fn draw_with_active_container(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        shape_paint_path: &mut ShapePaintPath,
+        transform: Mat2D,
+        use_path_fill_rule: bool,
+        override_paint: Option<&mut dyn RenderPaint>,
+        needs_save_operation: bool,
+        fill_rule: Option<u32>,
+        container_transform: &dyn Fn() -> Mat2D,
+        factory: Option<&RuntimeFactoryHandle>,
+    ) {
+        self.draw_with_context(
+            renderer,
+            shape_paint_path,
+            transform,
+            use_path_fill_rule,
+            override_paint,
+            needs_save_operation,
+            fill_rule,
+            Some(container_transform),
+            factory,
+        );
+    }
+
+    fn render_path_for_draw<'a>(
+        &self,
+        path: &'a mut ShapePaintPath,
+        active_factory: Option<&RuntimeFactoryHandle>,
+    ) -> &'a mut dyn nuxie_render_api::RenderPath {
+        let factory = active_factory.cloned().unwrap_or_else(|| {
+            self.base
+                .with_artboard(|artboard| artboard.factory())
+                .flatten()
+                .expect("a drawing ShapePaint has its imported Artboard factory")
+        });
+        // Retain the resolved factory only for this request, not across the
+        // following renderer callbacks. The path owns its resulting resource.
+        path.render_path(&factory)
+    }
+
+    fn draw_with_context(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        shape_paint_path: &mut ShapePaintPath,
+        transform: Mat2D,
+        use_path_fill_rule: bool,
+        override_paint: Option<&mut dyn RenderPaint>,
+        needs_save_operation: bool,
+        fill_rule: Option<u32>,
+        active_container_transform: Option<&dyn Fn() -> Mat2D>,
+        active_factory: Option<&RuntimeFactoryHandle>,
     ) {
         let mut saved = !needs_save_operation;
-        let feather = self.feather.as_ref().and_then(|feather| {
-            feather.with_downcast::<Feather, _>(|feather| {
-                (
-                    feather.space(),
-                    feather.base.inner() && fill_rule.is_some(),
-                    feather.base.offset_x(),
-                    feather.base.offset_y(),
-                    feather.effect_path_dirty(),
-                    feather.inner_path(),
-                )
-            })
-        });
-        if let Some((space, is_inner, offset_x, offset_y, _, _)) = feather.as_ref() {
-            if *space == TransformSpace::World
-                && !*is_inner
-                && (*offset_x != 0.0 || *offset_y != 0.0)
-            {
+        if let Some(feather) = self.feather.as_ref() {
+            let offset_in_artboard = feather
+                .with_downcast::<Feather, _>(|feather| {
+                    feather.space() == TransformSpace::World
+                        && !feather.is_inner()
+                        && (feather.base.offset_x() != 0.0 || feather.base.offset_y() != 0.0)
+                })
+                .unwrap_or(false);
+            if offset_in_artboard {
                 if !saved {
                     saved = true;
                     renderer.save();
                 }
-                renderer.translate(*offset_x, *offset_y);
+                // save() may change the feather. Only the branch decision is
+                // retained upstream; the translation uses the current offset.
+                if let Some((x, y)) = feather.with_downcast::<Feather, _>(|feather| {
+                    (feather.base.offset_x(), feather.base.offset_y())
+                }) {
+                    renderer.translate(x, y);
+                }
             }
         }
         if shape_paint_path.is_local() {
@@ -416,56 +480,84 @@ impl ShapePaint {
 
         let provider = self.path_provider;
         let path_effect = EffectsContainer::last_effect_path(self, &provider);
-        let inner_path =
-            feather
-                .as_ref()
-                .and_then(|(space, is_inner, _, _, effect_path_dirty, inner_path)| {
-                    if !*is_inner {
-                        return None;
+        let mut inner_path = None;
+        if let Some(feather) = self.feather.as_ref() {
+            if feather
+                .with_downcast::<Feather, _>(Feather::is_inner)
+                .unwrap_or(false)
+            {
+                // Upstream's nonvirtual innerPath() returns its value member's
+                // address, represented by this non-null, stable Rc. Retiring
+                // the Rust occurrence must still leave our save balanced.
+                let Some(path) = feather.with_downcast::<Feather, _>(Feather::inner_path) else {
+                    if saved && needs_save_operation {
+                        renderer.restore();
                     }
-                    // Upstream d6107a91 restores the renderer before returning
-                    // when innerPath() is null. Feather::innerPath() actually
-                    // returns its value member's address, represented here by
-                    // a non-null Rc, so that null-only branch is unreachable.
-                    if path_effect.is_some() && *effect_path_dirty {
-                        if let (Some(feather), Some(effect)) =
-                            (self.feather.as_ref(), path_effect.as_ref())
-                        {
+                    return;
+                };
+                if let Some(effect) = path_effect.as_ref() {
+                    if feather
+                        .with_downcast::<Feather, _>(Feather::effect_path_dirty)
+                        .unwrap_or(false)
+                    {
+                        let container_transform = active_container_transform
+                            .map(|read_transform| read_transform())
+                            .or_else(|| {
+                                self.base.parent_handle().and_then(|parent| {
+                                    parent
+                                        .with(|parent| parent.shape_paint_world_transform())
+                                        .flatten()
+                                })
+                            });
+                        if let Some(container_transform) = container_transform {
                             feather.with_downcast_mut::<Feather, _>(|feather| {
+                                let offset_in_artboard = feather.space() == TransformSpace::World;
                                 feather.rebuild_inner_path(
                                     &effect.borrow(),
-                                    &transform,
-                                    *space == TransformSpace::World,
+                                    &container_transform,
+                                    offset_in_artboard,
                                 );
                             });
                         }
                     }
-                    if !saved {
-                        saved = true;
-                        renderer.save();
-                    }
-                    if let Some(effect) = path_effect.as_ref() {
-                        renderer.clip_path(effect.borrow_mut().render_path(factory));
-                    } else {
-                        renderer.clip_path(shape_paint_path.render_path(factory));
-                    }
-                    Some(inner_path.clone())
-                });
-        if let Some((space, is_inner, offset_x, offset_y, _, _)) = feather.as_ref() {
-            if *space != TransformSpace::World
-                && !*is_inner
-                && (*offset_x != 0.0 || *offset_y != 0.0)
-            {
+                }
+                inner_path = Some(path);
                 if !saved {
                     saved = true;
                     renderer.save();
                 }
-                renderer.translate(*offset_x, *offset_y);
+                // renderPath(Component*) resolves the factory at each request,
+                // after preceding renderer callbacks (including editor edits).
+                if let Some(effect) = path_effect.as_ref() {
+                    renderer.clip_path(
+                        self.render_path_for_draw(&mut effect.borrow_mut(), active_factory),
+                    );
+                } else {
+                    renderer.clip_path(self.render_path_for_draw(shape_paint_path, active_factory));
+                }
+            }
+            let offset_in_local = feather
+                .with_downcast::<Feather, _>(|feather| {
+                    feather.space() != TransformSpace::World
+                        && !feather.is_inner()
+                        && (feather.base.offset_x() != 0.0 || feather.base.offset_y() != 0.0)
+                })
+                .unwrap_or(false);
+            if offset_in_local {
+                if !saved {
+                    saved = true;
+                    renderer.save();
+                }
+                if let Some((x, y)) = feather.with_downcast::<Feather, _>(|feather| {
+                    (feather.base.offset_x(), feather.base.offset_y())
+                }) {
+                    renderer.translate(x, y);
+                }
             }
         }
 
         let mut draw_path = |path: &mut ShapePaintPath, original: Option<&ShapePaintPath>| {
-            let render_path = path.render_path(factory);
+            let render_path = self.render_path_for_draw(path, active_factory);
             if !use_path_fill_rule && self.is_fill {
                 if let Some(fill_rule) = fill_rule {
                     match fill_rule {
@@ -479,9 +571,9 @@ impl ShapePaint {
             if override_paint.is_none() {
                 self.apply_modulated_image(original.unwrap_or(path));
             }
-            // Release the mutable render-path borrow while reading the
-            // original raw path, then borrow the already-built cache again.
-            let render_path = path.render_path(factory);
+            // C++ retains the selected RenderPath pointer through modulation.
+            // Reborrow that resource, without a second factory/path request.
+            let render_path = path.existing_render_path();
             if let Some(paint) = override_paint.as_deref() {
                 renderer.draw_path(render_path, paint);
             } else if let Some(paint) = self.render_paint.as_ref() {

@@ -149,4 +149,12 @@ impl ShapePaintPath {
         }
         self.render_path.as_deref_mut().unwrap()
     }
+
+    /// Reborrow the resource selected by render_path without repeating its
+    /// factory lookup or dirty-path callbacks.
+    pub(crate) fn existing_render_path(&mut self) -> &mut dyn RenderPath {
+        self.render_path
+            .as_deref_mut()
+            .expect("resolved RenderPath")
+    }
 }

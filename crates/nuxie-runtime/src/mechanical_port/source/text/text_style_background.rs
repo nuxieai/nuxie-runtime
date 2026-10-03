@@ -101,14 +101,38 @@ impl TextStyleBackground {
         self.paints.propagate_opacity(opacity);
     }
 
-    // Text supplies its already-borrowed transform/blend, as TextStylePaint does.
-    // Reading Text through the parent chain here would reborrow that same owner.
     pub fn draw(
         &mut self,
         renderer: &mut dyn Renderer,
         world: &Mat2D,
         blend: BlendMode,
         additive_amount: u8,
+    ) {
+        let style = self.base.parent_handle();
+        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| {
+            Self::style_world_transform(style.as_ref().expect("TextStyleBackground parent"))
+        });
+    }
+
+    // Text supplies its already-borrowed transform/blend, as TextStylePaint does.
+    // Reading Text through the parent chain here would reborrow that same owner.
+    pub(crate) fn draw_with_active_text(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        world: &Mat2D,
+        blend: BlendMode,
+        additive_amount: u8,
+    ) {
+        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| *world);
+    }
+
+    fn draw_with_container_transform(
+        &mut self,
+        renderer: &mut dyn Renderer,
+        world: &Mat2D,
+        blend: BlendMode,
+        additive_amount: u8,
+        container_transform: &dyn Fn() -> Mat2D,
     ) {
         if self.rects.is_empty() {
             return;
@@ -123,7 +147,7 @@ impl TextStyleBackground {
                 }
                 let fill_rule = paint.fill_rule();
                 paint.shape_paint_mut().blend_mode(blend, additive_amount);
-                paint.shape_paint_mut().draw_with_fill_rule(
+                paint.shape_paint_mut().draw_with_active_container(
                     renderer,
                     &mut self.path.path,
                     *world,
@@ -131,13 +155,19 @@ impl TextStyleBackground {
                     None,
                     true,
                     fill_rule,
+                    container_transform,
+                    None,
                 );
             });
         }
     }
 
     pub fn shape_world_transform(&self) -> Mat2D {
-        self.style()
+        Self::style_world_transform(&self.style())
+    }
+
+    fn style_world_transform(style: &CoreHandle) -> Mat2D {
+        style
             .with_downcast::<TextStylePaint, _>(TextStylePaint::shape_world_transform)
             .expect("TextStyleBackground parent is TextStylePaint")
     }

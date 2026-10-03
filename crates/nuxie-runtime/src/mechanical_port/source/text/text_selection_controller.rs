@@ -119,7 +119,7 @@ fn shape_to_root(text: &Text) -> Mat2D {
             let origin = artboard.root_transform(Vec2D::new(0.0, 0.0));
             let x = artboard.root_transform(Vec2D::new(1.0, 0.0)) - origin;
             let y = artboard.root_transform(Vec2D::new(0.0, 1.0)) - origin;
-            Mat2D::new(x.x, x.y, y.x, y.y, origin.x, origin.y) * *text.shape_world_transform()
+            Mat2D::new(x.x, x.y, y.x, y.y, origin.x, origin.y) * text.shape_world_transform()
         })
         .expect("registered Text has an Artboard")
 }
@@ -374,7 +374,7 @@ impl TextSelectionController {
                 return false;
             }
             if !nearest {
-                let artboard_point = *text.shape_world_transform() * local;
+                let artboard_point = text.shape_world_transform() * local;
                 if !text.base.hit_test_point(&artboard_point, false, true) {
                     return false;
                 }

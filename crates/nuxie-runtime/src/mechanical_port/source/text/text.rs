@@ -42,7 +42,10 @@ use crate::mechanical_port::source::{
         viewmodel_value_dependent::ViewModelValueDependent,
     },
 };
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::{Rc, Weak},
+};
 
 // Sweep gradients have no Rive shader and fall back to their first stop.
 pub fn draw_color_glyph_layer(
@@ -537,7 +540,9 @@ const FILE_FEATURES_ALL: u8 =
 pub struct Text {
     pub base: TextBase,
     pub internal_transform: Mat2D,
-    pub shape_world_transform: Mat2D,
+    // The actual C++ m_shapeWorldTransform field is read by paint callbacks
+    // while Text's other state is borrowed. There is no second matrix copy.
+    shape_world_transform: Rc<Cell<Mat2D>>,
     runs: Vec<CoreHandle>,
     all_runs: Vec<TextValueRunHandle>,
     render_styles: Vec<CoreHandle>,
@@ -576,7 +581,7 @@ impl Default for Text {
         Self {
             base: TextBase::default(),
             internal_transform: Mat2D::default(),
-            shape_world_transform: Mat2D::default(),
+            shape_world_transform: Rc::new(Cell::new(Mat2D::default())),
             runs: Vec::new(),
             all_runs: Vec::new(),
             render_styles: Vec::new(),
@@ -645,8 +650,16 @@ impl Text {
         self.internal_transform
     }
 
-    pub fn shape_world_transform(&self) -> &Mat2D {
-        &self.shape_world_transform
+    pub fn shape_world_transform(&self) -> Mat2D {
+        self.shape_world_transform.get()
+    }
+    // C++ exposes m_shapeWorldTransform publicly. Keep explicit writes to the
+    // same field rather than publishing a mirrored callback value.
+    pub fn set_shape_world_transform(&mut self, value: Mat2D) {
+        self.shape_world_transform.set(value);
+    }
+    pub(crate) fn shape_world_transform_weak(&self) -> Weak<Cell<Mat2D>> {
+        Rc::downgrade(&self.shape_world_transform)
     }
     pub fn unichars(&self) -> &[u32] {
         self.styled_text.unichars()
@@ -1178,9 +1191,9 @@ impl Text {
             .intersects(ComponentDirt::WORLD_TRANSFORM | ComponentDirt::PATH | ComponentDirt::PAINT)
         {
             self.clip_path.rewind();
-            self.shape_world_transform = *self.base.world_transform() * self.internal_transform;
+            self.set_shape_world_transform(*self.base.world_transform() * self.internal_transform);
             self.clip_path
-                .add_path(&self.clip_rect, Some(&self.shape_world_transform));
+                .add_path(&self.clip_rect, Some(&self.shape_world_transform()));
         }
         if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
             if let Some(controller) = self.selection_controller.upgrade() {
@@ -1804,7 +1817,7 @@ impl Text {
                 .expect("Text requires its Artboard renderer factory");
             renderer.clip_path(self.clip_path.render_path(&factory));
         }
-        let world_transform = self.shape_world_transform;
+        let world_transform = self.shape_world_transform();
         let blend_mode = self.base.blend_mode().into();
         let additive_amount = self.base.additive_amount();
         // Backgrounds precede every glyph, in style child order.
@@ -1814,7 +1827,7 @@ impl Text {
                 .flatten()
             {
                 background.with_downcast_mut::<TextStyleBackground, _>(|background| {
-                    background.draw_with_active_text(
+                    background.draw(
                         renderer,
                         &world_transform,
                         blend_mode,
@@ -1830,7 +1843,7 @@ impl Text {
             match &self.draw_commands[index] {
                 TextDrawCommand::Style(style) => {
                     style.with_downcast_mut::<TextStylePaint, _>(|style| {
-                        style.draw_with_active_text(
+                        style.draw(
                             renderer,
                             &world_transform,
                             blend_mode,

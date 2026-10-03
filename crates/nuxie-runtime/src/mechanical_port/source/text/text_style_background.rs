@@ -108,35 +108,17 @@ impl TextStyleBackground {
         blend: BlendMode,
         additive_amount: u8,
     ) {
-        let style = self.base.parent_handle();
-        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| {
-            Self::style_world_transform(style.as_ref().expect("TextStyleBackground parent"))
-        });
-    }
-
-    // Text supplies its already-borrowed transform/blend, as TextStylePaint does.
-    // Reading Text through the parent chain here would reborrow that same owner.
-    pub(crate) fn draw_with_active_text(
-        &mut self,
-        renderer: &mut dyn Renderer,
-        world: &Mat2D,
-        blend: BlendMode,
-        additive_amount: u8,
-    ) {
-        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| *world);
-    }
-
-    fn draw_with_container_transform(
-        &mut self,
-        renderer: &mut dyn Renderer,
-        world: &Mat2D,
-        blend: BlendMode,
-        additive_amount: u8,
-        container_transform: &dyn Fn() -> Mat2D,
-    ) {
         if self.rects.is_empty() {
             return;
         }
+        let base = &self.base;
+        // Read through the actual Style parent and Text matrix fields only
+        // when ShapePaint requests the container transform after callbacks.
+        let container_transform = || {
+            Self::style_world_transform(
+                &base.parent_handle().expect("TextStyleBackground parent"),
+            )
+        };
         for handle in self.paints.shape_paints().iter().cloned() {
             handle.with_mut(|object| {
                 let Some(paint) = object.as_shape_paint_behavior_mut() else {
@@ -155,7 +137,7 @@ impl TextStyleBackground {
                     None,
                     true,
                     fill_rule,
-                    container_transform,
+                    &container_transform,
                     None,
                 );
             });
@@ -168,13 +150,15 @@ impl TextStyleBackground {
 
     fn style_world_transform(style: &CoreHandle) -> Mat2D {
         style
-            .with_downcast::<TextStylePaint, _>(TextStylePaint::shape_world_transform)
+            .text_style_parent()
             .expect("TextStyleBackground parent is TextStylePaint")
+            .text_shape_world_transform()
+            .expect("TextStylePaint parent is Text")
     }
 
     pub fn path_builder(&self) -> CoreHandle {
         self.style()
-            .with_downcast::<TextStylePaint, _>(TextStylePaint::path_builder)
+            .text_style_parent()
             .expect("TextStyleBackground parent is TextStylePaint")
     }
 

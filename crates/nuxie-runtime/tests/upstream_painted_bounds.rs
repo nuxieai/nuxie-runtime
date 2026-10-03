@@ -7,6 +7,7 @@ use nuxie_runtime::{
     source::{
         advance_flags::AdvanceFlags,
         artboard::Artboard,
+        component_dirt::ComponentDirt,
         core::{CoreArena, CoreHandle, CoreObject},
         drawable::{BoundsFidelity, Drawable},
         generated::{
@@ -21,7 +22,7 @@ use nuxie_runtime::{
             },
             transform_component_base::TransformComponentBase,
         },
-        math::{aabb::Aabb, mat2d::Mat2D},
+        math::{aabb::Aabb, mat2d::Mat2D, path_types::PathDirection, raw_path::RawPath},
         node::Node,
         scripted::scripted_drawable::ScriptedDrawable,
         shapes::{
@@ -34,7 +35,10 @@ use nuxie_runtime::{
             shape::Shape,
         },
         status_code::StatusCode,
-        text::text::Text,
+        text::{
+            text::Text, text_style_background::TextStyleBackground,
+            text_style_paint::TextStylePaint,
+        },
     },
 };
 fn uint(h: &CoreHandle, k: u16, v: u32) {
@@ -473,4 +477,165 @@ fn inner_feather_effect_uses_parent_container_transform_not_draw_matrix() {
             approx(max_y, 9.0);
         })
         .unwrap();
+}
+
+fn draw_background_from_style_save(draw_matrix: Mat2D) {
+    let mut scene = Scene::new();
+    let text = scene.arena.insert(Text::default());
+    let text_id = scene.add(&text, 0);
+    number(&text, TransformComponentBase::SCALE_X_PROPERTY_KEY, 2.0);
+    number(&text, TransformComponentBase::SCALE_Y_PROPERTY_KEY, 2.0);
+    let style = scene.arena.insert(TextStylePaint::default());
+    let style_id = scene.add(&style, text_id);
+    let foreground_fill = scene.arena.insert(Fill::default());
+    let foreground_fill_id = scene.add(&foreground_fill, style_id);
+    scene.color(foreground_fill_id, 0xffff0000);
+    let background = scene.arena.insert(TextStyleBackground::default());
+    let background_id = scene.add(&background, style_id);
+    let background_fill = scene.arena.insert(Fill::default());
+    let background_fill_id = scene.add(&background_fill, background_id);
+    scene.color(background_fill_id, 0xff00ff00);
+    let feather = scene.arena.insert(Feather::default());
+    assert!(CoreRegistry::set_bool_handle(
+        &feather,
+        FeatherBase::INNER_PROPERTY_KEY.into(),
+        true,
+    ));
+    uint(&feather, FeatherBase::SPACE_VALUE_PROPERTY_KEY, 0);
+    number(&feather, FeatherBase::STRENGTH_PROPERTY_KEY, 1.0);
+    number(&feather, FeatherBase::OFFSET_X_PROPERTY_KEY, 6.0);
+    number(&feather, FeatherBase::OFFSET_Y_PROPERTY_KEY, 8.0);
+    scene.add(&feather, background_fill_id);
+    let trim = scene.arena.insert(TrimPath::default());
+    uint(&trim, TrimPathBase::MODE_VALUE_PROPERTY_KEY, 1);
+    number(&trim, TrimPathBase::START_PROPERTY_KEY, 0.0);
+    number(&trim, TrimPathBase::END_PROPERTY_KEY, 0.5);
+    scene.add(&trim, background_fill_id);
+    scene.initialize();
+
+    let actual_text_transform = text
+        .with_downcast::<Text, _>(|text| text.shape_world_transform())
+        .unwrap();
+    assert_eq!(actual_text_transform, Mat2D::from_scale(2.0, 2.0));
+    assert_eq!(
+        style.with_downcast::<TextStylePaint, _>(TextStylePaint::background),
+        Some(Some(background.clone()))
+    );
+    // Source public path-building APIs, as used by Text's layout pass. No
+    // font or shaping implementation is needed to exercise this draw boundary.
+    let rect = Aabb::new(-5.0, -5.0, 5.0, 5.0);
+    let mut glyph = RawPath::default();
+    glyph.add_rect(rect, PathDirection::Clockwise);
+    style
+        .with_downcast_mut::<TextStylePaint, _>(|style| {
+            style.add_path(&glyph, 1.0);
+        })
+        .unwrap();
+    background
+        .with_downcast_mut::<TextStyleBackground, _>(|background| {
+            background.add_rect(rect);
+            background.update_path();
+        })
+        .unwrap();
+    background_fill
+        .with_downcast_mut::<Fill, _>(|fill| fill.update(ComponentDirt::PATH))
+        .unwrap();
+    assert_eq!(
+        feather.with_downcast::<Feather, _>(Feather::effect_path_dirty),
+        Some(true)
+    );
+    let mut renderer = PaintCallbackRenderer {
+        on_save: Some(Box::new(move || {
+            let mut background_renderer = PaintCallbackRenderer::default();
+            // The active style is only an ancestor read: this background,
+            // Fill, path and Renderer are all distinct from the foreground.
+            background
+                .with_downcast_mut::<TextStyleBackground, _>(|background| {
+                    background.draw(
+                        &mut background_renderer,
+                        &draw_matrix,
+                        render::BlendMode::SrcOver,
+                        0,
+                    );
+                })
+                .unwrap();
+            assert_eq!(
+                background_renderer.events,
+                [
+                    PaintDrawEvent::Save,
+                    PaintDrawEvent::Transform(*draw_matrix.values()),
+                    PaintDrawEvent::Clip,
+                    PaintDrawEvent::Draw,
+                    PaintDrawEvent::Restore,
+                ]
+            );
+        })),
+        ..Default::default()
+    };
+    style
+        .with_downcast_mut::<TextStylePaint, _>(|style| {
+            style.draw(
+                &mut renderer,
+                &actual_text_transform,
+                render::BlendMode::SrcOver,
+                0,
+            );
+        })
+        .unwrap();
+    assert!(renderer.on_save.is_none());
+    assert_eq!(
+        renderer.events,
+        [
+            PaintDrawEvent::Save,
+            PaintDrawEvent::Transform(*actual_text_transform.values()),
+            PaintDrawEvent::Draw,
+            PaintDrawEvent::Restore,
+        ]
+    );
+    feather
+        .with_downcast::<Feather, _>(|feather| {
+            assert!(!feather.effect_path_dirty());
+            let inner = feather.inner_path();
+            let inner = inner.borrow();
+            let points = inner.raw_path().points();
+            assert!(points.len() > 4);
+            // Background -> Style -> Text supplies the actual matrix. World
+            // offset (6,8) becomes local (3,4), independent of draw_matrix.
+            let hole = &points[4..];
+            approx(
+                hole.iter()
+                    .map(|point| point.x)
+                    .fold(f32::INFINITY, f32::min),
+                -2.0,
+            );
+            approx(
+                hole.iter()
+                    .map(|point| point.x)
+                    .fold(f32::NEG_INFINITY, f32::max),
+                8.0,
+            );
+            approx(
+                hole.iter()
+                    .map(|point| point.y)
+                    .fold(f32::INFINITY, f32::min),
+                -1.0,
+            );
+            approx(
+                hole.iter()
+                    .map(|point| point.y)
+                    .fold(f32::NEG_INFINITY, f32::max),
+                9.0,
+            );
+        })
+        .unwrap();
+}
+
+#[test]
+fn text_style_save_callback_can_draw_its_separate_background() {
+    draw_background_from_style_save(Mat2D::from_scale(2.0, 2.0));
+}
+
+#[test]
+fn reentrant_text_background_feather_uses_actual_text_transform() {
+    draw_background_from_style_save(Mat2D::from_scale(3.0, 4.0));
 }

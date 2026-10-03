@@ -76,28 +76,14 @@ impl TextStylePaint {
         blend: nuxie_render_api::BlendMode,
         additive_amount: u8,
     ) {
-        let parent = self.base.parent_handle();
-        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| {
-            Self::parent_world_transform(parent.as_ref().expect("TextStylePaint parent is Text"))
-        });
-    }
-    pub(crate) fn draw_with_active_text(
-        &mut self,
-        renderer: &mut dyn Renderer,
-        world: &Mat2D,
-        blend: nuxie_render_api::BlendMode,
-        additive_amount: u8,
-    ) {
-        self.draw_with_container_transform(renderer, world, blend, additive_amount, &|| *world);
-    }
-    fn draw_with_container_transform(
-        &mut self,
-        renderer: &mut dyn Renderer,
-        world: &Mat2D,
-        blend: nuxie_render_api::BlendMode,
-        additive_amount: u8,
-        container_transform: &dyn Fn() -> Mat2D,
-    ) {
+        let base = &self.base;
+        // Resolve the actual parent field at the source read site. The draw
+        // argument is a distinct matrix and may not be used as a fallback.
+        let container_transform = || {
+            Self::parent_world_transform(
+                &base.parent_handle().expect("TextStylePaint parent is Text"),
+            )
+        };
         let mut paint_index = 0;
         while let Some(handle) = self.paints.shape_paints().get(paint_index).cloned() {
             paint_index += 1;
@@ -119,7 +105,7 @@ impl TextStylePaint {
                         None,
                         true,
                         fill_rule,
-                        container_transform,
+                        &container_transform,
                         None,
                     );
                 }
@@ -158,7 +144,7 @@ impl TextStylePaint {
                         Some(pooled),
                         true,
                         fill_rule,
-                        container_transform,
+                        &container_transform,
                         None,
                     );
                 }
@@ -191,8 +177,7 @@ impl TextStylePaint {
     }
     fn parent_world_transform(parent: &CoreHandle) -> Mat2D {
         parent
-            .with(|parent| parent.as_text().map(|text| *text.shape_world_transform()))
-            .flatten()
+            .text_shape_world_transform()
             .expect("TextStylePaint parent is Text")
     }
     pub fn path_builder(&self) -> CoreHandle {

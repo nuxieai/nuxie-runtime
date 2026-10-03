@@ -1,3 +1,8 @@
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
 pub use crate::mechanical_port::source::component_dirt::ComponentDirt;
 use crate::mechanical_port::source::{
     artboard::{Artboard, RuntimeArtboardDirtyHandle},
@@ -805,10 +810,44 @@ enum ComponentDirtStorage {
     Artboard(RuntimeArtboardDirtyHandle),
 }
 
+// A separate Background can read TextStylePaint's actual parent while a
+// renderer callback holds that style. Other Components keep the field inline.
+enum ComponentParentStorage {
+    Inline(Option<CoreHandle>),
+    TextStylePaint(Rc<RefCell<Option<CoreHandle>>>),
+}
+
+impl ComponentParentStorage {
+    fn set(&mut self, value: Option<CoreHandle>) {
+        match self {
+            Self::Inline(parent) => *parent = value,
+            Self::TextStylePaint(parent) => *parent.borrow_mut() = value,
+        }
+    }
+
+    fn get(&self) -> Option<CoreHandle> {
+        match self {
+            Self::Inline(parent) => parent.clone(),
+            Self::TextStylePaint(parent) => parent.borrow().clone(),
+        }
+    }
+
+    fn with<R>(&self, use_parent: impl FnOnce(&CoreHandle) -> R) -> Option<R> {
+        match self {
+            Self::Inline(parent) => parent.as_ref().map(use_parent),
+            Self::TextStylePaint(parent) => {
+                // Release the field borrow before invoking another owner.
+                let parent = parent.borrow().clone();
+                parent.as_ref().map(use_parent)
+            }
+        }
+    }
+}
+
 pub struct Component {
     pub base: ComponentBase,
     dependency_helper: DependencyHelper<Component>,
-    parent: Option<CoreHandle>,
+    parent: ComponentParentStorage,
     graph_order: u32,
     artboard: Option<CoreHandle>,
     collapsables: LazyVector<CoreHandle>,
@@ -821,7 +860,7 @@ impl Default for Component {
         Self {
             base: ComponentBase::default(),
             dependency_helper: DependencyHelper::default(),
-            parent: None,
+            parent: ComponentParentStorage::Inline(None),
             // No dependency order can assign the unsorted sentinel.
             graph_order: u32::MAX,
             artboard: None,
@@ -839,6 +878,17 @@ impl ComponentBaseCallbacks for Component {
 }
 
 impl Component {
+    pub(crate) fn text_style_parent_weak(&mut self) -> Weak<RefCell<Option<CoreHandle>>> {
+        if let ComponentParentStorage::Inline(parent) = &mut self.parent {
+            self.parent =
+                ComponentParentStorage::TextStylePaint(Rc::new(RefCell::new(parent.take())));
+        }
+        let ComponentParentStorage::TextStylePaint(parent) = &self.parent else {
+            unreachable!()
+        };
+        Rc::downgrade(parent)
+    }
+
     pub(crate) fn bind_artboard_dirt(&mut self, dirty: RuntimeArtboardDirtyHandle) {
         // Alias the root's existing field, including when a temporary generated
         // base stands in for it during copy/deserialize. Never replace its bits.
@@ -858,13 +908,12 @@ impl Component {
     }
     pub(crate) fn on_added_dirty_runtime(&mut self, context: &mut dyn CoreContext) -> StatusCode {
         self.artboard = context.resolve_handle(0);
-        self.parent = context.resolve(self.base.parent_id());
+        self.parent.set(context.resolve(self.base.parent_id()));
         let Some(occurrence) = self.runtime_occurrence.clone() else {
             return StatusCode::MissingObject;
         };
         self.parent
-            .as_ref()
-            .and_then(|parent| {
+            .with(|parent| {
                 parent
                     .with_mut(|parent| {
                         parent
@@ -873,6 +922,7 @@ impl Component {
                     })
                     .flatten()
             })
+            .flatten()
             .map_or(StatusCode::MissingObject, |_| StatusCode::Ok)
     }
     pub fn dependency_root(&self) -> Option<CoreHandle> {
@@ -915,13 +965,14 @@ impl Component {
     }
 
     pub fn parent_handle(&self) -> Option<CoreHandle> {
-        self.parent.clone()
+        self.parent.get()
     }
 
     pub fn with_parent<R>(&self, use_parent: impl FnOnce(&ContainerComponent) -> R) -> Option<R> {
         self.parent
-            .as_ref()?
-            .with(|parent| parent.as_container_component().map(use_parent))?
+            .with(|parent| {
+                parent.with(|parent| parent.as_container_component().map(use_parent))
+            })??
     }
 
     pub fn with_parent_mut<R>(
@@ -929,8 +980,9 @@ impl Component {
         use_parent: impl FnOnce(&mut ContainerComponent) -> R,
     ) -> Option<R> {
         self.parent
-            .as_ref()?
-            .with_mut(|parent| parent.as_container_component_mut().map(use_parent))?
+            .with(|parent| {
+                parent.with_mut(|parent| parent.as_container_component_mut().map(use_parent))
+            })??
     }
 
     pub fn validate(&mut self, context: &mut dyn CoreContext) -> bool {
@@ -962,7 +1014,7 @@ impl Component {
             return None;
         }
         self.artboard = artboard;
-        self.parent = parent;
+        self.parent.set(parent);
         Some(this)
     }
 
@@ -974,24 +1026,24 @@ impl Component {
         if self.artboard.as_ref() == Some(&this) {
             return StatusCode::Ok;
         }
-        self.parent = context
-            .resolve(self.base.parent_id())
-            .filter(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY));
-        let Some(parent) = self.parent.as_ref() else {
-            return StatusCode::MissingObject;
-        };
-        // The CoreObject lifecycle wrapper has already performed this virtual
-        // self-add through its concrete owner. Re-entering the occurrence by
-        // handle would violate RefCell's exclusive borrow and does not model a
-        // second C++ callback.
-        if parent == &this {
-            return StatusCode::Ok;
-        }
-        let added = Self::add_child_to_parent(parent, this);
-        if !added {
-            return StatusCode::MissingObject;
-        }
-        StatusCode::Ok
+        self.parent.set(
+            context
+                .resolve(self.base.parent_id())
+                .filter(|object| object.is_type_of(ContainerComponentBase::TYPE_KEY)),
+        );
+        self.parent
+            .with(|parent| {
+                // The CoreObject lifecycle wrapper has already performed this virtual
+                // self-add through its concrete owner. Re-entering the occurrence by
+                // handle would violate RefCell's exclusive borrow and does not model a
+                // second C++ callback.
+                if parent == &this || Self::add_child_to_parent(parent, this) {
+                    StatusCode::Ok
+                } else {
+                    StatusCode::MissingObject
+                }
+            })
+            .unwrap_or(StatusCode::MissingObject)
     }
 
     pub(crate) fn add_child_to_parent(parent: &CoreHandle, child: CoreHandle) -> bool {
@@ -1136,14 +1188,14 @@ impl Component {
         _is_primary_hit: bool,
     ) -> bool {
         self.parent
-            .as_ref()
-            .and_then(|parent| {
+            .with(|parent| {
                 parent
                     .with_mut(|parent| {
                         parent.component_hit_test_point(position, skip_on_unclipped, false)
                     })
                     .flatten()
             })
+            .flatten()
             .unwrap_or(true)
     }
 

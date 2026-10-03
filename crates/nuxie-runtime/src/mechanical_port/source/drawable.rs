@@ -448,7 +448,53 @@ pub enum RuntimeDrawableWeakOccurrence {
     RuntimeProxy(Weak<RefCell<DrawableProxy>>),
 }
 
+pub(crate) enum DrawRangePrelude {
+    Skip,
+    ClipStart,
+    ClipEnd,
+    Draw,
+}
+
 impl RuntimeDrawableOccurrence {
+    /// The callback-free shared-receiver part of Artboard::drawDrawableRange.
+    /// Keep emptyClipCount's mutable access separate, and end this access before
+    /// pending clips or the drawable call the renderer. The virtual predicates
+    /// retain their source order and short circuits.
+    pub(crate) fn draw_range_prelude(
+        &self,
+        suppressed_by_empty_clip: bool,
+        has_pending_clips: bool,
+    ) -> DrawRangePrelude {
+        match self {
+            Self::Authored(handle) => handle
+                .with(|object| {
+                    if !object.drawable_will_draw() || suppressed_by_empty_clip {
+                        DrawRangePrelude::Skip
+                    } else if object.drawable_is_clip_start() {
+                        DrawRangePrelude::ClipStart
+                    } else if has_pending_clips && object.drawable_is_clip_end() {
+                        DrawRangePrelude::ClipEnd
+                    } else {
+                        DrawRangePrelude::Draw
+                    }
+                })
+                .unwrap_or(DrawRangePrelude::Skip),
+            // ProxyDrawing is an open host boundary. Preserve its individual
+            // virtual getter borrows rather than widening the proxy's loan.
+            Self::RuntimeProxy(_) => {
+                if !self.will_draw() || suppressed_by_empty_clip {
+                    DrawRangePrelude::Skip
+                } else if self.is_clip_start() {
+                    DrawRangePrelude::ClipStart
+                } else if has_pending_clips && self.is_clip_end() {
+                    DrawRangePrelude::ClipEnd
+                } else {
+                    DrawRangePrelude::Draw
+                }
+            }
+        }
+    }
+
     pub fn layer_mask_marker(
         &self,
     ) -> Option<Rc<RefCell<crate::mechanical_port::source::layer_mask::LayerMaskProxyDrawable>>>

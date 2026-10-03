@@ -290,6 +290,116 @@ fn draw_visitor_draw_order_update_changes_the_next_drawable() {
     assert_eq!(renderer.depth, 0);
 }
 
+#[test]
+#[cfg(any(feature = "testing", feature = "tools"))]
+fn draw_visitor_can_release_the_last_external_runtime_root() {
+    use nuxie_runtime::source::{
+        focus_data::FocusData,
+        input::{
+            focus_manager::FocusManager,
+            focusable::{Focusable, Key, KeyModifiers},
+        },
+    };
+
+    struct ObserveBlur {
+        root: CoreHandle,
+        events: Rc<RefCell<Vec<&'static str>>>,
+    }
+    impl Focusable for ObserveBlur {
+        fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+            false
+        }
+        fn text_input(&mut self, _: &str) -> bool {
+            false
+        }
+        fn focused(&mut self) {}
+        fn blurred(&mut self) {
+            assert_eq!(self.root.with(|_| true), Some(true));
+            assert_eq!(self.root.with_mut(|_| true), Some(true));
+            self.events.borrow_mut().push("blur");
+        }
+    }
+
+    let mut builder = ArtboardBuilder::new();
+    for label in ["second", "first"] {
+        let (id, shape) = builder.add_shape();
+        name(&shape, label);
+        let property = builder.property(3, 0.5);
+        builder.add(&property, id);
+        if label == "first" {
+            let focus_data = builder.arena.insert(FocusData::default());
+            builder.add(&focus_data, id);
+        }
+    }
+    builder.initialize();
+    let instance = Artboard::instance_from_handle(&builder.artboard).unwrap();
+    let root = instance.core_handle();
+    advance(&root);
+    let (first, second, focus_data) = instance.with_artboard(|artboard| {
+        (
+            artboard.find_handle::<Shape>("first").unwrap(),
+            artboard.find_handle::<Shape>("second").unwrap(),
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| object.is_type_of(FocusData::TYPE_KEY))
+                .cloned()
+                .unwrap(),
+        )
+    });
+    let manager = instance.ensure_focus_manager();
+    let node = focus_data
+        .with_downcast_mut::<FocusData, _>(FocusData::focus_node)
+        .unwrap();
+    let events = Rc::new(RefCell::new(Vec::new()));
+    node.borrow_mut()
+        .set_focusable(Some(Rc::new(RefCell::new(ObserveBlur {
+            root: root.clone(),
+            events: events.clone(),
+        }))));
+    manager.with_focus_manager_mut(|manager| {
+        manager.add_child(None, node.clone(), None);
+        manager.set_focus(node.clone());
+    });
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_some()
+    );
+
+    let external = Rc::new(RefCell::new(Some(instance)));
+    let retained = external.clone();
+    let recorded = events.clone();
+    let live_root = root.clone();
+    let visitor: RuntimeDrawVisitor = Rc::new(move |drawable, _| {
+        if drawable == &first {
+            recorded.borrow_mut().push("first");
+            // Only the active draw range now retains the runtime instance.
+            drop(retained.borrow_mut().take().expect("last external root"));
+            assert!(live_root.is_alive());
+        } else {
+            assert_eq!(drawable, &second);
+            assert!(retained.borrow().is_none());
+            recorded.borrow_mut().push("second");
+        }
+    });
+    let mut renderer = ModulationRecorder::default();
+    Artboard::draw_internal_with_visitor_handle(&root, &mut renderer, Some(visitor), None);
+
+    assert_eq!(&*events.borrow(), &["first", "second", "blur"]);
+    assert!(external.borrow().is_none());
+    assert!(!root.is_alive());
+    assert!(root.with(|_| ()).is_none());
+    assert!(
+        manager
+            .with_focus_manager(FocusManager::primary_focus)
+            .is_none()
+    );
+    assert!(node.borrow().manager().is_none());
+    assert_eq!(renderer.depth, 0);
+}
+
 fn read_file(name: &str) -> RuntimeFileHandle {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .map(|root| std::path::PathBuf::from(root).join("tests/unit_tests/assets"))

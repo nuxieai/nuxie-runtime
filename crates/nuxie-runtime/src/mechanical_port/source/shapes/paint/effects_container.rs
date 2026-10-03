@@ -242,7 +242,9 @@ mod tests {
         factory::RuntimeFactoryHandle,
         file::File,
         node::Node,
-        shapes::paint::{fill::Fill, paint_image::PaintImage, stroke::Stroke},
+        shapes::paint::{
+            fill::Fill, paint_image::PaintImage, shape_paint::ShapePaintType, stroke::Stroke,
+        },
     };
     use nuxie_render_api as render;
     use std::{cell::Cell, rc::Rc};
@@ -290,6 +292,45 @@ mod tests {
         Artboard::instance_from_handle(&file.with_file(File::artboard).unwrap()).unwrap()
     }
 
+    struct ArtboardContext {
+        arena: CoreArena,
+        root: CoreHandle,
+    }
+
+    impl CoreContext for ArtboardContext {
+        fn core_arena(&self) -> &CoreArena {
+            &self.arena
+        }
+
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            self.root
+                .with_downcast::<Artboard, _>(|root| root.resolve_handle(id))
+                .flatten()
+        }
+    }
+
+    fn added_node(artboard: &RuntimeArtboardInstanceHandle) -> CoreHandle {
+        let root = artboard.core_handle();
+        let arena = root.retain_arena().unwrap();
+        let node = arena.insert(Node::default());
+        let mut context = ArtboardContext {
+            arena,
+            root: root.clone(),
+        };
+        assert_eq!(
+            node.with_mut(|object| object
+                .as_component_mut()
+                .unwrap()
+                .on_added_dirty(&mut context)),
+            Some(StatusCode::Ok)
+        );
+        assert_eq!(
+            node.with(|object| object.as_component().unwrap().dependency_root()),
+            Some(Some(root))
+        );
+        node
+    }
+
     fn install_invalidation_paint(
         paint: &CoreHandle,
         callback: impl FnMut() + 'static,
@@ -324,6 +365,17 @@ mod tests {
     }
 
     #[test]
+    fn fresh_fill_base_invalidation_preserves_pre_registration_virtual_identity() {
+        let mut fill = Fill::default();
+        assert!(fill.base.base.base.handle().is_none());
+        assert_eq!(fill.base.base.paint_type(), ShapePaintType::Fill);
+        assert!(fill.base.base.base.dirt().contains(ComponentDirt::PATH));
+        let before = fill.base.base.base.dirt();
+        fill.base.base.invalidate_effects();
+        assert_eq!(fill.base.base.base.dirt(), before);
+    }
+
+    #[test]
     fn stroke_invalidation_releases_owner_and_reads_dirt_and_dependents_after_renderer() {
         // This pinned upstream fixture imports the real white_stroke and its
         // initialized paint mutator, as runtime/stroke_test.cpp does.
@@ -331,8 +383,7 @@ mod tests {
         let stroke = artboard
             .with_artboard(|root| root.find_handle::<Stroke>("white_stroke"))
             .unwrap();
-        let arena = stroke.retain_arena().unwrap();
-        let dependent = arena.insert(Node::default());
+        let dependent = added_node(&artboard);
         set_dirt(&stroke, ComponentDirt::PATH);
         set_dirt(&dependent, ComponentDirt::NONE);
         let callback_stroke = stroke.clone();
@@ -429,7 +480,7 @@ mod tests {
             .with_artboard(|root| root.find_handle::<Stroke>("white_stroke"))
             .unwrap();
         let arena = stroke.retain_arena().unwrap();
-        let dependent = arena.insert(Node::default());
+        let dependent = added_node(&artboard);
         let mut image = PaintImage::default();
         image.base.base.base.set_parent_id_value(1);
         let image = arena.insert(image);

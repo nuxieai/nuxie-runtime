@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     core::binary_reader::BinaryReader, shapes::paint::fill::Fill,
-    shapes::paint::shape_paint::ShapePaint,
+    shapes::paint::shape_paint::{ShapePaint, ShapePaintType},
 };
 
 pub trait FillBaseCallbacks:
@@ -18,7 +18,7 @@ pub struct FillBase {
 impl Default for FillBase {
     fn default() -> Self {
         Self {
-            base: ShapePaint::default(),
+            base: ShapePaint::new(ShapePaintType::Fill),
             fill_rule: 0,
         }
     }

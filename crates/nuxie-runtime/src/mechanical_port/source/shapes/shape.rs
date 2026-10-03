@@ -176,36 +176,33 @@ impl Shape {
         if self.world_length < 0.0 {
             let mut length = 0.0;
             for path in self.paths() {
-                length += path
-                    .with(|object| {
-                        let path = object.as_path()?;
-                        let dirty = path.base.has_dirt(
-                            ComponentDirt::PATH
-                                | ComponentDirt::WORLD_TRANSFORM
-                                | ComponentDirt::N_SLICER,
+                path.with(|object| {
+                    let Some(path) = object.as_path() else {
+                        return;
+                    };
+                    let dirty = path.base.has_dirt(
+                        ComponentDirt::PATH
+                            | ComponentDirt::WORLD_TRANSFORM
+                            | ComponentDirt::N_SLICER,
+                    );
+                    let mut temporary = RawPath::default();
+                    let base = if dirty {
+                        path.build_path_from_shape(
+                            &mut temporary,
+                            Path::is_path_closed_for(object),
+                            object.as_points_path().is_some_and(|points| crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(points).is_some()),
+                            self,
                         );
-                        let mut temporary = RawPath::default();
-                        let base = if dirty {
-                            path.build_path_from_shape(
-                                &mut temporary,
-                                Path::is_path_closed_for(object),
-                                object.as_points_path().is_some_and(|points| crate::mechanical_port::source::bones::skinnable::SkinnableBehavior::skin(points).is_some()),
-                                self,
-                            );
-                            &temporary
-                        } else {
-                            path.raw_path()
-                        };
-                        let source = base.transform(Path::path_transform_for(object));
-                        let mut length = 0.0;
-                        let mut iter = ContourMeasureIter::new(&source, 0.5);
-                        while let Some(contour) = iter.next() {
-                            length += contour.length();
-                        }
-                        Some(length)
-                    })
-                    .flatten()
-                    .unwrap_or_default();
+                        &temporary
+                    } else {
+                        path.raw_path()
+                    };
+                    let source = base.transform(Path::path_transform_for(object));
+                    let mut iter = ContourMeasureIter::new(&source, 0.5);
+                    while let Some(contour) = iter.next() {
+                        length += contour.length();
+                    }
+                });
             }
             self.world_length = length;
         }
@@ -325,23 +322,21 @@ impl Shape {
         }
         let shape_local = self.is_flagged(PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE);
         for paint in self.paint_container.shape_paints().iter().rev() {
-            let Some((translucent, visible, flags)) = paint
+            let Some(flags) = paint
                 .with_mut(|object| {
-                    object.as_shape_paint_behavior_mut().map(|paint| {
-                        (
-                            paint.is_translucent(),
-                            paint.is_visible(),
-                            paint.path_flags(),
-                        )
-                    })
+                    let paint = object.as_shape_paint_behavior_mut()?;
+                    if paint.is_translucent() {
+                        return None;
+                    }
+                    if !paint.is_visible() {
+                        return None;
+                    }
+                    Some(paint.path_flags())
                 })
                 .flatten()
             else {
                 continue;
             };
-            if translucent || !visible {
-                continue;
-            }
             let paint_local = !(flags & (PathFlags::LOCAL | PathFlags::LOCAL_CLOCKWISE)).is_empty();
             let matrix = if paint_local {
                 xform * *self.base.world_transform()
@@ -553,6 +548,7 @@ impl Shape {
         }
         let mut first = true;
         let mut result = Aabb::for_expansion();
+        let mut pending = RawPath::default();
         let mut used_pending = false;
         for path in self.paths() {
             path.with(|object| {
@@ -577,7 +573,7 @@ impl Shape {
                     if has_property_bounds {
                         path.base.transform().map_bounding_box(property)
                     } else {
-                        let mut pending = RawPath::default();
+                        pending.rewind();
                         path.build_path_from_shape(
                             &mut pending,
                             Path::is_path_closed_for(object),
@@ -656,7 +652,18 @@ impl Shape {
                 })
                 .flatten()
                 .unwrap_or_default();
-            Vec2D::new(size.x.max(measured.x), size.y.max(measured.y))
+            Vec2D::new(
+                if size.x < measured.x {
+                    measured.x
+                } else {
+                    size.x
+                },
+                if size.y < measured.y {
+                    measured.y
+                } else {
+                    size.y
+                },
+            )
         })
     }
     pub fn control_size(
@@ -705,15 +712,15 @@ impl Shape {
             .cloned()
     }
     fn update_layout_scale(&mut self, size: Vec2D) {
+        let Some(participant) = self.layout_participant() else {
+            return;
+        };
         let bounds = self.compute_intrinsic_bounds();
         let (width, height) = (bounds.width(), bounds.height());
         let (sx, sy) = (
             if width > 0.0 { size.x / width } else { 1.0 },
             if height > 0.0 { size.y / height } else { 1.0 },
         );
-        let Some(participant) = self.layout_participant() else {
-            return;
-        };
         let changed = participant
             .with_downcast_mut::<LayoutParticipant, _>(|participant| {
                 if sx != participant.host_scale_x() || sy != participant.host_scale_y() {
@@ -729,9 +736,8 @@ impl Shape {
         }
     }
     pub fn add_child(&mut self, child: CoreHandle) {
-        let is_participant = child.is_type_of(LayoutParticipant::TYPE_KEY);
-        self.base.add_child(child);
-        if is_participant {
+        self.base.add_child(child.clone());
+        if child.is_type_of(LayoutParticipant::TYPE_KEY) {
             self.has_layout_participant = true;
         }
     }
@@ -769,42 +775,47 @@ impl Shape {
         // enabled by this runtime's tools configuration.
         self.has_layout_participant
     }
+    pub fn layout_base_translation(&self, participant: &CoreHandle) -> Option<Vec2D> {
+        // Intrinsic measurement may update this participant's cached bounds;
+        // acquire its shared loan only after that measurement has completed.
+        let intrinsic = self.compute_intrinsic_bounds();
+        participant.with_downcast::<LayoutParticipant, _>(|participant| {
+            Vec2D::new(
+                participant.resolved_left() - intrinsic.left() * participant.host_scale_x(),
+                participant.resolved_top() - intrinsic.top() * participant.host_scale_y(),
+            )
+        })
+    }
     pub(crate) fn try_compose_world_transform_override(&mut self) -> bool {
-        let participant = self.base.children().iter().find_map(|child| {
-            child
-                .with(|child| {
-                    child.as_any().downcast_ref::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>().map(|participant| {
-                        (
-                            participant.resolved_left(),
-                            participant.resolved_top(),
-                            participant.host_scale_x(),
-                            participant.host_scale_y(),
-                        )
-                    })
-                })
-                .flatten()
-        });
-        let parent_world = self.base.parent_transform_component().and_then(|parent| {
-            parent
-                .with(|parent| {
-                    parent
-                        .as_world_transform_component()
-                        .map(|parent| *parent.world_transform())
-                })
-                .flatten()
-        });
-        if let (Some((left, top, sx, sy)), Some(parent_world)) = (participant, parent_world) {
-            let intrinsic = self.compute_intrinsic_bounds();
-            let base = Mat2D::from_translation(Vec2D::new(
-                left - intrinsic.left() * sx,
-                top - intrinsic.top() * sy,
-            ));
-            let transform = *self.base.transform();
-            self.base
-                .set_world_transform(parent_world * base * transform * Mat2D::from_scale(sx, sy));
-            return true;
-        }
-        false
+        let Some(participant) = self.layout_participant() else {
+            return false;
+        };
+        let Some(parent) = self.base.parent_transform_component() else {
+            return false;
+        };
+        let Some((sx, sy)) = participant.with_downcast::<LayoutParticipant, _>(|participant| {
+            (participant.host_scale_x(), participant.host_scale_y())
+        }) else {
+            return false;
+        };
+        let Some(translation) = self.layout_base_translation(&participant) else {
+            return false;
+        };
+        let base = Mat2D::from_translation(translation);
+        let Some(parent_world) = parent
+            .with(|parent| {
+                parent
+                    .as_world_transform_component()
+                    .map(|parent| *parent.world_transform())
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        let transform = *self.base.transform();
+        self.base
+            .set_world_transform(parent_world * base * transform * Mat2D::from_scale(sx, sy));
+        true
     }
 
     pub fn with_path_mut<R>(

@@ -5337,34 +5337,28 @@ pub trait CoreCapabilities: Any {
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
         recurse: bool,
     ) -> bool {
-        let Some((dirt, self_handle, artboard, graph_order, dependents)) = (|| {
-            let component = self.as_component_mut()?;
-            let dirt = component.add_dirt_state(value)?;
-            Some((
-                dirt,
-                if recurse { component.base.base.handle() } else { None },
-                component.artboard_handle(),
-                component.graph_order(),
-                if recurse {
-                    component.dependents_snapshot()
-                } else {
-                    Default::default()
-                },
-            ))
-        })() else {
+        let Some(dirt) = self
+            .as_component_mut()
+            .and_then(|component| component.add_dirt_state(value))
+        else {
             return false;
         };
 
         self.component_on_dirty(dirt);
-        if let Some(artboard) = artboard {
-            if let Some(dirty) = artboard.artboard_dirty_handle() {
-                dirty.on_component_dirty_at(graph_order);
-            }
-        }
+        let component = self.as_component().expect("Component dirt owner");
+        component.notify_artboard();
         if recurse {
+            // onDirty may have rewired the root or this dependent list. Read
+            // both at their C++ sites, retaining only the traversal backing.
+            let self_handle = component.base.base.handle();
+            let dependents = component.dependents_snapshot();
             if let Some(shape) = self.as_shape_mut() {
-                for dependent in dependents {
+                for dependent in dependents.iter() {
                     dependent.add_dirt_from_shape(shape, value, true);
+                }
+            } else if let Some(text) = self.as_text_mut() {
+                for dependent in dependents.iter() {
+                    dependent.add_dirt_from_text(text, value, true);
                 }
             } else if let (Some(active_handle), Some(artboard)) =
                 (self_handle.as_ref(), self.as_artboard_mut())
@@ -5373,7 +5367,7 @@ pub trait CoreCapabilities: Any {
                     crate::mechanical_port::source::component::ActiveLayoutOwner::Artboard(
                         artboard,
                     );
-                for dependent in dependents {
+                for dependent in dependents.iter() {
                     dependent.add_dirt_from_layout(&mut active, active_handle, value, true);
                 }
             } else if let (Some(active_handle), Some(layout)) =
@@ -5381,11 +5375,11 @@ pub trait CoreCapabilities: Any {
             {
                 let mut active =
                     crate::mechanical_port::source::component::ActiveLayoutOwner::Layout(layout);
-                for dependent in dependents {
+                for dependent in dependents.iter() {
                     dependent.add_dirt_from_layout(&mut active, active_handle, value, true);
                 }
             } else {
-                for dependent in dependents {
+                for dependent in dependents.iter() {
                     dependent.add_dirt(value, true);
                 }
             }
@@ -5399,34 +5393,50 @@ pub trait CoreCapabilities: Any {
         self.as_component()
             .is_some_and(|component| component.is_collapsed())
     }
+    fn component_register_collapsable(&mut self, collapsable: CoreHandle) -> Option<bool> {
+        if !self.as_component_mut()?.register_collapsable(collapsable) {
+            return None;
+        }
+        // Component::addCollapsable calls the derived isCollapsed only on
+        // first insertion, while this actual receiver is still available.
+        Some(self.component_is_collapsed())
+    }
+    fn component_add_collapsable(&mut self, collapsable: CoreHandle) {
+        if let Some(collapsed) = self.component_register_collapsable(collapsable.clone()) {
+            crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, collapsed);
+        }
+    }
+    fn component_update_collapsables(&mut self) {
+        let collapsed = self.component_is_collapsed();
+        let Some(component) = self.as_component() else {
+            return;
+        };
+        let collapsables = component.collapsables_snapshot();
+        for collapsable in collapsables.iter() {
+            crate::source::data_bind::data_bind::DataBind::collapse_handle(collapsable, collapsed);
+        }
+    }
     fn component_collapse(&mut self, value: bool) -> bool {
-        let Some((dirt, self_handle, artboard, graph_order, collapsables)) = (|| {
-            let component = self.as_component_mut()?;
-            let dirt = component.collapse_state(value)?;
-            Some((
-                dirt,
-                component.base.base.handle(),
-                component.artboard_handle(),
-                component.graph_order(),
-                component.collapsables_snapshot(),
-            ))
-        })() else {
+        let Some(dirt) = self
+            .as_component_mut()
+            .and_then(|component| component.collapse_state(value))
+        else {
             return false;
         };
 
         self.component_on_dirty(dirt);
-        if let Some(artboard) = artboard {
-            if let Some(dirty) = artboard.artboard_dirty_handle() {
-                dirty.on_component_dirty_at(graph_order);
-            }
-        }
-        for collapsable in collapsables {
-            crate::source::data_bind::data_bind::DataBind::collapse_handle(&collapsable, value);
-        }
+        let component = self.as_component().expect("Component collapse owner");
+        component.notify_artboard();
+        self.component_update_collapsables();
         self.component_collapse_post(value);
         true
     }
     fn component_collapse_post(&mut self, value: bool) -> bool {
+        if let Some(artboard) = self.as_artboard_mut() {
+            crate::mechanical_port::source::component::ActiveLayoutOwner::Artboard(artboard)
+                .collapse_after_component(value);
+            return true;
+        }
         if self.as_layout_component().is_some() {
             let layout = self
                 .as_layout_component_mut()
@@ -5468,6 +5478,14 @@ pub trait CoreCapabilities: Any {
         // Concrete Component owners implement their inherited onDirty directly,
         // including Component's empty default. Non-Component owners have none.
         false
+    }
+    /// Inherited onDirty callbacks that can reenter the initiating occurrence
+    /// run after an internally acquired arena guard is released. Callers with
+    /// an already-borrowed receiver retain component_on_dirty's direct lane.
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        None
     }
     fn component_hit_test_point(
         &mut self,
@@ -55931,6 +55949,11 @@ impl CoreCapabilities for crate::mechanical_port::source::script_input_viewmodel
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::distance_constraint::DistanceConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -55994,6 +56017,11 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::follow_path_constraint::FollowPathConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -56068,6 +56096,11 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::list_follow_path_constraint::ListFollowPathConstraint {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::component::Component::import(&mut self.base.base.base.base.base.base.base.base.base.base, stack))
@@ -56098,6 +56131,11 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::list_foll
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base.base.base.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -56166,6 +56204,11 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constr
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::translation_constraint::TranslationConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -56288,6 +56331,11 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     fn is_advancing_component(&self) -> bool {
         true
     }
@@ -56400,6 +56448,11 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
     fn as_component_mut(&mut self) -> Option<&mut crate::mechanical_port::source::component::Component> { Some(&mut self.base.base.base.base) }
 }
 impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling::scroll_bar_constraint::ScrollBarConstraint {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(&mut self, stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
         Some(crate::mechanical_port::source::component::Component::import(&mut self.base.base.base.base.base.base, stack))
@@ -56439,6 +56492,11 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::scrolling
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::transform_constraint::TransformConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -56502,6 +56560,11 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::scale_constraint::ScaleConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -56605,6 +56668,11 @@ impl CoreCapabilities
 impl CoreCapabilities
     for crate::mechanical_port::source::constraints::rotation_constraint::RotationConstraint
 {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
+    }
     // Preserve the lifecycle methods inherited by this source owner.
     fn lifecycle_import(
         &mut self,
@@ -56998,8 +57066,9 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
         self.component_container_collapse_post(value);
         self.component_collapse_after_container(value)
     }
-    fn component_collapse_after_container(&mut self, _value: bool) -> bool {
+    fn component_collapse_after_container(&mut self, value: bool) -> bool {
         self.component_transform_collapse_post();
+        self.collapse_after_super(value);
         true
     }
     fn drawable_hit_test(
@@ -57215,8 +57284,9 @@ impl CoreCapabilities
         self.component_container_collapse_post(value);
         self.component_collapse_after_container(value)
     }
-    fn component_collapse_after_container(&mut self, _value: bool) -> bool {
+    fn component_collapse_after_container(&mut self, value: bool) -> bool {
         self.component_transform_collapse_post();
+        self.collapse_after_super(value);
         true
     }
     fn drawable_hit_test(
@@ -58511,6 +58581,11 @@ impl CoreCapabilities
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
         Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
+    }
+    fn component_collapse_after_container(&mut self, value: bool) -> bool {
+        self.component_transform_collapse_post();
+        self.base.base.collapse_after_super(value);
+        true
     }
     fn is_resetting_component(&self) -> bool {
         true
@@ -64213,6 +64288,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::PointsPath {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -64522,6 +64602,11 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rectangle {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -64825,6 +64910,11 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Triangle {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -65044,6 +65134,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Tria
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellipse {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -65263,6 +65358,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::ListPath {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -65558,6 +65658,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::clipping_shape
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polygon {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -65777,6 +65882,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polyg
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -68054,6 +68164,11 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
         Some(<Self as crate::mechanical_port::source::transform_component::TransformUpdate>::update_constraints)
     }
+    fn component_collapse_after_container(&mut self, value: bool) -> bool {
+        self.component_transform_collapse_post();
+        self.base.base.collapse_after_super(value);
+        true
+    }
     fn is_resetting_component(&self) -> bool {
         true
     }
@@ -68624,6 +68739,11 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::bones::skin::Skin::on_dirty_occurrence)
+    }
     fn component_update(
         &mut self,
         value: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -69618,6 +69738,11 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style::TextStyle {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -69707,6 +69832,11 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style::Text
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint::TextStylePaint {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
@@ -70584,6 +70714,11 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
+    fn component_on_dirty_handler(
+        &self,
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+        Some(crate::mechanical_port::source::text::text::Text::on_dirty_occurrence)
+    }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,

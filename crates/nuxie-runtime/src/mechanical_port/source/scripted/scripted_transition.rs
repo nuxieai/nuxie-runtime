@@ -4,7 +4,7 @@ use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
     artboard::{Artboard, RuntimeArtboardInstanceHandle},
-    component::{Component, ComponentOccurrenceHandle},
+    component::{ActiveLayoutOwner, Component, ComponentOccurrenceHandle},
     component_dirt::ComponentDirt,
     core::{CoreHandle, CoreObject},
     drawable_flag::DrawableFlag,
@@ -203,26 +203,81 @@ impl ScriptedTransition {
     }
 
     fn propagate_collapse_occurrence(owner: &CoreHandle, collapse: bool) {
-        let children = Self::read(owner, |this| {
+        Self::propagate_collapse_with_layout_occurrence(owner, collapse, None);
+    }
+    fn propagate_collapse_with_layout_occurrence(
+        owner: &CoreHandle,
+        collapse: bool,
+        mut active_layout: Option<(&mut ActiveLayoutOwner<'_>, &CoreHandle)>,
+    ) {
+        let (active, children) = Self::read(owner, |this| {
             let active = if collapse {
                 None
             } else {
-                this.active_component()
+                // A direct Artboard collapse keeps that actual root borrowed.
+                // Resolve the selection against it instead of its arena slot.
+                let active_root_selection =
+                    active_layout.as_ref().and_then(|(active, handle)| {
+                        if this.component().artboard_handle().as_ref() != Some(*handle) {
+                            return None;
+                        }
+                        let ActiveLayoutOwner::Artboard(artboard) = active else {
+                            return None;
+                        };
+                        Some(
+                            artboard
+                                .resolve_handle(this.base.active_component_id())
+                                .filter(|selected| {
+                                    this.design_children().iter().any(|child| child == selected)
+                                }),
+                        )
+                    });
+                active_root_selection.unwrap_or_else(|| this.active_component())
             };
-            this.children().iter().map(|child| {
-                let design = child.is_type_of(crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY);
-                let value = if !design { collapse }
-                    else if !collapse && this.transitioning && (Some(child) == this.from.design.as_ref() || Some(child) == this.to.design.as_ref()) { false }
-                    else { Some(child) != active.as_ref() };
-                (child.clone(), value)
-            }).collect::<Vec<_>>()
+            (active, this.children().to_vec())
         });
-        for (child, value) in children {
-            collapse_child(&child, value);
+        for child in children {
+            let design = child.is_type_of(
+                crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::TYPE_KEY,
+            );
+            let value = if !design {
+                collapse
+            } else if collapse {
+                Some(&child) != active.as_ref()
+            } else {
+                // C++ resolves active once, but reads the transition pair at
+                // each child's call site, after earlier collapse callbacks.
+                let Some(transition_child) = owner.with_downcast::<Self, _>(|this| {
+                    this.transitioning
+                        && (Some(&child) == this.from.design.as_ref()
+                            || Some(&child) == this.to.design.as_ref())
+                }) else {
+                    return;
+                };
+                !transition_child && Some(&child) != active.as_ref()
+            };
+            if let Some((active, active_handle)) = active_layout.as_mut() {
+                ComponentOccurrenceHandle::Authored(child)
+                    .collapse_from_layout(value, active, active_handle);
+            } else {
+                collapse_child(&child, value);
+            }
         }
     }
     pub fn collapse_after_component_occurrence(owner: &CoreHandle, value: bool) {
         Self::propagate_collapse_occurrence(owner, value);
+    }
+    pub(crate) fn collapse_after_component_from_layout_occurrence(
+        owner: &CoreHandle,
+        value: bool,
+        active: &mut ActiveLayoutOwner<'_>,
+        active_handle: &CoreHandle,
+    ) {
+        Self::propagate_collapse_with_layout_occurrence(
+            owner,
+            value,
+            Some((active, active_handle)),
+        );
     }
     fn propagate_current_collapse(owner: &CoreHandle) {
         let collapsed = Self::read(owner, |this| this.component().is_collapsed());

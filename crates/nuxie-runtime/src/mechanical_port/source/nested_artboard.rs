@@ -1116,6 +1116,18 @@ impl NestedArtboard {
         }
     }
 
+    pub fn collapse(&mut self, value: bool) -> bool {
+        crate::mechanical_port::source::generated::core_registry::CoreCapabilities::component_collapse(
+            self, value,
+        )
+    }
+
+    pub(crate) fn collapse_after_super(&mut self, value: bool) {
+        if let Some(instance) = self.instance.as_ref() {
+            instance.collapse_semantic_boundary(value);
+        }
+    }
+
     pub(crate) fn collapse_after_super_occurrence(owner: &CoreHandle, value: bool) {
         let instance = owner
             .with(|object| {

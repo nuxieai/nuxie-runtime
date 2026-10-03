@@ -173,11 +173,12 @@ impl IKConstraint {
         }
     }
 
-    pub(crate) fn ancestor_bones(&self) -> Vec<CoreHandle> {
-        self.fk_chain[..self.fk_chain.len().saturating_sub(1)]
-            .iter()
-            .map(|link| link.bone.clone())
-            .collect()
+    pub(crate) fn dirty_ancestor_count(&self) -> usize {
+        self.fk_chain.len().saturating_sub(1)
+    }
+
+    pub(crate) fn dirty_ancestor_at(&self, index: usize) -> Option<CoreHandle> {
+        self.fk_chain.get(index).map(|link| link.bone.clone())
     }
 
     pub fn on_dirty(

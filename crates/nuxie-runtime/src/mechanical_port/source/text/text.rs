@@ -670,10 +670,13 @@ impl Text {
         }
     }
     pub(crate) fn mark_shape_dirty_occurrence(owner: &CoreHandle, send_to_layout: bool) {
-        owner.with_mut(|object| object.component_add_dirt(ComponentDirt::PATH, false));
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt(ComponentDirt::PATH, false);
         let groups = owner
             .with_downcast::<Text, _>(|text| text.modifier_groups.clone())
-            .expect("live Text");
+            .unwrap_or_default();
         for group in groups {
             group.with_mut(|object| {
                 object
@@ -695,6 +698,25 @@ impl Text {
     }
     pub fn modifier_shape_dirty(&mut self) {
         CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
+    }
+    pub(crate) fn add_dirt_from_modifier_group(
+        &mut self,
+        value: ComponentDirt,
+        active_group: &mut TextModifierGroup,
+    ) -> bool {
+        let Some(dirt) = self
+            .as_component_mut()
+            .and_then(|component| component.add_dirt_state(value))
+        else {
+            return false;
+        };
+        // Group callbacks use addDirt's default nonrecursive lane. Its onDirty
+        // still receives all accumulated bits and may revisit the active group.
+        self.on_dirty_with_modifier_group(dirt, Some(active_group));
+        self.as_component()
+            .expect("Text component")
+            .notify_artboard();
+        true
     }
     pub fn add_run(&mut self, run: CoreHandle) {
         self.runs.push(run.clone());
@@ -1552,7 +1574,6 @@ impl Text {
             );
         }
 
-        self.ordered_lines.clear();
         let mut current_y = info.min_y - info.top_trim;
         let mut line_index = 0i32;
         let mut minimum_x = f32::MAX;
@@ -1934,9 +1955,24 @@ impl Text {
         self.local_bounds().height()
     }
     pub fn on_dirty(&mut self, value: ComponentDirt) {
+        self.on_dirty_with_modifier_group(value, None);
+    }
+    fn on_dirty_with_modifier_group(
+        &mut self,
+        value: ComponentDirt,
+        mut active_group: Option<&mut TextModifierGroup>,
+    ) {
         if value.intersects(ComponentDirt::WORLD_TRANSFORM) {
             for group in self.modifier_groups.clone() {
-                TextModifierGroup::on_text_world_transform_dirty(&group, self);
+                if let Some(active_group) = active_group.as_deref_mut() {
+                    TextModifierGroup::on_text_world_transform_dirty_from_group(
+                        &group,
+                        self,
+                        active_group,
+                    );
+                } else {
+                    TextModifierGroup::on_text_world_transform_dirty(&group, self);
+                }
             }
         }
         if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
@@ -1944,6 +1980,30 @@ impl Text {
                 style.with_downcast_mut::<TextStylePaint, _>(|style| {
                     style.paints.invalidate_stroke_effects()
                 });
+            }
+        }
+    }
+    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, value: ComponentDirt) {
+        if value.intersects(ComponentDirt::WORLD_TRANSFORM) {
+            let mut index = 0;
+            while let Some(group) = owner
+                .with_downcast::<Self, _>(|text| text.modifier_groups.get(index).cloned())
+                .flatten()
+            {
+                TextModifierGroup::on_text_world_transform_dirty_occurrence(&group);
+                index += 1;
+            }
+        }
+        if value.intersects(ComponentDirt::PATH | ComponentDirt::PAINT) {
+            // Read render styles after the modifier callbacks, at the same
+            // point as C++. No Text or style guard crosses renderer callbacks.
+            let mut index = 0;
+            while let Some(style) = owner
+                .with_downcast::<Self, _>(|text| text.render_styles.get(index).cloned())
+                .flatten()
+            {
+                crate::mechanical_port::source::shapes::shape_paint_container::ShapePaintContainer::invalidate_stroke_effects_occurrence(&style);
+                index += 1;
             }
         }
     }
@@ -2262,6 +2322,48 @@ mod settled_text_value_tests {
         let mut run = TextValueRun::default();
         run.base.set_text_value(value.to_owned());
         TextValueRunHandle::Runtime(Rc::new(RefCell::new(run)))
+    }
+
+    #[test]
+    fn paint_style_rebuild_appends_ordered_lines_until_the_next_path_update() {
+        // Pinned text.cpp clears m_orderedLines in the Path update, not in
+        // buildRenderStyles. Preserve this even on a paint-only rebuild.
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(root).join("tests/unit_tests/assets/modifier_test.riv"),
+        )
+        .expect("pinned text modifier fixture");
+        let mut factory =
+            nuxie_render_api::PersistentFactory::new(nuxie_render_api::RecordingFactory::default());
+        let file = crate::File::import(
+            &bytes,
+            crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .expect("text modifier fixture imports");
+        let artboard = file.with_file(crate::File::artboard_default).unwrap();
+        artboard.advance_default(0.0);
+        let text = artboard
+            .with_artboard(|root| root.find_all_handles::<Text>())
+            .into_iter()
+            .find(|text| {
+                text.with_downcast::<Text, _>(|text| !text.ordered_lines.is_empty())
+                    .unwrap()
+            })
+            .expect("fixture has shaped text lines");
+        text.with_downcast_mut::<Text, _>(|text| {
+            text.update_after_transform_super(ComponentDirt::PATH);
+            let before = text.ordered_lines.len();
+            assert!(before > 0);
+            text.update_after_transform_super(ComponentDirt::PAINT);
+            assert_eq!(text.ordered_lines.len(), before * 2);
+            text.update_after_transform_super(ComponentDirt::PATH);
+            assert_eq!(text.ordered_lines.len(), before);
+        })
+        .unwrap();
     }
 
     #[test]

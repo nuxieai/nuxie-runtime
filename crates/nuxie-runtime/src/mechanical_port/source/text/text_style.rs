@@ -92,37 +92,13 @@ impl TextStyle {
         value: ComponentDirt,
         recurse: bool,
     ) -> bool {
-        let changed = owner
-            .with_mut(|object| {
-                let component = object.as_component_mut().expect("TextStyle Component");
-                let dirt = component.add_dirt_state(value)?;
-                Some((dirt, component.artboard_handle(), component.graph_order()))
-            })
-            .expect("live TextStyle");
-        let Some((dirt, artboard, graph_order)) = changed else {
-            return false;
-        };
-        Self::on_dirty_occurrence(owner, dirt);
-        if let Some(dirty) = artboard.and_then(|artboard| artboard.artboard_dirty_handle()) {
-            dirty.on_component_dirty_at(graph_order);
-        }
-        if recurse {
-            let dependents = owner
-                .with(|object| {
-                    object
-                        .as_component()
-                        .expect("TextStyle Component")
-                        .dependents_snapshot()
-                })
-                .expect("live TextStyle");
-            for dependent in dependents {
-                dependent.add_dirt(value, true);
-            }
-        }
-        true
+        crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
+            owner.clone(),
+        )
+        .add_dirt(value, recurse)
     }
 
-    fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
+    pub(crate) fn on_dirty_occurrence(owner: &CoreHandle, dirt: ComponentDirt) {
         let text = owner
             .with(|object| object.as_text_style().expect("TextStyle").text.clone())
             .flatten();

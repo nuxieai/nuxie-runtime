@@ -49,11 +49,9 @@ impl PaintImage {
     }
     fn invalidate_paint(&self) {
         if let Some(parent) = self.base.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(paint) = parent.as_shape_paint_mut() {
-                    paint.invalidate_rendering();
-                }
-            });
+            crate::mechanical_port::source::shapes::paint::effects_container::invalidate_rendering_handle(
+                &parent,
+            );
         }
     }
     pub fn set_asset(&mut self, asset: Option<CoreHandle>) {

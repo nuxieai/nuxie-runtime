@@ -63186,7 +63186,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::stroke:
     ) -> Option<
         &mut dyn crate::mechanical_port::source::shapes::paint::effects_container::EffectsContainer,
     > {
-        Some(&mut self.base.base)
+        Some(self)
     }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::paint::stroke::Stroke::build_dependencies(self);
@@ -63538,7 +63538,7 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::paint::fill::F
     ) -> Option<
         &mut dyn crate::mechanical_port::source::shapes::paint::effects_container::EffectsContainer,
     > {
-        Some(&mut self.base.base)
+        Some(self)
     }
     fn component_build_dependencies(&mut self) -> bool {
         crate::mechanical_port::source::shapes::paint::fill::Fill::build_dependencies(self);

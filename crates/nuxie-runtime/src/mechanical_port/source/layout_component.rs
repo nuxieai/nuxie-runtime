@@ -1687,9 +1687,17 @@ impl LayoutComponent {
                 let Some(path) = path else {
                     return;
                 };
-                paint
-                    .shape_paint_mut()
-                    .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
+                paint.shape_paint_mut().draw_with_active_container(
+                    renderer,
+                    path,
+                    world,
+                    false,
+                    None,
+                    true,
+                    fill_rule,
+                    &|| world,
+                    None,
+                );
             });
         }
     }

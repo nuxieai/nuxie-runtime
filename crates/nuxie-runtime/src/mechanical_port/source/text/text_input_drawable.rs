@@ -62,9 +62,17 @@ impl TextInputDrawable {
                     unreachable!("TextInputDrawable::worldPath is unreachable upstream");
                 }
                 let fill_rule = paint.fill_rule();
-                paint
-                    .shape_paint_mut()
-                    .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
+                paint.shape_paint_mut().draw_with_active_container(
+                    renderer,
+                    path,
+                    world,
+                    false,
+                    None,
+                    true,
+                    fill_rule,
+                    &|| self.shape_world_transform(),
+                    None,
+                );
             });
         }
     }

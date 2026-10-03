@@ -3247,7 +3247,17 @@ impl Artboard {
                     crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(),
                 };
                 let Some(path) = path else { return; };
-                behavior.shape_paint_mut().draw_with_factory(renderer, path, world_transform, false, None, true, fill_rule, &factory);
+                behavior.shape_paint_mut().draw_with_active_container(
+                    renderer,
+                    path,
+                    world_transform,
+                    false,
+                    None,
+                    true,
+                    fill_rule,
+                    &|| world_transform,
+                    Some(&factory),
+                );
             });
         }
         Some((save, self.first_drawable.clone()))

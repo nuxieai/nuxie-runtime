@@ -1,6 +1,6 @@
 pub use crate::mechanical_port::source::component_dirt::ComponentDirt;
 use crate::mechanical_port::source::{
-    artboard::Artboard,
+    artboard::{Artboard, RuntimeArtboardDirtyHandle},
     container_component::ContainerComponent,
     core::CoreHandle,
     core_context::CoreContext,
@@ -559,6 +559,14 @@ impl ComponentOccurrenceHandle {
     }
 }
 
+// C++ Artboard scheduling uses its inherited Component::m_Dirt. Only that
+// root needs released access while callbacks borrow the Artboard's geometry;
+// ordinary Components keep their dirt inline.
+enum ComponentDirtStorage {
+    Inline(ComponentDirt),
+    Artboard(RuntimeArtboardDirtyHandle),
+}
+
 pub struct Component {
     pub base: ComponentBase,
     dependency_helper: DependencyHelper<Component>,
@@ -566,7 +574,7 @@ pub struct Component {
     graph_order: u32,
     artboard: Option<CoreHandle>,
     collapsables: LazyVector<CoreHandle>,
-    dirt: ComponentDirt,
+    dirt: ComponentDirtStorage,
     runtime_occurrence: Option<ComponentOccurrenceHandle>,
 }
 
@@ -580,7 +588,7 @@ impl Default for Component {
             graph_order: u32::MAX,
             artboard: None,
             collapsables: LazyVector::default(),
-            dirt: ComponentDirt::FILTHY,
+            dirt: ComponentDirtStorage::Inline(ComponentDirt::FILTHY),
             runtime_occurrence: None,
         }
     }
@@ -593,6 +601,12 @@ impl ComponentBaseCallbacks for Component {
 }
 
 impl Component {
+    pub(crate) fn bind_artboard_dirt(&mut self, dirty: RuntimeArtboardDirtyHandle) {
+        // Alias the root's existing field, including when a temporary generated
+        // base stands in for it during copy/deserialize. Never replace its bits.
+        self.dirt = ComponentDirtStorage::Artboard(dirty);
+    }
+
     pub(crate) fn bind_runtime_occurrence(&mut self, occurrence: ComponentOccurrenceHandle) {
         self.runtime_occurrence = Some(occurrence);
     }
@@ -775,21 +789,29 @@ impl Component {
     }
 
     pub fn dirt(&self) -> ComponentDirt {
-        self.dirt
+        match &self.dirt {
+            ComponentDirtStorage::Inline(dirt) => *dirt,
+            ComponentDirtStorage::Artboard(dirty) => dirty.component_dirt(),
+        }
     }
 
     pub fn set_dirt(&mut self, value: ComponentDirt) {
-        self.dirt = value;
+        match &mut self.dirt {
+            ComponentDirtStorage::Inline(dirt) => *dirt = value,
+            ComponentDirtStorage::Artboard(dirty) => dirty.set_component_dirt(value),
+        }
     }
 
     /// Mutate only retained dirt state. The central virtual action sequences
     /// callbacks, Artboard notification, and recursion after this borrow ends.
     pub fn add_dirt_state(&mut self, value: ComponentDirt) -> Option<ComponentDirt> {
-        if self.dirt.contains(value) {
+        let dirt = self.dirt();
+        if dirt.contains(value) {
             return None;
         }
-        self.dirt |= value;
-        Some(self.dirt)
+        let dirt = dirt | value;
+        self.set_dirt(dirt);
+        Some(dirt)
     }
 
     /// Mutate only the retained collapsed bit. Most-derived propagation is
@@ -798,12 +820,13 @@ impl Component {
         if self.is_collapsed() == value {
             return None;
         }
-        if value {
-            self.dirt |= ComponentDirt::COLLAPSED;
+        let dirt = if value {
+            self.dirt() | ComponentDirt::COLLAPSED
         } else {
-            self.dirt &= !ComponentDirt::COLLAPSED;
-        }
-        Some(self.dirt)
+            self.dirt() & !ComponentDirt::COLLAPSED
+        };
+        self.set_dirt(dirt);
+        Some(dirt)
     }
 
     pub fn collapsables_snapshot(&self) -> LazyVectorSnapshot<CoreHandle> {
@@ -819,7 +842,7 @@ impl Component {
     }
 
     pub fn has_dirt(&self, flag: ComponentDirt) -> bool {
-        self.dirt.contains(flag)
+        self.dirt().contains(flag)
     }
 
     pub fn has_dirt_in(value: ComponentDirt, flag: ComponentDirt) -> bool {
@@ -851,7 +874,7 @@ impl Component {
     }
 
     pub fn is_collapsed(&self) -> bool {
-        self.dirt.contains(ComponentDirt::COLLAPSED)
+        self.dirt().contains(ComponentDirt::COLLAPSED)
     }
 
     pub fn hit_test_point(

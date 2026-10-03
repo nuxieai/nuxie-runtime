@@ -52,6 +52,7 @@ PREPROCESSOR_ADAPTED_OWNERS = {
 # User-deferred execution lane, UNIV-3728. Enumerate exact owners so new upstream
 # files still fail this check until their scope is examined.
 DEFERRED_OWNERS = {
+    "wasm/aot_artifact",
     "wasm/artboard_wire", "wasm/browser_scripting_vm", "wasm/data_convert_wire",
     "wasm/gamepad_wire", "wasm/listener_wire", "wasm/module/gpu_proxy",
     "wasm/module/module_context", "wasm/module/render_proxy", "wasm/module_render",

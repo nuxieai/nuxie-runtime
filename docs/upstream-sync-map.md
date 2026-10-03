@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `115c48623dc5de51cda9850f1ffa9263ba1dc6e7`
+- LAST_SYNCED_SHA: `45b2f609457274d064928d2dcffe64fb6712129f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1c54a97c8411a92b824b903fe083d3ba45a204ab` (refreshed 2026-10-03 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are six upstream commits after the checkpoint at this fetched target.
-  All 182 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (204 after `5892bb05`); this
+  There are five upstream commits after the checkpoint at this fetched target.
+  All 183 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (205 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -208,6 +208,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `45b2f609457274d064928d2dcffe64fb6712129f` | Entire public executable delta remains deferred under UNIV-3728: Android WAMR AOT target/artifact naming, module hashes, cross-compilation cache/cancellation and rejected-artifact fallback/tier-pin preservation. Add the new exact wasm/aot_artifact owner to the existing deferred correspondence scope, without a directory-wide exemption. No shared/native Luau owner or test changes. Private linked-device CLI/publisher work mentioned in metadata is absent publicly and not claimed. Pins advance through this explicitly accounted deferral, not AOT execution parity. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `115c48623dc5de51cda9850f1ffa9263ba1dc6e7` | Translate separate print-separator dispatch (stdout-only for discrete console spans, tab in line-oriented logging); synchronize state-machine data binds once after matching listener actions; reintroduce owned font allocation decoding, mapped face selection and one-shot coverage probes; and discard abandoned/detached screen-target segments without dropping resource stream bytes. Port the new font, state-action and deferred attachment regressions. Retain COLRv1 corrections and approved Rust text/luaur boundaries. Private Flutter/Android/Dart changes described in metadata but absent from the public delta are not claimed. Reviews and validation recorded in PR. | — |
 | `cdeabe75935085cea27ae93392b6af5d350d8971` | Translate the explicit revert of upstream's stale mirror: restore masked color channels, shared transition drawing, Lua print separators and nested timed callback restoration, button-aware synchronized pointer dispatch/query, pre-delete focus detachment, stroke property 470/outset/three GM scenes, SRIV opcode 43, audio release and COLRv1 corrections. Remove the owned-font/probe/collection-face APIs and associated tests removed upstream. Preserve all intervening downstream source corrections, including shared color arithmetic, root dirt, Stroke identity/EffectsContainer access, and shape ordering. Standalone player refresh selection remains inapplicable; Wasm guest-lane changes remain deferred under UNIV-3728. The persistent luaur host-budget callback remains an explicit approved adaptation. Both reviews and applicable validation are recorded in the PR; no private metadata, full-corpus or hardware claim. | — |
 | `820cc19bd8405f84a8f85f9f388a133d6a2c7511` | Translate owned-buffer font decoding without copying its allocation; mapped file probes with collection face selection, nominal glyph coverage and one-shot promotion retaining the mapping; Factory/proxy and CommandServer ownership paths; and upstream font regressions. Apply the actual public reversals of low-byte color coercion, shared transition owner, Lua print separators/timed-context restoration, synchronized pointer query/button forwarding, focus detachment, stroke property/outset/GM additions, SRIV opcode 43, audio release and COLRv1 changes. Synchronized pointer calls again use the upstream primary-button default; queued dispatch still forwards buttons. Preserve existing renderer stroke-position support/opcode 42 and the approved persistent luaur host-budget boundary (its supplemental test is not C++ interrupt-restoration equivalence). Reversed standalone player refresh settings remain inapplicable; Wasm guest-lane reversals remain parked under UNIV-3728. Private changes absent from the public delta are not claimed. Independent source and separate Rust-integration reviews and applicable validation are recorded in the PR; no full-corpus/device claim. | — |

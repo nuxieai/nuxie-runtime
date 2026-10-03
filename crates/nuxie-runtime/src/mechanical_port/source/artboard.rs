@@ -119,6 +119,14 @@ impl Default for RuntimeArtboardDirtyHandle {
     }
 }
 impl RuntimeArtboardDirtyHandle {
+    pub(crate) fn component_dirt(&self) -> ComponentDirt {
+        self.0.dirt.get()
+    }
+
+    pub(crate) fn set_component_dirt(&self, dirt: ComponentDirt) {
+        self.0.dirt.set(dirt);
+    }
+
     pub fn wake_if_quiet_row(&self) {
         let row = self.0.quiet_host_row.replace(Artboard::NO_QUIET_ROW);
         if row == Artboard::NO_QUIET_ROW {
@@ -286,7 +294,12 @@ pub struct Artboard {
 
 impl Default for Artboard {
     fn default() -> Self {
+        let dirty_state = RuntimeArtboardDirtyHandle::default();
         let mut base = ArtboardBase::default();
+        base.base
+            .as_component_mut()
+            .expect("Artboard Component")
+            .bind_artboard_dirt(dirty_state.clone());
         base.base.set_clip(true);
         Self {
             base,
@@ -322,7 +335,7 @@ impl Default for Artboard {
             draw_visitor: None,
             draw_visitor_file: None,
             joysticks_apply_before_update: true,
-            dirty_state: RuntimeArtboardDirtyHandle::default(),
+            dirty_state,
             factory: None,
             first_drawable: None,
             is_instance: false,
@@ -4141,8 +4154,18 @@ impl Artboard {
         self.add_dirt(ComponentDirt::PATH, false);
     }
 
+    fn take_base_for_callbacks(&mut self) -> ArtboardBase {
+        let mut replacement = ArtboardBase::default();
+        replacement
+            .base
+            .as_component_mut()
+            .expect("Artboard Component")
+            .bind_artboard_dirt(self.dirty_state.clone());
+        std::mem::replace(&mut self.base, replacement)
+    }
+
     pub fn deserialize(&mut self, property_key: u16, reader: &mut BinaryReader<'_>) -> bool {
-        let mut base = std::mem::take(&mut self.base);
+        let mut base = self.take_base_for_callbacks();
         let result = base.deserialize(property_key, reader, self);
         self.base = base;
         match property_key {
@@ -5370,7 +5393,7 @@ impl Artboard {
 
     fn clone_instance_definition(&self) -> Box<ArtboardInstance> {
         let mut clone = Box::new(ArtboardInstance::default());
-        let mut base = std::mem::take(&mut clone.base.base);
+        let mut base = clone.base.take_base_for_callbacks();
         base.copy(&self.base, &mut clone.base);
         clone.base.base = base;
         clone.base.factory = self.factory.clone();
@@ -6196,6 +6219,137 @@ impl Default for ArtboardInstance {
 #[cfg(test)]
 mod update_receiver_tests {
     use super::*;
+
+    #[test]
+    fn root_component_and_released_notifications_share_one_dirt_field() {
+        for runtime in [false, true] {
+            let arena = CoreArena::default();
+            let instance =
+                runtime.then(|| RuntimeArtboardInstanceHandle::new(ArtboardInstance::default()));
+            let root = instance.as_ref().map_or_else(
+                || arena.insert(Artboard::default()),
+                RuntimeArtboardInstanceHandle::core_handle,
+            );
+            let dirty = root.artboard_dirty_handle().unwrap();
+            root.with_mut(|owner| {
+                owner
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::NONE);
+                // A child can notify the root while its geometry is borrowed.
+                dirty.on_component_dirty_at(0);
+                assert_eq!(
+                    owner.as_component().unwrap().dirt(),
+                    ComponentDirt::COMPONENTS
+                );
+                assert!(!owner.component_add_dirt(ComponentDirt::COMPONENTS, false));
+                owner
+                    .as_component_mut()
+                    .unwrap()
+                    .set_dirt(ComponentDirt::NONE);
+                assert!(!dirty.has_component_dirt());
+                assert!(owner.component_add_dirt(ComponentDirt::PATH, false));
+                assert_eq!(
+                    owner.as_component().unwrap().dirt(),
+                    ComponentDirt::PATH | ComponentDirt::COMPONENTS
+                );
+            })
+            .unwrap();
+
+            root.with_downcast_mut::<Artboard, _>(|artboard| {
+                artboard.dependency_order.push(root.clone().into());
+                artboard.as_component_mut().unwrap().set_dirt(
+                    ComponentDirt::COLLAPSED | ComponentDirt::PATH | ComponentDirt::COMPONENTS,
+                );
+            });
+            assert!(Artboard::update_components_handle(&root));
+            assert_eq!(
+                root.with(|owner| owner.as_component().unwrap().dirt()),
+                Some(ComponentDirt::COLLAPSED | ComponentDirt::PATH)
+            );
+            assert!(!dirty.has_component_dirt());
+            assert!(!Artboard::update_components_handle(&root));
+        }
+    }
+
+    #[test]
+    fn root_collapse_publishes_the_same_dirt_seen_by_scheduling() {
+        let mut artboard = Artboard::default();
+        let dirty = artboard.dirty_handle();
+        assert_eq!(
+            artboard.as_component().unwrap().dirt(),
+            ComponentDirt::FILTHY
+        );
+        artboard
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::NONE);
+        assert!(artboard.component_collapse(true));
+        assert_eq!(
+            artboard.as_component().unwrap().dirt(),
+            ComponentDirt::COLLAPSED | ComponentDirt::COMPONENTS
+        );
+        assert!(dirty.has_component_dirt());
+        assert!(!artboard.component_collapse(true));
+        assert!(artboard.component_collapse(false));
+        assert_eq!(
+            artboard.as_component().unwrap().dirt(),
+            ComponentDirt::COMPONENTS
+        );
+    }
+
+    #[test]
+    fn root_deserialization_retains_dirt_and_definition_clones_start_fresh() {
+        let mut source = Artboard::default();
+        let dirty = source.dirty_handle();
+        source
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::PATH);
+        let width = 37.0_f32.to_le_bytes();
+        assert!(source.deserialize(
+            LayoutComponentBase::WIDTH_PROPERTY_KEY,
+            &mut BinaryReader::new(&width),
+        ));
+        assert_eq!(source.width(), 37.0);
+        assert_eq!(source.original_width, 37.0);
+        assert_eq!(source.as_component().unwrap().dirt(), ComponentDirt::PATH);
+        assert!(!dirty.has_component_dirt());
+
+        let mut instance = source.clone_instance_definition();
+        let mut definition =
+            crate::mechanical_port::source::core::CoreObject::clone_boxed(&source).unwrap();
+        assert_eq!(
+            instance.base.as_component().unwrap().dirt(),
+            ComponentDirt::FILTHY
+        );
+        assert_eq!(
+            definition.as_component().unwrap().dirt(),
+            ComponentDirt::FILTHY
+        );
+        instance
+            .base
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::NONE);
+        definition
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::NONE);
+        dirty.on_component_dirty_at(0);
+        assert_eq!(
+            source.as_component().unwrap().dirt(),
+            ComponentDirt::PATH | ComponentDirt::COMPONENTS
+        );
+        assert!(!instance.base.has_component_dirt());
+        assert!(!definition.as_artboard().unwrap().has_component_dirt());
+        instance.base.dirty_handle().mark_components_dirty();
+        assert_eq!(
+            instance.base.as_component().unwrap().dirt(),
+            ComponentDirt::COMPONENTS
+        );
+        assert!(!definition.as_artboard().unwrap().has_component_dirt());
+    }
 
     #[test]
     fn layout_cleaning_guards_preserve_debug_assert_and_release_return_contract() {

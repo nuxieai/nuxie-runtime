@@ -5807,6 +5807,21 @@ impl Drop for Artboard {
         }
         self.unbind_for_drop();
 
+        // Pre-delete pass: an adopted manager may still have live focus. Clear
+        // every FocusData callback target before any hierarchy deletion can
+        // blur the chain, without accessing the possibly expired manager.
+        let root = crate::mechanical_port::source::core::CoreObject::core(self).handle();
+        for object in self
+            .objects
+            .iter()
+            .chain(self.invalid_objects.iter())
+            .flatten()
+        {
+            if Some(object) != root.as_ref() {
+                object.with_downcast_mut::<FocusData, _>(FocusData::detach_focusable);
+            }
+        }
+
         if self.dispose_source_for_replacement || self.is_instance {
             // Identify VM objects before destroying hierarchy components.
             // Replacement of an authored definition leaves those occurrences

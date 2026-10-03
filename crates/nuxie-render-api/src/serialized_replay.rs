@@ -133,6 +133,20 @@ pub fn replay_serialized_commands(
                     }
                 }
             }
+            STROKE_POSITION => {
+                let id = reader.read_var_uint();
+                let position = reader.read_var_uint();
+                let Some(paint) = paints.get_mut(&id) else {
+                    return false;
+                };
+                let position = match position {
+                    0 => StrokePosition::Inside,
+                    1 => StrokePosition::Center,
+                    2 => StrokePosition::Outside,
+                    _ => return false,
+                };
+                paint.stroke_position(position);
+            }
             SHADER => {
                 let id = reader.read_var_uint();
                 let shader = reader.read_var_uint();

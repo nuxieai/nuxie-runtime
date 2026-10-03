@@ -198,6 +198,14 @@ impl AudioEngine {
         Some(engine)
     }
 
+    pub fn release_runtime_engine() {
+        let mut runtime = lock(&RUNTIME_AUDIO_ENGINE);
+        let previous = runtime.take();
+        nuxie_audio::AudioEngine::release_runtime_engine();
+        drop(runtime);
+        drop(previous);
+    }
+
     pub fn runtime_engine(make_when_necessary: bool) -> Option<AudioEngineRef> {
         let mut runtime = lock(&RUNTIME_AUDIO_ENGINE);
         if runtime.is_none() && make_when_necessary {

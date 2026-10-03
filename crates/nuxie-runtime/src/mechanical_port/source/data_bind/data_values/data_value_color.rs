@@ -30,16 +30,20 @@ impl DataValueColor {
         self.value & 0xff
     }
     pub fn set_alpha(&mut self, value: i32) {
-        self.value = ((self.value as u32 & 0x00ff_ffff) | ((value as u32) << 24)) as i32
+        self.set_channel(24, value);
     }
     pub fn set_red(&mut self, value: i32) {
-        self.value = ((self.value as u32 & 0xff00_ffff) | ((value as u32) << 16)) as i32
+        self.set_channel(16, value);
     }
     pub fn set_green(&mut self, value: i32) {
-        self.value = ((self.value as u32 & 0xffff_00ff) | ((value as u32) << 8)) as i32
+        self.set_channel(8, value);
     }
     pub fn set_blue(&mut self, value: i32) {
-        self.value = ((self.value as u32 & 0xffff_ff00) | value as u32) as i32
+        self.set_channel(0, value);
+    }
+    fn set_channel(&mut self, shift: u32, value: i32) {
+        let mask = 0xff_u32 << shift;
+        self.value = ((self.value as u32 & !mask) | ((value as u32 & 0xff) << shift)) as i32;
     }
 }
 impl DataValue for DataValueColor {

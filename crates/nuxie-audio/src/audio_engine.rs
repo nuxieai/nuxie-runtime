@@ -143,6 +143,12 @@ impl AudioEngine {
             .clone()
     }
 
+    /// Release the process-owned reference without stopping retained engines.
+    pub fn release_runtime_engine() {
+        let previous = lock(&RUNTIME_ENGINE).take();
+        drop(previous);
+    }
+
     pub fn channels(&self) -> u32 {
         self.shared.channels
     }

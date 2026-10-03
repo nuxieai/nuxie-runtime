@@ -43,6 +43,74 @@ use crate::mechanical_port::source::{
     },
 };
 use std::{cell::RefCell, rc::Rc};
+
+// Sweep gradients have no Rive shader and fall back to their first stop.
+pub fn draw_color_glyph_layer(
+    renderer: &mut Renderer,
+    factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    layer: &mut crate::mechanical_port::source::text_engine::ColorGlyphLayer,
+    opacity: f32,
+) {
+    use crate::mechanical_port::source::text_engine::ColorGlyphPaintType as PaintType;
+    let mut paint = factory.with_factory_mut(|factory| factory.make_render_paint());
+    paint.style(RenderPaintStyle::Fill);
+    let mut to_unit_circle = Mat2D::default();
+    let is_linear = layer.paint_type == PaintType::LinearGradient;
+    let is_radial = layer.paint_type == PaintType::RadialGradient
+        && layer.radial_transform.invert(&mut to_unit_circle);
+    if layer.stops.len() < 2 || (!is_linear && !is_radial) {
+        let color = if layer.paint_type == PaintType::Solid || layer.stops.is_empty() {
+            layer.color
+        } else {
+            layer.stops[0].color
+        };
+        paint.color(color_modulate_opacity(color, opacity));
+        let path = factory.with_factory_mut(|factory| {
+            factory.make_render_path(
+                to_render_raw_path(&layer.path),
+                nuxie_render_api::FillRule::NonZero,
+            )
+        });
+        renderer.draw_path(path.as_ref(), paint.as_ref());
+        return;
+    }
+    let colors: Vec<_> = layer
+        .stops
+        .iter()
+        .map(|stop| color_modulate_opacity(stop.color, opacity))
+        .collect();
+    let stops: Vec<_> = layer.stops.iter().map(|stop| stop.offset).collect();
+    if is_linear {
+        let shader = factory.with_factory_mut(|factory| {
+            factory.make_linear_gradient(layer.x0, layer.y0, layer.x1, layer.y1, &colors, &stops)
+        });
+        paint.shader(Some(shader.as_ref()));
+        let path = factory.with_factory_mut(|factory| {
+            factory.make_render_path(
+                to_render_raw_path(&layer.path),
+                nuxie_render_api::FillRule::NonZero,
+            )
+        });
+        renderer.draw_path(path.as_ref(), paint.as_ref());
+        return;
+    }
+    let shader = factory.with_factory_mut(|factory| {
+        factory.make_radial_gradient(0.0, 0.0, 1.0, &colors, &stops)
+    });
+    paint.shader(Some(shader.as_ref()));
+    layer.path.transform_in_place(to_unit_circle);
+    renderer.save();
+    renderer.transform(nuxie_render_api::Mat2D(*layer.radial_transform.values()));
+    let path = factory.with_factory_mut(|factory| {
+        factory.make_render_path(
+            to_render_raw_path(&layer.path),
+            nuxie_render_api::FillRule::NonZero,
+        )
+    });
+    renderer.draw_path(path.as_ref(), paint.as_ref());
+    renderer.restore();
+}
+
 #[derive(Default)]
 pub struct StyledText {
     value: Vec<u32>,
@@ -1827,18 +1895,7 @@ impl Text {
                 );
                 renderer.restore();
             } else {
-                let (path, mut paint) = factory.with_factory_mut(|factory| {
-                    (
-                        factory.make_render_path(
-                            to_render_raw_path(&layer.path),
-                            crate::mechanical_port::source::renderer::FillRule::NonZero,
-                        ),
-                        factory.make_render_paint(),
-                    )
-                });
-                paint.style(RenderPaintStyle::Fill);
-                paint.color(color_modulate_opacity(layer.color, opacity));
-                renderer.draw_path(path.as_ref(), paint.as_ref());
+                draw_color_glyph_layer(renderer, &factory, &mut layer, opacity);
             }
         }
         renderer.restore();

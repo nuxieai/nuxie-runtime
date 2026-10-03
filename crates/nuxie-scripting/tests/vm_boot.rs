@@ -323,6 +323,28 @@ fn scripted_data_values_round_trip_converter_types_and_color_channels() {
 }
 
 #[test]
+fn scripted_data_value_color_channels_keep_their_low_byte() {
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    // Exercise the live Luau binding with upstream 93d8161d's ordered writes.
+    let (red, blue, alpha): (u32, u32, u32) = vm
+        .eval(r#"
+        local color = DataValue.color()
+        color.value = 0x80102030
+        color.red = -1
+        local red = color.value
+        color.blue = 300
+        local blue = color.value
+        color.alpha = 0x1FF
+        return red, blue, color.value
+    "#)
+        .unwrap();
+    assert_eq!(red, 0x80FF2030);
+    assert_eq!(blue, 0x80FF202C);
+    assert_eq!(alpha, 0xFFFF202C);
+}
+
+#[test]
 fn scripted_data_values_match_lua_check_coercion_and_index_semantics() {
     let vm = ScriptVm::new();
     vm.install_rive_globals().unwrap();
@@ -368,8 +390,8 @@ fn scripted_data_values_match_lua_check_coercion_and_index_semantics() {
 
     assert_eq!(result.get::<f64>("number").unwrap(), 12.75_f32 as f64);
     assert_eq!(result.get::<String>("string").unwrap(), "42");
-    assert_eq!(result.get::<u32>("color").unwrap(), 0xffff_ffff);
-    assert_eq!(result.get::<u32>("red").unwrap(), 0xff);
+    assert_eq!(result.get::<u32>("color").unwrap(), 0xff23_ffff);
+    assert_eq!(result.get::<u32>("red").unwrap(), 0x23);
     assert_eq!(result.get::<u32>("green").unwrap(), 0xff);
     assert!(!result.get::<bool>("readOk").unwrap());
     assert!(

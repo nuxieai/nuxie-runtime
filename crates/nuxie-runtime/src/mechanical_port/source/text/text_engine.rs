@@ -232,6 +232,7 @@ pub type FontFeature = Feature;
 pub struct GradientStop {
     pub offset: f32,
     pub color: ColorInt,
+    pub is_foreground: bool,
 }
 
 #[repr(u8)]
@@ -259,6 +260,7 @@ pub struct ColorGlyphLayer {
     pub r1: f32,
     pub start_angle: f32,
     pub end_angle: f32,
+    pub radial_transform: crate::mechanical_port::source::math::mat2d::Mat2D,
     pub image_bytes: Vec<u8>,
     pub image_width: u32,
     pub image_height: u32,
@@ -284,6 +286,7 @@ impl Default for ColorGlyphLayer {
             r1: 0.0,
             start_angle: 0.0,
             end_angle: 0.0,
+            radial_transform: crate::mechanical_port::source::math::mat2d::Mat2D::default(),
             image_bytes: Vec::new(),
             image_width: 0,
             image_height: 0,

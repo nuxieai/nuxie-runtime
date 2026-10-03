@@ -97,7 +97,7 @@ fn point_at(text: &CoreHandle, offset: u32) -> Vec2D {
             let visual = position.clamped(&view).visual_position(&view);
             assert!(visual.found());
             (
-                *text.shape_world_transform()
+                text.shape_world_transform()
                     * Vec2D::new(visual.x(), (visual.top() + visual.bottom()) / 2.0),
                 text.artboard_handle().unwrap(),
             )

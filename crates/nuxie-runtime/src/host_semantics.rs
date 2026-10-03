@@ -1182,7 +1182,7 @@ fn build_text_query(handle: &CoreHandle) -> Option<TextQuery> {
             {
                 return None;
             }
-            let world = *text.shape_world_transform();
+            let world = text.shape_world_transform();
             if !world.values().iter().all(|value| value.is_finite())
                 || !text.effective_width().is_finite()
                 || !text.effective_height().is_finite()

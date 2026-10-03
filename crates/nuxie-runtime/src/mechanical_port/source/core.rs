@@ -8,7 +8,8 @@ use std::{
 use crate::mechanical_port::source::generated::core_registry::CoreRegistryObject;
 use crate::mechanical_port::source::{
     component_dirt::ComponentDirt, core::binary_reader::BinaryReader, core_context::CoreContext,
-    data_bind::data_bind::DataBind, importers::import_stack::ImportStack, status_code::StatusCode,
+    data_bind::data_bind::DataBind, importers::import_stack::ImportStack, math::mat2d::Mat2D,
+    status_code::StatusCode,
 };
 
 pub mod binary_data_reader;
@@ -160,6 +161,13 @@ pub trait CoreObject: CoreRegistryObject + Any {
     }
 }
 
+/// Weak aliases of the existing fields read by a Text background while its
+/// Text or TextStylePaint ancestor is already borrowed by a renderer callback.
+enum CoreTextReadProjection {
+    Text(Weak<Cell<Mat2D>>),
+    TextStylePaint(Weak<RefCell<Option<CoreHandle>>>),
+}
+
 struct CoreArenaSlot {
     property_observers: RefCell<Weak<PropertyObservers>>,
     generation: Cell<u64>,
@@ -168,6 +176,7 @@ struct CoreArenaSlot {
     core_type: Cell<CoreTypeKey>,
     type_predicate: Cell<Option<fn(CoreTypeKey) -> bool>>,
     component_graph_order: Cell<Option<u32>>,
+    text_read_projection: RefCell<Option<CoreTextReadProjection>>,
     artboard_dirty:
         RefCell<Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle>>,
     data_bind_container: RefCell<
@@ -188,6 +197,7 @@ impl CoreArenaSlot {
             core_type: Cell::new(0),
             type_predicate: Cell::new(None),
             component_graph_order: Cell::new(None),
+            text_read_projection: RefCell::new(None),
             artboard_dirty: RefCell::new(None),
             data_bind_container: RefCell::new(None),
             object: RefCell::new(None),
@@ -306,6 +316,23 @@ impl CoreArena {
         );
         *slot.artboard_dirty.borrow_mut() =
             value.as_artboard().map(|artboard| artboard.dirty_handle());
+        *slot.text_read_projection.borrow_mut() = if let Some(text) = value.as_text() {
+            Some(CoreTextReadProjection::Text(
+                text.shape_world_transform_weak(),
+            ))
+        } else if CoreObject::is_type_of(
+            value.as_ref(),
+            crate::mechanical_port::source::generated::text::text_style_paint_base::TextStylePaintBase::TYPE_KEY,
+        ) {
+            Some(CoreTextReadProjection::TextStylePaint(
+                value
+                    .as_component_mut()
+                    .expect("TextStylePaint inherits Component")
+                    .text_style_parent_weak(),
+            ))
+        } else {
+            None
+        };
         value.set_core_handle(handle.clone());
         let previous = slot.object.replace(Some(value));
         slot.occupied.set(true);
@@ -339,6 +366,7 @@ impl CoreArena {
         *slot.property_observers.borrow_mut() = Weak::new();
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
+        slot.text_read_projection.borrow_mut().take();
         slot.component_graph_order.set(None);
         slot.source_global_id.set(None);
         slot.occupied.set(false);
@@ -362,6 +390,7 @@ impl CoreArena {
         }
         slot.data_bind_container.borrow_mut().take();
         slot.artboard_dirty.borrow_mut().take();
+        slot.text_read_projection.borrow_mut().take();
         slot.component_graph_order.set(None);
         slot.source_global_id.set(None);
         slot.occupied.set(false);
@@ -460,6 +489,33 @@ impl CoreHandle {
     ) -> Option<crate::mechanical_port::source::artboard::RuntimeArtboardDirtyHandle> {
         self.slot()?.artboard_dirty.borrow().clone()
     }
+
+    pub(crate) fn text_shape_world_transform(&self) -> Option<Mat2D> {
+        let slot = self.slot()?;
+        if !slot.occupied.get() {
+            return None;
+        }
+        let projection = slot.text_read_projection.borrow();
+        let CoreTextReadProjection::Text(transform) = projection.as_ref()? else {
+            return None;
+        };
+        Some(transform.upgrade()?.get())
+    }
+
+    pub(crate) fn text_style_parent(&self) -> Option<CoreHandle> {
+        let slot = self.slot()?;
+        if !slot.occupied.get() {
+            return None;
+        }
+        let projection = slot.text_read_projection.borrow();
+        let CoreTextReadProjection::TextStylePaint(parent) = projection.as_ref()? else {
+            return None;
+        };
+        let parent = parent.upgrade()?;
+        let handle = parent.borrow().clone();
+        handle
+    }
+
     fn belongs_to(&self, arena: &CoreArena) -> bool {
         Weak::ptr_eq(&self.arena, &arena.inner)
     }
@@ -989,5 +1045,118 @@ mod tests {
             None,
             "runtime identity is distinct from authored source identity"
         );
+    }
+
+    #[test]
+    fn text_matrix_projection_is_live_and_occurrence_scoped() {
+        use crate::mechanical_port::source::{math::mat2d::Mat2D, text::text::Text};
+
+        let arena = CoreArena::default();
+        let text = arena.insert(Text::default());
+        let matrix = Mat2D::from_scale(2.0, 3.0);
+        text.with_mut(|owner| {
+            owner.as_text_mut().unwrap().set_shape_world_transform(matrix);
+            // This is a read of another field of the active owner, not a
+            // second borrow of the entire Text object.
+            assert_eq!(text.text_shape_world_transform(), Some(matrix));
+        })
+        .unwrap();
+
+        let twin = text.clone_occurrence().unwrap();
+        assert_eq!(twin.text_shape_world_transform(), Some(Mat2D::default()));
+        twin.with_mut(|owner| {
+            owner
+                .as_text_mut()
+                .unwrap()
+                .set_shape_world_transform(Mat2D::from_scale(4.0, 5.0));
+        })
+        .unwrap();
+        assert_eq!(text.text_shape_world_transform(), Some(matrix));
+
+        // Keep the removed owner (and its matrix cell) alive across slot reuse.
+        let removed = arena.remove(&text).unwrap();
+        let replacement = arena.insert(Text::default());
+        assert_eq!(text.identity_key().1, replacement.identity_key().1);
+        assert_ne!(text.identity_key().2, replacement.identity_key().2);
+        assert_eq!(text.text_shape_world_transform(), None);
+        assert_eq!(replacement.text_shape_world_transform(), Some(Mat2D::default()));
+        assert_eq!(removed.as_text().unwrap().shape_world_transform(), matrix);
+
+        drop(arena);
+        assert_eq!(twin.text_shape_world_transform(), None);
+        assert_eq!(replacement.text_shape_world_transform(), None);
+    }
+
+    #[test]
+    fn style_parent_projection_tracks_lifecycle_without_aliasing_clones() {
+        use super::CoreHandle;
+        use crate::mechanical_port::source::{
+            artboard::Artboard,
+            core_context::CoreContext,
+            generated::{component_base::ComponentBase, core_registry::CoreRegistry},
+            status_code::StatusCode,
+            text::{text::Text, text_style_paint::TextStylePaint},
+        };
+
+        struct Context {
+            arena: CoreArena,
+            objects: Vec<CoreHandle>,
+        }
+        impl CoreContext for Context {
+            fn core_arena(&self) -> &CoreArena {
+                &self.arena
+            }
+            fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+                self.objects.get(id as usize).cloned()
+            }
+        }
+        fn hydrate(style: &CoreHandle, context: &mut Context, parent: u32) {
+            assert!(CoreRegistry::set_uint_handle(
+                style,
+                ComponentBase::PARENT_ID_PROPERTY_KEY.into(),
+                parent,
+            ));
+            style
+                .with_mut(|owner| {
+                    assert_eq!(
+                        owner.as_component_mut().unwrap().on_added_dirty(context),
+                        StatusCode::Ok,
+                    );
+                    assert_eq!(
+                        style.text_style_parent(),
+                        Some(context.objects[parent as usize].clone()),
+                    );
+                })
+                .unwrap();
+        }
+
+        let arena = CoreArena::default();
+        let root = arena.insert(Artboard::default());
+        let first = arena.insert(Text::default());
+        let second = arena.insert(Text::default());
+        let style = arena.insert(TextStylePaint::default());
+        let mut context = Context {
+            arena: arena.clone(),
+            objects: vec![root, first.clone(), second.clone()],
+        };
+        hydrate(&style, &mut context, 1);
+        hydrate(&style, &mut context, 2);
+
+        let twin = style.clone_occurrence().unwrap();
+        assert_eq!(twin.text_style_parent(), None);
+        hydrate(&twin, &mut context, 1);
+        assert_eq!(style.text_style_parent(), Some(second.clone()));
+
+        let removed = arena.remove(&style).unwrap();
+        let replacement = arena.insert(TextStylePaint::default());
+        assert_eq!(style.identity_key().1, replacement.identity_key().1);
+        hydrate(&replacement, &mut context, 1);
+        assert_eq!(style.text_style_parent(), None);
+        assert_eq!(removed.as_component().unwrap().parent_handle(), Some(second));
+        assert_eq!(twin.text_style_parent(), Some(first));
+        drop(context);
+        drop(arena);
+        assert_eq!(twin.text_style_parent(), None);
+        assert_eq!(replacement.text_style_parent(), None);
     }
 }

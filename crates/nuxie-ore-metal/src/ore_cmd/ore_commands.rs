@@ -233,16 +233,20 @@ const _: [(); 4 * std::mem::size_of::<u32>()] =
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct BeginRenderPassCmd {
+    pub label: BlobRef,
     pub colorCount: u32,
     pub colors: [ColorAttachmentPOD; 4],
     pub depthStencil: DepthStencilAttachmentPOD,
+    pub pad: u32,
 }
 crate::impl_wire_pod!(BeginRenderPassCmd {
+    label: BlobRef,
     colorCount: u32,
     colors: [ColorAttachmentPOD; 4],
-    depthStencil: DepthStencilAttachmentPOD
+    depthStencil: DepthStencilAttachmentPOD,
+    pad: u32
 });
-const _: [(); 33 * std::mem::size_of::<u32>()] = [(); std::mem::size_of::<BeginRenderPassCmd>()];
+const _: [(); 38 * std::mem::size_of::<u32>()] = [(); std::mem::size_of::<BeginRenderPassCmd>()];
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]

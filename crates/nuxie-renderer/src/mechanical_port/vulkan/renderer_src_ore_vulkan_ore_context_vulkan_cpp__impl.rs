@@ -7,8 +7,9 @@ use super::ore_bind_group_layout_vulkan_decl::BindGroupLayoutVulkan;
 use super::ore_bind_group_vulkan_decl::{BindGroupVulkan, ImageWrite, UBOWrite};
 use super::ore_buffer_vulkan_decl::BufferVulkan;
 use super::ore_context_vulkan_decl::{
-    ContextVulkan, DescriptorPoolGeneration, DescriptorSetAllocation, VKRenderPassKey,
-    VkPendingImageTransition, VkPendingTextureUpload, MAX_DESCRIPTOR_SETS_PER_GENERATION,
+    ContextVulkan, DescriptorPoolGeneration, DescriptorSetAllocation,
+    MAX_DESCRIPTOR_SETS_PER_GENERATION, VKRenderPassKey, VkPendingImageTransition,
+    VkPendingTextureUpload, kVkProfilePassesPerSlot, kVkProfileSlots,
 };
 use super::ore_render_pass_vulkan_decl::RenderPassVulkan;
 use super::ore_sampler_vulkan_decl::SamplerVulkan;
@@ -28,15 +29,15 @@ use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
-    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, RenderPassDesc,
-    SamplerDesc, ShaderModuleDesc, StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType,
-    TextureViewDesc, TextureViewDimension, WrapMode,
+    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
+    CompareFunction, Features, Filter, LoadOp, RenderPassDesc, SamplerDesc, ShaderModuleDesc,
+    StoreOp, TextureAspect, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
+    TextureViewDimension, WrapMode, kMaxBindGroups,
 };
-use std::mem::ManuallyDrop;
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use vk_mem::{Alloc, AllocationCreateFlags, AllocationCreateInfo, MemoryUsage};
 
@@ -270,6 +271,12 @@ pub(crate) fn Make(
         m_vkPendingInitialTransitions: Vec::new(),
         m_vkRiveWrapped: Rc::new(RefCell::new(Vec::new())),
         m_vkPendingTextureUploads: Vec::new(),
+        m_vkProfilePool: vk::QueryPool::null(),
+        m_vkProfileUnavailable: false,
+        m_vkProfileOverflowWarned: false,
+        m_vkTimestampMask: u64::MAX,
+        m_vkProfileSlots: std::array::from_fn(|_| Default::default()),
+        m_vkProfileSlot: kVkProfileSlots,
     }))
 }
 
@@ -305,12 +312,19 @@ impl Drop for ContextVulkan {
                         .m_ashDevice
                         .destroy_command_pool(self.m_vkCommandPool, None);
                 }
+                if self.m_vkProfilePool != vk::QueryPool::null() {
+                    self.m_vk
+                        .m_ashDevice
+                        .destroy_query_pool(self.m_vkProfilePool, None);
+                }
             }
         }
         for texture in self.m_vkRiveWrapped.borrow().iter() {
             // Registered only after stable publication; its destructor removes
             // the address before freeing it, on the resource's owner lane.
-            unsafe { texture.as_ref() }.m_vkOreContext.set(std::ptr::null_mut());
+            unsafe { texture.as_ref() }
+                .m_vkOreContext
+                .set(std::ptr::null_mut());
         }
         self.m_vkPendingTextureUploads.clear();
         self.m_vkPendingInitialTransitions.clear();
@@ -604,9 +618,178 @@ pub(crate) fn beginFrame(context: &mut ContextVulkan, desc: &FrameDescriptor) {
     }
     context.m_vkCommandBuffer = vk::CommandBuffer::from_raw(external.as_ptr() as u64);
     context.m_vkCmdBufRecording = true;
+    context.m_vkProfileSlot = kVkProfileSlots;
+    if context.gpuProfiling() {
+        vkBeginProfileFrame(context, desc);
+    } else {
+        for slot in &mut context.m_vkProfileSlots {
+            slot.pending = false;
+        }
+        context.base.clearGpuPassTimings();
+    }
     vkFlushPendingTextureUploads(context);
     vkFlushPendingInitialTransitions(context);
     vkSyncRiveTextures(context);
+}
+
+fn vkCreateProfilePool(context: &mut ContextVulkan) -> bool {
+    if context
+        .m_vk
+        .physicalDeviceProperties
+        .limits
+        .timestamp_compute_and_graphics
+        == 0
+    {
+        return false;
+    }
+    let get_families = context
+        .m_vk
+        .GetPhysicalDeviceQueueFamilyProperties
+        .expect("loaded vkGetPhysicalDeviceQueueFamilyProperties");
+    let mut family_count = 0;
+    unsafe {
+        get_families(
+            context.m_vk.physicalDevice,
+            &mut family_count,
+            std::ptr::null_mut(),
+        )
+    };
+    let mut families = vec![vk::QueueFamilyProperties::default(); family_count as usize];
+    unsafe {
+        get_families(
+            context.m_vk.physicalDevice,
+            &mut family_count,
+            families.as_mut_ptr(),
+        )
+    };
+    if context.m_vkQueueFamily >= family_count {
+        return false;
+    }
+    let valid_bits = families[context.m_vkQueueFamily as usize].timestamp_valid_bits;
+    if valid_bits == 0 {
+        return false;
+    }
+    context.m_vkTimestampMask = if valid_bits >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << valid_bits) - 1
+    };
+    let info = vk::QueryPoolCreateInfo::default()
+        .query_type(vk::QueryType::TIMESTAMP)
+        .query_count(kVkProfileSlots * kVkProfilePassesPerSlot * 2);
+    match unsafe { context.m_vk.m_ashDevice.create_query_pool(&info, None) } {
+        Ok(pool) => context.m_vkProfilePool = pool,
+        Err(_) => {
+            context.m_vkProfilePool = vk::QueryPool::null();
+            return false;
+        }
+    }
+    true
+}
+
+fn vkBeginProfileFrame(context: &mut ContextVulkan, desc: &FrameDescriptor) {
+    if context.m_vkProfilePool == vk::QueryPool::null() {
+        if context.m_vkProfileUnavailable {
+            return;
+        }
+        if !vkCreateProfilePool(context) {
+            context.m_vkProfileUnavailable = true;
+            eprintln!("[ore gpu] this device cannot time passes, so no profile will print");
+            return;
+        }
+    }
+    for index in 0..kVkProfileSlots {
+        let slot = &context.m_vkProfileSlots[index as usize];
+        if slot.pending && slot.frameNumber <= desc.safeFrameNumber {
+            vkResolveProfileSlot(context, index);
+        }
+    }
+    let index = (desc.currentFrameNumber % u64::from(kVkProfileSlots)) as u32;
+    let slot = &mut context.m_vkProfileSlots[index as usize];
+    if slot.pending {
+        return;
+    }
+    slot.frameNumber = desc.currentFrameNumber;
+    slot.pending = true;
+    slot.labels.clear();
+    context.m_vkProfileSlot = index;
+    unsafe {
+        context.m_vk.m_ashDevice.cmd_reset_query_pool(
+            context.m_vkCommandBuffer,
+            context.m_vkProfilePool,
+            index * kVkProfilePassesPerSlot * 2,
+            kVkProfilePassesPerSlot * 2,
+        );
+    }
+}
+
+fn vkResolveProfileSlot(context: &mut ContextVulkan, index: u32) {
+    let slot = &mut context.m_vkProfileSlots[index as usize];
+    slot.pending = false;
+    let period = f64::from(
+        context
+            .m_vk
+            .physicalDeviceProperties
+            .limits
+            .timestamp_period,
+    ) * 1e-6;
+    let mut rows = Vec::with_capacity(slot.labels.len());
+    for (i, label) in slot.labels.iter_mut().enumerate() {
+        let mut stamps = [0u64; 2];
+        let result = unsafe {
+            context
+                .m_vk
+                .GetQueryPoolResults
+                .expect("loaded vkGetQueryPoolResults")(
+                context.m_vk.device,
+                context.m_vkProfilePool,
+                (index * kVkProfilePassesPerSlot + i as u32) * 2,
+                2,
+                std::mem::size_of_val(&stamps),
+                stamps.as_mut_ptr().cast(),
+                std::mem::size_of::<u64>() as vk::DeviceSize,
+                vk::QueryResultFlags::TYPE_64,
+            )
+        };
+        if result != vk::Result::SUCCESS {
+            continue;
+        }
+        let ticks = stamps[1].wrapping_sub(stamps[0]) & context.m_vkTimestampMask;
+        rows.push(nuxie_ore_metal::context::GpuPassTiming {
+            label: std::mem::take(label),
+            milliseconds: ticks as f64 * period,
+        });
+    }
+    context.publishGpuPassTimings(&rows);
+}
+
+fn vkBeginProfilePass(context: &mut ContextVulkan, desc: &RenderPassDesc<'_>) -> u32 {
+    if context.m_vkProfileSlot == kVkProfileSlots {
+        return u32::MAX;
+    }
+    let slot = &mut context.m_vkProfileSlots[context.m_vkProfileSlot as usize];
+    if slot.labels.len() >= kVkProfilePassesPerSlot as usize {
+        if !context.m_vkProfileOverflowWarned {
+            context.m_vkProfileOverflowWarned = true;
+            eprintln!(
+                "[ore gpu] passes past {} in a frame go unmeasured",
+                kVkProfilePassesPerSlot
+            );
+        }
+        return u32::MAX;
+    }
+    let query = (context.m_vkProfileSlot * kVkProfilePassesPerSlot + slot.labels.len() as u32) * 2;
+    slot.labels
+        .push(nuxie_ore_metal::context::gpuPassLabel(desc));
+    unsafe {
+        context.m_vk.m_ashDevice.cmd_write_timestamp(
+            context.m_vkCommandBuffer,
+            vk::PipelineStageFlags::TOP_OF_PIPE,
+            context.m_vkProfilePool,
+            query,
+        );
+    }
+    query
 }
 
 fn vkSyncRiveTextures(context: &ContextVulkan) {
@@ -806,13 +989,14 @@ pub(crate) fn makeTextureViewImpl(
             base_array_layer: desc.baseLayer,
             layer_count: desc.layerCount,
         });
-    view.m_vkImageView = match unsafe { context.m_vk.m_ashDevice.create_image_view(&view_info, None) } {
-        Ok(view) => view,
-        Err(_) => {
-            context.setLastError("makeTextureView: vkCreateImageView failed");
-            return None;
-        }
-    };
+    view.m_vkImageView =
+        match unsafe { context.m_vk.m_ashDevice.create_image_view(&view_info, None) } {
+            Ok(view) => view,
+            Err(_) => {
+                context.setLastError("makeTextureView: vkCreateImageView failed");
+                return None;
+            }
+        };
     view.m_vkDestroyImageView = Some(context.m_vk.m_ashDevice.fp_v1_0().destroy_image_view);
     Some(ResourceHandle::new_with_installed_manager_in_domain(domain, view).erase())
 }
@@ -1351,6 +1535,9 @@ pub(crate) fn beginRenderPass(
 
     context.vkFlushPendingTextureUploads();
     context.vkFlushPendingInitialTransitions();
+    if context.gpuProfiling() {
+        state.m_vkProfileQuery = vkBeginProfilePass(context, desc);
+    }
     unsafe {
         context.m_vk.m_ashDevice.cmd_begin_render_pass(
             context.m_vkCommandBuffer,
@@ -1421,9 +1608,8 @@ pub(crate) unsafe fn wrapRenderTarget(
     info: nuxie_ore_metal::context::RenderTargetInfo,
 ) -> Option<AnyResourceHandle> {
     let target = NonNull::new(info.target.cast())?;
-    let binding = unsafe {
-        super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target)
-    };
+    let binding =
+        unsafe { super::render_context_vulkan_impl::liveRenderTargetVulkanTextureBinding(target) };
     unsafe { wrapTargetImage(context, target, binding.targetLastAccess.layout, false) }
 }
 
@@ -1524,7 +1710,9 @@ pub(crate) unsafe fn wrapRiveTexture(
         ResourceHandle::new_texture_with_installed_manager_in_domain(domain.clone(), wrapped)
             .erase();
     context.m_vkRiveWrapped.borrow_mut().push(NonNull::from(
-        wrapped.downcast_ref::<TextureVulkan>().expect("wrapped Vulkan texture"),
+        wrapped
+            .downcast_ref::<TextureVulkan>()
+            .expect("wrapped Vulkan texture"),
     ));
     let viewDesc = TextureViewDesc {
         texture: Some(&wrapped),

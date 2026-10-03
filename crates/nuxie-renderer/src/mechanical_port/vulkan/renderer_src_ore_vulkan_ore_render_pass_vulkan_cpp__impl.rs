@@ -304,7 +304,9 @@ fn keepAsAttachment(
     if texture.m_vkSampleable {
         return false;
     }
-    texture.m_vkLayout.set(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+    texture
+        .m_vkLayout
+        .set(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
     if let Some(target) = target {
         target.updateLastAccess(ImageAccess {
             pipelineStages: vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT,
@@ -326,6 +328,14 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
             .m_vk
             .m_ashDevice
             .cmd_end_render_pass(pass.m_vkCmdBuf);
+        if pass.m_vkProfileQuery != u32::MAX {
+            pass.context().m_vk.m_ashDevice.cmd_write_timestamp(
+                pass.m_vkCmdBuf,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                pass.context().m_vkProfilePool,
+                pass.m_vkProfileQuery + 1,
+            );
+        }
     }
 
     let colorAttachmentWriteAccess = ImageAccess {
@@ -344,11 +354,7 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
         ) {
             continue;
         }
-        transitionColorImage(
-            pass,
-            image,
-            pass.m_vkColorRanges[index],
-        );
+        transitionColorImage(pass, image, pass.m_vkColorRanges[index]);
         if let Some(target) = pass.m_vkColorRenderTargets[index].as_mut() {
             target.updateLastAccess(colorAttachmentWriteAccess);
         }
@@ -365,10 +371,7 @@ pub(crate) fn finish(pass: &mut RenderPassVulkanState) {
     for index in 0..pass.m_vkResolveTargets.len() {
         let (image, range) = {
             let resolve = &pass.m_vkResolveTargets[index];
-            (
-                resolve.image,
-                resolve.range,
-            )
+            (resolve.image, resolve.range)
         };
         if image == vk::Image::null() {
             continue;

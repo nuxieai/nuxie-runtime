@@ -10,11 +10,11 @@ use super::vkutil_decl::{
 };
 use super::vkutil_impl::vk_abort;
 use super::vulkan_context_decl::{VulkanContext, VulkanFeatures};
+use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::IAABB;
 use ash::vk;
 use ash::vk::Handle;
 use nuxie_ore_metal::gpu_resource::{GPUResourceManager, ResourceHandle};
-use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use nuxie_render_api::ColorInt;
 use std::ffi::CStr;
 use std::mem::{ManuallyDrop, transmute_copy};
@@ -44,12 +44,34 @@ unsafe fn loadDeviceCommand<T: Copy>(
 impl VulkanContext {
     /// # Safety
     /// Handles and loader must remain valid for the returned context's lifetime.
-    pub(crate) unsafe fn make(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
-        device: vk::Device, features: VulkanFeatures,
+    pub(crate) unsafe fn make(
+        instance: vk::Instance,
+        physicalDevice: vk::PhysicalDevice,
+        device: vk::Device,
+        features: VulkanFeatures,
         get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
-        enableDebugNames: bool) -> Option<Arc<Self>> {
-        let allocator = unsafe { make_vma_allocator(instance, physicalDevice, device, features, get_instance_proc_addr) }?;
-        Some(unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, Some(allocator), enableDebugNames) })
+        enableDebugNames: bool,
+    ) -> Option<Arc<Self>> {
+        let allocator = unsafe {
+            make_vma_allocator(
+                instance,
+                physicalDevice,
+                device,
+                features,
+                get_instance_proc_addr,
+            )
+        }?;
+        Some(unsafe {
+            Self::new_with_allocator(
+                instance,
+                physicalDevice,
+                device,
+                features,
+                get_instance_proc_addr,
+                Some(allocator),
+                enableDebugNames,
+            )
+        })
     }
     /// # Safety
     /// The raw handles and loader must be a compatible live Vulkan tuple and
@@ -62,22 +84,39 @@ impl VulkanContext {
         get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
         enableDebugNames: bool,
     ) -> Arc<Self> {
-        unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, None, enableDebugNames) }
+        unsafe {
+            Self::new_with_allocator(
+                instance,
+                physicalDevice,
+                device,
+                features,
+                get_instance_proc_addr,
+                None,
+                enableDebugNames,
+            )
+        }
     }
 
-    pub(crate) unsafe fn new_with_allocator(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
-        device: vk::Device, features: VulkanFeatures,
+    pub(crate) unsafe fn new_with_allocator(
+        instance: vk::Instance,
+        physicalDevice: vk::PhysicalDevice,
+        device: vk::Device,
+        features: VulkanFeatures,
         get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
         allocator: Option<vk_mem::Allocator>,
-        enableDebugNames: bool) -> Arc<Self> {
+        enableDebugNames: bool,
+    ) -> Arc<Self> {
         // The source GPUResourceManager base is constructed before every
         // Vulkan member and allocator initializer.
         let manager_owner = nuxie_ore_metal::gpu_resource::GPUResourceManagerOwner::new();
-        let static_fn = ash::StaticFn { get_instance_proc_addr };
+        let static_fn = ash::StaticFn {
+            get_instance_proc_addr,
+        };
         let ash_instance = unsafe { ash::Instance::load(&static_fn, instance) };
         let ash_device = unsafe { ash::Device::load(ash_instance.fp_v1_0(), device) };
-        let GetDeviceProcAddr: Option<vk::PFN_vkGetDeviceProcAddr> =
-            unsafe { loadInstanceCommand(get_instance_proc_addr, instance, c"vkGetDeviceProcAddr") };
+        let GetDeviceProcAddr: Option<vk::PFN_vkGetDeviceProcAddr> = unsafe {
+            loadInstanceCommand(get_instance_proc_addr, instance, c"vkGetDeviceProcAddr")
+        };
         let get_device_proc_addr =
             GetDeviceProcAddr.expect("Vulkan instance must publish vkGetDeviceProcAddr");
         let GetPhysicalDeviceFormatProperties = unsafe {
@@ -92,6 +131,13 @@ impl VulkanContext {
                 get_instance_proc_addr,
                 instance,
                 c"vkGetPhysicalDeviceProperties",
+            )
+        };
+        let GetPhysicalDeviceQueueFamilyProperties = unsafe {
+            loadInstanceCommand(
+                get_instance_proc_addr,
+                instance,
+                c"vkGetPhysicalDeviceQueueFamilyProperties",
             )
         };
         let GetPhysicalDeviceFeatures = unsafe {
@@ -119,25 +165,44 @@ impl VulkanContext {
         {
             features.colorWriteEnable = false;
         }
-        let allocator = allocator.or_else(|| unsafe {
-            make_vma_allocator(instance, physicalDevice, device, features, get_instance_proc_addr)
-        }).unwrap_or_else(|| std::process::abort());
-        assert!(properties.api_version >= features.apiVersion,
-            "Supplied API version should not be newer than the physical device");
-        let d24 = unsafe { ash_instance.get_physical_device_format_properties(
-            physicalDevice, vk::Format::D24_UNORM_S8_UINT) }
-            .optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
-        let d32 = unsafe { ash_instance.get_physical_device_format_properties(
-            physicalDevice, vk::Format::D32_SFLOAT_S8_UINT) }
-            .optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
+        let allocator = allocator
+            .or_else(|| unsafe {
+                make_vma_allocator(
+                    instance,
+                    physicalDevice,
+                    device,
+                    features,
+                    get_instance_proc_addr,
+                )
+            })
+            .unwrap_or_else(|| std::process::abort());
+        assert!(
+            properties.api_version >= features.apiVersion,
+            "Supplied API version should not be newer than the physical device"
+        );
+        let d24 = unsafe {
+            ash_instance.get_physical_device_format_properties(
+                physicalDevice,
+                vk::Format::D24_UNORM_S8_UINT,
+            )
+        }
+        .optimal_tiling_features
+        .contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
+        let d32 = unsafe {
+            ash_instance.get_physical_device_format_properties(
+                physicalDevice,
+                vk::Format::D32_SFLOAT_S8_UINT,
+            )
+        }
+        .optimal_tiling_features
+        .contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
         assert!(d24 || d32, "No suitable depth format supported!");
 
         macro_rules! load_device_command {
             ($name:ident) => {{
-                let name = CStr::from_bytes_with_nul(
-                    concat!("vk", stringify!($name), "\0").as_bytes(),
-                )
-                .expect("static Vulkan command name");
+                let name =
+                    CStr::from_bytes_with_nul(concat!("vk", stringify!($name), "\0").as_bytes())
+                        .expect("static Vulkan command name");
                 unsafe { loadDeviceCommand(get_device_proc_addr, device, name) }
             }};
         }
@@ -151,6 +216,7 @@ impl VulkanContext {
             GetDeviceProcAddr,
             GetPhysicalDeviceFormatProperties,
             GetPhysicalDeviceProperties,
+            GetPhysicalDeviceQueueFamilyProperties,
             GetPhysicalDeviceFeatures,
             SetDebugUtilsObjectNameEXT,
             AllocateCommandBuffers: load_device_command!(AllocateCommandBuffers),
@@ -171,6 +237,7 @@ impl VulkanContext {
             CmdNextSubpass: load_device_command!(CmdNextSubpass),
             CmdPipelineBarrier: load_device_command!(CmdPipelineBarrier),
             CmdPushConstants: load_device_command!(CmdPushConstants),
+            CmdResetQueryPool: load_device_command!(CmdResetQueryPool),
             CmdSetBlendConstants: load_device_command!(CmdSetBlendConstants),
             CmdSetColorWriteEnableEXT: load_device_command!(CmdSetColorWriteEnableEXT),
             CmdSetCullMode: load_device_command!(CmdSetCullMode),
@@ -181,6 +248,7 @@ impl VulkanContext {
             CmdSetStencilReference: load_device_command!(CmdSetStencilReference),
             CmdSetStencilWriteMask: load_device_command!(CmdSetStencilWriteMask),
             CmdSetViewport: load_device_command!(CmdSetViewport),
+            CmdWriteTimestamp: load_device_command!(CmdWriteTimestamp),
             CreateCommandPool: load_device_command!(CreateCommandPool),
             CreateDescriptorPool: load_device_command!(CreateDescriptorPool),
             CreateDescriptorSetLayout: load_device_command!(CreateDescriptorSetLayout),
@@ -189,6 +257,7 @@ impl VulkanContext {
             CreateGraphicsPipelines: load_device_command!(CreateGraphicsPipelines),
             CreateImageView: load_device_command!(CreateImageView),
             CreatePipelineLayout: load_device_command!(CreatePipelineLayout),
+            CreateQueryPool: load_device_command!(CreateQueryPool),
             CreateRenderPass: load_device_command!(CreateRenderPass),
             CreateSampler: load_device_command!(CreateSampler),
             CreateShaderModule: load_device_command!(CreateShaderModule),
@@ -200,12 +269,14 @@ impl VulkanContext {
             DestroyImageView: load_device_command!(DestroyImageView),
             DestroyPipeline: load_device_command!(DestroyPipeline),
             DestroyPipelineLayout: load_device_command!(DestroyPipelineLayout),
+            DestroyQueryPool: load_device_command!(DestroyQueryPool),
             DestroyRenderPass: load_device_command!(DestroyRenderPass),
             DestroySampler: load_device_command!(DestroySampler),
             DestroyShaderModule: load_device_command!(DestroyShaderModule),
             EndCommandBuffer: load_device_command!(EndCommandBuffer),
             FreeCommandBuffers: load_device_command!(FreeCommandBuffers),
             FreeDescriptorSets: load_device_command!(FreeDescriptorSets),
+            GetQueryPoolResults: load_device_command!(GetQueryPoolResults),
             QueueSubmit: load_device_command!(QueueSubmit),
             QueueWaitIdle: load_device_command!(QueueWaitIdle),
             ResetCommandBuffer: load_device_command!(ResetCommandBuffer),
@@ -223,53 +294,75 @@ impl VulkanContext {
         })
     }
 
-    pub(crate) fn shutdown(&self) { self.m_managerOwner.shutdown(); }
+    pub(crate) fn shutdown(&self) {
+        self.m_managerOwner.shutdown();
+    }
 
     pub(crate) fn advanceFrameNumber(&self, current: u64, safe: u64) {
         self.manager().advanceFrameNumber(current, safe);
     }
 
-    pub(crate) fn currentFrameNumber(&self) -> u64 { self.manager().currentFrameNumber() }
+    pub(crate) fn currentFrameNumber(&self) -> u64 {
+        self.manager().currentFrameNumber()
+    }
 
-    pub(crate) fn safeFrameNumber(&self) -> u64 { self.manager().safeFrameNumber() }
+    pub(crate) fn safeFrameNumber(&self) -> u64 {
+        self.manager().safeFrameNumber()
+    }
 
     pub(crate) fn isFormatSupportedWithFeatureFlags(
-        &self, format: vk::Format, flags: vk::FormatFeatureFlags,
+        &self,
+        format: vk::Format,
+        flags: vk::FormatFeatureFlags,
     ) -> bool {
-        unsafe { self.m_ashInstance.get_physical_device_format_properties(self.physicalDevice, format) }
-            .optimal_tiling_features.contains(flags)
+        unsafe {
+            self.m_ashInstance
+                .get_physical_device_format_properties(self.physicalDevice, format)
+        }
+        .optimal_tiling_features
+        .contains(flags)
     }
 
     pub(crate) fn makeBuffer(
-        self: &Arc<Self>, info: vk::BufferCreateInfo<'_>, mappability: Mappability,
+        self: &Arc<Self>,
+        info: vk::BufferCreateInfo<'_>,
+        mappability: Mappability,
     ) -> ResourceHandle<Buffer> {
         let payload = Buffer::new(Arc::clone(self), info, mappability);
         ResourceHandle::new(Some(self.manager()), payload)
     }
 
     pub(crate) fn makeImage(
-        self: &Arc<Self>, info: vk::ImageCreateInfo<'_>, name: Option<&CStr>,
+        self: &Arc<Self>,
+        info: vk::ImageCreateInfo<'_>,
+        name: Option<&CStr>,
     ) -> ResourceHandle<Image> {
         let payload = Image::new(Arc::clone(self), info, name);
         ResourceHandle::new(Some(self.manager()), payload)
     }
 
     pub(crate) fn makeExternalImage(
-        self: &Arc<Self>, image: vk::Image, info: vk::ImageCreateInfo<'_>, name: Option<&CStr>,
+        self: &Arc<Self>,
+        image: vk::Image,
+        info: vk::ImageCreateInfo<'_>,
+        name: Option<&CStr>,
     ) -> ResourceHandle<Image> {
         let payload = Image::new_external(Arc::clone(self), image, info, name);
         ResourceHandle::new(Some(self.manager()), payload)
     }
 
     pub(crate) fn makeFramebuffer(
-        self: &Arc<Self>, info: vk::FramebufferCreateInfo<'_>,
+        self: &Arc<Self>,
+        info: vk::FramebufferCreateInfo<'_>,
     ) -> ResourceHandle<Framebuffer> {
         let payload = Framebuffer::new(Arc::clone(self), info);
         ResourceHandle::new(Some(self.manager()), payload)
     }
 
     pub(crate) fn makeImageView(
-        self: &Arc<Self>, image: ResourceHandle<Image>, name: Option<&CStr>,
+        self: &Arc<Self>,
+        image: ResourceHandle<Image>,
+        name: Option<&CStr>,
     ) -> ResourceHandle<ImageView> {
         let image_info = image.info();
         let info = vk::ImageViewCreateInfo::default()
@@ -285,7 +378,9 @@ impl VulkanContext {
     }
 
     pub(crate) fn makeImageViewWithInfo(
-        self: &Arc<Self>, image: ResourceHandle<Image>, info: vk::ImageViewCreateInfo<'_>,
+        self: &Arc<Self>,
+        image: ResourceHandle<Image>,
+        info: vk::ImageViewCreateInfo<'_>,
         name: Option<&CStr>,
     ) -> ResourceHandle<ImageView> {
         let payload = ImageView::new(Arc::clone(self), Some(image), info, name);
@@ -293,26 +388,34 @@ impl VulkanContext {
     }
 
     pub(crate) fn makeExternalImageView(
-        self: &Arc<Self>, info: vk::ImageViewCreateInfo<'_>, name: Option<&CStr>,
+        self: &Arc<Self>,
+        info: vk::ImageViewCreateInfo<'_>,
+        name: Option<&CStr>,
     ) -> ResourceHandle<ImageView> {
         let payload = ImageView::new(Arc::clone(self), None, info, name);
         ResourceHandle::new(Some(self.manager()), payload)
     }
 
     pub(crate) fn makeTexture2D(
-        self: &Arc<Self>, info: vk::ImageCreateInfo<'_>, name: Option<&CStr>,
+        self: &Arc<Self>,
+        info: vk::ImageCreateInfo<'_>,
+        name: Option<&CStr>,
     ) -> rcp<Texture2D> {
         make_rcp(|| Texture2D::new(Arc::clone(self), info, name))
     }
 
     pub(crate) fn makeTexture2DFromImage(
-        self: &Arc<Self>, image: ResourceHandle<Image>, name: Option<&CStr>,
+        self: &Arc<Self>,
+        image: ResourceHandle<Image>,
+        name: Option<&CStr>,
     ) -> rcp<Texture2D> {
         make_rcp(|| Texture2D::new_from_image(Arc::clone(self), image, name))
     }
 
     pub(crate) fn updateImageDescriptorSets(
-        &self, set: vk::DescriptorSet, mut write: vk::WriteDescriptorSet<'_>,
+        &self,
+        set: vk::DescriptorSet,
+        mut write: vk::WriteDescriptorSet<'_>,
         infos: &[vk::DescriptorImageInfo],
     ) {
         write.s_type = vk::StructureType::WRITE_DESCRIPTOR_SET;
@@ -323,7 +426,9 @@ impl VulkanContext {
     }
 
     pub(crate) fn updateBufferDescriptorSets(
-        &self, set: vk::DescriptorSet, mut write: vk::WriteDescriptorSet<'_>,
+        &self,
+        set: vk::DescriptorSet,
+        mut write: vk::WriteDescriptorSet<'_>,
         infos: &[vk::DescriptorBufferInfo],
     ) {
         write.s_type = vk::StructureType::WRITE_DESCRIPTOR_SET;
@@ -333,17 +438,36 @@ impl VulkanContext {
         unsafe { self.m_ashDevice.update_descriptor_sets(&[write], &[]) };
     }
 
-    pub(crate) fn memoryBarrier(&self, command: vk::CommandBuffer,
-        src: vk::PipelineStageFlags, dst: vk::PipelineStageFlags,
-        dependency: vk::DependencyFlags, mut barrier: vk::MemoryBarrier<'_>) {
+    pub(crate) fn memoryBarrier(
+        &self,
+        command: vk::CommandBuffer,
+        src: vk::PipelineStageFlags,
+        dst: vk::PipelineStageFlags,
+        dependency: vk::DependencyFlags,
+        mut barrier: vk::MemoryBarrier<'_>,
+    ) {
         barrier.s_type = vk::StructureType::MEMORY_BARRIER;
-        unsafe { self.m_ashDevice.cmd_pipeline_barrier(command, src, dst, dependency,
-            &[barrier], &[], &[]) };
+        unsafe {
+            self.m_ashDevice.cmd_pipeline_barrier(
+                command,
+                src,
+                dst,
+                dependency,
+                &[barrier],
+                &[],
+                &[],
+            )
+        };
     }
 
-    pub(crate) fn imageMemoryBarriers(&self, command: vk::CommandBuffer,
-        src: vk::PipelineStageFlags, dst: vk::PipelineStageFlags,
-        dependency: vk::DependencyFlags, barriers: &mut [vk::ImageMemoryBarrier<'_>]) {
+    pub(crate) fn imageMemoryBarriers(
+        &self,
+        command: vk::CommandBuffer,
+        src: vk::PipelineStageFlags,
+        dst: vk::PipelineStageFlags,
+        dependency: vk::DependencyFlags,
+        barriers: &mut [vk::ImageMemoryBarrier<'_>],
+    ) {
         for barrier in barriers.iter_mut() {
             barrier.s_type = vk::StructureType::IMAGE_MEMORY_BARRIER;
             if barrier.subresource_range.aspect_mask.is_empty() {
@@ -356,69 +480,176 @@ impl VulkanContext {
                 barrier.subresource_range.layer_count = vk::REMAINING_ARRAY_LAYERS;
             }
         }
-        unsafe { self.m_ashDevice.cmd_pipeline_barrier(command, src, dst, dependency,
-            &[], &[], barriers) };
+        unsafe {
+            self.m_ashDevice
+                .cmd_pipeline_barrier(command, src, dst, dependency, &[], &[], barriers)
+        };
     }
 
-    pub(crate) fn imageMemoryBarrier(&self, command: vk::CommandBuffer,
-        src: vk::PipelineStageFlags, dst: vk::PipelineStageFlags,
-        dependency: vk::DependencyFlags, mut barrier: vk::ImageMemoryBarrier<'_>) {
-        self.imageMemoryBarriers(command, src, dst, dependency, core::slice::from_mut(&mut barrier));
+    pub(crate) fn imageMemoryBarrier(
+        &self,
+        command: vk::CommandBuffer,
+        src: vk::PipelineStageFlags,
+        dst: vk::PipelineStageFlags,
+        dependency: vk::DependencyFlags,
+        mut barrier: vk::ImageMemoryBarrier<'_>,
+    ) {
+        self.imageMemoryBarriers(
+            command,
+            src,
+            dst,
+            dependency,
+            core::slice::from_mut(&mut barrier),
+        );
     }
 
-    pub(crate) fn simpleImageMemoryBarrier(&self, command: vk::CommandBuffer,
-        src: ImageAccess, dst: ImageAccess, image: vk::Image,
-        action: ImageAccessAction, dependency: vk::DependencyFlags) -> ImageAccess {
+    pub(crate) fn simpleImageMemoryBarrier(
+        &self,
+        command: vk::CommandBuffer,
+        src: ImageAccess,
+        dst: ImageAccess,
+        image: vk::Image,
+        action: ImageAccessAction,
+        dependency: vk::DependencyFlags,
+    ) -> ImageAccess {
         assert_ne!(image, vk::Image::null());
         if src != dst {
-            self.imageMemoryBarrier(command, src.pipelineStages, dst.pipelineStages, dependency,
+            self.imageMemoryBarrier(
+                command,
+                src.pipelineStages,
+                dst.pipelineStages,
+                dependency,
                 vk::ImageMemoryBarrier::default()
-                    .src_access_mask(src.accessMask).dst_access_mask(dst.accessMask)
-                    .old_layout(if action == ImageAccessAction::preserveContents { src.layout }
-                        else { vk::ImageLayout::UNDEFINED })
-                    .new_layout(dst.layout).image(image));
+                    .src_access_mask(src.accessMask)
+                    .dst_access_mask(dst.accessMask)
+                    .old_layout(if action == ImageAccessAction::preserveContents {
+                        src.layout
+                    } else {
+                        vk::ImageLayout::UNDEFINED
+                    })
+                    .new_layout(dst.layout)
+                    .image(image),
+            );
         }
         dst
     }
 
-    pub(crate) fn bufferMemoryBarrier(&self, command: vk::CommandBuffer,
-        src: vk::PipelineStageFlags, dst: vk::PipelineStageFlags,
-        dependency: vk::DependencyFlags, mut barrier: vk::BufferMemoryBarrier<'_>) {
+    pub(crate) fn bufferMemoryBarrier(
+        &self,
+        command: vk::CommandBuffer,
+        src: vk::PipelineStageFlags,
+        dst: vk::PipelineStageFlags,
+        dependency: vk::DependencyFlags,
+        mut barrier: vk::BufferMemoryBarrier<'_>,
+    ) {
         barrier.s_type = vk::StructureType::BUFFER_MEMORY_BARRIER;
-        if barrier.size == 0 { barrier.size = vk::WHOLE_SIZE; }
-        unsafe { self.m_ashDevice.cmd_pipeline_barrier(command, src, dst, dependency,
-            &[], &[barrier], &[]) };
+        if barrier.size == 0 {
+            barrier.size = vk::WHOLE_SIZE;
+        }
+        unsafe {
+            self.m_ashDevice.cmd_pipeline_barrier(
+                command,
+                src,
+                dst,
+                dependency,
+                &[],
+                &[barrier],
+                &[],
+            )
+        };
     }
 
-    pub(crate) fn clearColorImage(&self, command: vk::CommandBuffer, color: ColorInt,
-        image: vk::Image, layout: vk::ImageLayout) {
+    pub(crate) fn clearColorImage(
+        &self,
+        command: vk::CommandBuffer,
+        color: ColorInt,
+        image: vk::Image,
+        layout: vk::ImageLayout,
+    ) {
         let value = vkutil_decl::color_clear_rgba32f(color);
-        let range = vk::ImageSubresourceRange { aspect_mask: vk::ImageAspectFlags::COLOR,
-            level_count: 1, layer_count: 1, ..Default::default() };
-        unsafe { self.m_ashDevice.cmd_clear_color_image(command, image, layout, &value, &[range]) };
+        let range = vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            level_count: 1,
+            layer_count: 1,
+            ..Default::default()
+        };
+        unsafe {
+            self.m_ashDevice
+                .cmd_clear_color_image(command, image, layout, &value, &[range])
+        };
     }
 
-    pub(crate) fn blitSubRect(&self, command: vk::CommandBuffer, src: vk::Image,
-        src_layout: vk::ImageLayout, dst: vk::Image, dst_layout: vk::ImageLayout,
-        bounds: &IAABB) {
-        if bounds.empty() { return; }
-        let sub = vk::ImageSubresourceLayers { aspect_mask: vk::ImageAspectFlags::COLOR,
-            layer_count: 1, ..Default::default() };
-        let blit = vk::ImageBlit { src_subresource: sub,
-            src_offsets: [vk::Offset3D { x: bounds.left, y: bounds.top, z: 0 },
-                vk::Offset3D { x: bounds.right, y: bounds.bottom, z: 1 }],
+    pub(crate) fn blitSubRect(
+        &self,
+        command: vk::CommandBuffer,
+        src: vk::Image,
+        src_layout: vk::ImageLayout,
+        dst: vk::Image,
+        dst_layout: vk::ImageLayout,
+        bounds: &IAABB,
+    ) {
+        if bounds.empty() {
+            return;
+        }
+        let sub = vk::ImageSubresourceLayers {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            layer_count: 1,
+            ..Default::default()
+        };
+        let blit = vk::ImageBlit {
+            src_subresource: sub,
+            src_offsets: [
+                vk::Offset3D {
+                    x: bounds.left,
+                    y: bounds.top,
+                    z: 0,
+                },
+                vk::Offset3D {
+                    x: bounds.right,
+                    y: bounds.bottom,
+                    z: 1,
+                },
+            ],
             dst_subresource: sub,
-            dst_offsets: [vk::Offset3D { x: bounds.left, y: bounds.top, z: 0 },
-                vk::Offset3D { x: bounds.right, y: bounds.bottom, z: 1 }] };
-        unsafe { self.m_ashDevice.cmd_blit_image(command, src, src_layout, dst, dst_layout,
-            &[blit], vk::Filter::NEAREST) };
+            dst_offsets: [
+                vk::Offset3D {
+                    x: bounds.left,
+                    y: bounds.top,
+                    z: 0,
+                },
+                vk::Offset3D {
+                    x: bounds.right,
+                    y: bounds.bottom,
+                    z: 1,
+                },
+            ],
+        };
+        unsafe {
+            self.m_ashDevice.cmd_blit_image(
+                command,
+                src,
+                src_layout,
+                dst,
+                dst_layout,
+                &[blit],
+                vk::Filter::NEAREST,
+            )
+        };
     }
 
-    pub(crate) fn setDebugNameIfEnabled<T: Handle>(&self, handle: T,
-        object_type: vk::ObjectType, name: Option<&CStr>) {
+    pub(crate) fn setDebugNameIfEnabled<T: Handle>(
+        &self,
+        handle: T,
+        object_type: vk::ObjectType,
+        name: Option<&CStr>,
+    ) {
         let handle = handle.as_raw();
-        if handle == 0 { return; }
-        let (Some(function), Some(name)) = (self.SetDebugUtilsObjectNameEXT, name) else { return; };
+        if handle == 0 {
+            return;
+        }
+        let (Some(function), Some(name)) = (self.SetDebugUtilsObjectNameEXT, name) else {
+            return;
+        };
         let info = vk::DebugUtilsObjectNameInfoEXT {
             object_type,
             object_handle: handle,
@@ -429,10 +660,21 @@ impl VulkanContext {
     }
 }
 
-unsafe fn make_vma_allocator(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
-    device: vk::Device, features: VulkanFeatures,
-    get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr) -> Option<vk_mem::Allocator> {
-    let ash_instance = unsafe { ash::Instance::load(&ash::StaticFn { get_instance_proc_addr }, instance) };
+unsafe fn make_vma_allocator(
+    instance: vk::Instance,
+    physicalDevice: vk::PhysicalDevice,
+    device: vk::Device,
+    features: VulkanFeatures,
+    get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+) -> Option<vk_mem::Allocator> {
+    let ash_instance = unsafe {
+        ash::Instance::load(
+            &ash::StaticFn {
+                get_instance_proc_addr,
+            },
+            instance,
+        )
+    };
     let ash_device = unsafe { ash::Device::load(ash_instance.fp_v1_0(), device) };
     let mut info = AllocatorCreateInfo::new(&ash_instance, &ash_device, physicalDevice);
     info.flags = AllocatorCreateFlags::EXTERNALLY_SYNCHRONIZED;
@@ -440,20 +682,28 @@ unsafe fn make_vma_allocator(instance: vk::Instance, physicalDevice: vk::Physica
     match unsafe { vk_mem::Allocator::new(info) } {
         Ok(allocator) => Some(allocator),
         Err(error) => {
-            super::vkutil_impl::vkReportAllocationError(error, "the VMA allocator", file!(), line!());
+            super::vkutil_impl::vkReportAllocationError(
+                error,
+                "the VMA allocator",
+                file!(),
+                line!(),
+            );
             None
         }
     }
 }
 
 fn image_view_type_for_image_type(image_type: vk::ImageType) -> vk::ImageViewType {
-    match image_type { vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,
-        _ => panic!("unsupported Vulkan image type {image_type:?}") }
+    match image_type {
+        vk::ImageType::TYPE_2D => vk::ImageViewType::TYPE_2D,
+        _ => panic!("unsupported Vulkan image type {image_type:?}"),
+    }
 }
 fn image_aspect_flags_for_format(format: vk::Format) -> vk::ImageAspectFlags {
     match format {
-        vk::Format::D24_UNORM_S8_UINT | vk::Format::D32_SFLOAT_S8_UINT =>
-            vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL,
+        vk::Format::D24_UNORM_S8_UINT | vk::Format::D32_SFLOAT_S8_UINT => {
+            vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL
+        }
         _ => vk::ImageAspectFlags::COLOR,
     }
 }

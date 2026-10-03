@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `45b2f609457274d064928d2dcffe64fb6712129f`
+- LAST_SYNCED_SHA: `53419065f067f9e32ede9f4f5e28e41e3ec89f29`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1c54a97c8411a92b824b903fe083d3ba45a204ab` (refreshed 2026-10-03 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are five upstream commits after the checkpoint at this fetched target.
-  All 183 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (205 after `5892bb05`); this
+  There are four upstream commits after the checkpoint at this fetched target.
+  All 184 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (206 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -208,6 +208,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `53419065f067f9e32ede9f4f5e28e41e3ec89f29` | Translate opt-in ORE GPU profiling state, environment seed and per-label reporting; Vulkan timestamp-query allocation, three-slot safe-frame resolution and pass begin/end writes; and render-pass label ownership across Lua, recording and replay, including the new upstream recording test. Other backends retain the toggle but publish no timing rows, as upstream. Wasm label ABI/proxy changes and WAMR linear-memory growth patch remain parked under UNIV-3728. Standalone player --gpu-profile and console-only benchmark NO_GETENV guard have no shipped Rust host counterpart; no player CLI, console support or performance campaign is claimed. Independent reviews and applicable validation are recorded in PR, with hardware limitations explicit. | — |
 | `45b2f609457274d064928d2dcffe64fb6712129f` | Entire public executable delta remains deferred under UNIV-3728: Android WAMR AOT target/artifact naming, module hashes, cross-compilation cache/cancellation and rejected-artifact fallback/tier-pin preservation. Add the new exact wasm/aot_artifact owner to the existing deferred correspondence scope, without a directory-wide exemption. No shared/native Luau owner or test changes. Private linked-device CLI/publisher work mentioned in metadata is absent publicly and not claimed. Pins advance through this explicitly accounted deferral, not AOT execution parity. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `115c48623dc5de51cda9850f1ffa9263ba1dc6e7` | Translate separate print-separator dispatch (stdout-only for discrete console spans, tab in line-oriented logging); synchronize state-machine data binds once after matching listener actions; reintroduce owned font allocation decoding, mapped face selection and one-shot coverage probes; and discard abandoned/detached screen-target segments without dropping resource stream bytes. Port the new font, state-action and deferred attachment regressions. Retain COLRv1 corrections and approved Rust text/luaur boundaries. Private Flutter/Android/Dart changes described in metadata but absent from the public delta are not claimed. Reviews and validation recorded in PR. | — |
 | `cdeabe75935085cea27ae93392b6af5d350d8971` | Translate the explicit revert of upstream's stale mirror: restore masked color channels, shared transition drawing, Lua print separators and nested timed callback restoration, button-aware synchronized pointer dispatch/query, pre-delete focus detachment, stroke property 470/outset/three GM scenes, SRIV opcode 43, audio release and COLRv1 corrections. Remove the owned-font/probe/collection-face APIs and associated tests removed upstream. Preserve all intervening downstream source corrections, including shared color arithmetic, root dirt, Stroke identity/EffectsContainer access, and shape ordering. Standalone player refresh selection remains inapplicable; Wasm guest-lane changes remain deferred under UNIV-3728. The persistent luaur host-budget callback remains an explicit approved adaptation. Both reviews and applicable validation are recorded in the PR; no private metadata, full-corpus or hardware claim. | — |

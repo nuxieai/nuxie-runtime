@@ -11,8 +11,8 @@ use std::fmt::Write;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 mod aabb;
 pub mod authored_ore_shader;
@@ -30,8 +30,8 @@ pub use aabb::{AABBi16, AABBu16, Aabb, AabbInteger, AabbScalarBounds, IntegerAab
 pub use nuxie_audio::{AudioDecodeError, AudioSource};
 pub use nuxie_ore_metal::context::FrameDescriptor as OreFrameDescriptor;
 pub use routing::{
-    canvas_texture_info, canvas_texture_owner, DeferredCanvasHost, DeferredCanvasHostHandle,
-    OreContextHandle, RenderCanvasHandle,
+    DeferredCanvasHost, DeferredCanvasHostHandle, OreContextHandle, RenderCanvasHandle,
+    canvas_texture_info, canvas_texture_owner,
 };
 pub use serializing::{SerializingFactory, SerializingRenderer};
 
@@ -570,7 +570,7 @@ pub fn annotate_glyph_runs(
     text: &[char],
     run_text_indices: &[&[u32]],
 ) -> Result<Vec<GlyphRunAnnotations>, GlyphRunAnnotationError> {
-    use line_break::{compute_line_breaks, line_break_props, LineBreak, LineBreakClass};
+    use line_break::{LineBreak, LineBreakClass, compute_line_breaks, line_break_props};
     // Adapt the public char slice without allocating for typical UI strings.
     let mut inline_unichars = [0u32; 256];
     let mut heap_unichars = Vec::new();
@@ -2468,6 +2468,7 @@ pub struct GpuCanvasDrawCommand {
 /// snapshot through [`GpuCanvasDrawCommand::pipeline_index`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuCanvasRenderPass {
+    pub label: Option<String>,
     pub color_attachments: Vec<GpuCanvasColorAttachment>,
     pub depth_stencil_attachment: Option<GpuCanvasDepthStencilAttachment>,
     pub draws: Vec<GpuCanvasDrawCommand>,
@@ -5349,19 +5350,21 @@ fn write_raw_path(out: &mut String, path: &RawPath) {
 }
 
 fn mesh_instances_to_string(instances: &[ImageMeshInstanceData]) -> String {
-    let values =
-        instances
-            .iter()
-            .map(|instance| {
-                format!(
-        "{{transform={},uvTranslate=[{},{}],uvScale=[{},{}],opacity={},additiveness={}}}",
-        mat_to_string(instance.transform),
-        float_to_string(instance.uv_translate[0]), float_to_string(instance.uv_translate[1]),
-        float_to_string(instance.uv_scale[0]), float_to_string(instance.uv_scale[1]),
-        float_to_string(instance.opacity), float_to_string(instance.additiveness),
-    )
-            })
-            .collect::<Vec<_>>();
+    let values = instances
+        .iter()
+        .map(|instance| {
+            format!(
+                "{{transform={},uvTranslate=[{},{}],uvScale=[{},{}],opacity={},additiveness={}}}",
+                mat_to_string(instance.transform),
+                float_to_string(instance.uv_translate[0]),
+                float_to_string(instance.uv_translate[1]),
+                float_to_string(instance.uv_scale[0]),
+                float_to_string(instance.uv_scale[1]),
+                float_to_string(instance.opacity),
+                float_to_string(instance.additiveness),
+            )
+        })
+        .collect::<Vec<_>>();
     format!("[{}]", values.join(","))
 }
 

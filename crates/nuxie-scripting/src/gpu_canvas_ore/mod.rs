@@ -58,7 +58,7 @@ fn boolean(table: &Table, key: &str, default: bool) -> Result<bool> {
         _ => default,
     })
 }
-fn string(table: &Table, key: &str) -> Result<Option<String>> {
+pub(super) fn string(table: &Table, key: &str) -> Result<Option<String>> {
     string_value(&table.lua(), table.get::<Value>(key)?)
 }
 fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {

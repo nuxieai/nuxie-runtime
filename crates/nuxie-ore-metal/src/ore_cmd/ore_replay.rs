@@ -5,7 +5,8 @@ use super::{
     ore_commands::*,
     ore_handle::{INVALID_HANDLE, REAL_RESOURCE_FLAG},
     ore_make_replay::{
-        OreKind, OreResident, decodePods, replayOreLifecycle, resolveOre, warn_throttled,
+        OreKind, OreResident, blobCString, decodePods, replayOreLifecycle, resolveOre,
+        warn_throttled,
     },
 };
 use crate::{
@@ -54,6 +55,7 @@ pub fn replayPassCommand(
             }
             let depth = resolve(c.depthStencil.view, OreKind::textureView);
             let mut desc = RenderPassDesc {
+                label: blobCString(reader, c.label),
                 colorCount: c.colorCount,
                 ..Default::default()
             };

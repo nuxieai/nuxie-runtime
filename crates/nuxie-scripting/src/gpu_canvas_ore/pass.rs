@@ -11,6 +11,7 @@ pub(super) struct Pass {
     pub sample_count: u32,
     pub pipeline_set: bool,
     pub draw_call_count: u32,
+    pub label: String,
 }
 impl Pass {
     fn validate(&self) -> Result<bool> {

@@ -3,10 +3,17 @@
 
 #![allow(non_snake_case)]
 
-pub(crate) fn targetDescFor(target: &super::render_target_vulkan_decl::RenderTargetVulkan) -> nuxie_ore_metal::context::TargetDesc {
+pub(crate) fn targetDescFor(
+    target: &super::render_target_vulkan_decl::RenderTargetVulkan,
+) -> nuxie_ore_metal::context::TargetDesc {
     match target.framebufferFormat() {
-        ash::vk::Format::R8G8B8A8_UNORM | ash::vk::Format::B8G8R8A8_UNORM =>
-            nuxie_ore_metal::context::TargetDesc::color8(target.width(), target.height(), target.framebufferFormat() == ash::vk::Format::B8G8R8A8_UNORM),
+        ash::vk::Format::R8G8B8A8_UNORM | ash::vk::Format::B8G8R8A8_UNORM => {
+            nuxie_ore_metal::context::TargetDesc::color8(
+                target.width(),
+                target.height(),
+                target.framebufferFormat() == ash::vk::Format::B8G8R8A8_UNORM,
+            )
+        }
         _ => Default::default(),
     }
 }
@@ -21,13 +28,22 @@ use nuxie_ore_metal::types::{
     BindGroupDesc, BindGroupLayoutDesc, BufferDesc, LoadOp, PipelineDesc, RenderPassDesc,
     SamplerDesc, ShaderModuleDesc, StoreOp, TextureDesc, TextureFormat, TextureViewDesc,
 };
-use std::mem::ManuallyDrop;
 use std::cell::{Cell, RefCell};
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 pub(crate) const MAX_DESCRIPTOR_SETS_PER_GENERATION: u32 = 256;
+pub(crate) const kVkProfileSlots: u32 = 3;
+pub(crate) const kVkProfilePassesPerSlot: u32 = 64;
+
+#[derive(Default)]
+pub(crate) struct VkProfileSlot {
+    pub(crate) frameNumber: u64,
+    pub(crate) pending: bool,
+    pub(crate) labels: Vec<String>,
+}
 
 pub(super) struct ContextVulkanLifetime {
     live: Cell<bool>,
@@ -167,8 +183,15 @@ pub(crate) struct ContextVulkan {
     pub(super) m_vkPendingInitialTransitions: Vec<VkPendingImageTransition>,
     // Non-owning stable texture addresses. Texture destruction unregisters
     // through a weak registry handle without borrowing the Context again.
-    pub(super) m_vkRiveWrapped: Rc<RefCell<Vec<NonNull<super::ore_texture_vulkan_decl::TextureVulkan>>>>,
+    pub(super) m_vkRiveWrapped:
+        Rc<RefCell<Vec<NonNull<super::ore_texture_vulkan_decl::TextureVulkan>>>>,
     pub(super) m_vkPendingTextureUploads: Vec<VkPendingTextureUpload>,
+    pub(super) m_vkProfilePool: vk::QueryPool,
+    pub(super) m_vkProfileUnavailable: bool,
+    pub(super) m_vkProfileOverflowWarned: bool,
+    pub(super) m_vkTimestampMask: u64,
+    pub(super) m_vkProfileSlots: [VkProfileSlot; kVkProfileSlots as usize],
+    pub(super) m_vkProfileSlot: u32,
 }
 
 impl ContextVulkan {
@@ -193,9 +216,7 @@ impl ContextVulkan {
         range: vk::ImageSubresourceRange,
         newLayout: vk::ImageLayout,
     ) {
-        super::ore_context_vulkan_impl::vkQueueTransitionToLayout(
-            self, texture, range, newLayout,
-        )
+        super::ore_context_vulkan_impl::vkQueueTransitionToLayout(self, texture, range, newLayout)
     }
 
     pub(crate) fn vkFlushPendingInitialTransitions(&mut self) {

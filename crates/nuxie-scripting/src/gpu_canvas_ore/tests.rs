@@ -34,6 +34,7 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
             sample_count: 1,
             pipeline_set: false,
             draw_call_count: 0,
+            label: String::new(),
         })
         .unwrap();
     vm.lua().globals().set("rp", rp.clone()).unwrap();
@@ -276,6 +277,40 @@ fn vertex_layout_metafields_follow_source_order_and_failure_boundary() {
         assert(not pcall(makePipeline))
         assert(table.concat(reads, ',') == 'stride,stepMode,attributes,attribute.format')
     "#).exec().unwrap();
+}
+
+#[test]
+fn render_pass_labels_follow_lua_string_coercion_and_retain_the_value() {
+    let vm = recording_vm();
+    vm.lua()
+        .load(
+            r#"
+        local texture = GPUTexture.new { width = 4, height = 4 }
+        function labeledPass(label)
+            local desc = {label = label, color = {{view = texture:view(), storeOp = 'store'}}}
+            local pass = canvas:beginRenderPass(desc)
+            desc.label = 'changed'
+            pass:finish()
+            return pass
+        end
+    "#,
+        )
+        .exec()
+        .unwrap();
+    for (expression, expected) in [
+        ("'lighting'", "lighting"),
+        ("123", "123"),
+        ("false", ""),
+        ("nil", ""),
+        ("'prefix' .. string.char(0) .. 'suffix'", "prefix"),
+    ] {
+        let pass: AnyUserData = vm
+            .lua()
+            .load(format!("return labeledPass({expression})"))
+            .eval()
+            .unwrap();
+        assert_eq!(pass.borrow::<pass::Pass>().unwrap().label, expected);
+    }
 }
 
 #[test]

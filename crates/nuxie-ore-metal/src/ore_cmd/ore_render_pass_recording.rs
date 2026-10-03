@@ -80,6 +80,7 @@ impl RenderPassRecording {
             }),
         };
         let mut begin = BeginRenderPassCmd {
+            label: out.state.cmd.borrow_mut().appendStringRef(desc.label),
             colorCount: desc.colorCount,
             ..Default::default()
         };

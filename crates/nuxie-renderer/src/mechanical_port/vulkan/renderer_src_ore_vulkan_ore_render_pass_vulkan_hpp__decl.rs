@@ -54,6 +54,7 @@ pub(crate) struct RenderPassVulkanState {
     pub(crate) m_vkDepthRange: vk::ImageSubresourceRange,
     pub(crate) m_vkDepthTexture: ManuallyDrop<Option<AnyResourceHandle>>,
     pub(crate) m_vkStencilRef: u32,
+    pub(crate) m_vkProfileQuery: u32,
 }
 
 impl RenderPassVulkanState {
@@ -80,6 +81,7 @@ impl RenderPassVulkanState {
             m_vkDepthRange: vk::ImageSubresourceRange::default(),
             m_vkDepthTexture: ManuallyDrop::new(None),
             m_vkStencilRef: 0,
+            m_vkProfileQuery: u32::MAX,
         }
     }
 

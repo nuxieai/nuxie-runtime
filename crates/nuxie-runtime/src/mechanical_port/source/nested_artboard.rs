@@ -88,6 +88,9 @@ pub struct NestedArtboard {
     cumulated_seconds: f32,
     owns_active_vmi: bool,
     host_flags: NestedArtboardHostFlags,
+    // Dropped after the mounted instance and all of its dependent state.
+    mounted_bindable:
+        Option<crate::mechanical_port::source::bindable_artboard::RuntimeBindableArtboardHandle>,
 }
 
 impl Default for NestedArtboard {
@@ -109,6 +112,7 @@ impl Default for NestedArtboard {
             cumulated_seconds: 0.0,
             owns_active_vmi: false,
             host_flags: NestedArtboardHostFlags::NONE,
+            mounted_bindable: None,
         }
     }
 }
@@ -159,11 +163,28 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl NestedArtboard {
-    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
-        let Some(nested)=self.artboard_instance_default() else {return crate::mechanical_port::source::drawable::BoundsFidelity::None};
+    pub fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        let Some(nested) = self.artboard_instance_default() else {
+            return crate::mechanical_port::source::drawable::BoundsFidelity::None;
+        };
         nested.with_artboard(|nested| {
-            let fidelity=crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&nested.bounds(),&self.world_transform(),None,out);
-            if fidelity==crate::mechanical_port::source::drawable::BoundsFidelity::None || nested.clip() {fidelity}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+            let fidelity =
+                crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+                    &nested.bounds(),
+                    &self.world_transform(),
+                    None,
+                    out,
+                );
+            if fidelity == crate::mechanical_port::source::drawable::BoundsFidelity::None
+                || nested.clip()
+            {
+                fidelity
+            } else {
+                crate::mechanical_port::source::drawable::BoundsFidelity::Approximate
+            }
         })
     }
     pub(crate) fn take_artboard_instance(&mut self) -> Option<RuntimeArtboardInstanceHandle> {
@@ -298,22 +319,27 @@ impl NestedArtboard {
         let mut base = std::mem::take(&mut nested_artboard.base);
         base.copy(self, &mut *nested_artboard);
         nested_artboard.base = base;
-        nested_artboard.file = self.file.clone();
         if self.is_artboard_data_bound() {
             nested_artboard.set_host_flag(NestedArtboardHostFlags::ARTBOARD_DATA_BOUND);
         }
+        self.clone_references_into(&mut nested_artboard);
+        nested_artboard
+    }
+
+    pub(crate) fn clone_references_into(&self, nested_artboard: &mut NestedArtboard) {
+        nested_artboard.file = self.file.clone();
         let Some(referenced) = self
             .instance
             .as_ref()
             .map(|instance| instance.core_handle())
             .or_else(|| self.artboard_referencer.referenced_artboard())
         else {
-            return nested_artboard;
+            return;
         };
+        nested_artboard.mounted_bindable = self.mounted_bindable.clone();
         if let Some(instance) = Artboard::nested_instance_from_handle(&referenced) {
             nested_artboard.referenced_artboard_instance(instance);
         }
-        nested_artboard
     }
 
     fn nest(&mut self, artboard: CoreHandle) {
@@ -589,6 +615,7 @@ impl NestedArtboard {
             }
             self.artboard_referencer.set_referenced_artboard(None);
             self.instance = None;
+            self.mounted_bindable = None;
             self.set_active_view_model_instance(None, false);
             return None;
         }
@@ -630,7 +657,25 @@ impl NestedArtboard {
         artboard: CoreHandle,
         view_model_instance_artboard: Option<CoreHandle>,
     ) -> Option<NestedSemanticRehome> {
-        if self.base.is_stateful() {
+        self.mounted_bindable = view_model_instance_artboard.as_ref().and_then(|property| {
+            property
+                .with(|property| {
+                    property
+                        .as_view_model_instance_artboard()
+                        .and_then(|property| property.asset())
+                })
+                .flatten()
+        });
+        let source_file = self
+            .mounted_bindable
+            .as_ref()
+            .and_then(|bindable| bindable.file())
+            .and_then(|file| file.upgrade());
+        let from_other_file = source_file
+            .as_ref()
+            .zip(self.file.upgrade().as_ref())
+            .is_some_and(|(source, host)| !source.ptr_eq(host));
+        if self.base.is_stateful() && !from_other_file {
             let stateful_child = self.find_stateful_child_vmi();
             let artboard_view_model_id = artboard
                 .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id())
@@ -668,6 +713,7 @@ impl NestedArtboard {
             }
         } else {
             self.set_active_view_model_instance(None, false);
+            self.clear_host_flag(NestedArtboardHostFlags::PENDING_STATEFUL_BINDING);
         }
 
         let bound = view_model_instance_artboard.as_ref().and_then(|property| {
@@ -802,7 +848,9 @@ impl NestedArtboard {
 
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
         let read = |callback: fn(&NestedArtboard) -> bool| {
-            owner.with(|object| callback(object.as_nested_artboard().expect("nested artboard"))).expect("live nested artboard")
+            owner
+                .with(|object| callback(object.as_nested_artboard().expect("nested artboard")))
+                .expect("live nested artboard")
         };
         if read(|this| this.needs_save_operation()) {
             renderer.save();
@@ -842,7 +890,11 @@ impl NestedArtboard {
         }
         renderer.transform(nuxie_render_api::Mat2D(*self.world_transform().values()));
         if let Some(instance) = &self.instance {
-            Artboard::draw_hosted_handle(&self.artboard_handle().expect("nested artboard owner"), &instance.core_handle(), renderer);
+            Artboard::draw_hosted_handle(
+                &self.artboard_handle().expect("nested artboard owner"),
+                &instance.core_handle(),
+                renderer,
+            );
         }
         if self.needs_save_operation() {
             renderer.restore();
@@ -1767,6 +1819,9 @@ impl ArtboardHost for NestedArtboard {
 }
 
 impl ArtboardReferencerBehavior for NestedArtboard {
+    fn nesting_artboard(&self) -> Option<CoreHandle> {
+        self.parent_artboard_handle()
+    }
     fn artboard_referencer(&self) -> &ArtboardReferencer {
         &self.artboard_referencer
     }

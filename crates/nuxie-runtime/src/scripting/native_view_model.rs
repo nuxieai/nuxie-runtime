@@ -121,6 +121,7 @@ impl NativeScriptViewModel {
                 generated::viewmodel_property_trigger_base::ViewModelPropertyTriggerBase::TYPE_KEY => Kind::Trigger,
                 generated::viewmodel_property_asset_image_base::ViewModelPropertyAssetImageBase::TYPE_KEY => Kind::Image,
                 generated::viewmodel_property_asset_font_base::ViewModelPropertyAssetFontBase::TYPE_KEY => Kind::Font,
+                generated::viewmodel_property_artboard_base::ViewModelPropertyArtboardBase::TYPE_KEY => Kind::Artboard,
                 generated::viewmodel_property_asset_blob_base::ViewModelPropertyAssetBlobBase::TYPE_KEY => Kind::Blob,
                 generated::viewmodel_property_list_base::ViewModelPropertyListBase::TYPE_KEY => Kind::List,
                 generated::viewmodel_property_viewmodel_base::ViewModelPropertyViewModelBase::TYPE_KEY => Kind::ViewModel,
@@ -401,6 +402,19 @@ impl NativeScriptViewModel {
             })
             .flatten();
         self.set_render_image(name, image)
+    }
+    #[cfg(feature = "scriptnet")]
+    pub fn set_artboard(
+        &self,
+        name: &str,
+        artboard: Option<crate::source::bindable_artboard::RuntimeBindableArtboardHandle>,
+        view_model: Option<CoreHandle>,
+    ) -> bool {
+        use crate::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
+        self.mutate::<ViewModelInstanceArtboard>(name, |owner| {
+            owner.set_bound_view_model_instance(view_model);
+            owner.set_asset(artboard)
+        })
     }
     pub fn set_render_image(
         &self,

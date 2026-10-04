@@ -181,7 +181,107 @@ impl RuntimeFile {
         }
 
         let artboard_index = usize::try_from(cpp_artboard_referencer_index(referencer)?).ok()?;
+        if self
+            .cpp_cyclic_artboard_referencers(referencer)
+            .contains(&referencer.id)
+        {
+            return None;
+        }
         self.cpp_backboard_artboard_for_referencer(referencer, artboard_index)
+    }
+
+    // This immutable record projection already reconstructs importer assignments
+    // at lookup. Keep the source's iterative SCC filter at that same boundary.
+    fn cpp_cyclic_artboard_referencers(&self, owner: &RuntimeObject) -> BTreeSet<u32> {
+        let Some((start, end)) = self.cpp_backboard_range_for_object(owner) else {
+            return BTreeSet::new();
+        };
+        let mut nodes = BTreeMap::new();
+        let mut references = Vec::new();
+        for (offset, object) in self.objects[start + 1..end].iter().enumerate() {
+            if self.import_status(start + 1 + offset) != Some(RuntimeImportStatus::Imported) {
+                continue;
+            }
+            let Some(object) = object.as_ref() else {
+                continue;
+            };
+            if !definition_by_type_key(object.type_key)
+                .is_some_and(|definition| definition.is_a("NestedArtboard"))
+            {
+                continue;
+            }
+            let Some((_, (nesting, _), _, _)) = self.cpp_artboard_local_context_for_object(object)
+            else {
+                continue;
+            };
+            let Some(target) = cpp_artboard_referencer_index(object)
+                .and_then(|index| usize::try_from(index).ok())
+                .and_then(|index| self.cpp_backboard_artboard_for_referencer(object, index))
+            else {
+                continue;
+            };
+            let next = nodes.len();
+            let from = *nodes.entry(nesting).or_insert(next);
+            let next = nodes.len();
+            let to = *nodes.entry(target.id as usize).or_insert(next);
+            references.push((object.id, from, to));
+        }
+        let count = nodes.len();
+        let mut edges = vec![Vec::new(); count];
+        for &(_, from, to) in &references {
+            edges[from].push(to);
+        }
+        let mut order = vec![None; count];
+        let mut lowlink = vec![0; count];
+        let mut component = vec![None; count];
+        let mut open = Vec::new();
+        let mut calls = Vec::<(usize, usize)>::new();
+        let mut next_order = 0;
+        let mut next_component = 0;
+        for root in 0..count {
+            if order[root].is_some() {
+                continue;
+            }
+            order[root] = Some(next_order);
+            lowlink[root] = next_order;
+            next_order += 1;
+            open.push(root);
+            calls.push((root, 0));
+            while let Some(&(current, next)) = calls.last() {
+                if next < edges[current].len() {
+                    calls.last_mut().unwrap().1 += 1;
+                    let neighbor = edges[current][next];
+                    if order[neighbor].is_none() {
+                        order[neighbor] = Some(next_order);
+                        lowlink[neighbor] = next_order;
+                        next_order += 1;
+                        open.push(neighbor);
+                        calls.push((neighbor, 0));
+                    } else if component[neighbor].is_none() {
+                        lowlink[current] = lowlink[current].min(order[neighbor].unwrap());
+                    }
+                    continue;
+                }
+                calls.pop();
+                if let Some(&(parent, _)) = calls.last() {
+                    lowlink[parent] = lowlink[parent].min(lowlink[current]);
+                }
+                if lowlink[current] == order[current].unwrap() {
+                    loop {
+                        let member = open.pop().unwrap();
+                        component[member] = Some(next_component);
+                        if member == current {
+                            break;
+                        }
+                    }
+                    next_component += 1;
+                }
+            }
+        }
+        references
+            .into_iter()
+            .filter_map(|(id, from, to)| (component[from] == component[to]).then_some(id))
+            .collect()
     }
 
     /// Reconstructs `m_ArtboardLookup` for the BackboardImporter that accepted

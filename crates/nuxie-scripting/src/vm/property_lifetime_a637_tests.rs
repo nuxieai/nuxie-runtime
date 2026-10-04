@@ -45,6 +45,63 @@ struct Screen {
     counter: CoreHandle,
     enabled: CoreHandle,
 }
+
+// scripting_properties_test.cpp: wrappers created/read from coroutine stacks
+// survive collection and dispatch listeners back through the owning VM.
+#[test]
+fn view_model_properties_work_from_async_bodies() {
+    let models = Models::new();
+    let screen = models.screen();
+    name(&models.counter_property, "n");
+    let model = models.facade(&screen.instance);
+    assert!(model.set_number("n", 7.0));
+    let vm = ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    vm.lua
+        .load(
+            r#"
+results = {}
+function run(model: ViewModel)
+    async(function()
+        results.method = model:getNumber("n").value
+        results.index = model.n.value
+        model:getNumber("n"):addListener(function()
+            results.heard = model.n.value
+        end)
+        results.kept = model:getNumber("n")
+        return nil
+    end)
+    return nil
+end
+function readKept(): number
+    return results.kept.value
+end
+"#,
+        )
+        .exec()
+        .unwrap();
+    vm.lua
+        .globals()
+        .get::<Function>("run")
+        .unwrap()
+        .call::<()>(create_scripted_view_model(&vm.lua, model.clone()).unwrap())
+        .unwrap();
+    vm.lua.gc_collect().unwrap();
+    let results: Table = vm.lua.globals().get("results").unwrap();
+    assert_eq!(results.get::<f32>("method").unwrap(), 7.0);
+    assert_eq!(results.get::<f32>("index").unwrap(), 7.0);
+    model.set_number("n", 9.0);
+    assert_eq!(results.get::<f32>("heard").unwrap(), 9.0);
+    assert_eq!(
+        vm.lua
+            .globals()
+            .get::<Function>("readKept")
+            .unwrap()
+            .call::<f32>(())
+            .unwrap(),
+        9.0
+    );
+}
 fn name(handle: &CoreHandle, value: &str) {
     assert!(CoreRegistry::set_string_handle(
         handle,
@@ -193,7 +250,7 @@ return function() return { init = init, counter = nil } end
     let table: Table = generator.call(()).unwrap();
     let model = Rc::new(RefCell::new(Some(model)));
     let missing = Rc::new(Cell::new(false));
-    let context = ScriptedContext::new(model.clone(), Vec::new(), missing.clone(), None);
+    let context = ScriptedContext::new(&vm.lua, model.clone(), Vec::new(), missing.clone(), None);
     let owner = context.listener_owner();
     let mut instance = LuaScriptInstance::new(table);
     instance.context = Some(vm.lua.create_userdata(context).unwrap());

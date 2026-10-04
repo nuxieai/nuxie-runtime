@@ -6193,6 +6193,12 @@ pub trait CoreCapabilities: Any {
     fn artboard_referencer_referenced_artboard_id(&self) -> Option<i32> {
         None
     }
+    fn artboard_referencer_nesting_artboard(
+        &self,
+    ) -> Option<crate::mechanical_port::source::core::CoreHandle> {
+        self.as_nested_artboard()
+            .and_then(|nested| nested.parent_artboard_handle())
+    }
     fn artboard_referencer_set_referenced_artboard(
         &mut self,
         _artboard: crate::mechanical_port::source::core::CoreHandle,

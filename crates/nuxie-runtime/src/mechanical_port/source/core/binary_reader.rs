@@ -44,12 +44,16 @@ impl<'a> BinaryReader<'a> {
         let mut value = 0u64;
         let mut shift = 0u8;
         loop {
-            if self.position >= self.bytes.len() {
+            if self.position >= self.bytes.len() || shift >= 64 {
                 self.overflow();
                 return 0;
             }
             let byte = self.bytes[self.position];
             self.position += 1;
+            if shift == 63 && byte & 0x7e != 0 {
+                self.overflow();
+                return 0;
+            }
             value |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
             if byte & 0x80 == 0 {
                 return value;
@@ -70,7 +74,7 @@ impl<'a> BinaryReader<'a> {
         }
     }
     pub fn read_string(&mut self) -> String {
-        let length = self.read_var_uint64() as usize;
+        let length = self.read_length();
         if self.did_overflow() {
             String::new()
         } else {
@@ -86,7 +90,7 @@ impl<'a> BinaryReader<'a> {
         }
     }
     pub fn read_bytes(&mut self) -> &'a [u8] {
-        let length = self.read_var_uint64() as usize;
+        let length = self.read_length();
         if self.did_overflow() {
             &self.bytes[self.position..self.position]
         } else {
@@ -101,6 +105,14 @@ impl<'a> BinaryReader<'a> {
         let start = self.position;
         self.position += length;
         &self.bytes[start..self.position]
+    }
+    fn read_length(&mut self) -> usize {
+        let length = self.read_var_uint64();
+        if length > self.bytes.len().saturating_sub(self.position) as u64 {
+            self.overflow();
+            return 0;
+        }
+        length as usize
     }
     pub fn read_float32(&mut self) -> f32 {
         f32::from_le_bytes(self.read_array())

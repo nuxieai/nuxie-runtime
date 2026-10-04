@@ -281,15 +281,10 @@ fn decode_cpp_manifest_paths(
     let count = reader.read_var_uint()?;
     for _ in 0..count {
         let id = cpp_manifest_key(reader.read_var_uint()?);
-        // C++ stores this var-uint in an `int` before comparing it with the
-        // unsigned loop counter. Values outside the positive `int` range can
-        // request effectively unbounded work after integer promotion; reject
-        // that malformed representation at the Rust allocation boundary.
-        let path_len = i32::try_from(reader.read_var_uint()?)
-            .map_err(|_| anyhow::anyhow!("manifest path length does not fit in C++ int"))?;
+        let path_len = reader.read_var_uint()?;
         let mut path = Vec::new();
         for _ in 0..path_len {
-            path.push(read_cpp_manifest_path_id(reader));
+            path.push(reader.read_var_uint()? as u32);
         }
         manifest.paths.insert(id, path);
     }
@@ -311,16 +306,6 @@ pub(crate) fn cpp_manifest_key(value: u64) -> i32 {
 // See cpp_manifest_key above and the pinning test cpp_manifest_key_reinterpret.
 pub(crate) fn cpp_manifest_resolver_key(value: u32) -> i32 {
     value as i32
-}
-
-fn read_cpp_manifest_path_id(reader: &mut BinaryReader<'_>) -> u32 {
-    match reader.read_var_uint() {
-        Ok(value) => value as u32,
-        Err(_) => {
-            reader.offset = reader.bytes.len();
-            0
-        }
-    }
 }
 
 #[cfg(test)]

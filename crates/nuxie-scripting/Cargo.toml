@@ -16,6 +16,7 @@ default = ["luau", "compiler", "async", "js-host-seed"]
 # Explicit upstream --no_ffp_contract mode for shared native Color arithmetic.
 strict-fp = ["nuxie-runtime/strict-fp"]
 async = ["luau", "luaur-rt/async"]
+scriptnet = ["luau", "nuxie-runtime/scriptnet"]
 compiler = ["luau", "luaur-rt/compiler"]
 js-host-seed = ["nuxie-runtime/js-host-seed"]
 apple-authored-msl = ["luau", "dep:sha2"]

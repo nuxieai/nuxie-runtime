@@ -9,6 +9,7 @@ pub struct ViewModelInstanceArtboard {
     pub base: ViewModelInstanceArtboardBase,
     bindable_artboard: Option<RuntimeBindableArtboardHandle>,
     bound_view_model_instance: Option<CoreHandle>,
+    bound_view_model_instance_changed: bool,
     #[cfg(feature = "tools")]
     changed_callback: Option<fn(&mut Self, u32)>,
 }
@@ -52,10 +53,26 @@ impl ViewModelInstanceArtboard {
         self.base.on_value_changed();
     }
 
-    pub fn set_asset(&mut self, value: Option<RuntimeBindableArtboardHandle>) {
+    pub fn set_asset(&mut self, value: Option<RuntimeBindableArtboardHandle>) -> bool {
+        let same = match (&self.bindable_artboard, &value) {
+            (Some(a), Some(b)) => a.ptr_eq(b),
+            (None, None) => true,
+            _ => false,
+        };
+        if self.base.property_value() == u32::MAX && same && !self.bound_view_model_instance_changed
+        {
+            return false;
+        }
+        self.bound_view_model_instance_changed = false;
+        let restore = self.base.suppress_delegation();
         self.set_property_value(u32::MAX);
+        if restore {
+            self.base.restore_delegation();
+        }
         self.bindable_artboard = value;
         self.base.add_dirt(ComponentDirt::BINDINGS);
+        self.base.on_value_changed();
+        true
     }
 
     pub fn asset(&self) -> Option<RuntimeBindableArtboardHandle> {
@@ -63,7 +80,10 @@ impl ViewModelInstanceArtboard {
     }
 
     pub fn set_bound_view_model_instance(&mut self, value: Option<CoreHandle>) {
-        self.bound_view_model_instance = value;
+        if self.bound_view_model_instance != value {
+            self.bound_view_model_instance = value;
+            self.bound_view_model_instance_changed = true;
+        }
     }
 
     pub fn bound_view_model_instance(&self) -> Option<CoreHandle> {

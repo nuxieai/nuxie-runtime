@@ -272,6 +272,7 @@ pub struct File {
     view_model_instance_registrar: Option<ViewModelInstanceRegistrarHandle>,
     manifest: Option<CoreHandle>,
     has_audio: bool,
+    require_signed_scripts: bool,
 }
 
 impl Drop for File {
@@ -280,6 +281,9 @@ impl Drop for File {
         DEBUG_TOTAL_FILE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         self.cleanup_scripting_vm();
         self.artboards.clear();
+        // Upstream clears each model's raw File pointer here. Our existing
+        // weak File edge is already non-upgradeable during final destruction;
+        // do not reborrow a model that may itself be releasing the last File.
         self.view_models.borrow_mut().clear();
         #[cfg(feature = "tools")]
         {
@@ -335,6 +339,7 @@ impl File {
             view_model_instance_registrar: None,
             manifest: None,
             has_audio: false,
+            require_signed_scripts: false,
         }
     }
 
@@ -352,7 +357,45 @@ impl File {
             }
             return None;
         };
-        Self::import_internal(bytes, factory, result, asset_loader, scripting_vm, None)
+        Self::import_internal(
+            bytes,
+            factory,
+            result,
+            asset_loader,
+            scripting_vm,
+            None,
+            false,
+            None,
+        )
+    }
+
+    pub fn import_with_script_policy(
+        bytes: &[u8],
+        factory: RuntimeFactoryHandle,
+        result: Option<&mut ImportResult>,
+        asset_loader: Option<FileAssetLoaderRef>,
+        scripting_vm: Option<RuntimeScriptingVmHandle>,
+        require_signed_scripts: bool,
+    ) -> Option<RuntimeFileHandle> {
+        Self::import_internal(
+            bytes,
+            factory,
+            result,
+            asset_loader,
+            scripting_vm,
+            None,
+            require_signed_scripts,
+            None,
+        )
+    }
+
+    pub(crate) fn import_decoded(
+        bytes: &[u8],
+        factory: RuntimeFactoryHandle,
+        result: Option<&mut ImportResult>,
+        make_vm: Option<&mut dyn FnMut(RuntimeFactoryHandle) -> RuntimeScriptingVmHandle>,
+    ) -> Option<RuntimeFileHandle> {
+        Self::import_internal(bytes, factory, result, None, None, None, true, make_vm)
     }
 
     pub fn import_with_loader(
@@ -368,6 +411,8 @@ impl File {
             result,
             Some(asset_loader),
             scripting_vm,
+            None,
+            false,
             None,
         )
     }
@@ -387,6 +432,8 @@ impl File {
             asset_loader,
             scripting_vm,
             Some(admission),
+            false,
+            None,
         )
     }
 
@@ -397,6 +444,8 @@ impl File {
         asset_loader: Option<FileAssetLoaderRef>,
         scripting_vm: Option<RuntimeScriptingVmHandle>,
         admission: Option<ImportAdmissionRef>,
+        require_signed_scripts: bool,
+        make_vm: Option<&mut dyn FnMut(RuntimeFactoryHandle) -> RuntimeScriptingVmHandle>,
     ) -> Option<RuntimeFileHandle> {
         let mut reader = BinaryReader::new(bytes);
         let mut header = RuntimeHeader::default();
@@ -423,6 +472,7 @@ impl File {
 
         let file = RuntimeFileHandle::new(File::new(factory, asset_loader));
         let (read_result, registration_ready) = file.with_file_mut(|file| {
+            file.require_signed_scripts = require_signed_scripts;
             file.set_scripting_vm(scripting_vm);
             file.read(&mut reader, &header, admission.clone())
         });
@@ -431,7 +481,7 @@ impl File {
                 .as_ref()
                 .is_some_and(|policy| policy.is_rejected())
         {
-            Self::register_scripts(&file);
+            Self::register_scripts(&file, make_vm);
         }
         if let Some(result) = result.as_deref_mut() {
             *result = read_result;
@@ -979,8 +1029,12 @@ impl File {
         self.view_model_instances.borrow_mut().push(instance);
     }
 
-    fn register_scripts(file: &RuntimeFileHandle) {
-        let (assets, vm, interpolators, models) = file.with_file(|file| {
+    fn register_scripts(
+        file: &RuntimeFileHandle,
+        make_vm: Option<&mut dyn FnMut(RuntimeFactoryHandle) -> RuntimeScriptingVmHandle>,
+    ) {
+        let require_signed_scripts = file.with_file(|file| file.require_signed_scripts);
+        let (assets, mut vm, interpolators, models) = file.with_file(|file| {
             (
                 file.file_assets.clone(),
                 file.scripting_vm.clone(),
@@ -988,17 +1042,46 @@ impl File {
                 file.view_models.borrow().clone(),
             )
         });
+        if require_signed_scripts {
+            for asset in &assets {
+                asset.with_downcast_mut::<ScriptAsset, _>(|script| {
+                    script.set_generator_function_ref(0)
+                });
+            }
+        }
         let scripts: Vec<_> = assets
             .iter()
             .filter(|asset| {
                 asset
-                    .with_downcast::<ScriptAsset, _>(|_| true)
+                    .with_downcast::<ScriptAsset, _>(|script| {
+                        !require_signed_scripts
+                            || Self::accepts_script(require_signed_scripts, script.verified())
+                    })
                     .unwrap_or(false)
             })
             .cloned()
             .collect();
         if scripts.is_empty() {
             return;
+        }
+        if vm.is_none() {
+            if let Some(make_vm) = make_vm {
+                let created = make_vm(file.with_file(|file| file.factory.clone()));
+                file.with_file_mut(|file| {
+                    file.set_scripting_vm(Some(created.clone()));
+                    for artboard in &file.artboards {
+                        artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                            artboard.set_scripting_vm(Some(created.clone()))
+                        });
+                    }
+                    for asset in &file.file_assets {
+                        asset.with_downcast_mut::<ScriptAsset, _>(|script| {
+                            script.set_scripting_vm(Some(created.clone()))
+                        });
+                    }
+                });
+                vm = Some(created);
+            }
         }
         let Some(vm) = vm else {
             return;
@@ -1033,8 +1116,7 @@ impl File {
             .filter_map(|script| {
                 script
                     .with_downcast::<ScriptAsset, _>(|script_asset| {
-                        #[cfg(not(feature = "tools"))]
-                        if !script_asset.verified() {
+                        if !Self::accepts_script(require_signed_scripts, script_asset.verified()) {
                             return None;
                         }
                         Some((
@@ -1117,6 +1199,14 @@ impl File {
             previous.dispose_orphan_scripted_properties(false);
         }
         self.scripting_vm = vm;
+    }
+
+    fn accepts_script(require_signed_scripts: bool, verified: bool) -> bool {
+        if require_signed_scripts {
+            !cfg!(feature = "test-script-signature") && verified
+        } else {
+            cfg!(feature = "tools") || verified
+        }
     }
 
     fn cleanup_scripting_vm(&mut self) {
@@ -1285,14 +1375,16 @@ impl File {
     }
 
     pub fn complete_view_model_instance(&self, instance: &CoreHandle) {
-        self.complete_view_model_instance_with_map(instance, &mut HashMap::new());
+        self.complete_view_model_instance_with_map(instance, &mut HashMap::new(), 1);
     }
 
     fn complete_view_model_instance_with_map(
         &self,
         instance: &CoreHandle,
         instances: &mut HashMap<CoreHandle, Option<CoreHandle>>,
+        depth: usize,
     ) {
+        let nest = depth < 256;
         let Some((view_model_id, values)) = instance
             .with(|instance| {
                 let instance = instance.as_view_model_instance()?;
@@ -1335,8 +1427,9 @@ impl File {
                             })
                             .flatten()
                     });
-                    if let Some(source) = source {
-                        let copied = self.copy_view_model_instance_with_map(&source, instances);
+                    if let Some(source) = source.filter(|_| nest) {
+                        let copied =
+                            self.copy_view_model_instance_with_map(&source, instances, depth + 1);
                         value.with_mut(|value| {
                             value
                                 .as_view_model_instance_view_model_mut()
@@ -1375,10 +1468,11 @@ impl File {
                             })
                             .flatten()
                     });
-                    let Some(source) = source else {
+                    let Some(source) = source.filter(|_| nest) else {
                         continue;
                     };
-                    let copied = self.copy_view_model_instance_with_map(&source, instances);
+                    let copied =
+                        self.copy_view_model_instance_with_map(&source, instances, depth + 1);
                     item.with_mut(|item| {
                         if let Some(item) = item.as_view_model_instance_list_item_mut() {
                             item.set_view_model_instance(copied);
@@ -1419,16 +1513,17 @@ impl File {
         models: &Rc<RefCell<Vec<CoreHandle>>>,
         instance: &CoreHandle,
     ) {
-        Self::complete_view_model_properties_visited(models, instance, &mut HashSet::new());
+        Self::complete_view_model_properties_visited(models, instance, &mut HashSet::new(), 1);
     }
 
     fn complete_view_model_properties_visited(
         models: &Rc<RefCell<Vec<CoreHandle>>>,
         instance: &CoreHandle,
         visited: &mut HashSet<CoreHandle>,
+        depth: usize,
     ) {
         // Visit each authored instance once, including diamonds and cycles.
-        if !visited.insert(instance.clone()) {
+        if depth > 256 || !visited.insert(instance.clone()) {
             return;
         }
         let Some((model_id, values)) = instance.with_downcast::<ViewModelInstance, _>(|instance| {
@@ -1458,7 +1553,7 @@ impl File {
                         model.instance_at(nested_index as usize)
                     }).flatten());
                     if let Some(referenced) = referenced {
-                        Self::complete_view_model_properties_visited(models, &referenced, visited);
+                        Self::complete_view_model_properties_visited(models, &referenced, visited, depth + 1);
                     }
                 }
             } else if let Some(items) = value
@@ -1488,7 +1583,12 @@ impl File {
                         .with_downcast::<ViewModel, _>(|model| model.instance_at(instance_id))
                         .flatten();
                     if let Some(referenced) = referenced {
-                        Self::complete_view_model_properties_visited(models, &referenced, visited);
+                        Self::complete_view_model_properties_visited(
+                            models,
+                            &referenced,
+                            visited,
+                            depth + 1,
+                        );
                     }
                 }
             }
@@ -1507,13 +1607,14 @@ impl File {
     /// Copy and complete a graph with the root registered in the same memo as
     /// its descendants. Active back-edges become null; completed copies share.
     pub fn copy_view_model_instance(&self, instance: Option<&CoreHandle>) -> Option<CoreHandle> {
-        self.copy_view_model_instance_with_map(instance?, &mut HashMap::new())
+        self.copy_view_model_instance_with_map(instance?, &mut HashMap::new(), 1)
     }
 
     fn copy_view_model_instance_with_map(
         &self,
         instance: &CoreHandle,
         instances: &mut HashMap<CoreHandle, Option<CoreHandle>>,
+        depth: usize,
     ) -> Option<CoreHandle> {
         if let Some(copied) = instances.get(instance) {
             return copied.clone();
@@ -1524,7 +1625,7 @@ impl File {
         instances.insert(instance.clone(), None);
         #[cfg(feature = "tools")]
         self.register_view_model_instance(copied.clone());
-        self.complete_view_model_instance_with_map(&copied, instances);
+        self.complete_view_model_instance_with_map(&copied, instances, depth);
         instances.insert(instance.clone(), Some(copied.clone()));
         Some(copied)
     }
@@ -1610,6 +1711,29 @@ impl File {
     }
 
     pub fn create_view_model_instance(&self, view_model: CoreHandle) -> Option<CoreHandle> {
+        self.create_bounded_view_model_instance(view_model, 100_000)
+    }
+
+    pub fn create_bounded_view_model_instance(
+        &self,
+        view_model: CoreHandle,
+        max_instances: usize,
+    ) -> Option<CoreHandle> {
+        let mut remaining = max_instances;
+        self.create_view_model_instance_recursive(view_model, &mut Vec::new(), &mut remaining)
+    }
+
+    fn create_view_model_instance_recursive(
+        &self,
+        view_model: CoreHandle,
+        creating: &mut Vec<CoreHandle>,
+        budget: &mut usize,
+    ) -> Option<CoreHandle> {
+        if *budget == 0 {
+            return None;
+        }
+        *budget -= 1;
+        creating.push(view_model.clone());
         let instance = self.core_arena.insert(ViewModelInstance::default());
         let view_model_id = self.find_view_model_id(&view_model);
         CoreRegistry::set_uint_handle(
@@ -1662,7 +1786,13 @@ impl File {
                 let reference_id = property.with_downcast::<crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel, _>(|property| property.base.view_model_reference_id());
                 let nested = reference_id
                     .and_then(|id| self.view_model_handle(id as usize))
-                    .and_then(|model| self.create_view_model_instance(model));
+                    .and_then(|model| {
+                        if creating.len() >= 256 || creating.contains(&model) {
+                            None
+                        } else {
+                            self.create_view_model_instance_recursive(model, creating, budget)
+                        }
+                    });
                 if let Some(nested) = nested {
                     value.with_mut(|value| {
                         if let Some(value) = value.as_view_model_instance_view_model_mut() {
@@ -1685,6 +1815,7 @@ impl File {
             instance
                 .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.add_value(value));
         }
+        creating.pop();
         #[cfg(feature = "tools")]
         self.register_view_model_instance(instance.clone());
         Some(instance)

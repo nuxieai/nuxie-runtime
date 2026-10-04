@@ -2,11 +2,17 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-53419065f067f9e32ede9f4f5e28e41e3ec89f29}
+ref=${RIVE_RUNTIME_REF:-6cd5d108fdae8fa2d00b56eeb857754adb9b67be}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/nested_artboard_cycle.riv|56aa525711563773e8b61165070964c24d8016e2b0b8f50e8361911a13a1a86f|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|nested_artboard_cycle.riv"
+  "sync/stateful_bindable_host.riv|ac34850110f4a83c150a36ce9a2a80ced976b5a9673b324d7a7bf210254e1e97|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|stateful_bindable_host.riv"
+  "sync/viewmodel_deep_chain.riv|7f4841338ea5f706e91bc0f97d49e01676279aff9890a0565ec7d1b5dd16ff62|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|viewmodel_deep_chain.riv"
+  "sync/viewmodel_fan_out.riv|24feba63e874692f431d13e6ee70243ce1f90fcb7d6dba00032142c046976d46|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|viewmodel_fan_out.riv"
+  "sync/viewmodel_instance_chain.riv|d2cae258004f5ad0ba28df3a44ddc67fe5b6ef0e669d11f85e8ea6fefa0ec467|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|viewmodel_instance_chain.riv"
+  "sync/viewmodel_self_reference.riv|9afe482a305e03e1db28d35905591d7938a3e540451afbe4839b460ff5b9e307|6cd5d108fdae8fa2d00b56eeb857754adb9b67be|viewmodel_self_reference.riv"
   "sync/listener_input_values.riv|0eecb1cb6fe5fc367b813c17956012a1f09f4211fc0b362f8d0065b73ce5d902|abf676e79e616e003893dc941471c90ccbaf5c6e|listener_input_values.riv"
   "sync/listener_input_values.rml|1f8300a80d674178151bdf9d3e9788f53d56be503e9a5e3e250c4a6f91c542ed|abf676e79e616e003893dc941471c90ccbaf5c6e|rml/listener_input_values.rml"
   "sync/additive_blendmode_test.riv|b158c8ac4434208913915ac364d1597ea83f06043a79fc94c7f2918bee9ff2cf|3d0d3f56ba21caa2ae13ef64451526639d793aee|additive_blendmode_test.riv"

@@ -25,6 +25,7 @@ android-authored-wgsl = [
     "nuxie-scripting/android-authored-wgsl",
 ]
 threading = ["nuxie-runtime/threading"]
+scriptnet = ["scripting", "nuxie-scripting/scriptnet"]
 test-support = ["nuxie-runtime/tools", "nuxie-scripting?/tools"]
 scripting = [
     "dep:nuxie-scripting",

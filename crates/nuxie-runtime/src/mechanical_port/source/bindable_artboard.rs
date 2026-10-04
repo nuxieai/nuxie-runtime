@@ -5,16 +5,17 @@ use crate::mechanical_port::source::{
         ArtboardInstance, RuntimeArtboardInstanceHandle, RuntimeArtboardInstanceWeakHandle,
     },
     core::CoreHandle,
-    file::RuntimeFileWeakHandle,
+    file::{RuntimeFileHandle, RuntimeFileWeakHandle},
 };
 
 /// The runtime occurrence created when an authored Artboard is bound into a
 /// view-model value. The authored source remains a CoreHandle; the instantiated
 /// scene remains the singular RuntimeArtboardInstanceHandle.
 pub struct BindableArtboard {
-    file: Option<RuntimeFileWeakHandle>,
     artboard: RuntimeArtboardInstanceHandle,
     source_artboard: Option<CoreHandle>,
+    // Rust drops fields in declaration order: definitions outlive the instance.
+    file: Option<RuntimeFileHandle>,
 }
 
 #[derive(Clone)]
@@ -27,14 +28,18 @@ impl RuntimeBindableArtboardHandle {
         source_artboard: Option<CoreHandle>,
     ) -> Self {
         Self(Rc::new(RefCell::new(BindableArtboard {
-            file,
+            file: file.and_then(|file| file.upgrade()),
             artboard,
             source_artboard,
         })))
     }
 
     pub fn file(&self) -> Option<RuntimeFileWeakHandle> {
-        self.0.borrow().file.clone()
+        self.0
+            .borrow()
+            .file
+            .as_ref()
+            .map(RuntimeFileHandle::downgrade)
     }
 
     pub fn source_artboard_handle(&self) -> Option<CoreHandle> {

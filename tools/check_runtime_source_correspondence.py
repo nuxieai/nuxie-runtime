@@ -27,6 +27,8 @@ ADAPTED_OWNERS = {
     "lua/lua_atoms": Path("crates/nuxie-scripting/src/vm.rs"),
     "lua/lua_script_backend": Path("crates/nuxie-scripting/src/vm.rs"),
     "lua/lua_transition": Path("crates/nuxie-scripting/src/vm/lua_transition.rs"),
+    "lua/lua_scriptnet": Path("crates/nuxie-scripting/src/vm/lua_scriptnet.rs"),
+    "lua/lua_rive_file": Path("crates/nuxie-scripting/src/vm/lua_rive_file.rs"),
     "scripted/script_backend": Path("crates/nuxie-runtime/src/scripting.rs"),
     # Shared by runtime and renderers, matching the upstream standalone enum.
     "shapes/paint/layer_mask_mode": Path("crates/nuxie-render-api/src/layer_mask_mode.rs"),
@@ -53,6 +55,7 @@ PREPROCESSOR_ADAPTED_OWNERS = {
 # files still fail this check until their scope is examined.
 DEFERRED_OWNERS = {
     "wasm/aot_artifact",
+    "wasm/net_wire",
     "wasm/artboard_wire", "wasm/browser_scripting_vm", "wasm/data_convert_wire",
     "wasm/gamepad_wire", "wasm/listener_wire", "wasm/module/gpu_proxy",
     "wasm/module/module_context", "wasm/module/render_proxy", "wasm/module_render",

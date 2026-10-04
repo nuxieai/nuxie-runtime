@@ -591,6 +591,17 @@ pub enum LuaAtoms {
     Min,
     Max,
     DefaultValue,
+    Status,
+    StatusText,
+    Ok,
+    Url,
+    Headers,
+    ArrayBuffer,
+    Header,
+    DecodeFile,
+    ArtboardNames,
+    BindableArtboard,
+    GetArtboard,
 }
 
 struct LuaAtomName {
@@ -1058,6 +1069,17 @@ pub fn find_atom(name: &str) -> Option<LuaAtoms> {
         "onCancel" => Some(LuaAtoms::OnCancel),
         "getStatus" => Some(LuaAtoms::GetStatus),
         "decodeImage" => Some(LuaAtoms::DecodeImage),
+        "status" => Some(LuaAtoms::Status),
+        "statusText" => Some(LuaAtoms::StatusText),
+        "ok" => Some(LuaAtoms::Ok),
+        "url" => Some(LuaAtoms::Url),
+        "headers" => Some(LuaAtoms::Headers),
+        "arrayBuffer" => Some(LuaAtoms::ArrayBuffer),
+        "header" => Some(LuaAtoms::Header),
+        "decodeFile" => Some(LuaAtoms::DecodeFile),
+        "artboardNames" => Some(LuaAtoms::ArtboardNames),
+        "bindableArtboard" => Some(LuaAtoms::BindableArtboard),
+        "getArtboard" => Some(LuaAtoms::GetArtboard),
         "transpose" => Some(LuaAtoms::Transpose),
         "transformPoint" => Some(LuaAtoms::TransformPoint),
         "transformVec4" => Some(LuaAtoms::TransformVec4),
@@ -2753,10 +2775,15 @@ pub trait ScriptingContext {
         self.data().owner_id
     }
 
-    fn work_pool(&mut self) -> &mut WorkPool {
+    fn acquire_owner_id(&mut self) -> u64 {
         if self.data().owner_id == 0 {
             self.data_mut().owner_id = WorkPool::next_owner_id();
         }
+        self.data().owner_id
+    }
+
+    fn work_pool(&mut self) -> &mut WorkPool {
+        self.acquire_owner_id();
         get_global_work_pool()
     }
 
@@ -2766,6 +2793,8 @@ pub trait ScriptingContext {
             if let Some(pool) = get_global_work_pool_if_exists() {
                 pool.cancel_all_for_owner(owner_id);
             }
+            #[cfg(feature = "scriptnet")]
+            crate::source::scriptnet::net::cancel_all_for_owner(owner_id);
             self.data_mut().owner_id = 0;
         }
     }

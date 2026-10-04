@@ -68,6 +68,9 @@ impl ArtboardReferencer {
 }
 
 pub trait ArtboardReferencerBehavior {
+    fn nesting_artboard(&self) -> Option<CoreHandle> {
+        None
+    }
     fn artboard_referencer(&self) -> &ArtboardReferencer;
     fn artboard_referencer_mut(&mut self) -> &mut ArtboardReferencer;
     // Runtime updateArtboard dispatch requires an unborrowed retained CoreHandle;

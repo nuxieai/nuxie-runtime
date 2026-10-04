@@ -19,6 +19,7 @@ use nuxie_runtime::{
 use super::lua_blob::{ScriptedBlob, ScriptedBlobAssets};
 use super::lua_font::{ScriptedFont, create_asset_font};
 use super::lua_image::{ScriptedImage, create_asset_image};
+use super::lua_main_ref::MainThreadRef;
 
 type ViewModelInstanceKey = (u8, usize, usize, u64);
 
@@ -463,6 +464,8 @@ fn create_scripted_view_model_with_listener_owner(
 }
 
 pub(super) fn install_property_binding_support(lua: &Lua) -> luaur_rt::Result<()> {
+    // Direct binding hosts, like ScriptVm, install from their owned main Lua.
+    super::lua_main_ref::install_main_lua(lua);
     // SAFETY: this bytecode is produced by the pinned build-time compiler from
     // the embedded source below.
     let chunk = unsafe {
@@ -533,6 +536,10 @@ end
 "#;
 
 fn scripted_property_state(property: &AnyUserData) -> Option<Rc<ScriptedPropertyState>> {
+    #[cfg(feature = "scriptnet")]
+    if let Ok(property) = property.borrow::<ScriptedPropertyArtboard>() {
+        return Some(property.watch.state.clone());
+    }
     macro_rules! state {
         ($($kind:ty),*) => { $(if let Ok(property) = property.borrow::<$kind>() {
             return Some(property.watch.state.clone());
@@ -570,6 +577,13 @@ fn dispose_property_userdata(property: &AnyUserData) {
         };
     }
     clear!(ScriptedPropertyNumber, model, unregister_property_watch,);
+    #[cfg(feature = "scriptnet")]
+    clear!(
+        ScriptedPropertyArtboard,
+        model,
+        unregister_property_watch,
+        cached_value
+    );
     clear!(ScriptedPropertyColor, model, unregister_property_watch,);
     clear!(ScriptedPropertyString, model, unregister_property_watch,);
     clear!(ScriptedPropertyBoolean, model, unregister_property_watch,);
@@ -631,6 +645,8 @@ fn property_watch_cleanup(property: &AnyUserData) -> Box<dyn Fn()> {
         };
     }
     cleanup!(ScriptedPropertyNumber, unregister_property_watch);
+    #[cfg(feature = "scriptnet")]
+    cleanup!(ScriptedPropertyArtboard, unregister_property_watch);
     cleanup!(ScriptedPropertyColor, unregister_property_watch);
     cleanup!(ScriptedPropertyString, unregister_property_watch);
     cleanup!(ScriptedPropertyBoolean, unregister_property_watch);
@@ -685,7 +701,9 @@ fn patch_property_userdata(
     };
     let identity = property.to_pointer() as usize as u64;
     weak_properties.raw_set(identity, property.clone())?;
-    let weak_lua = lua.weak();
+    let weak_lua = super::lua_main_ref::main_lua(lua)
+        .ok_or_else(|| luaur_rt::Error::runtime("missing main scripting state"))?
+        .weak();
     let cleanup_watch = property_watch_cleanup(&property);
     let expected_state = Rc::downgrade(&state);
     *state.cleanup.borrow_mut() = Some(Box::new(move || {
@@ -838,6 +856,56 @@ fn create_scripted_view_model_retained(
         })?,
     )?;
     let get_font_model = model.clone();
+    let properties = Rc::new(RefCell::new(BTreeMap::<String, MainThreadRef>::new()));
+    #[cfg(feature = "scriptnet")]
+    let nil_properties = Rc::new(RefCell::new(std::collections::BTreeSet::<Vec<u8>>::new()));
+    #[cfg(feature = "scriptnet")]
+    {
+        let model = model.clone();
+        let properties = properties.clone();
+        let nil_properties = nil_properties.clone();
+        table.set(
+            "getArtboard",
+            lua.create_function(move |lua, (this, name): (Table, luaur_rt::LuaString)| {
+                let bytes = name.as_bytes();
+                let prefix = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
+                if nil_properties.borrow().contains(prefix) {
+                    return Ok(Value::Nil);
+                }
+                let Some(name) = model
+                    .properties()
+                    .keys()
+                    .find(|name| name.as_bytes() == prefix)
+                    .cloned()
+                else {
+                    nil_properties.borrow_mut().insert(prefix.to_vec());
+                    return Ok(Value::Nil);
+                };
+                if let Some(property) = properties.borrow().get(&name) {
+                    let property: AnyUserData = property.get(lua)?;
+                    #[cfg(feature = "tools")]
+                    let reuse =
+                        !scripted_property_state(&property).is_some_and(|state| state.disposed());
+                    #[cfg(not(feature = "tools"))]
+                    let reuse = true;
+                    if reuse {
+                        return Ok(Value::UserData(property.clone()));
+                    }
+                }
+                if model.native_instance().is_none() {
+                    nil_properties.borrow_mut().insert(prefix.to_vec());
+                    return Ok(Value::Nil);
+                }
+                match model.property(&name) {
+                    Some(ScriptViewModelProperty::Artboard) => this.get(name),
+                    _ => {
+                        nil_properties.borrow_mut().insert(prefix.to_vec());
+                        Ok(Value::Nil)
+                    }
+                }
+            })?,
+        )?;
+    }
     table.set(
         "getFont",
         lua.create_function(move |_, (this, name): (Table, String)| {
@@ -896,7 +964,6 @@ fn create_scripted_view_model_retained(
         })?,
     )?;
 
-    let properties = Rc::new(RefCell::new(BTreeMap::<String, AnyUserData>::new()));
     let metatable = lua.create_table();
     metatable.set(
         "__index",
@@ -904,6 +971,14 @@ fn create_scripted_view_model_retained(
             let Value::String(key) = key else {
                 return Ok(Value::Nil);
             };
+            #[cfg(feature = "scriptnet")]
+            {
+                let bytes = key.as_bytes();
+                let prefix = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
+                if nil_properties.borrow().contains(prefix) {
+                    return Ok(Value::Nil);
+                }
+            }
             let name = key.to_str()?.to_string();
             let Some(kind) = model.property(&name) else {
                 return Ok(Value::Nil);
@@ -917,9 +992,10 @@ fn create_scripted_view_model_retained(
                 ));
             }
             if let Some(property) = properties.borrow().get(&name) {
+                let property: AnyUserData = property.get(lua)?;
                 #[cfg(feature = "tools")]
                 let reuse =
-                    !scripted_property_state(property).is_some_and(|state| state.disposed());
+                    !scripted_property_state(&property).is_some_and(|state| state.disposed());
                 #[cfg(not(feature = "tools"))]
                 let reuse = true;
                 if reuse {
@@ -927,8 +1003,14 @@ fn create_scripted_view_model_retained(
                 }
             }
             properties.borrow_mut().remove(&name);
-            let property = create_named_scripted_property(lua, model.clone(), name.clone(), kind)?;
-            properties.borrow_mut().insert(name, property.clone());
+            let Some(property) =
+                create_named_scripted_property(lua, model.clone(), name.clone(), kind)?
+            else {
+                return Ok(Value::Nil);
+            };
+            properties
+                .borrow_mut()
+                .insert(name, MainThreadRef::new(lua, property.clone())?);
             Ok(Value::UserData(property))
         })?,
     )?;
@@ -941,15 +1023,25 @@ fn create_named_scripted_property(
     model: ScriptViewModel,
     name: String,
     kind: ScriptViewModelProperty,
-) -> luaur_rt::Result<AnyUserData> {
+) -> luaur_rt::Result<Option<AnyUserData>> {
     let listener_owner = ScriptViewModelFrameContext::for_lua(lua)
         .current_owner
         .borrow()
         .clone();
     if kind == ScriptViewModelProperty::List {
-        return create_scripted_property_list(lua, model, name, listener_owner);
+        return create_scripted_property_list(lua, model, name, listener_owner).map(Some);
     }
     let property = match &kind {
+        #[cfg(not(feature = "scriptnet"))]
+        ScriptViewModelProperty::Artboard => return Ok(None),
+        #[cfg(feature = "scriptnet")]
+        ScriptViewModelProperty::Artboard => create_property_userdata(
+            lua,
+            model.clone(),
+            ScriptedPropertyArtboard::new(model.clone(), name.clone(), listener_owner.as_ref()),
+            true,
+            &[],
+        )?,
         ScriptViewModelProperty::Number => create_property_userdata(
             lua,
             model.clone(),
@@ -1025,7 +1117,7 @@ fn create_named_scripted_property(
             "symbol-list indices are exposed as scalar values before property wrapping"
         ),
     };
-    Ok(property)
+    Ok(Some(property))
 }
 
 pub(super) fn model_from_table(table: &Table) -> luaur_rt::Result<ScriptViewModel> {
@@ -1100,7 +1192,7 @@ fn add_property_listener(
     watch
         .listeners
         .borrow_mut()
-        .push(ScriptedListener { callback, userdata });
+        .push(ScriptedListener::new(lua, callback, userdata)?);
     ScriptViewModelFrameContext::for_lua(lua).register_property_watch(watch);
     Ok(())
 }
@@ -1122,7 +1214,7 @@ fn remove_property_listener(
     watch
         .listeners
         .borrow_mut()
-        .retain(|listener| listener.callback.to_pointer() != identity);
+        .retain(|listener| listener.identity != identity);
     if watch.listeners.borrow().is_empty() {
         unregister_property_watch(watch);
     }
@@ -1166,9 +1258,19 @@ fn notify_property_listeners(watch: &ScriptedPropertyWatch) {
 fn call_property_listeners(listeners: &RefCell<Vec<ScriptedListener>>) {
     let listeners = listeners.borrow().clone();
     for listener in listeners {
-        let _ = listener
-            .callback
-            .call::<()>(listener.userdata.unwrap_or(Value::Nil));
+        let Some(lua) = listener.callback.main_lua() else {
+            continue;
+        };
+        let _ = (|| -> luaur_rt::Result<()> {
+            let callback: Function = listener.callback.get(&lua)?;
+            let userdata = listener
+                .userdata
+                .as_ref()
+                .map(|value| value.get::<Value>(&lua))
+                .transpose()?
+                .unwrap_or(Value::Nil);
+            callback.call::<()>(userdata)
+        })();
     }
 }
 
@@ -1177,7 +1279,7 @@ struct ScriptedPropertyViewModel {
     name: String,
     creation_time_model: Option<nuxie_runtime::source::core::CoreHandle>,
     watch: Rc<ScriptedPropertyWatch>,
-    cached_value: Rc<RefCell<Option<Table>>>,
+    cached_value: Rc<RefCell<Option<MainThreadRef>>>,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
     _change_sink: RuntimeCellDirtSink,
 }
@@ -1221,7 +1323,7 @@ impl UserData for ScriptedPropertyViewModel {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
-                return Ok(Value::Table(cached.clone()));
+                return cached.get::<Table>(lua).map(Value::Table);
             }
             let model = if this.watch.state.disposed() {
                 this.parent
@@ -1235,7 +1337,7 @@ impl UserData for ScriptedPropertyViewModel {
                 model,
                 this.listener_owner.clone(),
             )?;
-            *this.cached_value.borrow_mut() = Some(value.clone());
+            *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::Table(value))
         });
         fields.add_field_method_set("value", |_, this, value: Table| {
@@ -1525,7 +1627,7 @@ fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Resu
 struct ScriptedPropertyImage {
     model: ScriptViewModel,
     name: String,
-    cached_value: Rc<RefCell<Option<AnyUserData>>>,
+    cached_value: Rc<RefCell<Option<MainThreadRef>>>,
     _change_sink: RuntimeCellDirtSink,
     watch: Rc<ScriptedPropertyWatch>,
 }
@@ -1542,7 +1644,7 @@ struct ScriptedPropertyBlob {
     model: ScriptViewModel,
     name: String,
     watch: Rc<ScriptedBlobWatch>,
-    cached_value: Rc<RefCell<Option<AnyUserData>>>,
+    cached_value: Rc<RefCell<Option<MainThreadRef>>>,
     _change_sink: RuntimeCellDirtSink,
 }
 
@@ -1608,13 +1710,13 @@ impl UserData for ScriptedPropertyBlob {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
-                return Ok(Value::UserData(cached.clone()));
+                return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
             let Some(asset) = this.model.blob_asset(&this.name) else {
                 return Ok(Value::Nil);
             };
             let value = lua.create_userdata(ScriptedBlob::from_asset(asset))?;
-            *this.cached_value.borrow_mut() = Some(value.clone());
+            *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
@@ -1659,7 +1761,7 @@ impl UserData for ScriptedPropertyBlob {
             this.watch
                 .listeners
                 .borrow_mut()
-                .push(ScriptedListener { callback, userdata });
+                .push(ScriptedListener::new(lua, callback, userdata)?);
             ScriptViewModelFrameContext::for_lua(lua).register_blob_watch(&this.watch);
             Ok(())
         });
@@ -1677,7 +1779,7 @@ impl UserData for ScriptedPropertyBlob {
             this.watch
                 .listeners
                 .borrow_mut()
-                .retain(|listener| listener.callback.to_pointer() != identity);
+                .retain(|listener| listener.identity != identity);
             if this.watch.listeners.borrow().is_empty() {
                 unregister_blob_watch(&this.watch);
             }
@@ -1716,7 +1818,7 @@ impl UserData for ScriptedPropertyImage {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
-                return Ok(Value::UserData(cached.clone()));
+                return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
             let value = if let Some(image) = this.model.render_image(&this.name) {
                 Some(lua.create_userdata(ScriptedImage::from_render_image_rc(image))?)
@@ -1730,7 +1832,7 @@ impl UserData for ScriptedPropertyImage {
             let Some(value) = value else {
                 return Ok(Value::Nil);
             };
-            *this.cached_value.borrow_mut() = Some(value.clone());
+            *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
@@ -1766,9 +1868,113 @@ impl UserData for ScriptedPropertyImage {
 struct ScriptedPropertyFont {
     model: ScriptViewModel,
     name: String,
-    cached_value: Rc<RefCell<Option<AnyUserData>>>,
+    cached_value: Rc<RefCell<Option<MainThreadRef>>>,
     _change_sink: RuntimeCellDirtSink,
     watch: Rc<ScriptedPropertyWatch>,
+}
+
+#[cfg(feature = "scriptnet")]
+struct ScriptedPropertyArtboard {
+    model: ScriptViewModel,
+    name: String,
+    cached_value: Rc<RefCell<Option<MainThreadRef>>>,
+    _change_sink: RuntimeCellDirtSink,
+    watch: Rc<ScriptedPropertyWatch>,
+}
+
+#[cfg(feature = "scriptnet")]
+impl ScriptedPropertyArtboard {
+    fn new(
+        model: ScriptViewModel,
+        name: String,
+        listener_owner: Option<&ScriptedPropertyListenerOwner>,
+    ) -> Self {
+        let cached_value = Rc::new(RefCell::new(None));
+        let weak = Rc::downgrade(&cached_value);
+        let change_sink = model
+            .property_change_sink(&name, move || {
+                if let Some(value) = weak.upgrade() {
+                    value.borrow_mut().take();
+                }
+            })
+            .unwrap_or_default();
+        let watch = property_watch(&model, &name, listener_owner);
+        Self {
+            model,
+            name,
+            cached_value,
+            _change_sink: change_sink,
+            watch,
+        }
+    }
+    fn property(&self) -> Option<nuxie_runtime::CoreHandle> {
+        self.model
+            .native_instance()?
+            .with(|owner| {
+                owner
+                    .as_view_model_instance()?
+                    .property_value_named(&self.name)
+            })
+            .flatten()
+    }
+}
+
+#[cfg(feature = "scriptnet")]
+impl UserData for ScriptedPropertyArtboard {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        use super::lua_rive_file::ScriptedBindableArtboard;
+        use nuxie_runtime::source::viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard;
+        fields.add_field_method_get("value", |lua, this| {
+            if let Some(value) = this.cached_value.borrow().clone() {
+                return value.get::<AnyUserData>(lua).map(Value::UserData);
+            }
+            let Some((artboard, view_model)) = this.property().and_then(|property| {
+                property
+                    .with_downcast::<ViewModelInstanceArtboard, _>(|property| {
+                        property
+                            .asset()
+                            .map(|artboard| (artboard, property.bound_view_model_instance()))
+                    })
+                    .flatten()
+            }) else {
+                return Ok(Value::Nil);
+            };
+            let value = ScriptedBindableArtboard::create(lua, artboard, view_model)?;
+            *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
+            Ok(Value::UserData(value))
+        });
+        fields.add_field_method_set("value", |_, this, value: Value| {
+            let value = match value {
+                Value::Nil => None,
+                Value::UserData(value) => {
+                    let value = value.borrow::<ScriptedBindableArtboard>()?;
+                    Some((value.artboard.clone(), value.view_model.clone()))
+                }
+                _ => {
+                    return Err(luaur_rt::Error::runtime(
+                        "expected BindableArtboard userdata or nil",
+                    ));
+                }
+            };
+            this.model.defer_property_change_callbacks(|| {
+                let view_model = value.as_ref().and_then(|(_, vm)| vm.clone());
+                this.model.set_artboard(
+                    &this.name,
+                    value.map(|(artboard, _)| artboard),
+                    view_model,
+                );
+            });
+            Ok(())
+        });
+    }
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method_mut("addListener", |lua, this, args: MultiValue| {
+            add_property_listener(lua, &this.watch, args)
+        });
+        methods.add_method_mut("removeListener", |_, this, args: MultiValue| {
+            remove_property_listener(&this.watch, args)
+        });
+    }
 }
 
 impl ScriptedPropertyFont {
@@ -1801,7 +2007,7 @@ impl UserData for ScriptedPropertyFont {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("value", |lua, this| {
             if let Some(cached) = this.cached_value.borrow().as_ref() {
-                return Ok(Value::UserData(cached.clone()));
+                return cached.get::<AnyUserData>(lua).map(Value::UserData);
             }
             let value = this
                 .model
@@ -1812,7 +2018,7 @@ impl UserData for ScriptedPropertyFont {
             let Some(value) = value else {
                 return Ok(Value::Nil);
             };
-            *this.cached_value.borrow_mut() = Some(value.clone());
+            *this.cached_value.borrow_mut() = Some(MainThreadRef::new(lua, value.clone())?);
             Ok(Value::UserData(value))
         });
         fields.add_field_method_set("value", |_, this, value: Value| {
@@ -1840,7 +2046,7 @@ impl UserData for ScriptedPropertyFont {
 struct ScriptedPropertyList {
     model: ScriptViewModel,
     name: String,
-    item_refs: BTreeMap<ViewModelInstanceKey, Table>,
+    item_refs: BTreeMap<ViewModelInstanceKey, MainThreadRef>,
     watch: Rc<ScriptedPropertyWatch>,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 }
@@ -1879,14 +2085,15 @@ impl ScriptedPropertyList {
             Some(item) => {
                 let key = item.identity_key();
                 if let Some(table) = self.item_refs.get(&key) {
-                    return Ok(Value::Table(table.clone()));
+                    return table.get::<Table>(lua).map(Value::Table);
                 }
                 let table = create_scripted_view_model_with_listener_owner(
                     lua,
                     item,
                     self.listener_owner.clone(),
                 )?;
-                self.item_refs.insert(key, table.clone());
+                self.item_refs
+                    .insert(key, MainThreadRef::new(lua, table.clone())?);
                 Ok(Value::Table(table))
             }
             None => Ok(Value::Nil),
@@ -1919,6 +2126,7 @@ fn create_scripted_property_list(
         .unwrap_or(false)
     {
         let fallback: Function = metatable.get("__index")?;
+        let fallback = MainThreadRef::new(lua, fallback)?;
         let index = lua.create_function(
             move |lua, (property, key): (AnyUserData, Value)| match key {
                 Value::Integer(index) => usize::try_from(index)
@@ -1938,7 +2146,9 @@ fn create_scripted_property_list(
                         .item_value(lua, index as usize - 1)
                 }
                 Value::Number(_) => Err(luaur_rt::Error::runtime("integer expected")),
-                key => fallback.call((Value::UserData(property), key)),
+                key => fallback
+                    .get::<Function>(lua)?
+                    .call((Value::UserData(property), key)),
             },
         )?;
         metatable.set("__index", index)?;
@@ -2063,7 +2273,7 @@ impl UserData for ScriptedPropertyList {
 // Lua values hold registry references in luaur. Retain the target alongside
 // the wrapper, exactly as ScriptedWrapperCache's rcp key and lua_ref do.
 struct ScriptedWrapperCache<K> {
-    entry: RefCell<Option<(K, Value)>>,
+    entry: RefCell<Option<(K, MainThreadRef)>>,
 }
 
 impl<K> Default for ScriptedWrapperCache<K> {
@@ -2075,17 +2285,25 @@ impl<K> Default for ScriptedWrapperCache<K> {
 }
 
 impl<K> ScriptedWrapperCache<K> {
-    fn get(&self, key: &K, same: impl FnOnce(&K, &K) -> bool) -> Option<Value> {
+    fn get(
+        &self,
+        lua: &Lua,
+        key: &K,
+        same: impl FnOnce(&K, &K) -> bool,
+    ) -> luaur_rt::Result<Option<Value>> {
         self.entry
             .borrow()
             .as_ref()
-            .and_then(|(cached_key, value)| same(cached_key, key).then(|| value.clone()))
+            .and_then(|(cached_key, value)| same(cached_key, key).then(|| value.get(lua)))
+            .transpose()
     }
 
-    fn store(&self, key: K, value: Value) -> Value {
-        let old = self.entry.replace(Some((key, value.clone())));
+    fn store(&self, lua: &Lua, key: K, value: Value) -> luaur_rt::Result<Value> {
+        let old = self
+            .entry
+            .replace(Some((key, MainThreadRef::new(lua, value.clone())?)));
         drop(old);
-        value
+        Ok(value)
     }
 
     fn release(&self) {
@@ -2100,7 +2318,7 @@ fn cached_view_model(
     model: ScriptViewModel,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> luaur_rt::Result<Value> {
-    if let Some(value) = cache.get(&model, |a, b| a.identity_key() == b.identity_key()) {
+    if let Some(value) = cache.get(lua, &model, |a, b| a.identity_key() == b.identity_key())? {
         return Ok(value);
     }
     let value = Value::Table(create_scripted_view_model_with_listener_owner(
@@ -2108,7 +2326,7 @@ fn cached_view_model(
         model.clone(),
         listener_owner,
     )?);
-    Ok(cache.store(model, value))
+    cache.store(lua, model, value)
 }
 
 pub(super) struct ScriptedContext {
@@ -2129,6 +2347,7 @@ pub(super) struct ScriptedContext {
 
 impl ScriptedContext {
     pub(super) fn new(
+        lua: &Lua,
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         parents: Vec<Option<ScriptViewModel>>,
         missing_requested_data: Rc<Cell<bool>>,
@@ -2136,6 +2355,7 @@ impl ScriptedContext {
     ) -> Self {
         let context_present = Rc::new(Cell::new(model.borrow().is_some()));
         Self::new_with_lifetime(
+            lua,
             model,
             context_present,
             parents,
@@ -2146,6 +2366,7 @@ impl ScriptedContext {
     }
 
     pub(super) fn new_with_lifetime(
+        lua: &Lua,
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         context_present: Rc<Cell<bool>>,
         parents: Vec<Option<ScriptViewModel>>,
@@ -2154,6 +2375,7 @@ impl ScriptedContext {
         alive: Rc<Cell<bool>>,
     ) -> Self {
         Self::new_with_lifetime_and_source(
+            lua,
             model,
             context_present,
             parents,
@@ -2165,6 +2387,7 @@ impl ScriptedContext {
     }
 
     pub(super) fn new_with_lifetime_and_source(
+        lua: &Lua,
         model: Rc<RefCell<Option<ScriptViewModel>>>,
         context_present: Rc<Cell<bool>>,
         parents: Vec<Option<ScriptViewModel>>,
@@ -2173,6 +2396,9 @@ impl ScriptedContext {
         gpu_canvas: Option<crate::gpu_canvas::GpuCanvasContextBindings>,
         alive: Rc<Cell<bool>>,
     ) -> Self {
+        // A direct binding host must register its owned Lua before exposing
+        // the context to guest callbacks, just as ScriptVm::new does.
+        super::lua_main_ref::install_main_lua(lua);
         Self {
             model,
             context_present,
@@ -2530,6 +2756,11 @@ impl UserData for ScriptedContext {
             this.require_live("decodeImage")?;
             super::lua_image_decode::start(lua, encoded)
         });
+        #[cfg(feature = "scriptnet")]
+        methods.add_method("decodeFile", |lua, this, encoded: Buffer| {
+            this.require_live("decodeFile")?;
+            super::lua_rive_file::decode_file(lua, encoded)
+        });
         methods.add_method("audio", |lua, this, name: String| {
             this.require_live("audio")?;
             super::lua_audio::ScriptedAudioAssets::lookup(lua, &name)
@@ -2633,7 +2864,7 @@ fn cached_data_context(
     backing: ScriptedDataContextBacking,
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> luaur_rt::Result<Value> {
-    if let Some(value) = cache.get(&backing, ScriptedDataContextBacking::same_identity) {
+    if let Some(value) = cache.get(lua, &backing, ScriptedDataContextBacking::same_identity)? {
         return Ok(value);
     }
     let value = Value::UserData(lua.create_userdata(ScriptedDataContext {
@@ -2642,7 +2873,7 @@ fn cached_data_context(
         view_model_cache: ScriptedWrapperCache::default(),
         parent_cache: ScriptedWrapperCache::default(),
     })?);
-    Ok(cache.store(backing, value))
+    cache.store(lua, backing, value)
 }
 
 struct ScriptedDataContext {
@@ -2790,8 +3021,21 @@ impl ScriptedPropertyTrigger {
 
 #[derive(Clone)]
 struct ScriptedListener {
-    callback: Function,
-    userdata: Option<Value>,
+    callback: MainThreadRef,
+    userdata: Option<MainThreadRef>,
+    identity: *const std::ffi::c_void,
+}
+
+impl ScriptedListener {
+    fn new(lua: &Lua, callback: Function, userdata: Option<Value>) -> luaur_rt::Result<Self> {
+        Ok(Self {
+            identity: callback.to_pointer(),
+            callback: MainThreadRef::new(lua, callback)?,
+            userdata: userdata
+                .map(|value| MainThreadRef::new(lua, value))
+                .transpose()?,
+        })
+    }
 }
 
 impl UserData for ScriptedPropertyTrigger {
@@ -2810,7 +3054,7 @@ impl UserData for ScriptedPropertyTrigger {
             this.watch
                 .listeners
                 .borrow_mut()
-                .push(ScriptedListener { callback, userdata });
+                .push(ScriptedListener::new(lua, callback, userdata)?);
             ScriptViewModelFrameContext::for_lua(lua).register_trigger_watch(&this.watch);
             Ok(())
         });
@@ -2828,7 +3072,7 @@ impl UserData for ScriptedPropertyTrigger {
             this.watch
                 .listeners
                 .borrow_mut()
-                .retain(|listener| listener.callback.to_pointer() != identity);
+                .retain(|listener| listener.identity != identity);
             if this.watch.listeners.borrow().is_empty() {
                 unregister_trigger_watch(&this.watch);
             }
@@ -2918,6 +3162,7 @@ mod tests {
         let missing_requested_data = Rc::new(Cell::new(false));
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::clone(&missing_requested_data),
@@ -2955,6 +3200,7 @@ mod tests {
         let missing_requested_data = Rc::new(Cell::new(false));
         let context = lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Rc::new(Cell::new(true)),
                 vec![None, Some(parent)],
@@ -3009,6 +3255,7 @@ mod tests {
         let lua = Lua::new();
         let alive = Rc::new(Cell::new(true));
         let context_state = ScriptedContext::new_with_lifetime(
+            &lua,
             Rc::new(RefCell::new(None)),
             Rc::new(Cell::new(true)),
             Vec::new(),
@@ -3040,6 +3287,7 @@ mod tests {
         let lua = Lua::new();
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -3069,6 +3317,7 @@ mod tests {
         let lua = Lua::new();
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -3097,6 +3346,7 @@ mod tests {
         let lua = Lua::new();
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -4192,6 +4442,7 @@ mod tests {
         let missing_requested_data = Rc::new(Cell::new(false));
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(Some(model.clone()))),
                 Vec::new(),
                 Rc::clone(&missing_requested_data),
@@ -4282,6 +4533,7 @@ mod tests {
         let missing_requested_data = Rc::new(Cell::new(false));
         let context = lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &lua,
                 Rc::new(RefCell::new(Some(local))),
                 Rc::new(Cell::new(true)),
                 vec![Some(nearer_parent), None],
@@ -4345,6 +4597,7 @@ mod tests {
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(Some(model))),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -4634,6 +4887,7 @@ mod tests {
             .expect("blob registration");
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -4695,6 +4949,7 @@ mod tests {
             .unwrap();
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -4788,6 +5043,7 @@ mod tests {
 
         fn context(lua: &Lua) -> AnyUserData {
             lua.create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -4798,6 +5054,7 @@ mod tests {
 
         fn disposed_context(lua: &Lua) -> AnyUserData {
             lua.create_userdata(ScriptedContext::new_with_lifetime(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Rc::new(Cell::new(false)),
                 Vec::new(),
@@ -4826,6 +5083,7 @@ mod tests {
             let missing_requested_data = Rc::new(Cell::new(false));
             let context = lua
                 .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    &lua,
                     Rc::new(RefCell::new(None)),
                     Rc::new(Cell::new(context_present)),
                     Vec::new(),
@@ -5030,6 +5288,7 @@ mod tests {
             );
             let context = lua
                 .create_userdata(ScriptedContext::new(
+                    &lua,
                     Rc::new(RefCell::new(None)),
                     Vec::new(),
                     Rc::new(Cell::new(false)),
@@ -5575,6 +5834,7 @@ mod tests {
             let lua = Lua::new();
             let context = lua
                 .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    &lua,
                     Rc::new(RefCell::new(None)),
                     Rc::new(Cell::new(true)),
                     Vec::new(),
@@ -5840,6 +6100,7 @@ mod tests {
             let lua = Lua::new();
             let context = lua
                 .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    &lua,
                     Rc::new(RefCell::new(Some(cached_main_facade))),
                     Rc::new(Cell::new(true)),
                     vec![Some(cached_root_facade)],

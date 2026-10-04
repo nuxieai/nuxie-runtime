@@ -7,18 +7,27 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f6d5441de24fd0a3a190f4026a69a02ee62761a2`
+- LAST_SYNCED_SHA: `1c54a97c8411a92b824b903fe083d3ba45a204ab`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1c54a97c8411a92b824b903fe083d3ba45a204ab` (refreshed 2026-10-03 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There is one upstream commit after the checkpoint at this fetched target.
-  All 187 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (209 after `5892bb05`); this
+  There are no upstream commits after the checkpoint at this fetched target.
+  All 188 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (210 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `1c54a97c`: independent source-equivalence and subsequent
+  Rust-integration reviews are clean. Scripting library tests pass 374 (one
+  existing ignored test), including all three new upstream mesh regressions;
+  four renderer-binding tests, one gated upstream renderer test and three
+  deferred-instance tests pass. wasm32-unknown-unknown with WebGPU, WebGL2,
+  scripting and scriptnet compiles. Source/pipeline tests pass 12 and manifest
+  tests pass 27. The preceding `81a73b81` vector suite passes 14 (one existing
+  ignored benchmark). No new full-corpus or hardware execution claim is made;
+  the broader sweep and its known Silver failure remain recorded below.
 - Validation at `6cd5d108`, integrated atop downstream `0d5fd220` without
   discarding its paint/Text callback fixes: both independent review passes and
   correction rereviews are clean. Native validation passes 256 tests (two
@@ -227,6 +236,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1c54a97c8411a92b824b903fe083d3ba45a204ab` | Translate Luau MeshInstances binding-owned staged data, unchanged-size resize no-op, preserved entries on resize, dirty writes and one whole-array commit immediately before a valid instanced draw; a redraw without writes does not commit. Preserve staged partial writes/error order and retained renderer data between draws. Port all three upstream regressions for commit counts/data, incremental growth and out-of-range errors. Private metadata is not imported; no Wasm guest work is introduced. Independent source and separate Rust-integration reviews and applicable validation are recorded in the PR. | — |
 | `f6d5441de24fd0a3a190f4026a69a02ee62761a2` | Entire executable delta is confined to the parked WasmScriptingVM: tracked view-model/artboard handle indices, constant-time tracked-slot removal, and retained-instance indexed detached-view-model advancement safe across callback handle mutation. These guest-engine changes remain deferred under UNIV-3728. No Luau, shared native view-model, renderer or test source changes occur in the public delta. Private metadata is not imported. Pins advance through an explicitly accounted deferral after independent source and separate integration review, not an execution-parity claim. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `81a73b8108814672748bfa4b1b19fde951776ba1` | Source-verify existing zero-z construction for Vector.xy/origin, Vec2 transport, node position/scale, pointer positions and gamepad sticks. The live luaur adapter already pushes fully initialized three-component vectors; preserve that equivalent behavior and leave xyz/vector math and the unused low-level fork primitive unchanged. Port upstream's stale-stack regression with the approved typed-vector transport adaptation. Private metadata is not imported. Independent source and separate Rust-integration review and applicable validation are recorded in the PR; no new full-corpus or hardware claim. | — |
 | `6cd5d108fdae8fa2d00b56eeb857754adb9b67be` | Translate optional script networking (`fetch`, byte-oriented HTTP values, request policy/limits, owner-thread settlement, cancellation/watchdog and Apple platform transport through Rust bindings) and `decodeFile` with strict signed-script admission, a lazy private VM, retained decoded files/artboards and their own view-model bindings. Networking is compiled only with `scriptnet` and no provider is installed by default; no consumer app is enabled. Translate bounded binary readers, manifest-path failure propagation, import cycle/depth/work limits, nested-artboard lifetime/stateful handling, coroutine-safe Lua property access, and shared async polling budget/pending query. Port applicable policy, fetch, Apple-provider, decoded-file, properties and malformed-import tests and pin six new fixtures. Wasm guest network/file ABI, NetWire tests, held async outcomes, write-only guest memory staging, compiler-path access and iOS prelinked AOT remain parked under UNIV-3728. Private CLI/device/emulator/build work mentioned in metadata is not present in the public delta and is not claimed. | — |

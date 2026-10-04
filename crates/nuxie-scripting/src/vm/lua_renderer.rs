@@ -323,7 +323,7 @@ impl UserData for ScriptedRenderer {
             (image, sampler, vertices, uvs, indices, instances):
                 (AnyUserData, AnyUserData, AnyUserData, AnyUserData, AnyUserData, AnyUserData)| {
             let sampler = sampler.borrow::<ScriptedImageSampler>()?;
-            let instances = instances.borrow::<ScriptedImageMeshInstances>()?;
+            let mut instances = instances.borrow_mut::<ScriptedImageMeshInstances>()?;
             let vertex_count = vertices.borrow::<ScriptedVertexBuffer>()?.len();
             let uv_count = uvs.borrow::<ScriptedVertexBuffer>()?.len();
             let index_count = indices.borrow::<ScriptedTriangleBuffer>()?.len();
@@ -345,9 +345,16 @@ impl UserData for ScriptedRenderer {
             let indices = indices.borrow::<ScriptedTriangleBuffer>()?;
             with_scripted_image(&image, |image| {
                 this.with_renderer_mut(|renderer| {
+                    // Validation above must succeed before staged writes reach
+                    // the renderer, once for all writes since its last draw.
+                    instances.commit();
+                    let committed_instances = instances.instances.clone();
+                    // The renderer may re-enter scripting. Its retained data
+                    // is independent of subsequent writes to the staging vec.
+                    drop(instances);
                     renderer.draw_image_mesh_instanced(Some(image), sampler.0,
                         vertices.render_buffer(), uvs.render_buffer(), indices.render_buffer(),
-                        vertex_count, index_count, Some(&instances.instances));
+                        vertex_count, index_count, Some(&committed_instances));
                     Ok(())
                 })
             })?
@@ -497,6 +504,153 @@ mod tests {
     use nuxie_render_api::{PersistentFactory, RecordingFactory};
     use nuxie_runtime::{NoopScriptHost, ScriptInstance};
 
+    #[derive(Default)]
+    struct InstanceRecorder {
+        draws: Vec<Vec<nuxie_render_api::ImageMeshInstanceData>>,
+        drew_while_editing: bool,
+    }
+
+    impl Renderer for InstanceRecorder {
+        fn save(&mut self) {}
+        fn restore(&mut self) {}
+        fn transform(&mut self, _: nuxie_render_api::Mat2D) {}
+        fn draw_path(&mut self, _: &dyn nuxie_render_api::RenderPath, _: &dyn nuxie_render_api::RenderPaint) {}
+        fn clip_path(&mut self, _: &dyn nuxie_render_api::RenderPath) {}
+        fn modulate_opacity(&mut self, _: f32) {}
+        fn draw_image(&mut self, _: Option<&dyn nuxie_render_api::RenderImage>, _: nuxie_render_api::ImageSampler, _: nuxie_render_api::BlendMode, _: f32) {}
+        fn draw_image_mesh(&mut self, _: Option<&dyn nuxie_render_api::RenderImage>, _: nuxie_render_api::ImageSampler, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: u32, _: u32, _: nuxie_render_api::BlendMode, _: f32) {}
+        fn draw_image_mesh_instanced(&mut self, _: Option<&dyn nuxie_render_api::RenderImage>, _: nuxie_render_api::ImageSampler, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: u32, _: u32, instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>) {
+            let instances = instances.unwrap().borrow();
+            self.drew_while_editing |= instances.is_editing();
+            self.draws.push(instances.instance_data().to_vec());
+        }
+    }
+
+    // Literal script from upstream scripting_mesh_test.cpp. The final return
+    // exposes the handle to the Rust harness instead of a CountingFactory;
+    // its ordinary storage already counts edits and tracks end_edit balance.
+    const MESH_INSTANCES_SOURCE: &str = r#"local vertices = VertexBuffer()
+vertices:add(Vector.xy(0, 0), Vector.xy(1, 0), Vector.xy(1, 1))
+local uvs = VertexBuffer()
+uvs:add(Vector.xy(0, 0), Vector.xy(1, 0), Vector.xy(1, 1))
+local triangles = TriangleBuffer()
+triangles:add(0, 1, 2)
+local sampler = ImageSampler('clamp', 'clamp', 'bilinear')
+local instances = MeshInstances()
+
+function fill(count: number, opacity: number)
+  instances:resize(count)
+  for i = 0, count - 1 do
+    instances:set(i, Mat2D.withTranslation(i, 0), opacity, 0.25, Vector.xy(0.5, 0), Vector.xy(0.5, 1))
+  end
+end
+
+function grow(count: number)
+  for i = 0, count - 1 do
+    instances:resize(i + 1)
+    instances:set(i, Mat2D.withTranslation(10 + i, 0))
+  end
+end
+
+function setPastEnd(): string
+  instances:resize(2)
+  local ok, message = pcall(function()
+    instances:set(2, Mat2D.identity())
+  end)
+  return message
+end
+
+function render(renderer: Renderer, image: Image)
+  renderer:drawImageMeshInstanced(image, sampler, vertices, uvs, triangles, instances)
+end
+return instances
+"#;
+
+    struct MeshInstancesTest {
+        vm: ScriptVm,
+        factory: PersistentFactory<RecordingFactory>,
+        instances: nuxie_render_api::ImageMeshInstancesHandle,
+    }
+    impl MeshInstancesTest {
+        fn new() -> Self {
+            let vm = ScriptVm::new();
+            let mut factory = PersistentFactory::new(RecordingFactory::new());
+            vm.install_render_factory(&mut factory).unwrap();
+            vm.install_rive_globals().unwrap();
+            let instances: AnyUserData = vm.eval(MESH_INSTANCES_SOURCE).unwrap();
+            let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap().instances.clone();
+            Self { vm, factory, instances }
+        }
+        fn commits(&self) -> usize {
+            let instances = self.instances.borrow();
+            assert!(!instances.is_editing());
+            instances.edit_count()
+        }
+        fn fill(&self, count: usize, opacity: f32) {
+            self.vm.lua().globals().get::<luaur_rt::Function>("fill").unwrap().call::<()>((count, opacity)).unwrap();
+        }
+        fn render(&mut self, recorder: &mut InstanceRecorder) {
+            let lua = self.vm.lua();
+            let (renderer, _scope) = ScriptedRenderer::create_call_scoped_userdata(
+                lua, recorder, self.vm.renderer_bindings.clone()).unwrap();
+            let image = self.factory.borrow_mut().decode_image(&[1]).unwrap();
+            let image = lua.create_userdata(ScriptedImage::from_render_image(image)).unwrap();
+            lua.globals().get::<luaur_rt::Function>("render").unwrap().call::<()>((renderer.clone(), image)).unwrap();
+            assert!(renderer.borrow::<ScriptedRenderer>().unwrap().end());
+        }
+    }
+
+    #[test]
+    fn mesh_instances_set_commits_once_per_draw() {
+        let mut vm = MeshInstancesTest::new();
+        let mut recorder = InstanceRecorder::default();
+        vm.fill(100, 0.5);
+        assert_eq!(vm.commits(), 0);
+        vm.render(&mut recorder);
+        assert_eq!(vm.commits(), 1);
+        assert!(!recorder.drew_while_editing);
+        assert_eq!(recorder.draws.len(), 1);
+        assert_eq!(recorder.draws[0].len(), 100);
+        let seventh = recorder.draws[0][7];
+        assert_eq!(seventh.transform.0[4], 7.0);
+        assert_eq!(seventh.opacity, 0.5);
+        assert_eq!(seventh.additiveness, 0.25);
+        assert_eq!(seventh.uv_translate, [0.5, 0.0]);
+        assert_eq!(seventh.uv_scale, [0.5, 1.0]);
+        vm.fill(100, 0.75);
+        vm.render(&mut recorder);
+        assert_eq!(vm.commits(), 2);
+        assert_eq!(recorder.draws.len(), 2);
+        assert_eq!(recorder.draws[1][99].opacity, 0.75);
+        vm.render(&mut recorder);
+        assert_eq!(vm.commits(), 2);
+        assert_eq!(recorder.draws.len(), 3);
+        assert_eq!(recorder.draws[2][99].opacity, 0.75);
+    }
+
+    #[test]
+    fn mesh_instances_resize_keeps_earlier_sets_and_commits_once_per_draw() {
+        let mut vm = MeshInstancesTest::new();
+        let mut recorder = InstanceRecorder::default();
+        vm.vm.lua().globals().get::<luaur_rt::Function>("grow").unwrap().call::<()>(100).unwrap();
+        assert_eq!(vm.commits(), 0);
+        vm.render(&mut recorder);
+        assert_eq!(vm.commits(), 1);
+        assert!(!recorder.drew_while_editing);
+        assert_eq!(recorder.draws.len(), 1);
+        assert_eq!(recorder.draws[0].len(), 100);
+        for i in 0..100 {
+            assert_eq!(recorder.draws[0][i].transform.0[4], 10.0 + i as f32);
+        }
+    }
+
+    #[test]
+    fn mesh_instances_set_rejects_an_index_past_the_end() {
+        let vm = MeshInstancesTest::new();
+        let message = vm.vm.lua().globals().get::<luaur_rt::Function>("setPastEnd").unwrap().call::<String>(()).unwrap();
+        assert!(message.contains("index 2 is past the end of MeshInstances"), "{message}");
+    }
+
     #[test]
     fn mesh_instances_luau_defaults_resize_set_and_instanced_draw() {
         let vm = ScriptVm::new();
@@ -516,12 +670,10 @@ mod tests {
         {
             let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap();
             let data = instances.instances.borrow();
-            assert_eq!(data.count(), 2);
-            assert_eq!(data.instance_data()[0].opacity, 1.0);
-            assert_eq!(data.instance_data()[0].uv_scale, [1.0, 1.0]);
-            assert_eq!(data.instance_data()[1].uv_translate, [0.2, 0.3]);
-            assert_eq!(data.instance_data()[1].additiveness, 0.25);
-            assert_eq!(data.edit_count(), 3);
+            // set/resize affect staging only; the renderer still has the
+            // constructor's empty instance array until the first draw.
+            assert_eq!(data.count(), 0);
+            assert_eq!(data.edit_count(), 0);
         }
         let table: Table = vm.eval(r#"
             return {draw = function(self, renderer)
@@ -534,6 +686,16 @@ mod tests {
         "#).unwrap();
         let mut renderer = factory.borrow().make_renderer();
         vm.renderer_bindings.call_draw(&table, &mut factory, &mut renderer, None).unwrap();
+        {
+            let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap();
+            let data = instances.instances.borrow();
+            assert_eq!(data.count(), 2);
+            assert_eq!(data.instance_data()[0].opacity, 1.0);
+            assert_eq!(data.instance_data()[0].uv_scale, [1.0, 1.0]);
+            assert_eq!(data.instance_data()[1].uv_translate, [0.2, 0.3]);
+            assert_eq!(data.instance_data()[1].additiveness, 0.25);
+            assert_eq!(data.edit_count(), 1);
+        }
         let stream = factory.borrow().stream();
         assert_eq!(stream.matches("drawImageMeshInstanced ").count(), 1);
         assert!(!stream.contains("drawImageMesh "));

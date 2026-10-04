@@ -68,15 +68,17 @@ impl ManifestAsset {
             if reader.has_error() {
                 return false;
             }
-            let path_length = reader.read_var_uint64() as i32;
+            let path_length = reader.read_var_uint64();
             if reader.has_error() {
                 return false;
             }
             let mut path = Vec::new();
-            // C++ compares uint64_t j with the signed pathLength, so the
-            // signed value is converted back to u64 for the loop bound.
-            for _ in 0..(path_length as u64) {
-                path.push(reader.read_var_uint64() as u32);
+            for _ in 0..path_length {
+                let path_id = reader.read_var_uint64() as u32;
+                if reader.has_error() {
+                    return false;
+                }
+                path.push(path_id);
             }
             self.paths.insert(id, path);
             if reader.has_error() {

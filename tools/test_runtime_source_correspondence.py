@@ -49,7 +49,7 @@ class RuntimeSourceCorrespondenceTests(unittest.TestCase):
     def test_deferred_scope_is_exact_not_a_wasm_directory_exemption(self):
         with tempfile.TemporaryDirectory() as directory:
             missing = missing_owners(Path(directory), {
-                "wasm/aot_artifact", "wasm/wasm_scripting_vm", "wasm/prelinked_aot", "scripting_slots", "wasm/new_owner",
+                "wasm/aot_artifact", "wasm/net_wire", "wasm/wasm_scripting_vm", "wasm/prelinked_aot", "scripting_slots", "wasm/new_owner",
             })
             self.assertEqual([row.split(" -> ")[0] for row in missing], ["wasm/new_owner"])
 

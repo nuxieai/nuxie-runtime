@@ -7,18 +7,37 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `53419065f067f9e32ede9f4f5e28e41e3ec89f29`
+- LAST_SYNCED_SHA: `6cd5d108fdae8fa2d00b56eeb857754adb9b67be`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1c54a97c8411a92b824b903fe083d3ba45a204ab` (refreshed 2026-10-03 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are four upstream commits after the checkpoint at this fetched target.
-  All 184 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (206 after `5892bb05`); this
+  There are three upstream commits after the checkpoint at this fetched target.
+  All 185 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (207 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `6cd5d108`, integrated atop downstream `0d5fd220` without
+  discarding its paint/Text callback fixes: both independent review passes and
+  correction rereviews are clean. Native validation passes 256 tests (two
+  ignored), including five real Apple loopback transport tests and the new
+  downstream paint/Text regressions; scripting passes 371 (one ignored), and
+  binary-reader/import tests pass 41. The runtime also compiles without default
+  features. wasm32-unknown-unknown WebGPU/WebGL2/scripting/scriptnet and Android
+  arm64 Vulkan/scripting/scriptnet compilation pass; these are not browser-pixel
+  or physical Android execution claims. Fresh pinned ordinary and scripted
+  Golden runs each cover 364 entries with zero failures and the existing one
+  ordinary/two scripted recorded divergences. All 231 runtime Silver cases were
+  executed individually after the bulk runner stopped at the known converter
+  failure: 85 byte-exact, 121 within unchanged epsilon, seven recorded
+  divergences, 17 unsupported skips, and the unchanged `data_converter_to_number`
+  failure (frame 41, op 2120, expected 1850 path fields, got 1443). No assertion
+  or tolerance was relaxed. Manifest tests pass 27; source/pipeline checks pass
+  12, with 1,063 mirrored and 12 adapted owners (structural coverage only).
+  Networking remains opt-in with no provider installed; Wasm guest execution
+  remains deferred under UNIV-3728.
 - `3330baec` was integrated atop downstream `ca4c9ebb` without discarding its
   drawable-dispatch preparation. Focused source-level integration review is
   clean; the combined tree passes 109 runtime library tests (two ignored) and
@@ -208,6 +227,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `6cd5d108fdae8fa2d00b56eeb857754adb9b67be` | Translate optional script networking (`fetch`, byte-oriented HTTP values, request policy/limits, owner-thread settlement, cancellation/watchdog and Apple platform transport through Rust bindings) and `decodeFile` with strict signed-script admission, a lazy private VM, retained decoded files/artboards and their own view-model bindings. Networking is compiled only with `scriptnet` and no provider is installed by default; no consumer app is enabled. Translate bounded binary readers, manifest-path failure propagation, import cycle/depth/work limits, nested-artboard lifetime/stateful handling, coroutine-safe Lua property access, and shared async polling budget/pending query. Port applicable policy, fetch, Apple-provider, decoded-file, properties and malformed-import tests and pin six new fixtures. Wasm guest network/file ABI, NetWire tests, held async outcomes, write-only guest memory staging, compiler-path access and iOS prelinked AOT remain parked under UNIV-3728. Private CLI/device/emulator/build work mentioned in metadata is not present in the public delta and is not claimed. | — |
 | `53419065f067f9e32ede9f4f5e28e41e3ec89f29` | Translate opt-in ORE GPU profiling state, environment seed and per-label reporting; Vulkan timestamp-query allocation, three-slot safe-frame resolution and pass begin/end writes; and render-pass label ownership across Lua, recording and replay, including the new upstream recording test. Other backends retain the toggle but publish no timing rows, as upstream. Wasm label ABI/proxy changes and WAMR linear-memory growth patch remain parked under UNIV-3728. Standalone player --gpu-profile and console-only benchmark NO_GETENV guard have no shipped Rust host counterpart; no player CLI, console support or performance campaign is claimed. Independent reviews and applicable validation are recorded in PR, with hardware limitations explicit. | — |
 | `45b2f609457274d064928d2dcffe64fb6712129f` | Entire public executable delta remains deferred under UNIV-3728: Android WAMR AOT target/artifact naming, module hashes, cross-compilation cache/cancellation and rejected-artifact fallback/tier-pin preservation. Add the new exact wasm/aot_artifact owner to the existing deferred correspondence scope, without a directory-wide exemption. No shared/native Luau owner or test changes. Private linked-device CLI/publisher work mentioned in metadata is absent publicly and not claimed. Pins advance through this explicitly accounted deferral, not AOT execution parity. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `115c48623dc5de51cda9850f1ffa9263ba1dc6e7` | Translate separate print-separator dispatch (stdout-only for discrete console spans, tab in line-oriented logging); synchronize state-machine data binds once after matching listener actions; reintroduce owned font allocation decoding, mapped face selection and one-shot coverage probes; and discard abandoned/detached screen-target segments without dropping resource stream bytes. Port the new font, state-action and deferred attachment regressions. Retain COLRv1 corrections and approved Rust text/luaur boundaries. Private Flutter/Android/Dart changes described in metadata but absent from the public delta are not claimed. Reviews and validation recorded in PR. | — |
@@ -570,6 +590,15 @@ and preserve upstream order; do not let parallel work merge dependent changes
 out of order. Do not load implement or TDD skills for this workflow.
 
 ## Scope decisions
+
+On 2026-10-03 the user approved porting the optional script networking and
+`decodeFile` capabilities introduced by `6cd5d108`, including the platform
+transport through Rust bindings. Network access remains disabled until a host
+explicitly installs a provider; enabling it in consumer apps is a separate
+decision. Preserve upstream's signed-script requirement for decoded files and
+its policy behavior, including the documented private-address DNS gap; this is
+not a security qualification for app enablement. The Wasm guest-execution
+deferral remains unchanged.
 
 Port fixes and compatible features on supported runtime and renderer surfaces,
 even when they lack a corpus signal or appear in an "editor" commit. For mixed

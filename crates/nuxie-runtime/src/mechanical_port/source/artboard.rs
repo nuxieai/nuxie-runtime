@@ -2026,14 +2026,14 @@ impl Artboard {
     }
 
     pub fn poll_async_work(&mut self) {
-        crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work();
+        crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
         if let Some(vm) = &self.scripting_vm {
             let _ = vm.poll_async_work();
         }
     }
 
     pub fn poll_async_work_handle(root: &CoreHandle) {
-        crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work();
+        crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
         let vm = root
             .with_downcast::<Artboard, _>(|artboard| artboard.scripting_vm.clone())
             .flatten();

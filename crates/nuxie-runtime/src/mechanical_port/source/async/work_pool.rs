@@ -314,11 +314,29 @@ pub fn get_global_work_pool_if_exists() -> Option<&'static Arc<Mutex<WorkPool>>>
     GLOBAL_WORK_POOL.get()
 }
 
-pub fn rive_poll_async_work() {
+/// Deliver at most `max_callbacks` outcomes; upstream's default budget is 32.
+pub fn rive_poll_async_work(max_callbacks: u32) -> u32 {
+    #[cfg(feature = "scriptnet")]
+    let mut processed = super::super::scriptnet::net::poll(max_callbacks.wrapping_add(1) / 2);
+    #[cfg(not(feature = "scriptnet"))]
+    let mut processed = 0;
     if let Some(pool) = get_global_work_pool_if_exists() {
         let mut pool = pool.lock().unwrap();
         if pool.has_pending_work() {
-            pool.poll_completed_work(16);
+            processed += pool.poll_completed_work(max_callbacks - processed);
         }
     }
+    processed
+}
+
+pub fn rive_has_pending_async_work() -> bool {
+    if let Some(pool) = get_global_work_pool_if_exists() {
+        if pool.lock().unwrap().has_pending_work() {
+            return true;
+        }
+    }
+    #[cfg(feature = "scriptnet")]
+    return super::super::scriptnet::net::has_pending_work();
+    #[cfg(not(feature = "scriptnet"))]
+    false
 }

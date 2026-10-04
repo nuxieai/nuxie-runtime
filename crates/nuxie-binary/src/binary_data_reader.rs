@@ -47,11 +47,19 @@ impl<'a> BinaryDataReader<'a> {
         let mut result = 0u64;
         let mut shift = 0u32;
         loop {
+            if shift >= 64 {
+                self.overflow();
+                return 0;
+            }
             let Some(&byte) = self.bytes.get(self.position) else {
                 self.overflow();
                 return 0;
             };
             self.position = self.position.saturating_add(1);
+            if shift == 63 && byte & 0x7e != 0 {
+                self.overflow();
+                return 0;
+            }
             result |= u64::from(byte & 0x7f).wrapping_shl(shift);
             if byte & 0x80 == 0 {
                 return result;
@@ -64,11 +72,19 @@ impl<'a> BinaryDataReader<'a> {
         let mut result = 0u32;
         let mut shift = 0u32;
         loop {
+            if shift >= 32 {
+                self.overflow();
+                return 0;
+            }
             let Some(&byte) = self.bytes.get(self.position) else {
                 self.overflow();
                 return 0;
             };
             self.position = self.position.saturating_add(1);
+            if shift == 28 && byte & 0x70 != 0 {
+                self.overflow();
+                return 0;
+            }
             result |= u32::from(byte & 0x7f).wrapping_shl(shift);
             if byte & 0x80 == 0 {
                 return result;

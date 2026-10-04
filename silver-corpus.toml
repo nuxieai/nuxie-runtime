@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "53419065f067f9e32ede9f4f5e28e41e3ec89f29"
+upstream_ref = "6cd5d108fdae8fa2d00b56eeb857754adb9b67be"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -2450,7 +2450,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Image read from propertyValue"
-producer_line = 851
+producer_line = 854
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -3336,7 +3336,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Expose list index to scripts and ensure the type is correct"
-producer_line = 804
+producer_line = 807
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4040,7 +4040,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripts can remove items from lists"
-producer_line = 781
+producer_line = 784
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4062,7 +4062,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Replace a view model property value from a script"
-producer_line = 748
+producer_line = 751
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4172,7 +4172,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Reset detached view model instances at end of frame"
-producer_line = 900
+producer_line = 903
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4832,7 +4832,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Scripted image properties"
-producer_line = 825
+producer_line = 828
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -5998,7 +5998,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Access view model properties and enum properties"
-producer_line = 703
+producer_line = 706
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -6064,7 +6064,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_properties_test.cpp"
 provenance_test = "Creates view models from specified named instances"
-producer_line = 723
+producer_line = 726
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]

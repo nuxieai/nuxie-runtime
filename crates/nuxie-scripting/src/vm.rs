@@ -22,16 +22,25 @@ mod lua_data_value;
 mod lua_font;
 pub(crate) mod lua_image;
 mod lua_image_decode;
+mod lua_main_ref;
 mod lua_mat4;
 mod lua_math;
 mod lua_mesh;
 mod lua_promise;
 mod lua_rive_base;
+#[cfg(feature = "scriptnet")]
+mod lua_rive_file;
 mod lua_scripted_context;
+#[cfg(feature = "scriptnet")]
+mod lua_scriptnet;
 mod lua_text;
 mod lua_vec2d;
 mod native_registration;
 mod renderer;
+#[cfg(all(test, feature = "compiler", feature = "scriptnet"))]
+mod upstream_scripting_decode_file_test;
+#[cfg(all(test, feature = "compiler", feature = "scriptnet"))]
+mod upstream_scripting_fetch_test;
 #[cfg(all(test, feature = "compiler"))]
 pub(crate) mod upstream_scripting_gpu_features;
 #[cfg(all(test, feature = "compiler"))]
@@ -633,6 +642,17 @@ const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"min", 347),
     (b"max", 348),
     (b"default", 349),
+    (b"status", 350),
+    (b"statusText", 351),
+    (b"ok", 352),
+    (b"url", 353),
+    (b"headers", 354),
+    (b"arrayBuffer", 355),
+    (b"header", 356),
+    (b"decodeFile", 357),
+    (b"artboardNames", 358),
+    (b"bindableArtboard", 359),
+    (b"getArtboard", 360),
 ];
 
 const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
@@ -1467,6 +1487,7 @@ impl LuaScriptInstance {
             let missing_requested_data = Rc::new(Cell::new(false));
             let context = lua
                 .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    &lua,
                     context_view_model,
                     context_present,
                     context_parent_view_models,
@@ -1595,6 +1616,8 @@ impl Default for ScriptVm {
 
 impl Drop for ScriptVm {
     fn drop(&mut self) {
+        #[cfg(feature = "scriptnet")]
+        lua_scriptnet::shutdown(&self.lua);
         #[cfg(feature = "tools")]
         self.view_model_frame_context
             .dispose_orphan_scripted_properties(true);
@@ -1825,6 +1848,7 @@ impl ScriptVm {
         let context = self
             .lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &self.lua,
                 Rc::clone(&context_view_model),
                 Rc::clone(&context_present),
                 context_parent_view_models.clone(),
@@ -1939,6 +1963,7 @@ impl ScriptVm {
             let context = self
                 .lua
                 .create_userdata(ScriptedContext::new_with_lifetime_and_source(
+                    &self.lua,
                     Rc::clone(&context_view_model),
                     Rc::clone(&context_present),
                     context_parent_view_models.clone(),
@@ -2007,6 +2032,7 @@ impl ScriptVm {
     /// Boot a VM with the Luau standard libraries open.
     pub fn new() -> Self {
         let lua = Lua::new();
+        lua_main_ref::install_main_lua(&lua);
         // Install Rive's atom resolver before any Rive globals or imported
         // bytecode can intern their method/property strings.
         unsafe {
@@ -2409,6 +2435,8 @@ impl ScriptVm {
         buffer_ext::install_buffer_extensions(&self.lua)?;
         lua_promise::install_promise_globals(&self.lua)?;
         lua_image_decode::install(&self.lua);
+        #[cfg(feature = "scriptnet")]
+        lua_scriptnet::install(&self.lua)?;
         lua_audio::install_audio_global(&self.lua)?;
         view_model::install_property_binding_support(&self.lua)?;
 
@@ -2957,6 +2985,7 @@ impl RuntimeScriptingVm for ScriptVm {
         let context = self
             .lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &self.lua,
                 Rc::clone(&context_view_model),
                 Rc::clone(&context_present),
                 context_parent_view_models.clone(),
@@ -4569,6 +4598,7 @@ mod context_init_tests {
             let context_alive = Rc::new(Cell::new(true));
             let context = lua
                 .create_userdata(ScriptedContext::new_with_lifetime(
+                    &lua,
                     Rc::clone(&context_view_model),
                     Rc::clone(&context_present),
                     Vec::new(),
@@ -4677,6 +4707,7 @@ mod context_init_tests {
         let first_context_alive = Rc::new(Cell::new(true));
         let first_context = lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &lua,
                 Rc::clone(&context_view_model),
                 Rc::clone(&context_present),
                 Vec::new(),
@@ -4795,6 +4826,7 @@ mod context_init_tests {
         let first_context_alive = Rc::new(Cell::new(true));
         let first_context = lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &lua,
                 Rc::clone(&context_view_model),
                 Rc::clone(&context_present),
                 Vec::new(),
@@ -5218,8 +5250,8 @@ mod context_init_tests {
 
     #[test]
     fn host_interrupt_survives_nested_protected_calls_and_caught_errors() {
-    // Approved luaur host-budget boundary: the production callback remains
-    // installed across nested calls without C++ callback swapping.
+        // Approved luaur host-budget boundary: the production callback remains
+        // installed across nested calls without C++ callback swapping.
         let vm = ScriptVm::new();
         let interrupts = Rc::new(Cell::new(0_u32));
         let observed = interrupts.clone();
@@ -5227,12 +5259,16 @@ mod context_init_tests {
             observed.set(observed.get() + 1);
             Ok(VmState::Continue)
         });
-        let nested = vm.lua.create_function(|lua, fail: bool| {
-            let function: Function = lua.globals().get("nestedBody")?;
-            function.protected_call::<()>(fail)
-        }).unwrap();
+        let nested = vm
+            .lua
+            .create_function(|lua, fail: bool| {
+                let function: Function = lua.globals().get("nestedBody")?;
+                function.protected_call::<()>(fail)
+            })
+            .unwrap();
         vm.lua.globals().set("nestedHostCall", nested).unwrap();
-        vm.eval::<()>(r#"
+        vm.eval::<()>(
+            r#"
             function nestedBody(fail)
                 if fail then error("expected nested failure") end
             end
@@ -5243,7 +5279,9 @@ mod context_init_tests {
                 for index = 1, 1000 do total += index end
                 return total
             end
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
         for fail in [false, true] {
             let before = interrupts.get();
             let total: f64 = vm.call_global("boundedWorkAfterNestedCall", fail).unwrap();
@@ -5341,6 +5379,7 @@ mod context_init_tests {
         let context_present = Rc::new(Cell::new(false));
         let context = lua
             .create_userdata(ScriptedContext::new_with_lifetime(
+                &lua,
                 Rc::clone(&context_view_model),
                 Rc::clone(&context_present),
                 Vec::new(),

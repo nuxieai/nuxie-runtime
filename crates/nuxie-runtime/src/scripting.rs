@@ -1390,6 +1390,18 @@ impl ScriptViewModel {
             .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
 
+    #[cfg(feature = "scriptnet")]
+    pub fn set_artboard(
+        &self,
+        name: &str,
+        artboard: Option<crate::source::bindable_artboard::RuntimeBindableArtboardHandle>,
+        view_model: Option<crate::CoreHandle>,
+    ) -> bool {
+        let native = self.native();
+        let changed = native.set_artboard(name, artboard, view_model);
+        self.finish_property_change(&native.property_path(name).unwrap_or_default(), changed)
+    }
+
     #[doc(hidden)]
     pub fn set_font_bytes(&self, name: &str, font_bytes: Option<Arc<[u8]>>) -> bool {
         let native = self.native();
@@ -1603,6 +1615,9 @@ impl ScriptViewModel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptViewModelProperty {
+    // Shared metadata must not change shape when Cargo unifies runtime features
+    // independently of a scripting consumer's binding features.
+    Artboard,
     Number,
     Color,
     String,

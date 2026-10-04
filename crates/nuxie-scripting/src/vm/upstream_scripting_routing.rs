@@ -213,6 +213,7 @@ fn install_test_context(vm: &ScriptVm) {
         vm.renderer_bindings.clone(),
     );
     let context = view_model::ScriptedContext::new(
+        &vm.lua,
         Rc::new(RefCell::new(None)),
         Vec::new(),
         Rc::new(Cell::new(false)),

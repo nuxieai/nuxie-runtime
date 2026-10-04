@@ -36,25 +36,9 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 impl NestedArtboardLeaf {
     pub fn clone_leaf(&self) -> Self {
         let mut nested_artboard = NestedArtboardLeafBase::clone_into(self);
-        nested_artboard.base.base.set_file(self.base.base.file());
-        // Upstream instances the currently referenced Artboard, which is the
-        // mounted instance after mounting and the authored source before it.
-        let referenced = match self.base.base.artboard_instance_handle(0) {
-            Some(instance) => Some(instance.core_handle()),
-            None => self.base.base.source_artboard(),
-        };
-        if let Some(referenced) = referenced {
-            if let Some(instance) =
-                crate::mechanical_port::source::artboard::Artboard::nested_instance_from_handle(
-                    &referenced,
-                )
-            {
-                nested_artboard
-                    .base
-                    .base
-                    .referenced_artboard_instance(instance);
-            }
-        }
+        self.base
+            .base
+            .clone_references_into(&mut nested_artboard.base.base);
         nested_artboard
     }
 

@@ -279,6 +279,7 @@ mod tests {
         install(&lua);
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),
@@ -488,6 +489,7 @@ mod tests {
         let lua = vm.lua();
         let context = lua
             .create_userdata(ScriptedContext::new(
+                &lua,
                 Rc::new(RefCell::new(None)),
                 Vec::new(),
                 Rc::new(Cell::new(false)),

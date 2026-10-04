@@ -14,6 +14,7 @@ fn vm_with_target(ore: Option<Rc<RefCell<DeferredOreContext>>>) -> ScriptVm {
     vm.install_render_factory(&mut factory).unwrap();
     vm.install_rive_globals().unwrap();
     let context = view_model::ScriptedContext::new(
+        &vm.lua,
         Rc::new(RefCell::new(None)),
         Vec::new(),
         Rc::new(Cell::new(false)),

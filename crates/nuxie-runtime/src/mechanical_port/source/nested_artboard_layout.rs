@@ -75,18 +75,7 @@ impl NestedArtboardLayout {
 
     pub fn clone_layout(&self) -> Self {
         let mut nested = NestedArtboardLayoutBase::clone_into(self);
-        nested.base.base.set_file(self.base.base.file());
-        // Upstream instances the current reference, not necessarily its
-        // original authored definition.
-        let referenced = match self.base.base.artboard_instance_handle(0) {
-            Some(instance) => Some(instance.core_handle()),
-            None => self.base.base.source_artboard(),
-        };
-        if let Some(referenced) = referenced {
-            if let Some(instance) = Artboard::nested_instance_from_handle(&referenced) {
-                nested.base.base.referenced_artboard_instance(instance);
-            }
-        }
+        self.base.base.clone_references_into(&mut nested.base.base);
         nested
     }
 

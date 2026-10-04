@@ -1,5 +1,5 @@
 use crate::StringValue;
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 pub(crate) struct BinaryReader<'a> {
     pub(crate) bytes: &'a [u8],
@@ -58,7 +58,15 @@ impl<'a> BinaryReader<'a> {
         let mut shift = 0u8;
 
         loop {
+            if shift >= 64 {
+                self.overflow();
+                bail!("varuint exceeds 64 bits");
+            }
             let byte = self.read_byte()?;
+            if shift == 63 && byte & 0x7e != 0 {
+                self.overflow();
+                bail!("varuint exceeds 64 bits");
+            }
             result |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
 
             if byte & 0x80 == 0 {
@@ -76,15 +84,22 @@ impl<'a> BinaryReader<'a> {
     }
 
     pub(crate) fn read_string(&mut self) -> Result<StringValue> {
-        let length =
-            usize::try_from(self.read_var_uint()?).context("length does not fit in usize")?;
+        let length = self.read_length()?;
         self.read_string_with_length(length)
     }
 
     pub(crate) fn read_length_prefixed_bytes(&mut self) -> Result<&'a [u8]> {
-        let length =
-            usize::try_from(self.read_var_uint()?).context("length does not fit in usize")?;
+        let length = self.read_length()?;
         self.read_bytes_exact(length)
+    }
+
+    fn read_length(&mut self) -> Result<usize> {
+        let length = self.read_var_uint()?;
+        if length > self.bytes.len().saturating_sub(self.offset) as u64 {
+            self.overflow();
+            bail!("length {length} extends past end");
+        }
+        Ok(length as usize)
     }
 
     pub(crate) fn read_bytes_exact(&mut self, length: usize) -> Result<&'a [u8]> {

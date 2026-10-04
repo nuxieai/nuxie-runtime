@@ -202,11 +202,97 @@ impl BackboardImporter {
     pub fn backboard(&self) -> CoreHandle {
         self.backboard.clone()
     }
+
+    fn cyclic_artboard_references(&self) -> Vec<bool> {
+        let mut nodes = HashMap::<CoreHandle, usize>::new();
+        let mut references = vec![None; self.artboard_referencers.len()];
+        for (index, referencer) in self.artboard_referencers.iter().enumerate() {
+            let Some((nesting, target)) = referencer
+                .with(|referencer| {
+                    Some((
+                        referencer.artboard_referencer_nesting_artboard()?,
+                        referencer.artboard_referencer_referenced_artboard_id()?,
+                    ))
+                })
+                .flatten()
+            else {
+                continue;
+            };
+            let Some(nested) = self.artboard_lookup.get(&target) else {
+                continue;
+            };
+            let next = nodes.len();
+            let from = *nodes.entry(nesting).or_insert(next);
+            let next = nodes.len();
+            let to = *nodes.entry(nested.clone()).or_insert(next);
+            references[index] = Some((from, to));
+        }
+        let count = nodes.len();
+        let mut edges = vec![Vec::new(); count];
+        for &(from, to) in references.iter().flatten() {
+            edges[from].push(to);
+        }
+        let mut order = vec![None; count];
+        let mut lowlink = vec![0; count];
+        let mut component = vec![None; count];
+        let mut open = Vec::new();
+        let mut calls = Vec::<(usize, usize)>::new();
+        let mut next_order = 0;
+        let mut next_component = 0;
+        for root in 0..count {
+            if order[root].is_some() {
+                continue;
+            }
+            order[root] = Some(next_order);
+            lowlink[root] = next_order;
+            next_order += 1;
+            open.push(root);
+            calls.push((root, 0));
+            while let Some(&(current, next)) = calls.last() {
+                if next < edges[current].len() {
+                    calls.last_mut().unwrap().1 += 1;
+                    let neighbor = edges[current][next];
+                    if order[neighbor].is_none() {
+                        order[neighbor] = Some(next_order);
+                        lowlink[neighbor] = next_order;
+                        next_order += 1;
+                        open.push(neighbor);
+                        calls.push((neighbor, 0));
+                    } else if component[neighbor].is_none() {
+                        lowlink[current] = lowlink[current].min(order[neighbor].unwrap());
+                    }
+                    continue;
+                }
+                calls.pop();
+                if let Some(&(parent, _)) = calls.last() {
+                    lowlink[parent] = lowlink[parent].min(lowlink[current]);
+                }
+                if lowlink[current] == order[current].unwrap() {
+                    loop {
+                        let member = open.pop().unwrap();
+                        component[member] = Some(next_component);
+                        if member == current {
+                            break;
+                        }
+                    }
+                    next_component += 1;
+                }
+            }
+        }
+        references
+            .into_iter()
+            .map(|edge| edge.is_some_and(|(from, to)| component[from] == component[to]))
+            .collect()
+    }
 }
 
 impl ImportStackObject for BackboardImporter {
     fn resolve(&mut self) -> StatusCode {
-        for referencer in &self.artboard_referencers {
+        let cyclic = self.cyclic_artboard_references();
+        for (index, referencer) in self.artboard_referencers.iter().enumerate() {
+            if cyclic[index] {
+                continue;
+            }
             let referenced_artboard_id = referencer
                 .with(|referencer| referencer.artboard_referencer_referenced_artboard_id())
                 .expect("BackboardImporter retains live ArtboardReferencers")

@@ -35,8 +35,13 @@ impl<'a> BinaryDataReader<'a> {
         let mut value = 0u64;
         let mut shift = 0u8;
         loop {
+            if shift >= 64 {
+                self.overflow();
+                return 0;
+            }
             let byte = self.read_byte();
-            if self.overflowed {
+            if self.overflowed || (shift == 63 && byte & 0x7e != 0) {
+                self.overflow();
                 return 0;
             }
             value |= u64::from(byte & 0x7f).wrapping_shl(u32::from(shift));
@@ -50,8 +55,13 @@ impl<'a> BinaryDataReader<'a> {
         let mut value = 0u32;
         let mut shift = 0u8;
         loop {
+            if shift >= 32 {
+                self.overflow();
+                return 0;
+            }
             let byte = self.read_byte();
-            if self.overflowed {
+            if self.overflowed || (shift == 28 && byte & 0x70 != 0) {
+                self.overflow();
                 return 0;
             }
             value |= u32::from(byte & 0x7f).wrapping_shl(u32::from(shift));
@@ -81,13 +91,13 @@ impl<'a> BinaryDataReader<'a> {
         u32::from_le_bytes(self.read_array())
     }
     pub fn read_string(&mut self) -> String {
-        let length = self.read_var_uint() as usize;
-        if self.overflowed || length > self.end.saturating_sub(self.position) {
+        let length = self.read_var_uint();
+        if self.overflowed || length > self.end.saturating_sub(self.position) as u64 {
             self.overflow();
             return String::new();
         }
         let start = self.position;
-        self.position += length;
+        self.position += length as usize;
         String::from_utf8_lossy(&self.bytes[start..self.position]).into_owned()
     }
     fn read_array<const N: usize>(&mut self) -> [u8; N] {

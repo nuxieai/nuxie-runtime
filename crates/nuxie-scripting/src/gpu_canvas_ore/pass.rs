@@ -2,10 +2,14 @@
 use super::pipeline::{BindGroup, Pipeline};
 use super::*;
 use luaur_rt::FromLua;
+use nuxie_ore_metal::bind_group::{scriptDynamicOffsetAlignment, validateSetBindGroup};
+use nuxie_ore_metal::deferred_bind_groups::DeferredBindGroups;
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::script_guards::*;
 
 pub(super) struct Pass {
+    // C++ destroys the deferred groups before the underlying render pass.
+    pub deferred_bind_groups: Option<DeferredBindGroups>,
     pub pass: Option<Box<dyn RenderPassApi>>,
     pub finished: bool,
     pub sample_count: u32,
@@ -45,6 +49,9 @@ impl UserData for Pass {
             if pipeline.sample_count!=this.sample_count {return Err(Error::runtime(format!("pipeline sampleCount ({}) does not match render pass sampleCount ({}) — recreate the pipeline with matching sampleCount",pipeline.sample_count,this.sample_count)));}
             let context=context(lua)?;context.borrow().clearLastError();
             this.pass().setPipeline(Some(&pipeline.resource));
+            if let Some(groups) = this.deferred_bind_groups.as_mut() {
+                groups.flush(&mut **this.pass.as_mut().expect("validated pass"));
+            }
             let error=context.borrow().lastError();if !error.is_empty(){return Err(Error::runtime(format!("setPipeline: {error}")));}
             this.pipeline_set=true;Ok(())
         });
@@ -89,15 +96,31 @@ impl UserData for Pass {
             },
         );
         methods.add_method_mut("setBindGroup",|lua,this,(group,data,offsets):(Value,Value,Value)| {
-            if !this.validate()? { return Ok(()); }let group=u32::from_lua(group,lua)?;if group>=kMaxBindGroups {return Err(Error::runtime(format!("setBindGroup: groupIndex must be in [0, {kMaxBindGroups}) (got {group})")));}
+            if !this.validate()? { return Ok(()); }let group=u32::from_lua(group,lua)?;
             let data=AnyUserData::from_lua(data,lua)?;let bg=data.borrow::<BindGroup>()?;let mut values=Vec::new();
             if let Value::Table(offsets)=offsets {
-                if offsets.raw_len()>8 {return Err(Error::runtime(format!("setBindGroup: dynamicOffsets count {} exceeds maximum of 8",offsets.raw_len())));}
-                for index in 0..offsets.raw_len() {let offset=number_value(lua,offsets.raw_get::<Value>(index+1)?,0.0)? as u32;if offset%256!=0{return Err(Error::runtime(format!("setBindGroup: dynamicOffsets[{index}] = {offset} is not a multiple of 256 (alignment requirement)")));}values.push(offset);}
+                if offsets.raw_len()>kMaxDynamicOffsets as usize {return Err(Error::runtime(format!("setBindGroup: dynamicOffsets count {} exceeds maximum of {kMaxDynamicOffsets}",offsets.raw_len())));}
+                for index in 0..offsets.raw_len() {let offset=number_value(lua,offsets.raw_get::<Value>(index+1)?,0.0)? as u32;values.push(offset);}
             }
-            let expected=bg.resource.bindGroupBase().expect("bind group").dynamicOffsetCount();
-            if values.len() as u32!=expected {return Err(Error::runtime(format!("setBindGroup: dynamicOffsets count {} does not match the BindGroup's declared dynamic UBO count {expected}",values.len())));}
-            this.pass().setBindGroup(group,Some(&bg.resource),if values.is_empty(){None}else{Some(&values)},values.len() as u32);Ok(())
+            let context = RendererBindings::for_lua(lua).and_then(|bindings| bindings.ore_context());
+            let alignment = scriptDynamicOffsetAlignment(context.as_ref().map(|ctx| ctx.borrow()).as_deref());
+            let mut message = String::new();
+            if !validateSetBindGroup(group, bg.resource.bindGroupBase(), Some(&values), values.len() as u32, alignment, Some(&mut message)) {
+                // C++ copies this shared guard message into a 256-byte buffer.
+                message.truncate(message.len().min(255));
+                if !message.is_empty() { return Err(Error::runtime(message)); }
+            }
+            if !this.pipeline_set {
+                this.deferred_bind_groups.get_or_insert_with(DeferredBindGroups::default).defer(group, Some(&bg.resource), Some(&values), values.len() as u32);
+                return Ok(());
+            }
+            if let Some(context) = context.as_ref() { context.borrow().clearLastError(); }
+            this.pass().setBindGroup(group,Some(&bg.resource),if values.is_empty(){None}else{Some(&values)},values.len() as u32);
+            if let Some(context) = context.as_ref() {
+                let error = context.borrow().lastError();
+                if !error.is_empty() { return Err(Error::runtime(format!("setBindGroup: {error}"))); }
+            }
+            Ok(())
         });
         methods.add_method_mut(
             "setViewport",

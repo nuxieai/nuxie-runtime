@@ -186,6 +186,7 @@ fn queriedFeatures(executionDomain: &GLExecutionDomain) -> Features {
     let maxVertexAttributes = executionDomain.getInteger(GL_MAX_VERTEX_ATTRIBS);
     let maxTextureUnits = executionDomain.getInteger(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS);
     let maxSamples = executionDomain.getInteger(GL_MAX_SAMPLES);
+    let uboOffsetAlignment = executionDomain.getInteger(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT);
 
     features.maxTextureSize2D = maxTextureSize as u32;
     features.maxTextureSizeCube = maxCubeSize as u32;
@@ -195,6 +196,10 @@ fn queriedFeatures(executionDomain: &GLExecutionDomain) -> Features {
     features.maxVertexAttributes = maxVertexAttributes as u32;
     features.maxSamplers = maxTextureUnits as u32;
     features.maxSamples = maxSamples.max(1) as u32;
+    // Never below the default so scripts stay portable to D3D11.
+    features.minUniformBufferOffsetAlignment = features
+        .minUniformBufferOffsetAlignment
+        .max(uboOffsetAlignment as u32);
 
     let extensionCount = executionDomain.getInteger(GL_NUM_EXTENSIONS);
     for index in 0..extensionCount.max(0) as u32 {
@@ -1235,6 +1240,7 @@ fn makeBindGroupCurrent(
 
     let mut group = BindGroupGL::new(context.executionStamp().clone());
     nuxie_ore_metal::install_bind_group_backend_context(&mut group.base, &context.base);
+    group.base.recordDynamicRanges(desc);
     let mut dynamicOffsetCount = 0;
     let mut retainedBuffers = Vec::new();
     let mut retainedViews = Vec::new();

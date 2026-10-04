@@ -232,6 +232,7 @@ pub(crate) const GL_MAX_DRAW_BUFFERS: GLenum = 0x8824;
 pub(crate) const GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS: GLenum = 0x8B4D;
 pub(crate) const GL_MAX_VERTEX_ATTRIBS: GLenum = 0x8869;
 pub(crate) const GL_MAX_UNIFORM_BLOCK_SIZE: GLenum = 0x8A30;
+pub(crate) const GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT: GLenum = 0x8A34;
 pub(crate) const GL_MAX_SAMPLES: GLenum = 0x8D57;
 pub(crate) const GL_INVALID_INDEX: GLuint = 0xFFFF_FFFF;
 

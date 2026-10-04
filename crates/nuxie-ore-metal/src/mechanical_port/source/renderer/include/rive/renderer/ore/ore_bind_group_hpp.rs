@@ -30,6 +30,14 @@ use super::super::gpu_resource_hpp::{AnyResourceHandle, GPUResource, GpuResource
 use super::ore_bind_group_layout_hpp::BindGroupLayout;
 use std::sync::Weak;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DynamicUBORange {
+    pub slot: u32,
+    pub offset: u32,
+    pub size: u32,
+    pub bufferSize: u64,
+}
+
 // namespace rive::ore
 // {
 
@@ -62,6 +70,7 @@ pub struct BindGroupMembers {
 
     // uint32_t m_dynamicOffsetCount = 0;
     pub(crate) m_dynamicOffsetCount: u32,
+    pub(crate) m_dynamicRanges: Vec<DynamicUBORange>,
 
     // The layout this BindGroup conforms to. Holds the per-backend native
     // layout handle alive for the BindGroup's lifetime — Vulkan's
@@ -126,6 +135,7 @@ impl Drop for BindGroup {
             #[cfg(test)]
             super::super::gpu_resource_hpp::record_resource_drop_stage("BindGroup.layout");
             core::ptr::drop_in_place(&mut self.m_layoutRef);
+            core::ptr::drop_in_place(&mut self.m_dynamicRanges);
             #[cfg(test)]
             super::super::gpu_resource_hpp::record_resource_drop_stage("BindGroup.base");
             ManuallyDrop::drop(&mut self.base);
@@ -152,6 +162,10 @@ impl BindGroup {
     // uint32_t dynamicOffsetCount() const { return m_dynamicOffsetCount; }
     pub fn dynamicOffsetCount(&self) -> u32 {
         self.m_dynamicOffsetCount
+    }
+
+    pub fn dynamicRanges(&self) -> &[DynamicUBORange] {
+        &self.m_dynamicRanges
     }
 
     // uint32_t groupIndex() const
@@ -204,6 +218,7 @@ impl BindGroup {
             base: ManuallyDrop::new(GPUResource::new(None)),
             members: ManuallyDrop::new(BindGroupMembers {
                 m_dynamicOffsetCount: 0,
+                m_dynamicRanges: Vec::new(),
                 m_layoutRef: None,
                 m_retainedBuffers: Vec::new(),
                 m_retainedViews: Vec::new(),

@@ -3,6 +3,15 @@
 #![allow(non_upper_case_globals)]
 
 pub const kGuardSetPipelineBeforeDraw: &str = "setPipeline must be called before draw";
+pub const kMaxDynamicOffsets: u32 = 8;
+pub const kGuardDynamicOffsetCountFormat: &str =
+    "setBindGroup: dynamicOffsets count %u exceeds maximum of %u";
+
+pub fn dynamic_offset_count_message(count: u32, maximum: u32) -> String {
+    kGuardDynamicOffsetCountFormat
+        .replacen("%u", &count.to_string(), 1)
+        .replacen("%u", &maximum.to_string(), 1)
+}
 pub const kGuardVertexSlotRangeFormat: &str = "setVertexBuffer: slot must be 0-%u (got %u)";
 pub const kGuardBaseVertexFormat: &str = "%s: baseVertex=%d requires the drawBaseInstance feature, which the active backend does not support";
 pub const kGuardFirstInstanceFormat: &str = "%s: firstInstance=%u requires the drawBaseInstance feature, which the active backend does not support";

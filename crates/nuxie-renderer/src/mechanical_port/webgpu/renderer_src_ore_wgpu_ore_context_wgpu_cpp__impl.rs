@@ -934,6 +934,7 @@ pub(crate) fn makeBindGroup(
     let (manager, domain) = managerAndDomain(context)?;
     let nativeLayout = layout.native().clone();
     let mut group = BindGroupWGPU::new(context);
+    group.recordDynamicRanges(desc);
     nuxie_ore_metal::install_bind_group_backend_parts(
         &mut group,
         dynamicCount,

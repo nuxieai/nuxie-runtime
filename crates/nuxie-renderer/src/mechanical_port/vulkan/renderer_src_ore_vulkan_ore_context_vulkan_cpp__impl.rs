@@ -246,6 +246,10 @@ pub(crate) fn Make(
     features.maxTextureSizeCube = properties.limits.max_image_dimension_cube;
     features.maxTextureSize3D = properties.limits.max_image_dimension3_d;
     features.maxUniformBufferSize = properties.limits.max_uniform_buffer_range;
+    // Never below the default so scripts stay portable to D3D11.
+    features.minUniformBufferOffsetAlignment = features
+        .minUniformBufferOffsetAlignment
+        .max(properties.limits.min_uniform_buffer_offset_alignment as u32);
     features.maxVertexAttributes = properties.limits.max_vertex_input_attributes;
     features.maxSamplers = properties.limits.max_per_stage_descriptor_samplers;
 
@@ -1215,6 +1219,7 @@ pub(crate) fn makeBindGroup(
     }
     let (manager, domain) = contextResourceParts(context);
     let mut bg = BindGroupVulkan::new(manager.clone(), context);
+    bg.base.recordDynamicRanges(desc);
     bg.m_vkDSL = layout.m_vkDSL;
     let dynamicCount = layout
         .entries()

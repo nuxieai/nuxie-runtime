@@ -4,6 +4,7 @@ use luaur_rt::{AnyUserData, Error, FromLua, Lua, MultiValue, Result, Table, User
 use nuxie_render_api::{
     Factory as RenderFactory, RenderBuffer, RenderBufferFlags, RenderBufferType, Vec2D,
     ImageMeshInstancesHandle,
+    ImageMeshInstanceData,
 };
 
 pub(super) struct ScriptedVertexBuffer {
@@ -152,28 +153,57 @@ impl UserData for ScriptedTriangleBuffer {
 
 pub(super) struct ScriptedImageMeshInstances {
     pub(super) instances: ImageMeshInstancesHandle,
+    staged: Vec<ImageMeshInstanceData>,
+    dirty: bool,
+}
+
+impl ScriptedImageMeshInstances {
+    fn new(factory: &mut dyn RenderFactory, count: usize) -> Self {
+        Self {
+            instances: factory.make_image_mesh_instances(count),
+            staged: vec![ImageMeshInstanceData::default(); count],
+            dirty: false,
+        }
+    }
+
+    fn resize(&mut self, count: usize) {
+        if self.staged.len() != count {
+            self.staged.resize(count, ImageMeshInstanceData::default());
+            self.dirty = true;
+        }
+    }
+
+    fn stage(&mut self, index: usize) -> &mut ImageMeshInstanceData {
+        self.dirty = true;
+        &mut self.staged[index]
+    }
+
+    pub(super) fn commit(&mut self) {
+        if !self.dirty {
+            return;
+        }
+        let mut instances = self.instances.borrow_mut();
+        instances.edit(Some(self.staged.len())).copy_from_slice(&self.staged);
+        instances.end_edit();
+        self.dirty = false;
+    }
 }
 
 impl UserData for ScriptedImageMeshInstances {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("resize", |_, this, count: u32| {
-            let mut instances = this.instances.borrow_mut();
-            if instances.count() != count as usize {
-                instances.edit(Some(count as usize));
-                instances.end_edit();
-            }
+        methods.add_method_mut("resize", |_, this, count: u32| {
+            this.resize(count as usize);
             Ok(())
         });
-        methods.add_method("set", |lua, this, values: MultiValue| {
+        methods.add_method_mut("set", |lua, this, values: MultiValue| {
             let value = |index| values.get(index).cloned().unwrap_or(Value::Nil);
             let index = u32::from_lua(value(0), lua)? as usize;
-            let mut instances = this.instances.borrow_mut();
-            if index >= instances.count() {
+            if index >= this.staged.len() {
                 return Err(Error::runtime(format!("index {index} is past the end of MeshInstances")));
             }
             let matrix = AnyUserData::from_lua(value(1), lua)?;
             let matrix = matrix.borrow::<super::lua_mat2d::ScriptedMat2D>()?.0;
-            let data = &mut instances.edit(None)[index];
+            let data = this.stage(index);
             data.transform = matrix;
             data.opacity = Option::<f32>::from_lua(value(2), lua)?.unwrap_or(1.0);
             data.additiveness = Option::<f32>::from_lua(value(3), lua)?.unwrap_or(0.0);
@@ -186,7 +216,6 @@ impl UserData for ScriptedImageMeshInstances {
             };
             data.uv_translate = vector(4, [0.0, 0.0])?;
             data.uv_scale = vector(5, [1.0, 1.0])?;
-            instances.end_edit();
             Ok(())
         });
     }
@@ -220,9 +249,9 @@ pub(super) fn install_mesh_globals(lua: &Lua) -> Result<()> {
         let bindings = super::lua_renderer_library::RendererBindings::for_lua(lua)
             .ok_or_else(|| Error::runtime("renderer bindings are not installed"))?;
         let instances = bindings.with_factory(|factory| {
-            Ok(factory.make_image_mesh_instances(count.unwrap_or(0) as usize))
+            Ok(ScriptedImageMeshInstances::new(factory, count.unwrap_or(0) as usize))
         })?;
-        lua.create_userdata(ScriptedImageMeshInstances { instances })
+        lua.create_userdata(instances)
     })?)?;
     metatable.set_readonly(true);
     table.set_metatable(Some(metatable))?;

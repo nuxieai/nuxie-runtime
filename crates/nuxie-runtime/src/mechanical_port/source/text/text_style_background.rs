@@ -115,9 +115,7 @@ impl TextStyleBackground {
         // Read through the actual Style parent and Text matrix fields only
         // when ShapePaint requests the container transform after callbacks.
         let container_transform = || {
-            Self::style_world_transform(
-                &base.parent_handle().expect("TextStyleBackground parent"),
-            )
+            Self::style_world_transform(&base.parent_handle().expect("TextStyleBackground parent"))
         };
         for handle in self.paints.shape_paints().iter().cloned() {
             handle.with_mut(|object| {

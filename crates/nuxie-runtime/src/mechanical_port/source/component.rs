@@ -969,20 +969,18 @@ impl Component {
     }
 
     pub fn with_parent<R>(&self, use_parent: impl FnOnce(&ContainerComponent) -> R) -> Option<R> {
-        self.parent
-            .with(|parent| {
-                parent.with(|parent| parent.as_container_component().map(use_parent))
-            })??
+        self.parent.with(|parent| {
+            parent.with(|parent| parent.as_container_component().map(use_parent))
+        })??
     }
 
     pub fn with_parent_mut<R>(
         &self,
         use_parent: impl FnOnce(&mut ContainerComponent) -> R,
     ) -> Option<R> {
-        self.parent
-            .with(|parent| {
-                parent.with_mut(|parent| parent.as_container_component_mut().map(use_parent))
-            })??
+        self.parent.with(|parent| {
+            parent.with_mut(|parent| parent.as_container_component_mut().map(use_parent))
+        })??
     }
 
     pub fn validate(&mut self, context: &mut dyn CoreContext) -> bool {

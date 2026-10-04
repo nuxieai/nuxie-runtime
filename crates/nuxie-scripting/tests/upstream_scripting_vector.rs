@@ -62,6 +62,72 @@ fn vector_can_be_constructed() {
 }
 
 #[test]
+fn two_component_vectors_always_have_z_zero() {
+    use luaur_vm::functions::{
+        lua_getfield::lua_getfield, lua_gettop::lua_gettop, lua_pcall::lua_pcall,
+        lua_pushnumber::lua_pushnumber,
+        lua_pushvector_lapi::lua_pushvector_lua_state_f32_f32_f32_f32 as push_vector,
+        lua_settop::lua_settop, lua_tovector::lua_tovector,
+    };
+    use luaur_vm::macros::lua_getglobal::lua_getglobal;
+
+    let vm = rive_vm();
+    vm.eval::<()>("seeded = 1").unwrap();
+    let lua = vm.lua();
+    // The approved Lua adapter carries Vec2 values as a fully initialized
+    // LuaVector, then Value::Vector pushes all three components. Exercise that
+    // transport as well as the full-vector primitive underlying it.
+    lua.globals()
+        .set(
+            "pushVec2D",
+            lua.create_function(|_, ()| Ok(luaur_rt::Vector::new(3.0, 4.0, 0.0)))
+                .unwrap(),
+        )
+        .unwrap();
+    unsafe {
+        lua.exec_raw::<(), _>((), |state| {
+            let top = lua_gettop(state);
+            let seed = || {
+                for _ in 0..8 {
+                    push_vector(state, 1.0, 2.0, 9.0, 0.0)?;
+                }
+                lua_settop(state, -9)
+            };
+            seed()?;
+            push_vector(state, 3.0, 4.0, 0.0, 0.0)?;
+            assert_eq!(*lua_tovector(state, -1).add(2), 0.0);
+            lua_settop(state, -2)?;
+
+            seed()?;
+            lua_getglobal(state, c"pushVec2D".as_ptr())?;
+            assert_eq!(lua_pcall(state, 0, 1, 0)?, 0);
+            let vector = lua_tovector(state, -1);
+            assert!(!vector.is_null());
+            assert_eq!(*vector.add(2), 0.0);
+            lua_settop(state, -2)?;
+
+            // As upstream, pass two arguments even to origin, and keep the
+            // Vector table beneath the call. Results reuse the seeded slots.
+            for name in [c"xy", c"origin"] {
+                seed()?;
+                lua_getglobal(state, c"Vector".as_ptr())?;
+                lua_getfield(state, -1, name.as_ptr())?;
+                lua_pushnumber(state, 3.0)?;
+                lua_pushnumber(state, 4.0)?;
+                assert_eq!(lua_pcall(state, 2, 1, 0)?, 0);
+                let vector = lua_tovector(state, -1);
+                assert!(!vector.is_null(), "{name:?}");
+                assert_eq!(*vector.add(2), 0.0, "{name:?}");
+                lua_settop(state, -3)?;
+            }
+            assert_eq!(lua_gettop(state), top);
+            Ok(())
+        })
+        .unwrap();
+    }
+}
+
+#[test]
 fn vector_static_methods_work() {
     assert_eq!(
         eval_number("return Vector.distance(Vector.origin(),Vector.xy(10,0))"),

@@ -1055,7 +1055,10 @@ mod tests {
         let text = arena.insert(Text::default());
         let matrix = Mat2D::from_scale(2.0, 3.0);
         text.with_mut(|owner| {
-            owner.as_text_mut().unwrap().set_shape_world_transform(matrix);
+            owner
+                .as_text_mut()
+                .unwrap()
+                .set_shape_world_transform(matrix);
             // This is a read of another field of the active owner, not a
             // second borrow of the entire Text object.
             assert_eq!(text.text_shape_world_transform(), Some(matrix));
@@ -1079,7 +1082,10 @@ mod tests {
         assert_eq!(text.identity_key().1, replacement.identity_key().1);
         assert_ne!(text.identity_key().2, replacement.identity_key().2);
         assert_eq!(text.text_shape_world_transform(), None);
-        assert_eq!(replacement.text_shape_world_transform(), Some(Mat2D::default()));
+        assert_eq!(
+            replacement.text_shape_world_transform(),
+            Some(Mat2D::default())
+        );
         assert_eq!(removed.as_text().unwrap().shape_world_transform(), matrix);
 
         drop(arena);
@@ -1152,7 +1158,10 @@ mod tests {
         assert_eq!(style.identity_key().1, replacement.identity_key().1);
         hydrate(&replacement, &mut context, 1);
         assert_eq!(style.text_style_parent(), None);
-        assert_eq!(removed.as_component().unwrap().parent_handle(), Some(second));
+        assert_eq!(
+            removed.as_component().unwrap().parent_handle(),
+            Some(second)
+        );
         assert_eq!(twin.text_style_parent(), Some(first));
         drop(context);
         drop(arena);

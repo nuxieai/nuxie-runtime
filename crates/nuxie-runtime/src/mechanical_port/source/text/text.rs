@@ -1827,12 +1827,7 @@ impl Text {
                 .flatten()
             {
                 background.with_downcast_mut::<TextStyleBackground, _>(|background| {
-                    background.draw(
-                        renderer,
-                        &world_transform,
-                        blend_mode,
-                        additive_amount,
-                    );
+                    background.draw(renderer, &world_transform, blend_mode, additive_amount);
                 });
             }
         }
@@ -1843,12 +1838,7 @@ impl Text {
             match &self.draw_commands[index] {
                 TextDrawCommand::Style(style) => {
                     style.with_downcast_mut::<TextStylePaint, _>(|style| {
-                        style.draw(
-                            renderer,
-                            &world_transform,
-                            blend_mode,
-                            additive_amount,
-                        )
+                        style.draw(renderer, &world_transform, blend_mode, additive_amount)
                     });
                 }
                 TextDrawCommand::ColorGlyph {

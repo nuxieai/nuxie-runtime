@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `cd04cd3326c5b760e592079ef5dea1a81dfcd86e`
+- LAST_SYNCED_SHA: `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `cd04cd3326c5b760e592079ef5dea1a81dfcd86e` (refreshed 2026-10-04 by the daily upstream sync).
+- Current target: `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6` (refreshed 2026-10-04 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
   There are no upstream commits after the checkpoint at this fetched target.
-  All 189 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (211 after `5892bb05`); this
+  All 190 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (212 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -248,6 +248,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6` | Entire public executable delta remains parked under UNIV-3728: WAMR compiler patch for FP/min-max lowering, cold trap paths and CPU scheduling; ModuleTierLadder compiler-capability probing, cache revision/tuning identity, optimized guard-page tier and supported Apple CPU tuning. No shared native/Luau/renderer owner or test changes. Private AnimaScript compiler/library/REPL/editor-completion changes described in metadata are absent publicly and not claimed. Pins advance through a reviewed deferral, not AOT execution parity. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `cd04cd3326c5b760e592079ef5dea1a81dfcd86e` | Translate ORE dynamic UBO ranges and shared setBindGroup validation (group index/identity, count, device alignment and buffer bounds), default/query alignment features, and retained pre-pipeline bind groups flushed in slot order. Wire ranges through Metal, Vulkan, WebGPU, WebGL2 and deferred groups; expose alignment and backend bind errors through live Luau. Port both upstream bookkeeping regressions and focused binding coverage. Existing sizeless backend ranges already span the remaining buffer. D3D11 shadow-buffer/11.1 offset handling and D3D12 hookup are inapplicable to unshipped backends. Wasm guest feature ABI, GPU proxy and execution bindings remain deferred under UNIV-3728. Private benchmark tier/CLI changes described in metadata are absent publicly and not claimed. Independent source and separate Rust-integration reviews and applicable validation are recorded in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `1c54a97c8411a92b824b903fe083d3ba45a204ab` | Translate Luau MeshInstances binding-owned staged data, unchanged-size resize no-op, preserved entries on resize, dirty writes and one whole-array commit immediately before a valid instanced draw; a redraw without writes does not commit. Preserve staged partial writes/error order and retained renderer data between draws. Port all three upstream regressions for commit counts/data, incremental growth and out-of-range errors. Private metadata is not imported; no Wasm guest work is introduced. Independent source and separate Rust-integration reviews and applicable validation are recorded in the PR. | — |
 | `f6d5441de24fd0a3a190f4026a69a02ee62761a2` | Entire executable delta is confined to the parked WasmScriptingVM: tracked view-model/artboard handle indices, constant-time tracked-slot removal, and retained-instance indexed detached-view-model advancement safe across callback handle mutation. These guest-engine changes remain deferred under UNIV-3728. No Luau, shared native view-model, renderer or test source changes occur in the public delta. Private metadata is not imported. Pins advance through an explicitly accounted deferral after independent source and separate integration review, not an execution-parity claim. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

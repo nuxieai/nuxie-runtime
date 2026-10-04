@@ -594,26 +594,41 @@ impl CoreHandle {
 
     pub fn with<R>(&self, f: impl FnOnce(&dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
+        // Authored objects and runtime Artboard roots occupy disjoint slots.
+        // An authored receiver needs only its object borrow, not a second
+        // borrow of the empty root route. Release an empty object guard before
+        // root callbacks, which may resolve this same arena identity again.
+        {
+            let object = slot.object.borrow();
+            if let Some(object) = object.as_deref() {
+                return Some(f(object));
+            }
+        }
         let runtime_artboard = slot.runtime_artboard.borrow().clone();
         if let Some(root) = runtime_artboard {
             let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root.upgrade()?);
             return Some(root.with_artboard(|root| f(&root.base)));
         }
-        let object = slot.object.borrow();
-        let object = object.as_deref()?;
-        Some(f(object))
+        None
     }
 
     pub fn with_mut<R>(&self, f: impl FnOnce(&mut dyn CoreObject) -> R) -> Option<R> {
         let slot = self.slot()?;
+        // Keep the two payload cells separate: liveness/type queries remain
+        // available while an authored object is mutably borrowed. As above,
+        // never carry the empty object guard into a runtime-root callback.
+        {
+            let mut object = slot.object.borrow_mut();
+            if let Some(object) = object.as_deref_mut() {
+                return Some(f(object));
+            }
+        }
         let runtime_artboard = slot.runtime_artboard.borrow().clone();
         if let Some(root) = runtime_artboard {
             let root = crate::mechanical_port::source::artboard::RuntimeArtboardInstanceHandle::from_retained(root.upgrade()?);
             return Some(root.with_artboard_mut(|root| f(&mut root.base)));
         }
-        let mut object = slot.object.borrow_mut();
-        let object = object.as_deref_mut()?;
-        Some(f(object))
+        None
     }
 
     pub fn with_downcast<T: Any, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
@@ -941,6 +956,78 @@ impl Drop for Core {
 mod tests {
     use super::CoreArena;
     use crate::mechanical_port::source::{node::Node, shapes::shape::Shape};
+
+    #[test]
+    fn authored_access_keeps_live_metadata_available_during_mutable_borrow() {
+        let arena = CoreArena::default();
+        let node = arena.insert(Node::default());
+        let type_key = node.core_type().unwrap();
+        node.with_mut(|object| {
+            assert_eq!(object.core_type(), type_key);
+            assert!(node.is_alive());
+            assert!(arena.contains(&node));
+            assert!(node.is_type_of(type_key));
+            assert_eq!(node.type_metadata().unwrap().0, type_key);
+            assert!(node.runtime_artboard_instance().is_none());
+        })
+        .unwrap();
+        assert_eq!(node.with(|_| node.with(|_| 7)), Some(Some(7)));
+    }
+
+    #[test]
+    fn runtime_root_access_releases_the_empty_object_guard_before_callbacks() {
+        use crate::mechanical_port::source::artboard::{
+            ArtboardInstance, RuntimeArtboardInstanceHandle,
+        };
+        let runtime = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
+        let root = runtime.core_handle();
+        let arena = root.retain_arena().unwrap();
+        root.with(|_| {
+            assert!(arena.remove(&root).is_none());
+            assert!(root.with(|object| object.as_artboard().is_some()).unwrap());
+        })
+        .unwrap();
+        root.with_mut(|object| {
+            assert!(object.as_artboard_mut().is_some());
+            assert!(arena.remove(&root).is_none());
+            assert!(root.is_alive());
+            assert!(root.type_metadata().is_some());
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn runtime_access_retains_last_owner_until_callback_and_then_retires_identity() {
+        use crate::mechanical_port::source::artboard::Artboard;
+        for mutable in [false, true] {
+            let definitions = CoreArena::default();
+            let source = definitions.insert(Artboard::default());
+            let runtime = Artboard::instance_from_handle(&source).unwrap();
+            let _manager = runtime.ensure_focus_manager();
+            let weak = runtime.downgrade();
+            let root = runtime.core_handle();
+            let arena = root.retain_arena().unwrap();
+            let during_callback = || {
+                drop(runtime);
+                assert!(weak.upgrade().is_some());
+                assert!(root.is_alive());
+            };
+            if mutable {
+                root.with_mut(|_| during_callback()).unwrap();
+            } else {
+                root.with(|_| during_callback()).unwrap();
+            }
+            assert!(weak.upgrade().is_none());
+            assert!(!root.is_alive());
+            assert!(root.with(|_| ()).is_none());
+            assert!(root.with_mut(|_| ()).is_none());
+            let replacement = arena.insert(Node::default());
+            assert_eq!(root.identity_key().1, replacement.identity_key().1);
+            assert_ne!(root.identity_key().2, replacement.identity_key().2);
+            assert!(root.with(|_| ()).is_none());
+            assert!(replacement.with(|_| ()).is_some());
+        }
+    }
 
     #[test]
     fn draw_dispatch_metadata_matches_registered_owner_projections() {

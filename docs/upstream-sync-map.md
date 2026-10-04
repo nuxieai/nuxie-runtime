@@ -7,15 +7,15 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `81a73b8108814672748bfa4b1b19fde951776ba1`
+- LAST_SYNCED_SHA: `f6d5441de24fd0a3a190f4026a69a02ee62761a2`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `1c54a97c8411a92b824b903fe083d3ba45a204ab` (refreshed 2026-10-03 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are two upstream commits after the checkpoint at this fetched target.
-  All 186 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (208 after `5892bb05`); this
+  There is one upstream commit after the checkpoint at this fetched target.
+  All 187 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (209 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
@@ -227,6 +227,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f6d5441de24fd0a3a190f4026a69a02ee62761a2` | Entire executable delta is confined to the parked WasmScriptingVM: tracked view-model/artboard handle indices, constant-time tracked-slot removal, and retained-instance indexed detached-view-model advancement safe across callback handle mutation. These guest-engine changes remain deferred under UNIV-3728. No Luau, shared native view-model, renderer or test source changes occur in the public delta. Private metadata is not imported. Pins advance through an explicitly accounted deferral after independent source and separate integration review, not an execution-parity claim. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `81a73b8108814672748bfa4b1b19fde951776ba1` | Source-verify existing zero-z construction for Vector.xy/origin, Vec2 transport, node position/scale, pointer positions and gamepad sticks. The live luaur adapter already pushes fully initialized three-component vectors; preserve that equivalent behavior and leave xyz/vector math and the unused low-level fork primitive unchanged. Port upstream's stale-stack regression with the approved typed-vector transport adaptation. Private metadata is not imported. Independent source and separate Rust-integration review and applicable validation are recorded in the PR; no new full-corpus or hardware claim. | — |
 | `6cd5d108fdae8fa2d00b56eeb857754adb9b67be` | Translate optional script networking (`fetch`, byte-oriented HTTP values, request policy/limits, owner-thread settlement, cancellation/watchdog and Apple platform transport through Rust bindings) and `decodeFile` with strict signed-script admission, a lazy private VM, retained decoded files/artboards and their own view-model bindings. Networking is compiled only with `scriptnet` and no provider is installed by default; no consumer app is enabled. Translate bounded binary readers, manifest-path failure propagation, import cycle/depth/work limits, nested-artboard lifetime/stateful handling, coroutine-safe Lua property access, and shared async polling budget/pending query. Port applicable policy, fetch, Apple-provider, decoded-file, properties and malformed-import tests and pin six new fixtures. Wasm guest network/file ABI, NetWire tests, held async outcomes, write-only guest memory staging, compiler-path access and iOS prelinked AOT remain parked under UNIV-3728. Private CLI/device/emulator/build work mentioned in metadata is not present in the public delta and is not claimed. | — |
 | `53419065f067f9e32ede9f4f5e28e41e3ec89f29` | Translate opt-in ORE GPU profiling state, environment seed and per-label reporting; Vulkan timestamp-query allocation, three-slot safe-frame resolution and pass begin/end writes; and render-pass label ownership across Lua, recording and replay, including the new upstream recording test. Other backends retain the toggle but publish no timing rows, as upstream. Wasm label ABI/proxy changes and WAMR linear-memory growth patch remain parked under UNIV-3728. Standalone player --gpu-profile and console-only benchmark NO_GETENV guard have no shipped Rust host counterpart; no player CLI, console support or performance campaign is claimed. Independent reviews and applicable validation are recorded in PR, with hardware limitations explicit. | — |

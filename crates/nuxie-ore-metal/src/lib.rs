@@ -24,6 +24,10 @@ pub mod ore_cmd;
 
 pub mod bind_group {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_hpp::*;
+    pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{validateSetBindGroup, scriptDynamicOffsetAlignment};
+}
+pub mod deferred_bind_groups {
+    pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_deferred_bind_groups_hpp::*;
 }
 pub mod bind_group_layout {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_layout_hpp::*;

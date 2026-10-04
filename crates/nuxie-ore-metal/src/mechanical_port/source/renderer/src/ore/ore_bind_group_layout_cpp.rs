@@ -18,6 +18,108 @@ use super::*;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::AnyResourceHandle;
 use crate::{context::ContextApi, shader_module::ShaderModule};
 
+impl BindGroup {
+    /// Protected upstream operation exposed to sibling backend crates.
+    /// The descriptor's slice counts must first pass `validateBindGroupDesc`.
+    pub fn recordDynamicRanges(&mut self, desc: &BindGroupDesc<'_>) {
+        self.m_dynamicRanges.clear();
+        let Some(layout) = desc.layout.and_then(AnyResourceHandle::bindGroupLayoutBase) else {
+            return;
+        };
+        for ubo in &desc.ubos[..desc.uboCount as usize] {
+            if !layout.hasDynamicOffset(ubo.slot) {
+                continue;
+            }
+            if let Some(bufferSize) = ubo.buffer.and_then(AnyResourceHandle::size).map(u64::from) {
+                let size = if ubo.size != 0 {
+                    u64::from(ubo.size)
+                } else {
+                    bufferSize.saturating_sub(u64::from(ubo.offset))
+                };
+                self.m_dynamicRanges.push(DynamicUBORange {
+                    slot: ubo.slot,
+                    offset: ubo.offset,
+                    size: size as u32,
+                    bufferSize,
+                });
+            }
+        }
+        self.m_dynamicRanges
+            .sort_unstable_by_key(|range| range.slot);
+    }
+}
+
+pub fn validateSetBindGroup(
+    groupIndex: u32,
+    group: Option<&BindGroup>,
+    offsets: Option<&[u32]>,
+    offsetCount: u32,
+    alignment: u32,
+    mut outError: Option<&mut String>,
+) -> bool {
+    let mut fail = |message: String| {
+        if let Some(error) = outError.as_mut() {
+            **error = message;
+        }
+        false
+    };
+    if groupIndex >= kMaxBindGroups {
+        return fail(format!(
+            "setBindGroup: groupIndex must be in [0, {kMaxBindGroups}) (got {groupIndex})"
+        ));
+    }
+    if offsetCount > kMaxDynamicOffsets {
+        return fail(dynamic_offset_count_message(
+            offsetCount,
+            kMaxDynamicOffsets,
+        ));
+    }
+    let Some(group) = group else {
+        return true;
+    };
+    if group.layout().is_some() && group.groupIndex() != groupIndex {
+        return fail(format!(
+            "setBindGroup: BindGroup was made for group {}, not {groupIndex}",
+            group.groupIndex()
+        ));
+    }
+    if offsetCount != group.dynamicOffsetCount() {
+        return fail(format!(
+            "setBindGroup: dynamicOffsets count {offsetCount} does not match the BindGroup's declared dynamic UBO count {}",
+            group.dynamicOffsetCount()
+        ));
+    }
+    let ranges = group.dynamicRanges();
+    let paired = ranges.len() == offsetCount as usize;
+    for i in 0..offsetCount as usize {
+        let offset = offsets.expect("dynamic offsets")[i];
+        if alignment != 0 && offset % alignment != 0 {
+            return fail(format!(
+                "setBindGroup: dynamicOffsets[{i}] = {offset} is not a multiple of {alignment} (alignment requirement)"
+            ));
+        }
+        if paired {
+            let range = &ranges[i];
+            if u64::from(offset) + u64::from(range.offset) + u64::from(range.size)
+                > range.bufferSize
+            {
+                return fail(format!(
+                    "setBindGroup: dynamicOffsets[{i}] = {offset} moves @binding({}) past the end of its {} byte buffer",
+                    range.slot, range.bufferSize
+                ));
+            }
+        }
+    }
+    true
+}
+
+pub fn scriptDynamicOffsetAlignment(context: Option<&dyn ContextApi>) -> u32 {
+    context.filter(|context| context.featuresKnown()).map_or(
+        Features::default().minUniformBufferOffsetAlignment,
+        |context| context.features().minUniformBufferOffsetAlignment,
+    )
+}
+
 // namespace rive::ore
 
 #[cfg(all(test, feature = "with-rive-tools"))]
@@ -374,9 +476,8 @@ fn samplerPairsDepthOnly(
     groupIndex: u32,
     binding: u32,
 ) -> bool {
-    let fragment = fragmentPairSource.filter(|fragment| {
-        !vertexPairSource.is_some_and(|vertex| std::ptr::eq(vertex, *fragment))
-    });
+    let fragment = fragmentPairSource
+        .filter(|fragment| !vertexPairSource.is_some_and(|vertex| std::ptr::eq(vertex, *fragment)));
     let mut paired = false;
     for module in [vertexPairSource, fragment].into_iter().flatten() {
         for p in &module.m_textureSamplerPairs {
@@ -404,7 +505,13 @@ fn collectDepthOnlySamplers(
         let e = bm.at(i);
         if u32::from(e.group) == groupIndex
             && e.kind == ResourceKind::Sampler
-            && samplerPairsDepthOnly(bm, vertexPairSource, fragmentPairSource, groupIndex, u32::from(e.binding))
+            && samplerPairsDepthOnly(
+                bm,
+                vertexPairSource,
+                fragmentPairSource,
+                groupIndex,
+                u32::from(e.binding),
+            )
         {
             bindings.push(u32::from(e.binding));
         }
@@ -462,7 +569,8 @@ pub fn makeBindGroupLayoutFromBindingMap(
     };
     if !nonFiltering.is_empty() {
         for e in entries.iter_mut().take(n as usize) {
-            e.samplerNonFiltering = e.kind == BindingKind::sampler && nonFiltering.contains(&e.binding);
+            e.samplerNonFiltering =
+                e.kind == BindingKind::sampler && nonFiltering.contains(&e.binding);
         }
     }
     let layout = ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
@@ -943,6 +1051,18 @@ pub fn validatePipelineDesc(
 /// Validate UBO ranges before a backend touches native objects. Null layouts
 /// and missing bindings/buffers remain the backend's own errors to name.
 pub fn validateBindGroupDesc(desc: &BindGroupDesc<'_>, mut outError: Option<&mut String>) -> bool {
+    // Rust's pointer/count adaptation carries a bounded slice. Reject an
+    // invalid count before recording dynamic ranges or touching native objects.
+    if desc.uboCount as usize > desc.ubos.len() {
+        if let Some(error) = outError.as_mut() {
+            **error = format!(
+                "uboCount {} exceeds the supplied UBO entry count {}",
+                desc.uboCount,
+                desc.ubos.len()
+            );
+        }
+        return false;
+    }
     let Some(layout) = desc.layout.and_then(AnyResourceHandle::bindGroupLayoutBase) else {
         return true;
     };

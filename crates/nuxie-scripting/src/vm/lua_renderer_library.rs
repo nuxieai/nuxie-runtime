@@ -194,7 +194,8 @@ impl RendererBindings {
                 maxColorAttachments,
                 maxUniformBufferSize,
                 maxSamplers,
-                maxSamples
+                maxSamples,
+                minUniformBufferOffsetAlignment
             );
         } else {
             for name in [
@@ -221,6 +222,7 @@ impl RendererBindings {
                 ("maxUniformBufferSize", 16384),
                 ("maxSamplers", 16),
                 ("maxSamples", 4),
+                ("minUniformBufferOffsetAlignment", 256),
             ] {
                 table.set(name, value)?;
             }

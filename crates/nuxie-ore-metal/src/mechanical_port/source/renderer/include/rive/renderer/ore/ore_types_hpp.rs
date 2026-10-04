@@ -1842,6 +1842,7 @@ pub struct Features {
     pub maxTextureSizeCube: u32,
     pub maxTextureSize3D: u32,
     pub maxUniformBufferSize: u32,
+    pub minUniformBufferOffsetAlignment: u32,
     pub maxVertexAttributes: u32,
     pub maxSamplers: u32,
     // Maximum MSAA sample count supported for color render targets.
@@ -1873,6 +1874,7 @@ impl Default for Features {
             maxTextureSizeCube: 4096,
             maxTextureSize3D: 256,
             maxUniformBufferSize: 16384,
+            minUniformBufferOffsetAlignment: 256,
             maxVertexAttributes: 16,
             maxSamplers: 16,
             maxSamples: 4,

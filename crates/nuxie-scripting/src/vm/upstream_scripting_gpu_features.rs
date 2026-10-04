@@ -173,9 +173,10 @@ fn recording_script_reads_replay_device_capabilities() {
     let device: OreContextHandle = Rc::new(RefCell::new(FakeDeviceContext::new(Features {
         colorBufferHalfFloat: true,
         maxSamples: 8,
+        minUniformBufferOffsetAlignment: 64,
         ..Features::default()
     })));
-    let script = "local f = gpuFeatures()\nassert(f.colorBufferHalfFloat == true, 'half float denied')\nassert(f.maxSamples == 8, 'maxSamples ' .. f.maxSamples)\n";
+    let script = "local f = gpuFeatures()\nassert(f.colorBufferHalfFloat == true, 'half float denied')\nassert(f.maxSamples == 8, 'maxSamples ' .. f.maxSamples)\nassert(f.minUniformBufferOffsetAlignment == 64)\n";
     let recorder = DeferredOreContext::fromReal(Some(device.clone()));
     assert!(run_with_ore_context(Rc::new(RefCell::new(recorder)), script).is_empty());
     let mut recorder = DeferredOreContext::fromReal(None);
@@ -188,6 +189,19 @@ fn recording_script_reads_replay_device_capabilities() {
         )
         .is_empty()
     );
+}
+
+#[test]
+fn missing_gpu_context_reports_default_uniform_alignment() {
+    let vm = ScriptVm::new();
+    let features = vm.renderer_bindings.gpu_features(vm.lua()).unwrap();
+    assert_eq!(
+        features
+            .get::<u32>("minUniformBufferOffsetAlignment")
+            .unwrap(),
+        256
+    );
+    assert!(features.is_readonly());
 }
 
 #[test]

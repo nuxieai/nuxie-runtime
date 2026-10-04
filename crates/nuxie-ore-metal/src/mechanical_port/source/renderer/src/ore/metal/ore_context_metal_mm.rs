@@ -1205,6 +1205,7 @@ impl ContextMetal {
         let mut bind_group = BindGroupMetal::new();
         bind_group.base.m_context = Arc::downgrade(&self.base.state);
         bind_group.base.m_layoutRef = Some(layoutHandle.clone());
+        bind_group.base.recordDynamicRanges(desc);
 
         // Resolve per-stage Metal slots from the layout's pre-resolved
         // nativeSlotVS/nativeSlotFS fields. The source helper deliberately

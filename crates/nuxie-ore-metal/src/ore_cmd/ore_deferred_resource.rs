@@ -363,6 +363,7 @@ impl DeferredBindGroup {
                 base.m_dynamicOffsetCount += 1;
             }
         }
+        base.recordDynamicRanges(desc);
         Self::fromBase(base, h, g, s, a)
     }
 }

@@ -30,6 +30,7 @@ fn pass_closed_by_enclosing_pass_expires_for_script() {
         .lua()
         .create_userdata(pass::Pass {
             pass: Some(Box::new(inner)),
+            deferred_bind_groups: None,
             finished: false,
             sample_count: 1,
             pipeline_set: false,
@@ -101,6 +102,79 @@ fn recording_vm() -> ScriptVm {
         Canvas::create(vm.lua(), RendererBindings::for_lua(vm.lua()).unwrap(), 0, 0).unwrap();
     vm.lua().globals().set("canvas", canvas).unwrap();
     vm
+}
+
+// cd04cd33: bindings made before the first pipeline wait at the Lua owner,
+// rather than issuing a backend bind with no pipeline layout.
+#[test]
+fn bind_groups_wait_for_first_pipeline() {
+    use nuxie_ore_metal::cmd::command_stream::CommandReader;
+    use nuxie_ore_metal::ore_cmd::{
+        ore_command_buffer::OreCommandBuffer,
+        ore_commands::{CommandType, SetBindGroupCmd, SetPipelineCmd},
+        ore_render_pass_recording::RenderPassRecording,
+    };
+    let vm = recording_vm();
+    let ore = context(vm.lua()).unwrap();
+    let stream = Rc::new(RefCell::new(OreCommandBuffer::default()));
+    let inner = RenderPassRecording::new(
+        Some(ore.borrow().contextBase()),
+        stream.clone(),
+        &RenderPassDesc {
+            colorCount: 0,
+            ..RenderPassDesc::default()
+        },
+    );
+    let rp = vm
+        .lua()
+        .create_userdata(pass::Pass {
+            pass: Some(Box::new(inner)),
+            deferred_bind_groups: None,
+            finished: false,
+            sample_count: 1,
+            pipeline_set: false,
+            draw_call_count: 0,
+            label: String::new(),
+        })
+        .unwrap();
+    vm.lua().globals().set("rp", rp.clone()).unwrap();
+    vm.lua()
+        .load(
+            r#"
+        layout = GPUBindGroupLayout.new { shader = shader }
+        bg = GPUBindGroup.new { layout = layout }
+        pipeline = GPUPipeline.new { vertex = shader, vertexLayout = {}, colorTargets = false }
+    "#,
+        )
+        .exec()
+        .unwrap();
+    let before = stream.borrow().command_bytes().len();
+    vm.lua().load("rp:setBindGroup(0, bg)").exec().unwrap();
+    assert_eq!(stream.borrow().command_bytes().len(), before);
+    assert!(
+        rp.borrow::<pass::Pass>()
+            .unwrap()
+            .deferred_bind_groups
+            .is_some()
+    );
+    vm.lua().load("rp:setPipeline(pipeline)").exec().unwrap();
+    {
+        let stream = stream.borrow();
+        let mut reader = CommandReader::new(&stream.command_bytes()[before..], stream.blob_bytes());
+        assert_eq!(reader.next::<CommandType>(), Some(CommandType::setPipeline));
+        assert!(reader.next::<SetPipelineCmd>().is_some());
+        assert_eq!(
+            reader.next::<CommandType>(),
+            Some(CommandType::setBindGroup)
+        );
+        let binding = reader.next::<SetBindGroupCmd>().unwrap();
+        assert_eq!(binding.groupIndex, 0);
+        assert_eq!(binding.dynamicOffsetCount, 0);
+        assert_eq!(reader.next::<CommandType>(), None);
+        assert!(!reader.overrun());
+    }
+    assert!(rp.borrow::<pass::Pass>().unwrap().pipeline_set);
+    vm.lua().load("rp:finish()").exec().unwrap();
 }
 
 #[test]

@@ -5,6 +5,8 @@
 
 #[path = "ore/ore_bind_group_hpp.rs"]
 pub mod ore_bind_group_hpp;
+#[path = "ore/ore_deferred_bind_groups_hpp.rs"]
+pub mod ore_deferred_bind_groups_hpp;
 #[path = "ore/ore_bind_group_layout_hpp.rs"]
 pub mod ore_bind_group_layout_hpp;
 #[path = "ore/ore_binding_map_hpp.rs"]

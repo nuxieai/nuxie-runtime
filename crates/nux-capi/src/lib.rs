@@ -3712,10 +3712,15 @@ fn validate_focus_inputs(
                         NuxStatus::LimitExceeded,
                         "focus text exceeds the step byte bound",
                     ))?;
-                PreparedFocusInput::Text(
-                    with_utf8_view(input.text, str::to_owned)
-                        .map_err(|status| (status, "focus text must be valid UTF-8"))?,
-                )
+                PreparedFocusInput::Text(with_utf8_view(input.text, str::to_owned).map_err(
+                    |status| {
+                        let message = match status {
+                            NuxStatus::NullArgument => "focus text pointer is null",
+                            _ => "focus text must be valid UTF-8",
+                        };
+                        (status, message)
+                    },
+                )?)
             }
             _ => return Err((NuxStatus::InvalidArgument, "unknown focus input kind")),
         };
@@ -4850,7 +4855,7 @@ pub unsafe extern "C" fn nux_player_step_result_focus_input(
 /// Non-state-machine players return NOT_FOUND.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_focus_state(
-    player: *mut NuxPlayer,
+    player: *const NuxPlayer,
     out_state: *mut NuxPlayerFocusState,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {

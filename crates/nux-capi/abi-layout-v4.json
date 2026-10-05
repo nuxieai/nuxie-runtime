@@ -434,7 +434,7 @@
     },
     {
       "name": "NuxMetalRenderOperation",
-      "size": 64,
+      "size": 72,
       "alignment": 8,
       "fields": [
         {
@@ -472,6 +472,10 @@
         {
           "name": "readback_bytes_per_row",
           "offset": 56
+        },
+        {
+          "name": "layout_scale_factor",
+          "offset": 64
         }
       ]
     },

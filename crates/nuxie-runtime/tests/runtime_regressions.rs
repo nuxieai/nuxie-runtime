@@ -108,17 +108,19 @@ fn check_fill_width_text(participant_layout: bool) {
         i32::from(TextBase::WIDTH_PROPERTY_KEY),
         1.0
     ));
-    for (content, expected_lines) in [("Choose", 1), ("Choose\nChoose\nChoose", 3)] {
+    // Inter 40px: two words fit in 354px, while only one fits in 200px.
+    // First-line height is 47.521587px; each later line advances 44px.
+    for (content, width, expected_lines, expected_height) in [
+        ("Choose", 354.0, 1, 47.521587),
+        ("Choose\nChoose\nChoose", 354.0, 3, 135.52159),
+        ("Choose Choose Choose", 354.0, 2, 91.52159),
+        ("Choose Choose Choose", 200.0, 3, 135.52159),
+    ] {
         set_text(&text, content);
-        let expected_height = if expected_lines == 1 {
-            47.521587
-        } else {
-            135.52159
-        };
         let first_measure = text
             .with_downcast_mut::<Text, _>(|text| {
                 text.measure_layout(
-                    354.0,
+                    width,
                     LayoutMeasureMode::Exactly,
                     f32::NAN,
                     LayoutMeasureMode::Undefined,
@@ -133,7 +135,7 @@ fn check_fill_width_text(participant_layout: bool) {
 
         text.with_downcast_mut::<Text, _>(|text| {
             text.control_size(
-                Vec2D::new(354.0, 0.0),
+                Vec2D::new(width, 0.0),
                 LayoutScaleType::Fill,
                 LayoutScaleType::Hug,
                 LayoutDirection::Ltr,
@@ -144,7 +146,7 @@ fn check_fill_width_text(participant_layout: bool) {
         let (measured, lines) = text
             .with_downcast_mut::<Text, _>(|text| {
                 let measured = text.measure_layout(
-                    354.0,
+                    width,
                     LayoutMeasureMode::Exactly,
                     f32::NAN,
                     LayoutMeasureMode::Undefined,

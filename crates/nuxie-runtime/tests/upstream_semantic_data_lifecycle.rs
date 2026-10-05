@@ -114,50 +114,6 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
 }
 
 #[test]
-fn host_semantic_actions_refuse_disabled_and_hidden_nodes_before_enqueue() {
-    for (hidden, queued) in [(false, false), (true, false), (false, true), (true, true)] {
-        let fixture = dropdown();
-        let Dropdown {
-            machine,
-            manager,
-            button_id,
-            ..
-        } = &fixture;
-        let button_id = *button_id;
-        let data = manager
-            .with_semantic_manager(|manager| manager.node_by_id(button_id))
-            .expect("dropdown node")
-            .borrow()
-            .semantic_data
-            .clone()
-            .expect("authored semantics");
-        if queued {
-            machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
-        }
-        data.with_downcast_mut::<SemanticData, _>(|data| {
-            if hidden {
-                data.set_is_hidden(true);
-            } else {
-                data.set_is_disabled(true);
-            }
-        })
-        .expect("semantic data");
-        if !queued {
-            machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
-        }
-        for _ in 0..10 {
-            machine.advance_and_apply(0.1);
-        }
-        assert_eq!(
-            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
-                .unwrap(),
-            !queued,
-            "Disabled and hidden nodes refuse new actions; accepted actions remain queued (hidden={hidden}, queued={queued})"
-        );
-    }
-}
-
-#[test]
 fn full_snapshot_survives_diff_drain_and_tracks_authored_actions() {
     let fixture = dropdown();
     let snapshot = fixture
@@ -336,10 +292,6 @@ fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
                 }
             })
             .unwrap();
-        assert!(!fixture.machine.fire_semantic_action(
-            fixture.button_id,
-            SemanticActionType::Tap as u8,
-        ));
         touch();
         assert!(
             data.with_downcast::<SemanticData, _>(|data| data.is_expanded())

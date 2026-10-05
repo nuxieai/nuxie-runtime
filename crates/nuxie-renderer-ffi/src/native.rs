@@ -1,7 +1,8 @@
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, Mat2D, PathVerb,
-    RawPath, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint,
-    RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin, Vec2D,
+    RawPath, RawPathRef, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
+    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 use std::any::Any;
 use std::error::Error;
@@ -408,7 +409,7 @@ impl Factory for FfiFactory {
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
-        let (verbs, points) = raw_path_parts(&raw_path);
+        let (verbs, points) = raw_path_parts(raw_path.as_ref());
         let handle = unsafe {
             ffi::rive_ffi_make_render_path(
                 self.context.as_ptr(),
@@ -943,7 +944,7 @@ impl RenderPath for FfiRenderPath {
         };
     }
 
-    fn add_raw_path(&mut self, path: &RawPath) {
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
         let (verbs, points) = raw_path_parts(path);
         unsafe {
             ffi::rive_ffi_render_path_add_raw_path(
@@ -1066,7 +1067,7 @@ impl RenderBuffer for FfiRenderBuffer {
     }
 }
 
-fn raw_path_parts(path: &RawPath) -> (Vec<u8>, Vec<FfiVec2D>) {
+fn raw_path_parts(path: RawPathRef<'_>) -> (Vec<u8>, Vec<FfiVec2D>) {
     (
         path.verbs().iter().map(|verb| *verb as u8).collect(),
         path.points().iter().copied().map(Into::into).collect(),

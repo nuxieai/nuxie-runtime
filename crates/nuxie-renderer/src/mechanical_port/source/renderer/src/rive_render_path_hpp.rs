@@ -144,7 +144,9 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{RenderPath, Re
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::{
     LiteRttiBase, LiteRttiCastFrom, LiteRttiTypeId, CONST_ID,
 };
-use nuxie_render_api::{Aabb, FillRule, Mat2D, RawPath, RenderPath as ApiRenderPath, Vec2D};
+use nuxie_render_api::{
+    Aabb, FillRule, Mat2D, RawPath, RawPathRef, RenderPath as ApiRenderPath, Vec2D,
+};
 use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -411,9 +413,9 @@ unsafe impl RenderPathContract for RiveRenderPath {
         }
         self.m_dirt.set(u32::MAX);
     }
-    fn addRawPath(&mut self, path: &RawPath) {
+    fn addRawPath(&mut self, path: RawPathRef<'_>) {
         self.assertRawPathMutationsUnlocked();
-        self.m_rawPath.add_path(path, Mat2D::IDENTITY);
+        self.m_rawPath.add_path_view(path);
         self.m_dirt.set(u32::MAX);
     }
 }
@@ -447,7 +449,7 @@ impl ApiRenderPath for RiveRenderPath {
             }
         }
     }
-    fn add_raw_path(&mut self, path: &RawPath) {
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
         self.addRawPath(path);
     }
     fn move_to(&mut self, x: f32, y: f32) {
@@ -568,7 +570,7 @@ mod upstream_1db281b3_triangulation_cache_tests {
         extra.line_to(500.0, 0.0);
         extra.line_to(400.0, 100.0);
         extra.close();
-        path.addRawPath(&extra);
+        path.addRawPath(extra.as_ref());
         repromote(&path, &mut allocator, &mut last_mutation_id);
 
         path.rewind();
@@ -601,7 +603,7 @@ mod mat2d_caller_tests {
         assert_eq!(path.m_rawPath.points().len(), 1);
 
         let mut trusted = RiveRenderPath::default();
-        trusted.add_raw_path(&degenerate);
+        trusted.add_raw_path(degenerate.as_ref());
         assert_eq!(trusted.m_rawPath.verbs().len(), 5);
     }
 
@@ -612,13 +614,13 @@ mod mat2d_caller_tests {
         let mut path = RiveRenderPath::default();
         let mut first = RawPath::new();
         first.add_rect_with_direction(Aabb::new(0., 0., 10., 10.), PathDirection::Clockwise);
-        path.add_raw_path(&first);
+        path.add_raw_path(first.as_ref());
         assert_eq!(path.getBounds().max().x, 10.);
         assert_eq!(path.getCoarseArea(), 100.);
         let first_mutation = path.getRawPathMutationID();
         let mut second = RawPath::new();
         second.add_rect_with_direction(Aabb::new(20., 20., 40., 40.), PathDirection::Clockwise);
-        path.add_raw_path(&second);
+        path.add_raw_path(second.as_ref());
         assert_eq!(path.getBounds().max().x, 40.);
         assert_eq!(path.getCoarseArea(), 100. + 400.);
         assert_ne!(path.getRawPathMutationID(), first_mutation);
@@ -788,7 +790,7 @@ impl ApiRenderPath for RiveRenderPathHandle {
             self.source_mut().addRenderPathBackwards(other, &matrix);
         }
     }
-    fn add_raw_path(&mut self, path: &RawPath) {
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
         self.source_mut().addRawPath(path);
     }
     fn move_to(&mut self, x: f32, y: f32) {

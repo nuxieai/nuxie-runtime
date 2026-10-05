@@ -173,7 +173,7 @@ fn replay_self_append_matches_a_frozen_non_deferred_source_copy() {
     let mut expected_path = expected.make_render_path(source_geometry.clone(), FillRule::EvenOdd);
     let mut transformed_copy = RawPath::new();
     transformed_copy.add_path(&source_geometry, matrix);
-    expected_path.add_raw_path(&transformed_copy);
+    expected_path.add_raw_path(transformed_copy.as_ref());
 
     assert_eq!(&*actual.bytes(), &*expected.bytes());
 }

@@ -576,7 +576,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                     reader.blob_at(c.points_offset, c.point_count.wrapping_mul(8)),
                 );
                 if let Some(path) = table.paths.get(c.path) {
-                    path.borrow_mut().add_raw_path(&raw);
+                    path.borrow_mut().add_raw_path(raw.as_ref());
                 }
             }
             RenderCmd::PathAddRenderPath => {

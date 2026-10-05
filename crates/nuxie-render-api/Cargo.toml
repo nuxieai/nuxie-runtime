@@ -6,6 +6,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+bytemuck = { version = "1.24", features = ["derive"] }
 harfrust = "0.12"
 nuxie-audio = { path = "../nuxie-audio" }
 nuxie-binary = { path = "../nuxie-binary" }

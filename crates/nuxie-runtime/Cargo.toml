@@ -30,6 +30,7 @@ default = ["js-host-seed"]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 anyhow = "1"
+bytemuck = { version = "1.24", features = ["derive"] }
 harfrust = "0.12"
 nuxie-script-signature = { path = "../nuxie-script-signature" }
 nuxie-audio = { path = "../nuxie-audio" }

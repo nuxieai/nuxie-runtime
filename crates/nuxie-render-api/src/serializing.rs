@@ -1,8 +1,8 @@
 use super::{
     encoded_image_dimensions, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError,
-    ImageSampler, LayerMaskMode, Mat2D, PathVerb, RawPath, RenderBuffer, RenderBufferFlags,
-    RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer,
-    StrokeCap, StrokeJoin, StrokePosition,
+    ImageSampler, LayerMaskMode, Mat2D, PathVerb, RawPath, RawPathRef, RenderBuffer,
+    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
+    RenderShader, Renderer, StrokeCap, StrokeJoin, StrokePosition,
 };
 use crate::{
     DeferredCanvasHost, DeferredCanvasHostHandle, ImageMeshInstanceData, ImageMeshInstances,
@@ -46,7 +46,7 @@ impl Writer {
         self.bytes.extend_from_slice(&value.to_le_bytes());
     }
 
-    fn raw_path(&mut self, path: &RawPath) {
+    fn raw_path(&mut self, path: RawPathRef<'_>) {
         serialize_raw_path(self, path);
     }
 }
@@ -351,7 +351,7 @@ impl Factory for SerializingFactory {
             writer.varuint(id);
             writer.varuint(ADD_RAW_PATH);
             writer.varuint(id);
-            writer.raw_path(&raw_path);
+            writer.raw_path(raw_path.as_ref());
         }
         Box::new(SerializingRenderPath {
             writer: Rc::clone(&self.writer),
@@ -642,7 +642,7 @@ struct SerializingRenderPath {
 }
 
 impl SerializingRenderPath {
-    fn emit_raw_path(&self, path: &RawPath) {
+    fn emit_raw_path(&self, path: RawPathRef<'_>) {
         let mut writer = self.writer.borrow_mut();
         writer.varuint(ADD_RAW_PATH);
         writer.varuint(self.id);
@@ -684,50 +684,50 @@ impl RenderPath for SerializingRenderPath {
         let path = serializing_path(path);
         let mut appended = RawPath::new();
         appended.add_path(&path.raw_path, transform);
-        self.add_raw_path(&appended);
+        self.add_raw_path(appended.as_ref());
     }
 
     fn add_render_path_self(&mut self, transform: Mat2D) {
         let source = self.raw_path.clone();
         let mut appended = RawPath::new();
         appended.add_path(&source, transform);
-        self.add_raw_path(&appended);
+        self.add_raw_path(appended.as_ref());
     }
 
     fn add_render_path_backwards(&mut self, path: &dyn RenderPath, transform: Mat2D) {
         let path = serializing_path(path);
         let mut appended = RawPath::new();
         appended.add_path_backwards_with_transform(&path.raw_path, transform);
-        self.add_raw_path(&appended);
+        self.add_raw_path(appended.as_ref());
     }
 
-    fn add_raw_path(&mut self, path: &RawPath) {
-        self.raw_path.add_path(path, Mat2D::IDENTITY);
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
+        self.raw_path.add_path_view(path);
         self.emit_raw_path(path);
     }
 
     fn move_to(&mut self, x: f32, y: f32) {
         let mut path = RawPath::new();
         path.move_to(x, y);
-        self.add_raw_path(&path);
+        self.add_raw_path(path.as_ref());
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
         let mut path = RawPath::new();
         path.line_to(x, y);
-        self.add_raw_path(&path);
+        self.add_raw_path(path.as_ref());
     }
 
     fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
         let mut path = RawPath::new();
         path.cubic_to(ox, oy, ix, iy, x, y);
-        self.add_raw_path(&path);
+        self.add_raw_path(path.as_ref());
     }
 
     fn close(&mut self) {
         let mut path = RawPath::new();
         path.close();
-        self.add_raw_path(&path);
+        self.add_raw_path(path.as_ref());
     }
 }
 

@@ -155,7 +155,7 @@ fn serialized_2d_commands_replay_byte_identically() {
     cp.line_to(20.0, 0.0);
     cp.line_to(20.0, 20.0);
     cp.close();
-    clip.add_raw_path(&cp);
+    clip.add_raw_path(cp.as_ref());
     let grad = a.make_linear_gradient(
         0.0,
         0.0,

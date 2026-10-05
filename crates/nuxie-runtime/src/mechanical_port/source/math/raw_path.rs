@@ -151,6 +151,11 @@ impl RawPath {
     pub fn verbs(&self) -> &[PathVerb] {
         &self.verbs
     }
+    /// Borrow the original path buffers at the renderer boundary, without
+    /// replaying geometry or changing contour construction state.
+    pub fn as_render_path_ref(&self) -> nuxie_render_api::RawPathRef<'_> {
+        nuxie_render_api::RawPathRef::new(&self.verbs, bytemuck::cast_slice(&self.points))
+    }
     pub fn verbs_mut(&mut self) -> &mut [PathVerb] {
         &mut self.verbs
     }
@@ -768,6 +773,68 @@ fn expand_cubic_bounds_for_axis(
         expand_bounds_to_cubic_point(bounds, axis, d2a / (d2a - d2b), start, cp1, cp2, end);
     }
 }
+#[cfg(test)]
+mod render_view_tests {
+    use super::{PathVerb, RawPath, Vec2D};
+
+    #[test]
+    fn render_view_borrows_original_buffers_and_preserves_order_and_float_bits() {
+        let verbs = [
+            PathVerb::Move,
+            PathVerb::Line,
+            PathVerb::Quad,
+            PathVerb::Cubic,
+            PathVerb::Close,
+        ];
+        let points = [
+            Vec2D::new(-0.0, 0.0),
+            Vec2D::new(f32::from_bits(0x7fc0_1234), f32::NEG_INFINITY),
+            Vec2D::new(f32::INFINITY, f32::from_bits(1)),
+            Vec2D::new(1.0, -2.0),
+            Vec2D::new(3.0, -4.0),
+            Vec2D::new(5.0, -6.0),
+            Vec2D::new(7.0, -8.0),
+        ];
+        let path = RawPath::from_slices(&verbs, &points);
+        let view = path.as_render_path_ref();
+
+        assert!(!view.empty());
+        assert_eq!(view.verbs().as_ptr(), path.verbs().as_ptr());
+        assert_eq!(
+            view.points().as_ptr().cast::<u8>(),
+            path.points().as_ptr().cast::<u8>()
+        );
+        assert_eq!(view.verbs(), verbs);
+        assert_eq!(
+            view.verbs()
+                .iter()
+                .map(|verb| *verb as u8)
+                .collect::<Vec<_>>(),
+            [0, 1, 2, 4, 5]
+        );
+        assert_eq!(view.points().len(), points.len());
+        for (actual, expected) in view.points().iter().zip(points) {
+            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+        }
+    }
+
+    #[test]
+    fn render_view_preserves_empty_storage() {
+        let path = RawPath::default();
+        let view = path.as_render_path_ref();
+
+        assert!(view.empty());
+        assert!(view.verbs().is_empty());
+        assert!(view.points().is_empty());
+        assert_eq!(view.verbs().as_ptr(), path.verbs().as_ptr());
+        assert_eq!(
+            view.points().as_ptr().cast::<u8>(),
+            path.points().as_ptr().cast::<u8>()
+        );
+    }
+}
+
 #[cfg(test)]
 mod prune_tests {
     use super::*;

@@ -6,6 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+# Mirrors WITH_RIVE_EDITOR for incomplete authored paint objects.
+editor = []
 testing = [] # Upstream TESTING observations; test harnesses only.
 # Mirrors upstream --no_ffp_contract for the strict unit/Silver lane.
 # Shipping consumers, including default-features=false hosts, keep the

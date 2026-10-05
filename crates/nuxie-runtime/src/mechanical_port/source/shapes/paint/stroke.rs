@@ -151,8 +151,9 @@ impl Stroke {
     }
 
     pub fn invalidate_rendering(&mut self) {
-        self.prepare_rendering_invalidation().before_dirt();
-        self.base.invalidate_rendering_base();
+        if self.prepare_rendering_invalidation().before_dirt() {
+            self.base.invalidate_rendering_base();
+        }
     }
 
     pub fn invalidate_effects_from(&mut self, effect: Option<&CoreHandle>) {
@@ -178,11 +179,7 @@ impl Stroke {
 
 impl ShapePaintBehavior for Stroke {
     fn prepare_rendering_invalidation(&self) -> ShapePaintRenderingInvalidation {
-        ShapePaintRenderingInvalidation::Stroke(
-            self.base
-                .render_paint_handle()
-                .expect("initialized Stroke render paint"),
-        )
+        ShapePaintRenderingInvalidation::stroke(self.base.render_paint_handle())
     }
 
     fn invalidate_rendering(&mut self) {

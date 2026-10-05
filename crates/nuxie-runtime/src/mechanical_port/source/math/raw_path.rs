@@ -14,7 +14,7 @@ pub struct PathSegment<'a> {
 }
 
 /// Position of appended geometry without borrowing the growable path buffers.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RawPathCursor {
     verb: usize,
     point: usize,
@@ -106,6 +106,12 @@ impl Eq for RawPathIter<'_> {}
 impl Default for RawPathCursor {
     fn default() -> Self {
         Self { verb: 0, point: 0 }
+    }
+}
+
+impl RawPathCursor {
+    pub(crate) fn point_index(self) -> usize {
+        self.point
     }
 }
 
@@ -356,6 +362,13 @@ impl RawPath {
             verbs: &self.verbs,
             points: &self.points,
             cursor: RawPathCursor::default(),
+        }
+    }
+    pub(crate) fn iter_from(&self, cursor: RawPathCursor) -> RawPathIter<'_> {
+        RawPathIter {
+            verbs: &self.verbs,
+            points: &self.points,
+            cursor,
         }
     }
     pub fn end(&self) -> RawPathIter<'_> {

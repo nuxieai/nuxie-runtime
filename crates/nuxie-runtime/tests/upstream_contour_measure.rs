@@ -33,25 +33,28 @@ fn nearly_eq_point(a: Vec2D, b: Vec2D, tolerance: f32) -> bool {
 #[test]
 fn contour_basics() {
     let tolerance = 0.000001_f32;
-    let mut path = RawPath::default();
-    let mut contours = ContourMeasureIter::new(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let empty_path = RawPath::default();
+    let mut contours = ContourMeasureIter::new(&empty_path, ContourMeasureIter::DEFAULT_TOLERANCE);
     assert!(contours.next().is_none());
 
-    path.move_to(1.0, 2.0);
-    contours.rewind(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let mut move_path = RawPath::default();
+    move_path.move_to(1.0, 2.0);
+    contours.rewind(&move_path, ContourMeasureIter::DEFAULT_TOLERANCE);
     assert!(contours.next().is_none());
 
-    path.line_to(4.0, 6.0);
-    contours.rewind(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let mut line_path = RawPath::default();
+    line_path.move_to(1.0, 2.0);
+    line_path.line_to(4.0, 6.0);
+    contours.rewind(&line_path, ContourMeasureIter::DEFAULT_TOLERANCE);
     let contour = contours.next().expect("one measurable line contour");
     assert!(nearly_eq(contour.length(), 5.0, tolerance));
     assert!(contours.next().is_none());
 
     let width = 4.0;
     let height = 6.0;
-    path = RawPath::default();
-    path.add_rect(Aabb::new(0.0, 0.0, width, height), PathDirection::Clockwise);
-    contours.rewind(&path, ContourMeasureIter::DEFAULT_TOLERANCE);
+    let mut rectangle_path = RawPath::default();
+    rectangle_path.add_rect(Aabb::new(0.0, 0.0, width, height), PathDirection::Clockwise);
+    contours.rewind(&rectangle_path, ContourMeasureIter::DEFAULT_TOLERANCE);
     let contour = contours.next().expect("one measurable rectangle contour");
     assert!(nearly_eq(
         contour.length(),

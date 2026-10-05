@@ -2115,8 +2115,8 @@ impl Text {
         }
     }
     fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {
-        // During the solve, the participant's authored axis types are already
-        // available, but control_size has not supplied the resolved slot yet.
+        // Native sizing uses the authored width unless a layout participant owns
+        // the axis; control_size has not supplied the solved slot yet.
         let measuring_width = match self.effective_sizing() {
             TextSizing::AutoHeight | TextSizing::Fixed => {
                 if self.layout_owns_width() {
@@ -2127,6 +2127,7 @@ impl Text {
             }
             _ => f32::MAX,
         };
+        // Host exact-slot adaptation: docs/PORTING.md, A9 host-exact-text-measure.
         let measuring_width = crate::text::layout_measure_width(exact_width, measuring_width);
         let fit_width = max.x.min(measuring_width);
         let font_scale = if self.overflow() == TextOverflow::FitFontSize

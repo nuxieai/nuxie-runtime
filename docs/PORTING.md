@@ -1431,6 +1431,22 @@ and concrete evidence.
 - **A8 terminal-script-resource-limits:** terminal VM limit failures cannot be
   retried or allowed to continue traversal.
 
+- **A9 host-exact-text-measure:** `Text::measure` owns the exact layout-slot
+  adaptation through `host_text.rs::layout_measure_width`. Nuxie-authored text
+  widths are not kept in sync with the resolved layout slot, so an exact host
+  width determines measurement even when no native LayoutParticipant owns the
+  axis. Unconstrained measurement keeps the native authored-width policy.
+  Pinned upstream `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
+  `src/text/text.cpp:1482-1520`, uses the offered width only when
+  `layoutOwnsWidth()` is true. Preserve the one-line host bridge during
+  sync-upstream. `tests/runtime_regressions.rs` pins hard and soft wrapping at
+  exact widths 354 and 200.
+
+The editor missing-paint guard is a port correction, not an adaptation:
+`editor` mirrors `WITH_RIVE_EDITOR` at the same pin,
+`src/shapes/paint/stroke.cpp:89-101`, returning before renderer invalidation
+and superclass dirt changes. Default runtime builds retain the assertion.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++
@@ -1459,3 +1475,17 @@ advance, or draw behavior.
   `ScriptedObject` setters. This retained direct program is not a runtime
   Component, so the caller initiates the next draw and no component dirt is
   synthesized.
+
+- **semantic-action-admission** (X4): the public
+  `RuntimeStateMachineInstanceHandle::fire_semantic_action` in
+  `host_semantics.rs` refuses a disabled or semantically hidden target,
+  authored ancestor, or mounted-artboard host and reports `false`. Opacity is
+  ignored. Accepted actions stay queued if eligibility changes afterward.
+  This host extension also governs the command server, which dispatches
+  through that public handle. It deliberately differs from pinned upstream
+  `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
+  `src/animation/state_machine_instance.cpp:3711-3743` and
+  `src/semantic/semantic_data.cpp:550-573`, whose dispatch forwards to
+  registered listeners without these eligibility checks. Native listener
+  delivery is unchanged. `tests/host_semantic_actions.rs` pins the host
+  contract; the golden runner records the returned admission result.

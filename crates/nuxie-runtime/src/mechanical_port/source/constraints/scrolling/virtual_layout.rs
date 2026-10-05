@@ -26,67 +26,6 @@ impl VirtualWindow {
         line >= self.visible_start && line <= self.visible_end
     }
 }
-#[repr(u8)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum VirtualTrackSizing {
-    #[default]
-    AutoSize,
-    Points,
-    Percent,
-    Fr,
-}
-#[derive(Clone, Copy, Debug, Default)]
-pub struct VirtualGridTrack {
-    pub min_sizing: VirtualTrackSizing,
-    pub min_value: f32,
-    pub max_sizing: VirtualTrackSizing,
-    pub max_value: f32,
-}
-impl VirtualGridTrack {
-    pub fn points(value: f32) -> Self {
-        Self {
-            min_sizing: VirtualTrackSizing::Points,
-            min_value: value,
-            max_sizing: VirtualTrackSizing::Points,
-            max_value: value,
-        }
-    }
-    pub fn auto_size() -> Self {
-        Self::default()
-    }
-    pub fn percent(value: f32) -> Self {
-        Self {
-            min_sizing: VirtualTrackSizing::Percent,
-            min_value: value,
-            max_sizing: VirtualTrackSizing::Percent,
-            max_value: value,
-        }
-    }
-    pub fn fr(value: f32) -> Self {
-        Self {
-            max_sizing: VirtualTrackSizing::Fr,
-            max_value: value,
-            ..Self::default()
-        }
-    }
-}
-#[derive(Clone, Debug)]
-pub struct VirtualGridAxis {
-    pub templates: Vec<VirtualGridTrack>,
-    pub autos: Vec<VirtualGridTrack>,
-    pub space: f32,
-    pub resize: bool,
-}
-impl Default for VirtualGridAxis {
-    fn default() -> Self {
-        Self {
-            templates: Vec::new(),
-            autos: Vec::new(),
-            space: -1.0,
-            resize: false,
-        }
-    }
-}
 #[derive(Clone, Debug)]
 pub struct VirtualLayout {
     item_count: i32,
@@ -110,13 +49,10 @@ pub struct VirtualLayout {
     column_count: i32,
     column_gap: f32,
     column_starts: Vec<f32>,
-    column_widths: Vec<f32>,
-    column_sizes: Vec<f32>,
-    row_sizes: Vec<f32>,
-    rows: VirtualGridAxis,
-    columns: VirtualGridAxis,
-    column_track_sizes: Vec<f32>,
-    natural_extent: f32,
+    row_count: i32,
+    row_starts: Vec<f32>,
+    column_contents: Vec<f32>,
+    row_contents: Vec<f32>,
     item_extent: Vec<f32>,
     item_flow_extent: Vec<f32>,
     item_flow_offset: Vec<f32>,
@@ -151,13 +87,10 @@ impl Default for VirtualLayout {
             column_count: 1,
             column_gap: 0.0,
             column_starts: Vec::new(),
-            column_widths: Vec::new(),
-            column_sizes: Vec::new(),
-            row_sizes: Vec::new(),
-            rows: VirtualGridAxis::default(),
-            columns: VirtualGridAxis::default(),
-            column_track_sizes: Vec::new(),
-            natural_extent: -1.0,
+            row_count: 0,
+            row_starts: Vec::new(),
+            column_contents: Vec::new(),
+            row_contents: Vec::new(),
             item_extent: Vec::new(),
             item_flow_extent: Vec::new(),
             item_flow_offset: Vec::new(),
@@ -197,9 +130,7 @@ impl VirtualLayout {
         self.gap
     }
     pub fn extent(&self) -> f32 {
-        if self.natural_extent >= 0.0 {
-            self.natural_extent
-        } else if self.line_count == 0 {
+        if self.line_count == 0 {
             0.0
         } else {
             let last = self.line_count as usize - 1;
@@ -212,7 +143,6 @@ impl VirtualLayout {
     pub fn begin_linear(&mut self, gap: f32) {
         self.item_count = 0;
         self.line_count = 0;
-        self.natural_extent = -1.0;
         self.gap = gap;
         self.running = 0.0;
         self.trailing = f32::NEG_INFINITY;
@@ -257,38 +187,37 @@ impl VirtualLayout {
         column_count: i32,
         align: LayoutCrossAlign,
         column_gap: f32,
+        row_count: i32,
     ) {
         self.column_gap = column_gap;
         self.begin_linear(row_gap);
         self.wraps = true;
         self.grid = true;
         self.column_count = 1.max(column_count);
-        self.column_widths.clear();
-        self.column_widths.resize(self.column_count as usize, 0.0);
+        self.row_count = row_count;
+        self.column_contents.clear();
+        self.column_contents.resize(self.column_count as usize, 0.0);
         self.column_starts.clear();
-        for axis in [&mut self.rows, &mut self.columns] {
-            axis.templates.clear();
-            axis.autos.clear();
-            axis.space = -1.0;
-            axis.resize = false;
-        }
-        self.column_track_sizes.clear();
+        self.row_starts.clear();
         self.align = align;
     }
     pub fn grid_column_starts(&mut self) -> &mut Vec<f32> {
         &mut self.column_starts
     }
-    pub fn grid_rows(&mut self) -> &mut VirtualGridAxis {
-        &mut self.rows
+    pub fn grid_row_starts(&mut self) -> &mut Vec<f32> {
+        &mut self.row_starts
     }
-    pub fn grid_columns(&mut self) -> &mut VirtualGridAxis {
-        &mut self.columns
+    pub fn grid_row_contents(&self) -> &[f32] {
+        &self.row_contents
     }
-    pub fn grid_column_sizes(&mut self) -> &mut Vec<f32> {
-        &mut self.column_sizes
+    pub fn grid_column_contents(&self) -> &[f32] {
+        &self.column_contents
     }
-    pub fn grid_row_sizes(&mut self) -> &mut Vec<f32> {
-        &mut self.row_sizes
+    pub fn line_laid_out(&self, line: i32) -> bool {
+        !self.grid || self.wrap_line(line) + 1 < self.row_starts.len() as i32
+    }
+    pub fn rows_laid_out(&self) -> bool {
+        !self.grid || self.row_starts.len() as i32 > self.line_count
     }
     pub fn wraps(&self) -> bool {
         self.wraps
@@ -305,59 +234,26 @@ impl VirtualLayout {
     pub fn column_count(&self) -> i32 {
         if self.grid { self.column_count } else { 1 }
     }
-    pub fn grid_column_size(&self, column: i32) -> f32 {
-        if column < self.column_track_sizes.len() as i32 {
-            self.column_track_sizes[column as usize]
-        } else {
-            0.0
-        }
-    }
-    fn track_at(axis: &VirtualGridAxis, index: usize) -> VirtualGridTrack {
-        if index < axis.templates.len() {
-            axis.templates[index]
-        } else if axis.autos.is_empty() {
-            VirtualGridTrack::default()
-        } else {
-            axis.autos[(index - axis.templates.len()) % axis.autos.len()]
-        }
-    }
-    fn size_axis(axis: &VirtualGridAxis, content: &[f32], gap: f32, sizes: &mut Vec<f32>) -> f32 {
-        Self::size_tracks(content, axis.space, axis, gap, sizes);
-        let n = content.len();
-        let mut sizes_again = axis.space < 0.0 && axis.resize;
-        let mut index = 0;
-        while index < n && axis.space < 0.0 && !sizes_again {
-            let track = Self::track_at(axis, index);
-            sizes_again = track.min_sizing == VirtualTrackSizing::Percent
-                || track.max_sizing == VirtualTrackSizing::Percent;
-            index += 1;
-        }
-        if !sizes_again {
-            return -1.0;
-        }
-        let mut natural = if n > 1 { gap * (n - 1) as f32 } else { 0.0 };
-        for &size in sizes.iter() {
-            natural += size;
-        }
-        Self::size_tracks(content, natural, axis, gap, sizes);
-        natural
-    }
-    fn size_grid_rows(&mut self) {
-        while self.line_count < self.rows.templates.len() as i32 {
+    fn place_grid_rows(&mut self) {
+        while self.line_count < self.row_count {
             self.push_line(0.0, 0.0);
         }
         let n = self.line_count as usize;
-        let content = self.line_extent[..n].to_vec();
-        let mut sizes = Vec::new();
-        let natural = Self::size_axis(&self.rows, &content, self.gap, &mut sizes);
-        if natural >= 0.0 {
-            self.natural_extent = natural;
-        }
+        self.row_contents.clear();
+        self.row_contents.extend_from_slice(&self.line_extent[..n]);
+        let lines = self.row_starts.len();
         self.running = 0.0;
         self.trailing = f32::NEG_INFINITY;
         for line in 0..n {
-            let extent = sizes[line];
-            self.line_start[line] = self.running;
+            let mut start = self.running;
+            let mut extent = self.row_contents[line];
+            if line + 1 < lines {
+                start = self.row_starts[line] - self.row_starts[0];
+                extent = self.row_starts[line + 1]
+                    - self.row_starts[line]
+                    - if line + 2 < lines { self.gap } else { 0.0 };
+            }
+            self.line_start[line] = start;
             self.line_extent[line] = extent;
             let last = if line + 1 < n {
                 self.line_first_item[line + 1]
@@ -372,118 +268,9 @@ impl VirtualLayout {
                     0.0
                 };
             }
-            self.trailing = max(self.trailing, self.running + extent);
+            self.trailing = max(self.trailing, start + extent);
             self.trailing_max[line] = self.trailing;
-            self.running += extent + self.gap;
-        }
-    }
-    fn size_tracks(
-        content: &[f32],
-        space: f32,
-        axis: &VirtualGridAxis,
-        gap: f32,
-        size: &mut Vec<f32>,
-    ) {
-        let n = content.len();
-        size.clear();
-        size.resize(n, 0.0);
-        let mut limit = vec![0.0; n];
-        let mut flex = vec![0.0; n];
-        let resolve = |sizing: VirtualTrackSizing, value: f32, auto_size: f32| match sizing {
-            VirtualTrackSizing::Points => value,
-            VirtualTrackSizing::Percent if space >= 0.0 => value / 100.0 * space,
-            _ => auto_size,
-        };
-        let mut any_flex = false;
-        for row in 0..n {
-            let track = Self::track_at(axis, row);
-            size[row] = resolve(track.min_sizing, track.min_value, content[row]);
-            if track.max_sizing == VirtualTrackSizing::Fr {
-                flex[row] = track.max_value;
-                limit[row] = size[row];
-                any_flex = any_flex || flex[row] > 0.0;
-            } else {
-                limit[row] = max(
-                    size[row],
-                    resolve(track.max_sizing, track.max_value, content[row]),
-                );
-            }
-        }
-        let gaps = if n > 1 { gap * (n - 1) as f32 } else { 0.0 };
-        if space >= 0.0 {
-            let mut room = space - gaps;
-            for &s in size.iter() {
-                room -= s;
-            }
-            while room > 1e-6 {
-                let mut growing = 0;
-                for row in 0..n {
-                    if limit[row] > size[row] {
-                        growing += 1;
-                    }
-                }
-                if growing == 0 {
-                    break;
-                }
-                let share = room / growing as f32;
-                for row in 0..n {
-                    if limit[row] > size[row] {
-                        let grow = min(share, limit[row] - size[row]);
-                        size[row] += grow;
-                        room -= grow;
-                    }
-                }
-            }
-        }
-        if !any_flex {
-            return;
-        }
-        let mut fr_size = 0.0;
-        if space < 0.0 {
-            for row in 0..n {
-                if flex[row] > 0.0 {
-                    let factor = max(flex[row], 1.0);
-                    let items = content[row] / factor;
-                    fr_size = max(
-                        fr_size,
-                        max(
-                            size[row] / factor,
-                            if flex[row] * items < size[row] {
-                                content[row] - size[row]
-                            } else {
-                                items
-                            },
-                        ),
-                    );
-                }
-            }
-        } else {
-            let mut fixed = vec![false; n];
-            let mut settled = false;
-            while !settled {
-                let mut left = space - gaps;
-                let mut factors = 0.0;
-                for row in 0..n {
-                    if flex[row] > 0.0 && !fixed[row] {
-                        factors += flex[row];
-                    } else {
-                        left -= size[row];
-                    }
-                }
-                fr_size = max(0.0, left) / max(factors, 1.0);
-                settled = true;
-                for row in 0..n {
-                    if flex[row] > 0.0 && !fixed[row] && flex[row] * fr_size < size[row] {
-                        fixed[row] = true;
-                        settled = false;
-                    }
-                }
-            }
-        }
-        for row in 0..n {
-            if flex[row] > 0.0 {
-                size[row] = max(size[row], flex[row] * fr_size);
-            }
+            self.running = start + extent + self.gap;
         }
     }
     pub fn begin_segment(&mut self) {
@@ -510,8 +297,8 @@ impl VirtualLayout {
         if self.grid {
             for item in first..self.item_count as usize {
                 let column = item - first;
-                self.column_widths[column] =
-                    max(self.column_widths[column], self.item_flow_extent[item]);
+                self.column_contents[column] =
+                    max(self.column_contents[column], self.item_flow_extent[item]);
                 self.item_flow_offset[item] = if column < self.column_starts.len() {
                     self.column_starts[column]
                 } else {
@@ -604,13 +391,7 @@ impl VirtualLayout {
             self.close_line();
         }
         if self.grid {
-            Self::size_axis(
-                &self.columns,
-                &self.column_widths,
-                self.column_gap,
-                &mut self.column_track_sizes,
-            );
-            self.size_grid_rows();
+            self.place_grid_rows();
         }
         self.line_first_item.push(self.item_count);
         self.start_suffix_min.resize(self.line_count as usize, 0.0);

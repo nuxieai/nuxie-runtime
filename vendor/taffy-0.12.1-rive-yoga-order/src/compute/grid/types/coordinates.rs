@@ -15,26 +15,26 @@ use core::ops::{Add, AddAssign, Sub};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[repr(transparent)]
-pub struct GridLine(i16);
+pub struct GridLine(i32);
 
-impl From<i16> for GridLine {
-    fn from(value: i16) -> Self {
+impl From<i32> for GridLine {
+    fn from(value: i32) -> Self {
         Self(value)
     }
 }
 
 impl GridLine {
-    /// Returns the underlying i16
-    pub fn as_i16(self) -> i16 {
+    /// Returns the underlying i32
+    pub fn as_i32(self) -> i32 {
         self.0
     }
 
     /// Convert into OriginZero coordinates using the specified explicit track count
-    pub(crate) fn into_origin_zero_line(self, explicit_track_count: u16) -> OriginZeroLine {
+    pub(crate) fn into_origin_zero_line(self, explicit_track_count: u32) -> OriginZeroLine {
         let explicit_line_count = explicit_track_count + 1;
         let oz_line = match self.0.cmp(&0) {
             Ordering::Greater => self.0 - 1,
-            Ordering::Less => self.0 + explicit_line_count as i16,
+            Ordering::Less => self.0 + explicit_line_count as i32,
             Ordering::Equal => panic!("Grid line of zero is invalid"),
         };
         OriginZeroLine(oz_line)
@@ -49,7 +49,7 @@ impl GridLine {
 ///   - The next line to the left (or up) is -1, and so on
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(transparent)]
-pub struct OriginZeroLine(pub i16);
+pub struct OriginZeroLine(pub i32);
 
 // Add and Sub with Self
 impl Add<OriginZeroLine> for OriginZeroLine {
@@ -65,22 +65,22 @@ impl Sub<OriginZeroLine> for OriginZeroLine {
     }
 }
 
-// Add and Sub with u16
-impl Add<u16> for OriginZeroLine {
+// Add and Sub with u32
+impl Add<u32> for OriginZeroLine {
     type Output = Self;
-    fn add(self, rhs: u16) -> Self::Output {
-        OriginZeroLine(self.0 + rhs as i16)
+    fn add(self, rhs: u32) -> Self::Output {
+        OriginZeroLine(self.0 + rhs as i32)
     }
 }
-impl AddAssign<u16> for OriginZeroLine {
-    fn add_assign(&mut self, rhs: u16) {
-        self.0 += rhs as i16;
+impl AddAssign<u32> for OriginZeroLine {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs as i32;
     }
 }
-impl Sub<u16> for OriginZeroLine {
+impl Sub<u32> for OriginZeroLine {
     type Output = Self;
-    fn sub(self, rhs: u16) -> Self::Output {
-        OriginZeroLine(self.0 - rhs as i16)
+    fn sub(self, rhs: u32) -> Self::Output {
+        OriginZeroLine(self.0 - rhs as i32)
     }
 }
 
@@ -107,19 +107,19 @@ impl OriginZeroLine {
     /// The infallible version above if used when placing regular in-flow grid items.
     pub(crate) fn try_into_track_vec_index(self, track_counts: TrackCounts) -> Option<usize> {
         // OriginZero grid line cannot be less than the number of negative grid lines
-        if self.0 < -(track_counts.negative_implicit as i16) {
+        if self.0 < -(track_counts.negative_implicit as i32) {
             return None;
         };
         // OriginZero grid line cannot be more than the number of positive grid lines
-        if self.0 > (track_counts.explicit + track_counts.positive_implicit) as i16 {
+        if self.0 > (track_counts.explicit + track_counts.positive_implicit) as i32 {
             return None;
         };
 
-        Some(2 * ((self.0 + track_counts.negative_implicit as i16) as usize))
+        Some(2 * ((self.0 + track_counts.negative_implicit as i32) as usize))
     }
 
     /// The minimum number of negative implicit track there must be if a grid item starts at this line.
-    pub(crate) fn implied_negative_implicit_tracks(self) -> u16 {
+    pub(crate) fn implied_negative_implicit_tracks(self) -> u32 {
         if self.0 < 0 {
             self.0.unsigned_abs()
         } else {
@@ -128,9 +128,9 @@ impl OriginZeroLine {
     }
 
     /// The minimum number of positive implicit track there must be if a grid item end at this line.
-    pub(crate) fn implied_positive_implicit_tracks(self, explicit_track_count: u16) -> u16 {
-        if self.0 > explicit_track_count as i16 {
-            self.0 as u16 - explicit_track_count
+    pub(crate) fn implied_positive_implicit_tracks(self, explicit_track_count: u32) -> u32 {
+        if self.0 > explicit_track_count as i32 {
+            self.0 as u32 - explicit_track_count
         } else {
             0
         }
@@ -139,8 +139,8 @@ impl OriginZeroLine {
 
 impl Line<OriginZeroLine> {
     /// The number of tracks between the start and end lines
-    pub(crate) fn span(self) -> u16 {
-        max(self.end.0 - self.start.0, 0) as u16
+    pub(crate) fn span(self) -> u32 {
+        max(self.end.0 - self.start.0, 0) as u32
     }
 }
 

@@ -41,7 +41,7 @@ fn search_start_line(
 
 #[inline]
 /// Resolves an indefinite span at `position`, respecting the active axis direction.
-fn resolve_indefinite_grid_span(position: OriginZeroLine, span: u16, axis_is_reversed: bool) -> Line<OriginZeroLine> {
+fn resolve_indefinite_grid_span(position: OriginZeroLine, span: u32, axis_is_reversed: bool) -> Line<OriginZeroLine> {
     if axis_is_reversed {
         Line { start: (position - span) + 1, end: position + 1 }
     } else {
@@ -51,8 +51,8 @@ fn resolve_indefinite_grid_span(position: OriginZeroLine, span: u16, axis_is_rev
 
 #[inline]
 /// Mirrors a horizontal span around the explicit grid width.
-fn mirror_horizontal_span(span: Line<OriginZeroLine>, explicit_col_count: u16) -> Line<OriginZeroLine> {
-    let explicit_col_end_line = explicit_col_count as i16;
+fn mirror_horizontal_span(span: Line<OriginZeroLine>, explicit_col_count: u32) -> Line<OriginZeroLine> {
+    let explicit_col_end_line = explicit_col_count as i32;
     Line {
         start: OriginZeroLine(explicit_col_end_line - span.end.0),
         end: OriginZeroLine(explicit_col_end_line - span.start.0),
@@ -65,7 +65,7 @@ fn maybe_mirror_span(
     span: Line<OriginZeroLine>,
     axis: AbsoluteAxis,
     direction: Direction,
-    explicit_col_count: u16,
+    explicit_col_count: u32,
 ) -> Line<OriginZeroLine> {
     if axis == AbsoluteAxis::Horizontal && direction.is_rtl() {
         mirror_horizontal_span(span, explicit_col_count)
@@ -258,7 +258,7 @@ fn place_definite_grid_item(
     placement: InBothAbsAxis<Line<OriginZeroGridPlacement>>,
     primary_axis: AbsoluteAxis,
     direction: Direction,
-    explicit_col_count: u16,
+    explicit_col_count: u32,
 ) -> (Line<OriginZeroLine>, Line<OriginZeroLine>) {
     // Resolve spans to tracks
     let primary_span = maybe_mirror_span(
@@ -284,7 +284,7 @@ fn place_definite_secondary_axis_item(
     placement: InBothAbsAxis<Line<OriginZeroGridPlacement>>,
     auto_flow: GridAutoFlow,
     direction: Direction,
-    explicit_col_count: u16,
+    explicit_col_count: u32,
 ) -> (Line<OriginZeroLine>, Line<OriginZeroLine>) {
     let primary_axis = auto_flow.primary_axis();
     let secondary_axis = primary_axis.other_axis();
@@ -350,7 +350,7 @@ fn place_indefinitely_positioned_item(
     auto_flow: GridAutoFlow,
     grid_position: (OriginZeroLine, OriginZeroLine),
     direction: Direction,
-    explicit_col_count: u16,
+    explicit_col_count: u32,
 ) -> (Line<OriginZeroLine>, Line<OriginZeroLine>) {
     let primary_axis = auto_flow.primary_axis();
     let secondary_axis = primary_axis.other_axis();
@@ -490,7 +490,7 @@ fn record_grid_placement<S: GridItemStyle>(
         style,
         parent_align_items,
         parent_justify_items,
-        index as u16,
+        index as u32,
     ));
 
     #[cfg(test)]
@@ -516,11 +516,11 @@ mod tests {
 
         use super::super::place_grid_items;
 
-        type ExpectedPlacement = (i16, i16, i16, i16);
+        type ExpectedPlacement = (i32, i32, i32, i32);
 
         fn placement_test_runner(
-            explicit_col_count: u16,
-            explicit_row_count: u16,
+            explicit_col_count: u32,
+            explicit_row_count: u32,
             children: Vec<(usize, Style, ExpectedPlacement)>,
             expected_col_counts: TrackCounts,
             expected_row_counts: TrackCounts,

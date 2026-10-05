@@ -135,6 +135,8 @@ use crate::style::{AvailableSpace, CoreStyle};
 use crate::style::{FlexboxContainerStyle, FlexboxItemStyle};
 #[cfg(feature = "grid")]
 use crate::style::{GridContainerStyle, GridItemStyle};
+#[cfg(feature = "grid")]
+use crate::util::sys::Vec;
 use crate::CheapCloneStr;
 #[cfg(feature = "block_layout")]
 use crate::{BlockContainerStyle, BlockContext, BlockItemStyle};
@@ -200,10 +202,14 @@ pub trait LayoutPartialTree: TraversePartialTree {
     fn compute_child_layout(&mut self, node_id: NodeId, inputs: LayoutInput) -> LayoutOutput;
 
     /// Whether this traversal uses Rive's pinned Yoga layout boundary.
-    fn uses_rive_layout(&self) -> bool { false }
+    fn uses_rive_layout(&self) -> bool {
+        false
+    }
 
     /// Rive's grid absolute-child caller retains the owner's flex axis.
-    fn rive_container_is_row(&self, _node: NodeId) -> bool { false }
+    fn rive_container_is_row(&self, _node: NodeId) -> bool {
+        false
+    }
 
     /// Rive: bracket an intrinsic grid probe, including recursive descendants.
     fn begin_min_content_probe(&mut self) {}
@@ -269,6 +275,15 @@ pub trait LayoutFlexboxContainer: LayoutPartialTree {
 #[cfg(feature = "grid")]
 /// Extends [`LayoutPartialTree`] with getters for the styles required for CSS Grid layout
 pub trait LayoutGridContainer: LayoutPartialTree {
+    /// Rive: nodeless single-cell contents, counted from grid line one.
+    fn grid_virtual_contributions(&self, _node_id: NodeId, _rows: bool) -> &[f32] {
+        &[]
+    }
+    /// Rive: up to four track sizing passes per axis survive child movement.
+    fn grid_virtual_sizing(&self, _node_id: NodeId, _key: &[u64]) -> Option<Vec<f32>> {
+        None
+    }
+    fn store_grid_virtual_sizing(&mut self, _node_id: NodeId, _key: Vec<u64>, _sizes: Vec<f32>) {}
     /// The style type representing the CSS Grid container's styles
     type GridContainerStyle<'a>: GridContainerStyle<CustomIdent = Self::CustomIdent>
     where

@@ -17,8 +17,8 @@ use super::OriginZeroLine;
 ///
 /// Note that this function internally mixes use of grid track numbers and grid line numbers
 pub(crate) fn compute_grid_size_estimate<'a, S: GridItemStyle + 'a>(
-    explicit_col_count: u16,
-    explicit_row_count: u16,
+    explicit_col_count: u32,
+    explicit_row_count: u32,
     direction: Direction,
     child_styles_iter: impl Iterator<Item = S>,
 ) -> (TrackCounts, TrackCounts) {
@@ -64,10 +64,10 @@ pub(crate) fn compute_grid_size_estimate<'a, S: GridItemStyle + 'a>(
 /// The span is measured in tracks spanned
 fn get_known_child_positions<'a, S: GridItemStyle + 'a>(
     children_iter: impl Iterator<Item = S>,
-    explicit_col_count: u16,
-    explicit_row_count: u16,
+    explicit_col_count: u32,
+    explicit_row_count: u32,
     direction: Direction,
-) -> (OriginZeroLine, OriginZeroLine, u16, OriginZeroLine, OriginZeroLine, u16) {
+) -> (OriginZeroLine, OriginZeroLine, u32, OriginZeroLine, OriginZeroLine, u32) {
     let (mut col_min, mut col_max, mut col_max_span) = (OriginZeroLine(0), OriginZeroLine(0), 0);
     let (mut row_min, mut row_max, mut row_max_span) = (OriginZeroLine(0), OriginZeroLine(0), 0);
     children_iter.for_each(|child_style| {
@@ -84,7 +84,7 @@ fn get_known_child_positions<'a, S: GridItemStyle + 'a>(
         // Placement mirrors horizontal spans in RTL, so mirror known column line bounds here
         // to keep implicit-grid pre-sizing consistent with actual placement.
         if direction.is_rtl() && (child_col_min != OriginZeroLine(0) || child_col_max != OriginZeroLine(0)) {
-            let explicit_col_end_line = explicit_col_count as i16;
+            let explicit_col_end_line = explicit_col_count as i32;
             let mirrored_min = OriginZeroLine(explicit_col_end_line - child_col_max.0);
             let mirrored_max = OriginZeroLine(explicit_col_end_line - child_col_min.0);
             child_col_min = mirrored_min;
@@ -109,8 +109,8 @@ fn get_known_child_positions<'a, S: GridItemStyle + 'a>(
 #[inline]
 fn child_min_line_max_line_span<S: CheapCloneStr>(
     line: Line<GridPlacement<S>>,
-    explicit_track_count: u16,
-) -> (OriginZeroLine, OriginZeroLine, u16) {
+    explicit_track_count: u32,
+) -> (OriginZeroLine, OriginZeroLine, u32) {
     use GenericGridPlacement::*;
 
     // 8.3.1. Grid Placement Conflict Handling

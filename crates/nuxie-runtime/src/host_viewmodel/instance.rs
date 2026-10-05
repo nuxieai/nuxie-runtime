@@ -471,7 +471,7 @@ impl RuntimeOwnedViewModelInstance {
     pub fn property_index_by_name(&self, name: &str) -> Option<usize> {
         let properties = self
             .model()
-            .with(|model| model.as_view_model().unwrap().properties())?;
+            .with(|model| model.as_view_model().unwrap().properties().to_vec())?;
         properties.iter().position(|property| {
             property
                 .with(|property| property.as_view_model_property().unwrap().const_name() == name)
@@ -481,7 +481,7 @@ impl RuntimeOwnedViewModelInstance {
     fn unique_property_index_by_name(&self, name: &str) -> Option<usize> {
         let properties = self
             .model()
-            .with(|model| model.as_view_model().unwrap().properties())?;
+            .with(|model| model.as_view_model().unwrap().properties().to_vec())?;
         let mut matches = properties
             .iter()
             .enumerate()

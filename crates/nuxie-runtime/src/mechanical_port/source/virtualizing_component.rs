@@ -26,6 +26,7 @@ pub trait VirtualizingComponent {
     fn virtualizable_changed(&mut self);
     fn remove_virtualizable(&mut self, index: i32);
     fn realized_indices(&self, out: &mut Vec<i32>);
+    fn items_version(&self) -> u32;
     fn clear_virtual_window(&mut self);
     fn add_to_virtual_window(&mut self, index: i32, visible: bool);
     fn set_virtualizable_cell(&mut self, index: i32, column: i32, row: i32);

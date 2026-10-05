@@ -74,13 +74,13 @@ impl CellOccupancyMatrix {
     pub fn is_area_in_range(
         &self,
         primary_axis: AbsoluteAxis,
-        primary_range: Range<i16>,
-        secondary_range: Range<i16>,
+        primary_range: Range<i32>,
+        secondary_range: Range<i32>,
     ) -> bool {
-        if primary_range.start < 0 || primary_range.end > self.track_counts(primary_axis).len() as i16 {
+        if primary_range.start < 0 || primary_range.end > self.track_counts(primary_axis).len() as i32 {
             return false;
         }
-        if secondary_range.start < 0 || secondary_range.end > self.track_counts(primary_axis.other_axis()).len() as i16
+        if secondary_range.start < 0 || secondary_range.end > self.track_counts(primary_axis.other_axis()).len() as i32
         {
             return false;
         }
@@ -88,12 +88,12 @@ impl CellOccupancyMatrix {
     }
 
     /// Expands the grid (potentially in all 4 directions) in order to ensure that the specified range fits within the allocated space
-    fn expand_to_fit_range(&mut self, row_range: Range<i16>, col_range: Range<i16>) {
+    fn expand_to_fit_range(&mut self, row_range: Range<i32>, col_range: Range<i32>) {
         // Calculate number of rows and columns missing to accommodate ranges (if any)
         let req_negative_rows = max(-row_range.start, 0);
-        let req_positive_rows = max(row_range.end - self.rows.len() as i16, 0);
+        let req_positive_rows = max(row_range.end - self.rows.len() as i32, 0);
         let req_negative_cols = max(-col_range.start, 0);
-        let req_positive_cols = max(col_range.end - self.columns.len() as i16, 0);
+        let req_positive_cols = max(col_range.end - self.columns.len() as i32, 0);
 
         let old_row_count = self.rows.len();
         let old_col_count = self.columns.len();
@@ -130,10 +130,10 @@ impl CellOccupancyMatrix {
 
         // Update self with new data
         self.inner = Grid::from_vec(data, new_col_count);
-        self.rows.negative_implicit += req_negative_rows as u16;
-        self.rows.positive_implicit += req_positive_rows as u16;
-        self.columns.negative_implicit += req_negative_cols as u16;
-        self.columns.positive_implicit += req_positive_cols as u16;
+        self.rows.negative_implicit += req_negative_rows as u32;
+        self.rows.positive_implicit += req_positive_rows as u32;
+        self.columns.negative_implicit += req_negative_cols as u32;
+        self.columns.positive_implicit += req_positive_cols as u32;
     }
 
     /// Mark an area of the matrix as occupied, expanding the allocated space as necessary to accommodate the passed area.
@@ -186,8 +186,8 @@ impl CellOccupancyMatrix {
     pub fn track_area_is_unoccupied(
         &self,
         primary_axis: AbsoluteAxis,
-        primary_range: Range<i16>,
-        secondary_range: Range<i16>,
+        primary_range: Range<i32>,
+        secondary_range: Range<i32>,
     ) -> bool {
         let (row_range, col_range) = match primary_axis {
             AbsoluteAxis::Horizontal => (secondary_range, primary_range),
@@ -245,7 +245,7 @@ impl CellOccupancyMatrix {
 
         let maybe_index = match track_type {
             AbsoluteAxis::Horizontal => {
-                if track_computed_index < 0 || track_computed_index >= self.inner.rows() as i16 {
+                if track_computed_index < 0 || track_computed_index >= self.inner.rows() as i32 {
                     // Index out of bounds: no tracks to search
                     None
                 } else {
@@ -253,7 +253,7 @@ impl CellOccupancyMatrix {
                 }
             }
             AbsoluteAxis::Vertical => {
-                if track_computed_index < 0 || track_computed_index >= self.inner.cols() as i16 {
+                if track_computed_index < 0 || track_computed_index >= self.inner.cols() as i32 {
                     // Index out of bounds: no tracks to search
                     None
                 } else {
@@ -262,7 +262,7 @@ impl CellOccupancyMatrix {
             }
         };
 
-        maybe_index.map(|idx| track_counts.track_to_prev_oz_line(idx as u16))
+        maybe_index.map(|idx| track_counts.track_to_prev_oz_line(idx as u32))
     }
 
     /// Given an axis and a track index
@@ -279,7 +279,7 @@ impl CellOccupancyMatrix {
 
         let maybe_index = match track_type {
             AbsoluteAxis::Horizontal => {
-                if track_computed_index < 0 || track_computed_index >= self.inner.rows() as i16 {
+                if track_computed_index < 0 || track_computed_index >= self.inner.rows() as i32 {
                     // Index out of bounds: no tracks to search
                     None
                 } else {
@@ -287,7 +287,7 @@ impl CellOccupancyMatrix {
                 }
             }
             AbsoluteAxis::Vertical => {
-                if track_computed_index < 0 || track_computed_index >= self.inner.cols() as i16 {
+                if track_computed_index < 0 || track_computed_index >= self.inner.cols() as i32 {
                     // Index out of bounds: no tracks to search
                     None
                 } else {
@@ -296,6 +296,6 @@ impl CellOccupancyMatrix {
             }
         };
 
-        maybe_index.map(|idx| track_counts.track_to_prev_oz_line(idx as u16))
+        maybe_index.map(|idx| track_counts.track_to_prev_oz_line(idx as u32))
     }
 }

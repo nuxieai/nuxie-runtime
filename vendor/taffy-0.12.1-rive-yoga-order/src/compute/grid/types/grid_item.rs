@@ -19,7 +19,7 @@ pub(in super::super) struct GridItem {
     ///
     /// We sort the list of grid items during track sizing. This field allows us to sort back the original order
     /// for final positioning
-    pub source_order: u16,
+    pub source_order: u32,
 
     /// The item's definite row-start and row-end, as resolved by the placement algorithm
     /// (in origin-zero coordinates)
@@ -61,10 +61,10 @@ pub(in super::super) struct GridItem {
 
     /// The item's definite row-start and row-end (same as `row` field, except in a different coordinate system)
     /// (as indexes into the Vec<GridTrack> stored in a grid's AbstractAxisTracks)
-    pub row_indexes: Line<u16>,
+    pub row_indexes: Line<u32>,
     /// The items definite column-start and column-end (same as `column` field, except in a different coordinate system)
     /// (as indexes into the Vec<GridTrack> stored in a grid's AbstractAxisTracks)
-    pub column_indexes: Line<u16>,
+    pub column_indexes: Line<u32>,
 
     /// Whether the item crosses a flexible row
     pub crosses_flexible_row: bool,
@@ -100,7 +100,7 @@ impl GridItem {
         style: S,
         parent_align_items: AlignItems,
         parent_justify_items: AlignItems,
-        source_order: u16,
+        source_order: u32,
     ) -> Self {
         GridItem {
             node,
@@ -145,7 +145,7 @@ impl GridItem {
     }
 
     /// This item's placement in the specified axis as GridTrackVec indices
-    pub fn placement_indexes(&self, axis: AbstractAxis) -> Line<u16> {
+    pub fn placement_indexes(&self, axis: AbstractAxis) -> Line<u32> {
         match axis {
             AbstractAxis::Block => self.row_indexes,
             AbstractAxis::Inline => self.column_indexes,
@@ -161,7 +161,7 @@ impl GridItem {
     }
 
     /// Returns the number of tracks that this item spans in the specified axis
-    pub fn span(&self, axis: AbstractAxis) -> u16 {
+    pub fn span(&self, axis: AbstractAxis) -> u32 {
         match axis {
             AbstractAxis::Block => self.row.span(),
             AbstractAxis::Inline => self.column.span(),
@@ -549,6 +549,12 @@ impl GridItem {
         grid_area_size: Size<Option<f32>>,
         inner_node_size: Size<Option<f32>>,
     ) -> f32 {
+        // Rive Yoga TrackSizing::minimumContribution returns the measured
+        // min-content contribution immediately for an authored point size.
+        // A fixed track maximum must not cap that preferred-size contribution.
+        if self.size.get(axis).0.tag() == crate::style::CompactLength::LENGTH_TAG {
+            return self.min_content_contribution_cached(axis, tree, grid_area_size, grid_area_size.with(axis, None));
+        }
         let padding = self.padding.resolve_or_zero(grid_area_size.width, |val, basis| tree.calc(val, basis));
         let border = self.border.resolve_or_zero(grid_area_size.width, |val, basis| tree.calc(val, basis));
         let padding_border_size = (padding + border).sum_axes();

@@ -139,8 +139,8 @@ impl ViewModel {
         self.file.clone()
     }
 
-    pub fn properties(&self) -> Vec<CoreHandle> {
-        self.properties.clone()
+    pub fn properties(&self) -> &[CoreHandle] {
+        &self.properties
     }
 
     pub fn instances(&self) -> Vec<CoreHandle> {

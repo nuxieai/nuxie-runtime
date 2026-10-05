@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     ops::{Deref, DerefMut},
     rc::Rc,
 };
@@ -16,7 +16,7 @@ use crate::mechanical_port::source::{
             scroll_constraint_proxy::ViewportDraggableProxy,
             scroll_physics::{self, ScrollPhysicsRuntime, ScrollPhysicsType},
             scroll_virtualizer::ScrollVirtualizer,
-            virtual_layout::{VirtualGridTrack, VirtualLayout, VirtualTrackSizing},
+            virtual_layout::VirtualLayout,
         },
         transform_constraint::TransformConstraint,
     },
@@ -82,6 +82,11 @@ pub struct ScrollConstraint {
     physics: Option<CoreHandle>,
     virtualizer: Option<Rc<RefCell<ScrollVirtualizer>>>,
     virtual_layout: Option<Rc<RefCell<VirtualLayout>>>,
+    virtual_inputs: RefCell<Vec<f32>>,
+    virtual_versions: RefCell<Vec<u32>>,
+    column_lines: RefCell<Vec<f32>>,
+    row_lines: RefCell<Vec<f32>>,
+    contributions_stale: Cell<bool>,
     // Stable shared list across virtualizer callbacks; rebuilt only by dependencies.
     layout_children: Rc<Vec<CoreHandle>>,
     components_a: TransformComponents,
@@ -122,6 +127,11 @@ impl Default for ScrollConstraint {
             physics: None,
             virtualizer: None,
             virtual_layout: None,
+            virtual_inputs: RefCell::new(Vec::new()),
+            virtual_versions: RefCell::new(Vec::new()),
+            column_lines: RefCell::new(Vec::new()),
+            row_lines: RefCell::new(Vec::new()),
+            contributions_stale: Cell::new(false),
             layout_children: Rc::new(Vec::new()),
             components_a: TransformComponents::default(),
             components_b: TransformComponents::default(),
@@ -503,6 +513,19 @@ impl ScrollConstraint {
             let v = v.borrow();
             if self.infinite() {
                 v.cycle_extent()
+            } else if v.is_grid()
+                && v.rows_laid_out()
+                && self
+                    .with_content(|c| {
+                        c.with_style(|s| {
+                            s.height_scale_type()
+                                == crate::source::layout::layout_enums::LayoutScaleType::Hug
+                        })
+                        .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            {
+                self.with_content(LayoutComponent::layout_height).unwrap()
             } else {
                 v.extent() + padding
             }
@@ -546,87 +569,82 @@ impl ScrollConstraint {
         }
     }
 
-    fn refresh_virtual_layout(&self) {
+    fn refresh_virtual_layout(&self) -> bool {
         use crate::source::layout::grid_track::{GridTrack, GridTrackCollection};
         let Some(model) = self.virtual_layout() else {
-            return;
+            return false;
         };
         let horizontal = !self.virtual_axis_is_column();
-        let gap = self.gap();
-        let mut v = model.borrow_mut();
-        if self.virtualizes_grid() {
-            let children = self.with_content(|c| c.children().to_vec()).unwrap();
-            let columns = children
-                .iter()
-                .filter(|c| {
-                    c.with_downcast::<GridTrack, _>(|t| {
-                        t.grid_collection() == GridTrackCollection::TemplateColumns
-                    })
-                    .unwrap_or(false)
-                })
-                .count() as i32;
-            let align = self.with_content(|c| c.child_alignment().cross).unwrap();
-            v.begin_grid(gap.y, columns, align, gap.x);
-            self.with_content(|c| c.grid_column_line_offsets(v.grid_column_starts()));
-            for child in children {
-                child.with_downcast::<GridTrack, _>(|t| {
-                    let sizing = |n| match n {
-                        1 => VirtualTrackSizing::Points,
-                        2 => VirtualTrackSizing::Percent,
-                        3 => VirtualTrackSizing::Fr,
-                        _ => VirtualTrackSizing::AutoSize,
-                    };
-                    let min = sizing(t.track_type());
-                    let track = if t.track_max_type() == 0 {
-                        VirtualGridTrack {
-                            min_sizing: min,
-                            min_value: t.track_value(),
-                            max_sizing: min,
-                            max_value: t.track_value(),
-                        }
-                    } else {
-                        VirtualGridTrack {
-                            min_sizing: min,
-                            min_value: t.track_value(),
-                            max_sizing: sizing(t.track_max_type() - 1),
-                            max_value: t.track_max_value(),
-                        }
-                    };
-                    match t.grid_collection() {
-                        GridTrackCollection::TemplateRows => v.grid_rows().templates.push(track),
-                        GridTrackCollection::AutoRows => v.grid_rows().autos.push(track),
-                        GridTrackCollection::TemplateColumns => {
-                            v.grid_columns().templates.push(track)
-                        }
-                        GridTrackCollection::AutoColumns => v.grid_columns().autos.push(track),
-                        _ => {}
-                    }
-                });
+        let mut gap = self.gap();
+        let children = self.scroll_children();
+        let mut inputs = Vec::new();
+        let mut versions = Vec::new();
+        for child in children {
+            if let Some(version) =
+                child.with_downcast::<ArtboardComponentList, _>(|c| c.items_version())
+            {
+                versions.push(version);
+            } else {
+                versions.push(0);
+                let bounds = Self::with_layout_child(child, |c| c.layout_bounds()).unwrap();
+                inputs.extend([bounds.width(), bounds.height()]);
             }
+        }
+        let grid = self.virtualizes_grid();
+        let wraps = !grid && self.with_content(LayoutComponent::wraps_lines).unwrap();
+        let align = self.with_content(LayoutComponent::child_alignment).unwrap();
+        inputs.extend([
+            grid as u8 as f32,
+            wraps as u8 as f32,
+            horizontal as u8 as f32,
+            gap.x,
+            gap.y,
+            align.main as u8 as f32,
+            align.cross as u8 as f32,
+        ]);
+        let mut columns = 0;
+        let mut rows = 0;
+        let mut flow_start = 0.0;
+        let mut flow_extent = 0.0;
+        let mut hugs = false;
+        let mut flow_from_layout = true;
+        if grid {
             self.with_content(|c| {
-                c.with_style(|s| {
-                    if s.layout_height_scale_type() != 2 {
-                        v.grid_rows().space = 0.0_f32.max(Self::inner_size(c, true));
+                for track in c.children() {
+                    if let Some(collection) =
+                        track.with_downcast::<GridTrack, _>(GridTrack::grid_collection)
+                    {
+                        match collection {
+                            GridTrackCollection::TemplateColumns => columns += 1,
+                            GridTrackCollection::TemplateRows => rows += 1,
+                            _ => {}
+                        }
                     }
-                    if s.layout_width_scale_type() != 2 {
-                        v.grid_columns().space = 0.0_f32.max(Self::inner_size(c, false));
-                    }
-                });
-            });
-            self.with_viewport(|p| {
-                if p.with_style(|s| s.layout_type_value() == 0)
-                    .unwrap_or(false)
-                {
-                    let column = p.main_axis_is_column();
-                    v.grid_rows().resize = column;
-                    v.grid_columns().resize = !column;
                 }
+                let mut column_lines = self.column_lines.borrow_mut();
+                let mut row_lines = self.row_lines.borrow_mut();
+                let column_gap = c.grid_lines(false, &mut column_lines);
+                let row_gap = c.grid_lines(true, &mut row_lines);
+                if !column_lines.is_empty() {
+                    gap.x = column_gap;
+                }
+                if !row_lines.is_empty() {
+                    gap.y = row_gap;
+                }
+                inputs.extend([
+                    gap.x,
+                    gap.y,
+                    columns as f32,
+                    rows as f32,
+                    column_lines.len() as f32,
+                ]);
+                inputs.extend_from_slice(&column_lines);
+                inputs.extend_from_slice(&row_lines);
             });
-        } else if self.with_content(LayoutComponent::wraps_lines).unwrap() {
-            let (align, hugs, start, padding) = self
+        } else if wraps {
+            let (wrap_hugs, start, padding) = self
                 .with_content(|c| {
                     (
-                        c.child_alignment(),
                         c.hugs_lines(),
                         if horizontal {
                             c.padding_top()
@@ -641,6 +659,7 @@ impl ScrollConstraint {
                     )
                 })
                 .unwrap();
+            hugs = wrap_hugs;
             let mut extent = if hugs {
                 self.with_viewport(|p| Self::inner_size(p, horizontal))
                     .unwrap()
@@ -676,20 +695,47 @@ impl ScrollConstraint {
                     .unwrap();
                 extent -= margins;
             }
+
+            flow_start = start;
+            flow_extent = extent;
+            flow_from_layout = !hugs && !self.infinite() && self.scroll_children_are_lists();
+            inputs.extend([
+                flow_start,
+                flow_extent,
+                hugs as u8 as f32,
+                flow_from_layout as u8 as f32,
+            ]);
+        }
+        if inputs == *self.virtual_inputs.borrow()
+            && versions == *self.virtual_versions.borrow()
+            && model.borrow().segment_count() == children.len() as i32
+        {
+            return false;
+        }
+        *self.virtual_inputs.borrow_mut() = inputs;
+        *self.virtual_versions.borrow_mut() = versions;
+        self.contributions_stale.set(true);
+        let mut v = model.borrow_mut();
+        if grid {
+            v.begin_grid(gap.y, columns, align.cross, gap.x, rows);
+            v.grid_column_starts()
+                .clone_from(&self.column_lines.borrow());
+            v.grid_row_starts().clone_from(&self.row_lines.borrow());
+        } else if wraps {
             v.begin_wrap(
                 if horizontal { gap.x } else { gap.y },
                 if horizontal { gap.y } else { gap.x },
-                start,
-                extent,
+                flow_start,
+                flow_extent,
                 align.main,
                 align.cross,
                 hugs,
             );
-            v.set_flow_from_layout(!hugs && !self.infinite() && self.scroll_children_are_lists());
+            v.set_flow_from_layout(flow_from_layout);
         } else {
             v.begin_linear(if horizontal { gap.x } else { gap.y });
         }
-        for child in self.scroll_children() {
+        for child in children {
             v.begin_segment();
             let count = Self::with_layout_child(child, |c| c.num_layout_nodes()).unwrap();
             for index in 0..count {
@@ -711,6 +757,7 @@ impl ScrollConstraint {
             }
         }
         v.end();
+        true
     }
 
     fn anchor_scroll(&mut self, moved: f32, column: bool) {
@@ -740,46 +787,24 @@ impl ScrollConstraint {
         });
     }
 
-    fn sync_virtual_grid_tracks(&self) {
+    fn sync_virtual_grid_contributions(&self) {
+        self.contributions_stale.set(false);
         if self.content_handle().is_none() {
             return;
         }
-        if !self.virtualizes_grid()
-            || self
+        let grid = self.virtualizes_grid()
+            && self
                 .virtual_layout
                 .as_ref()
-                .is_none_or(|v| !v.borrow().is_grid())
-        {
-            self.with_content_mut(|c| c.virtual_grid_tracks(&[], &[]));
-            return;
+                .is_some_and(|v| v.borrow().is_grid());
+        if grid {
+            let v = self.virtual_layout.as_ref().unwrap().borrow();
+            self.with_content_mut(|c| {
+                c.virtual_grid_contributions(v.grid_row_contents(), v.grid_column_contents())
+            });
+        } else {
+            self.with_content_mut(|c| c.virtual_grid_contributions(&[], &[]));
         }
-        let model = self.virtual_layout.as_ref().unwrap();
-        let mut v = model.borrow_mut();
-        let columns: Vec<_> = (0..v.column_count())
-            .map(|c| v.grid_column_size(c))
-            .collect();
-        *v.grid_column_sizes() = columns.clone();
-        let count = v.line_count();
-        let virtualizer = self.virtualizer.as_ref().unwrap().borrow();
-        let start = virtualizer.realized_line_start();
-        let end = virtualizer.realized_line_end();
-        let mut rows = Vec::new();
-        if count > 0 && end >= start {
-            let first = v.wrap_line(start);
-            let span = (end - start + 1).min(count);
-            if !self.infinite() || self.virtualizes_grid_columns() {
-                rows.extend((start..=end).map(|l| v.line_extent(l)));
-            } else if first + span <= count {
-                rows.extend((first..first + span).map(|l| v.line_extent(l)));
-            } else {
-                rows.extend((0..first + span - count).map(|l| v.line_extent(l)));
-                rows.extend((first..count).map(|l| v.line_extent(l)));
-            }
-        }
-        *v.grid_row_sizes() = rows.clone();
-        drop(v);
-        drop(virtualizer);
-        self.with_content_mut(|c| c.virtual_grid_tracks(&columns, &rows));
     }
 
     // The source argument is unused; content/viewport access follows the
@@ -930,7 +955,11 @@ impl ScrollConstraint {
             column_viewport,
             columns,
         );
-        owner.with_downcast::<Self, _>(Self::sync_virtual_grid_tracks);
+        owner.with_downcast::<Self, _>(|scroll| {
+            if scroll.contributions_stale.get() {
+                scroll.sync_virtual_grid_contributions();
+            }
+        });
     }
     pub fn add_layout_child(&mut self, child: CoreHandle) {
         assert!(!self.layout_children.contains(&child));
@@ -1263,7 +1292,7 @@ impl ScrollConstraint {
         if !self.has_layout_parent() {
             return None;
         }
-        self.sync_virtual_grid_tracks();
+        self.sync_virtual_grid_contributions();
         Some(self.layout_children.clone())
     }
     fn realize_all_children(children: &[CoreHandle], active_scroll: Option<&Self>) {

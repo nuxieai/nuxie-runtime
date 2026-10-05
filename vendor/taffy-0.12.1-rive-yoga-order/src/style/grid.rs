@@ -23,13 +23,13 @@ pub struct GridTemplateArea<CustomIdent: CheapCloneStr> {
     #[cfg_attr(feature = "serde", serde(deserialize_with = "crate::util::deserialize_from_str"))]
     pub name: CustomIdent,
     /// The index of the row at which the grid area starts in grid coordinates.
-    pub row_start: u16,
+    pub row_start: u32,
     /// The index of the row at which the grid area ends in grid coordinates.
-    pub row_end: u16,
+    pub row_end: u32,
     /// The index of the column at which the grid area starts in grid coordinates.
-    pub column_start: u16,
+    pub column_start: u32,
     /// The index of the column at which the grid area end in grid coordinates.
-    pub column_end: u16,
+    pub column_end: u32,
 }
 
 /// Defines a named grid line
@@ -40,7 +40,7 @@ pub struct NamedGridLine<CustomIdent: CheapCloneStr> {
     #[cfg_attr(feature = "serde", serde(deserialize_with = "crate::util::deserialize_from_str"))]
     pub name: CustomIdent,
     /// The index of the row at which the grid area starts in grid coordinates.
-    pub index: u16,
+    pub index: u32,
 }
 
 /// Axis as `Row` or `Column`
@@ -79,8 +79,8 @@ pub trait GenericRepetition {
     /// Get an iterator over the repeated tracks
     fn tracks(&self) -> Self::RepetitionTrackList<'_>;
     /// Returns the number of repeated tracks
-    fn track_count(&self) -> u16 {
-        self.tracks().len() as u16
+    fn track_count(&self) -> u32 {
+        self.tracks().len() as u32
     }
     /// Returns an iterator over the lines names
     fn lines_names(&self) -> Self::TemplateLineNames<'_>;
@@ -366,7 +366,7 @@ pub enum GenericGridPlacement<LineType: GridCoordinate> {
     /// Place item at specified line (column or row) index
     Line(LineType),
     /// Item should span specified number of tracks (columns or rows)
-    Span(u16),
+    Span(u32),
 }
 
 /// A grid line placement using the normalized OriginZero coordinates to specify line positions.
@@ -391,35 +391,35 @@ pub enum GridPlacement<S: CheapCloneStr = DefaultCheapStr> {
     /// Place item at specified line (column or row) index
     Line(GridLine),
     /// Place item at specified named line (column or row)
-    NamedLine(S, i16),
+    NamedLine(S, i32),
     /// Item should span specified number of tracks (columns or rows)
-    Span(u16),
+    Span(u32),
     /// Item should span until the nth line named `<name>`.
     ///
     /// If there are less than n lines named `<name>` in the specified direction then
     /// all implicit lines will be counted.
-    NamedSpan(S, u16),
+    NamedSpan(S, u32),
 }
 impl<S: CheapCloneStr> TaffyAuto for GridPlacement<S> {
     const AUTO: Self = Self::Auto;
 }
 impl<S: CheapCloneStr> TaffyGridLine for GridPlacement<S> {
-    fn from_line_index(index: i16) -> Self {
+    fn from_line_index(index: i32) -> Self {
         GridPlacement::<S>::Line(GridLine::from(index))
     }
 }
 impl<S: CheapCloneStr> TaffyGridLine for Line<GridPlacement<S>> {
-    fn from_line_index(index: i16) -> Self {
+    fn from_line_index(index: i32) -> Self {
         Line { start: GridPlacement::<S>::from_line_index(index), end: GridPlacement::<S>::Auto }
     }
 }
 impl<S: CheapCloneStr> TaffyGridSpan for GridPlacement<S> {
-    fn from_span(span: u16) -> Self {
+    fn from_span(span: u32) -> Self {
         GridPlacement::<S>::Span(span)
     }
 }
 impl<S: CheapCloneStr> TaffyGridSpan for Line<GridPlacement<S>> {
-    fn from_span(span: u16) -> Self {
+    fn from_span(span: u32) -> Self {
         Line { start: GridPlacement::<S>::from_span(span), end: GridPlacement::<S>::Auto }
     }
 }
@@ -467,11 +467,11 @@ impl<S: CheapCloneStr> FromCss for GridPlacement<S> {
 
         match (span, number, ident) {
             (true, None, None) => Ok(Self::Span(0)),
-            (true, Some(number), None) => Ok(Self::Span(number as u16)),
+            (true, Some(number), None) => Ok(Self::Span(number as u32)),
             (true, None, Some(ident)) => Ok(Self::NamedSpan(ident, 0)),
-            (true, Some(number), Some(ident)) => Ok(Self::NamedSpan(ident, number as u16)),
-            (false, Some(number), None) => Ok(Self::Line(GridLine::from(number as i16))),
-            (false, Some(number), Some(ident)) => Ok(Self::NamedLine(ident, number as i16)),
+            (true, Some(number), Some(ident)) => Ok(Self::NamedSpan(ident, number as u32)),
+            (false, Some(number), None) => Ok(Self::Line(GridLine::from(number as i32))),
+            (false, Some(number), Some(ident)) => Ok(Self::NamedLine(ident, number as i32)),
             (false, None, Some(ident)) => Ok(Self::NamedLine(ident, 0)),
             (false, None, None) => Err(parser.new_error(cssparser::BasicParseErrorKind::EndOfInput)),
         }
@@ -488,13 +488,13 @@ impl<S: CheapCloneStr> core::str::FromStr for GridPlacement<S> {
 
 impl<S: CheapCloneStr> GridPlacement<S> {
     /// Apply a mapping function if the [`GridPlacement`] is a `Line`. Otherwise return `self` unmodified.
-    pub fn into_origin_zero_placement_ignoring_named(&self, explicit_track_count: u16) -> OriginZeroGridPlacement {
+    pub fn into_origin_zero_placement_ignoring_named(&self, explicit_track_count: u32) -> OriginZeroGridPlacement {
         match self {
             Self::Auto => OriginZeroGridPlacement::Auto,
             Self::Span(span) => OriginZeroGridPlacement::Span(*span),
             // Grid line zero is an invalid index, so it gets treated as Auto
             // See: https://developer.mozilla.org/en-US/docs/Web/CSS/grid-row-start#values
-            Self::Line(line) => match line.as_i16() {
+            Self::Line(line) => match line.as_i32() {
                 0 => OriginZeroGridPlacement::Auto,
                 _ => OriginZeroGridPlacement::Line(line.into_origin_zero_line(explicit_track_count)),
             },
@@ -506,7 +506,7 @@ impl<S: CheapCloneStr> GridPlacement<S> {
 
 impl<S: CheapCloneStr> Line<GridPlacement<S>> {
     /// Apply a mapping function if the [`GridPlacement`] is a `Line`. Otherwise return `self` unmodified.
-    pub fn into_origin_zero_ignoring_named(&self, explicit_track_count: u16) -> Line<OriginZeroGridPlacement> {
+    pub fn into_origin_zero_ignoring_named(&self, explicit_track_count: u32) -> Line<OriginZeroGridPlacement> {
         Line {
             start: self.start.into_origin_zero_placement_ignoring_named(explicit_track_count),
             end: self.end.into_origin_zero_placement_ignoring_named(explicit_track_count),
@@ -518,7 +518,7 @@ impl NonNamedGridPlacement {
     /// Apply a mapping function if the [`GridPlacement`] is a `Track`. Otherwise return `self` unmodified.
     pub fn into_origin_zero_placement(
         &self,
-        explicit_track_count: u16,
+        explicit_track_count: u32,
         // resolve_named: impl Fn(&str) -> Option<GridLine>
     ) -> OriginZeroGridPlacement {
         match self {
@@ -526,7 +526,7 @@ impl NonNamedGridPlacement {
             Self::Span(span) => OriginZeroGridPlacement::Span(*span),
             // Grid line zero is an invalid index, so it gets treated as Auto
             // See: https://developer.mozilla.org/en-US/docs/Web/CSS/grid-row-start#values
-            Self::Line(line) => match line.as_i16() {
+            Self::Line(line) => match line.as_i32() {
                 0 => OriginZeroGridPlacement::Auto,
                 _ => OriginZeroGridPlacement::Line(line.into_origin_zero_line(explicit_track_count)),
             },
@@ -537,7 +537,7 @@ impl NonNamedGridPlacement {
 impl<T: GridCoordinate> Line<GenericGridPlacement<T>> {
     /// Resolves the span for an indefinite placement (a placement that does not consist of two `Track`s).
     /// Panics if called on a definite placement
-    pub const fn indefinite_span(&self) -> u16 {
+    pub const fn indefinite_span(&self) -> u32 {
         use GenericGridPlacement as GP;
         match (self.start, self.end) {
             (GP::Line(_), GP::Auto) => 1,
@@ -560,8 +560,8 @@ impl<S: CheapCloneStr> Line<GridPlacement<S>> {
     /// (0 is an invalid line in GridLine coordinates, and falls back to "auto" which is indefinite)
     pub fn is_definite(&self) -> bool {
         match (&self.start, &self.end) {
-            (GridPlacement::Line(line), _) if line.as_i16() != 0 => true,
-            (_, GridPlacement::Line(line)) if line.as_i16() != 0 => true,
+            (GridPlacement::Line(line), _) if line.as_i32() != 0 => true,
+            (_, GridPlacement::Line(line)) if line.as_i32() != 0 => true,
             (GridPlacement::NamedLine(_, _), _) => true,
             (_, GridPlacement::NamedLine(_, _)) => true,
             _ => false,
@@ -576,14 +576,14 @@ impl Line<NonNamedGridPlacement> {
     /// (0 is an invalid line in GridLine coordinates, and falls back to "auto" which is indefinite)
     pub fn is_definite(&self) -> bool {
         match (&self.start, &self.end) {
-            (GenericGridPlacement::Line(line), _) if line.as_i16() != 0 => true,
-            (_, GenericGridPlacement::Line(line)) if line.as_i16() != 0 => true,
+            (GenericGridPlacement::Line(line), _) if line.as_i32() != 0 => true,
+            (_, GenericGridPlacement::Line(line)) if line.as_i32() != 0 => true,
             _ => false,
         }
     }
 
     /// Apply a mapping function if the [`GridPlacement`] is a `Track`. Otherwise return `self` unmodified.
-    pub fn into_origin_zero(&self, explicit_track_count: u16) -> Line<OriginZeroGridPlacement> {
+    pub fn into_origin_zero(&self, explicit_track_count: u32) -> Line<OriginZeroGridPlacement> {
         Line {
             start: self.start.into_origin_zero_placement(explicit_track_count),
             end: self.end.into_origin_zero_placement(explicit_track_count),
@@ -1347,10 +1347,10 @@ pub enum RepetitionCount {
     /// See: <https://developer.mozilla.org/en-US/docs/Web/CSS/repeat#auto-fit>
     AutoFit,
     /// The specified tracks should be repeated exacts N times
-    Count(u16),
+    Count(u32),
 }
-impl From<u16> for RepetitionCount {
-    fn from(value: u16) -> Self {
+impl From<u32> for RepetitionCount {
+    fn from(value: u32) -> Self {
         Self::Count(value)
     }
 }
@@ -1413,8 +1413,8 @@ impl<S: CheapCloneStr> GenericRepetition for &'_ GridTemplateRepetition<S> {
         self.count
     }
     #[inline(always)]
-    fn track_count(&self) -> u16 {
-        self.tracks.len() as u16
+    fn track_count(&self) -> u32 {
+        self.tracks.len() as u32
     }
     #[inline(always)]
     fn tracks(&self) -> Self::RepetitionTrackList<'_> {

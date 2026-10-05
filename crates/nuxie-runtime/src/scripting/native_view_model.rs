@@ -107,7 +107,7 @@ impl NativeScriptViewModel {
             return BTreeMap::new();
         };
         let properties = model
-            .with(|model| model.as_view_model().map(|model| model.properties()))
+            .with(|model| model.as_view_model().map(|model| model.properties().to_vec()))
             .flatten()
             .expect("native ViewModel definition");
         properties.into_iter().filter_map(|property| {
@@ -144,7 +144,7 @@ impl NativeScriptViewModel {
         let properties = self
             .model
             .as_ref()?
-            .with(|model| model.as_view_model().map(|model| model.properties()))
+            .with(|model| model.as_view_model().map(|model| model.properties().to_vec()))
             .flatten()?;
         properties
             .iter()

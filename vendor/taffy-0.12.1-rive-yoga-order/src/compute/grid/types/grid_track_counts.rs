@@ -40,16 +40,16 @@ use core::ops::Range;
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub(crate) struct TrackCounts {
     /// The number of track in the implicit grid before the explicit grid
-    pub negative_implicit: u16,
+    pub negative_implicit: u32,
     /// The number of tracks in the explicit grid
-    pub explicit: u16,
+    pub explicit: u32,
     /// The number of tracks in the implicit grid after the explicit grid
-    pub positive_implicit: u16,
+    pub positive_implicit: u32,
 }
 
 impl TrackCounts {
     /// Create a TrackCounts instance from raw track count numbers
-    pub const fn from_raw(negative_implicit: u16, explicit: u16, positive_implicit: u16) -> Self {
+    pub const fn from_raw(negative_implicit: u32, explicit: u32, positive_implicit: u32) -> Self {
         Self { negative_implicit, explicit, positive_implicit }
     }
 
@@ -60,12 +60,12 @@ impl TrackCounts {
 
     /// The OriginZeroLine representing the start of the implicit grid
     pub const fn implicit_start_line(&self) -> OriginZeroLine {
-        OriginZeroLine(-(self.negative_implicit as i16))
+        OriginZeroLine(-(self.negative_implicit as i32))
     }
 
     /// The OriginZeroLine representing the end of the implicit grid
     pub const fn implicit_end_line(&self) -> OriginZeroLine {
-        OriginZeroLine((self.explicit + self.positive_implicit) as i16)
+        OriginZeroLine((self.explicit + self.positive_implicit) as i32)
     }
 }
 
@@ -74,13 +74,13 @@ impl TrackCounts {
 impl TrackCounts {
     /// Converts a grid line in OriginZero coordinates into the track immediately
     /// following that grid line as an index into the CellOccupancyMatrix.
-    pub const fn oz_line_to_next_track(&self, index: OriginZeroLine) -> i16 {
-        index.0 + (self.negative_implicit as i16)
+    pub const fn oz_line_to_next_track(&self, index: OriginZeroLine) -> i32 {
+        index.0 + (self.negative_implicit as i32)
     }
 
     /// Converts start and end grid lines in OriginZero coordinates into a range of tracks
     /// as indexes into the CellOccupancyMatrix
-    pub const fn oz_line_range_to_track_range(&self, input: Line<OriginZeroLine>) -> Range<i16> {
+    pub const fn oz_line_range_to_track_range(&self, input: Line<OriginZeroLine>) -> Range<i32> {
         let start = self.oz_line_to_next_track(input.start);
         let end = self.oz_line_to_next_track(input.end); // Don't subtract 1 as output range is exclusive
         start..end
@@ -88,15 +88,15 @@ impl TrackCounts {
 
     /// Converts a track as an index into the CellOccupancyMatrix into the grid line immediately
     /// preceding that track in OriginZero coordinates.
-    pub const fn track_to_prev_oz_line(&self, index: u16) -> OriginZeroLine {
-        OriginZeroLine((index as i16) - (self.negative_implicit as i16))
+    pub const fn track_to_prev_oz_line(&self, index: u32) -> OriginZeroLine {
+        OriginZeroLine((index as i32) - (self.negative_implicit as i32))
     }
 
     /// Converts a range of tracks as indexes into the CellOccupancyMatrix into
     /// start and end grid lines in OriginZero coordinates
-    pub const fn track_range_to_oz_line_range(&self, input: Range<i16>) -> Line<OriginZeroLine> {
-        let start = self.track_to_prev_oz_line(input.start as u16);
-        let end = self.track_to_prev_oz_line(input.end as u16); // Don't add 1 as input range is exclusive
+    pub const fn track_range_to_oz_line_range(&self, input: Range<i32>) -> Line<OriginZeroLine> {
+        let start = self.track_to_prev_oz_line(input.start as u32);
+        let end = self.track_to_prev_oz_line(input.end as u32); // Don't add 1 as input range is exclusive
         Line { start, end }
     }
 }

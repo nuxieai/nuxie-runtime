@@ -34,7 +34,7 @@ where
 
 #[cfg(feature = "grid")]
 /// Returns a grid template containing `count` evenly sized tracks
-pub fn evenly_sized_tracks<S: CheapCloneStr>(count: u16) -> Vec<GridTemplateComponent<S>> {
+pub fn evenly_sized_tracks<S: CheapCloneStr>(count: u32) -> Vec<GridTemplateComponent<S>> {
     use crate::util::sys::new_vec_with_capacity;
     let mut repeated_tracks = new_vec_with_capacity(1);
     repeated_tracks.push(flex(1.0f32));
@@ -47,23 +47,23 @@ pub fn evenly_sized_tracks<S: CheapCloneStr>(count: u16) -> Vec<GridTemplateComp
 ///  - Positive indices count upwards from the start (top or left) of the explicit grid
 ///  - Negative indices count downwards from the end (bottom or right) of the explicit grid
 ///  - ZERO IS INVALID index, and will be treated as a GridPlacement::Auto.
-pub fn line<T: TaffyGridLine>(index: i16) -> T {
+pub fn line<T: TaffyGridLine>(index: i32) -> T {
     T::from_line_index(index)
 }
 /// Trait to abstract over grid line values
 pub trait TaffyGridLine {
-    /// Converts an i16 into Self
-    fn from_line_index(index: i16) -> Self;
+    /// Converts an i32 into Self
+    fn from_line_index(index: i32) -> Self;
 }
 
 /// Returns a GridPlacement::Span
-pub fn span<T: TaffyGridSpan>(span: u16) -> T {
+pub fn span<T: TaffyGridSpan>(span: u32) -> T {
     T::from_span(span)
 }
 /// Trait to abstract over grid span values
 pub trait TaffyGridSpan {
-    /// Converts an u16 into Self
-    fn from_span(span: u16) -> Self;
+    /// Converts an u32 into Self
+    fn from_span(span: u32) -> Self;
 }
 
 /// Returns a MinMax with min value of min and max value of max
@@ -540,7 +540,7 @@ mod repeat_fn_tests {
     const TEST_VEC: Vec<TrackSizingFunction> = Vec::new();
 
     #[test]
-    fn test_repeat_u16() {
+    fn test_repeat_u32() {
         assert_eq!(
             repeat::<_, S>(123, TEST_VEC),
             GridTemplateComponent::Repeat(GridTemplateRepetition {

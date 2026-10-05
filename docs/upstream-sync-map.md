@@ -7,18 +7,39 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `dc75beed2defe9bfe53dfbc30b8649649905b602`
+- LAST_SYNCED_SHA: `160085c654874d35ad654a750e782d7c78e050d9`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `160085c654874d35ad654a750e782d7c78e050d9` (refreshed 2026-10-05 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There is one upstream commit after the checkpoint at this fetched target.
-  All 193 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (215 after `5892bb05`); this
+  There are no upstream commits after the checkpoint at this fetched target.
+  All 194 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (216 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `160085c6`, integrated atop downstream `97e52f7db0`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including correction rereviews, are clean. The new contribution matrix
+  exposed two existing layout differences: definite item sizes were capped by
+  fixed tracks, and unresolved percentage minima were omitted from intrinsic
+  sizing. Both now follow the pinned public Yoga source, with unchanged test
+  expectations. Native runtime/affected integration tests pass 612 (three
+  ignored), with only the recorded converter Silver assertion failing;
+  scripting passes 377 (one ignored). WebGPU/WebGL2 on wasm32-unknown-unknown,
+  Android arm64 Vulkan with scripting/scriptnet, and no-default runtime compile.
+  Fresh ordinary/scripted Golden comparisons each cover 364 entries with zero
+  failures and the existing one/two divergences; the scripted wrapper was rebuilt
+  and its comparison repeated after main's audio-ABI fix. All 231 runtime Silver
+  cases ran: 85 byte-exact, 121 within unchanged epsilon, seven recorded
+  divergences, 17 unsupported skips, and only `data_converter_to_number`
+  (frame 41, op 2120, expected 1850 path fields, got 1443). Structural/helper
+  checks pass 16 and manifest tests 27; 1,065 mirrored owners are structural
+  coverage, not semantic proof. Boundary-checker unit tests pass 168; its broad
+  scan has the same 49 diagnostics on an untouched `97e52f7db0` snapshot and
+  this branch, identical after normalizing the root path. No browser-pixel or
+  physical-device execution is claimed; deferred guest execution is not a pass.
 - Validation at `dc75beed`: independent source-equivalence and separate
   Rust-integration reviews, including correction rereviews, are clean. Native
   runtime/affected integration tests pass 316 (two ignored); scripting passes
@@ -272,6 +293,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `160085c654874d35ad654a750e782d7c78e050d9` | Translate layout-owned virtual grid contributions from every item, solved row/column lines and gaps, cached virtual inputs/item versions, original grid-cell pinning and sparse realized-item traversal. Remove the superseded runtime track-sizing model. Preserve Taffy through native contribution sizing at the approved layout boundary; the public Yoga dependency is the behavioral reference, not a runtime C dependency. Translate linear-time list updates, inline first-parent/LazyVector dependency storage, ordered symbol entries, append/reserve creation and nesting-stack changes. Core emptyId is already an associated constant. Port revised/new upstream tests; the upstream hidden scroll benchmark remains ignored and is not a performance campaign. Private .rive_head metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |
 | `dc75beed2defe9bfe53dfbc30b8649649905b602` | Translate the shared virtual layout model, wrapping lines, grid row/column windows, two-axis scrolling and carousel cycles, anchoring, per-axis physics sizes/shifts, grid placement/track observation, list realization and layout/style/text-input integration. Port the new model, sweep, alignment, component-list, anchor and physics tests and consume the new grid fixture from this pin. Retain the approved Taffy engine, exposing solved grid line offsets for the same runtime observations. C++ oracle dependency resolution follows the new public yoga.ref; private packages/yoga source is not imported. Private metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |
 | `de0417920b48a6e8540314c1ec2db091ae9f23fc` | C++ header dependency fix only: write attribution now includes cstddef explicitly for size_t. The paired Rust owner already uses the built-in usize for depth and needs no import or behavior change. Advance active pins after independent source and separate integration review; private .rive_head metadata is not imported. | — |
 | `7c9291ae1e49d6adc2c3e38074ba27051fe677ac` | Translate tools-only write attribution: enabled switch, thread-local ordered non-owning source stack, depth-restoring scopes, state-machine layer/listener and data-bind instrumentation, and live Luau protected calls/property writes/common methods. Preserve source identity through approved Rust ownership and delayed observer delivery; non-tools builds omit instrumentation. Wasm execution-scope instrumentation remains parked under UNIV-3728. Private CLI debugger/editor/script-asset changes described in metadata are absent publicly and not claimed. Reviews and applicable validation are recorded in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

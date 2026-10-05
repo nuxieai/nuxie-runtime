@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, hash_map::DefaultHasher},
+    collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
 };
 
@@ -23,6 +23,11 @@ use super::symbol_type::SymbolType;
 pub enum DataBindContainerDependent {
     Authored(CoreHandle),
     StateMachine(RuntimeStateMachineInstanceWeakHandle),
+}
+impl PartialEq for DataBindContainerDependent {
+    fn eq(&self, other: &Self) -> bool {
+        self.same_identity(other)
+    }
 }
 
 impl DataBindContainerDependent {
@@ -78,9 +83,10 @@ pub struct ViewModelInstance {
     pub base: ViewModelInstanceBase,
     property_values: Vec<CoreHandle>,
     value_data_binds: LazyVector<CoreHandle>,
-    parents: Vec<CoreHandle>,
-    dependents: Vec<DataBindContainerDependent>,
-    property_symbols: HashMap<SymbolType, CoreHandle>,
+    parent: Option<CoreHandle>,
+    more_parents: LazyVector<CoreHandle>,
+    dependents: LazyVector<DataBindContainerDependent>,
+    property_symbols: Vec<(SymbolType, CoreHandle)>,
     view_model: Option<CoreHandle>,
 }
 
@@ -103,9 +109,16 @@ impl ViewModelInstance {
         if self.property_values.contains(&value) {
             return;
         }
+        self.append_value(value);
+    }
+    pub fn reserve_values(&mut self, count: usize) {
+        self.property_values
+            .reserve(count.saturating_sub(self.property_values.len()));
+    }
+    pub fn append_value(&mut self, value: CoreHandle) {
         value
             .with_mut(|value| {
-                self.add_value_borrowed(
+                self.append_value_borrowed(
                     value
                         .as_view_model_instance_value_mut()
                         .expect("ViewModelInstance values derive from ViewModelInstanceValue"),
@@ -124,18 +137,16 @@ impl ViewModelInstance {
         if self.property_values.contains(&handle) {
             return;
         }
+        self.append_value_borrowed(value);
+    }
+    fn append_value_borrowed(
+        &mut self,
+        value: &mut super::viewmodel_instance_value::ViewModelInstanceValue,
+    ) {
+        let handle = value
+            .handle()
+            .expect("ViewModelInstanceValue is arena-owned");
         value.set_view_model_instance_borrowed(self);
-        let symbol = value.view_model_property().and_then(|property| {
-            property
-                .with(|property| {
-                    let property = property.as_view_model_property()?;
-                    SymbolType::from_i32(property.base.symbol_type_value() as i32)
-                })
-                .flatten()
-        });
-        if let Some(symbol) = symbol.filter(|symbol| *symbol != SymbolType::None) {
-            self.set_property_symbol(symbol, handle.clone());
-        }
         self.property_values.push(handle);
     }
 
@@ -164,7 +175,7 @@ impl ViewModelInstance {
                 bind.remove_occurrence();
             }
         }
-        for dependent in self.dependents.clone() {
+        for dependent in self.dependents.view().to_vec() {
             dependent.drop_instance_value_binds_targeting(&value);
         }
         if let Some(referenced) = value
@@ -182,7 +193,7 @@ impl ViewModelInstance {
                 }
             });
         }
-        self.property_symbols.retain(|_, stored| stored != &value);
+        self.property_symbols.retain(|(_, stored)| stored != &value);
         self.property_values.remove(index);
         true
     }
@@ -221,12 +232,23 @@ impl ViewModelInstance {
     }
 
     pub fn property_value_for_symbol(&self, symbol_type: SymbolType) -> Option<CoreHandle> {
-        self.property_symbols.get(&symbol_type).cloned()
+        self.property_symbols
+            .iter()
+            .find(|(symbol, _)| *symbol == symbol_type)
+            .map(|(_, value)| value.clone())
     }
 
     pub fn set_property_symbol(&mut self, symbol_type: SymbolType, value: CoreHandle) {
         if symbol_type != SymbolType::None {
-            self.property_symbols.insert(symbol_type, value);
+            if let Some((_, stored)) = self
+                .property_symbols
+                .iter_mut()
+                .find(|(symbol, _)| *symbol == symbol_type)
+            {
+                *stored = value;
+            } else {
+                self.property_symbols.push((symbol_type, value));
+            }
         }
     }
 
@@ -379,12 +401,21 @@ impl ViewModelInstance {
     }
 
     pub fn rebind_dependents_occurrence(owner: &CoreHandle) {
-        let (dependents, parents) = owner
-            .with_downcast::<Self, _>(|owner| (owner.dependents.clone(), owner.parents.clone()))
+        let dependents = owner
+            .with_downcast::<Self, _>(|owner| owner.dependents.snapshot())
             .expect("ViewModel occurrence");
         for dependent in dependents {
             dependent.relink_data_context();
         }
+        if let Some(parent) = owner
+            .with_downcast::<Self, _>(|owner| owner.parent.clone())
+            .flatten()
+        {
+            Self::rebind_dependents_occurrence(&parent);
+        }
+        let parents = owner
+            .with_downcast::<Self, _>(|owner| owner.more_parents.snapshot())
+            .expect("ViewModel occurrence");
         for parent in parents {
             Self::rebind_dependents_occurrence(&parent);
         }
@@ -536,11 +567,13 @@ impl ViewModelInstance {
     }
 
     pub fn add_value_data_bind(&mut self, bind: CoreHandle) {
-        let flags = bind.with(|owner| {
-            let bind = owner.as_data_bind().unwrap();
-            (bind.to_source() && bind.to_target())
-                .then(|| bind.base.flags() | SOURCE_TO_TARGET_FIRST)
-        }).flatten();
+        let flags = bind
+            .with(|owner| {
+                let bind = owner.as_data_bind().unwrap();
+                (bind.to_source() && bind.to_target())
+                    .then(|| bind.base.flags() | SOURCE_TO_TARGET_FIRST)
+            })
+            .flatten();
         if let Some(flags) = flags {
             // The source setter notifies before insertion. Release the bind
             // first: its FLAGS observer may legally be the bind itself.
@@ -692,17 +725,28 @@ impl ViewModelInstance {
     }
 
     pub fn add_parent(&mut self, parent: CoreHandle) {
-        if !self.parents.contains(&parent) {
-            self.parents.push(parent);
+        if self.parent.as_ref() == Some(&parent) {
+            return;
         }
+        if self.parent.is_none() {
+            self.parent = Some(parent);
+            return;
+        }
+        self.more_parents.push_unique(parent);
     }
 
     pub fn remove_parent(&mut self, parent: &CoreHandle) {
-        self.parents.retain(|candidate| candidate != parent);
+        self.more_parents.erase_all(parent);
+        if self.parent.as_ref() == Some(parent) {
+            self.parent = self.more_parents.view().last().cloned();
+            if let Some(parent) = &self.parent {
+                self.more_parents.erase_all(parent);
+            }
+        }
     }
 
     pub fn has_parents(&self) -> bool {
-        !self.parents.is_empty()
+        self.parent.is_some()
     }
 
     pub fn add_dependent(&mut self, dependent: CoreHandle) {
@@ -730,18 +774,11 @@ impl ViewModelInstance {
     }
 
     fn add_dependent_occurrence(&mut self, dependent: DataBindContainerDependent) {
-        if !self
-            .dependents
-            .iter()
-            .any(|candidate| candidate.same_identity(&dependent))
-        {
-            self.dependents.push(dependent);
-        }
+        self.dependents.push_unique(dependent);
     }
 
     fn remove_dependent_occurrence(&mut self, dependent: &DataBindContainerDependent) {
-        self.dependents
-            .retain(|candidate| !candidate.same_identity(dependent));
+        self.dependents.erase_all(dependent);
     }
 
     #[cfg(any(test, feature = "tools"))]
@@ -756,7 +793,11 @@ impl ViewModelInstance {
     }
 
     pub fn parents(&self) -> Vec<CoreHandle> {
-        self.parents.clone()
+        let mut parents = self.more_parents.view().to_vec();
+        if let Some(parent) = &self.parent {
+            parents.insert(0, parent.clone());
+        }
+        parents
     }
 
     pub fn rebind_properties(&mut self) {
@@ -784,10 +825,17 @@ impl ViewModelInstance {
     }
 
     fn rebind_dependents(&mut self) {
-        for dependent in &self.dependents {
+        for dependent in self.dependents.iter() {
             dependent.relink_data_context();
         }
-        for parent in self.parents.clone() {
+        if let Some(parent) = self.parent.clone() {
+            parent.with_mut(|parent| {
+                if let Some(parent) = parent.as_view_model_instance_mut() {
+                    parent.rebind_dependents();
+                }
+            });
+        }
+        for parent in self.more_parents.snapshot() {
             parent.with_mut(|parent| {
                 if let Some(parent) = parent.as_view_model_instance_mut() {
                     parent.rebind_dependents();
@@ -822,5 +870,36 @@ impl Drop for ViewModelInstance {
         }
         self.property_values.clear();
         self.view_model = None;
+    }
+}
+
+#[cfg(test)]
+mod parent_storage_tests {
+    use super::*;
+    use crate::source::core::CoreArena;
+
+    #[test]
+    fn removing_inline_parent_promotes_last_extra_parent() {
+        let arena = CoreArena::default();
+        let parents: Vec<_> = (0..4)
+            .map(|_| arena.insert(ViewModelInstance::default()))
+            .collect();
+        let mut instance = ViewModelInstance::default();
+        for parent in &parents {
+            instance.add_parent(parent.clone());
+        }
+        instance.add_parent(parents[0].clone());
+        instance.add_parent(parents[2].clone());
+        assert_eq!(instance.parents(), parents);
+        instance.remove_parent(&parents[0]);
+        assert_eq!(
+            instance.parents(),
+            vec![parents[3].clone(), parents[1].clone(), parents[2].clone()]
+        );
+        instance.remove_parent(&parents[1]);
+        instance.remove_parent(&parents[3]);
+        assert_eq!(instance.parents(), vec![parents[2].clone()]);
+        instance.remove_parent(&parents[2]);
+        assert!(!instance.has_parents());
     }
 }

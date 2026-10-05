@@ -342,18 +342,18 @@ pub type GridTrackList = Vec<YGGridTrackSize>;
 pub enum YGGridLine {
     #[default]
     Auto,
-    Line(i16),
-    Span(u16),
+    Line(i32),
+    Span(u32),
 }
 impl YGGridLine {
     pub fn auto() -> Self {
         Self::Auto
     }
     pub fn from_integer(v: i32) -> Self {
-        Self::Line(v as i16)
+        Self::Line(v)
     }
     pub fn span(v: i32) -> Self {
-        Self::Span(v.max(0) as u16)
+        Self::Span(v.max(0) as u32)
     }
     fn taffy(&self) -> GridPlacement {
         match *self {

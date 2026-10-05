@@ -139,7 +139,9 @@ fn invalidate_rendering_handle_with_active(
     // Stroke calls the actual renderer before Super::invalidateRendering.
     // Release the Core receiver, and then the temporary render-paint identity,
     // before reading any dirt or dependent state after that callback.
-    action.before_dirt();
+    if !action.before_dirt() {
+        return;
+    }
     add_dirt_with_active(
         &ComponentOccurrenceHandle::Authored(paint.clone()),
         ComponentDirt::PATH,

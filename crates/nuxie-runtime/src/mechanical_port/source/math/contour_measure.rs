@@ -1,8 +1,8 @@
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 
 use super::math_types;
 use super::path_types::PathVerb;
-use super::raw_path::RawPath;
+use super::raw_path::{RawPath, RawPathCursor};
 use super::raw_path_utils::{EvalCubic, EvalQuad, cubic_extract, line_extract, quad_extract};
 use super::vec2d::Vec2D;
 use super::wangs_formula::{self, VectorXform};
@@ -20,19 +20,38 @@ enum SegmentType {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[repr(C)]
 pub struct Segment {
     distance: f32,
     point_index: u32,
-    t_value: u32,
-    segment_type: SegmentType,
+    // Upstream stores a 30-bit t value and a 2-bit type in one word.
+    packed_t_and_type: u32,
 }
 impl Segment {
+    fn new(distance: f32, point_index: u32, t_value: u32, segment_type: SegmentType) -> Self {
+        Self {
+            distance,
+            point_index,
+            packed_t_and_type: (t_value & MAX_DOT30) | ((segment_type as u32) << 30),
+        }
+    }
+    fn t_value(self) -> u32 {
+        self.packed_t_and_type & MAX_DOT30
+    }
+    fn segment_type(self) -> SegmentType {
+        match self.packed_t_and_type >> 30 {
+            0 => SegmentType::Line,
+            1 => SegmentType::Quad,
+            2 => SegmentType::Cubic,
+            _ => unreachable!("invalid segment type"),
+        }
+    }
     pub fn get_t(self) -> f32 {
-        self.t_value as f32 * INV_SCALE_D30
+        self.t_value() as f32 * INV_SCALE_D30
     }
     fn extract_all(self, dst: &mut RawPath, points: &[Vec2D]) {
         let points = &points[self.point_index as usize..];
-        match self.segment_type {
+        match self.segment_type() {
             SegmentType::Line => dst.line_to_point(points[1]),
             SegmentType::Quad => dst.quad_to_points(points[1], points[2]),
             SegmentType::Cubic => dst.cubic_to_points(points[1], points[2], points[3]),
@@ -41,7 +60,7 @@ impl Segment {
     fn extract(self, dst: &mut RawPath, from_t: f32, to_t: f32, points: &[Vec2D], move_to: bool) {
         assert!(from_t <= to_t);
         let points = &points[self.point_index as usize..];
-        match self.segment_type {
+        match self.segment_type() {
             SegmentType::Line => {
                 let source: &[Vec2D; 2] = points[..2].try_into().unwrap();
                 let mut extracted = [Vec2D::default(); 2];
@@ -78,13 +97,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn segment_packs_the_source_t_value_and_type_in_twelve_bytes() {
+        assert_eq!(std::mem::size_of::<Segment>(), 12);
+        for kind in [SegmentType::Line, SegmentType::Quad, SegmentType::Cubic] {
+            for t_value in [0, 1, MAX_DOT30 / 2, MAX_DOT30] {
+                let segment = Segment::new(5.0, 7, t_value, kind);
+                assert_eq!(segment.distance, 5.0);
+                assert_eq!(segment.point_index, 7);
+                assert_eq!(segment.t_value(), t_value);
+                assert_eq!(segment.segment_type(), kind);
+                assert_eq!(
+                    segment.get_t().to_bits(),
+                    (t_value as f32 * INV_SCALE_D30).to_bits()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn line_segment_extract_matches_pinned_exact_lerp_grouping() {
-        let segment = Segment {
-            distance: 1.0,
-            point_index: 0,
-            t_value: MAX_DOT30,
-            segment_type: SegmentType::Line,
-        };
+        let segment = Segment::new(1.0, 0, MAX_DOT30, SegmentType::Line);
         let points = [
             Vec2D::new(39.608627, -64.03908),
             Vec2D::new(12.428378, -185.07193),
@@ -165,6 +197,109 @@ mod tests {
             assert_eq!(actual.tan.x.to_bits(), expected_tangent.x.to_bits());
             assert_eq!(actual.tan.y.to_bits(), expected_tangent.y.to_bits());
         }
+    }
+
+    #[test]
+    fn borrowed_iterator_uses_the_source_but_returns_independent_geometry() {
+        let contour = {
+            let mut path = RawPath::default();
+            path.move_to(1.0, 2.0);
+            path.line_to(4.0, 6.0);
+            let mut iter = ContourMeasureIter::new(&path, 0.5);
+            assert!(matches!(&iter.path, Cow::Borrowed(_)));
+            assert!(std::ptr::eq(iter.path.as_ref(), &path));
+            iter.next().unwrap()
+        };
+        assert_eq!(contour.length(), 5.0);
+        assert_eq!(contour.get_pos_tan(5.0).pos, Vec2D::new(4.0, 6.0));
+        let mut extracted = RawPath::default();
+        contour.get_segment(0.0, 5.0, &mut extracted, true);
+        assert_eq!(
+            extracted.points(),
+            &[Vec2D::new(1.0, 2.0), Vec2D::new(4.0, 6.0)]
+        );
+    }
+
+    #[test]
+    fn owning_iterator_survives_source_changes_and_clones_its_current_position() {
+        let mut owner = {
+            let mut path = RawPath::default();
+            path.move_to(1.0, 2.0);
+            path.line_to(4.0, 6.0);
+            path.move_to(10.0, 10.0);
+            path.line_to(13.0, 10.0);
+            let owner = RefCntContourMeasureIter::new(&path, 0.5);
+            assert!(matches!(&owner.iterator.path, Cow::Owned(_)));
+            path.rewind();
+            owner
+        };
+        assert_eq!(owner.get().next().unwrap().length(), 5.0);
+        let mut clone = owner.clone();
+        drop(owner);
+        let second = clone.get().next().unwrap();
+        assert_eq!(second.length(), 3.0);
+        assert_eq!(second.get_pos_tan(0.0).pos, Vec2D::new(10.0, 10.0));
+        assert!(clone.get().next().is_none());
+    }
+
+    #[test]
+    fn contour_passes_reuse_scratch_and_preserve_degenerate_and_closing_points() {
+        let mut path = RawPath::default();
+        path.move_to(0.0, 0.0);
+        path.line_to(0.0, 0.0);
+        path.quad_to(0.0, 0.0, 0.0, 0.0);
+        path.cubic_to(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        path.line_to(3.0, 0.0);
+        path.close();
+        path.move_to(10.0, 0.0);
+        path.quad_to(11.0, 2.0, 12.0, 0.0);
+        path.cubic_to(13.0, 3.0, 14.0, -3.0, 15.0, 0.0);
+        path.line_to(10.0, 0.0);
+        path.close();
+        let mut iter = ContourMeasureIter::new(&path, 0.5);
+        let scratch = iter.segment_counts.as_ptr();
+        let capacity = iter.segment_counts.capacity();
+        let first = iter.next().unwrap();
+        assert_eq!(&iter.segment_counts[..2], &[0, 0]);
+        assert_eq!(first.length(), 6.0);
+        assert!(first.is_closed());
+        assert_eq!(first.segments.len(), 2);
+        assert_eq!(first.points.len(), 9);
+        assert_eq!(first.points.last(), Some(&Vec2D::new(0.0, 0.0)));
+        let second = iter.next().unwrap();
+        assert!(iter.segment_counts[..2].iter().all(|&count| count > 0));
+        assert!(second.is_closed());
+        assert_eq!(second.points.len(), 7);
+        assert_eq!(second.points.first(), second.points.last());
+        assert_eq!(iter.segment_counts.as_ptr(), scratch);
+        assert_eq!(iter.segment_counts.capacity(), capacity);
+        assert!(iter.next().is_none());
+        iter.rewind(&path, 0.5);
+        assert_eq!(iter.segment_counts.as_ptr(), scratch);
+        assert_eq!(iter.segment_counts.capacity(), capacity);
+        assert_eq!(iter.next().unwrap().points, first.points);
+    }
+
+    #[test]
+    fn contour_counts_apply_the_source_segment_cap_and_tolerance_floor() {
+        let mut path = RawPath::default();
+        path.move_to(0.0, 0.0);
+        path.quad_to(1_000_000.0, 1_000_000.0, 2_000_000.0, 0.0);
+        path.cubic_to(
+            3_000_000.0,
+            1_000_000.0,
+            4_000_000.0,
+            -1_000_000.0,
+            5_000_000.0,
+            0.0,
+        );
+        let mut iter = ContourMeasureIter::new(&path, 0.0);
+        let contour = iter.next().unwrap();
+        assert_eq!(&iter.segment_counts[..2], &[100, 100]);
+        assert_eq!(contour.segments.len(), 200);
+        let at_floor = ContourMeasureIter::new(&path, 1.0 / 16.0).next().unwrap();
+        assert_eq!(contour.length().to_bits(), at_floor.length().to_bits());
+        assert_eq!(contour.points, at_floor.points);
     }
 }
 
@@ -252,7 +387,7 @@ impl ContourMeasure {
             (distance - previous_distance) / (current_distance - previous_distance);
         assert!((0.0..=1.0).contains(&relative_distance));
         let point_index = segment.point_index as usize;
-        if segment.segment_type == SegmentType::Line {
+        if segment.segment_type() == SegmentType::Line {
             let p0 = self.points[point_index];
             let p1 = self.points[point_index + 1];
             return PosTan {
@@ -270,7 +405,7 @@ impl ContourMeasure {
         };
         let t = interpolate_segment_t(previous_t, segment.get_t(), relative_distance);
         assert!((0.0..=1.0).contains(&t));
-        if segment.segment_type == SegmentType::Quad {
+        if segment.segment_type() == SegmentType::Quad {
             eval_quad(
                 (&self.points[point_index..point_index + 3])
                     .try_into()
@@ -363,7 +498,7 @@ impl ContourMeasure {
                     segment.distance as f64,
                     segment.point_index as i32,
                     segment.get_t() as f64,
-                    segment.segment_type as i32,
+                    segment.segment_type() as i32,
                 );
             }
         }
@@ -381,7 +516,7 @@ impl ContourMeasure {
                     cpp_g(segment.distance),
                     segment.point_index as i32,
                     cpp_g(segment.get_t()),
-                    segment.segment_type as i32
+                    segment.segment_type() as i32
                 );
             }
         }
@@ -498,68 +633,93 @@ fn next_segment_beginning(segments: &[Segment], mut index: usize) -> usize {
 }
 
 #[derive(Clone, Debug)]
-struct SourceContour {
-    start: Vec2D,
-    elements: Vec<SourceElement>,
-    closed: bool,
-}
-#[derive(Clone, Debug)]
-enum SourceElement {
-    Line([Vec2D; 2]),
-    Quad([Vec2D; 3]),
-    Cubic([Vec2D; 4]),
-}
-
-#[derive(Clone, Debug)]
-pub struct ContourMeasureIter {
-    contours: Vec<SourceContour>,
-    index: usize,
+pub struct ContourMeasureIter<'a> {
+    path: Cow<'a, RawPath>,
+    cursor: RawPathCursor,
     inverse_tolerance: f32,
     pub segment_counts: Vec<u32>,
 }
-impl ContourMeasureIter {
+impl<'a> ContourMeasureIter<'a> {
     pub const DEFAULT_TOLERANCE: f32 = 0.5;
-    pub fn new(path: &RawPath, tolerance: f32) -> Self {
-        let mut result = Self {
-            contours: Vec::new(),
-            index: 0,
-            inverse_tolerance: 1.0,
-            segment_counts: vec![0; path.verbs().len()],
-        };
-        result.rewind(path, tolerance);
-        result
+
+    /// Upstream's pointer constructor borrows the source for iteration. Each
+    /// returned measure owns its points and can outlive both source and iterator.
+    pub fn new(path: &'a RawPath, tolerance: f32) -> Self {
+        Self::from_path(Cow::Borrowed(path), tolerance)
     }
-    pub fn rewind(&mut self, path: &RawPath, tolerance: f32) {
-        self.contours = collect_contours(path);
-        self.index = 0;
+
+    fn from_path(path: Cow<'a, RawPath>, tolerance: f32) -> Self {
+        let segment_counts = vec![0; path.verbs().len()];
+        Self {
+            path,
+            cursor: RawPathCursor::default(),
+            inverse_tolerance: 1.0 / cpp_max(tolerance, 1.0 / 16.0),
+            segment_counts,
+        }
+    }
+
+    pub fn rewind(&mut self, path: &'a RawPath, tolerance: f32) {
+        self.path = Cow::Borrowed(path);
+        self.cursor = RawPathCursor::default();
         self.inverse_tolerance = 1.0 / cpp_max(tolerance, 1.0 / 16.0);
         self.segment_counts.resize(path.verbs().len(), 0);
     }
+
     fn try_next(&mut self) -> Option<Rc<ContourMeasure>> {
-        let contour = self.contours.get(self.index)?.clone();
-        self.index += 1;
-        let mut segment_counts = Vec::new();
+        let path = self.path.as_ref();
+        let mut iter = path.iter_from(self.cursor);
+        let end = path.end();
+        assert!(iter == end || iter.verb() == PathVerb::Move);
+
+        // Skip empty contours, retaining the most recent move point.
+        let mut start = Vec2D::default();
+        loop {
+            if iter == end {
+                self.cursor = iter.cursor();
+                return None;
+            }
+            match iter.verb() {
+                PathVerb::Move => start = iter.move_point(),
+                PathVerb::Close => {}
+                _ => break,
+            }
+            let _ = iter.next();
+        }
+
+        // Pass 1 counts directly from the source path and reuses the scratch
+        // buffer sized by rewind, including any closing line in the reservation.
+        let first = iter.clone();
+        let mut end_of_contour = end.clone();
         let mut curve_segments = 0usize;
         let mut line_count = 0usize;
-        for element in &contour.elements {
-            match element {
-                SourceElement::Line(points) => {
-                    line_count += usize::from(Vec2D::distance_squared(points[1], points[0]) > 0.0)
+        let mut curve_index = 0usize;
+        let mut closed = false;
+        let mut scan = first.clone();
+        while scan != end {
+            match scan.verb() {
+                PathVerb::Move => {
+                    end_of_contour = scan;
+                    break;
                 }
-                SourceElement::Quad(points) => {
+                PathVerb::Line => {
+                    let points = scan.line_points();
+                    line_count += usize::from(Vec2D::distance_squared(points[1], points[0]) > 0.0);
+                }
+                PathVerb::Quad => {
                     let count = wangs_formula::quadratic(
-                        points,
+                        scan.quad_points().try_into().unwrap(),
                         self.inverse_tolerance,
                         VectorXform::default(),
                     )
                     .ceil() as u32;
                     let count = count.min(100);
                     curve_segments += count as usize;
-                    segment_counts.push(count);
+                    self.segment_counts[curve_index] = count;
+                    curve_index += 1;
                 }
-                SourceElement::Cubic(points) => {
+                PathVerb::Cubic => {
                     let count = wangs_formula::cubic(
-                        points,
+                        scan.cubic_points().try_into().unwrap(),
                         self.inverse_tolerance,
                         VectorXform::default(),
                     )
@@ -567,71 +727,104 @@ impl ContourMeasureIter {
                     .ceil() as u32;
                     let count = count.min(100);
                     curve_segments += count as usize;
-                    segment_counts.push(count);
+                    self.segment_counts[curve_index] = count;
+                    curve_index += 1;
+                }
+                PathVerb::Close => {
+                    line_count += usize::from(scan.point_before_close() != start);
+                    closed = true;
                 }
             }
+            let _ = scan.next();
         }
-        self.segment_counts[..segment_counts.len()].copy_from_slice(&segment_counts);
+
+        // Pass 2 emits into the fully reserved segment buffer. The math and
+        // source point indices follow the same path traversal as pass 1.
         let mut segments = Vec::with_capacity(curve_segments + line_count);
-        let mut points = vec![contour.start];
         let mut distance = 0.0;
         let mut point_index = 0u32;
         let mut curve_index = 0;
-        for element in &contour.elements {
-            match element {
-                SourceElement::Line(line) => {
+        let mut duplicate_start = false;
+        while iter != end_of_contour {
+            match iter.verb() {
+                PathVerb::Move => unreachable!("move begins the next contour"),
+                PathVerb::Line => {
+                    let line = iter.line_points();
                     if Vec2D::distance_squared(line[1], line[0]) > 0.0 {
                         distance += (line[1] - line[0]).length();
-                        segments.push(Segment {
+                        segments.push(Segment::new(
                             distance,
                             point_index,
-                            t_value: MAX_DOT30,
-                            segment_type: SegmentType::Line,
-                        });
+                            MAX_DOT30,
+                            SegmentType::Line,
+                        ));
                     }
-                    points.push(line[1]);
                     point_index += 1;
                 }
-                SourceElement::Quad(quad) => {
-                    let count = segment_counts[curve_index];
+                PathVerb::Quad => {
+                    let count = self.segment_counts[curve_index];
                     curve_index += 1;
                     if count > 0 {
-                        distance =
-                            add_quad_segments(&mut segments, quad, count, point_index, distance);
+                        distance = add_quad_segments(
+                            &mut segments,
+                            iter.quad_points().try_into().unwrap(),
+                            count,
+                            point_index,
+                            distance,
+                        );
                     }
-                    points.extend_from_slice(&quad[1..]);
                     point_index += 2;
                 }
-                SourceElement::Cubic(cubic) => {
-                    let count = segment_counts[curve_index];
+                PathVerb::Cubic => {
+                    let count = self.segment_counts[curve_index];
                     curve_index += 1;
                     if count > 0 {
-                        distance =
-                            add_cubic_segments(&mut segments, cubic, count, point_index, distance);
+                        distance = add_cubic_segments(
+                            &mut segments,
+                            iter.cubic_points().try_into().unwrap(),
+                            count,
+                            point_index,
+                            distance,
+                        );
                     }
-                    points.extend_from_slice(&cubic[1..]);
                     point_index += 3;
                 }
+                PathVerb::Close => {
+                    let last = iter.point_before_close();
+                    if last != start {
+                        distance += (start - last).length();
+                        segments.push(Segment::new(
+                            distance,
+                            point_index,
+                            MAX_DOT30,
+                            SegmentType::Line,
+                        ));
+                        point_index += 1;
+                        duplicate_start = true;
+                    }
+                    assert!(closed);
+                }
             }
+            let _ = iter.next();
         }
-        if contour.closed && points.last().copied() != Some(contour.start) {
-            let last = *points.last().unwrap();
-            distance += (contour.start - last).length();
-            segments.push(Segment {
-                distance,
-                point_index,
-                t_value: MAX_DOT30,
-                segment_type: SegmentType::Line,
-            });
-            points.push(contour.start);
+        assert_eq!(segments.len(), curve_segments + line_count);
+
+        // Measures retain their own contiguous point range, independent of the
+        // borrowed or copied source that this iterator is currently reading.
+        let mut points = Vec::with_capacity(1 + point_index as usize);
+        points.extend_from_slice(
+            &path.points()[first.cursor().point_index() - 1..end_of_contour.cursor().point_index()],
+        );
+        if duplicate_start {
+            points.push(start);
         }
+        assert_eq!(points.len(), 1 + point_index as usize);
+        self.cursor = end_of_contour.cursor();
+
         if distance > 0.0 && points.len() >= 2 {
             assert!(!distance.is_nan());
             Some(Rc::new(ContourMeasure::new(
-                segments,
-                points,
-                distance,
-                contour.closed,
+                segments, points, distance, closed,
             )))
         } else {
             assert!(distance == 0.0 || distance.is_nan());
@@ -641,65 +834,34 @@ impl ContourMeasureIter {
     pub fn next(&mut self) -> Option<Rc<ContourMeasure>> {
         loop {
             let result = self.try_next();
-            if result.is_some() || self.index >= self.contours.len() {
+            if result.is_some() || self.cursor == self.path.end().cursor() {
                 return result;
             }
         }
     }
 }
 
+impl ContourMeasureIter<'static> {
+    /// Upstream's reference constructor copies the source for an iterator that
+    /// can outlive it, as required by the scripting wrapper.
+    pub fn from_path_copy(path: &RawPath, tolerance: f32) -> Self {
+        Self::from_path(Cow::Owned(path.clone()), tolerance)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct RefCntContourMeasureIter {
-    iterator: ContourMeasureIter,
+    iterator: ContourMeasureIter<'static>,
 }
 impl RefCntContourMeasureIter {
     pub fn new(path: &RawPath, tolerance: f32) -> Self {
         Self {
-            iterator: ContourMeasureIter::new(path, tolerance),
+            iterator: ContourMeasureIter::from_path_copy(path, tolerance),
         }
     }
-    pub fn get(&mut self) -> &mut ContourMeasureIter {
+    pub fn get(&mut self) -> &mut ContourMeasureIter<'static> {
         &mut self.iterator
     }
-}
-
-fn collect_contours(path: &RawPath) -> Vec<SourceContour> {
-    let mut contours = Vec::new();
-    let mut current: Option<SourceContour> = None;
-    for segment in path.segments() {
-        match segment.verb {
-            PathVerb::Move => {
-                if let Some(contour) = current.take() {
-                    contours.push(contour);
-                }
-                current = Some(SourceContour {
-                    start: segment.points[0],
-                    elements: Vec::new(),
-                    closed: false,
-                });
-            }
-            PathVerb::Line => current
-                .as_mut()
-                .unwrap()
-                .elements
-                .push(SourceElement::Line([segment.points[0], segment.points[1]])),
-            PathVerb::Quad => current
-                .as_mut()
-                .unwrap()
-                .elements
-                .push(SourceElement::Quad(segment.points.try_into().unwrap())),
-            PathVerb::Cubic => current
-                .as_mut()
-                .unwrap()
-                .elements
-                .push(SourceElement::Cubic(segment.points.try_into().unwrap())),
-            PathVerb::Close => current.as_mut().unwrap().closed = true,
-        }
-    }
-    if let Some(contour) = current {
-        contours.push(contour);
-    }
-    contours
 }
 fn to_dot30(value: f32) -> u32 {
     assert!(value >= 0.0 && value < 1.0);
@@ -719,22 +881,22 @@ fn add_quad_segments(
     for _ in 1..count {
         let next = (eval.a * t + eval.b) * t + eval.c;
         distance += (next - previous).length();
-        output.push(Segment {
+        output.push(Segment::new(
             distance,
             point_index,
-            t_value: to_dot30(t),
-            segment_type: SegmentType::Quad,
-        });
+            to_dot30(t),
+            SegmentType::Quad,
+        ));
         previous = next;
         t += delta;
     }
     distance += (points[2] - previous).length();
-    output.push(Segment {
+    output.push(Segment::new(
         distance,
         point_index,
-        t_value: MAX_DOT30,
-        segment_type: SegmentType::Quad,
-    });
+        MAX_DOT30,
+        SegmentType::Quad,
+    ));
     distance
 }
 fn add_cubic_segments(
@@ -751,22 +913,22 @@ fn add_cubic_segments(
     for _ in 1..count {
         let next = eval.at(t);
         distance += (next - previous).length();
-        output.push(Segment {
+        output.push(Segment::new(
             distance,
             point_index,
-            t_value: to_dot30(t),
-            segment_type: SegmentType::Cubic,
-        });
+            to_dot30(t),
+            SegmentType::Cubic,
+        ));
         previous = next;
         t += delta;
     }
     distance += (points[3] - previous).length();
-    output.push(Segment {
+    output.push(Segment::new(
         distance,
         point_index,
-        t_value: MAX_DOT30,
-        segment_type: SegmentType::Cubic,
-    });
+        MAX_DOT30,
+        SegmentType::Cubic,
+    ));
     distance
 }
 fn cpp_min(first: f32, second: f32) -> f32 {

@@ -139,3 +139,38 @@ fn path_add_self_matches_upstream_raw_path_self_append() {
         .unwrap();
     assert!(exact);
 }
+
+#[test]
+fn contour_iterator_owns_its_source_across_path_mutation_and_collection() {
+    let vm = rive_vm();
+    vm.eval::<()>(
+        r#"
+        local path = Path.new()
+        path:moveTo(Vector(0, 0))
+        path:lineTo(Vector(3, 4))
+        path:moveTo(Vector(10, 20))
+        path:lineTo(Vector(10, 30))
+        contourSnapshot = path:contours()
+        -- The second contour has not been measured yet. Upstream's
+        -- RefCntContourMeasureIter owns a copy, not a view of this path.
+        path:reset()
+        path:moveTo(Vector(100, 100))
+        path:lineTo(Vector(200, 100))
+        "#,
+    )
+    .unwrap();
+    vm.lua().gc_collect().unwrap();
+    vm.lua().gc_collect().unwrap();
+
+    let actual: (f64, f64, bool, f64, f64, f64, f64) = vm
+        .eval(
+            r#"
+            local second = contourSnapshot.next
+            local position, tangent = second:positionAndTangent(5)
+            return contourSnapshot.length, second.length, second.next == nil,
+                position.x, position.y, tangent.x, tangent.y
+            "#,
+        )
+        .unwrap();
+    assert_eq!(actual, (5.0, 10.0, true, 10.0, 25.0, 0.0, 1.0));
+}

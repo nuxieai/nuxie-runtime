@@ -251,6 +251,24 @@ mod tests {
     use nuxie_render_api as render;
     use std::{cell::Cell, rc::Rc};
 
+    #[cfg(feature = "editor")]
+    #[test]
+    fn colorless_stroke_effect_invalidation_preserves_clean_dirt() {
+        let arena = CoreArena::default();
+        let stroke = arena.insert(Stroke::default());
+        stroke.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE);
+        });
+        invalidate_rendering_handle(&stroke);
+        assert_eq!(
+            stroke.with(|owner| owner.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
+    }
+
     struct InvalidationPaint {
         calls: Rc<Cell<usize>>,
         callback: Box<dyn FnMut()>,

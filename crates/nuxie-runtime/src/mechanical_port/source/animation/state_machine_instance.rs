@@ -4485,16 +4485,17 @@ impl StateMachineInstance {
             self.sort_hit_components();
         }
         if new_frame {
-            let input_report_start = self
+            // Capture before either queue so host drains retain focus and blur reports too.
+            let queued_input_report_start = self
                 .reporting
                 .get()
                 .map_or(0, |reporting| reporting.reported_events.len());
             self.process_focus_events();
             self.process_semantic_events();
-            let input_reports = self
+            let queued_input_reports = self
                 .reporting
                 .get()
-                .map(|reporting| reporting.reported_events[input_report_start..].to_vec())
+                .map(|reporting| reporting.reported_events[queued_input_report_start..].to_vec())
                 .unwrap_or_default();
             self.apply_events();
             // Queued focus and semantic input execute inside this frame, unlike pointer
@@ -4503,7 +4504,7 @@ impl StateMachineInstance {
             if let Some(reporting) = self.reporting.get_mut() {
                 reporting
                     .events_applied_during_loop
-                    .splice(0..0, input_reports);
+                    .splice(0..0, queued_input_reports);
             }
             self.needs_advance.set(false);
         }

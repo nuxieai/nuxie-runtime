@@ -2461,6 +2461,20 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_borrowed_raw_path_facade_symbol_is_exact(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        owner = "crates/nux-capi/src/render_callbacks.rs"
+        for source in (
+            "use nuxie::render_api::{Mat2D, RawPath, RawPathRef};",
+            "use nuxie::render_api::RawPathRef;",
+            "fn append(_: nuxie::render_api::RawPathRef<'_>) {}",
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(check(owner, source), [])
+                self.assertTrue(check(owner, source.replace("RawPathRef", "UnknownPathRef")))
+        self.assertTrue(check(owner, "use nuxie::render_api::*;"))
+        self.assertTrue(check(owner, "use nuxie::RawPathRef;"))
+
     def test_allows_exact_authored_msl_apple_extension_symbols(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/apple_metal.rs").write_text(

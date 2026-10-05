@@ -61,6 +61,7 @@ pub use render_callbacks::{
     NUX_RENDER_CALLBACKS_V3_MIN_SIZE, NuxImageSampler, NuxRawPathView, NuxRenderCallbacks,
 };
 
+use nuxie::runtime::input::focusable::{Key, KeyModifiers};
 use nuxie::{
     ArtboardInstance, Factory, FileImportLimits, LinearAnimationInstance, PersistentFactory,
     RuntimeEventPropertyValue, RuntimeFileHandle, RuntimeHitResult,
@@ -1260,9 +1261,70 @@ pub struct NuxPlayerPointerEvent {
     pub timestamp_seconds: f32,
 }
 
+/// Focus operations in submission order, after pointers and before advance.
+/// Next and Previous traverse Rive focus nodes; Clear removes focus; Key sends
+/// a GLFW-numbered key with modifiers and phase; Text sends typed UTF-8 text.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NuxPlayerFocusKind {
+    Next = 0,
+    Previous = 1,
+    Clear = 2,
+    Key = 3,
+    Text = 4,
+}
+
+pub const NUX_PLAYER_FOCUS_KIND_NEXT: u32 = NuxPlayerFocusKind::Next as u32;
+pub const NUX_PLAYER_FOCUS_KIND_PREVIOUS: u32 = NuxPlayerFocusKind::Previous as u32;
+pub const NUX_PLAYER_FOCUS_KIND_CLEAR: u32 = NuxPlayerFocusKind::Clear as u32;
+pub const NUX_PLAYER_FOCUS_KIND_KEY: u32 = NuxPlayerFocusKind::Key as u32;
+pub const NUX_PLAYER_FOCUS_KIND_TEXT: u32 = NuxPlayerFocusKind::Text as u32;
+
+/// Fixed-stride focus input. Each kind ignores fields it does not use.
+/// Listener events and value changes are returned in the same step result.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NuxPlayerFocusInput {
+    /// One of the NUX_PLAYER_FOCUS_KIND constants.
+    pub kind: u32,
+    /// Rive's GLFW key code, at most 0xFFFF, used only by Key.
+    pub key_code: u32,
+    /// Key modifier bits: Shift=1, Ctrl=2, Alt=4, Meta=8.
+    pub modifiers: u32,
+    /// Key phase booleans must each be exactly 0 or 1.
+    pub pressed: u32,
+    pub repeat: u32,
+    /// Text only: borrowed UTF-8, bounded per item and per step.
+    pub text: NuxStringView,
+}
+
+/// Read-only caller-sized focus state for a state-machine player.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct NuxPlayerFocusState {
+    pub struct_size: u32,
+    pub has_focus: u32,
+    pub expects_keyboard_input: u32,
+}
+
+pub const NUX_PLAYER_FOCUS_STATE_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxPlayerFocusState, expects_keyboard_input) + std::mem::size_of::<u32>();
+
+impl Default for NuxPlayerFocusState {
+    fn default() -> Self {
+        Self {
+            struct_size: u32::try_from(std::mem::size_of::<Self>()).unwrap_or(u32::MAX),
+            has_focus: 0,
+            expects_keyboard_input: 0,
+        }
+    }
+}
+
 /// One atomic, product-neutral player operation. Input and pointer arrays use
 /// ABI-v3 fixed element strides; future element layouts require a new entry
 /// point rather than appending fields and silently changing array stride.
+/// Named inputs run first, then pointers, then focus inputs in array order,
+/// then advance. Focus listener events and value changes return in this step.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxPlayerStep {
@@ -1274,6 +1336,8 @@ pub struct NuxPlayerStep {
     pub elapsed_seconds: f32,
     /// Opaque caller identity copied into runtime-authored change entries.
     pub correlation_id: u64,
+    pub focus_inputs: *const NuxPlayerFocusInput,
+    pub focus_input_count: usize,
 }
 
 pub const NUX_PLAYER_STEP_V3_MIN_SIZE: usize =
@@ -1289,6 +1353,8 @@ impl Default for NuxPlayerStep {
             pointer_count: 0,
             elapsed_seconds: 0.0,
             correlation_id: 0,
+            focus_inputs: ptr::null(),
+            focus_input_count: 0,
         }
     }
 }
@@ -1322,6 +1388,7 @@ pub struct NuxPlayerStepInfo {
     /// authored events first, then commands in FIFO order.
     pub host_command_count: usize,
     pub view_model_change_count: usize,
+    pub focus_input_result_count: usize,
 }
 
 pub const NUX_PLAYER_STEP_INFO_V3_MIN_SIZE: usize =
@@ -1337,6 +1404,7 @@ impl Default for NuxPlayerStepInfo {
             event_count: 0,
             host_command_count: 0,
             view_model_change_count: 0,
+            focus_input_result_count: 0,
         }
     }
 }
@@ -1676,6 +1744,7 @@ pub struct NuxPlayerStepResult {
     keep_going: bool,
     scheduling: NuxPlayerSchedulingInfo,
     pointer_results: Vec<NuxPlayerPointerHit>,
+    focus_input_results: Vec<u32>,
     state_changes: Vec<OwnedPlayerStateChange>,
     events: Vec<OwnedPlayerEvent>,
     host_commands: Vec<OwnedHostCommand>,
@@ -2744,6 +2813,9 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
         }
         match ArtboardInstance::from_native(file.file.clone(), artboard_index) {
             Ok(instance) => {
+                // Root occurrences own their focus tree before players attach listeners.
+                let native = instance.native_handle();
+                native.build_focus_tree(Some(native.ensure_focus_manager()), None);
                 let view_model_index = instance.view_model_index();
                 let handle = NuxArtboardInstance {
                     occurrence: Rc::new(ArtboardOccurrence {
@@ -3323,6 +3395,9 @@ pub unsafe extern "C" fn nux_player_info(
 
 pub const NUX_PLAYER_STEP_MAX_INPUTS: usize = 4 * 1024;
 pub const NUX_PLAYER_STEP_MAX_POINTERS: usize = 4 * 1024;
+pub const NUX_PLAYER_STEP_MAX_FOCUS_INPUTS: usize = 4 * 1024;
+pub const NUX_PLAYER_STEP_MAX_TEXT_BYTES: usize = 1024 * 1024;
+pub const NUX_PLAYER_STEP_MAX_TEXT_BYTES_TOTAL: usize = 4 * 1024 * 1024;
 pub const NUX_PLAYER_STEP_MAX_INPUT_NAME_BYTES: usize = 4 * 1024;
 const MAX_PLAYER_STEP_INPUT_NAME_BYTES_TOTAL: usize = 4 * 1024 * 1024;
 const MAX_PLAYER_STEP_EVENTS: usize = 4 * 1024;
@@ -3386,6 +3461,7 @@ fn player_step_failure(status: NuxStatus, message: impl AsRef<[u8]>) -> NuxPlaye
         keep_going: false,
         scheduling: NuxPlayerSchedulingInfo::default(),
         pointer_results: Vec::new(),
+        focus_input_results: Vec::new(),
         state_changes: Vec::new(),
         events: Vec::new(),
         host_commands: Vec::new(),
@@ -3494,6 +3570,7 @@ struct PreparedPlayerPointer {
 struct PreparedPlayerOperation {
     inputs: Vec<PlannedPlayerInput>,
     pointers: Vec<PreparedPlayerPointer>,
+    focus_inputs: Vec<PreparedFocusInput>,
     elapsed_seconds: f32,
 }
 
@@ -3586,6 +3663,88 @@ fn validate_player_inputs(
     Ok(planned)
 }
 
+enum PreparedFocusInput {
+    Next,
+    Previous,
+    Clear,
+    Key {
+        key: Key,
+        modifiers: KeyModifiers,
+        pressed: bool,
+        repeat: bool,
+    },
+    Text(String),
+}
+
+fn validate_focus_inputs(
+    inputs: &[NuxPlayerFocusInput],
+) -> Result<Vec<PreparedFocusInput>, (NuxStatus, &'static str)> {
+    let mut prepared = Vec::with_capacity(inputs.len());
+    let mut text_bytes = 0usize;
+    for input in inputs {
+        let value = match input.kind {
+            NUX_PLAYER_FOCUS_KIND_NEXT => PreparedFocusInput::Next,
+            NUX_PLAYER_FOCUS_KIND_PREVIOUS => PreparedFocusInput::Previous,
+            NUX_PLAYER_FOCUS_KIND_CLEAR => PreparedFocusInput::Clear,
+            NUX_PLAYER_FOCUS_KIND_KEY => {
+                if input.key_code > u32::from(u16::MAX)
+                    || input.modifiers & !15 != 0
+                    || input.pressed > 1
+                    || input.repeat > 1
+                {
+                    return Err((NuxStatus::InvalidArgument, "invalid focus key input"));
+                }
+                PreparedFocusInput::Key {
+                    key: Key::from_raw(input.key_code),
+                    modifiers: KeyModifiers::from_raw(input.modifiers),
+                    pressed: input.pressed != 0,
+                    repeat: input.repeat != 0,
+                }
+            }
+            NUX_PLAYER_FOCUS_KIND_TEXT => {
+                if input.text.len > NUX_PLAYER_STEP_MAX_TEXT_BYTES {
+                    return Err((
+                        NuxStatus::LimitExceeded,
+                        "focus text exceeds the per-item byte bound",
+                    ));
+                }
+                text_bytes = text_bytes
+                    .checked_add(input.text.len)
+                    .filter(|total| *total <= NUX_PLAYER_STEP_MAX_TEXT_BYTES_TOTAL)
+                    .ok_or((
+                        NuxStatus::LimitExceeded,
+                        "focus text exceeds the step byte bound",
+                    ))?;
+                PreparedFocusInput::Text(
+                    with_utf8_view(input.text, str::to_owned)
+                        .map_err(|status| (status, "focus text must be valid UTF-8"))?,
+                )
+            }
+            _ => return Err((NuxStatus::InvalidArgument, "unknown focus input kind")),
+        };
+        prepared.push(value);
+    }
+    Ok(prepared)
+}
+
+fn apply_focus_input(machine: &mut StateMachineInstance, input: &PreparedFocusInput) -> u32 {
+    u32::from(match input {
+        PreparedFocusInput::Next => machine.focus_next(),
+        PreparedFocusInput::Previous => machine.focus_previous(),
+        PreparedFocusInput::Clear => {
+            machine.clear_focus();
+            false
+        }
+        PreparedFocusInput::Key {
+            key,
+            modifiers,
+            pressed,
+            repeat,
+        } => machine.key_input(*key, *modifiers, *pressed, *repeat),
+        PreparedFocusInput::Text(text) => machine.text_input(text),
+    })
+}
+
 fn validate_player_pointers(
     pointers: &[NuxPlayerPointerEvent],
 ) -> Result<Vec<PreparedPlayerPointer>, (NuxStatus, &'static str)> {
@@ -3672,6 +3831,7 @@ fn push_optional_owned_bytes(
 fn own_reported_events(
     reported: Vec<StateMachineReportedEvent>,
     pointer_result_count: usize,
+    focus_input_result_count: usize,
     state_change_count: usize,
 ) -> Result<Vec<OwnedPlayerEvent>, (NuxStatus, &'static str)> {
     if reported.len() > MAX_PLAYER_STEP_EVENTS {
@@ -3697,6 +3857,11 @@ fn own_reported_events(
     })?;
     let result_prefix_bytes = pointer_result_count
         .checked_mul(std::mem::size_of::<NuxPlayerPointerHit>())
+        .and_then(|bytes| {
+            focus_input_result_count
+                .checked_mul(std::mem::size_of::<u32>())
+                .and_then(|focus_bytes| bytes.checked_add(focus_bytes))
+        })
         .and_then(|bytes| {
             state_change_count
                 .checked_mul(std::mem::size_of::<OwnedPlayerStateChange>())
@@ -3859,6 +4024,7 @@ fn checked_owned_bytes(total: &mut usize, count: usize) -> Option<()> {
 
 fn player_step_owned_result_bytes(
     pointer_results: &[NuxPlayerPointerHit],
+    focus_input_results: &[u32],
     state_changes: &[OwnedPlayerStateChange],
     events: &[OwnedPlayerEvent],
     host_commands: &[OwnedHostCommand],
@@ -3867,6 +4033,7 @@ fn player_step_owned_result_bytes(
 ) -> Option<usize> {
     let mut total = std::mem::size_of::<NuxPlayerStepResult>();
     checked_owned_items::<NuxPlayerPointerHit>(&mut total, pointer_results.len())?;
+    checked_owned_items::<u32>(&mut total, focus_input_results.len())?;
     checked_owned_items::<OwnedPlayerStateChange>(&mut total, state_changes.len())?;
     checked_owned_items::<OwnedPlayerEvent>(&mut total, events.len())?;
     checked_owned_items::<OwnedHostCommand>(&mut total, host_commands.len())?;
@@ -3942,6 +4109,7 @@ fn player_step_body(
     }
     if step.input_count > NUX_PLAYER_STEP_MAX_INPUTS
         || step.pointer_count > NUX_PLAYER_STEP_MAX_POINTERS
+        || step.focus_input_count > NUX_PLAYER_STEP_MAX_FOCUS_INPUTS
     {
         return publish_player_step_failure(
             out_result,
@@ -3951,6 +4119,7 @@ fn player_step_body(
     }
     if (step.inputs.is_null() && step.input_count != 0)
         || (step.pointers.is_null() && step.pointer_count != 0)
+        || (step.focus_inputs.is_null() && step.focus_input_count != 0)
     {
         return publish_player_step_failure(
             out_result,
@@ -3967,6 +4136,15 @@ fn player_step_body(
         &[]
     } else {
         unsafe { slice::from_raw_parts(step.pointers, step.pointer_count) }
+    };
+    let focus_inputs = if step.focus_input_count == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(step.focus_inputs, step.focus_input_count) }
+    };
+    let prepared_focus_inputs = match validate_focus_inputs(focus_inputs) {
+        Ok(inputs) => inputs,
+        Err((status, message)) => return publish_player_step_failure(out_result, status, message),
     };
     let prepared_pointers = match validate_player_pointers(pointers) {
         Ok(pointers) => pointers,
@@ -4028,12 +4206,12 @@ fn player_step_body(
             }
         },
         PlayerInstance::LinearAnimation(_) | PlayerInstance::StaticArtboard
-            if !inputs.is_empty() =>
+            if !inputs.is_empty() || !focus_inputs.is_empty() =>
         {
             return publish_player_step_failure(
                 out_result,
                 NuxStatus::NotFound,
-                "named inputs require a state-machine player",
+                "named and focus inputs require a state-machine player",
             );
         }
         PlayerInstance::LinearAnimation(_) | PlayerInstance::StaticArtboard => Vec::new(),
@@ -4041,6 +4219,7 @@ fn player_step_body(
     let prepared = PreparedPlayerOperation {
         inputs: planned_inputs,
         pointers: prepared_pointers,
+        focus_inputs: prepared_focus_inputs,
         elapsed_seconds: step.elapsed_seconds,
     };
 
@@ -4105,6 +4284,7 @@ fn player_step_body(
         None
     };
     let mut pointer_results = Vec::with_capacity(prepared.pointers.len());
+    let mut focus_input_results = Vec::with_capacity(prepared.focus_inputs.len());
     let mut state_changes = Vec::new();
     let mut reported_events = Vec::new();
     #[cfg(feature = "scripting")]
@@ -4144,7 +4324,10 @@ fn player_step_body(
             for pointer in prepared.pointers.iter().copied() {
                 pointer_results.push(apply_player_pointer(machine, pointer));
             }
-            // Pointer callbacks can report authored events immediately. Drain
+            for input in &prepared.focus_inputs {
+                focus_input_results.push(apply_focus_input(machine, input));
+            }
+            // Pointer and focus callbacks can report events immediately. Drain
             // those before advancement, then append events authored by the
             // advance itself so the result preserves C++ production order.
             reported_events = machine.take_reported_events();
@@ -4236,14 +4419,18 @@ fn player_step_body(
         }
     };
 
-    let events =
-        match own_reported_events(reported_events, pointer_results.len(), state_changes.len()) {
-            Ok(events) => events,
-            Err((status, message)) => {
-                player.artboard.poisoned.set(true);
-                return publish_player_step_failure(out_result, status, message);
-            }
-        };
+    let events = match own_reported_events(
+        reported_events,
+        pointer_results.len(),
+        focus_input_results.len(),
+        state_changes.len(),
+    ) {
+        Ok(events) => events,
+        Err((status, message)) => {
+            player.artboard.poisoned.set(true);
+            return publish_player_step_failure(out_result, status, message);
+        }
+    };
     #[cfg(feature = "scripting")]
     let commands = match script_transaction {
         Some(transaction) => match transaction.commit_host_commands() {
@@ -4342,6 +4529,7 @@ fn player_step_body(
     };
     let Some(owned_result_bytes) = player_step_owned_result_bytes(
         &pointer_results,
+        &focus_input_results,
         &state_changes,
         &events,
         &host_commands,
@@ -4393,6 +4581,7 @@ fn player_step_body(
                 ..NuxPlayerSchedulingInfo::default()
             },
             pointer_results,
+            focus_input_results,
             state_changes,
             events,
             host_commands,
@@ -4438,7 +4627,9 @@ fn player_step_body(
     NuxStatus::Ok
 }
 
-/// Apply all input changes and pointer events, then advance exactly once. The
+/// Apply named input changes, pointers, and focus inputs in that order, then
+/// advance exactly once. Focus inputs retain array order. Their listener events
+/// and view-model writes are captured in this same step's result. The
 /// operation validates the complete batch before mutation. Any unexpected
 /// post-mutation failure rolls back pending script-host effects and terminally
 /// poisons the shared occurrence, so no artboard/player operation can observe
@@ -4514,6 +4705,7 @@ pub unsafe extern "C" fn nux_player_step_result_info(
             event_count: result.events.len(),
             host_command_count: result.host_commands.len(),
             view_model_change_count: result.view_model_changes.len(),
+            focus_input_result_count: result.focus_input_results.len(),
         };
         unsafe { write_caller_struct(out_info, &value, NUX_PLAYER_STEP_INFO_V3_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -4630,6 +4822,64 @@ pub unsafe extern "C" fn nux_player_step_result_view_model_change_list_item(
         };
         unsafe { *out_instance_id = *identity };
         NuxStatus::Ok
+    })
+}
+
+/// Read one runtime boolean in focus-input order. Clear focus returns 0;
+/// traversal reports movement, and key/text report consumption by the runtime.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_focus_input(
+    result: *const NuxPlayerStepResult,
+    index: usize,
+    out_value: *mut u32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_value.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        let _call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let result = unsafe { &*result };
+        let Some(value) = result.focus_input_results.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe {
+            *out_value = *value;
+        }
+        NuxStatus::Ok
+    })
+}
+
+/// Read focus and keyboard-input expectations without mutating the player.
+/// Non-state-machine players return NOT_FOUND.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_focus_state(
+    player: *mut NuxPlayer,
+    out_state: *mut NuxPlayerFocusState,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _call = enter_status_handle!(player, HandleKind::Player);
+        let player = unsafe { &*player };
+        if let Err(status) = require_owner_thread(player.owner_thread) {
+            return status;
+        }
+        let _occurrence = match enter_occurrence(&player.artboard) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
+        let Ok(instance) = player.instance.try_borrow() else {
+            return NuxStatus::ReentrantCall;
+        };
+        let PlayerInstance::StateMachine(machine) = &*instance else {
+            return NuxStatus::NotFound;
+        };
+        let state = machine.focus_state();
+        let value = NuxPlayerFocusState {
+            has_focus: u32::from(state.has_focus),
+            expects_keyboard_input: u32::from(state.expects_keyboard_input),
+            ..NuxPlayerFocusState::default()
+        };
+        unsafe { write_caller_struct(out_state, &value, NUX_PLAYER_FOCUS_STATE_MIN_SIZE) }
+            .map_or_else(|status| status, |()| NuxStatus::Ok)
     })
 }
 
@@ -5634,6 +5884,8 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
 
 #[cfg(test)]
 mod event_source_tests;
+#[cfg(test)]
+mod focus_input_tests;
 
 #[cfg(test)]
 mod firewall_tests {
@@ -5664,17 +5916,17 @@ mod firewall_tests {
             )
         };
         let empty = make_changes(0);
-        let fixed = player_step_owned_result_bytes(&[], &[], &[], &[], &[], &empty)
+        let fixed = player_step_owned_result_bytes(&[], &[], &[], &[], &[], &[], &empty)
             .expect("fixed result size");
         assert!(fixed < MAX_PLAYER_STEP_RESULT_BYTES);
         let exact = make_changes(MAX_PLAYER_STEP_RESULT_BYTES - fixed);
         assert_eq!(
-            player_step_owned_result_bytes(&[], &[], &[], &[], &[], &exact),
+            player_step_owned_result_bytes(&[], &[], &[], &[], &[], &[], &exact),
             Some(MAX_PLAYER_STEP_RESULT_BYTES)
         );
         let one_over = make_changes(MAX_PLAYER_STEP_RESULT_BYTES - fixed + 1);
         assert_eq!(
-            player_step_owned_result_bytes(&[], &[], &[], &[], &[], &one_over),
+            player_step_owned_result_bytes(&[], &[], &[], &[], &[], &[], &one_over),
             Some(MAX_PLAYER_STEP_RESULT_BYTES + 1)
         );
     }

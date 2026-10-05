@@ -667,3 +667,32 @@ fn replacing_style_file_releases_controller_borrow_before_source_text_destructio
     assert!(!selection.has_selection());
     assert!(selection.selected_text().is_empty());
 }
+
+#[test]
+fn regular_selection_keeps_upstream_cr_cell_and_skips_line_feed() {
+    // d7d5fdd8 src/text/cursor.cpp:254-316 emits every overlapping glyph cell.
+    let mut scene = Scene::new();
+    let text = scene.texts[0].clone();
+    set_text(&text, "a\r\nb");
+    integer(&text, TextBase::WRAP_VALUE_PROPERTY_KEY, 1);
+    scene.advance();
+    scene.selection.set_range(&text, 1, 2);
+    assert_eq!(scene.selection.selection_rects(&text).len(), 1);
+    scene.selection.set_range(&text, 2, 3);
+    assert!(scene.selection.selection_rects(&text).is_empty());
+}
+
+#[test]
+fn regular_unicode_whitespace_does_not_create_a_third_soft_wrap_line() {
+    let scene = Scene::new();
+    let text = scene.texts[0].clone();
+    set_text(&text, "a  \u{2003}a");
+    integer(&text, TextBase::SIZING_VALUE_PROPERTY_KEY, 1);
+    integer(&text, TextBase::WRAP_VALUE_PROPERTY_KEY, 0);
+    scalar(&text, TextBase::WIDTH_PROPERTY_KEY, 8.0);
+    scene.advance();
+    text.with_downcast::<Text, _>(|text| {
+        assert_eq!(text.ordered_lines().len(), 2);
+    })
+    .unwrap();
+}

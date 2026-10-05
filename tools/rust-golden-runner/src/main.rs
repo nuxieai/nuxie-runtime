@@ -1797,23 +1797,10 @@ fn apply_semantic_input(
         machine.and_then(|machine| machine.with_instance(|machine| machine.semantic_manager()));
     match event.kind {
         InputKind::SemanticAction => {
-            // This is the C++ runner's dispatch observation, not a synthetic
-            // success flag: the actual node must own actual SemanticData.
-            let dispatched = manager
-                .as_ref()
-                .and_then(|manager| {
-                    manager
-                        .with_semantic_manager(|manager| manager.node_by_id(event.semantic_node_id))
-                })
-                .is_some_and(|node| node.borrow().semantic_data.is_some());
-            if dispatched {
+            let dispatched = machine.is_some_and(|machine| {
                 machine
-                    .expect("a semantic manager belongs to the selected machine")
-                    .fire_semantic_action(
-                        event.semantic_node_id,
-                        event.semantic_action.raw() as u8,
-                    );
-            }
+                    .fire_semantic_action(event.semantic_node_id, event.semantic_action.raw() as u8)
+            });
             if record {
                 factory.add_semantic_action(
                     event.seconds,

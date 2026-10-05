@@ -210,13 +210,14 @@ impl NativeScriptViewModel {
             return false;
         };
         let notifications = RuntimeHostMutationNotifications::begin();
-        let changed = property
-            .with_downcast_mut::<T, _>(mutation)
-            .unwrap_or(false);
+        let changed = property.with_downcast_mut::<T, _>(mutation);
+        if changed == Some(false) {
+            crate::host_viewmodel::capture_unchanged_native_write(&property);
+        }
         if let Some(notifications) = notifications {
             notifications.commit();
         }
-        changed
+        changed.unwrap_or(false)
     }
 
     pub fn number(&self, name: &str) -> Option<f32> {
@@ -234,6 +235,9 @@ impl NativeScriptViewModel {
         };
         let notifications = RuntimeHostMutationNotifications::begin();
         ViewModelInstanceNumber::set_value_handle(&property, value);
+        if previous == value {
+            crate::host_viewmodel::capture_unchanged_native_write(&property);
+        }
         if let Some(notifications) = notifications {
             notifications.commit();
         }

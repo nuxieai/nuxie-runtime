@@ -2209,8 +2209,8 @@ impl Text {
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::AutoHeight => Vec2D::new(
-                // Taffy's known-width boundary reports its exact slot width;
-                // shaping above still follows upstream participant ownership.
+                // Shaping and reported AutoHeight width use the exact host slot
+                // when provided; see docs/PORTING.md A9.
                 exact_width.unwrap_or(self.base.width()),
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
@@ -2423,8 +2423,8 @@ mod settled_text_value_tests {
         let authored = measure(&mut text, 354.0, LayoutMeasureMode::AtMost);
         assert!(narrow.y > authored.y, "fixture must wrap more at 120px");
         text.base.set_width_value(120.0);
-        // Width ownership belongs to the participant before the first solve,
-        // not to measure mode or the slot control_size supplies afterward.
+        // AtMost retains native participant ownership; Exactly uses the
+        // host slot even without a participant (docs/PORTING.md A9).
         let mut participant = LayoutParticipant::default();
         participant
             .base

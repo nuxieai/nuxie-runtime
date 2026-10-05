@@ -1435,7 +1435,9 @@ and concrete evidence.
   adaptation through `host_text.rs::layout_measure_width`. Nuxie-authored text
   widths are not kept in sync with the resolved layout slot, so an exact host
   width determines measurement even when no native LayoutParticipant owns the
-  axis. Unconstrained measurement keeps the native authored-width policy.
+  axis. Only Exactly measurement differs; AtMost and Undefined retain the
+  native width policy. The reported AutoHeight width also uses the exact
+  host slot when provided, instead of authored width (`text.cpp:1598-1601`).
   Pinned upstream `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
   `src/text/text.cpp:1482-1520`, uses the offered width only when
   `layoutOwnsWidth()` is true. Preserve the one-line host bridge during
@@ -1446,12 +1448,21 @@ The editor missing-paint guard is a port correction, not an adaptation:
 `editor` mirrors `WITH_RIVE_EDITOR` at the same pin,
 `src/shapes/paint/stroke.cpp:89-101`, returning before renderer invalidation
 and superclass dirt changes. Default runtime builds retain the assertion.
+This feature does not cover the other editor paint guards, starting with
+`linear_gradient.cpp:86-110` (missing render paint) and `feather.cpp:45-53`
+(missing parent render paint), or `shape_paint.cpp:33-46` (culling uninitialized
+paint). Editor-specific registration, dynamic paint classification and child
+ordering in `gradient_stop.cpp`, `feather.cpp`, `shape_paint.cpp`,
+`target_effect.cpp` and `dash_path.cpp` are not enabled by this feature either.
+The null-parent check from `shape_paint_mutator.cpp:25-40` already exists
+unconditionally in Rust; it is not evidence of general editor-feature parity.
 
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++
 owner. They are not support ceilings and must not alter baseline update, dirt,
-advance, or draw behavior.
+advance, or draw behavior. X4-X6 below are deliberate admission divergences
+from this additive-only rule, retained explicitly for sync-upstream.
 
 - **semantic-geometry-cache-authority** (X1):
   `SemanticGeometryRevision` is an opaque equality token for an editor cache.
@@ -1480,7 +1491,10 @@ advance, or draw behavior.
   `RuntimeStateMachineInstanceHandle::fire_semantic_action` in
   `host_semantics.rs` refuses a disabled or semantically hidden target,
   authored ancestor, or mounted-artboard host and reports `false`. Opacity is
-  ignored. Accepted actions stay queued if eligibility changes afterward.
+  ignored. An action unsupported by any live listener also returns `false`.
+  Upstream `fireSemanticAction` no longer has a translation in the mechanical
+  port: its sync home is `host_semantics.rs`. Accepted actions stay queued if
+  eligibility changes afterward.
   This host extension also governs the command server, which dispatches
   through that public handle. It deliberately differs from pinned upstream
   `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
@@ -1489,3 +1503,21 @@ advance, or draw behavior.
   registered listeners without these eligibility checks. Native listener
   delivery is unchanged. `tests/host_semantic_actions.rs` pins the host
   contract; the golden runner records the returned admission result.
+
+- **pointer-action-admission** (X5): `StateMachineInstance::pointer_activation_allowed`
+  in the mechanical port refuses disabled or hidden controls and their ancestors
+  or mounted hosts before pointer delivery. Pinned upstream
+  `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
+  `src/animation/state_machine_listener.cpp:220-243`, has no such admission rule.
+  `tests/host_semantic_actions.rs` covers refusal and readmission.
+- **phone-semantic-action-admission** (X6): `SemanticNode::is_action_eligible`
+  is a Nuxie-only port method used by every nux-capi phone accessibility action.
+  It requires a live attached semantic path, refuses disabled/hidden ancestry
+  and checks source visibility. The pinned `include/rive/semantic/semantic_node.hpp`
+  has no action-eligibility counterpart (there is no corresponding source file).
+
+Sync X4, X5 and X6 together: changing only pointer or semantic admission can
+make a disabled control activate through one input path. Moving X5/X6 into
+the host, consolidating all three walks, and correcting phone opacity/clipping
+action masks are deferred to [UNIV-3932](https://universe.basis.dev/issue/UNIV-3932).
+Do not remove these divergences during a mechanical upstream sync.

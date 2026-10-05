@@ -74,13 +74,12 @@ corresponding ported facade. Citations:
   selected retained manager through
   `StateMachineInstance::drain_semantics_diff(artboard)`; that call also
   synchronizes live mounted occurrences before producing the diff.
-- `semanticAction` — dispatch through
-  `StateMachineInstance::fireSemanticAction(id, action)`
-  (`state_machine_instance.cpp:2552-2582`). The C++ API is `void`, so the
-  observable outcome is whether the manager resolved the id to a non-boundary
-  `SemanticData`; callback effects are recorded by the following advance's
-  complete semantic diff. Rust reports that same resolution boundary rather
-  than exposing its additional internal callback boolean.
+- `semanticAction`: C++ `fireSemanticAction` is void and records resolution to
+  a non-boundary SemanticData (`state_machine_instance.cpp:3711-3743` at the
+  pinned revision). Rust records the bool returned by host action admission.
+  A disabled/hidden target, ancestor or mounted host, or an unsupported action,
+  produces Rust `missing` where C++ can report `dispatched`. This deliberate
+  divergence is recorded in [PORTING.md X4](PORTING.md#named-additive-host-extensions).
 - `semanticFocus` — the bool returned by
   `SemanticManager::requestFocus(id)`; Rust mirrors it with
   `StateMachineInstance::request_semantic_focus(id)`.
@@ -183,12 +182,14 @@ With the side channel enabled they emit, respectively:
     semanticAction seconds=<float> nodeId=<u32> action=<tap|increase|decrease> outcome=<dispatched|missing>
     semanticFocus seconds=<float> nodeId=<u32> outcome=<focused|rejected>
 
-`dispatched` means the selected semantic manager resolved `nodeId` to a
-non-boundary node with owning `SemanticData` and the runtime invoked the
-requested method. It does not claim that an authored listener accepted that
-action; any listener/state/data effect is observable in the next advance and
-semantic diff. `missing` includes no selected manager, an unknown id, and a
-boundary node. `focused`/`rejected` is the exact requestFocus return.
+For C++, `dispatched` means the manager resolved a non-boundary SemanticData
+node and invoked its method, regardless of listener support. Rust `dispatched`
+means host admission succeeded. Rust `missing` additionally includes disabled
+or hidden targets, ancestors or mounted hosts and unsupported actions, per
+[PORTING.md X4](PORTING.md#named-additive-host-extensions). Both include absent
+managers, unknown ids and boundary nodes in `missing`. Listener effects appear
+in the next advance and semantic diff. `focused`/`rejected` is the exact
+requestFocus return.
 
 ### Scripted state, view-model, and resize verbs
 

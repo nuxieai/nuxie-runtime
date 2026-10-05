@@ -36,6 +36,7 @@ impl SemanticNode {
     /// Actions require a live, attached path through one semantic occurrence.
     /// Recheck this at dispatch: visibility or membership can change after
     /// a listener has been queued without changing the target's own flags.
+    // Nuxie phone action admission divergence: docs/PORTING.md X6.
     pub fn is_action_eligible(node: &SemanticNodeRef) -> bool {
         if node
             .borrow()

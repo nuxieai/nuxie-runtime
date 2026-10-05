@@ -6,7 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-# Mirrors WITH_RIVE_EDITOR for incomplete authored paint objects.
+# Mirrors only the WITH_RIVE_EDITOR stroke invalidation guard (stroke.cpp:89-101).
+# Other editor paint guards are not covered; see docs/PORTING.md.
 editor = []
 testing = [] # Upstream TESTING observations; test harnesses only.
 # Mirrors upstream --no_ffp_contract for the strict unit/Silver lane.

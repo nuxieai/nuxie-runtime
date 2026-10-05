@@ -627,7 +627,7 @@ impl<'factory> RawText<'factory> {
 }
 
 /// An exact host layout slot is also the width used to measure its text.
-/// An unconstrained measurement retains the native authored-width policy.
+/// AtMost and Undefined measurements retain the native width policy.
 pub(crate) fn layout_measure_width(exact_width: Option<f32>, native_width: f32) -> f32 {
     exact_width.unwrap_or(native_width)
 }

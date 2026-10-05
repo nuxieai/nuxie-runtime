@@ -2740,6 +2740,7 @@ impl RuntimeStateMachineInstanceHandle {
         }
     }
 
+    // Upstream fireSemanticAction is hosted in host_semantics.rs; see docs/PORTING.md X4.
     pub fn advance_and_apply(&self, seconds: f32) -> bool {
         let artboard = self.with_instance(|machine| {
             machine
@@ -3249,6 +3250,7 @@ impl StateMachineInstance {
             })
     }
 
+    // Nuxie pointer admission divergence: docs/PORTING.md X5.
     fn pointer_activation_allowed(&self, listener: &CoreHandle) -> bool {
         let mut target = self.resolve_artboard_object(Self::listener_target_id(listener));
         let mut visited = std::collections::HashSet::new();

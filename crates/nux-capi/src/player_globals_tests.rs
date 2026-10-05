@@ -20,7 +20,7 @@ fn import_upstream() -> *mut NuxFile {
     );
     file
 }
-fn native_global(player: *mut NuxPlayer, name: &str) -> Option<nuxie::runtime::core::CoreHandle> {
+fn native_global(player: *mut NuxPlayer, name: &str) -> Option<(usize, usize, u64)> {
     let player = unsafe { &*player };
     let instance = player.instance.borrow();
     let PlayerInstance::StateMachine(machine) = &*instance else {
@@ -29,6 +29,7 @@ fn native_global(player: *mut NuxPlayer, name: &str) -> Option<nuxie::runtime::c
     machine
         .native_handle()
         .with_instance(|machine| machine.global_view_model_instance(name))
+        .map(|instance| instance.identity_key())
 }
 #[test]
 fn global_cpp_slot_identity_and_fresh_default_through_c_api() {
@@ -72,7 +73,7 @@ fn global_cpp_slot_identity_and_fresh_default_through_c_api() {
         );
         assert_eq!(
             native_global(player, name).unwrap(),
-            (*instance).instance.native_handle()
+            (*instance).instance.native_handle().identity_key()
         );
         assert_eq!(
             nux_player_set_global_view_model(
@@ -89,7 +90,7 @@ fn global_cpp_slot_identity_and_fresh_default_through_c_api() {
         );
         let fresh = native_global(player, name).unwrap();
         assert_ne!(fresh, original);
-        assert_ne!(fresh, (*instance).instance.native_handle());
+        assert_ne!(fresh, (*instance).instance.native_handle().identity_key());
         // Pinned cpp:329-360 refuses a real model that is not global.
         let mut catalog = ptr::null_mut();
         assert_eq!(

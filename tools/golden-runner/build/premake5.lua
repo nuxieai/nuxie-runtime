@@ -92,6 +92,12 @@ local runner_forceincludes = {
 if with_scripting then
     table.insert(runner_defines, 'WITH_RIVE_SCRIPTING')
     table.insert(runner_defines, 'WITH_RIVE_SCRIPTING_LUAU')
+    -- build.sh builds this lane with --with_rive_audio=external. These must
+    -- match librive: EXTERNAL_RIVE_AUDIO_ENGINE changes Artboard's layout.
+    table.insert(runner_defines, 'WITH_RIVE_AUDIO')
+    table.insert(runner_defines, 'EXTERNAL_RIVE_AUDIO_ENGINE')
+    table.insert(runner_defines, 'MA_NO_DEVICE_IO')
+    table.insert(runner_defines, 'MA_NO_RESOURCE_MANAGER')
     table.insert(runner_defines, 'RIVE_DECODERS')
     table.insert(runner_defines, 'HYDRO_SIGN_VERIFY_ONLY=1')
     table.insert(runner_forceincludes, 'rive_luau.hpp')

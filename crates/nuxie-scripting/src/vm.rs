@@ -1048,11 +1048,24 @@ trait ProtectedScriptCall {
 impl ProtectedScriptCall for Function {
     fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R> {
         let lua = self.lua();
+        #[cfg(feature = "tools")]
+        let _write_source = luau_write_scope(&lua);
         let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&lua);
         let result = self.call(args);
         exit_script_call_gpu_scope(&lua, &scope);
         result
     }
+}
+
+#[cfg(feature = "tools")]
+fn luau_write_scope(
+    lua: &Lua,
+) -> nuxie_runtime::source::viewmodel::write_attribution::WriteAttributionScope {
+    use nuxie_runtime::source::viewmodel::write_attribution::{
+        WriteAttributionScope, WriteSourceKind,
+    };
+    // The source attributes the calling lua_State, including a coroutine.
+    WriteAttributionScope::new(WriteSourceKind::luau, lua.state_identity(), None)
 }
 
 fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGpuScope) {

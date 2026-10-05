@@ -489,7 +489,7 @@ local setmetatable = setmetatable
 local type = type
 local unpack = table.unpack
 local flushes = setmetatable({}, { __mode = "k" })
-return function(property, writableValue, mutatingMethods, flush)
+return function(property, writableValue, mutatingMethods, flush, attributedCall)
     flushes[property] = flush
     local metatable = getmetatable(property)
     if metatable.__rivePropertyPatched then
@@ -505,13 +505,21 @@ return function(property, writableValue, mutatingMethods, flush)
             result = index[key]
         end
         if type(result) == "function" and mutatingMethods[key] then
-            return function(...)
-                local values = pack(result(...))
+            local method = result
+            result = function(...)
+                local values = pack(method(...))
                 local pending = flushes[self]
                 if pending then
                     pending()
                 end
                 return unpack(values, 1, values.n)
+            end
+        end
+        if attributedCall and type(result) == "function" and
+            (mutatingMethods[key] or key == "addListener" or key == "removeListener" or key == "values") then
+            local method = result
+            return function(...)
+                return attributedCall(method, ...)
             end
         end
         return result
@@ -527,6 +535,12 @@ return function(property, writableValue, mutatingMethods, flush)
                 if pending then
                     pending()
                 end
+            end
+        end
+        if attributedCall then
+            local write = metatable.__newindex
+            metatable.__newindex = function(...)
+                return attributedCall(write, ...)
             end
         end
     end
@@ -725,7 +739,18 @@ fn patch_property_userdata(
         }
         Ok(())
     })?;
-    patcher.call((property, writable_value, mutating, flush))
+    #[cfg(feature = "tools")]
+    let attributed_call = Some(lua.create_function(
+        |lua, (function, args): (Function, MultiValue)| {
+            // The adaptation flushes deferred observers after releasing the
+            // userdata borrow. Keep attribution live through that same write.
+            let _write_source = super::luau_write_scope(lua);
+            function.call::<MultiValue>(args)
+        },
+    )?);
+    #[cfg(not(feature = "tools"))]
+    let attributed_call: Option<Function> = None;
+    patcher.call((property, writable_value, mutating, flush, attributed_call))
 }
 
 fn create_property_userdata<T: UserData + 'static>(
@@ -3097,6 +3122,69 @@ mod property_lifetime_a637_tests;
 mod tests {
     use super::super::{ScriptProgram, ScriptVm};
     use super::*;
+    #[cfg(feature = "tools")]
+    #[test]
+    fn write_attribution_spans_property_flush_and_restores_failed_calls() {
+        use super::super::ProtectedScriptCall;
+        use nuxie_runtime::source::viewmodel::write_attribution::{
+            WriteAttribution, WriteSourceKind,
+        };
+        struct DisableOnDrop;
+        impl Drop for DisableOnDrop {
+            fn drop(&mut self) {
+                WriteAttribution::enable(false);
+                WriteAttribution::reset();
+            }
+        }
+        let _reset = DisableOnDrop;
+        WriteAttribution::reset();
+        WriteAttribution::enable(true);
+        let (model, name) = model_with_property(ScriptViewModelProperty::Number);
+        let vm = ScriptVm::new();
+        let table = create_scripted_view_model(vm.lua(), model.clone()).unwrap();
+        vm.lua().globals().set("model", table).unwrap();
+        vm.lua()
+            .globals()
+            .set("propertyName", name.clone())
+            .unwrap();
+        let snapshots = Rc::new(RefCell::new(Vec::new()));
+        let observed = snapshots.clone();
+        let _registration = model.add_property_change_callback(
+            &name,
+            Rc::new(move || {
+                observed.borrow_mut().push(WriteAttribution::sources());
+            }),
+        );
+        let write: Function = vm
+            .lua()
+            .load(
+                r#"
+            return function()
+                local property = model:getNumber(propertyName)
+                property.value = 12
+                local co = coroutine.create(function() property.value = 13 end)
+                assert(coroutine.resume(co))
+                property.value = false
+            end
+        "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(write.protected_call::<()>(()).is_err());
+        assert!(WriteAttribution::sources().is_empty());
+        let snapshots = snapshots.borrow();
+        assert_eq!(snapshots.len(), 2);
+        for sources in snapshots.iter() {
+            assert_eq!(sources.len(), 2);
+            assert!(
+                sources
+                    .iter()
+                    .all(|source| source.kind == WriteSourceKind::luau)
+            );
+        }
+        assert_eq!(snapshots[0][0].object, snapshots[0][1].object);
+        assert_ne!(snapshots[1][0].object, snapshots[1][1].object);
+    }
     use nuxie_runtime::source::{
         assets::{font_asset::FontAsset, image_asset::ImageAsset},
         core::CoreHandle,

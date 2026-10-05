@@ -95,7 +95,7 @@ pub fn replay_serialized_commands(
                         };
                         path.fill_rule(rule);
                     }
-                    _ => path.add_raw_path(&deserialize_raw_path(&mut reader)),
+                    _ => path.add_raw_path(deserialize_raw_path(&mut reader).as_ref()),
                 }
             }
             COLOR | STYLE | THICKNESS | JOIN | CAP | FEATHER | BLEND_MODE | ADDITIVENESS => {

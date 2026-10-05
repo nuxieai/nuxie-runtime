@@ -306,7 +306,8 @@ use crate::mechanical_port::source::src::renderer_cpp::computeAlignment;
 #[cfg(any(feature = "native-webgpu-experimental", feature = "ore-gl"))]
 use nuxie_ore_metal::gpu_resource::{OwnerThreadFinalRelease, OwnerThreadFinalReleaseRoute};
 use nuxie_render_api::{
-    Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPath, StrokeCap, StrokeJoin, Vec2D,
+    Aabb as AABB, BlendMode, ColorInt, FillRule, Fit, Mat2D, RawPathRef, StrokeCap, StrokeJoin,
+    Vec2D,
 };
 pub use nuxie_render_api::{
     ImageMeshInstanceData, ImageMeshInstances, ImageMeshInstancesHandle, ImageMeshInstancesStorage,
@@ -1072,7 +1073,7 @@ pub unsafe trait RenderPathContract: Sized {
     }
 
     // virtual void addRawPath(const RawPath& path) = 0;
-    fn addRawPath(&mut self, path: &RawPath);
+    fn addRawPath(&mut self, path: RawPathRef<'_>);
 }
 
 // class Renderer

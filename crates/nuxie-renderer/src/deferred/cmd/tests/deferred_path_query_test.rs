@@ -40,7 +40,7 @@ fn retained_query_mirrors_mutations_in_source_order() {
     path.line_to(4.0, 2.0);
 
     let bulk = line_path((-2.0, -3.0), (6.0, 5.0));
-    path.add_raw_path(&bulk);
+    path.add_raw_path(bulk.as_ref());
     path.cubic_to(7.0, 8.0, 9.0, -4.0, 10.0, 1.0);
     path.close();
 
@@ -158,7 +158,7 @@ fn recorded_bytes(retain_query: bool) -> (Vec<u8>, Vec<u8>) {
     path.fill_rule(FillRule::Clockwise);
     path.move_to(-1.0, -2.0);
     path.line_to(3.0, 4.0);
-    path.add_raw_path(&line_path((5.0, 6.0), (7.0, 8.0)));
+    path.add_raw_path(line_path((5.0, 6.0), (7.0, 8.0)).as_ref());
     path.add_render_path_self(Mat2D([2.0, 0.0, 0.0, 3.0, 11.0, 12.0]));
     path.rewind();
     path.move_to(9.0, 10.0);
@@ -242,7 +242,7 @@ fn seed_and_bulk_add_leave_query_contour_bookkeeping_at_source_defaults() {
 
     let mut appended = session.make_empty_render_path();
     deferred_mut(appended.as_mut()).retain_query_geometry(None);
-    appended.add_raw_path(&geometry);
+    appended.add_raw_path(geometry.as_ref());
     appended.close(); // addPath does not copy the source contour state
     appended.line_to(8.0, 9.0);
     appended.close();

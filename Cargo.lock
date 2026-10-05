@@ -1190,6 +1190,7 @@ dependencies = [
 name = "nuxie-render-api"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "harfrust",
  "nuxie-audio",
  "nuxie-binary",
@@ -1255,6 +1256,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "block2",
+ "bytemuck",
  "dispatch2",
  "harfrust",
  "i_overlay",

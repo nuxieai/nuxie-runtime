@@ -613,7 +613,7 @@ impl RawTextInput {
                 .as_ref()
                 .unwrap()
                 .borrow_mut()
-                .add_raw_path(&raw);
+                .add_raw_path(raw.as_ref());
         } else {
             self.clip_render_path = None;
         }

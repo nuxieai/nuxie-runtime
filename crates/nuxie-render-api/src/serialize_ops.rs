@@ -1,5 +1,5 @@
 //! `include/utils/serialize_ops.hpp` — shared SRIV wire operations.
-use crate::{PathVerb, RawPath, Vec2D};
+use crate::{PathVerb, RawPath, RawPathRef, Vec2D};
 pub use nuxie_binary::BinaryDataReader as Reader;
 
 macro_rules! operations {
@@ -56,7 +56,7 @@ operations! {
     STROKE_POSITION = strokePosition = 43,
 }
 
-pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: &RawPath) {
+pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: RawPathRef<'_>) {
     writer.varuint(path.verbs().len() as u64);
     for verb in path.verbs() {
         writer.varuint(*verb as u64);

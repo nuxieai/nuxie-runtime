@@ -8,7 +8,7 @@
 //! callback is optional (may be NULL); missing callbacks degrade to no-ops so
 //! a zeroed vtable behaves like a null renderer.
 
-use nuxie::render_api::{Mat2D, RawPath};
+use nuxie::render_api::{Mat2D, RawPath, RawPathRef};
 use nuxie::{
     BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, RenderBuffer,
     RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
@@ -232,7 +232,10 @@ macro_rules! call_handle {
     };
 }
 
-fn with_raw_path_view<R>(path: &RawPath, action: impl FnOnce(*const NuxRawPathView) -> R) -> R {
+fn with_raw_path_view<R>(
+    path: RawPathRef<'_>,
+    action: impl FnOnce(*const NuxRawPathView) -> R,
+) -> R {
     // SAFETY: PathVerb is #[repr(u8)], so a verb slice can be viewed as bytes.
     let verbs = path.verbs().as_ptr().cast::<u8>();
     let points = path
@@ -345,7 +348,7 @@ impl RenderPath for CallbackRenderPath {
         );
     }
 
-    fn add_raw_path(&mut self, path: &RawPath) {
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
         with_raw_path_view(path, |view| {
             call!(self.callbacks, render_path_add_raw_path, self.handle, view);
         });
@@ -658,7 +661,7 @@ impl Factory for CallbackFactory {
     }
 
     fn make_render_path(&mut self, raw_path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
-        let handle = with_raw_path_view(&raw_path, |view| {
+        let handle = with_raw_path_view(raw_path.as_ref(), |view| {
             call_handle!(self.callbacks, make_render_path, view, fill_rule as u8)
         });
         Box::new(CallbackRenderPath {

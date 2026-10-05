@@ -53,7 +53,8 @@ pub fn increment_artboard_draw_frame_id() {
 
 pub type ColorInt = u32;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+#[repr(C)]
 pub struct Vec2D {
     pub x: f32,
     pub y: f32,
@@ -686,6 +687,35 @@ pub enum PathVerb {
     Close = 5,
 }
 
+/// Borrowed geometry for the source `const RawPath&` renderer boundary.
+///
+/// The owner guarantees that the verb and point arrays are self-consistent.
+/// This view neither rebuilds contours nor creates a render-path mutation ID.
+#[derive(Debug, Clone, Copy)]
+pub struct RawPathRef<'a> {
+    verbs: &'a [PathVerb],
+    points: &'a [Vec2D],
+}
+
+impl<'a> RawPathRef<'a> {
+    pub const fn new(verbs: &'a [PathVerb], points: &'a [Vec2D]) -> Self {
+        Self { verbs, points }
+    }
+
+    pub const fn verbs(self) -> &'a [PathVerb] {
+        self.verbs
+    }
+
+    pub const fn points(self) -> &'a [Vec2D] {
+        self.points
+    }
+
+    /// Matches source `RawPath::empty()`, which tests the point array.
+    pub const fn empty(self) -> bool {
+        self.points.is_empty()
+    }
+}
+
 static NEXT_RAW_PATH_MUTATION_ID: AtomicU64 = AtomicU64::new(1);
 
 fn next_raw_path_mutation_id() -> u64 {
@@ -820,6 +850,10 @@ impl RawPath {
 
     pub fn points(&self) -> &[Vec2D] {
         &self.points
+    }
+
+    pub fn as_ref(&self) -> RawPathRef<'_> {
+        RawPathRef::new(&self.verbs, &self.points)
     }
 
     /// Coarse control-point bounds, matching C++ `RawPath::bounds()`.
@@ -1076,31 +1110,37 @@ impl RawPath {
     /// exact pinned `Mat2D::mapPoints` evaluation.
     pub fn add_path(&mut self, path: &RawPath, transform: Mat2D) {
         let transform = (transform != Mat2D::IDENTITY).then_some(transform);
-        self.add_path_impl(path, transform);
+        self.add_path_impl(path.as_ref(), transform);
+    }
+
+    /// Bulk append borrowed geometry as source `RawPath::addPath(src, nullptr)`.
+    /// Source point bits and destination contour bookkeeping are unchanged.
+    pub fn add_path_view(&mut self, path: RawPathRef<'_>) {
+        self.add_path_impl(path, None);
     }
 
     /// Append as pinned `RawPath::addPath(src, &transform)` with a guaranteed
     /// non-null matrix pointer. This intentionally evaluates `mapPoints` even
     /// when the matrix compares equal to identity.
     pub fn add_path_with_transform(&mut self, path: &RawPath, transform: Mat2D) {
-        self.add_path_impl(path, Some(transform));
+        self.add_path_impl(path.as_ref(), Some(transform));
     }
 
-    fn add_path_impl(&mut self, path: &RawPath, transform: Option<Mat2D>) {
+    fn add_path_impl(&mut self, path: RawPathRef<'_>, transform: Option<Mat2D>) {
         if path.verbs.is_empty() {
             return;
         }
         self.mark_mutated();
-        self.verbs.extend_from_slice(&path.verbs);
+        self.verbs.extend_from_slice(path.verbs);
         if let Some(transform) = transform {
             let initial_point_count = self.points.len();
             self.points.resize(
                 initial_point_count + path.points.len(),
                 Vec2D::new(0.0, 0.0),
             );
-            transform.map_points(&mut self.points[initial_point_count..], &path.points);
+            transform.map_points(&mut self.points[initial_point_count..], path.points);
         } else {
-            self.points.extend_from_slice(&path.points);
+            self.points.extend_from_slice(path.points);
         }
     }
 
@@ -2685,12 +2725,12 @@ pub trait RenderPath: Any {
     // Upstream RenderPath's default is empty; RiveRenderPath overrides it.
     fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: Mat2D) {}
     /// The caller must supply a valid path with no zero-length segments.
-    fn add_raw_path(&mut self, path: &RawPath);
+    fn add_raw_path(&mut self, path: RawPathRef<'_>);
     /// Upstream RenderPath::addUntrustedRawPath: prune a copy of authored geometry.
     fn add_untrusted_raw_path(&mut self, path: &RawPath) {
         let mut sanitized = path.clone();
         sanitized.prune_empty_segments();
-        self.add_raw_path(&sanitized);
+        self.add_raw_path(sanitized.as_ref());
     }
     fn move_to(&mut self, x: f32, y: f32);
     fn line_to(&mut self, x: f32, y: f32);
@@ -4449,8 +4489,8 @@ impl RenderPath for NullRenderPath {
             .add_path_backwards_with_transform(&path.raw_path, transform);
     }
 
-    fn add_raw_path(&mut self, path: &RawPath) {
-        self.raw_path.add_path(path, Mat2D::IDENTITY);
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
+        self.raw_path.add_path_view(path);
     }
 
     fn move_to(&mut self, x: f32, y: f32) {
@@ -4783,8 +4823,8 @@ impl RenderPath for RecordingRenderPath {
             .add_path_backwards_with_transform(&path.raw_path, transform);
     }
 
-    fn add_raw_path(&mut self, path: &RawPath) {
-        self.raw_path.add_path(path, Mat2D::IDENTITY);
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
+        self.raw_path.add_path_view(path);
     }
 
     fn move_to(&mut self, x: f32, y: f32) {
@@ -6164,6 +6204,65 @@ mod tests {
     }
 
     #[test]
+    fn borrowed_raw_path_views_reuse_source_slices_without_mutating_the_owner() {
+        let source = RawPath::from_verbs_and_points(
+            vec![PathVerb::Move, PathVerb::Line],
+            vec![Vec2D::new(-0.0, 1.0), Vec2D::new(2.0, 3.0)],
+        );
+        let source_mutation_id = source.mutation_id();
+        let view = source.as_ref();
+        assert_eq!(view.verbs().as_ptr(), source.verbs().as_ptr());
+        assert_eq!(view.points().as_ptr(), source.points().as_ptr());
+        assert!(!view.empty());
+
+        let mut destination = RawPath::new();
+        let destination_mutation_id = destination.mutation_id();
+        destination.add_path_view(view);
+        assert_eq!(destination, source);
+        assert_ne!(destination.mutation_id(), destination_mutation_id);
+        assert_eq!(source.mutation_id(), source_mutation_id);
+
+        let empty = RawPathRef::new(&[], &[]);
+        assert!(empty.empty());
+        let destination_mutation_id = destination.mutation_id();
+        destination.add_path_view(empty);
+        assert_eq!(destination.mutation_id(), destination_mutation_id);
+        assert_eq!(destination, source);
+    }
+
+    #[test]
+    fn borrowed_raw_path_bulk_append_preserves_all_verbs_and_exact_point_bits() {
+        let verbs = [
+            PathVerb::Move,
+            PathVerb::Line,
+            PathVerb::Quad,
+            PathVerb::Cubic,
+            PathVerb::Close,
+        ];
+        let points = [
+            Vec2D::new(-0.0, 0.0),
+            Vec2D::new(0.0, -0.0),
+            Vec2D::new(f32::from_bits(0x7fc0_1234), f32::from_bits(0xffc0_4321)),
+            Vec2D::new(f32::INFINITY, f32::NEG_INFINITY),
+            Vec2D::new(f32::from_bits(1), f32::from_bits(0x8000_0001)),
+            Vec2D::new(1.0, 2.0),
+            Vec2D::new(3.0, 4.0),
+        ];
+        let mut destination = RawPath::new();
+        destination.move_to(10.0, 20.0);
+        destination.add_path_view(RawPathRef::new(&verbs, &points));
+
+        assert_eq!(destination.verbs()[0], PathVerb::Move);
+        assert_eq!(&destination.verbs()[1..], &verbs);
+        assert_eq!(destination.points()[0], Vec2D::new(10.0, 20.0));
+        assert_eq!(destination.points().len(), points.len() + 1);
+        for (actual, expected) in destination.points()[1..].iter().zip(points) {
+            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+        }
+    }
+
+    #[test]
     fn non_null_identity_path_appends_run_cpp_map_points() {
         let mut source = RawPath::new();
         source.move_to(-0.0, -0.0);
@@ -6214,6 +6313,12 @@ mod tests {
         appended.line_to(8.0, 9.0);
         appended.close();
 
+        let mut borrowed = RawPath::new();
+        borrowed.add_path_view(source.as_ref());
+        borrowed.close();
+        borrowed.line_to(8.0, 9.0);
+        borrowed.close();
+
         let expected_verbs = [
             PathVerb::Move,
             PathVerb::Line,
@@ -6231,6 +6336,8 @@ mod tests {
         assert_eq!(constructed.points(), &expected_points);
         assert_eq!(appended.verbs(), &expected_verbs);
         assert_eq!(appended.points(), &expected_points);
+        assert_eq!(borrowed.verbs(), &expected_verbs);
+        assert_eq!(borrowed.points(), &expected_points);
 
         let mut closed_source = RawPath::new();
         closed_source.move_to(20.0, 21.0);

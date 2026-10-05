@@ -139,8 +139,8 @@ impl RenderPath for SVGRenderPath {
         let source = self.raw_path.clone();
         self.raw_path.add_path_with_transform(&source, transform);
     }
-    fn add_raw_path(&mut self, path: &RawPath) {
-        self.raw_path.add_path(path, Mat2D::IDENTITY);
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
+        self.raw_path.add_path_view(path);
     }
     fn move_to(&mut self, x: f32, y: f32) {
         self.raw_path.move_to(x, y);

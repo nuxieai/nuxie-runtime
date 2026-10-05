@@ -105,7 +105,7 @@ impl Drop for DeferredFactory {
 impl Factory for DeferredFactory {
     fn make_render_path(&mut self, path: RawPath, fill_rule: FillRule) -> Box<dyn RenderPath> {
         let base = self.allocate(ResourceKind::Path, &self.path_ids);
-        let (verbs, points) = raw_path_bytes(&path);
+        let (verbs, points) = raw_path_bytes(path.as_ref());
         let mut buffer = self.buffer.lock().unwrap();
         let blob_offset = buffer.append_blob(&verbs);
         let points_offset = buffer.append_blob(&points);

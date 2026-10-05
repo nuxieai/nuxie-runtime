@@ -416,7 +416,7 @@ impl DeferredRenderPath {
         if scratch.verbs().is_empty() {
             return;
         }
-        self.record_add_raw_path(&scratch);
+        self.record_add_raw_path(scratch.as_ref());
         scratch.rewind();
     }
     pub fn flush_scratch_of(path: &dyn RenderPath) {
@@ -443,7 +443,7 @@ impl DeferredRenderPath {
             path.cubic(p1, p2, p3);
         }
     }
-    fn record_add_raw_path(&self, path: &RawPath) {
+    fn record_add_raw_path(&self, path: RawPathRef<'_>) {
         self.resource.bump();
         let commands = self.resource.base.commands();
         let mut commands = commands.lock().unwrap();
@@ -479,7 +479,7 @@ impl DeferredRenderPath {
         );
     }
 }
-pub fn raw_path_bytes(path: &RawPath) -> (Vec<u8>, Vec<u8>) {
+pub fn raw_path_bytes(path: RawPathRef<'_>) -> (Vec<u8>, Vec<u8>) {
     let verbs = path.verbs().iter().map(|&v| v as u8).collect();
     let mut points = Vec::with_capacity(path.points().len() * 8);
     for point in path.points() {
@@ -550,10 +550,10 @@ impl RenderPath for DeferredRenderPath {
     fn add_render_path_backwards(&mut self, _path: &dyn RenderPath, _transform: Mat2D) {
         // Inherits RenderPath's no-op on non-Rive renderers (renderer.hpp:191).
     }
-    fn add_raw_path(&mut self, path: &RawPath) {
+    fn add_raw_path(&mut self, path: RawPathRef<'_>) {
         self.flush_scratch();
         self.record_add_raw_path(path);
-        self.query_mirror(|query| query.add_path(path, Mat2D::IDENTITY));
+        self.query_mirror(|query| query.add_path_view(path));
     }
     fn move_to(&mut self, x: f32, y: f32) {
         self.scratch.get_mut().move_to(x, y);

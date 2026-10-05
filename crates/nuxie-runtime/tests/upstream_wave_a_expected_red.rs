@@ -631,8 +631,8 @@ impl render::RenderPath for ClipProbePath {
     fn add_render_path(&mut self, _: &dyn render::RenderPath, _: render::Mat2D) {}
     fn add_render_path_self(&mut self, _: render::Mat2D) {}
     fn add_render_path_backwards(&mut self, _: &dyn render::RenderPath, _: render::Mat2D) {}
-    fn add_raw_path(&mut self, path: &render::RawPath) {
-        self.raw.add_path(path, render::Mat2D::IDENTITY);
+    fn add_raw_path(&mut self, path: render::RawPathRef<'_>) {
+        self.raw.add_path_view(path);
     }
     fn move_to(&mut self, _: f32, _: f32) {}
     fn line_to(&mut self, _: f32, _: f32) {}

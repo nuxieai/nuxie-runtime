@@ -82,7 +82,7 @@ impl RenderPath for MPath {
         self.self_adds += 1;
     }
     fn add_render_path_backwards(&mut self, _: &dyn RenderPath, _: Mat2D) {}
-    fn add_raw_path(&mut self, _: &RawPath) {}
+    fn add_raw_path(&mut self, _: RawPathRef<'_>) {}
     fn move_to(&mut self, _: f32, _: f32) {}
     fn line_to(&mut self, _: f32, _: f32) {}
     fn cubic_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {}

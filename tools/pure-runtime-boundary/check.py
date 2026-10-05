@@ -239,6 +239,7 @@ PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
         "Mat2D",
         "NullFactory",
         "RawPath",
+        "RawPathRef",
         "RecordingFactory",
     },
     "host_interfaces": {

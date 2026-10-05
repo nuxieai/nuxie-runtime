@@ -221,6 +221,14 @@ impl Lua {
         self.inner.state
     }
 
+    /// Opaque identity of this handle's calling state, including implicit
+    /// coroutines. Observing it does not allocate or execute VM instructions.
+    /// The token does not retain the state and must not be dereferenced.
+    #[inline]
+    pub fn state_identity(&self) -> usize {
+        self.state() as usize
+    }
+
     /// Wrap an *already-existing* state (e.g. the thread passed into a C
     /// trampoline) in a borrowed [`Lua`] that will **not** close it on drop.
     ///

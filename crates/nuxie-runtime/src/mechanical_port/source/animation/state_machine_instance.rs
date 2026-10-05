@@ -474,6 +474,12 @@ impl StateMachineLayerInstance {
         seconds: f32,
         new_frame: bool,
     ) -> bool {
+        #[cfg(feature = "tools")]
+        let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
+            super::super::viewmodel::write_attribution::WriteSourceKind::layer,
+            self.layer.as_ref().map_or(0, CoreHandle::slot_address),
+            Some(machine as *const StateMachineInstance as usize),
+        );
         if new_frame {
             self.state_machine_changed_on_advance = false;
         }
@@ -3301,6 +3307,12 @@ impl StateMachineInstance {
         invocation: ListenerInvocation,
     ) {
         self.wake_row();
+        #[cfg(feature = "tools")]
+        let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
+            super::super::viewmodel::write_attribution::WriteSourceKind::listener,
+            listener.slot_address(),
+            Some(self as *const StateMachineInstance as usize),
+        );
         // Check authored state at dispatch, including when no accessibility
         // manager exists. Exit and move listeners still run for pointer cleanup.
         if invocation.as_pointer().is_some_and(|pointer| {

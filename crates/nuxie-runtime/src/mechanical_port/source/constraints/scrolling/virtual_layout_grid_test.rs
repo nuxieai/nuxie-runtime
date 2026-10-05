@@ -4,9 +4,8 @@ use super::*;
 struct GridOptions {
     columns: i32,
     column_starts: Vec<f32>,
-    template_rows: Vec<VirtualGridTrack>,
-    auto_rows: Vec<VirtualGridTrack>,
-    row_space: f32,
+    row_starts: Vec<f32>,
+    row_count: i32,
     align: LayoutCrossAlign,
 }
 impl Default for GridOptions {
@@ -14,19 +13,16 @@ impl Default for GridOptions {
         Self {
             columns: 4,
             column_starts: vec![0.0, 110.0, 220.0, 330.0],
-            template_rows: Vec::new(),
-            auto_rows: Vec::new(),
-            row_space: -1.0,
+            row_starts: Vec::new(),
+            row_count: 0,
             align: LayoutCrossAlign::Start,
         }
     }
 }
 fn grid(l: &mut VirtualLayout, heights: &[f32], o: GridOptions) {
-    l.begin_grid(10.0, o.columns, o.align, 0.0);
+    l.begin_grid(10.0, o.columns, o.align, 10.0, o.row_count);
     *l.grid_column_starts() = o.column_starts;
-    l.grid_rows().templates = o.template_rows;
-    l.grid_rows().autos = o.auto_rows;
-    l.grid_rows().space = o.row_space;
+    *l.grid_row_starts() = o.row_starts;
     l.begin_segment();
     for &h in heights {
         l.add_item(h, 100.0);
@@ -34,7 +30,7 @@ fn grid(l: &mut VirtualLayout, heights: &[f32], o: GridOptions) {
     l.end();
 }
 fn columns(l: &mut VirtualLayout, with_lines: bool) {
-    l.begin_grid(10.0, 4, LayoutCrossAlign::Start, 10.0);
+    l.begin_grid(10.0, 4, LayoutCrossAlign::Start, 10.0, 0);
     if with_lines {
         *l.grid_column_starts() = vec![0.0, 110.0, 220.0, 330.0, 430.0];
     }
@@ -74,27 +70,22 @@ fn grid_items_take_their_column_start() {
     }
 }
 #[test]
-fn grid_row_tracks() {
+fn grid_rows() {
     let mut l = VirtualLayout::default();
     grid(
         &mut l,
-        &[60.0; 20],
+        &[30.0; 12],
         GridOptions {
-            template_rows: vec![
-                VirtualGridTrack::points(80.0),
-                VirtualGridTrack::auto_size(),
-            ],
-            auto_rows: vec![
-                VirtualGridTrack::points(40.0),
-                VirtualGridTrack::points(50.0),
-            ],
+            row_starts: vec![5.0, 95.0, 165.0, 215.0],
             ..Default::default()
         },
     );
-    for (r, e) in [0.0, 90.0, 160.0, 210.0, 270.0].into_iter().enumerate() {
-        assert_eq!(l.line_start(r as i32), e);
-    }
-    assert_eq!(l.extent(), 310.0);
+    assert_eq!(l.line_start(0), 0.0);
+    assert_eq!(l.line_start(1), 90.0);
+    assert_eq!(l.line_extent(1), 60.0);
+    assert_eq!(l.line_start(2), 160.0);
+    assert_eq!(l.line_extent(2), 50.0);
+    assert_eq!(l.extent(), 210.0);
     let mut l = VirtualLayout::default();
     grid(
         &mut l,
@@ -103,6 +94,44 @@ fn grid_row_tracks() {
     );
     assert_eq!(l.line_start(1), 100.0);
     assert_eq!(l.extent(), 130.0);
+    let mut l = VirtualLayout::default();
+    grid(
+        &mut l,
+        &[30.0; 12],
+        GridOptions {
+            row_starts: vec![0.0, 80.0],
+            ..Default::default()
+        },
+    );
+    assert_eq!(l.line_extent(0), 80.0);
+    assert_eq!(l.line_start(1), 90.0);
+    assert_eq!(l.line_extent(1), 30.0);
+    assert_eq!(l.line_start(2), 130.0);
+    let mut l = VirtualLayout::default();
+    grid(
+        &mut l,
+        &[30.0; 4],
+        GridOptions {
+            row_count: 4,
+            row_starts: vec![0.0, 30.0, 70.0, 110.0, 150.0],
+            ..Default::default()
+        },
+    );
+    assert_eq!(l.line_count(), 4);
+    assert_eq!(l.line_first_item(3), 4);
+    assert_eq!(l.extent(), 150.0);
+}
+#[test]
+fn grid_reports_each_row_and_column_largest_item() {
+    let mut l = VirtualLayout::default();
+    l.begin_grid(10.0, 2, LayoutCrossAlign::Start, 10.0, 3);
+    l.begin_segment();
+    l.add_item(20.0, 50.0);
+    l.add_item(40.0, 70.0);
+    l.add_item(30.0, 90.0);
+    l.end();
+    assert_eq!(l.grid_row_contents(), &[40.0, 30.0, 0.0]);
+    assert_eq!(l.grid_column_contents(), &[90.0, 70.0]);
 }
 #[test]
 fn grid_only_centers_within_a_row() {
@@ -226,69 +255,6 @@ fn cycling_column_windows_match_a_brute_force_sweep() {
             );
             assert_eq!(w.visible_end, end, "offset {offset} viewport {viewport}");
             offset += 0.25;
-        }
-    }
-}
-struct RowCase {
-    rows: &'static [VirtualGridTrack],
-    heights: &'static [f32],
-    gap: f32,
-    row_space: f32,
-    tops: &'static [f32],
-    height: f32,
-}
-struct ColumnCase {
-    columns: &'static [VirtualGridTrack],
-    widths: &'static [f32],
-    gap: f32,
-    column_space: f32,
-    resize: bool,
-    starts: &'static [f32],
-}
-#[path = "virtual_layout_grid_cases.rs"]
-mod cases;
-#[test]
-fn grid_rows_land_where_layout_puts_them() {
-    for (index, c) in cases::ROW_CASES.iter().enumerate() {
-        let mut l = VirtualLayout::default();
-        l.begin_grid(c.gap, 1, LayoutCrossAlign::Start, 0.0);
-        *l.grid_column_starts() = vec![0.0, 100.0];
-        l.grid_rows().templates = c.rows.to_vec();
-        l.grid_rows().space = c.row_space;
-        l.begin_segment();
-        for &h in c.heights {
-            l.add_item(h, 100.0);
-        }
-        l.end();
-        for (item, &top) in c.tops.iter().enumerate() {
-            let actual =
-                l.line_start(l.line_of_item(item as i32)) + l.item_line_offset(item as i32);
-            let _ = index;
-            approx(actual, top, 0.01);
-        }
-        if c.height >= 0.0 {
-            approx(l.extent(), c.height, 0.01);
-        }
-    }
-}
-#[test]
-fn grid_columns_land_where_layout_puts_them() {
-    for c in cases::COLUMN_CASES {
-        let count = c.columns.len() as i32;
-        let mut l = VirtualLayout::default();
-        l.begin_grid(10.0, count, LayoutCrossAlign::Start, c.gap);
-        l.grid_columns().templates = c.columns.to_vec();
-        l.grid_columns().space = c.column_space;
-        l.grid_columns().resize = c.resize;
-        l.begin_segment();
-        for &w in c.widths {
-            l.add_item(50.0, w);
-        }
-        l.end();
-        let mut start = 0.0;
-        for column in 0..count {
-            approx(start, c.starts[column as usize], 0.01);
-            start += l.grid_column_size(column) + c.gap;
         }
     }
 }

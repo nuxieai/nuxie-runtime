@@ -17,12 +17,10 @@ use crate::tree::{
 use crate::util::debug::{debug_log, debug_log_node};
 use crate::util::sys::{new_vec_with_capacity, ChildrenVec, Vec};
 
-use crate::compute::{
-    compute_cached_layout, compute_hidden_layout, compute_root_layout, round_layout,
-};
-use crate::CacheTree;
+use crate::compute::{compute_cached_layout, compute_hidden_layout, compute_root_layout, round_layout};
 use crate::tree::rive_measure_cache::RiveMeasureCache;
 use crate::tree::RiveMeasureMetadata;
+use crate::CacheTree;
 
 #[cfg(feature = "block_layout")]
 use crate::{compute::compute_block_layout, LayoutBlockContainer};
@@ -99,6 +97,12 @@ impl Default for TaffyConfig {
 /// Stored in a [`TaffyTree`].
 #[derive(Debug, Clone, PartialEq)]
 struct NodeData {
+    #[cfg(feature = "grid")]
+    grid_virtual_rows: Vec<f32>,
+    #[cfg(feature = "grid")]
+    grid_virtual_columns: Vec<f32>,
+    #[cfg(feature = "grid")]
+    grid_virtual_sizings: Vec<(Style, Vec<u64>, Vec<f32>)>,
     /// The layout strategy used by this node
     pub(crate) style: Style,
 
@@ -132,6 +136,12 @@ impl NodeData {
     #[must_use]
     pub const fn new(style: Style) -> Self {
         Self {
+            #[cfg(feature = "grid")]
+            grid_virtual_rows: Vec::new(),
+            #[cfg(feature = "grid")]
+            grid_virtual_columns: Vec::new(),
+            #[cfg(feature = "grid")]
+            grid_virtual_sizings: Vec::new(),
             style,
             cache: Cache::new(),
             cache_measure_context: 0,
@@ -152,7 +162,11 @@ impl NodeData {
     #[inline]
     pub fn mark_dirty(&mut self) -> ClearState {
         let generic = self.cache.clear();
-        if self.rive_measure_cache.mark_dirty() { ClearState::Cleared } else { generic }
+        if self.rive_measure_cache.mark_dirty() {
+            ClearState::Cleared
+        } else {
+            generic
+        }
     }
 
     fn cached_layout(&self, input: &LayoutInput, context: u8) -> Option<LayoutOutput> {
@@ -344,11 +358,21 @@ where
 
         let key = node_id.into();
         let data = &self.taffy.nodes[key];
-        if self.rive_metadata.is_some() && data.has_context && self.child_count(node_id) == 0
-            && data.style.display != Display::None && !crate::CoreStyle::is_block(&data.style)
+        #[cfg(feature = "grid")]
+        let virtual_grid = data.style.display == Display::Grid
+            && (!data.grid_virtual_rows.is_empty() || !data.grid_virtual_columns.is_empty());
+        #[cfg(not(feature = "grid"))]
+        let virtual_grid = false;
+        if self.rive_metadata.is_some()
+            && data.has_context
+            && self.child_count(node_id) == 0
+            && data.style.display != Display::None
+            && !crate::CoreStyle::is_block(&data.style)
+            && !virtual_grid
         {
             let probing = self.min_content_probe_depth.is_some_and(|depth| depth.get() != 0);
-            let metadata = self.rive_metadata.as_mut().unwrap()(node_id, self.taffy.node_context_data.get(key), probing);
+            let metadata =
+                self.rive_metadata.as_mut().unwrap()(node_id, self.taffy.node_context_data.get(key), probing);
             let data = &mut self.taffy.nodes[key];
             // Generic and Rive layouts must not consume each other's entries.
             if data.cache_measure_context == 0 {
@@ -360,9 +384,12 @@ where
             let style = &data.style;
             let measure = &mut self.measure_function;
             return crate::compute::leaf::compute_leaf_layout_cached(
-                inputs, style, |_, _| 0.0,
+                inputs,
+                style,
+                |_, _| 0.0,
                 |known, available| measure(known, available, node_id, context, style),
-                true, Some((&mut data.rive_measure_cache, metadata, self.taffy.rive_generation)),
+                true,
+                Some((&mut data.rive_measure_cache, metadata, self.taffy.rive_generation)),
             );
         }
 
@@ -374,6 +401,11 @@ where
         compute_cached_layout(self, node_id, inputs, |tree, node_id, inputs| {
             let display_mode = tree.taffy.nodes[node_id.into()].style.display;
             let has_children = tree.child_count(node_id) > 0;
+            #[cfg(feature = "grid")]
+            let has_children = has_children
+                || (display_mode == Display::Grid
+                    && (!tree.taffy.nodes[node_id.into()].grid_virtual_rows.is_empty()
+                        || !tree.taffy.nodes[node_id.into()].grid_virtual_columns.is_empty()));
 
             debug_log!(display_mode);
             debug_log_node!(inputs);
@@ -397,7 +429,11 @@ where
                         (tree.measure_function)(known_dimensions, available_space, node_id, node_context, style)
                     };
                     crate::compute::leaf::compute_leaf_layout_with_rive_measurement(
-                        inputs, style, |_, _| 0.0, measure_function, rive_measured_leaf,
+                        inputs,
+                        style,
+                        |_, _| 0.0,
+                        measure_function,
+                        rive_measured_leaf,
                     )
                 }
             }
@@ -609,6 +645,29 @@ where
     fn get_grid_child_style(&self, child_node_id: NodeId) -> Self::GridItemStyle<'_> {
         &self.taffy.nodes[child_node_id.into()].style
     }
+    fn grid_virtual_contributions(&self, node_id: NodeId, rows: bool) -> &[f32] {
+        let data = &self.taffy.nodes[node_id.into()];
+        if rows {
+            &data.grid_virtual_rows
+        } else {
+            &data.grid_virtual_columns
+        }
+    }
+    fn grid_virtual_sizing(&self, node_id: NodeId, key: &[u64]) -> Option<Vec<f32>> {
+        let data = &self.taffy.nodes[node_id.into()];
+        data.grid_virtual_sizings
+            .iter()
+            .find(|(style, old, _)| style == &data.style && old == key)
+            .map(|(_, _, sizes)| sizes.clone())
+    }
+    fn store_grid_virtual_sizing(&mut self, node_id: NodeId, key: Vec<u64>, sizes: Vec<f32>) {
+        let data = &mut self.taffy.nodes[node_id.into()];
+        if data.grid_virtual_sizings.iter().filter(|(_, old, _)| old[0] == key[0]).count() >= 4 {
+            let first = data.grid_virtual_sizings.iter().position(|(_, old, _)| old[0] == key[0]).unwrap();
+            data.grid_virtual_sizings.remove(first);
+        }
+        data.grid_virtual_sizings.push((data.style.clone(), key, sizes));
+    }
 
     #[inline(always)]
     #[cfg(feature = "detailed_layout_info")]
@@ -636,6 +695,23 @@ where
 
 #[allow(clippy::iter_cloned_collect)] // due to no-std support, we need to use `iter_cloned` instead of `collect`
 impl<NodeContext> TaffyTree<NodeContext> {
+    /// Rive's YGNodeSetGridVirtualContributions: normalize nonfinite values,
+    /// retain independent owned contents, and invalidate only on change.
+    #[cfg(feature = "grid")]
+    pub fn set_grid_virtual_contributions(&mut self, node: NodeId, rows: &[f32], columns: &[f32]) -> TaffyResult<bool> {
+        let finite = |v: &f32| if v.is_finite() { *v } else { 0.0 };
+        let data = &mut self.nodes[node.into()];
+        if data.grid_virtual_rows.iter().copied().eq(rows.iter().map(finite))
+            && data.grid_virtual_columns.iter().copied().eq(columns.iter().map(finite))
+        {
+            return Ok(false);
+        }
+        data.grid_virtual_rows = rows.iter().map(finite).collect();
+        data.grid_virtual_columns = columns.iter().map(finite).collect();
+        data.grid_virtual_sizings.clear();
+        self.mark_dirty(node)?;
+        Ok(true)
+    }
     /// Creates a new [`TaffyTree`]
     ///
     /// The default capacity of a [`TaffyTree`] is 16 nodes.
@@ -1016,7 +1092,8 @@ impl<NodeContext> TaffyTree<NodeContext> {
             FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
     {
         let use_rounding = self.config.use_rounding;
-        let mut taffy_view = TaffyView { taffy: self, measure_function, min_content_probe_depth: None, rive_metadata: None };
+        let mut taffy_view =
+            TaffyView { taffy: self, measure_function, min_content_probe_depth: None, rive_metadata: None };
         compute_root_layout(&mut taffy_view, node_id, available_space);
         if use_rounding {
             round_layout(&mut taffy_view, node_id);
@@ -1073,7 +1150,12 @@ impl<NodeContext> TaffyTree<NodeContext> {
     /// Returns an instance of LayoutTree representing the TaffyTree
     #[cfg(test)]
     pub(crate) fn as_layout_tree(&mut self) -> impl LayoutPartialTree + CacheTree + '_ {
-        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO, min_content_probe_depth: None, rive_metadata: None }
+        TaffyView {
+            taffy: self,
+            measure_function: |_, _, _, _, _| Size::ZERO,
+            min_content_probe_depth: None,
+            rive_metadata: None,
+        }
     }
 }
 
@@ -1089,22 +1171,26 @@ mod tests {
     fn rive_exact_leaf_skips_measurement_without_changing_final_box() {
         fn run(style: Style, rive: bool, context: bool) -> (usize, Layout) {
             let mut tree = TaffyTree::<()>::new();
-            let node = if context {
-                tree.new_leaf_with_context(style, ()).unwrap()
-            } else {
-                tree.new_leaf(style).unwrap()
-            };
+            let node =
+                if context { tree.new_leaf_with_context(style, ()).unwrap() } else { tree.new_leaf(style).unwrap() };
             let mut calls = 0;
             if rive {
-                tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _| RiveMeasureMetadata::default(), |_, _, _, _, _, _| {
-                    calls += 1;
-                    Size { width: 33.0, height: 44.0 }
-                }).unwrap();
+                tree.compute_layout_with_measure_and_probe(
+                    node,
+                    Size::MAX_CONTENT,
+                    |_, _, _| RiveMeasureMetadata::default(),
+                    |_, _, _, _, _, _| {
+                        calls += 1;
+                        Size { width: 33.0, height: 44.0 }
+                    },
+                )
+                .unwrap();
             } else {
                 tree.compute_layout_with_measure(node, Size::MAX_CONTENT, |_, _, _, _, _| {
                     calls += 1;
                     Size { width: 33.0, height: 44.0 }
-                }).unwrap();
+                })
+                .unwrap();
             }
             (calls, *tree.layout(node).unwrap())
         }
@@ -1113,13 +1199,27 @@ mod tests {
         let bounded = Style {
             min_size: Size { width: auto(), height: length(90.0) },
             max_size: Size { width: length(60.0), height: auto() },
-            padding: crate::geometry::Rect { left: length(7.0), right: length(7.0), top: length(7.0), bottom: length(7.0) },
+            padding: crate::geometry::Rect {
+                left: length(7.0),
+                right: length(7.0),
+                top: length(7.0),
+                bottom: length(7.0),
+            },
             ..fixed.clone()
         };
-        let aspect = Style { size: Size { width: length(100.0), height: length(10.0) }, aspect_ratio: Some(2.0), ..Style::default() };
+        let aspect = Style {
+            size: Size { width: length(100.0), height: length(10.0) },
+            aspect_ratio: Some(2.0),
+            ..Style::default()
+        };
         let padding_floor = Style {
             size: Size { width: length(1.0), height: length(1.0) },
-            padding: crate::geometry::Rect { left: length(10.0), right: length(10.0), top: length(10.0), bottom: length(10.0) },
+            padding: crate::geometry::Rect {
+                left: length(10.0),
+                right: length(10.0),
+                top: length(10.0),
+                bottom: length(10.0),
+            },
             ..Style::default()
         };
         for style in [fixed.clone(), bounded, aspect, padding_floor] {
@@ -1136,30 +1236,60 @@ mod tests {
         // No measured context means no Rive shortcut; generic callbacks retain
         // their behavior. One definite axis or AtMost offers still need measure.
         assert!(run(fixed, true, false).0 > 0);
-        assert!(run(Style { size: Size { width: length(100.0), height: auto() }, ..Style::default() }, true, true).0 > 0);
-        assert!(run(Style { max_size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() }, true, true).0 > 0);
+        assert!(
+            run(Style { size: Size { width: length(100.0), height: auto() }, ..Style::default() }, true, true).0 > 0
+        );
+        assert!(
+            run(
+                Style { max_size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() },
+                true,
+                true
+            )
+            .0 > 0
+        );
         #[cfg(feature = "block_layout")]
-        assert!(run(Style { display: Display::Block, size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() }, true, true).0 > 0);
+        assert!(
+            run(
+                Style {
+                    display: Display::Block,
+                    size: Size { width: length(100.0), height: length(80.0) },
+                    ..Style::default()
+                },
+                true,
+                true
+            )
+            .0 > 0
+        );
     }
 
     #[test]
     fn rive_exact_leaf_shortcut_does_not_leak_into_generic_cache() {
         let mut tree = TaffyTree::<()>::new();
-        let node = tree.new_leaf_with_context(
-            Style { size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() }, (),
-        ).unwrap();
+        let node = tree
+            .new_leaf_with_context(
+                Style { size: Size { width: length(100.0), height: length(80.0) }, ..Style::default() },
+                (),
+            )
+            .unwrap();
         for _ in 0..2 {
             let mut generic_calls = 0;
             tree.compute_layout_with_measure(node, Size::MAX_CONTENT, |_, _, _, _, _| {
                 generic_calls += 1;
                 Size { width: 33.0, height: 44.0 }
-            }).unwrap();
+            })
+            .unwrap();
             assert!(generic_calls > 0);
             let mut rive_calls = 0;
-            tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT, |_, _, _| RiveMeasureMetadata::default(), |_, _, _, _, _, _| {
-                rive_calls += 1;
-                Size { width: 33.0, height: 44.0 }
-            }).unwrap();
+            tree.compute_layout_with_measure_and_probe(
+                node,
+                Size::MAX_CONTENT,
+                |_, _, _| RiveMeasureMetadata::default(),
+                |_, _, _, _, _, _| {
+                    rive_calls += 1;
+                    Size { width: 33.0, height: 44.0 }
+                },
+            )
+            .unwrap();
             assert_eq!(rive_calls, 0);
         }
     }
@@ -1221,7 +1351,8 @@ mod tests {
                 calls.set(calls.get() + 1);
                 Size { width: if depth.get() > 0 { 80.0 } else { 0.0 }, height: 0.0 }
             },
-            min_content_probe_depth: Some(&depth), rive_metadata: Some(&mut metadata),
+            min_content_probe_depth: Some(&depth),
+            rive_metadata: Some(&mut metadata),
         };
         let input = LayoutInput {
             run_mode: RunMode::PerformLayout,
@@ -1287,7 +1418,10 @@ mod tests {
         assert!(
             run(
                 parent.clone(),
-                Style { margin: crate::geometry::Rect { top: auto(), ..crate::geometry::Rect::zero() }, ..child.clone() },
+                Style {
+                    margin: crate::geometry::Rect { top: auto(), ..crate::geometry::Rect::zero() },
+                    ..child.clone()
+                },
                 false,
                 true
             )
@@ -1332,8 +1466,9 @@ mod tests {
                 ..Style::default()
             })
             .unwrap();
-        let root =
-            tree.new_with_children(Style { flex_direction: FlexDirection::Column, ..Style::default() }, &[child]).unwrap();
+        let root = tree
+            .new_with_children(Style { flex_direction: FlexDirection::Column, ..Style::default() }, &[child])
+            .unwrap();
         let depth = core::cell::Cell::new(0);
         let mut metadata = |_, _: Option<&()>, _| RiveMeasureMetadata::default();
         let mut view = TaffyView {
@@ -1555,14 +1690,18 @@ mod tests {
         let content = core::cell::Cell::new(10.0);
         let direction = core::cell::Cell::new(0);
         let mut run = |tree: &mut TaffyTree<()>| {
-            tree.compute_layout_with_measure_and_probe(node, Size::MAX_CONTENT,
+            tree.compute_layout_with_measure_and_probe(
+                node,
+                Size::MAX_CONTENT,
                 |_, _, _| RiveMeasureMetadata { owner_direction: direction.get(), normalization: 0 },
                 |_, _, _, _, _, _| {
                     calls.set(calls.get() + 1);
                     let width = content.get();
                     content.set(width + 10.0);
                     Size { width, height: 10.0 }
-                }).unwrap();
+                },
+            )
+            .unwrap();
         };
         run(&mut tree);
         run(&mut tree);

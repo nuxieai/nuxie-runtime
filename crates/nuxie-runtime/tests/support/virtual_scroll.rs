@@ -39,7 +39,7 @@ pub struct ScrollFixture {
     pub instance: CoreHandle,
     pub list: CoreHandle,
     pub scroll: CoreHandle,
-    _file: RuntimeFileHandle,
+    pub file: RuntimeFileHandle,
 }
 impl ScrollFixture {
     pub fn new(asset: &str) -> Self {
@@ -63,7 +63,7 @@ impl ScrollFixture {
             instance,
             list,
             scroll,
-            _file: file,
+            file,
         }
     }
     pub fn wrap(width_scale: u32) -> Self {
@@ -80,8 +80,13 @@ impl ScrollFixture {
         f
     }
     pub fn grid() -> Self {
+        Self::grid_settled(true)
+    }
+    pub fn grid_settled(settled: bool) -> Self {
         let f = Self::new("layout/layout_scroll_grid_virtualized.riv");
-        f.settle();
+        if settled {
+            f.settle();
+        }
         f
     }
     pub fn content(&self) -> CoreHandle {

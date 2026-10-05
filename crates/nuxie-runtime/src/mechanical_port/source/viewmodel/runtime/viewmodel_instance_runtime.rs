@@ -380,7 +380,7 @@ impl ViewModelInstanceRuntime {
                 view_model.with(|view_model| {
                     view_model
                         .as_view_model()
-                        .map(|view_model| view_model.properties())
+                        .map(|view_model| view_model.properties().to_vec())
                 })
             })
             .flatten()

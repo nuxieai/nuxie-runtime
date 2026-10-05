@@ -114,3 +114,46 @@ and final end, including padding/border and distributed gaps. The runtime uses
 these solved values for `LayoutComponent::grid_column_line_offsets`, replacing
 the pinned Yoga grid-line query without recomputing tracks or switching layout
 engines. This adds observation only and does not change the solver.
+
+## Virtual grid contributions (upstream 160085c6)
+
+Public Yoga tag `rive_yoga_fb91f6cb0f8f` resolves to commit
+`9a6ac7fac43ca22d9b1e56468e5c8200ba0a07d3`. Its `YGNode.h`,
+`grid/AutoPlacement.h`, `grid/TrackSizing.h`, and `grid/GridLayout.cpp`
+define the nodeless contribution contract translated here. Node-owned row and
+column contents normalize nonfinite values to zero, compare before dirtying,
+clear when both arrays are empty, and deep-copy with the tree. Contributions
+extend implicit tracks from grid line one and enter intrinsic/flexible sizing
+directly. Realized children still lay out in their own cells, but do not also
+participate in sizing when the complete contributions exist. Childless grids
+with contributions use the grid solver, not leaf measurement.
+
+Taffy sizes axes separately: it retains four sizing passes **per axis**, rather
+than Yoga's four paired-axis records. The node-owned cache survives child
+placement dirt, and checks current style, track counts and leading implicit
+origin, inner/owner/known/min/max dimensions, available-space modes and the
+finite-undefined offers. Contribution changes clear it. Cached base and growth
+sizes are restored; percentage-track flags remain derived from the same track
+definitions. No synthetic nodes or replacement grid-size solver are introduced.
+Both row and column solved line offsets and the post-distribution gap are
+published for the runtime's `grid_lines` query.
+
+The contribution contract also preserves Yoga's 32-bit grid range. Grid counts,
+spans, placement indexes and repetition counts use `u32`; authored/origin-zero
+line coordinates and named-line occurrences use `i32`. The runtime's `YGGridLine`
+adapter retains those widths through original-cell pinning. This replaces Taffy's
+16-bit representations consistently, including occupancy, track sizing and
+detailed results: 65,536 contributions must not wrap to an empty grid, and a
+realized child beyond line 32,767 must remain in its original cell. Ordinary
+in-range arithmetic and placement semantics are unchanged; counts are not
+clamped and no synthetic cells or alternate sizing path are introduced.
+
+The all-realized versus nodeless upstream matrices also exposed two existing
+real-item sizing differences. `GridItem::minimum_contribution` now mirrors
+Yoga's immediate min-content return for a definite point preferred size, before
+the automatic-minimum fixed-track cap. Intrinsic-minimum distribution tests
+the current percentage basis instead of an authored-tag crossing flag, so an
+unresolved percentage minimum participates like auto, as Yoga's
+`isIntrinsicSizingFunction` requires. Both corrections apply the upstream rule
+to real items; virtual contributions and test expectations are not reduced to
+match the previous differences.

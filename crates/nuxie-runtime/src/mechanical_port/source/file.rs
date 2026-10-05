@@ -1733,7 +1733,6 @@ impl File {
             return None;
         }
         *budget -= 1;
-        creating.push(view_model.clone());
         let instance = self.core_arena.insert(ViewModelInstance::default());
         let view_model_id = self.find_view_model_id(&view_model);
         CoreRegistry::set_uint_handle(
@@ -1744,8 +1743,14 @@ impl File {
         instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
             instance.view_model(view_model.clone());
         });
-        let properties = view_model.with_downcast::<ViewModel, _>(ViewModel::properties)?;
-        for (property_id, property) in properties.into_iter().enumerate() {
+        let property_count =
+            view_model.with_downcast::<ViewModel, _>(|model| model.properties().len())?;
+        instance.with_downcast_mut::<ViewModelInstance, _>(|instance| {
+            instance.reserve_values(property_count)
+        });
+        for property_id in 0..property_count {
+            let property = view_model
+                .with_downcast::<ViewModel, _>(|model| model.properties()[property_id].clone())?;
             let property_type = property.core_type()?;
             let value_type =
                 match property_type {
@@ -1768,7 +1773,7 @@ impl File {
                     crate::mechanical_port::source::generated::viewmodel::viewmodel_property_artboard_base::ViewModelPropertyArtboardBase::TYPE_KEY => crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_artboard_base::ViewModelInstanceArtboardBase::TYPE_KEY,
                     _ => {
                         eprintln!("Missing view model property type");
-                        return None;
+                        continue;
                     }
                 };
             let value = self
@@ -1787,10 +1792,17 @@ impl File {
                 let nested = reference_id
                     .and_then(|id| self.view_model_handle(id as usize))
                     .and_then(|model| {
-                        if creating.len() >= 256 || creating.contains(&model) {
+                        if creating.len() + 1 >= 256
+                            || model == view_model
+                            || creating.contains(&model)
+                        {
                             None
                         } else {
-                            self.create_view_model_instance_recursive(model, creating, budget)
+                            creating.push(view_model.clone());
+                            let nested =
+                                self.create_view_model_instance_recursive(model, creating, budget);
+                            creating.pop();
+                            nested
                         }
                     });
                 if let Some(nested) = nested {
@@ -1813,9 +1825,8 @@ impl File {
                 property_id as u32,
             );
             instance
-                .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.add_value(value));
+                .with_downcast_mut::<ViewModelInstance, _>(|instance| instance.append_value(value));
         }
-        creating.pop();
         #[cfg(feature = "tools")]
         self.register_view_model_instance(instance.clone());
         Some(instance)

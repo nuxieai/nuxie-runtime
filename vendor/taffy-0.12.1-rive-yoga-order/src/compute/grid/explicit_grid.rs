@@ -27,7 +27,7 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
     auto_fit_strategy: AutoRepeatStrategy,
     resolve_calc_value: impl Fn(*const (), f32) -> f32,
     axis: AbsoluteAxis,
-) -> (u16, u16) {
+) -> (u32, u32) {
     let template = match axis {
         AbsoluteAxis::Horizontal => style.grid_template_columns(),
         AbsoluteAxis::Vertical => style.grid_template_rows(),
@@ -62,9 +62,9 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
                 RepetitionCount::AutoFit | RepetitionCount::AutoFill => 0,
             },
         })
-        .sum::<u16>();
+        .sum::<u32>();
 
-    let auto_repetition_count: u16 = template.clone().filter(|track_def| track_def.is_auto_repetition()).count() as u16;
+    let auto_repetition_count: u32 = template.clone().filter(|track_def| track_def.is_auto_repetition()).count() as u32;
     let all_track_defs_have_fixed_component = template.clone().all(|track_def| match track_def {
         GenericGridTemplateComponent::Single(sizing_function) => sizing_function.has_fixed_component(),
         GenericGridTemplateComponent::Repeat(repeat) => {
@@ -98,10 +98,10 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
         })
         .unwrap();
     let repetition_definition_iter = repetition_definition.tracks();
-    let repetition_track_count = repetition_definition_iter.len() as u16;
+    let repetition_track_count = repetition_definition_iter.len() as u32;
 
     // Determine the number of repetitions
-    let num_repetitions: u16 = match auto_fit_container_size {
+    let num_repetitions: u32 = match auto_fit_container_size {
         None => 1,
         Some(inner_container_size) => {
             let parent_size = Some(inner_container_size);
@@ -154,7 +154,7 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
             // If a single repetition already overflows the container then we return 1 as the repetition count
             // (the number of repetitions is floored at 1)
             if first_repetition_and_non_repeating_tracks_used_space > inner_container_size {
-                1u16
+                1u32
             } else {
                 let per_repetition_gap_used_space = (repetition_track_count as f32) * gap_size;
                 let per_repetition_used_space = per_repetition_track_used_space + per_repetition_gap_used_space;
@@ -169,8 +169,8 @@ pub(crate) fn compute_explicit_grid_size_in_axis(
                 //
                 // In all cases we add the additional repetition that was already accounted for in the special-case computation above
                 match auto_fit_strategy {
-                    AutoRepeatStrategy::MaxRepetitionsThatDoNotOverflow => (floor(num_repetition_that_fit) as u16) + 1,
-                    AutoRepeatStrategy::MinRepetitionsThatDoOverflow => (ceil(num_repetition_that_fit) as u16) + 1,
+                    AutoRepeatStrategy::MaxRepetitionsThatDoNotOverflow => (floor(num_repetition_that_fit) as u32) + 1,
+                    AutoRepeatStrategy::MinRepetitionsThatDoOverflow => (ceil(num_repetition_that_fit) as u32) + 1,
                 }
             }
         }
@@ -224,7 +224,7 @@ pub(super) fn initialize_grid_tracks(
                         RepetitionCount::AutoFit | RepetitionCount::AutoFill => 0,
                     },
                 })
-                .sum::<u16>()
+                .sum::<u32>()
         })
         .unwrap_or(0);
 
@@ -318,7 +318,7 @@ pub(super) fn initialize_grid_tracks(
         }
     }
 
-    let grid_area_tracks = (counts.negative_implicit + counts.explicit) - current_track_index as u16;
+    let grid_area_tracks = (counts.negative_implicit + counts.explicit) - current_track_index as u32;
 
     // Create positive implicit tracks
     if auto_track_count == 0 {
@@ -337,7 +337,7 @@ pub(super) fn initialize_grid_tracks(
 /// Utility function for repeating logic of creating implicit tracks
 fn create_implicit_tracks(
     tracks: &mut Vec<GridTrack>,
-    count: u16,
+    count: u32,
     mut auto_tracks_iter: impl Iterator<Item = TrackSizingFunction>,
     gap: LengthPercentage,
 ) {
@@ -686,7 +686,7 @@ mod test {
         };
         let track_counts = TrackCounts {
             negative_implicit: 3,
-            explicit: grid_style.grid_template_columns.len() as u16,
+            explicit: grid_style.grid_template_columns.len() as u32,
             positive_implicit: 3,
         };
 

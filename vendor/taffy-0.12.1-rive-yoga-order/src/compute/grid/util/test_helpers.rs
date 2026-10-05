@@ -36,7 +36,7 @@ impl CreateChildTestNode
 pub(crate) trait CreateExpectedPlacement {
     fn into_oz(self) -> (OriginZeroLine, OriginZeroLine, OriginZeroLine, OriginZeroLine);
 }
-impl CreateExpectedPlacement for (i16, i16, i16, i16) {
+impl CreateExpectedPlacement for (i32, i32, i32, i32) {
     fn into_oz(self) -> (OriginZeroLine, OriginZeroLine, OriginZeroLine, OriginZeroLine) {
         (OriginZeroLine(self.0), OriginZeroLine(self.1), OriginZeroLine(self.2), OriginZeroLine(self.3))
     }

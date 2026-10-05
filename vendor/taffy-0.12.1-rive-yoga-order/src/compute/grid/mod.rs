@@ -45,7 +45,13 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     node: NodeId,
     inputs: LayoutInput,
 ) -> LayoutOutput {
-    let LayoutInput { known_dimensions, parent_size, available_space, run_mode, .. } = inputs;
+    let LayoutInput {
+        known_dimensions,
+        parent_size,
+        available_space,
+        run_mode,
+        ..
+    } = inputs;
 
     let style = tree.get_grid_container_style(node);
     let direction = style.direction();
@@ -53,12 +59,19 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // 1. Compute "available grid space"
     // https://www.w3.org/TR/css-grid-1/#available-grid-space
     let aspect_ratio = style.aspect_ratio();
-    let padding = style.padding().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
-    let border = style.border().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
+    let padding = style
+        .padding()
+        .resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
+    let border = style
+        .border()
+        .resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
     let padding_border = padding + border;
     let padding_border_size = padding_border.sum_axes();
-    let box_sizing_adjustment =
-        if style.box_sizing() == BoxSizing::ContentBox { padding_border_size } else { Size::ZERO };
+    let box_sizing_adjustment = if style.box_sizing() == BoxSizing::ContentBox {
+        padding_border_size
+    } else {
+        Size::ZERO
+    };
 
     let min_size = style
         .min_size()
@@ -74,8 +87,11 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // the numeric inner offer to layoutAbsoluteDescendants. Do not use this
     // as either the track basis or the grid's own content-sized dimensions.
     let rive_absolute_percentage_basis = if tree.uses_rive_layout() {
-        let margin = style.margin().resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
-        inputs.rive_undefined_available
+        let margin = style
+            .margin()
+            .resolve_or_zero(parent_size.width, |val, basis| tree.calc(val, basis));
+        inputs
+            .rive_undefined_available
             .maybe_sub(margin.sum_axes())
             .maybe_sub(padding_border_size)
             .maybe_clamp(
@@ -138,11 +154,17 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             .map_definite_value(|space| space - content_box_inset.vertical_axis_sum()),
     };
 
-    let outer_node_size =
-        known_dimensions.or(preferred_size).maybe_clamp(min_size, max_size).maybe_max(padding_border_size);
+    let outer_node_size = known_dimensions
+        .or(preferred_size)
+        .maybe_clamp(min_size, max_size)
+        .maybe_max(padding_border_size);
     let mut inner_node_size = Size {
-        width: outer_node_size.width.map(|space| space - content_box_inset.horizontal_axis_sum()),
-        height: outer_node_size.height.map(|space| space - content_box_inset.vertical_axis_sum()),
+        width: outer_node_size
+            .width
+            .map(|space| space - content_box_inset.horizontal_axis_sum()),
+        height: outer_node_size
+            .height
+            .map(|space| space - content_box_inset.vertical_axis_sum()),
     };
 
     debug_log!("parent_size", dbg:parent_size);
@@ -152,7 +174,11 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Short-circuit layout if the container's size is fully determined by the container's size and the run mode
     // is ComputeSize (and thus the container's size is all that we're interested in)
     if run_mode == RunMode::ComputeSize {
-        if let Size { width: Some(width), height: Some(height) } = outer_node_size {
+        if let Size {
+            width: Some(width),
+            height: Some(height),
+        } = outer_node_size
+        {
             return LayoutOutput::from_outer_size(Size { width, height });
         }
 
@@ -164,8 +190,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         }
     }
 
-    let get_child_styles_iter =
-        |node| tree.child_ids(node).map(|child_node: NodeId| tree.get_grid_child_style(child_node));
+    let get_child_styles_iter = |node| {
+        tree.child_ids(node)
+            .map(|child_node: NodeId| tree.get_grid_child_style(child_node))
+    };
     let child_styles_iter = get_child_styles_iter(node);
 
     // 2. Resolve the explicit grid
@@ -246,8 +274,17 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     );
 
     // Extract track counts from previous step (auto-placement can expand the number of tracks)
-    let final_col_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Horizontal);
-    let final_row_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Vertical);
+    let mut final_col_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Horizontal);
+    let mut final_row_counts = *cell_occupancy_matrix.track_counts(AbsoluteAxis::Vertical);
+    let virtual_columns = tree.grid_virtual_contributions(node, false).to_vec();
+    let virtual_rows = tree.grid_virtual_contributions(node, true).to_vec();
+    let virtual_grid = !virtual_columns.is_empty() || !virtual_rows.is_empty();
+    final_col_counts.positive_implicit = final_col_counts
+        .positive_implicit
+        .max((virtual_columns.len() as u32).saturating_sub(final_col_counts.explicit));
+    final_row_counts.positive_implicit = final_row_counts
+        .positive_implicit
+        .max((virtual_rows.len() as u32).saturating_sub(final_row_counts.explicit));
 
     // 5. Initialize Tracks
     // Initialize (explicit and implicit) grid tracks (and gutters)
@@ -273,9 +310,13 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             cell_occupancy_matrix.column_is_occupied(occupancy_index)
         },
     );
-    initialize_grid_tracks(&mut rows, final_row_counts, &style, AbsoluteAxis::Vertical, |row_index| {
-        cell_occupancy_matrix.row_is_occupied(row_index)
-    });
+    initialize_grid_tracks(
+        &mut rows,
+        final_row_counts,
+        &style,
+        AbsoluteAxis::Vertical,
+        |row_index| cell_occupancy_matrix.row_is_occupied(row_index),
+    );
     if direction.is_rtl() {
         reverse_non_gutter_tracks(&mut columns, final_col_counts);
     }
@@ -285,6 +326,21 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     drop(grid_auto_rows);
     drop(grid_auto_columns);
     drop(style);
+
+    // Contributions are indexed from authored grid line one, not the first
+    // implicit track. Realized nodes are covered by these contents too.
+    for (tracks, counts, values) in [
+        (&mut columns, final_col_counts, &virtual_columns),
+        (&mut rows, final_row_counts, &virtual_rows),
+    ] {
+        for (index, track) in tracks.iter_mut().skip(1).step_by(2).enumerate() {
+            track.virtual_contribution = index
+                .checked_sub(counts.negative_implicit as usize)
+                .and_then(|i| values.get(i))
+                .copied()
+                .unwrap_or(0.0);
+        }
+    }
 
     // 6. Track Sizing
 
@@ -302,6 +358,9 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Run track sizing algorithm for Inline axis
     track_sizing_algorithm(
         tree,
+        node,
+        inputs,
+        final_col_counts.negative_implicit,
         AbstractAxis::Inline,
         min_size.get(AbstractAxis::Inline),
         max_size.get(AbstractAxis::Inline),
@@ -311,9 +370,11 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         inner_node_size,
         &mut columns,
         &mut rows,
-        &mut items,
+        if virtual_grid { &mut [] } else { &mut items },
         |track: &GridTrack, parent_size: Option<f32>, tree: &Tree| {
-            track.max_track_sizing_function.definite_value(parent_size, |val, basis| tree.calc(val, basis))
+            track
+                .max_track_sizing_function
+                .definite_value(parent_size, |val, basis| tree.calc(val, basis))
         },
         has_baseline_aligned_item,
     );
@@ -325,6 +386,9 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Run track sizing algorithm for Block axis
     track_sizing_algorithm(
         tree,
+        node,
+        inputs,
+        final_row_counts.negative_implicit,
         AbstractAxis::Block,
         min_size.get(AbstractAxis::Block),
         max_size.get(AbstractAxis::Block),
@@ -334,7 +398,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         inner_node_size,
         &mut rows,
         &mut columns,
-        &mut items,
+        if virtual_grid { &mut [] } else { &mut items },
         |track: &GridTrack, _, _| Some(track.base_size),
         false, // TODO: Support baseline alignment in the vertical axis
     );
@@ -361,7 +425,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             .max(padding_border_size.height),
     };
     let mut container_content_box = Size {
-        width: f32_max(0.0, container_border_box.width - content_box_inset.horizontal_axis_sum()),
+        width: f32_max(
+            0.0,
+            container_border_box.width - content_box_inset.horizontal_axis_sum(),
+        ),
         height: f32_max(0.0, container_border_box.height - content_box_inset.vertical_axis_sum()),
     };
 
@@ -409,8 +476,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     rerun_column_sizing = parent_width_indefinite && has_percentage_column;
 
     if !rerun_column_sizing {
-        intrinsic_column_contribution_changed =
-            items.iter_mut().filter(|item| item.crosses_intrinsic_column).any(|item| {
+        intrinsic_column_contribution_changed = items
+            .iter_mut()
+            .filter(|item| !virtual_grid && item.crosses_intrinsic_column)
+            .any(|item| {
                 let grid_area_size = item.grid_area_size(
                     AbstractAxis::Inline,
                     &columns,
@@ -449,6 +518,9 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         // Re-run track sizing algorithm for Inline axis
         track_sizing_algorithm(
             tree,
+            node,
+            inputs,
+            final_col_counts.negative_implicit,
             AbstractAxis::Inline,
             min_size.get(AbstractAxis::Inline),
             max_size.get(AbstractAxis::Inline),
@@ -458,7 +530,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             inner_node_size,
             &mut columns,
             &mut rows,
-            &mut items,
+            if virtual_grid { &mut [] } else { &mut items },
             |track: &GridTrack, _, _| Some(track.base_size),
             has_baseline_aligned_item,
         );
@@ -473,8 +545,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         rerun_row_sizing = parent_height_indefinite && has_percentage_row;
 
         if !rerun_row_sizing {
-            intrinsic_row_contribution_changed =
-                items.iter_mut().filter(|item| item.crosses_intrinsic_column).any(|item| {
+            intrinsic_row_contribution_changed = items
+                .iter_mut()
+                .filter(|item| !virtual_grid && item.crosses_intrinsic_column)
+                .any(|item| {
                     let grid_area_size = item.grid_area_size(
                         AbstractAxis::Block,
                         &rows,
@@ -511,6 +585,9 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
             // Re-run track sizing algorithm for Block axis
             track_sizing_algorithm(
                 tree,
+                node,
+                inputs,
+                final_row_counts.negative_implicit,
                 AbstractAxis::Block,
                 min_size.get(AbstractAxis::Block),
                 max_size.get(AbstractAxis::Block),
@@ -520,7 +597,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 inner_node_size,
                 &mut rows,
                 &mut columns,
-                &mut items,
+                if virtual_grid { &mut [] } else { &mut items },
                 |track: &GridTrack, _, _| Some(track.base_size),
                 false, // TODO: Support baseline alignment in the vertical axis
             );
@@ -539,8 +616,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 .unwrap_or_else(|| final_column_sum + content_box_inset.horizontal_axis_sum())
                 .maybe_clamp(min_size.width, max_size.width)
                 .max(padding_border_size.width);
-            container_content_box.width =
-                f32_max(0.0, container_border_box.width - content_box_inset.horizontal_axis_sum());
+            container_content_box.width = f32_max(
+                0.0,
+                container_border_box.width - content_box_inset.horizontal_axis_sum(),
+            );
         }
 
         if intrinsic_row_contribution_changed && !has_percentage_row {
@@ -567,10 +646,23 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     align_tracks(
         container_content_box.get(AbstractAxis::Inline),
         Line {
-            start: padding.left + if direction.is_rtl() { inline_scrollbar_gutter_for_alignment } else { 0.0 },
-            end: padding.right + if direction.is_rtl() { 0.0 } else { inline_scrollbar_gutter_for_alignment },
+            start: padding.left
+                + if direction.is_rtl() {
+                    inline_scrollbar_gutter_for_alignment
+                } else {
+                    0.0
+                },
+            end: padding.right
+                + if direction.is_rtl() {
+                    0.0
+                } else {
+                    inline_scrollbar_gutter_for_alignment
+                },
         },
-        Line { start: border.left, end: border.right },
+        Line {
+            start: border.left,
+            end: border.right,
+        },
         &mut columns,
         justify_content,
         direction.is_rtl(),
@@ -578,8 +670,14 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Align rows
     align_tracks(
         container_content_box.get(AbstractAxis::Block),
-        Line { start: padding.top, end: padding.bottom },
-        Line { start: border.top, end: border.bottom },
+        Line {
+            start: padding.top,
+            end: padding.bottom,
+        },
+        Line {
+            start: border.top,
+            end: border.bottom,
+        },
         &mut rows,
         align_content,
         false,
@@ -593,7 +691,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     // Sort items back into original order to allow them to be matched up with styles
     items.sort_by_key(|item| item.source_order);
 
-    let container_alignment_styles = InBothAbsAxis { horizontal: justify_items, vertical: align_items };
+    let container_alignment_styles = InBothAbsAxis {
+        horizontal: justify_items,
+        vertical: align_items,
+    };
 
     // Position in-flow children (stored in items vector)
     for (index, item) in items.iter_mut().enumerate() {
@@ -658,7 +759,7 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                     maybe_grid_line
                         .map(|line: OriginZeroLine| {
                             if direction.is_rtl() {
-                                OriginZeroLine(final_col_counts.explicit as i16 - line.0)
+                                OriginZeroLine(final_col_counts.explicit as i32 - line.0)
                             } else {
                                 line
                             }
@@ -666,7 +767,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                         .and_then(|line| line.try_into_track_vec_index(final_col_counts))
                 });
             let maybe_col_indexes = if direction.is_rtl() {
-                Line { start: maybe_col_indexes.end, end: maybe_col_indexes.start }
+                Line {
+                    start: maybe_col_indexes.end,
+                    end: maybe_col_indexes.start,
+                }
             } else {
                 maybe_col_indexes
             };
@@ -681,33 +785,50 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
                 });
 
             let grid_area = Rect {
-                top: maybe_row_indexes.start.map(|index| rows[index].offset).unwrap_or(border.top),
+                top: maybe_row_indexes
+                    .start
+                    .map(|index| rows[index].offset)
+                    .unwrap_or(border.top),
                 bottom: maybe_row_indexes
                     .end
                     .map(|index| rows[index].offset)
                     .unwrap_or(container_border_box.height - border.bottom - scrollbar_gutter.y),
-                left: maybe_col_indexes.start.map(|index| columns[index].offset).unwrap_or_else(|| {
-                    if direction.is_rtl() {
-                        border.left + scrollbar_gutter.x
-                    } else {
-                        border.left
-                    }
-                }),
-                right: maybe_col_indexes.end.map(|index| columns[index].offset).unwrap_or_else(|| {
-                    if direction.is_rtl() {
-                        container_border_box.width - border.right
-                    } else {
-                        container_border_box.width - border.right - scrollbar_gutter.x
-                    }
-                }),
+                left: maybe_col_indexes
+                    .start
+                    .map(|index| columns[index].offset)
+                    .unwrap_or_else(|| {
+                        if direction.is_rtl() {
+                            border.left + scrollbar_gutter.x
+                        } else {
+                            border.left
+                        }
+                    }),
+                right: maybe_col_indexes
+                    .end
+                    .map(|index| columns[index].offset)
+                    .unwrap_or_else(|| {
+                        if direction.is_rtl() {
+                            container_border_box.width - border.right
+                        } else {
+                            container_border_box.width - border.right - scrollbar_gutter.x
+                        }
+                    }),
             };
             drop(child_style);
 
             // TODO: Baseline alignment support for absolutely positioned items (should check if is actually specified)
             #[cfg_attr(not(feature = "content_size"), allow(unused_variables))]
-            let (content_size_contribution, _, _) =
-                align_and_position_item(tree, child, order, grid_area, container_alignment_styles, 0.0, direction,
-                    rive_absolute_percentage_basis, tree.rive_container_is_row(node));
+            let (content_size_contribution, _, _) = align_and_position_item(
+                tree,
+                child,
+                order,
+                grid_area,
+                container_alignment_styles,
+                0.0,
+                direction,
+                rive_absolute_percentage_basis,
+                tree.rive_container_is_row(node),
+            );
             #[cfg(feature = "content_size")]
             {
                 item_content_size_contribution = item_content_size_contribution.f32_max(content_size_contribution);
@@ -719,14 +840,30 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
 
     // Set detailed grid information
     #[cfg(feature = "detailed_layout_info")]
-    tree.set_detailed_grid_info(
-        node,
-        DetailedGridInfo {
-            rows: DetailedGridTracksInfo::from_grid_tracks_and_track_count(final_row_counts, rows),
-            columns: DetailedGridTracksInfo::from_grid_tracks_and_track_count(final_col_counts, columns),
-            items: items.iter().map(DetailedGridItemsInfo::from_grid_item).collect(),
-        },
-    );
+    {
+        let row_gap = tree
+            .get_grid_container_style(node)
+            .gap()
+            .height
+            .resolve_or_zero(Some(container_content_box.height), |val, basis| tree.calc(val, basis));
+        let column_gap = tree
+            .get_grid_container_style(node)
+            .gap()
+            .width
+            .resolve_or_zero(Some(container_content_box.width), |val, basis| tree.calc(val, basis));
+        tree.set_detailed_grid_info(
+            node,
+            DetailedGridInfo {
+                rows: DetailedGridTracksInfo::from_grid_tracks_and_track_count(final_row_counts, rows, row_gap),
+                columns: DetailedGridTracksInfo::from_grid_tracks_and_track_count(
+                    final_col_counts,
+                    columns,
+                    column_gap,
+                ),
+                items: items.iter().map(DetailedGridItemsInfo::from_grid_item).collect(),
+            },
+        );
+    }
 
     // If there are not items then return just the container size (no baseline)
     if items.is_empty() {
@@ -742,13 +879,21 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
         let first_row = items[0].row_indexes.start;
 
         // Create a slice of all of the items start in this row (taking advantage of the fact that we have just sorted the array)
-        let first_row_items = &items[0..].split(|item| item.row_indexes.start != first_row).next().unwrap();
+        let first_row_items = &items[0..]
+            .split(|item| item.row_indexes.start != first_row)
+            .next()
+            .unwrap();
 
         // Check if any items in *this row* are baseline aligned
-        let row_has_baseline_item = first_row_items.iter().any(|item| item.align_self == AlignSelf::BASELINE);
+        let row_has_baseline_item = first_row_items
+            .iter()
+            .any(|item| item.align_self == AlignSelf::BASELINE);
 
         let item = if row_has_baseline_item {
-            first_row_items.iter().find(|item| item.align_self == AlignSelf::BASELINE).unwrap()
+            first_row_items
+                .iter()
+                .find(|item| item.align_self == AlignSelf::BASELINE)
+                .unwrap()
         } else {
             &first_row_items[0]
         };
@@ -759,7 +904,10 @@ pub fn compute_grid_layout<Tree: LayoutGridContainer>(
     LayoutOutput::from_sizes_and_baselines(
         container_border_box,
         item_content_size_contribution,
-        Point { x: None, y: Some(grid_container_baseline) },
+        Point {
+            x: None,
+            y: Some(grid_container_baseline),
+        },
     )
 }
 
@@ -827,15 +975,17 @@ pub struct DetailedGridInfo {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg(feature = "detailed_layout_info")]
 pub struct DetailedGridTracksInfo {
+    /// Actual gap after content distribution, rather than just the authored gutter.
+    pub gap: f32,
     /// Solved local line offsets: each track start followed by the final end.
     /// Host observation for Rive's virtual grid, including distributed gaps.
     pub line_offsets: Vec<f32>,
     /// Number of leading implicit grid tracks
-    pub negative_implicit_tracks: u16,
+    pub negative_implicit_tracks: u32,
     /// Number of explicit grid tracks
-    pub explicit_tracks: u16,
+    pub explicit_tracks: u32,
     /// Number of trailing implicit grid tracks
-    pub positive_implicit_tracks: u16,
+    pub positive_implicit_tracks: u32,
 
     /// Gutters between tracks
     pub gutters: Vec<f32>,
@@ -868,14 +1018,32 @@ impl DetailedGridTracksInfo {
     }
 
     /// Construct DetailedGridTracksInfo from TrackCounts and GridTracks
-    fn from_grid_tracks_and_track_count(track_count: TrackCounts, grid_tracks: Vec<GridTrack>) -> Self {
-        let mut line_offsets: Vec<f32> = grid_tracks.iter()
+    fn from_grid_tracks_and_track_count(
+        track_count: TrackCounts,
+        grid_tracks: Vec<GridTrack>,
+        authored_gap: f32,
+    ) -> Self {
+        let gap = if grid_tracks.len() > 3 {
+            grid_tracks[3].offset - grid_tracks[1].offset - grid_tracks[1].base_size
+        } else {
+            authored_gap
+        };
+        let mut line_offsets: Vec<f32> = grid_tracks
+            .iter()
             .filter(|track| track.kind == GridTrackKind::Track)
-            .map(|track| track.offset).collect();
-        if let Some(track) = grid_tracks.iter().rev().find(|track| track.kind == GridTrackKind::Track) {
+            .map(|track| track.offset)
+            .collect();
+        if let Some(track) = grid_tracks
+            .iter()
+            .rev()
+            .find(|track| track.kind == GridTrackKind::Track)
+        {
             line_offsets.push(track.offset + track.base_size);
+        } else {
+            line_offsets.push(grid_tracks.first().map_or(0.0, |track| track.offset));
         }
         DetailedGridTracksInfo {
+            gap,
             line_offsets,
             negative_implicit_tracks: track_count.negative_implicit,
             explicit_tracks: track_count.explicit,
@@ -894,13 +1062,13 @@ impl DetailedGridTracksInfo {
 #[cfg(feature = "detailed_layout_info")]
 pub struct DetailedGridItemsInfo {
     /// row-start with 1-indexed grid line numbers
-    pub row_start: u16,
+    pub row_start: u32,
     /// row-end with 1-indexed grid line numbers
-    pub row_end: u16,
+    pub row_end: u32,
     /// column-start with 1-indexed grid line numbers
-    pub column_start: u16,
+    pub column_start: u32,
     /// column-end with 1-indexed grid line numbers
-    pub column_end: u16,
+    pub column_end: u32,
 }
 
 /// Grid area information from the placement algorithm
@@ -911,7 +1079,7 @@ impl DetailedGridItemsInfo {
     fn from_grid_item(grid_item: &GridItem) -> Self {
         /// Conversion from the indexes of Vec<GridTrack> into 1-indexed grid line numbers. See [`GridItem::row_indexes`] or [`GridItem::column_indexes`]
         #[inline(always)]
-        fn to_one_indexed_grid_line(grid_track_index: u16) -> u16 {
+        fn to_one_indexed_grid_line(grid_track_index: u32) -> u32 {
             grid_track_index / 2 + 1
         }
 
@@ -933,13 +1101,26 @@ mod rive_finite_undefined_tests {
         let mut tree = TaffyTree::<()>::new();
         tree.disable_rounding();
         let content = tree
-            .new_leaf(Style { size: Size { width: length(80.0), height: length(10.0) }, ..Style::default() })
+            .new_leaf(Style {
+                size: Size {
+                    width: length(80.0),
+                    height: length(10.0),
+                },
+                ..Style::default()
+            })
             .unwrap();
         let padded = tree
             .new_leaf(Style {
                 position: Position::Absolute,
-                size: Size { width: percent(0.5), height: length(10.0) },
-                padding: Rect { left: percent(0.1), right: percent(0.1), ..Rect::zero() },
+                size: Size {
+                    width: percent(0.5),
+                    height: length(10.0),
+                },
+                padding: Rect {
+                    left: percent(0.1),
+                    right: percent(0.1),
+                    ..Rect::zero()
+                },
                 ..Style::default()
             })
             .unwrap();
@@ -947,7 +1128,10 @@ mod rive_finite_undefined_tests {
             .new_leaf_with_context(
                 Style {
                     position: Position::Absolute,
-                    size: Size { width: auto(), height: length(10.0) },
+                    size: Size {
+                        width: auto(),
+                        height: length(10.0),
+                    },
                     ..Style::default()
                 },
                 (),
@@ -956,17 +1140,33 @@ mod rive_finite_undefined_tests {
         let margined = tree
             .new_leaf(Style {
                 position: Position::Absolute,
-                size: Size { width: percent(0.5), height: length(10.0) },
-                margin: Rect { left: percent(0.1), right: percent(0.1), ..Rect::zero() },
-                inset: Rect { left: length(0.0), ..Rect::auto() },
+                size: Size {
+                    width: percent(0.5),
+                    height: length(10.0),
+                },
+                margin: Rect {
+                    left: percent(0.1),
+                    right: percent(0.1),
+                    ..Rect::zero()
+                },
+                inset: Rect {
+                    left: length(0.0),
+                    ..Rect::auto()
+                },
                 ..Style::default()
             })
             .unwrap();
         let bounded = tree
             .new_leaf(Style {
                 position: Position::Absolute,
-                size: Size { width: percent(0.5), height: length(10.0) },
-                max_size: Size { width: percent(0.25), height: auto() },
+                size: Size {
+                    width: percent(0.5),
+                    height: length(10.0),
+                },
+                max_size: Size {
+                    width: percent(0.25),
+                    height: auto(),
+                },
                 ..Style::default()
             })
             .unwrap();
@@ -975,7 +1175,10 @@ mod rive_finite_undefined_tests {
                 Style {
                     display: Display::Grid,
                     flex_grow: 1.0,
-                    min_size: Size { width: length(0.0), height: length(0.0) },
+                    min_size: Size {
+                        width: length(0.0),
+                        height: length(0.0),
+                    },
                     ..Style::default()
                 },
                 &[content, padded, measured, margined, bounded],
@@ -987,7 +1190,10 @@ mod rive_finite_undefined_tests {
                     flex_direction: FlexDirection::Column,
                     flex_wrap: FlexWrap::Wrap,
                     align_content: Some(AlignContent::FLEX_START),
-                    size: Size { width: length(400.0), height: length(100.0) },
+                    size: Size {
+                        width: length(400.0),
+                        height: length(100.0),
+                    },
                     ..Style::default()
                 },
                 &[grid],
@@ -1002,7 +1208,10 @@ mod rive_finite_undefined_tests {
                 if node == measured {
                     requests.push(available.width);
                 }
-                known.unwrap_or(Size { width: 123.0, height: 10.0 })
+                known.unwrap_or(Size {
+                    width: 123.0,
+                    height: 10.0,
+                })
             },
         )
         .unwrap();
@@ -1025,29 +1234,54 @@ mod rive_finite_undefined_tests {
             let mut tree = TaffyTree::<()>::new();
             tree.disable_rounding();
             let content = tree
-                .new_leaf(Style { size: Size { width: length(80.0), height: length(10.0) }, ..Style::default() })
+                .new_leaf(Style {
+                    size: Size {
+                        width: length(80.0),
+                        height: length(10.0),
+                    },
+                    ..Style::default()
+                })
                 .unwrap();
             let percentage = tree
                 .new_leaf(Style {
                     position: Position::Absolute,
-                    size: Size { width: percent(0.5), height: length(10.0) },
-                    inset: Rect { left: percent(0.1), ..Rect::auto() },
+                    size: Size {
+                        width: percent(0.5),
+                        height: length(10.0),
+                    },
+                    inset: Rect {
+                        left: percent(0.1),
+                        ..Rect::auto()
+                    },
                     ..Style::default()
                 })
                 .unwrap();
             let opposing = tree
                 .new_leaf(Style {
                     position: Position::Absolute,
-                    size: Size { width: auto(), height: length(10.0) },
-                    inset: Rect { left: percent(0.1), right: percent(0.1), ..Rect::auto() },
+                    size: Size {
+                        width: auto(),
+                        height: length(10.0),
+                    },
+                    inset: Rect {
+                        left: percent(0.1),
+                        right: percent(0.1),
+                        ..Rect::auto()
+                    },
                     ..Style::default()
                 })
                 .unwrap();
             let trailing = tree
                 .new_leaf(Style {
                     position: Position::Absolute,
-                    size: Size { width: length(10.0), height: length(10.0) },
-                    inset: Rect { right: percent(0.05), ..Rect::auto() },
+                    size: Size {
+                        width: length(10.0),
+                        height: length(10.0),
+                    },
+                    inset: Rect {
+                        right: percent(0.05),
+                        ..Rect::auto()
+                    },
                     ..Style::default()
                 })
                 .unwrap();
@@ -1056,8 +1290,14 @@ mod rive_finite_undefined_tests {
                     Style {
                         display: Display::Grid,
                         flex_grow: 1.0,
-                        min_size: Size { width: length(0.0), height: length(0.0) },
-                        max_size: Size { width: max_width.map(length).unwrap_or_else(auto), height: auto() },
+                        min_size: Size {
+                            width: length(0.0),
+                            height: length(0.0),
+                        },
+                        max_size: Size {
+                            width: max_width.map(length).unwrap_or_else(auto),
+                            height: auto(),
+                        },
                         ..Style::default()
                     },
                     &[content, percentage, opposing, trailing],
@@ -1069,7 +1309,10 @@ mod rive_finite_undefined_tests {
                         flex_direction: FlexDirection::Column,
                         flex_wrap: FlexWrap::Wrap,
                         align_content: Some(AlignContent::FLEX_START),
-                        size: Size { width: length(400.0), height: length(100.0) },
+                        size: Size {
+                            width: length(400.0),
+                            height: length(100.0),
+                        },
                         ..Style::default()
                     },
                     &[grid],

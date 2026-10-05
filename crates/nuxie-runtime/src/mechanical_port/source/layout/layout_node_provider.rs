@@ -128,6 +128,14 @@ pub trait LayoutNodeProvider {
     fn mark_layout_node_dirty(&mut self, _should_force_update_layout_bounds: bool) {}
     fn add_layout_style_applier(&mut self, _applier: CoreHandle) {}
     fn num_layout_nodes(&self) -> usize;
+    fn collect_layout_nodes(&self, out: &mut Vec<LayoutNodeKey>) {
+        let provider = self.provider_handle().expect("live layout provider");
+        for index in 0..self.num_layout_nodes() {
+            if let Some(node) = layout_node_for(&provider, index) {
+                out.push(node);
+            }
+        }
+    }
     fn cascade_layout_style(
         &mut self,
         _interpolation: LayoutStyleInterpolation,

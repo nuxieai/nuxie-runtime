@@ -278,8 +278,6 @@ struct VirtualGrid {
     column: i32,
     row: i32,
     pinned: bool,
-    columns: Vec<f32>,
-    rows: Vec<f32>,
 }
 impl Default for VirtualGrid {
     fn default() -> Self {
@@ -287,8 +285,6 @@ impl Default for VirtualGrid {
             column: -1,
             row: -1,
             pinned: false,
-            columns: Vec::new(),
-            rows: Vec::new(),
         }
     }
 }
@@ -318,6 +314,11 @@ pub struct LayoutComponent {
     forced_height: f32,
     virtual_grid: Option<Box<VirtualGrid>>,
     grid_column_lines: Vec<f32>,
+    grid_row_lines: Vec<f32>,
+    grid_column_gap: f32,
+    grid_row_gap: f32,
+    grid_virtual_rows: Vec<f32>,
+    grid_virtual_columns: Vec<f32>,
     // Files exported before 7.3 never composed a layout's own rotation/scale,
     // so any stored value was ignored. Import clears this for those files; it
     // defaults to the current behavior so a layout built outside of import
@@ -354,6 +355,11 @@ impl Default for LayoutComponent {
             forced_height: f32::NAN,
             virtual_grid: None,
             grid_column_lines: Vec::new(),
+            grid_row_lines: Vec::new(),
+            grid_column_gap: 0.0,
+            grid_row_gap: 0.0,
+            grid_virtual_rows: Vec::new(),
+            grid_virtual_columns: Vec::new(),
         }
     }
 }
@@ -822,40 +828,35 @@ impl LayoutComponent {
             })
             .expect("live Layout owner");
         Self::clear_detached_layout_ownership(Some(owner), &detached);
+        let mut nodes = Vec::new();
         for (_, provider) in Self::layout_providers_nested_with_solo(owner, false, active_solo) {
             let active = active_participant
                 .filter(|participant| participant.base.handle().as_ref() == Some(&provider));
-            let count = if let Some(participant) = active {
-                participant.num_layout_nodes()
+            if let Some(participant) = active {
+                for index in 0..participant.num_layout_nodes() {
+                    if let Some(node) = participant.layout_node_key(index) {
+                        nodes.push(node);
+                    }
+                }
             } else {
                 provider
-                    .with_mut(|object| {
+                    .with(|object| {
                         object
-                            .as_layout_node_provider_mut()
+                            .as_layout_node_provider()
                             .expect("layout provider")
-                            .num_layout_nodes()
+                            .collect_layout_nodes(&mut nodes)
                     })
-                    .expect("live layout provider")
-            };
-            for index in 0..count {
-                let node = if let Some(participant) = active {
-                    participant.layout_node_key(index)
-                } else {
-                    crate::mechanical_port::source::layout::layout_node_provider::layout_node_for(
-                        &provider, index,
-                    )
-                };
-                let Some(node) = node else {
-                    continue;
-                };
-                *node.owner.borrow_mut() = Some(owner.clone());
-                owner.with_mut(|object| {
-                    let layout = object.as_layout_component_mut().expect("Layout owner");
-                    #[cfg(feature = "tools")]
-                    layout.layout_data.children.push(node.provider.clone());
-                    layout.layout_children.push(node);
-                });
+                    .expect("live layout provider");
             }
+        }
+        for node in nodes {
+            *node.owner.borrow_mut() = Some(owner.clone());
+            owner.with_mut(|object| {
+                let layout = object.as_layout_component_mut().expect("Layout owner");
+                #[cfg(feature = "tools")]
+                layout.layout_data.children.push(node.provider.clone());
+                layout.layout_children.push(node);
+            });
         }
         Self::mark_layout_tree_topology_dirty_occurrence(owner);
         Self::mark_layout_node_dirty_occurrence(owner, false);
@@ -1028,7 +1029,10 @@ impl LayoutComponent {
         }
         if let Some((_, roots)) = Self::hosted_layout_roots(provider) {
             let mut changed = false;
-            for (_, root) in roots {
+            for index in roots {
+                let Some(root) = Self::hosted_layout_root(provider, index) else {
+                    continue;
+                };
                 changed |=
                     Artboard::sync_style_changes_with_parent_style_handle(&root, parent_style);
             }
@@ -1956,16 +1960,23 @@ impl LayoutComponent {
         grid.row = row;
         true
     }
-    pub fn virtual_grid_tracks(&mut self, columns: &[f32], rows: &[f32]) {
-        if self.virtual_grid.is_none() && columns.is_empty() && rows.is_empty() {
+    pub fn virtual_grid_contributions(&mut self, rows: &[f32], columns: &[f32]) {
+        let finite = |v: &f32| if v.is_finite() { *v } else { 0.0 };
+        if self
+            .grid_virtual_rows
+            .iter()
+            .copied()
+            .eq(rows.iter().map(finite))
+            && self
+                .grid_virtual_columns
+                .iter()
+                .copied()
+                .eq(columns.iter().map(finite))
+        {
             return;
         }
-        let grid = self.virtual_grid.get_or_insert_with(Default::default);
-        if grid.columns == columns && grid.rows == rows {
-            return;
-        }
-        grid.columns = columns.to_vec();
-        grid.rows = rows.to_vec();
+        self.grid_virtual_rows = rows.iter().map(finite).collect();
+        self.grid_virtual_columns = columns.iter().map(finite).collect();
         self.mark_layout_node_dirty(false);
     }
     pub fn hugs_lines(&self) -> bool {
@@ -1997,9 +2008,18 @@ impl LayoutComponent {
         self.with_style(|style| style.is_grid() && !style.is_stack())
             .unwrap_or(false)
     }
-    pub fn grid_column_line_offsets(&self, out: &mut Vec<f32>) {
+    pub fn grid_lines(&self, rows: bool, out: &mut Vec<f32>) -> f32 {
         out.clear();
-        out.extend_from_slice(&self.grid_column_lines);
+        out.extend_from_slice(if rows {
+            &self.grid_row_lines
+        } else {
+            &self.grid_column_lines
+        });
+        if rows {
+            self.grid_row_gap
+        } else {
+            self.grid_column_gap
+        }
     }
     fn clear_virtual_grid_placement(&mut self, style: &mut YGStyle) {
         if let Some(grid) = self.virtual_grid.as_mut() {
@@ -2591,6 +2611,18 @@ impl LayoutComponent {
         }
         for index in 0..cache.nodes.len() {
             let entry = &mut cache.nodes[index];
+            entry.owner.with(|object| {
+                if let Some(layout) = object.as_layout_component() {
+                    cache
+                        .tree
+                        .set_grid_virtual_contributions(
+                            entry.node,
+                            &layout.grid_virtual_rows,
+                            &layout.grid_virtual_columns,
+                        )
+                        .expect("valid native grid contributions");
+                }
+            });
             if entry.measure != measures[index] {
                 cache
                     .tree
@@ -2780,16 +2812,21 @@ impl LayoutComponent {
                 output.padding.right,
                 output.padding.bottom,
             );
-            let grid_column_lines = match cache.tree.detailed_layout_info(entry.node) {
-                taffy::tree::DetailedLayoutInfo::Grid(info) => info.columns.line_offsets.clone(),
-                _ => Vec::new(),
+            let grid_lines = match cache.tree.detailed_layout_info(entry.node) {
+                taffy::tree::DetailedLayoutInfo::Grid(info) => (
+                    info.columns.line_offsets.clone(),
+                    info.rows.line_offsets.clone(),
+                    info.columns.gap,
+                    info.rows.gap,
+                ),
+                _ => (Vec::new(), Vec::new(), 0.0, 0.0),
             };
             outputs.push((
                 entry.owner.clone(),
                 next,
                 padding,
                 subtree_dirty[index],
-                grid_column_lines,
+                grid_lines,
             ));
         }
         owner.with_mut(|object| {
@@ -2798,10 +2835,15 @@ impl LayoutComponent {
                 .expect("layout calculation owner")
                 .layout_tree_cache = Some(cache);
         });
-        for (owner, next, padding, subtree_dirty, grid_column_lines) in outputs {
+        for (owner, next, padding, subtree_dirty, grid_lines) in outputs {
             owner.with_mut(|object| {
                 let data = if let Some(layout) = object.as_layout_component_mut() {
-                    layout.grid_column_lines = grid_column_lines;
+                    (
+                        layout.grid_column_lines,
+                        layout.grid_row_lines,
+                        layout.grid_column_gap,
+                        layout.grid_row_gap,
+                    ) = grid_lines;
                     layout.layout_data.has_new_layout |= layout.solved_padding != padding;
                     layout.solved_padding = padding;
                     &mut *layout.layout_data
@@ -2908,13 +2950,24 @@ impl LayoutComponent {
         }
         self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
     }
-    fn hosted_layout_roots(provider: &CoreHandle) -> Option<(bool, Vec<(i32, CoreHandle)>)> {
+    fn hosted_layout_roots(provider: &CoreHandle) -> Option<(bool, Vec<i32>)> {
         provider.with(|object| {
             if let Some(nested) = object.as_any().downcast_ref::<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>() {
-                Some((false, nested.base.base.artboard_instance_handle(0).map(|instance| (0, instance.core_handle())).into_iter().collect()))
+                Some((false, nested.base.base.artboard_instance_handle(0).map(|_| 0).into_iter().collect()))
             } else if let Some(list) = object.as_any().downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
-                Some((true, (0..list.artboard_count() as i32).filter_map(|index| list.item(index).map(|instance| (index, instance.core_handle()))).collect()))
+                let mut indices = Vec::new();
+                list.realized_indices(&mut indices);
+                Some((true, indices))
             } else { None }
+        }).flatten()
+    }
+    fn hosted_layout_root(provider: &CoreHandle, index: i32) -> Option<CoreHandle> {
+        provider.with(|object| {
+            if let Some(nested) = object.as_any().downcast_ref::<crate::source::nested_artboard_layout::NestedArtboardLayout>() {
+                nested.base.base.artboard_instance_handle(index).map(|instance| instance.core_handle())
+            } else {
+                object.as_any().downcast_ref::<crate::source::artboard_component_list::ArtboardComponentList>()?.item(index).map(|instance| instance.core_handle())
+            }
         }).flatten()
     }
 
@@ -2926,9 +2979,11 @@ impl LayoutComponent {
         {
             Self::update_layout_bounds_occurrence(provider, animate);
         } else if let Some((is_list, roots)) = Self::hosted_layout_roots(provider) {
-            for (index, root) in roots {
+            let has_virtual_window = is_list && provider.with_downcast::<crate::source::artboard_component_list::ArtboardComponentList, _>(|list| list.has_visible_virtual_window()).unwrap();
+            for index in roots {
+                let Some(root) = Self::hosted_layout_root(provider, index) else { continue; };
                 Self::update_layout_bounds_occurrence(&root, animate);
-                if is_list {
+                if is_list && (!has_virtual_window || provider.with_downcast::<crate::source::artboard_component_list::ArtboardComponentList, _>(|list| list.is_within_visible_window(index)).unwrap()) {
                     let bounds = root
                         .with(|object| object.as_layout_component().unwrap().layout_bounds())
                         .unwrap();
@@ -3095,7 +3150,8 @@ impl LayoutComponent {
                     direction,
                 );
             } else if let Some((_, roots)) = Self::hosted_layout_roots(&provider) {
-                for (_, root) in roots {
+                for index in roots {
+                    let Some(root) = Self::hosted_layout_root(&provider, index) else { continue; };
                     Self::cascade_layout_style_occurrence(
                         &root,
                         interpolation,
@@ -3559,7 +3615,8 @@ impl LayoutComponent {
                     direction,
                 );
             } else if let Some((_, roots)) = Self::hosted_layout_roots(&provider) {
-                for (_, root) in roots {
+                for index in roots {
+                    let Some(root) = Self::hosted_layout_root(&provider, index) else { continue; };
                     Self::cascade_layout_style_occurrence(
                         &root,
                         interpolation,
@@ -3810,10 +3867,6 @@ impl LayoutComponent {
                 style,
                 self,
                 u32::from(justify),
-                self.virtual_grid
-                    .as_ref()
-                    .map(|grid| grid.columns.as_slice()),
-                self.virtual_grid.as_ref().map(|grid| grid.rows.as_slice()),
             );
         }
     }

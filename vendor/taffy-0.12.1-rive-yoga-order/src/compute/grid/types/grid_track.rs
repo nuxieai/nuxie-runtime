@@ -12,7 +12,7 @@ pub(in super::super) enum GridTrackKind {
     /// Track is an actual track
     Track,
     /// Track is a gutter (aka grid line) (aka gap)
-    Gutter, // { name: Option<u16> },
+    Gutter, // { name: Option<u32> },
 }
 
 /// Internal sizing information for a single grid track (row/column)
@@ -20,6 +20,8 @@ pub(in super::super) enum GridTrackKind {
 /// are also represented by this struct
 #[derive(Debug, Clone)]
 pub(in super::super) struct GridTrack {
+    /// Rive: content supplied by unrealized grid items, independent of nodes.
+    pub virtual_contribution: f32,
     #[allow(dead_code)] // Used in tests + may be useful in future
     /// Whether the track is a full track, a gutter, or a placeholder that has not yet been initialised
     pub kind: GridTrackKind,
@@ -67,6 +69,7 @@ impl GridTrack {
         max_track_sizing_function: MaxTrackSizingFunction,
     ) -> GridTrack {
         GridTrack {
+            virtual_contribution: 0.0,
             kind,
             is_collapsed: false,
             min_track_sizing_function,

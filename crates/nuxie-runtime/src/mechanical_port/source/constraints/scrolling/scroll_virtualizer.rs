@@ -20,8 +20,6 @@ pub struct ScrollVirtualizer {
     viewport_size: f32,
     windows_columns: bool,
     pinned_cells: bool,
-    line_start: i32,
-    line_end: i32,
     flow_offset: f32,
     column_start: f32,
     column_viewport: f32,
@@ -39,8 +37,6 @@ impl Default for ScrollVirtualizer {
             viewport_size: 0.0,
             windows_columns: false,
             pinned_cells: false,
-            line_start: 0,
-            line_end: -1,
             flow_offset: 0.0,
             column_start: 0.0,
             column_viewport: 0.0,
@@ -69,12 +65,6 @@ impl ScrollVirtualizer {
     }
     pub fn reset(&mut self) {
         self.anchor_item = -1;
-    }
-    pub fn realized_line_start(&self) -> i32 {
-        self.line_start
-    }
-    pub fn realized_line_end(&self) -> i32 {
-        self.line_end
     }
     pub fn anchor_moved(&self, layout: &VirtualLayout, children: &[CoreHandle]) -> f32 {
         if self.anchor_item < 0 {
@@ -116,7 +106,11 @@ impl ScrollVirtualizer {
         } else if layout.item_count() != self.anchor_item_count {
             return 0.0;
         }
-        layout.line_start(layout.line_of_item(item)) - self.anchor_start
+        let line = layout.line_of_item(item);
+        if !layout.line_laid_out(line) {
+            return 0.0;
+        }
+        layout.line_start(line) - self.anchor_start
     }
     pub fn constrain(
         &mut self,
@@ -183,8 +177,6 @@ impl ScrollVirtualizer {
         let total = layout.item_count();
         let buffer = Self::with_scroll(scroll, |s| i32::from(s.virtualize_buffer())).min(total);
         let window = layout.window(self.offset, self.viewport_size, self.infinite, buffer);
-        self.line_start = window.start;
-        self.line_end = window.end;
         let windows_columns = self.windows_columns && layout.is_grid();
         let loops_columns = windows_columns && self.infinite;
         let mut flow_offset = self.flow_offset;
@@ -217,14 +209,16 @@ impl ScrollVirtualizer {
         for child in children {
             Self::with_virtualizer_mut(child, |v| v.clear_virtual_window());
         }
-        let mut used = vec![false; total as usize];
+        let mut used = Vec::new();
         for line in window.start..=window.end {
             for item in layout.line_first_item(line)..=layout.line_last_item(line) {
                 if in_columns(line, item) {
-                    used[item as usize] = true;
+                    used.push(item);
                 }
             }
         }
+        used.sort_unstable();
+        let is_used = |item: i32| used.binary_search(&item).is_ok();
         for (segment, child) in children.iter().enumerate() {
             Self::with_virtualizer_mut(child, |virt| {
                 let mut held = Vec::new();
@@ -242,7 +236,7 @@ impl ScrollVirtualizer {
                 let kept: Vec<_> = held
                     .iter()
                     .zip(&held_items)
-                    .filter(|(i, _)| **i < count && used[(first + **i) as usize])
+                    .filter(|(i, _)| **i < count && is_used(first + **i))
                     .map(|(_, v)| v.clone())
                     .collect();
                 let same =
@@ -255,7 +249,7 @@ impl ScrollVirtualizer {
                     };
                 let mut recycled = Vec::new();
                 for (index, shared) in held.iter().zip(held_items) {
-                    if *index < count && used[(first + *index) as usize] {
+                    if *index < count && is_used(first + *index) {
                         continue;
                     }
                     if !kept.iter().any(|v| same(v, &shared))
@@ -269,7 +263,11 @@ impl ScrollVirtualizer {
         }
         self.anchor_item = -1;
         for line in window.visible_start..=window.visible_end {
-            if self.infinite || window.is_empty() || self.anchor_item >= 0 {
+            if self.infinite
+                || window.is_empty()
+                || self.anchor_item >= 0
+                || !layout.line_laid_out(line)
+            {
                 break;
             }
             let first = layout.line_first_item(line);
@@ -337,13 +335,13 @@ impl ScrollVirtualizer {
                     Self::with_virtualizer_mut(child, |v| {
                         v.set_virtualizable_cell(
                             local,
-                            if windows_columns {
+                            if layout.is_grid() {
                                 item - layout.line_first_item(line)
                             } else {
                                 -1
                             },
-                            if windows_columns {
-                                line - window.start
+                            if layout.is_grid() {
+                                layout.wrap_line(line)
                             } else {
                                 -1
                             },
@@ -403,7 +401,7 @@ impl ScrollVirtualizer {
         } else {
             None
         };
-        self.pinned_cells = windows_columns;
+        self.pinned_cells = layout.is_grid();
         changed.sort_by_key(CoreHandle::slot_address);
         for child in changed {
             Self::with_virtualizer_mut(&child, |v| v.virtualizable_changed());

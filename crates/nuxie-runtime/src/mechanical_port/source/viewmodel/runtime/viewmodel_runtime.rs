@@ -137,7 +137,8 @@ impl RuntimeViewModelHandle {
                 model.as_view_model().map(|model| {
                     model
                         .properties()
-                        .into_iter()
+                        .iter()
+                        .cloned()
                         .map(Self::property_data)
                         .collect()
                 })

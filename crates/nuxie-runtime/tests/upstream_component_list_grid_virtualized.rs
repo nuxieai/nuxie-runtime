@@ -1,9 +1,10 @@
-//! Direct translation of component_list_grid_virtualized_test.cpp at dc75beed.
+//! Direct translation of component_list_grid_virtualized_test.cpp at 160085c6.
 #[path = "support/virtual_scroll.rs"]
 mod support;
 use nuxie_runtime::source::{
     generated::layout::grid_track_base::GridTrackBase,
     layout::grid_track::{GridTrack, GridTrackCollection},
+    viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
 use support::*;
 #[test]
@@ -204,4 +205,97 @@ fn grid_auto_columns_size_from_unrealized_items() {
     f.settle();
     approx(f.bounds(1).left(), 160.0);
     approx((f.drawn_at(1) - f.drawn_at(0)).x, 160.0);
+}
+
+#[test]
+fn grid_virtualized_list_keeps_its_offset_while_layout_places_rows() {
+    let f = ScrollFixture::grid_settled(false);
+    f.scroll_y(-100.0);
+    f.offset_y(-100.0);
+    f.settle();
+    approx(
+        read::<ScrollConstraint, _>(&f.scroll, |s| s.offset_y()),
+        -100.0,
+    );
+}
+
+#[test]
+fn grid_virtualized_list_with_percent_rows_scrolls_its_layout_height() {
+    let f = ScrollFixture::grid();
+    let content = f.content();
+    uint(
+        &style(&content),
+        Sizing::LAYOUT_HEIGHT_SCALE_TYPE_PROPERTY_KEY,
+        2,
+    );
+    let children = read::<LayoutComponent, _>(&content, |c| c.base.children().to_vec());
+    for child in children {
+        if child.is_type_of(GridTrack::TYPE_KEY)
+            && read::<GridTrack, _>(&child, |t| t.grid_collection())
+                == GridTrackCollection::TemplateRows
+        {
+            uint(&child, GridTrackBase::TRACK_TYPE_PROPERTY_KEY, 2);
+            number(&child, GridTrackBase::TRACK_VALUE_PROPERTY_KEY, 50.0);
+        }
+    }
+    f.settle();
+    approx(
+        read::<ScrollConstraint, _>(&f.scroll, |s| s.content_height()),
+        read::<LayoutComponent, _>(&content, |c| c.layout_height()),
+    );
+}
+
+#[test]
+fn grid_virtualized_list_rebuilds_when_an_added_item_opens_a_row() {
+    let f = ScrollFixture::grid();
+    approx(
+        read::<ScrollConstraint, _>(&f.scroll, |s| s.content_height()),
+        360.0,
+    );
+    let items = read::<ViewModelInstance, _>(&f.instance, |v| {
+        v.property_values()
+            .iter()
+            .filter(|v| v.is_type_of(ViewModelInstanceList::TYPE_KEY))
+            .last()
+            .cloned()
+    })
+    .expect("list property");
+    let first = read::<ViewModelInstanceList, _>(&items, |v| v.list_items()[0].clone());
+    let first_instance =
+        read::<ViewModelInstanceListItem, _>(&first, |i| i.view_model_instance()).unwrap();
+    let model = read::<ViewModelInstance, _>(&first_instance, |v| v.get_view_model()).unwrap();
+    let instance = f
+        .file
+        .with_file_mut(|f| f.create_view_model_instance(model))
+        .unwrap();
+    let item = items
+        .insert_sibling(ViewModelInstanceListItem::default())
+        .unwrap();
+    write::<ViewModelInstanceListItem, _>(&item, |i| {
+        i.set_view_model_instance(Some(instance));
+        i.set_artboard(read::<ViewModelInstanceListItem, _>(&first, |i| {
+            i.artboard()
+        }));
+    });
+    write::<ViewModelInstanceList, _>(&items, |v| v.add_item(item));
+    f.settle();
+    approx(
+        read::<ScrollConstraint, _>(&f.scroll, |s| s.content_height()),
+        430.0,
+    );
+}
+
+#[test]
+fn grid_virtualized_list_rebuilds_when_a_wider_gap_spreads_the_rows() {
+    let f = ScrollFixture::grid();
+    approx(
+        read::<ScrollConstraint, _>(&f.scroll, |s| s.content_height()),
+        360.0,
+    );
+    number(&f.content_style(), Style::GAP_VERTICAL_PROPERTY_KEY, 20.0);
+    f.settle();
+    approx(
+        read::<ScrollConstraint, _>(&f.scroll, |s| s.content_height()),
+        400.0,
+    );
 }

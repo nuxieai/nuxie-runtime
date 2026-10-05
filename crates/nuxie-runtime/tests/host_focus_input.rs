@@ -18,8 +18,7 @@ fn host_keyboard_matches_upstream_key_combinations() {
                 .find(|&index| file.artboard_name_at(index) == "KeyboardInput")
         })
         .unwrap();
-    let native = file.with_file(|file| file.artboard_at(index)).unwrap();
-    let mut artboard = ArtboardInstance::from_native_handle(file, index, native);
+    let mut artboard = ArtboardInstance::from_native(file, index).unwrap();
     let file = artboard.native_file();
     let source = artboard.native_handle().core_handle();
     let model = file
@@ -100,4 +99,64 @@ fn host_keyboard_matches_upstream_key_combinations() {
     machine.key_input(Key::X, KeyModifiers::SHIFT, true, false);
     advance!();
     count!(6);
+}
+
+fn import_host_artboard(bytes: &[u8]) -> ArtboardInstance {
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(bytes, retained, None, None, None).unwrap();
+    ArtboardInstance::from_native(file, 0).unwrap()
+}
+
+#[test]
+fn host_text_input_matches_upstream_focused_node_events() {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR").expect("RIVE_RUNTIME_DIR");
+    let bytes = std::fs::read(
+        std::path::Path::new(&root).join("tests/unit_tests/assets/text_input_event.riv"),
+    )
+    .unwrap();
+    let mut artboard = import_host_artboard(&bytes);
+    let file = artboard.native_file();
+    let source = artboard.native_handle().core_handle();
+    let model = file
+        .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+        .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
+        .unwrap();
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    machine.bind_owned_view_model_handle(model.clone());
+    macro_rules! advance {
+        () => {
+            artboard
+                .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+                .unwrap()
+        };
+    }
+    macro_rules! values {
+        ($focused:expr, $keyed:expr, $texted:expr) => {
+            for (name, expected) in [
+                ("isFocused", $focused),
+                ("hasKeyed", $keyed),
+                ("hasTexted", $texted),
+            ] {
+                assert_eq!(
+                    model.borrow().boolean_value_by_property_name(name),
+                    Some(expected),
+                    "{name}"
+                );
+            }
+        };
+    }
+    advance!();
+    assert!(machine.focus_next());
+    advance!();
+    values!(true, false, false);
+    machine.key_input(Key::B, KeyModifiers::NONE, true, false);
+    advance!();
+    values!(true, false, false);
+    machine.text_input("b");
+    advance!();
+    values!(true, false, true);
+    machine.key_input(Key::A, KeyModifiers::NONE, true, false);
+    advance!();
+    values!(true, true, true);
 }

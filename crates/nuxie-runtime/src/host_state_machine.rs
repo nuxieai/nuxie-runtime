@@ -923,12 +923,12 @@ impl StateMachineInstance {
         self.native.with_instance(|machine| machine.focus_state())
     }
     pub fn focus_next(&mut self) -> bool {
-        self.native
-            .with_instance_mut(|machine| machine.focus_next())
+        let manager = self.native.with_instance(|machine| machine.focus_manager());
+        manager.is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_next))
     }
     pub fn focus_previous(&mut self) -> bool {
-        self.native
-            .with_instance_mut(|machine| machine.focus_previous())
+        let manager = self.native.with_instance(|machine| machine.focus_manager());
+        manager.is_some_and(|manager| manager.with_focus_manager_mut(FocusManager::focus_previous))
     }
     pub fn focus_up(&mut self) -> bool {
         self.native.with_instance_mut(|machine| machine.focus_up())
@@ -946,8 +946,10 @@ impl StateMachineInstance {
             .with_instance_mut(|machine| machine.focus_right())
     }
     pub fn clear_focus(&mut self) {
-        self.native
-            .with_instance_mut(|machine| machine.clear_focus());
+        let manager = self.native.with_instance(|machine| machine.focus_manager());
+        if let Some(manager) = manager {
+            manager.with_focus_manager_mut(FocusManager::clear_focus);
+        }
     }
     pub fn key_input(
         &mut self,
@@ -956,12 +958,14 @@ impl StateMachineInstance {
         is_pressed: bool,
         is_repeat: bool,
     ) -> bool {
-        self.native
-            .with_instance_mut(|machine| machine.key_input(key, modifiers, is_pressed, is_repeat))
+        let manager = self.native.with_instance(|machine| machine.focus_manager());
+        manager.is_some_and(|manager| {
+            manager.key_input_dispatch(key, modifiers, is_pressed, is_repeat)
+        })
     }
     pub fn text_input(&mut self, text: &str) -> bool {
-        self.native
-            .with_instance_mut(|machine| machine.text_input(text))
+        let manager = self.native.with_instance(|machine| machine.focus_manager());
+        manager.is_some_and(|manager| manager.text_input_dispatch(text))
     }
     pub fn reset_state(&mut self) {
         self.native

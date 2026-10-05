@@ -103,6 +103,28 @@ impl RuntimeFocusManagerHandle {
         self.2.get()
     }
 
+    pub fn key_input_dispatch(
+        &self,
+        key: Key,
+        modifiers: KeyModifiers,
+        is_pressed: bool,
+        is_repeat: bool,
+    ) -> bool {
+        let node = self.with_focus_manager_mut(|manager| {
+            manager.drop_focus_if_focus_target_hidden();
+            manager.primary_focus.clone()
+        });
+        dispatch_key_from_node(node, key, modifiers, is_pressed, is_repeat)
+    }
+
+    pub fn text_input_dispatch(&self, text: &str) -> bool {
+        let node = self.with_focus_manager_mut(|manager| {
+            manager.drop_focus_if_focus_target_hidden();
+            manager.primary_focus.clone()
+        });
+        dispatch_text_from_node(node, text)
+    }
+
     pub fn gamepad_dispatch(
         &self,
         invocation: &ListenerInvocation,
@@ -114,6 +136,58 @@ impl RuntimeFocusManagerHandle {
         });
         dispatch_gamepad_from_node(node, invocation, output)
     }
+}
+
+fn dispatch_key_from_node(
+    mut node: Option<FocusNodeRef>,
+    key: Key,
+    modifiers: KeyModifiers,
+    is_pressed: bool,
+    is_repeat: bool,
+) -> bool {
+    while let Some(current) = node {
+        let focusable = current.borrow().focusable();
+        if let Some(focusable) = focusable {
+            let owner = focusable.borrow().gamepad_dispatch_owner();
+            let handled = if let Some(owner) = owner {
+                crate::mechanical_port::source::focus_data::FocusData::key_input_occurrence(
+                    &owner, key, modifiers, is_pressed, is_repeat,
+                )
+            } else {
+                focusable
+                    .borrow_mut()
+                    .key_input(key, modifiers, is_pressed, is_repeat)
+            };
+            if handled {
+                return true;
+            }
+        }
+        // Listener actions may reparent the focused node synchronously.
+        node = current.borrow().parent();
+    }
+    false
+}
+
+fn dispatch_text_from_node(mut node: Option<FocusNodeRef>, text: &str) -> bool {
+    while let Some(current) = node {
+        let focusable = current.borrow().focusable();
+        if let Some(focusable) = focusable {
+            let owner = focusable.borrow().gamepad_dispatch_owner();
+            let handled = if let Some(owner) = owner {
+                crate::mechanical_port::source::focus_data::FocusData::text_input_occurrence(
+                    &owner, text,
+                )
+            } else {
+                focusable.borrow_mut().text_input(text)
+            };
+            if handled {
+                return true;
+            }
+        }
+        // Listener actions may reparent the focused node synchronously.
+        node = current.borrow().parent();
+    }
+    false
 }
 
 fn dispatch_gamepad_from_node(

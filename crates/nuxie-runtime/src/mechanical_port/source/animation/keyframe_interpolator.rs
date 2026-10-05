@@ -28,10 +28,11 @@ impl KeyFrameInterpolator {
         self.scripted = value;
     }
     pub fn host_from(component: CoreHandle) -> Option<CoreHandle> {
-        component
-            .is_type_of(
+        // Upstream switches on coreType: Artboard inherits LayoutComponent but is not a host.
+        (component.core_type()
+            == Some(
                 crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
-            )
+            ))
             .then_some(component)
     }
     pub fn import(owner: &mut dyn CoreObject, stack: &mut ImportStack) -> StatusCode {

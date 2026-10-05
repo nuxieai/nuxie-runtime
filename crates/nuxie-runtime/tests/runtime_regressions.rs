@@ -144,7 +144,10 @@ fn check_fill_width_text(participant_layout: bool, solve_layout: bool) {
                     (layout.layout_width(), layout.layout_height())
                 })
                 .unwrap();
-            assert!((actual_width - width).abs() < 0.1, "fill width: {actual_width}");
+            assert!(
+                (actual_width - width).abs() < 0.1,
+                "fill width: {actual_width}"
+            );
             assert!(
                 (height - expected_height).abs() < 0.1,
                 "solved {content:?} at {width}: {height}, expected {expected_height}"

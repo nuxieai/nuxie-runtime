@@ -336,6 +336,10 @@ fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
                 }
             })
             .unwrap();
+        assert!(!fixture.machine.fire_semantic_action(
+            fixture.button_id,
+            SemanticActionType::Tap as u8,
+        ));
         touch();
         assert!(
             data.with_downcast::<SemanticData, _>(|data| data.is_expanded())

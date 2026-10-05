@@ -14,7 +14,9 @@ mod video_sync;
 pub use video::*;
 pub use video_resources::*;
 pub use video_sync::*;
+mod layout_size;
 mod player_view_models;
+pub use layout_size::*;
 mod render_callbacks;
 
 pub use asset_catalog::*;

@@ -711,3 +711,66 @@ fn markers_follow_writes_in_native_component_copies_and_list_rows() {
         nux_file_free(file);
     }
 }
+
+#[cfg(feature = "scripting")]
+#[test]
+fn marker_rows_survive_removal_from_a_subscribed_list_in_the_same_step() {
+    let script = scripts::compile(
+        br#"return function(context)
+        return { init = function() return true end,
+            performAction = function()
+                local rows = context:rootViewModel().rows
+                local item = rows[1]
+                item.n.value = 5
+                rows:remove(item)
+            end }
+    end"#,
+    );
+    let file = scripts::trusted(&fixture::occurrences(&script));
+    let row = model(file);
+    let mut root = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 1, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    let clear = mutation(root, "rows", NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR);
+    let mut insert = mutation(root, "rows", NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT);
+    insert.related_instance = row;
+    mutate(&[clear, insert]);
+    assert_eq!(install(file, &[marker("n", "n_set")]), NuxStatus::Ok);
+    let player = Player::at(file, root, 1);
+    player.step(&NuxPlayerStep::default());
+    let pointer = NuxPlayerPointerEvent {
+        kind: NUX_PLAYER_POINTER_KIND_DOWN,
+        x: 105.0,
+        y: 5.0,
+        pointer_id: 1,
+        timestamp_seconds: 0.0,
+    };
+    let changes = player.step(&NuxPlayerStep {
+        pointers: &pointer,
+        pointer_count: 1,
+        ..Default::default()
+    });
+    assert_eq!(state(row), (5.0, 1));
+    let mut snapshot = ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_snapshot(root, &mut snapshot) },
+        NuxStatus::Ok
+    );
+    let mut list = NuxViewModelSnapshotValueView::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_value(snapshot, 0, &mut list) },
+        NuxStatus::Ok
+    );
+    assert_eq!(list.list_item_count, 0);
+    unsafe { nux_view_model_snapshot_free(snapshot) };
+    assert!(changes.contains(&(0, NUX_VIEW_MODEL_VALUE_KIND_NUMBER, 5.0, 0)));
+    assert!(changes.contains(&(1, NUX_VIEW_MODEL_VALUE_KIND_BOOL, 0.0, 1)));
+    drop(player);
+    unsafe {
+        nux_view_model_instance_free(row);
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}

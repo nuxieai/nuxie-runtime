@@ -845,7 +845,7 @@
     },
     {
       "name": "NuxRenderCallbacks",
-      "size": 328,
+      "size": 336,
       "alignment": 8,
       "fields": [
         {
@@ -1011,6 +1011,10 @@
         {
           "name": "modulate_opacity",
           "offset": 320
+        },
+        {
+          "name": "modulate_color",
+          "offset": 328
         }
       ]
     },

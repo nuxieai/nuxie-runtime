@@ -2813,9 +2813,6 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
         }
         match ArtboardInstance::from_native(file.file.clone(), artboard_index) {
             Ok(instance) => {
-                // Root occurrences own their focus tree before players attach listeners.
-                let native = instance.native_handle();
-                native.build_focus_tree(Some(native.ensure_focus_manager()), None);
                 let view_model_index = instance.view_model_index();
                 let handle = NuxArtboardInstance {
                     occurrence: Rc::new(ArtboardOccurrence {

@@ -56,6 +56,7 @@ impl ArtboardInstance {
             .with_context(|| format!("no artboard at index {index}"))?;
         let native = Artboard::instance_from_handle(&source)
             .context("translated Artboard initialization failed")?;
+        native.build_focus_tree(Some(native.ensure_focus_manager()), None);
         Ok(Self {
             native,
             file,

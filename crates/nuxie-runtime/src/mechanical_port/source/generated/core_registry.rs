@@ -67353,9 +67353,6 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
         ))
     }
 
-    fn overrides_keyed_interpolation(&mut self, property_key: i32) -> Option<bool> {
-        Some(self.base.base.overrides_keyed_interpolation(property_key))
-    }
     fn artboard_add_animation(
         &mut self,
         animation: crate::mechanical_port::source::core::CoreHandle,

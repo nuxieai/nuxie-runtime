@@ -6257,6 +6257,131 @@ impl Default for ArtboardInstance {
 }
 
 #[cfg(test)]
+mod interpolation_host_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        animation::{
+            keyed_property::KeyedProperty, keyframe_double::KeyFrameDouble,
+            keyframe_interpolator::KeyFrameInterpolator,
+        },
+        generated::node_base::NodeBase,
+        layout::{
+            layout_component_style::LayoutComponentStyle,
+            layout_enums::{LayoutAnimationStyle, LayoutStyleInterpolation},
+        },
+    };
+
+    fn layout_target(arena: &CoreArena, artboard: bool, animated: bool) -> CoreHandle {
+        let target = if artboard {
+            arena.insert(Artboard::default())
+        } else {
+            arena.insert(LayoutComponent::default())
+        };
+        if animated {
+            let mut style = LayoutComponentStyle::default();
+            style
+                .base
+                .set_animation_style_type_value(LayoutAnimationStyle::Custom as u8);
+            style
+                .base
+                .set_interpolation_type_value(LayoutStyleInterpolation::Linear as u8);
+            style.base.set_interpolation_time_value(1.0);
+            let style = arena.insert(style);
+            target
+                .with_mut(|object| {
+                    object
+                        .as_layout_component_mut()
+                        .unwrap()
+                        .set_style(Some(style))
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            target.with(|object| object.as_layout_component().unwrap().animates()),
+            Some(animated)
+        );
+        target
+    }
+
+    fn apply_keyed_number(arena: &CoreArena, target: &CoreHandle, property_key: u16) -> f32 {
+        assert!(CoreRegistry::set_double_handle(
+            target,
+            i32::from(property_key),
+            100.0
+        ));
+        let mut frame = KeyFrameDouble::default();
+        frame.base.set_value_value(200.0);
+        let mut property = KeyedProperty::default();
+        property
+            .base
+            .set_property_key_value(u32::from(property_key));
+        property.add_key_frame(arena.insert(frame));
+        let mut keyed = KeyedObject::default();
+        keyed.base.set_object_id_value(0);
+        keyed.add_keyed_property(arena.insert(property));
+        let keyed = arena.insert(keyed);
+        let mut context = ArtboardObjectContext {
+            arena: arena.clone(),
+            objects: vec![Some(target.clone())],
+        };
+        assert_eq!(
+            keyed.with_downcast_mut::<KeyedObject, _>(|object| {
+                object.on_added_dirty(&mut context)
+            }),
+            Some(StatusCode::Ok)
+        );
+        context.apply_keyed_object(keyed, 0.0, 0.25, None);
+        CoreRegistry::get_double_handle(target, i32::from(property_key)).unwrap()
+    }
+
+    #[test]
+    fn interpolator_host_requires_exact_layout_type_not_inherited_membership() {
+        let arena = CoreArena::default();
+        let artboard = layout_target(&arena, true, true);
+        let layout = layout_target(&arena, false, true);
+        assert!(artboard.is_type_of(LayoutComponentBase::TYPE_KEY));
+        assert_eq!(artboard.core_type(), Some(ArtboardBase::TYPE_KEY));
+        assert!(KeyFrameInterpolator::host_from(artboard).is_none());
+        assert_eq!(
+            KeyFrameInterpolator::host_from(layout.clone()),
+            Some(layout)
+        );
+    }
+
+    #[test]
+    fn keyed_dimensions_override_mix_only_for_animated_exact_layout() {
+        for property_key in [
+            LayoutComponentBase::WIDTH_PROPERTY_KEY,
+            LayoutComponentBase::HEIGHT_PROPERTY_KEY,
+        ] {
+            for (artboard, animated, expected) in [
+                (true, true, 125.0),
+                (false, true, 200.0),
+                (false, false, 125.0),
+            ] {
+                let arena = CoreArena::default();
+                let target = layout_target(&arena, artboard, animated);
+                assert_eq!(
+                    apply_keyed_number(&arena, &target, property_key),
+                    expected,
+                    "property {property_key}, artboard {artboard}, animated {animated}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn animated_layout_does_not_override_unrelated_keyed_property_mix() {
+        let arena = CoreArena::default();
+        let layout = layout_target(&arena, false, true);
+        assert_eq!(
+            apply_keyed_number(&arena, &layout, NodeBase::X_PROPERTY_KEY),
+            125.0
+        );
+    }
+}
+
+#[cfg(test)]
 mod update_receiver_tests {
     use super::*;
 

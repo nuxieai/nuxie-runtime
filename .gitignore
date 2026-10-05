@@ -1,6 +1,7 @@
 /target/
 /vendor/*/target/
 /fixtures/**/*.riv
+/fixtures/sync/listener_input_values.rml
 /fixtures/command_queue/
 /fixtures/gm/
 /fixtures/fonts/
@@ -22,6 +23,7 @@
 !/fixtures/univ-1278/
 !/fixtures/univ-1278/parent_child_opacity.riv
 /fuzz/seeds/**/*.riv
+/fuzz/seeds/**/listener_input_values.rml
 /fuzz/seeds/**/OpenSans-Italic.ttf
 /fuzz/seeds/**/batdude.png
 /fuzz/seeds/**/what.wav

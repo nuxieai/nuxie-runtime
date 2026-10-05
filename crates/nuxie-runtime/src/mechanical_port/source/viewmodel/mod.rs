@@ -44,3 +44,5 @@ pub mod viewmodel_property_symbol_list_index;
 pub mod viewmodel_property_trigger;
 pub mod viewmodel_property_viewmodel;
 pub mod viewmodel_value_dependent;
+#[cfg(feature = "tools")]
+pub mod write_attribution;

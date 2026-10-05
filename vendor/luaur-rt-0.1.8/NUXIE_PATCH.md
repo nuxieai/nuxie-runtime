@@ -1,5 +1,14 @@
 # Nuxie patches for luaur-rt 0.1.8
 
+## Non-executing caller identity (runtime 7c9291ae)
+
+- `Lua::state_identity` exposes an opaque, non-owning integer token for the
+  handle's actual calling state, including implicit async coroutines. The
+  tools-only runtime write-attribution adapter uses it without creating
+  handles, allocating, executing VM instructions, or adding error paths.
+- This is observation only: no dereference or state mutation API is exposed.
+  Touched file: `src/state.rs`.
+
 ## Module lifecycle inspection (runtime c5faa1fa)
 
 - `Lua::create_module_thread` installs the module closure's sandbox as the

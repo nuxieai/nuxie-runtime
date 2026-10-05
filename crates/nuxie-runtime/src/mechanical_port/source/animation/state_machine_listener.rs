@@ -146,6 +146,18 @@ impl StateMachineListener {
         ),
     ) {
         machine.wake_row();
+        #[cfg(feature = "tools")]
+        let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
+            super::super::viewmodel::write_attribution::WriteSourceKind::listener,
+            self.base
+                .base
+                .base
+                .base
+                .handle()
+                .as_ref()
+                .map_or(self as *const Self as usize, CoreHandle::slot_address),
+            Some(machine as *const super::state_machine_instance::StateMachineInstance as usize),
+        );
         for action in &self.actions {
             dispatch(action, machine, invocation);
         }

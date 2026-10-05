@@ -448,6 +448,12 @@ impl DataBind {
         if invalidate {
             context.invalidate();
         }
+        #[cfg(feature = "tools")]
+        let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
+            super::super::viewmodel::write_attribution::WriteSourceKind::dataBind,
+            owner.slot_address(),
+            None,
+        );
         context
             .borrow_mut()
             .apply_to_source(target, key, is_main, owner.clone());
@@ -782,6 +788,13 @@ impl DataBind {
                 if invalidate {
                     context.invalidate();
                 }
+                #[cfg(feature = "tools")]
+                let _write_source =
+                    super::super::viewmodel::write_attribution::WriteAttributionScope::new(
+                        super::super::viewmodel::write_attribution::WriteSourceKind::dataBind,
+                        bind.slot_address(),
+                        None,
+                    );
                 context.apply_to_source(target, self.base.property_key(), is_main, bind);
             }
         }

@@ -169,3 +169,31 @@ fn invalid_focus_batch_preserves_the_earlier_bool_input() {
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
     }
 }
+
+#[test]
+fn focus_text_validation_distinguishes_null_from_invalid_utf8() {
+    let invalid = [0xffu8];
+    for (text, expected) in [
+        (
+            NuxStringView {
+                data: ptr::null(),
+                len: 1,
+            },
+            (NuxStatus::NullArgument, "focus text pointer is null"),
+        ),
+        (
+            NuxStringView {
+                data: invalid.as_ptr().cast(),
+                len: invalid.len(),
+            },
+            (NuxStatus::InvalidArgument, "focus text must be valid UTF-8"),
+        ),
+    ] {
+        let inputs = [NuxPlayerFocusInput {
+            kind: NUX_PLAYER_FOCUS_KIND_TEXT,
+            text,
+            ..NuxPlayerFocusInput::default()
+        }];
+        assert_eq!(validate_focus_inputs(&inputs).err(), Some(expected));
+    }
+}

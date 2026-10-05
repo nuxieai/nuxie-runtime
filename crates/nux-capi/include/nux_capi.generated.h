@@ -2227,7 +2227,8 @@ NuxStatus nux_player_field_view_model_instance(const struct NuxPlayer *player,
  * Read focus and keyboard-input expectations without mutating the player.
  * Non-state-machine players return NOT_FOUND.
  */
-NuxStatus nux_player_focus_state(struct NuxPlayer *player, struct NuxPlayerFocusState *out_state);
+NuxStatus nux_player_focus_state(const struct NuxPlayer *player,
+                                 struct NuxPlayerFocusState *out_state);
 
 NuxStatus nux_player_free(struct NuxPlayer *player);
 

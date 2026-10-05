@@ -57,6 +57,9 @@ mod asset_hooks;
 ))]
 mod renderer_layout;
 
+#[cfg(feature = "scripting")]
+mod value_rule_script;
+
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 pub use apple_metal::*;
 
@@ -1769,6 +1772,7 @@ pub struct NuxPlayerStepResult {
     host_commands: Vec<OwnedHostCommand>,
     host_values: Vec<OwnedHostValue>,
     view_model_changes: Vec<data_binding::OwnedViewModelChange>,
+    rule_reports: Vec<nuxie::RuntimeValueRuleReport>,
 }
 
 /// Caller-sized view into one owned C-ABI result. `code` and `message` remain
@@ -2364,6 +2368,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
     };
     #[cfg(feature = "scripting")]
     {
+        let shares_command_module = prepared.as_ref().is_some_and(|config| config.module_name == "value_rules");
         let (execution_limits, extension): (_, Arc<dyn nuxie::ScriptHostExtension>) =
             if let Some(prepared) = prepared {
                 let execution_limits = ScriptExecutionLimits::new()
@@ -2390,6 +2395,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
                     Arc::new(nuxie::NoopScriptHostExtension),
                 )
             };
+        let (extension, value_rule_file) = value_rule_script::Extension::wrap(extension, shares_command_module);
         let capability = match native_shader_authority {
             NativeShaderImportAuthority::Denied => {
                 // SAFETY: this helper is reachable only from the explicit
@@ -2424,6 +2430,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
             None,
         )
         .map_err(|error| error.to_string())?;
+        *value_rule_file.borrow_mut() = Some(scripted.native_file().downgrade());
         Ok(ImportedRuntimeFile {
             file: scripted.native_file().clone(),
             scripted: Some(scripted),
@@ -3491,6 +3498,7 @@ fn player_step_failure(status: NuxStatus, message: impl AsRef<[u8]>) -> NuxPlaye
         host_commands: Vec::new(),
         host_values: Vec::new(),
         view_model_changes: Vec::new(),
+        rule_reports: Vec::new(),
     }
 }
 
@@ -4213,7 +4221,7 @@ fn player_step_body(
         }
     };
     let policy = policy.as_ref();
-    let has_markers = policy.is_some_and(nuxie::RuntimeValuePolicy::has_markers);
+    let has_value_policy = policy.is_some_and(|policy| policy.has_markers() || policy.has_rules());
     let mut bound_view_model = match player.artboard.bound_view_model.try_borrow() {
         Ok(bound) => bound.clone(),
         Err(_) => {
@@ -4272,7 +4280,7 @@ fn player_step_body(
         .cloned()
         .collect::<Vec<_>>();
     subscribed_roots.extend(bound_view_model.iter().cloned());
-    let retained_subscribed_owners = if has_markers {
+    let retained_subscribed_owners = if has_value_policy {
         match value_policy::retain_scope(&subscribed_roots) {
             Ok(owners) => owners,
             Err(status) => {
@@ -4286,7 +4294,7 @@ fn player_step_body(
     } else {
         Vec::new()
     };
-    let has_subscriptions = !subscribed_roots.is_empty() || has_markers;
+    let has_subscriptions = !subscribed_roots.is_empty() || has_value_policy;
     let scene_view_model_roots = match has_subscriptions {
         true => match player_view_models::scene_roots_across(
             &artboard,
@@ -4304,7 +4312,7 @@ fn player_step_body(
         },
         false => Vec::new(),
     };
-    let retained_policy_scope = if has_markers {
+    let retained_policy_scope = if has_value_policy {
         match value_policy::retain_scope(&scene_view_model_roots) {
             Ok(roots) => roots,
             Err(status) => {
@@ -4361,6 +4369,13 @@ fn player_step_body(
     } else {
         None
     };
+    let rule_operation = match policy.filter(|policy| policy.has_rules()).map(|policy| policy.begin_rules(&scene_view_model_roots)).transpose() {
+        Ok(operation) => operation.map(|operation| Rc::new(RefCell::new(operation))),
+        Err(error) => return publish_player_step_failure(out_result, value_policy::status(error), "value rule checkpoint failed"),
+    };
+    #[cfg(feature = "scripting")]
+    let _value_rule_script = value_rule_script::enter(player, bound_view_model.as_ref(), rule_operation.clone());
+    let mut rule_reports = Vec::new();
     let mut pointer_results = Vec::with_capacity(prepared.pointers.len());
     let mut focus_input_results = Vec::with_capacity(prepared.focus_inputs.len());
     let mut state_changes = Vec::new();
@@ -4551,12 +4566,20 @@ fn player_step_body(
             roots.extend(retained_policy_scope);
             if let Some(policy) = policy {
                 loop {
-                    match policy.apply_markers(&capture, &roots, |owner, index, value| {
+                    let rules_changed = match rule_operation.as_ref().map(|operation| operation.borrow_mut().apply(policy, &capture, &roots)).transpose() {
+                        Ok(changed) => changed.unwrap_or(false),
+                        Err(error) => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(out_result, value_policy::status(error), "value rule pass failed");
+                        }
+                    };
+                    let marker_result = policy.apply_markers(&capture, &roots, |owner, index, value| {
                         let mut owner = owner
                             .try_borrow_mut()
                             .map_err(|_| nuxie::RuntimeValuePolicyError::BorrowConflict)?;
                         Ok(owner.set_boolean_by_property_index(index, value))
-                    }) {
+                    });
+                    match marker_result.map(|changed| changed || rules_changed) {
                         Ok(false) => break,
                         Ok(true) => {
                             runtime_dirty = true;
@@ -4599,6 +4622,11 @@ fn player_step_body(
                         }
                     }
                 }
+            }
+            if let Some(operation) = rule_operation.as_ref() {
+                let operation = operation.borrow();
+                roots.extend(operation.retained_roots());
+                rule_reports = operation.reports().to_vec();
             }
             match RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
                 &roots, capture,
@@ -4717,6 +4745,7 @@ fn player_step_body(
             host_commands,
             host_values,
             view_model_changes,
+            rule_reports,
         },
         HandleKind::PlayerStepResult,
     );

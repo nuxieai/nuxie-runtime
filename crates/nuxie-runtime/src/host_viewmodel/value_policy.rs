@@ -82,6 +82,33 @@ impl RuntimeValuePolicy {
         self.rules.get(index).map(|rule| &rule.entry)
     }
 
+    pub fn resolve_property(
+        &self,
+        root: &RuntimeOwnedViewModelHandle,
+        path: &str,
+    ) -> Result<(RuntimeOwnedViewModelHandle, usize), RuntimeValuePolicyError> {
+        if !root.native_file().ptr_eq(&self.file) {
+            return Err(RuntimeValuePolicyError::InvalidArgument);
+        }
+        let path = root.borrow().path_named(path).ok_or(RuntimeValuePolicyError::NotFound)?;
+        let (index, parents) = path.split_last().ok_or(RuntimeValuePolicyError::NotFound)?;
+        let owner = if parents.is_empty() { root.clone() }
+            else { root.linked_view_model_by_property_path(parents).ok_or(RuntimeValuePolicyError::NotFound)? };
+        Ok((owner, *index))
+    }
+
+    pub fn property_value(&self, root: &RuntimeOwnedViewModelHandle, path: &str) -> Result<RuntimeViewModelChangeValue, RuntimeValuePolicyError> {
+        let (owner, index) = self.resolve_property(root, path)?;
+        let property = owner.borrow().property_by_path(&[index]).ok_or(RuntimeValuePolicyError::NotFound)?;
+        operation::read(&property).ok_or(RuntimeValuePolicyError::InvalidArgument)
+    }
+
+    pub fn marker_property(&self, owner: &RuntimeOwnedViewModelHandle, index: usize) -> Option<usize> {
+        if !owner.native_file().ptr_eq(&self.file) { return None; }
+        let model = owner.borrow().view_model_index();
+        self.markers.iter().find(|pair| pair.model == model && pair.value == index).map(|pair| pair.marker)
+    }
+
     /// Replace the entire ordered rule table atomically. Model/property names
     /// are resolved from this file; no naming convention selects a property.
     pub fn set_rules(

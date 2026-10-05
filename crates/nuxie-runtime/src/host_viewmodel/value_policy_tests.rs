@@ -841,3 +841,133 @@ fn script_created_detached_owner_uses_its_value_before_the_first_write() {
     );
     checkpoint.commit();
 }
+
+#[test]
+fn checked_write_refuses_before_mutation_and_keeps_other_writes() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    policy
+        .set_rules(&[installed_rule(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+        )])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let result = operation
+        .checked_write(
+            &policy,
+            &root,
+            "n",
+            RuntimeViewModelChangeValue::Number(400.0),
+            None,
+            || panic!("a refused writer must not run"),
+        )
+        .unwrap();
+    assert!(!result.applied);
+    assert_eq!(result.rule_indices, vec![0]);
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+    let marker = operation
+        .checked_write(
+            &policy,
+            &root,
+            "n_set",
+            RuntimeViewModelChangeValue::Boolean(true),
+            None,
+            || panic!("the refused value's marker must not land"),
+        )
+        .unwrap();
+    assert!(!marker.applied);
+    let result = operation
+        .checked_write(
+            &policy,
+            &root,
+            "b",
+            RuntimeViewModelChangeValue::Boolean(true),
+            None,
+            || {
+                root.borrow_mut().set_boolean_by_property_name("b", true);
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert!(result.applied);
+    assert!(result.rule_indices.is_empty());
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(operation.reports().len(), 1);
+    let changes = root.resolve_change_capture(capture).unwrap();
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].property_index, 2);
+    checkpoint.commit();
+}
+
+#[test]
+fn checked_reports_follow_attempt_order_across_early_script_flushes() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy
+        .set_rules(&[
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMinimum(10.0),
+                RuntimeValueRuleMode::Mark,
+            ),
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMaximum(365.0),
+                RuntimeValueRuleMode::Refuse,
+            ),
+        ])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    for (value, accepted, indices) in [
+        (5.0, true, vec![0]),
+        (400.0, false, vec![1]),
+        (20.0, true, vec![]),
+    ] {
+        operation.apply_pending_writes(&policy, roots).unwrap();
+        let result = operation
+            .checked_write(
+                &policy,
+                &root,
+                "n",
+                RuntimeViewModelChangeValue::Number(value),
+                None,
+                || {
+                    root.borrow_mut().set_number_by_property_name("n", value);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(result.applied, accepted);
+        assert_eq!(result.rule_indices, indices);
+    }
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(20.0));
+    assert_eq!(
+        operation
+            .reports()
+            .iter()
+            .map(|report| (report.rule_index, report.refused))
+            .collect::<Vec<_>>(),
+        vec![(0, false), (1, true)]
+    );
+    let changes = root.resolve_change_capture(capture).unwrap();
+    assert_eq!(changes.len(), 2);
+    assert!(matches!(
+        changes[0].value,
+        RuntimeViewModelChangeValue::Number(5.0)
+    ));
+    assert!(matches!(
+        changes[1].value,
+        RuntimeViewModelChangeValue::Number(20.0)
+    ));
+    checkpoint.commit();
+}

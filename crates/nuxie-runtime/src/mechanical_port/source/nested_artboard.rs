@@ -143,6 +143,9 @@ impl Drop for NestedArtboard {
                 manager.with_focus_manager_mut(|manager| manager.remove_child(&scope));
             }
         }
+
+        // C++ destroys m_boundNestedStateMachine before m_Instance.
+        self.retire_bound_nested_state_machine();
     }
 }
 
@@ -535,6 +538,14 @@ impl NestedArtboard {
         self.nested_animations.clear();
     }
 
+    fn retire_bound_nested_state_machine(&mut self) {
+        // Only the synthesized bound machine is uniquely owned by this host;
+        // authored nested animations remain owned by their containing graph.
+        if let Some(machine) = self.bound_nested_state_machine.take() {
+            machine.remove_occurrence();
+        }
+    }
+
     /// Runtime swaps use the handle boundary: semantic subtree construction
     /// can walk back through this host, so the callback cannot retain &mut self.
     pub fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
@@ -603,7 +614,7 @@ impl NestedArtboard {
         }
         self.clear_data_context();
         self.clear_nested_animations();
-        self.bound_nested_state_machine = None;
+        self.retire_bound_nested_state_machine();
 
         if explicit_null {
             if self.instance.is_none() {

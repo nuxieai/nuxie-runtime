@@ -8,7 +8,10 @@ use std::path::PathBuf;
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
-    animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
+    animation::{
+        nested_state_machine::NestedStateMachine,
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
+    },
     nested_artboard::NestedArtboard,
     semantic::semantic_manager::RuntimeSemanticManagerHandle,
     viewmodel::{
@@ -109,6 +112,146 @@ fn assert_manager(
         actual.ptr_eq(manager),
         "replacement must use the same semantic manager"
     );
+}
+
+fn bind_slot(
+    file: &RuntimeFileHandle,
+    artboard: &RuntimeArtboardInstanceHandle,
+    machine: &RuntimeStateMachineInstanceHandle,
+) -> (CoreHandle, CoreHandle) {
+    let vmi = bind(file, artboard, machine);
+    let property = vmi
+        .with_downcast::<ViewModelInstance, _>(|vmi| vmi.property_value_named("artboardProp"))
+        .flatten()
+        .expect("artboardProp");
+    machine.advance_and_apply(0.016);
+    (slot_host(artboard), property)
+}
+
+fn bound_machine(artboard: &RuntimeArtboardInstanceHandle, host: &CoreHandle) -> CoreHandle {
+    let animations = host
+        .with_downcast::<NestedArtboard, _>(|host| host.nested_animations().to_vec())
+        .expect("nested host");
+    let mut owned = animations
+        .into_iter()
+        .filter(|animation| {
+            animation
+                .with_downcast::<NestedStateMachine, _>(|_| ())
+                .is_some()
+                && !artboard.with_artboard(|artboard| {
+                    artboard
+                        .objects()
+                        .iter()
+                        .flatten()
+                        .any(|object| object == animation)
+                })
+        })
+        .collect::<Vec<_>>();
+    // Authored nested animations belong to the parent object list. The
+    // data-bound host separately owns the machine synthesized by the swap.
+    assert_eq!(owned.len(), 1, "one synthetic bound state machine");
+    owned.pop().unwrap()
+}
+
+fn set_slot_asset(
+    file: &RuntimeFileHandle,
+    property: &CoreHandle,
+    machine: &RuntimeStateMachineInstanceHandle,
+    name: Option<&str>,
+) {
+    let source = name.map(|name| {
+        file.with_file(|file| file.bindable_artboard_named(name))
+            .expect("bindable source")
+    });
+    property
+        .with_downcast_mut::<ViewModelInstanceArtboard, _>(|property| property.set_asset(source))
+        .expect("artboard property");
+    machine.advance_and_apply(0.016);
+}
+
+#[test]
+fn replacing_bound_nested_state_machine_retires_old_occurrence() {
+    let (file, artboard, machine) = fixture();
+    let authored = artboard.with_artboard(|artboard| {
+        artboard
+            .objects_typed::<NestedStateMachine>()
+            .iter()
+            .collect::<Vec<_>>()
+    });
+    let (slot, property) = bind_slot(&file, &artboard, &machine);
+    let arena = slot.retain_arena().expect("live host arena");
+    for name in ["Swappable2", "Swappable1", "Swappable2"] {
+        let outgoing = bound_machine(&artboard, &slot);
+        set_slot_asset(&file, &property, &machine, Some(name));
+        assert!(arena.contains(&slot), "the host arena remains live");
+        assert!(
+            !outgoing.is_alive(),
+            "the replaced owned machine must retire"
+        );
+        assert!(outgoing.with(|_| ()).is_none());
+        let incoming = bound_machine(&artboard, &slot);
+        assert_ne!(incoming, outgoing);
+        assert!(arena.contains(&incoming));
+        assert!(authored.iter().all(|handle| handle.is_alive()));
+    }
+}
+
+#[test]
+fn clearing_bound_nested_artboard_retires_owned_state_machine() {
+    let (file, artboard, machine) = fixture();
+    let (slot, property) = bind_slot(&file, &artboard, &machine);
+    let outgoing = bound_machine(&artboard, &slot);
+    let arena = slot.retain_arena().expect("live host arena");
+    set_slot_asset(&file, &property, &machine, None);
+    assert!(arena.contains(&slot), "the host arena remains live");
+    assert!(
+        !outgoing.is_alive(),
+        "explicit null must retire the owned machine"
+    );
+    assert!(outgoing.with(|_| ()).is_none());
+    slot.with_downcast::<NestedArtboard, _>(|host| {
+        assert!(host.artboard_instance_handle(0).is_none());
+        assert!(host.nested_animations().is_empty());
+    })
+    .expect("live cleared host");
+}
+
+#[test]
+fn unresolved_nested_artboard_preserves_owned_state_machine() {
+    let (file, artboard, machine) = fixture();
+    let (slot, property) = bind_slot(&file, &artboard, &machine);
+    let existing = bound_machine(&artboard, &slot);
+    let mounted = instance(&slot).core_handle();
+    property
+        .with_downcast_mut::<ViewModelInstanceArtboard, _>(|property| {
+            property.set_property_value(9999);
+            assert!(property.asset().is_none());
+            assert_ne!(property.base.property_value(), u32::MAX);
+        })
+        .expect("unresolved artboard property");
+    machine.advance_and_apply(0.016);
+    assert!(existing.is_alive());
+    assert_eq!(bound_machine(&artboard, &slot), existing);
+    assert_eq!(instance(&slot).core_handle(), mounted);
+}
+
+#[test]
+fn destroying_nested_host_retires_owned_machine_with_arena_retained() {
+    let (file, artboard, machine) = fixture();
+    let (slot, _property) = bind_slot(&file, &artboard, &machine);
+    let bound = bound_machine(&artboard, &slot);
+    let arena = slot.retain_arena().expect("live host arena");
+    assert!(arena.contains(&bound));
+    // Retain only the allocation domain, not the parent or mounted runtime
+    // instance, so arena destruction cannot hide missing owned-child cleanup.
+    drop(machine);
+    drop(artboard);
+    assert!(!slot.is_alive(), "parent teardown must destroy the host");
+    assert!(
+        !arena.contains(&bound),
+        "host destruction must retire its machine"
+    );
+    assert!(bound.with(|_| ()).is_none());
 }
 
 #[test]

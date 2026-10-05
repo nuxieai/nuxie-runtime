@@ -2127,6 +2127,7 @@ impl Text {
             }
             _ => f32::MAX,
         };
+        let measuring_width = crate::text::layout_measure_width(exact_width, measuring_width);
         let fit_width = max.x.min(measuring_width);
         let font_scale = if self.overflow() == TextOverflow::FitFontSize
             && self.fit_font_size_resizes_box_active()

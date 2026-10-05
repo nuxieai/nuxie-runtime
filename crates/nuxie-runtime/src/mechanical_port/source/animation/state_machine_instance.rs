@@ -2740,29 +2740,6 @@ impl RuntimeStateMachineInstanceHandle {
         }
     }
 
-    pub fn fire_semantic_action(&self, node_id: u32, action_type: u8) {
-        let Some(manager) = self.with_instance(|machine| machine.semantic_manager()) else {
-            return;
-        };
-        let semantic_data = manager
-            .with_semantic_manager(|manager| manager.node_by_id(node_id))
-            .and_then(|node| node.borrow().semantic_data.clone());
-        let Some(semantic_data) = semantic_data else {
-            return;
-        };
-        semantic_data.with_mut(|semantic_data| {
-            let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
-                return;
-            };
-            match SemanticActionType::from_raw(action_type as u32) {
-                Some(SemanticActionType::Tap) => semantic_data.fire_semantic_tap(),
-                Some(SemanticActionType::Increase) => semantic_data.fire_semantic_increase(),
-                Some(SemanticActionType::Decrease) => semantic_data.fire_semantic_decrease(),
-                None => {}
-            }
-        });
-    }
-
     pub fn advance_and_apply(&self, seconds: f32) -> bool {
         let artboard = self.with_instance(|machine| {
             machine

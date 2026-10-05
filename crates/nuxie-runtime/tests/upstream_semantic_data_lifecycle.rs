@@ -114,7 +114,7 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
 }
 
 #[test]
-fn semantic_actions_use_registration_at_enqueue_without_rechecking_state() {
+fn host_semantic_actions_refuse_disabled_and_hidden_nodes_before_enqueue() {
     for (hidden, queued) in [(false, false), (true, false), (false, true), (true, true)] {
         let fixture = dropdown();
         let Dropdown {
@@ -151,8 +151,8 @@ fn semantic_actions_use_registration_at_enqueue_without_rechecking_state() {
         assert_eq!(
             data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
                 .unwrap(),
-            hidden && !queued,
-            "Hidden removes the node before lookup; already queued actions and Disabled still execute (hidden={hidden}, queued={queued})"
+            !queued,
+            "Disabled and hidden nodes refuse new actions; accepted actions remain queued (hidden={hidden}, queued={queued})"
         );
     }
 }

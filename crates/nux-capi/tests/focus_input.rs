@@ -1,7 +1,7 @@
 use nux_capi::*;
 use std::{collections::BTreeMap, ptr};
 
-#[path = "support/focus_input.rs"]
+#[path = "../../nuxie-runtime/tests/support/focus_input.rs"]
 mod fixture;
 
 fn view(text: &str) -> NuxStringView {

@@ -4485,25 +4485,25 @@ impl StateMachineInstance {
             self.sort_hit_components();
         }
         if new_frame {
-            self.process_focus_events();
-            let semantic_report_start = self
+            let input_report_start = self
                 .reporting
                 .get()
                 .map_or(0, |reporting| reporting.reported_events.len());
+            self.process_focus_events();
             self.process_semantic_events();
-            let semantic_reports = self
+            let input_reports = self
                 .reporting
                 .get()
-                .map(|reporting| reporting.reported_events[semantic_report_start..].to_vec())
+                .map(|reporting| reporting.reported_events[input_report_start..].to_vec())
                 .unwrap_or_default();
             self.apply_events();
-            // Queued semantic input executes inside this frame, unlike pointer
+            // Queued focus and semantic input execute inside this frame, unlike pointer
             // input reported between frames. Preserve its initial reports for
             // the host after native event delivery has consumed the queue.
             if let Some(reporting) = self.reporting.get_mut() {
                 reporting
                     .events_applied_during_loop
-                    .splice(0..0, semantic_reports);
+                    .splice(0..0, input_reports);
             }
             self.needs_advance.set(false);
         }

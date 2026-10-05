@@ -89,6 +89,8 @@ fn step(
         pointers: pointers.as_ptr(),
         pointer_count: pointers.len(),
         elapsed_seconds,
+        focus_inputs: std::ptr::null(),
+        focus_input_count: 0,
     };
     let mut result = std::ptr::null_mut();
     let status = unsafe { nux_player_step(player, &operation, &mut result) };

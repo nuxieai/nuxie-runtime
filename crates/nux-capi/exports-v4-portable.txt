@@ -31,6 +31,7 @@ nux_player_enable_semantics
 nux_player_field_string_copy
 nux_player_field_string_set
 nux_player_field_view_model_instance
+nux_player_focus_state
 nux_player_free
 nux_player_info
 nux_player_new_default
@@ -49,6 +50,7 @@ nux_player_step_result_diagnostic
 nux_player_step_result_event
 nux_player_step_result_event_property
 nux_player_step_result_event_view_model_instance
+nux_player_step_result_focus_input
 nux_player_step_result_free
 nux_player_step_result_host_command
 nux_player_step_result_host_value

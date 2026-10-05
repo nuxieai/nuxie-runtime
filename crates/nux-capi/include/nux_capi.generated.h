@@ -100,11 +100,27 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+#define NUX_PLAYER_STEP_MAX_FOCUS_INPUTS (4 * 1024)
+
 #define NUX_PLAYER_STEP_MAX_INPUTS (4 * 1024)
 
 #define NUX_PLAYER_STEP_MAX_INPUT_NAME_BYTES (4 * 1024)
 
 #define NUX_PLAYER_STEP_MAX_POINTERS (4 * 1024)
+
+#define NUX_PLAYER_STEP_MAX_TEXT_BYTES (1024 * 1024)
+
+#define NUX_PLAYER_STEP_MAX_TEXT_BYTES_TOTAL ((4 * 1024) * 1024)
 
 #define NUX_SCRIPT_INTERRUPTS_PER_CALLBACK_HARD_MAX 10000000
 
@@ -349,6 +365,26 @@ enum NuxPlayerPointerKind
 };
 #ifndef __cplusplus
 typedef uint32_t NuxPlayerPointerKind;
+#endif // __cplusplus
+
+/**
+ * Focus operations in submission order, after pointers and before advance.
+ * Next and Previous traverse Rive focus nodes; Clear removes focus; Key sends
+ * a GLFW-numbered key with modifiers and phase; Text sends typed UTF-8 text.
+ */
+enum NuxPlayerFocusKind
+#ifdef __cplusplus
+  : uint32_t
+#endif // __cplusplus
+ {
+  NUX_PLAYER_FOCUS_KIND_NEXT = 0,
+  NUX_PLAYER_FOCUS_KIND_PREVIOUS = 1,
+  NUX_PLAYER_FOCUS_KIND_CLEAR = 2,
+  NUX_PLAYER_FOCUS_KIND_KEY = 3,
+  NUX_PLAYER_FOCUS_KIND_TEXT = 4,
+};
+#ifndef __cplusplus
+typedef uint32_t NuxPlayerFocusKind;
 #endif // __cplusplus
 
 /**
@@ -900,6 +936,15 @@ typedef struct NuxFileImportConfig {
 #endif
 
 /**
+ * Read-only caller-sized focus state for a state-machine player.
+ */
+typedef struct NuxPlayerFocusState {
+  uint32_t struct_size;
+  uint32_t has_focus;
+  uint32_t expects_keyboard_input;
+} NuxPlayerFocusState;
+
+/**
  * Versioned metadata for a selected runtime-native player.
  */
 typedef struct NuxPlayerInfo {
@@ -946,9 +991,39 @@ typedef struct NuxPlayerPointerEvent {
 } NuxPlayerPointerEvent;
 
 /**
+ * Fixed-stride focus input. Each kind ignores fields it does not use.
+ * Listener events and value changes are returned in the same step result.
+ */
+typedef struct NuxPlayerFocusInput {
+  /**
+   * One of the NUX_PLAYER_FOCUS_KIND constants.
+   */
+  uint32_t kind;
+  /**
+   * Rive's GLFW key code, at most 0xFFFF, used only by Key.
+   */
+  uint32_t key_code;
+  /**
+   * Key modifier bits: Shift=1, Ctrl=2, Alt=4, Meta=8.
+   */
+  uint32_t modifiers;
+  /**
+   * Key phase booleans must each be exactly 0 or 1.
+   */
+  uint32_t pressed;
+  uint32_t repeat;
+  /**
+   * Text only: borrowed UTF-8, bounded per item and per step.
+   */
+  struct NuxStringView text;
+} NuxPlayerFocusInput;
+
+/**
  * One atomic, product-neutral player operation. Input and pointer arrays use
  * ABI-v3 fixed element strides; future element layouts require a new entry
  * point rather than appending fields and silently changing array stride.
+ * Named inputs run first, then pointers, then focus inputs in array order,
+ * then advance. Focus listener events and value changes return in this step.
  */
 typedef struct NuxPlayerStep {
   uint32_t struct_size;
@@ -961,6 +1036,8 @@ typedef struct NuxPlayerStep {
    * Opaque caller identity copied into runtime-authored change entries.
    */
   uint64_t correlation_id;
+  const struct NuxPlayerFocusInput *focus_inputs;
+  size_t focus_input_count;
 } NuxPlayerStep;
 
 /**
@@ -1050,6 +1127,7 @@ typedef struct NuxPlayerStepInfo {
    */
   size_t host_command_count;
   size_t view_model_change_count;
+  size_t focus_input_result_count;
 } NuxPlayerStepInfo;
 
 /**
@@ -2145,6 +2223,12 @@ NuxStatus nux_player_field_view_model_instance(const struct NuxPlayer *player,
                                                struct NuxStringView name,
                                                struct NuxViewModelInstance **out_instance);
 
+/**
+ * Read focus and keyboard-input expectations without mutating the player.
+ * Non-state-machine players return NOT_FOUND.
+ */
+NuxStatus nux_player_focus_state(struct NuxPlayer *player, struct NuxPlayerFocusState *out_state);
+
 NuxStatus nux_player_free(struct NuxPlayer *player);
 
 /**
@@ -2247,7 +2331,9 @@ NuxStatus nux_player_semantic_snapshot(const struct NuxPlayer *player,
                                        struct NuxSemanticSnapshot **out_snapshot);
 
 /**
- * Apply all input changes and pointer events, then advance exactly once. The
+ * Apply named input changes, pointers, and focus inputs in that order, then
+ * advance exactly once. Focus inputs retain array order. Their listener events
+ * and view-model writes are captured in this same step's result. The
  * operation validates the complete batch before mutation. Any unexpected
  * post-mutation failure rolls back pending script-host effects and terminally
  * poisons the shared occurrence, so no artboard/player operation can observe
@@ -2277,6 +2363,14 @@ NuxStatus nux_player_step_result_event_property(const struct NuxPlayerStepResult
 NuxStatus nux_player_step_result_event_view_model_instance(const struct NuxPlayerStepResult *result,
                                                            size_t event_index,
                                                            uint64_t *out_instance_id);
+
+/**
+ * Read one runtime boolean in focus-input order. Clear focus returns 0;
+ * traversal reports movement, and key/text report consumption by the runtime.
+ */
+NuxStatus nux_player_step_result_focus_input(const struct NuxPlayerStepResult *result,
+                                             size_t index,
+                                             uint32_t *out_value);
 
 NuxStatus nux_player_step_result_free(struct NuxPlayerStepResult *result);
 

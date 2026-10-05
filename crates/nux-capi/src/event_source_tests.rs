@@ -34,7 +34,7 @@ fn nested_event_source_survives_owned_c_projection() {
         .unwrap();
     machine.pointer_down(80.0, 50.0, 1);
     machine.pointer_up(80.0, 50.0, 1);
-    let events = own_reported_events(machine.take_reported_events(), 0, 0).unwrap();
+    let events = own_reported_events(machine.take_reported_events(), 0, 0, 0).unwrap();
     assert_eq!(events.len(), 1);
     let mut owned = player_step_failure(NuxStatus::Ok, "");
     owned.events = events;

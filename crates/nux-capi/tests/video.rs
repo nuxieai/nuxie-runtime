@@ -885,6 +885,8 @@ fn synchronization_c_api_uses_native_clocks_and_retains_thread_affine_occurrence
             pointers: ptr::null(),
             pointer_count: 0,
             elapsed_seconds: 0.0,
+            focus_inputs: std::ptr::null(),
+            focus_input_count: 0,
         };
         let mut result = ptr::null_mut();
         let mut scheduling = NuxPlayerSchedulingInfo::default();
@@ -1455,7 +1457,9 @@ fn video_visibility_queries_work_before_decode_and_preserve_output_on_invalid_in
                     input_count: 0,
                     pointers: ptr::null(),
                     pointer_count: 0,
-                    elapsed_seconds: 0.0
+                    elapsed_seconds: 0.0,
+                    focus_inputs: std::ptr::null(),
+                    focus_input_count: 0,
                 },
                 &mut step_result
             ),
@@ -1524,7 +1528,9 @@ fn published_video_is_visible_before_decode() {
                     input_count: 0,
                     pointers: ptr::null(),
                     pointer_count: 0,
-                    elapsed_seconds: 0.0
+                    elapsed_seconds: 0.0,
+                    focus_inputs: std::ptr::null(),
+                    focus_input_count: 0,
                 },
                 &mut step_result
             ),

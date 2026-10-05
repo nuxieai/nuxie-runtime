@@ -207,6 +207,7 @@ pub trait ScrollPhysicsRuntime {
     fn advance(&mut self, _elapsed_seconds: f32) -> Vec2D {
         Vec2D::default()
     }
+    fn shift(&mut self, _delta: Vec2D) {}
 
     fn accumulate(&mut self, delta: Vec2D, time_stamp: f32) {
         self.physics_mut().accumulate(delta, time_stamp);
@@ -219,8 +220,8 @@ pub trait ScrollPhysicsRuntime {
         _range_max: Vec2D,
         _value: Vec2D,
         _snapping_points: Vec<Vec2D>,
-        _content_size: f32,
-        _viewport_size: f32,
+        _content_size: Vec2D,
+        _viewport_size: Vec2D,
     ) {
         self.physics_mut().run_base();
     }

@@ -131,8 +131,12 @@ impl GridTrack {
         style: &mut YGStyle,
         owner: &ContainerComponent,
         justify_items: u32,
+        column_sizes: Option<&[f32]>,
+        row_sizes: Option<&[f32]>,
     ) {
         let mut lists: [GridTrackList; 4] = Default::default();
+        let overrides_rows = row_sizes.is_some_and(|rows| !rows.is_empty());
+        let mut column = 0;
         for child in owner.children() {
             let Some((collection, track_size)) = child.with_downcast::<GridTrack, _>(|track| {
                 (track.base.collection(), Self::grid_track_size(track))
@@ -142,7 +146,39 @@ impl GridTrack {
             if collection > 3 {
                 continue;
             }
+            if collection == 0 {
+                let size = column_sizes
+                    .and_then(|sizes| sizes.get(column))
+                    .copied()
+                    .unwrap_or(-1.0);
+                column += 1;
+                if size >= 0.0 {
+                    lists[0].push(YGGridTrackSize::length(size));
+                    continue;
+                }
+            }
+            if collection == 1 && overrides_rows {
+                continue;
+            }
             lists[collection as usize].push(track_size);
+        }
+        if overrides_rows {
+            lists[1].extend(
+                row_sizes
+                    .unwrap()
+                    .iter()
+                    .map(|size| YGGridTrackSize::length(*size)),
+            );
+        }
+        if column == 0 {
+            if let Some(size) = column_sizes
+                .and_then(|sizes| sizes.first())
+                .copied()
+                .filter(|size| *size >= 0.0)
+            {
+                lists[2].clear();
+                lists[2].push(YGGridTrackSize::length(size));
+            }
         }
         style.set_grid_template_columns(std::mem::take(&mut lists[0]));
         style.set_grid_template_rows(std::mem::take(&mut lists[1]));

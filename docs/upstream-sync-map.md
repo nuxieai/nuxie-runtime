@@ -7,18 +7,32 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `de0417920b48a6e8540314c1ec2db091ae9f23fc`
+- LAST_SYNCED_SHA: `dc75beed2defe9bfe53dfbc30b8649649905b602`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `160085c654874d35ad654a750e782d7c78e050d9` (refreshed 2026-10-05 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are two upstream commits after the checkpoint at this fetched target.
-  All 192 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (214 after `5892bb05`); this
+  There is one upstream commit after the checkpoint at this fetched target.
+  All 193 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (215 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `dc75beed`: independent source-equivalence and separate
+  Rust-integration reviews, including correction rereviews, are clean. Native
+  runtime/affected integration tests pass 316 (two ignored); scripting passes
+  377 (one ignored). wasm32-unknown-unknown WebGPU/WebGL2, Android arm64 Vulkan
+  with scripting/scriptnet, and runtime without default features compile.
+  Fresh pinned ordinary/scripted Golden comparisons each cover 364 entries
+  with zero failures and the existing one/two recorded divergences. All 231
+  runtime Silver entries were checked individually: 85 byte-exact, 121 within
+  unchanged epsilon, seven unchanged divergences, 17 unsupported skips, and
+  only the recorded `data_converter_to_number` failure (frame 41, op 2120,
+  expected 1850 path fields, got 1443). No assertions or tolerances changed.
+  Source/pipeline checks pass 12, manifest tests 27, and public Yoga-ref resolver
+  tests four. Structural coverage is 1,065 mirrored owners, not semantic proof.
+  No browser-pixel or physical-device execution is claimed.
 - Validation at `7c9291ae`, atop downstream `01baaeafb6`: independent source
   and separate Rust-integration reviews are clean after adding the omitted
   enum `values()` attribution and replacing an allocating VM identity probe
@@ -258,6 +272,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `dc75beed2defe9bfe53dfbc30b8649649905b602` | Translate the shared virtual layout model, wrapping lines, grid row/column windows, two-axis scrolling and carousel cycles, anchoring, per-axis physics sizes/shifts, grid placement/track observation, list realization and layout/style/text-input integration. Port the new model, sweep, alignment, component-list, anchor and physics tests and consume the new grid fixture from this pin. Retain the approved Taffy engine, exposing solved grid line offsets for the same runtime observations. C++ oracle dependency resolution follows the new public yoga.ref; private packages/yoga source is not imported. Private metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |
 | `de0417920b48a6e8540314c1ec2db091ae9f23fc` | C++ header dependency fix only: write attribution now includes cstddef explicitly for size_t. The paired Rust owner already uses the built-in usize for depth and needs no import or behavior change. Advance active pins after independent source and separate integration review; private .rive_head metadata is not imported. | — |
 | `7c9291ae1e49d6adc2c3e38074ba27051fe677ac` | Translate tools-only write attribution: enabled switch, thread-local ordered non-owning source stack, depth-restoring scopes, state-machine layer/listener and data-bind instrumentation, and live Luau protected calls/property writes/common methods. Preserve source identity through approved Rust ownership and delayed observer delivery; non-tools builds omit instrumentation. Wasm execution-scope instrumentation remains parked under UNIV-3728. Private CLI debugger/editor/script-asset changes described in metadata are absent publicly and not claimed. Reviews and applicable validation are recorded in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6` | Entire public executable delta remains parked under UNIV-3728: WAMR compiler patch for FP/min-max lowering, cold trap paths and CPU scheduling; ModuleTierLadder compiler-capability probing, cache revision/tuning identity, optimized guard-page tier and supported Apple CPU tuning. No shared native/Luau/renderer owner or test changes. Private AnimaScript compiler/library/REPL/editor-completion changes described in metadata are absent publicly and not claimed. Pins advance through a reviewed deferral, not AOT execution parity. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

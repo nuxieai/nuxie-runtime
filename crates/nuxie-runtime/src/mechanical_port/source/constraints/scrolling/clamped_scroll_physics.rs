@@ -19,6 +19,9 @@ impl Default for ClampedScrollPhysics {
 }
 
 impl ClampedScrollPhysics {
+    pub fn shift(&mut self, delta: Vec2D) {
+        self.value += delta;
+    }
     pub fn advance(&mut self, _elapsed_seconds: f32) -> Vec2D {
         ScrollPhysicsRuntime::stop(self);
         self.value
@@ -30,8 +33,8 @@ impl ClampedScrollPhysics {
         range_max: Vec2D,
         value: Vec2D,
         snapping_points: Vec<Vec2D>,
-        content_size: f32,
-        viewport_size: f32,
+        content_size: Vec2D,
+        viewport_size: Vec2D,
     ) {
         self.base.base.run_base();
         self.value = self.clamp(range_min, range_max, value);
@@ -46,6 +49,9 @@ impl ClampedScrollPhysics {
 }
 
 impl ScrollPhysicsRuntime for ClampedScrollPhysics {
+    fn shift(&mut self, delta: Vec2D) {
+        ClampedScrollPhysics::shift(self, delta);
+    }
     fn physics(&self) -> &ScrollPhysics {
         &self.base.base
     }
@@ -64,8 +70,8 @@ impl ScrollPhysicsRuntime for ClampedScrollPhysics {
         range_max: Vec2D,
         value: Vec2D,
         snapping_points: Vec<Vec2D>,
-        content_size: f32,
-        viewport_size: f32,
+        content_size: Vec2D,
+        viewport_size: Vec2D,
     ) {
         ClampedScrollPhysics::run(
             self,

@@ -7,7 +7,13 @@ thread_local! {
 }
 
 #[derive(Clone, Copy)]
-enum RowPass { Advance, Settle, UpdateDataBinds, Reset, Update }
+enum RowPass {
+    Advance,
+    Settle,
+    UpdateDataBinds,
+    Reset,
+    Update,
+}
 
 /// The callback-visible portion of the list, shared so a hosted artboard can
 /// wake its current host during a synchronous layout callback into that list.
@@ -18,7 +24,13 @@ pub(crate) struct QuietRowHostState {
 }
 impl QuietRowHostState {
     pub(crate) fn hosted_row_woke(&self, artboard: &CoreHandle, row: u32) {
-        if self.artboards.borrow().get(row as usize).and_then(Option::as_ref) == Some(artboard) {
+        if self
+            .artboards
+            .borrow()
+            .get(row as usize)
+            .and_then(Option::as_ref)
+            == Some(artboard)
+        {
             if let Some(word) = self.bits.borrow_mut().get_mut(row as usize >> 6) {
                 *word &= !(1u64 << (row & 63));
             }
@@ -150,10 +162,9 @@ pub struct ArtboardComponentList {
     file: Option<RuntimeFileWeakHandle>,
     artboard_sizes: Vec<Vec2D>,
     layout_size: Vec2D,
-    visible_start_index: i32,
-    visible_end_index: i32,
-    realized_start_index: i32,
-    realized_end_index: i32,
+    window_state: Vec<u8>,
+    window_order: Vec<i32>,
+    window_visible_count: i32,
     artboard_map_rules: HashMap<i32, i32>,
     list_scope_focus_node: Option<FocusNodeRef>,
     list_row_focus_nodes: Vec<Option<FocusNodeRef>>,
@@ -190,10 +201,9 @@ impl Default for ArtboardComponentList {
             file: None,
             artboard_sizes: Vec::new(),
             layout_size: Vec2D::default(),
-            visible_start_index: -1,
-            visible_end_index: -1,
-            realized_start_index: -1,
-            realized_end_index: -1,
+            window_state: Vec::new(),
+            window_order: Vec::new(),
+            window_visible_count: 0,
             artboard_map_rules: HashMap::new(),
             list_scope_focus_node: None,
             list_row_focus_nodes: Vec::new(),
@@ -372,7 +382,9 @@ impl ArtboardComponentList {
     pub fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle> {
         (index >= 0)
             .then(|| self.artboard_instances_by_index.get(index as usize))
-            .flatten().cloned().flatten()
+            .flatten()
+            .cloned()
+            .flatten()
     }
 
     pub fn index_of_artboard_instance(&self, instance: &RuntimeArtboardInstanceHandle) -> i32 {
@@ -391,7 +403,9 @@ impl ArtboardComponentList {
     pub fn state_machine_instance(&self, index: i32) -> Option<RuntimeStateMachineInstanceHandle> {
         (index >= 0)
             .then(|| self.state_machines_by_index.get(index as usize))
-            .flatten().cloned().flatten()
+            .flatten()
+            .cloned()
+            .flatten()
     }
 
     fn set_rows_for_item(
@@ -404,7 +418,8 @@ impl ArtboardComponentList {
         if !self.list_has_duplicate_items {
             if index >= 0 && self.list_items.get(index as usize) == Some(item) {
                 self.reset_quiet_row(index as usize);
-                self.quiet_row_artboards.borrow_mut()[index as usize] = artboard.as_ref().map(|instance| instance.core_handle());
+                self.quiet_row_artboards.borrow_mut()[index as usize] =
+                    artboard.as_ref().map(|instance| instance.core_handle());
                 self.artboard_instances_by_index[index as usize] = artboard;
                 self.state_machines_by_index[index as usize] = state_machine;
             }
@@ -413,7 +428,8 @@ impl ArtboardComponentList {
         for i in 0..self.list_items.len() {
             if &self.list_items[i] == item {
                 self.reset_quiet_row(i);
-                self.quiet_row_artboards.borrow_mut()[i] = artboard.as_ref().map(|instance| instance.core_handle());
+                self.quiet_row_artboards.borrow_mut()[i] =
+                    artboard.as_ref().map(|instance| instance.core_handle());
                 self.artboard_instances_by_index[i] = artboard.clone();
                 self.state_machines_by_index[i] = state_machine.clone();
             }
@@ -444,9 +460,7 @@ impl ArtboardComponentList {
         // into the artboard sizes would feed back into the virtualizer, which sums
         // that same table to pick the visible window - so only visible items
         // report their size.
-        let has_virtual_window = self.virtualization_enabled()
-            && self.visible_start_index >= 0
-            && self.visible_end_index >= 0;
+        let has_virtual_window = self.virtualization_enabled() && self.window_visible_count > 0;
         for index in 0..self.artboard_count() as i32 {
             if let Some(artboard) = self.artboard_instance(index) {
                 let bounds = artboard.with_artboard_mut(|artboard| {
@@ -815,14 +829,18 @@ impl ArtboardComponentList {
     }
 
     fn list_row_nodes_in_place(&self) -> bool {
-        let Some(scope) = &self.list_scope_focus_node else { return false; };
+        let Some(scope) = &self.list_scope_focus_node else {
+            return false;
+        };
         if self.list_row_focus_nodes.len() != self.list_items.len() {
             return false;
         }
         let scope = scope.borrow();
         let children = scope.children();
         children.len() == self.list_row_focus_nodes.len()
-            && children.iter().zip(&self.list_row_focus_nodes)
+            && children
+                .iter()
+                .zip(&self.list_row_focus_nodes)
                 .all(|(child, row)| row.as_ref().is_some_and(|row| Rc::ptr_eq(child, row)))
     }
 
@@ -933,7 +951,11 @@ impl ArtboardComponentList {
         Self::sync_layout_children_occurrence(owner);
         owner
             .with_downcast_mut::<Self, _>(|owner| {
-                owner.finish_list_after_layout_children(&previous_list_items, &previous_row_nodes, was_updating_list);
+                owner.finish_list_after_layout_children(
+                    &previous_list_items,
+                    &previous_row_nodes,
+                    was_updating_list,
+                );
             })
             .expect("live ArtboardComponentList");
     }
@@ -955,7 +977,11 @@ impl ArtboardComponentList {
         self.list_items.extend(list.iter().cloned());
         // Items are retained while pointer identities are sorted, so arena
         // slots cannot be recycled during duplicate detection.
-        let mut sorted: Vec<_> = self.list_items.iter().map(CoreHandle::slot_address).collect();
+        let mut sorted: Vec<_> = self
+            .list_items
+            .iter()
+            .map(CoreHandle::slot_address)
+            .collect();
         sorted.sort_unstable();
         self.list_has_duplicate_items = sorted.windows(2).any(|pair| pair[0] == pair[1]);
         self.invalidate_ordered_list_indices_cache();
@@ -963,9 +989,11 @@ impl ArtboardComponentList {
         self.reset_quiet_rows(self.list_items.len());
         self.artboard_instances_by_index.clear();
         self.state_machines_by_index.clear();
-        self.artboard_instances_by_index.resize(self.list_items.len(), None);
+        self.artboard_instances_by_index
+            .resize(self.list_items.len(), None);
         *self.quiet_row_artboards.borrow_mut() = vec![None; self.list_items.len()];
-        self.state_machines_by_index.resize(self.list_items.len(), None);
+        self.state_machines_by_index
+            .resize(self.list_items.len(), None);
         self.layout_parent_mut(LayoutComponent::clear_layout_children);
         for item in self.old_items.clone() {
             if !self.list_items.contains(&item) {
@@ -1040,21 +1068,30 @@ impl ArtboardComponentList {
             let word = row >> 6;
             let quiet = rows.get(word).copied().unwrap_or(0);
             let awake = !quiet & (u64::MAX << (row & 63));
-            if awake != 0 { return count.min((word << 6) + awake.trailing_zeros() as usize); }
+            if awake != 0 {
+                return count.min((word << 6) + awake.trailing_zeros() as usize);
+            }
             row = (word + 1) << 6;
         }
         count
     }
 
     fn is_row_quiet(&self, row: usize) -> bool {
-        self.quiet_rows.borrow().get(row >> 6).is_some_and(|bits| bits & (1 << (row & 63)) != 0)
+        self.quiet_rows
+            .borrow()
+            .get(row >> 6)
+            .is_some_and(|bits| bits & (1 << (row & 63)) != 0)
     }
 
     fn row_quiet_state(&self, row: usize) -> QuietState {
         let artboard = self.artboard_instances_by_index[row].as_ref();
         let machine = self.state_machines_by_index[row].as_ref();
         let Some(artboard) = artboard else {
-            return if machine.is_none() { QuietState::Quiet } else { QuietState::Busy };
+            return if machine.is_none() {
+                QuietState::Quiet
+            } else {
+                QuietState::Busy
+            };
         };
         if machine.is_some_and(|machine| {
             !machine
@@ -1064,9 +1101,15 @@ impl ArtboardComponentList {
             return QuietState::Busy;
         }
         if self.should_reset_instances {
-            let bound = artboard.data_context().and_then(|context| context.with_context(DataContext::main_view_model_instance));
-            let item = self.list_items[row].with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance()).flatten();
-            if bound.is_some() && bound != item { return QuietState::Busy; }
+            let bound = artboard
+                .data_context()
+                .and_then(|context| context.with_context(DataContext::main_view_model_instance));
+            let item = self.list_items[row]
+                .with_downcast::<ViewModelInstanceListItem, _>(|item| item.view_model_instance())
+                .flatten();
+            if bound.is_some() && bound != item {
+                return QuietState::Busy;
+            }
         }
         let state = artboard.with_artboard(|artboard| artboard.row_quiet_state());
         if state != QuietState::Quiet {
@@ -1080,12 +1123,21 @@ impl ArtboardComponentList {
     fn try_quiet_row(&mut self, row: usize) -> bool {
         let word = row >> 6;
         let bit = 1u64 << (row & 63);
-        if self.list_has_duplicate_items || word >= self.quiet_rows.borrow().len()
-            || self.never_quiet_rows[word] & bit != 0 { return false; }
+        if self.list_has_duplicate_items
+            || word >= self.quiet_rows.borrow().len()
+            || self.never_quiet_rows[word] & bit != 0
+        {
+            return false;
+        }
         #[cfg(any(test, feature = "testing"))]
-        if !QUIET_ROWS_ENABLED.with(std::cell::Cell::get) { return false; }
+        if !QUIET_ROWS_ENABLED.with(std::cell::Cell::get) {
+            return false;
+        }
         match self.row_quiet_state(row) {
-            QuietState::Never => { self.never_quiet_rows[word] |= bit; return false; }
+            QuietState::Never => {
+                self.never_quiet_rows[word] |= bit;
+                return false;
+            }
             QuietState::Busy => return false,
             QuietState::Quiet => {}
         }
@@ -1100,11 +1152,14 @@ impl ArtboardComponentList {
 
     fn reset_quiet_row(&mut self, row: usize) {
         let word = row >> 6;
-        if word >= self.quiet_rows.borrow().len() { return; }
+        if word >= self.quiet_rows.borrow().len() {
+            return;
+        }
         let bit = 1u64 << (row & 63);
         if self.quiet_rows.borrow()[word] & bit != 0 {
             if let Some(Some(artboard)) = self.artboard_instances_by_index.get(row) {
-                artboard.with_artboard(|artboard| artboard.set_quiet_host_row(Artboard::NO_QUIET_ROW));
+                artboard
+                    .with_artboard(|artboard| artboard.set_quiet_host_row(Artboard::NO_QUIET_ROW));
             }
         }
         self.quiet_rows.borrow_mut()[word] &= !bit;
@@ -1133,13 +1188,20 @@ impl ArtboardComponentList {
     }
 
     pub(crate) fn quiet_row_host_state(&self) -> QuietRowHostState {
-        QuietRowHostState { bits: self.quiet_rows.clone(), artboards: self.quiet_row_artboards.clone() }
+        QuietRowHostState {
+            bits: self.quiet_rows.clone(),
+            artboards: self.quiet_row_artboards.clone(),
+        }
     }
 
     #[cfg(any(test, feature = "testing"))]
-    pub fn quiet_row_skips() -> u64 { QUIET_ROW_SKIPS.with(std::cell::Cell::get) }
+    pub fn quiet_row_skips() -> u64 {
+        QUIET_ROW_SKIPS.with(std::cell::Cell::get)
+    }
     #[cfg(any(test, feature = "testing"))]
-    pub fn set_quiet_rows_enabled(enabled: bool) { QUIET_ROWS_ENABLED.with(|value| value.set(enabled)); }
+    pub fn set_quiet_rows_enabled(enabled: bool) {
+        QUIET_ROWS_ENABLED.with(|value| value.set(enabled));
+    }
 
     #[cfg(any(test, feature = "testing"))]
     fn verify_quiet_rows(&self, pass: RowPass, elapsed: f32, flags: AdvanceFlags, nested: bool) {
@@ -1150,10 +1212,18 @@ impl ArtboardComponentList {
             while quiet != 0 {
                 let row = (word << 6) + quiet.trailing_zeros() as usize;
                 QUIET_ROW_SKIPS.with(|count| count.set(count.get() + 1));
-                assert_eq!(self.row_quiet_state(row), QuietState::Quiet, "Quiet row {row} stopped being quiet but nothing woke it");
+                assert_eq!(
+                    self.row_quiet_state(row),
+                    QuietState::Quiet,
+                    "Quiet row {row} stopped being quiet but nothing woke it"
+                );
                 if let Some(artboard) = self.artboard_instances_by_index[row].as_ref() {
                     let machine = self.state_machines_by_index[row].as_ref();
-                    assert_eq!(artboard.with_artboard(|artboard| artboard.quiet_host_row()), row as u32, "Quiet row lost track of its artboard");
+                    assert_eq!(
+                        artboard.with_artboard(|artboard| artboard.quiet_host_row()),
+                        row as u32,
+                        "Quiet row lost track of its artboard"
+                    );
                     let dirt = Artboard::dirt_notifications();
                     let updates = crate::source::data_bind::data_bind_container::DataBindContainer::data_bind_updates();
                     let mut did_work = false;
@@ -1171,12 +1241,18 @@ impl ArtboardComponentList {
                         }
                         RowPass::UpdateDataBinds => {
                             if let Some(machine) = machine {
-                                machine.with_instance(|machine| machine.data_bind_container.clone()).update_data_binds(false);
+                                machine
+                                    .with_instance(|machine| machine.data_bind_container.clone())
+                                    .update_data_binds(false);
                             }
                             artboard.update_data_binds(true);
                         }
-                        RowPass::Reset => { artboard.with_artboard_mut(|artboard| artboard.reset()); }
-                        RowPass::Update => { did_work = artboard.update_pass(false); }
+                        RowPass::Reset => {
+                            artboard.with_artboard_mut(|artboard| artboard.reset());
+                        }
+                        RowPass::Update => {
+                            did_work = artboard.update_pass(false);
+                        }
                     }
                     assert!(!did_work && dirt == Artboard::dirt_notifications()
                         && updates == crate::source::data_bind::data_bind_container::DataBindContainer::data_bind_updates()
@@ -1207,14 +1283,22 @@ impl ArtboardComponentList {
         let advance_nested = flags.contains(AdvanceFlags::ADVANCE_NESTED);
         let new_frame = flags.contains(AdvanceFlags::NEW_FRAME);
         let advancing_flags = flags & !AdvanceFlags::IS_ROOT;
-        let mut index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(0)).unwrap() as i32;
+        let mut index = owner
+            .with_downcast::<Self, _>(|list| list.next_awake_row(0))
+            .unwrap() as i32;
         while index
             < owner
                 .with_downcast::<Self, _>(Self::artboard_count)
                 .expect("live ArtboardComponentList") as i32
         {
-            if new_frame && owner.with_downcast_mut::<Self, _>(|list| list.try_quiet_row(index as usize)).unwrap() {
-                index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1)).unwrap() as i32;
+            if new_frame
+                && owner
+                    .with_downcast_mut::<Self, _>(|list| list.try_quiet_row(index as usize))
+                    .unwrap()
+            {
+                index = owner
+                    .with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1))
+                    .unwrap() as i32;
                 continue;
             }
             if advance_nested {
@@ -1249,7 +1333,9 @@ impl ArtboardComponentList {
                     });
                 }
             }
-            index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1)).unwrap() as i32;
+            index = owner
+                .with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1))
+                .unwrap() as i32;
         }
         #[cfg(any(test, feature = "testing"))]
         owner.with_downcast::<Self, _>(|list| {
@@ -1268,7 +1354,11 @@ impl ArtboardComponentList {
     }
 
     pub fn reset(&mut self) {
-        let mut index = if self.should_reset_instances { 0 } else { self.next_awake_row(0) };
+        let mut index = if self.should_reset_instances {
+            0
+        } else {
+            self.next_awake_row(0)
+        };
         while index < self.list_items.len() {
             let item = &self.list_items[index];
             let artboard = self.artboard_instances_by_index[index].as_ref();
@@ -1281,7 +1371,10 @@ impl ArtboardComponentList {
                 if let Some(view_model_instance) = view_model_instance.as_ref() {
                     ViewModelInstance::advanced_handle(view_model_instance);
                 }
-                if self.is_row_quiet(index) { index += 1; continue; }
+                if self.is_row_quiet(index) {
+                    index += 1;
+                    continue;
+                }
                 if let Some(artboard) = artboard {
                     let bound_instance = artboard.with_artboard(|artboard| {
                         artboard.base.data_context().and_then(|context| {
@@ -1298,7 +1391,11 @@ impl ArtboardComponentList {
             if let Some(artboard) = artboard {
                 artboard.with_artboard_mut(|artboard| artboard.reset());
             }
-            index = if self.should_reset_instances { index + 1 } else { self.next_awake_row(index + 1) };
+            index = if self.should_reset_instances {
+                index + 1
+            } else {
+                self.next_awake_row(index + 1)
+            };
         }
         #[cfg(any(test, feature = "testing"))]
         self.verify_quiet_rows(RowPass::Reset, 0.0, AdvanceFlags::NONE, false);
@@ -1319,38 +1416,52 @@ impl ArtboardComponentList {
     ) -> Aabb {
         let virtualized = self.virtualization_enabled_with_scroll(scroll);
         if virtualized {
-            let real_index = index % self.list_items.len();
-            let gap = self.gap_ref();
-            let mut running_size = 0.0;
-            let is_horizontal = self.main_axis_is_row_ref();
-            for item_index in 0..real_index {
-                let size = self.artboard_sizes[item_index];
-                running_size += if is_horizontal { size.x } else { size.y } + gap;
+            let count = self.artboard_sizes.len();
+            if count == 0 {
+                return Aabb::default();
             }
+            let real_index = index % count;
+            let owner = self.base.handle().expect("live component list");
+            let position = if let Some(scroll) = scroll {
+                scroll.virtual_item_position(&owner, real_index as i32)
+            } else {
+                self.scroll_constraint_handle()
+                    .and_then(|scroll| {
+                        scroll.with_downcast::<ScrollConstraint, _>(|scroll| {
+                            scroll.virtual_item_position(&owner, real_index as i32)
+                        })
+                    })
+                    .expect("virtualized list scroll")
+            };
             let item_size = self.artboard_sizes[real_index];
-            let left = if is_horizontal { running_size } else { 0.0 };
-            let top = if is_horizontal { 0.0 } else { running_size };
-            return Aabb::new(left, top, left + item_size.x, top + item_size.y);
+            return Aabb::new(
+                position.x,
+                position.y,
+                position.x + item_size.x,
+                position.y + item_size.y,
+            );
         }
         // A row can have no artboard (e.g. its view model resolves to none).
-        if let Some(artboard) =
-            self.artboard_instance(index as i32)
-        {
+        if let Some(artboard) = self.artboard_instance(index as i32) {
             return artboard.with_artboard(|artboard| artboard.layout_bounds());
         }
         Aabb::default()
     }
 
     pub fn mark_hosting_layout_dirty(&mut self, artboard_instance: &RuntimeArtboardInstanceHandle) {
-        if self.artboard_instances_by_index.iter().flatten()
-            .any(|artboard| artboard.downgrade().ptr_eq(&artboard_instance.downgrade())) {
-                if let Some(parent) = self.component().artboard_handle() {
-                    Artboard::mark_layout_dirty_occurrence(
-                        &parent,
-                        artboard_instance.core_handle(),
-                        None,
-                    );
-                }
+        if self
+            .artboard_instances_by_index
+            .iter()
+            .flatten()
+            .any(|artboard| artboard.downgrade().ptr_eq(&artboard_instance.downgrade()))
+        {
+            if let Some(parent) = self.component().artboard_handle() {
+                Artboard::mark_layout_dirty_occurrence(
+                    &parent,
+                    artboard_instance.core_handle(),
+                    None,
+                );
+            }
         }
         self.transform_mut().mark_world_transform_dirty();
     }
@@ -1481,17 +1592,7 @@ impl ArtboardComponentList {
     }
 
     fn is_within_visible_window(&self, index: i32) -> bool {
-        let count = self.list_items.len() as i32;
-        if count == 0 || self.visible_start_index < 0 || self.visible_end_index < 0 {
-            return false;
-        }
-        let start = self.visible_start_index % count;
-        let end = self.visible_end_index % count;
-        if start <= end {
-            index >= start && index <= end
-        } else {
-            index >= start || index <= end
-        }
+        index >= 0 && self.window_state.get(index as usize) == Some(&2)
     }
 
     pub fn ensure_ordered_list_indices(&mut self) {
@@ -1505,25 +1606,16 @@ impl ArtboardComponentList {
             return;
         }
         self.cached_ordered_list_indices.clear();
-        let use_virtual_window = self.virtualization_enabled()
-            && self.realized_start_index >= 0
-            && self.realized_end_index >= 0;
+        let use_virtual_window = self.virtualization_enabled() && !self.window_order.is_empty();
         if use_virtual_window {
-            let start_index = self.realized_start_index % count;
-            let end_index = self.realized_end_index % count;
-            let mut index = start_index;
-            loop {
-                self.cached_ordered_list_indices.push(index);
-                if index == end_index {
-                    break;
+            for index in &self.window_order {
+                if *index < count {
+                    self.cached_ordered_list_indices.push(*index);
                 }
-                index = (index + 1) % count;
             }
         } else {
             self.cached_ordered_list_indices.reserve(count as usize);
-            for index in 0..count {
-                self.cached_ordered_list_indices.push(index);
-            }
+            self.cached_ordered_list_indices.extend(0..count);
         }
         if self.list_uses_draw_index_sort {
             let mut indices = std::mem::take(&mut self.cached_ordered_list_indices);
@@ -1548,8 +1640,13 @@ impl ArtboardComponentList {
 
 impl ArtboardComponentList {
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
-        fn read<R>(owner: &CoreHandle, callback: impl FnOnce(&mut ArtboardComponentList) -> R) -> R {
-            owner.with_downcast_mut::<ArtboardComponentList, _>(callback).expect("live artboard component list")
+        fn read<R>(
+            owner: &CoreHandle,
+            callback: impl FnOnce(&mut ArtboardComponentList) -> R,
+        ) -> R {
+            owner
+                .with_downcast_mut::<ArtboardComponentList, _>(callback)
+                .expect("live artboard component list")
         }
         if read(owner, |this| this.drawable().needs_save_operation()) {
             renderer.save();
@@ -1566,11 +1663,7 @@ impl ArtboardComponentList {
             let transform = read(owner, |this| *this.transform().world_transform().values());
             renderer.transform(nuxie_render_api::Mat2D(transform));
         }
-        if !virtualized
-            || read(owner, |this| {
-                this.realized_start_index != -1 && this.realized_end_index != -1
-            })
-        {
+        if !virtualized || read(owner, |this| !this.window_order.is_empty()) {
             let indices = read(owner, |this| this.ordered_list_indices().to_vec());
             for index in indices {
                 // Resolve each row only when the source loop reaches it: a
@@ -1605,7 +1698,7 @@ impl ArtboardComponentList {
             self.layout_parent_ref(|parent| {
                 renderer.transform(nuxie_render_api::Mat2D(*parent.world_transform().values()));
             });
-            if self.realized_start_index != -1 && self.realized_end_index != -1 {
+            if !self.window_order.is_empty() {
                 let indices = self.ordered_list_indices().to_vec();
                 for index in indices {
                     if let (Some(artboard), Some(item)) =
@@ -1616,7 +1709,11 @@ impl ArtboardComponentList {
                         // a newly realized row is waiting for layout.
                         let transform = *self.artboard_transforms.entry(item).or_default();
                         renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-                        Artboard::draw_hosted_handle(&self.parent_artboard().expect("component list artboard"), &artboard.core_handle(), renderer);
+                        Artboard::draw_hosted_handle(
+                            &self.parent_artboard().expect("component list artboard"),
+                            &artboard.core_handle(),
+                            renderer,
+                        );
                         renderer.restore();
                     }
                 }
@@ -1632,7 +1729,11 @@ impl ArtboardComponentList {
                     renderer.save();
                     let transform = *self.artboard_transforms.entry(item).or_default();
                     renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
-                    Artboard::draw_hosted_handle(&self.parent_artboard().expect("component list artboard"), &artboard.core_handle(), renderer);
+                    Artboard::draw_hosted_handle(
+                        &self.parent_artboard().expect("component list artboard"),
+                        &artboard.core_handle(),
+                        renderer,
+                    );
                     renderer.restore();
                 }
             }
@@ -1812,7 +1913,9 @@ impl ArtboardComponentList {
             }
         }
         if Component::has_dirt_in(value, ComponentDirt::COMPONENTS) {
-            let mut index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(0)).unwrap() as i32;
+            let mut index = owner
+                .with_downcast::<Self, _>(|list| list.next_awake_row(0))
+                .unwrap() as i32;
             loop {
                 let next = owner
                     .with_downcast::<Self, _>(|list| {
@@ -1826,7 +1929,9 @@ impl ArtboardComponentList {
                 if let Some(artboard) = artboard {
                     artboard.update_pass(false);
                 }
-                index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1)).unwrap() as i32;
+                index = owner
+                    .with_downcast::<Self, _>(|list| list.next_awake_row(index as usize + 1))
+                    .unwrap() as i32;
             }
             #[cfg(any(test, feature = "testing"))]
             owner.with_downcast::<Self, _>(|list| {
@@ -1947,7 +2052,9 @@ impl ArtboardComponentList {
         {
             return;
         }
-        let mut index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(0)).unwrap();
+        let mut index = owner
+            .with_downcast::<Self, _>(|list| list.next_awake_row(0))
+            .unwrap();
         while index
             < owner
                 .with_downcast::<Self, _>(Self::artboard_count)
@@ -1967,7 +2074,9 @@ impl ArtboardComponentList {
             if let Some(artboard) = artboard {
                 artboard.update_data_binds(true);
             }
-            index = owner.with_downcast::<Self, _>(|list| list.next_awake_row(index + 1)).unwrap();
+            index = owner
+                .with_downcast::<Self, _>(|list| list.next_awake_row(index + 1))
+                .unwrap();
         }
         #[cfg(any(test, feature = "testing"))]
         owner.with_downcast::<Self, _>(|list| {
@@ -2039,6 +2148,14 @@ impl ArtboardComponentList {
     }
 
     pub fn create_artboard_at_occurrence(owner: &CoreHandle, index: i32, force_layout_sync: bool) {
+        Self::create_artboard_at_with_scroll_occurrence(owner, index, force_layout_sync, None);
+    }
+    fn create_artboard_at_with_scroll_occurrence(
+        owner: &CoreHandle,
+        index: i32,
+        force_layout_sync: bool,
+        active_scroll: Option<&ScrollConstraint>,
+    ) {
         let artboard = owner
             .with_downcast_mut::<Self, _>(|owner| owner.create_artboard_for_index(index))
             .expect("live ArtboardComponentList");
@@ -2053,7 +2170,13 @@ impl ArtboardComponentList {
                     })
                     .expect("selected ArtboardComponentListOverride remains live");
             }
-            Self::add_artboard_at_occurrence(owner, artboard, index, force_layout_sync);
+            Self::add_artboard_at_with_scroll_occurrence(
+                owner,
+                artboard,
+                index,
+                force_layout_sync,
+                active_scroll,
+            );
         }
     }
 
@@ -2063,8 +2186,25 @@ impl ArtboardComponentList {
         index: i32,
         force_layout_sync: bool,
     ) {
+        Self::add_artboard_at_with_scroll_occurrence(
+            owner,
+            artboard,
+            index,
+            force_layout_sync,
+            None,
+        );
+    }
+    fn add_artboard_at_with_scroll_occurrence(
+        owner: &CoreHandle,
+        artboard: RuntimeArtboardInstanceHandle,
+        index: i32,
+        force_layout_sync: bool,
+        active_scroll: Option<&ScrollConstraint>,
+    ) {
         let item = owner
-            .with_downcast_mut::<Self, _>(|owner| owner.begin_add_artboard_at(&artboard, index))
+            .with_downcast_mut::<Self, _>(|owner| {
+                owner.begin_add_artboard_at(&artboard, index, active_scroll)
+            })
             .expect("live ArtboardComponentList");
         let Some((item, virtualized)) = item else {
             return;
@@ -2091,21 +2231,22 @@ impl ArtboardComponentList {
                 );
             })
             .expect("live ArtboardComponentList");
+        Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
         if force_layout_sync {
             Self::sync_layout_children_occurrence(owner);
         }
-        Self::finish_add_artboard_at_occurrence(owner, artboard, index, item, virtualized);
     }
 
     fn begin_add_artboard_at(
         &mut self,
         artboard: &RuntimeArtboardInstanceHandle,
         index: i32,
+        active_scroll: Option<&ScrollConstraint>,
     ) -> Option<(CoreHandle, bool)> {
         let item = self.list_item(index)?;
         self.artboard_instances_map
             .insert(item.clone(), artboard.clone());
-        let virtualized = self.virtualization_enabled();
+        let virtualized = self.virtualization_enabled_with_scroll(active_scroll);
         if virtualized {
             self.set_rows_for_item(index, &item, Some(artboard.clone()), None);
         }
@@ -2143,7 +2284,12 @@ impl ArtboardComponentList {
                     .state_machines_map
                     .insert(item.clone(), state_machine.clone());
                 if virtualized {
-                    owner.set_rows_for_item(index, &item, Some(artboard.clone()), Some(state_machine.clone()));
+                    owner.set_rows_for_item(
+                        index,
+                        &item,
+                        Some(artboard.clone()),
+                        Some(state_machine.clone()),
+                    );
                 }
             });
             Self::link_state_machine_to_artboard_occurrence(owner, &state_machine, &artboard);
@@ -2172,7 +2318,8 @@ impl ArtboardComponentList {
         owner.with_downcast_mut::<Self, _>(|owner| {
             if !virtualized {
                 owner.reset_quiet_row(index as usize);
-                owner.quiet_row_artboards.borrow_mut()[index as usize] = Some(artboard.core_handle());
+                owner.quiet_row_artboards.borrow_mut()[index as usize] =
+                    Some(artboard.core_handle());
                 owner.artboard_instances_by_index[index as usize] = Some(artboard);
                 owner.state_machines_by_index[index as usize] = state_machine_instance;
             }
@@ -2302,6 +2449,13 @@ impl ArtboardComponentList {
 
 impl ArtboardComponentList {
     pub fn add_virtualizable_occurrence(owner: &CoreHandle, index: i32) {
+        Self::add_virtualizable_with_scroll_occurrence(owner, index, None);
+    }
+    pub(crate) fn add_virtualizable_with_scroll_occurrence(
+        owner: &CoreHandle,
+        index: i32,
+        active_scroll: Option<&ScrollConstraint>,
+    ) {
         let prepared = owner
             .with_downcast_mut::<Self, _>(|owner| {
                 let list_item = owner.list_item(index)?;
@@ -2335,7 +2489,13 @@ impl ArtboardComponentList {
                         .expect("source pooled artboard not already moved")
                 })
                 .expect("live ArtboardComponentList");
-            Self::add_artboard_at_occurrence(owner, pooled_artboard, index, true);
+            Self::add_artboard_at_with_scroll_occurrence(
+                owner,
+                pooled_artboard,
+                index,
+                true,
+                active_scroll,
+            );
             owner.with_downcast_mut::<Self, _>(|owner| {
                 owner
                     .resource_pool
@@ -2344,7 +2504,7 @@ impl ArtboardComponentList {
                     .pop();
             });
         } else {
-            Self::create_artboard_at_occurrence(owner, index, true);
+            Self::create_artboard_at_with_scroll_occurrence(owner, index, true, active_scroll);
         }
         let parent = owner
             .with_downcast_mut::<Self, _>(|owner| {
@@ -2381,6 +2541,12 @@ impl ArtboardComponentList {
             if let (Some(artboard), Some(artboard_instance)) =
                 (artboard.as_ref(), artboard_instance)
             {
+                LayoutComponent::set_virtual_grid_cell_with_host_occurrence(
+                    &artboard_instance.core_handle(),
+                    -1,
+                    -1,
+                    self,
+                );
                 self.resource_pool
                     .entry(artboard.clone())
                     .or_default()
@@ -2652,19 +2818,51 @@ impl ArtboardComponentList {
         );
     }
 
-    pub fn set_visible_indices(&mut self, start: i32, end: i32) {
-        self.visible_start_index = start;
-        self.visible_end_index = end;
+    pub fn realized_indices(&self, out: &mut Vec<i32>) {
+        for (index, item) in self.artboard_instances_by_index.iter().enumerate() {
+            if item.is_some() {
+                out.push(index as i32);
+            }
+        }
     }
-
-    pub fn set_realized_indices(&mut self, start: i32, end: i32) {
-        self.realized_start_index = start;
-        self.realized_end_index = end;
+    pub fn clear_virtual_window(&mut self) {
+        for index in &self.window_order {
+            if (*index as usize) < self.window_state.len() {
+                self.window_state[*index as usize] = 0;
+            }
+        }
+        self.window_order.clear();
+        self.window_visible_count = 0;
         self.invalidate_ordered_list_indices_cache();
+    }
+    pub fn add_to_virtual_window(&mut self, index: i32, visible: bool) {
+        let index_usize = index as usize;
+        if index_usize >= self.window_state.len() {
+            self.window_state
+                .resize((index_usize + 1).max(self.list_items.len()), 0);
+        }
+        self.window_state[index_usize] = if visible { 2 } else { 1 };
+        self.window_order.push(index);
+        if visible {
+            self.window_visible_count += 1;
+        }
+        self.invalidate_ordered_list_indices_cache();
+    }
+    pub fn set_virtualizable_cell(&mut self, index: i32, column: i32, row: i32) {
+        if let Some(artboard) = self.artboard_instance(index) {
+            LayoutComponent::set_virtual_grid_cell_with_host_occurrence(
+                &artboard.core_handle(),
+                column,
+                row,
+                self,
+            );
+        }
     }
 
     pub fn should_reset_instances(&mut self, value: bool) {
-        if value != self.should_reset_instances { self.reset_quiet_rows(self.list_items.len()); }
+        if value != self.should_reset_instances {
+            self.reset_quiet_rows(self.list_items.len());
+        }
         self.should_reset_instances = value;
     }
 
@@ -2820,12 +3018,17 @@ impl VirtualizingComponent for ArtboardComponentList {
         ArtboardComponentList::remove_virtualizable(self, index);
     }
 
-    fn set_visible_indices(&mut self, start: i32, end: i32) {
-        ArtboardComponentList::set_visible_indices(self, start, end);
+    fn realized_indices(&self, out: &mut Vec<i32>) {
+        ArtboardComponentList::realized_indices(self, out);
     }
-
-    fn set_realized_indices(&mut self, start: i32, end: i32) {
-        ArtboardComponentList::set_realized_indices(self, start, end);
+    fn clear_virtual_window(&mut self) {
+        ArtboardComponentList::clear_virtual_window(self);
+    }
+    fn add_to_virtual_window(&mut self, index: i32, visible: bool) {
+        ArtboardComponentList::add_to_virtual_window(self, index, visible);
+    }
+    fn set_virtualizable_cell(&mut self, index: i32, column: i32, row: i32) {
+        ArtboardComponentList::set_virtualizable_cell(self, index, column, row);
     }
 
     fn set_virtualizable_position(&mut self, index: i32, position: Vec2D) {

@@ -107,3 +107,10 @@ The pinned `data_bind_blob_test.riv` silver builds a finite, acyclic tree of
 cache exceeded 1.4 million child-layout calls without finishing the first
 solve in the bounded debug test. The set-associative cache completes the exact
 silver comparison in about two seconds on the same debug build.
+# Virtual grid line observation (upstream dc75beed)
+
+`DetailedGridTracksInfo::line_offsets` exposes the solver's actual track starts
+and final end, including padding/border and distributed gaps. The runtime uses
+these solved values for `LayoutComponent::grid_column_line_offsets`, replacing
+the pinned Yoga grid-line query without recomputing tracks or switching layout
+engines. This adds observation only and does not change the solver.

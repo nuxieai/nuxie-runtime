@@ -1,488 +1,412 @@
-use std::collections::HashSet;
-
 use crate::mechanical_port::source::{
-    constraints::scrolling::scroll_constraint::ScrollConstraint,
+    artboard::RuntimeArtboardInstanceWeakHandle,
+    constraints::scrolling::{
+        scroll_constraint::ScrollConstraint,
+        virtual_layout::{VirtualLayout, VirtualWindow},
+    },
     core::CoreHandle,
     generated::core_registry::CoreCapabilities,
-    layout::layout_node_provider::LayoutNodeProvider,
     math::{mat2d::Mat2D, vec2d::Vec2D},
     virtualizing_component::{self, VirtualizedDirection, VirtualizingComponent},
 };
 
 pub struct ScrollVirtualizer {
-    realized_index_start: i32,
-    realized_index_end: i32,
+    anchor_item: i32,
+    anchor_start: f32,
+    anchor_item_count: i32,
+    anchor_instance: Option<RuntimeArtboardInstanceWeakHandle>,
     offset: f32,
     infinite: bool,
     viewport_size: f32,
+    windows_columns: bool,
+    pinned_cells: bool,
+    line_start: i32,
+    line_end: i32,
+    flow_offset: f32,
+    column_start: f32,
+    column_viewport: f32,
     direction: VirtualizedDirection,
 }
-
 impl Default for ScrollVirtualizer {
     fn default() -> Self {
         Self {
-            realized_index_start: 0,
-            realized_index_end: 0,
+            anchor_item: -1,
+            anchor_start: 0.0,
+            anchor_item_count: 0,
+            anchor_instance: None,
             offset: 0.0,
             infinite: false,
             viewport_size: 0.0,
+            windows_columns: false,
+            pinned_cells: false,
+            line_start: 0,
+            line_end: -1,
+            flow_offset: 0.0,
+            column_start: 0.0,
+            column_viewport: 0.0,
             direction: VirtualizedDirection::Horizontal,
         }
     }
 }
-
 impl Drop for ScrollVirtualizer {
     fn drop(&mut self) {
         self.reset();
     }
 }
-
 impl ScrollVirtualizer {
-    fn with_scroll<R>(scroll: &CoreHandle, use_scroll: impl FnOnce(&ScrollConstraint) -> R) -> R {
+    fn with_scroll<R>(scroll: &CoreHandle, f: impl FnOnce(&ScrollConstraint) -> R) -> R {
         scroll
-            .with_downcast::<ScrollConstraint, _>(use_scroll)
+            .with_downcast::<ScrollConstraint, _>(f)
             .expect("live ScrollConstraint")
     }
-    fn with_virtualizer_mut<R>(
+    pub(super) fn with_virtualizer_mut<R>(
         child: &CoreHandle,
-        use_virtualizer: impl FnOnce(&mut dyn VirtualizingComponent) -> R,
+        f: impl FnOnce(&mut dyn VirtualizingComponent) -> R,
     ) -> Option<R> {
         child
-            .with_mut(|child| virtualizing_component::from(child).map(use_virtualizer))
+            .with_mut(|child| virtualizing_component::from(child).map(f))
             .flatten()
     }
-
     pub fn reset(&mut self) {
-        self.realized_index_end = 0;
-        self.realized_index_start = self.realized_index_end;
+        self.anchor_item = -1;
     }
-
-    fn with_provider<R>(
-        child: &CoreHandle,
-        use_provider: impl FnOnce(&dyn LayoutNodeProvider) -> R,
-    ) -> R {
-        child
-            .with(|child| child.as_layout_node_provider().map(use_provider))
-            .flatten()
-            .expect("ScrollVirtualizer children remain LayoutNodeProviders")
+    pub fn realized_line_start(&self) -> i32 {
+        self.line_start
     }
-
-    fn with_provider_mut<R>(
-        child: &CoreHandle,
-        use_provider: impl FnOnce(&mut dyn LayoutNodeProvider) -> R,
-    ) -> R {
-        child
-            .with_mut(|child| child.as_layout_node_provider_mut().map(use_provider))
-            .flatten()
-            .expect("ScrollVirtualizer children remain LayoutNodeProviders")
+    pub fn realized_line_end(&self) -> i32 {
+        self.line_end
     }
-
+    pub fn anchor_moved(&self, layout: &VirtualLayout, children: &[CoreHandle]) -> f32 {
+        if self.anchor_item < 0 {
+            return 0.0;
+        }
+        let mut item = self.anchor_item;
+        if let Some(anchor) = &self.anchor_instance {
+            item = -1;
+            for segment in 0..(children.len() as i32).min(layout.segment_count()) {
+                let first = layout.segment_start(segment);
+                let local = self.anchor_item - first;
+                let found = Self::with_virtualizer_mut(&children[segment as usize], |virt| {
+                    if local >= 0
+                        && local < virt.item_count()
+                        && virt
+                            .item(local)
+                            .is_some_and(|v| v.downgrade().ptr_eq(anchor))
+                    {
+                        return Some(self.anchor_item);
+                    }
+                    let mut held = Vec::new();
+                    virt.realized_indices(&mut held);
+                    held.into_iter()
+                        .find(|index| {
+                            virt.item(*index)
+                                .is_some_and(|v| v.downgrade().ptr_eq(anchor))
+                        })
+                        .map(|index| first + index)
+                })
+                .flatten();
+                if let Some(found) = found {
+                    item = found;
+                    break;
+                }
+            }
+            if item < 0 || item >= layout.item_count() {
+                return 0.0;
+            }
+        } else if layout.item_count() != self.anchor_item_count {
+            return 0.0;
+        }
+        layout.line_start(layout.line_of_item(item)) - self.anchor_start
+    }
     pub fn constrain(
         &mut self,
         scroll: &CoreHandle,
         children: &[CoreHandle],
         offset: f32,
         direction: VirtualizedDirection,
+        flow_offset: f32,
+        column_start: f32,
+        column_viewport: f32,
+        windows_columns: bool,
     ) -> bool {
+        self.windows_columns = windows_columns;
+        self.flow_offset = flow_offset;
+        self.column_start = column_start;
+        self.column_viewport = column_viewport;
         let horizontal = direction == VirtualizedDirection::Horizontal;
-        let content_size = if horizontal {
-            Self::with_scroll(scroll, ScrollConstraint::content_width) as f64
-        } else {
-            Self::with_scroll(scroll, ScrollConstraint::content_height) as f64
-        };
-        if content_size > 0.0 {
-            let normalized_offset = -offset;
-            self.direction = direction;
-            self.viewport_size = if horizontal {
-                Self::with_scroll(scroll, ScrollConstraint::viewport_width)
+        let content_size = Self::with_scroll(scroll, |s| {
+            if horizontal {
+                s.content_width()
             } else {
-                Self::with_scroll(scroll, ScrollConstraint::viewport_height)
-            };
-            self.infinite = Self::with_scroll(scroll, |scroll| scroll.infinite());
-            if offset > 0.0 {
+                s.content_height()
+            }
+        }) as f64;
+        if content_size > 0.0 {
+            let normalized = -offset;
+            self.direction = direction;
+            self.viewport_size = Self::with_scroll(scroll, |s| {
+                if horizontal {
+                    s.viewport_width()
+                } else {
+                    s.viewport_height()
+                }
+            });
+            self.infinite = Self::with_scroll(scroll, |s| s.infinite());
+            self.offset = if offset > 0.0 {
                 if self.infinite {
                     let multiplier = (f64::from(offset) / content_size).floor() as i32 + 1;
-                    self.offset =
-                        (-1.0 * (f64::from(offset) - f64::from(multiplier) * content_size)) as f32;
+                    (-(f64::from(offset) - f64::from(multiplier) * content_size)) as f32
                 } else {
-                    self.offset = -offset;
+                    -offset
                 }
             } else {
-                let multiplier = (f64::from(normalized_offset) / content_size).floor() as i32;
-                self.offset = if multiplier > 0 {
-                    (f64::from(normalized_offset) % (f64::from(multiplier) * content_size)) as f32
+                let multiplier = (f64::from(normalized) / content_size).floor() as i32;
+                if multiplier > 0 {
+                    (f64::from(normalized) % (f64::from(multiplier) * content_size)) as f32
                 } else {
-                    normalized_offset
-                };
-            }
+                    normalized
+                }
+            };
             self.virtualize(scroll, children);
         }
         true
     }
-
     pub fn virtualize(&mut self, scroll: &CoreHandle, children: &[CoreHandle]) {
-        let total_item_count: i32 = children
-            .iter()
-            .map(|child| Self::with_provider(child, |child| child.num_layout_nodes() as i32))
-            .sum();
-        let last_realized_index_start = if self.infinite && total_item_count > 0 {
-            self.realized_index_start % total_item_count
-        } else {
-            self.realized_index_start
+        let Some(model) = Self::with_scroll(scroll, |s| s.virtual_layout()) else {
+            return;
         };
-        let last_realized_index_end = if self.infinite && total_item_count > 0 {
-            self.realized_index_end % total_item_count
-        } else {
-            self.realized_index_end
-        };
-        self.realized_index_start = 0;
-        self.realized_index_end = total_item_count - 1;
-        let mut running_size = 0.0;
-        let mut running_offset = 0.0;
-        let mut running_index = 0;
-        let mut child_index = 0usize;
-        let mut current_child_index = 0usize;
-        let horizontal = self.direction == VirtualizedDirection::Horizontal;
-        let gap = if horizontal {
-            Self::with_scroll(scroll, |scroll| scroll.gap().x)
-        } else {
-            Self::with_scroll(scroll, |scroll| scroll.gap().y)
-        };
-        let mut changed_components = Vec::<CoreHandle>::new();
-
-        for child in children {
-            Self::with_virtualizer_mut(child, |virtualizer| {
-                virtualizer.set_visible_indices(-1, -1);
-                virtualizer.set_realized_indices(-1, -1);
-            });
-        }
-
-        'find_start: for child in children {
-            let count = Self::with_provider(child, |provider| provider.num_layout_nodes());
-            for item_index in 0..count {
-                let size = self.get_item_size(child, item_index, horizontal);
-                if running_size + size > self.offset {
-                    running_offset = running_size - self.offset;
-                    self.realized_index_start = running_index;
-                    if current_child_index == children.len() - 1 {
-                        child_index += 1;
-                        current_child_index = 0;
-                    } else {
-                        current_child_index += 1;
-                    }
-                    break 'find_start;
-                }
-                running_size += size;
-                current_child_index = item_index;
-                running_index += 1;
-                if running_size + gap > self.offset {
-                    if running_index == total_item_count {
-                        running_index = 0;
-                    }
-                    if current_child_index == children.len() - 1 {
-                        child_index += 1;
-                        current_child_index = 0;
-                    } else {
-                        current_child_index += 1;
-                    }
-                    running_size += gap;
-                    running_offset = running_size - self.offset;
-                    self.realized_index_start = running_index;
-                    break 'find_start;
-                }
-                running_size += gap;
-            }
-            child_index += 1;
-        }
-
-        child_index %= children.len();
-        let mut item = self.realized_index_start;
-        let mut wrapped = false;
-        let mut cycle_count = 0;
-        'find_end: while item < total_item_count && cycle_count < 2 {
-            let child = &children[child_index];
-            let count = Self::with_provider(child, |provider| provider.num_layout_nodes());
-            for local in current_child_index..count {
-                let size = self.get_item_size(child, local, horizontal);
-                if running_size + size + gap >= self.offset + self.viewport_size {
-                    self.realized_index_end = if self.infinite && wrapped {
-                        item + total_item_count
-                    } else {
-                        item
-                    };
-                    break 'find_end;
-                }
-                running_size += size + gap;
-                running_index += 1;
-                if self.infinite && item == total_item_count - 1 {
-                    wrapped = true;
-                    item = -1;
-                    cycle_count += 1;
-                }
-                item += 1;
-            }
-            current_child_index = 0;
-        }
-
-        // Keep `virtualizeBuffer` lines realized on each side of the visible range
-        // so items are mounted and advancing before they scroll in. Buffered items
-        // are drawn (clipped away by a normal viewport), but stay out of the
-        // visible range, which is what reports measured sizes back to us.
-        let mut visible_index_start = self.realized_index_start;
-        let mut visible_index_end = self.realized_index_end;
-        let buffer = Self::with_scroll(scroll, |scroll| i32::from(scroll.virtualize_buffer()))
-            .min(total_item_count);
-        if buffer > 0 && total_item_count > 0 {
-            let visible_span = self.realized_index_end - self.realized_index_start + 1;
-            let max_extra = (total_item_count - visible_span).max(0);
-            let before = buffer.min(if self.infinite {
-                max_extra
-            } else {
-                self.realized_index_start
-            });
-            let after = buffer.min(if self.infinite {
-                max_extra - before
-            } else {
-                total_item_count - 1 - self.realized_index_end
-            });
-            let before = before.max(0);
-            let after = after.max(0);
-            for k in 1..=before {
-                running_offset -= self.get_item_size_at(
-                    self.realized_index_start - k,
-                    children,
-                    total_item_count,
-                    horizontal,
-                ) + gap;
-            }
-            self.realized_index_start -= before;
-            self.realized_index_end += after;
-            if self.infinite {
-                // Indices are modular when infinite, so bias the widened
-                // range into positive space and keep visible bounds in the
-                // same frame.
-                self.realized_index_start += total_item_count;
-                self.realized_index_end += total_item_count;
-                visible_index_start += total_item_count;
-                visible_index_end += total_item_count;
-            }
-        }
-
-        let actual_start = if self.infinite && total_item_count > 0 {
-            self.realized_index_start % total_item_count
-        } else {
-            self.realized_index_start
-        };
-        let actual_end = if self.infinite && total_item_count > 0 {
-            self.realized_index_end % total_item_count
-        } else {
-            self.realized_index_end
-        };
-        let mut used = HashSet::new();
-        if actual_start <= actual_end {
-            for index in actual_start..=actual_end {
-                used.insert(index);
-            }
-        } else {
-            for index in actual_start..total_item_count {
-                used.insert(index);
-            }
-            for index in 0..=actual_end {
-                used.insert(index);
-            }
-        }
-        let mut recycle = Vec::new();
-        if last_realized_index_start <= last_realized_index_end {
-            for index in last_realized_index_start..=last_realized_index_end {
-                if !used.contains(&index) {
-                    recycle.push(index);
-                }
-            }
-        } else {
-            for index in last_realized_index_start..total_item_count {
-                if !used.contains(&index) {
-                    recycle.push(index);
-                }
-            }
-            for index in 0..=last_realized_index_end {
-                if !used.contains(&index) {
-                    recycle.push(index);
-                }
-            }
-        }
-        self.recycle_items(recycle, children, total_item_count);
-
-        let mut visible_indices = vec![Vec2D::new(-1.0, -1.0); children.len()];
-        let mut realized_indices = vec![Vec2D::new(-1.0, -1.0); children.len()];
-        for global_index in self.realized_index_start..=self.realized_index_end {
-            let actual_index = if self.infinite {
-                global_index % total_item_count
-            } else {
-                global_index
-            };
-            // Buffered items are realized and drawn, but only on screen items
-            // report their measured size back.
-            let is_visible =
-                global_index >= visible_index_start && global_index <= visible_index_end;
-            let mut running_total = 0;
-            'providers: for (provider_index, child) in children.iter().enumerate() {
-                let count =
-                    Self::with_provider(child, |provider| provider.num_layout_nodes()) as i32;
-                let start = running_total;
-                let end = start + count;
-                if start < end && actual_index < end && actual_index >= start {
-                    let local = (actual_index - start) as usize;
-                    if realized_indices[provider_index].x == -1.0 {
-                        realized_indices[provider_index].x = local as f32;
-                    }
-                    realized_indices[provider_index].y = local as f32;
-                    if is_visible {
-                        if visible_indices[provider_index].x == -1.0 {
-                            visible_indices[provider_index].x = local as f32;
-                        }
-                        visible_indices[provider_index].y = local as f32;
-                    }
-                    let Some(changed) = Self::with_virtualizer_mut(child, |virtualizer| {
-                        virtualizer.item(local as i32).is_none()
-                    }) else {
-                        running_total = end;
-                        continue;
-                    };
-                    if changed {
-                        assert!(virtualizing_component::add_virtualizable_handle(
-                            child,
-                            local as i32
-                        ));
-                        if !changed_components.contains(child) {
-                            changed_components.push(child.clone());
-                        }
-                    }
-                    let size = self.get_item_size(child, local, horizontal);
-                    let virtualizable = Self::with_virtualizer_mut(child, |virtualizer| {
-                        virtualizer.item(local as i32)
-                    })
-                    .expect("live VirtualizingComponent");
-                    if let Some(virtualizable) = virtualizable {
-                        let invertible = child
-                            .with(|child| {
-                                let component = child
-                                    .as_transform_component()
-                                    .expect("virtualizing transform");
-                                let mut inverse = Mat2D::default();
-                                component.world_transform().invert(&mut inverse)
-                            })
-                            .expect("live virtualizing transform");
-                        if !invertible {
-                            continue 'providers;
-                        }
-                        let location = if horizontal {
-                            Vec2D::new(
-                                running_offset,
-                                virtualizable.with_artboard(|a| a.base.layout_y()),
-                            )
-                        } else {
-                            Vec2D::new(
-                                virtualizable.with_artboard(|a| a.base.layout_x()),
-                                running_offset,
-                            )
-                        };
-                        Self::with_virtualizer_mut(child, |virtualizer| {
-                            virtualizer.set_virtualizable_position(local as i32, location);
-                        });
-                    }
-                    running_offset += size + gap;
-                    break;
-                }
-                running_total = end;
-            }
-        }
-
-        for (index, child) in children.iter().enumerate() {
-            let visible = visible_indices[index];
-            Self::with_virtualizer_mut(child, |virtualizer| {
-                virtualizer.set_visible_indices(visible.x as i32, visible.y as i32);
-                let realized = realized_indices[index];
-                virtualizer.set_realized_indices(realized.x as i32, realized.y as i32);
-            });
-        }
-        for child in changed_components {
-            Self::with_virtualizer_mut(&child, |virtualizer| {
-                virtualizer.virtualizable_changed();
-            });
-        }
-    }
-
-    fn recycle_items(
-        &mut self,
-        mut indices: Vec<i32>,
-        children: &[CoreHandle],
-        total_item_count: i32,
-    ) {
-        if total_item_count == 0 {
+        let layout = model.borrow();
+        if layout.segment_count() != children.len() as i32 {
             return;
         }
-        indices.sort();
-        for global_index in indices {
-            let actual_index = if self.infinite {
-                global_index % total_item_count
+        let horizontal = self.direction == VirtualizedDirection::Horizontal;
+        let total = layout.item_count();
+        let buffer = Self::with_scroll(scroll, |s| i32::from(s.virtualize_buffer())).min(total);
+        let window = layout.window(self.offset, self.viewport_size, self.infinite, buffer);
+        self.line_start = window.start;
+        self.line_end = window.end;
+        let windows_columns = self.windows_columns && layout.is_grid();
+        let loops_columns = windows_columns && self.infinite;
+        let mut flow_offset = self.flow_offset;
+        let mut column_start = self.column_start;
+        let column_cycle = layout.column_cycle_extent();
+        if loops_columns && column_cycle > 0.0 {
+            let cycles = (column_start / column_cycle).floor() * column_cycle;
+            flow_offset -= cycles;
+            column_start -= cycles;
+        }
+        let columns = if windows_columns {
+            layout.column_window(column_start, self.column_viewport, buffer, loops_columns)
+        } else {
+            VirtualWindow::default()
+        };
+        let window_column = |line, item| {
+            let column = item - layout.line_first_item(line);
+            if loops_columns {
+                columns.start + layout.wrap_column(column - columns.start)
             } else {
-                global_index
+                column
+            }
+        };
+        let in_columns = |line, item| {
+            !windows_columns || {
+                let column = window_column(line, item);
+                column >= columns.start && column <= columns.end
+            }
+        };
+        for child in children {
+            Self::with_virtualizer_mut(child, |v| v.clear_virtual_window());
+        }
+        let mut used = vec![false; total as usize];
+        for line in window.start..=window.end {
+            for item in layout.line_first_item(line)..=layout.line_last_item(line) {
+                if in_columns(line, item) {
+                    used[item as usize] = true;
+                }
+            }
+        }
+        for (segment, child) in children.iter().enumerate() {
+            Self::with_virtualizer_mut(child, |virt| {
+                let mut held = Vec::new();
+                virt.realized_indices(&mut held);
+                let first = layout.segment_start(segment as i32);
+                let count = if segment + 1 < children.len() {
+                    layout.segment_start(segment as i32 + 1)
+                } else {
+                    total
+                } - first;
+                let held_items: Vec<_> = held
+                    .iter()
+                    .map(|i| virt.item(*i).map(|v| v.downgrade()))
+                    .collect();
+                let kept: Vec<_> = held
+                    .iter()
+                    .zip(&held_items)
+                    .filter(|(i, _)| **i < count && used[(first + **i) as usize])
+                    .map(|(_, v)| v.clone())
+                    .collect();
+                let same =
+                    |a: &Option<RuntimeArtboardInstanceWeakHandle>,
+                     b: &Option<RuntimeArtboardInstanceWeakHandle>| match (a, b)
+                    {
+                        (Some(a), Some(b)) => a.ptr_eq(b),
+                        (None, None) => true,
+                        _ => false,
+                    };
+                let mut recycled = Vec::new();
+                for (index, shared) in held.iter().zip(held_items) {
+                    if *index < count && used[(first + *index) as usize] {
+                        continue;
+                    }
+                    if !kept.iter().any(|v| same(v, &shared))
+                        && !recycled.iter().any(|v| same(v, &shared))
+                    {
+                        recycled.push(shared);
+                        virt.remove_virtualizable(*index);
+                    }
+                }
+            });
+        }
+        self.anchor_item = -1;
+        for line in window.visible_start..=window.visible_end {
+            if self.infinite || window.is_empty() || self.anchor_item >= 0 {
+                break;
+            }
+            let first = layout.line_first_item(line);
+            let last = layout.line_last_item(line);
+            let shown = if windows_columns {
+                columns.visible_end - columns.visible_start + 1
+            } else {
+                1
             };
-            let mut running_total = 0;
-            for child in children {
-                let start = running_total;
-                let end = start
-                    + Self::with_provider(child, |provider| provider.num_layout_nodes()) as i32;
-                if start < end && actual_index < end && actual_index >= start {
-                    Self::with_virtualizer_mut(child, |virtualizer| {
-                        virtualizer.remove_virtualizable(actual_index - start);
-                    });
+            for n in 0..shown {
+                let column = if windows_columns {
+                    if loops_columns {
+                        layout.wrap_column(columns.visible_start + n)
+                    } else {
+                        columns.visible_start + n
+                    }
+                } else {
+                    0
+                };
+                if first + column <= last {
+                    self.anchor_item = first + column;
+                    self.anchor_start = layout.line_start(line);
+                    self.anchor_item_count = total;
                     break;
                 }
-                running_total = end;
             }
         }
-    }
-
-    fn get_item_size(&self, child: &CoreHandle, index: usize, horizontal: bool) -> f32 {
-        if let Some(size) =
-            Self::with_virtualizer_mut(child, |virtualizer| virtualizer.item_size(index as i32))
-        {
-            return if horizontal { size.x } else { size.y };
-        }
-        Self::with_provider_mut(child, |child| {
-            let bounds = child.layout_bounds();
-            if horizontal {
-                bounds.width()
+        let mut changed = Vec::<CoreHandle>::new();
+        for line in window.start..=window.end {
+            let visible = window.is_visible(line);
+            let position = layout.line_start(line) - self.offset;
+            let first = layout.line_first_item(line);
+            let last = layout.line_last_item(line);
+            let items: Vec<_> = if loops_columns {
+                (columns.start..=columns.end)
+                    .map(|c| first + layout.wrap_column(c))
+                    .filter(|i| *i <= last)
+                    .collect()
             } else {
-                bounds.height()
+                (first..=last).filter(|i| in_columns(line, *i)).collect()
+            };
+            for item in items {
+                let segment = layout.segment_of(item);
+                let child = &children[segment as usize];
+                let local = item - layout.segment_start(segment);
+                let Some(missing) = Self::with_virtualizer_mut(child, |virt| {
+                    virt.add_to_virtual_window(
+                        local,
+                        visible
+                            && (!windows_columns || columns.is_visible(window_column(line, item))),
+                    );
+                    virt.item(local).is_none()
+                }) else {
+                    continue;
+                };
+                if missing {
+                    assert!(virtualizing_component::add_virtualizable_handle(
+                        child, local
+                    ));
+                    if !changed.contains(child) {
+                        changed.push(child.clone());
+                    }
+                }
+                if layout.is_grid() || self.pinned_cells {
+                    Self::with_virtualizer_mut(child, |v| {
+                        v.set_virtualizable_cell(
+                            local,
+                            if windows_columns {
+                                item - layout.line_first_item(line)
+                            } else {
+                                -1
+                            },
+                            if windows_columns {
+                                line - window.start
+                            } else {
+                                -1
+                            },
+                        )
+                    });
+                }
+                let Some(instance) = Self::with_virtualizer_mut(child, |v| v.item(local)).flatten()
+                else {
+                    continue;
+                };
+                let invertible = child
+                    .with(|c| {
+                        let mut inverse = Mat2D::default();
+                        c.as_transform_component()
+                            .expect("virtualizing transform")
+                            .world_transform()
+                            .invert(&mut inverse)
+                    })
+                    .expect("live virtualizing transform");
+                if !invertible {
+                    continue;
+                }
+                let mut flow = if !layout.flow_from_layout() {
+                    layout.item_flow_offset(item)
+                } else {
+                    instance.with_artboard(|a| {
+                        if horizontal {
+                            a.base.layout_y()
+                        } else {
+                            a.base.layout_x()
+                        }
+                    })
+                };
+                flow -= flow_offset;
+                if loops_columns {
+                    flow += layout.column_start(window_column(line, item))
+                        - layout.column_start(item - layout.line_first_item(line));
+                }
+                let position = position + layout.item_line_offset(item);
+                let location = if horizontal {
+                    Vec2D::new(position, flow)
+                } else {
+                    Vec2D::new(flow, position)
+                };
+                Self::with_virtualizer_mut(child, |v| {
+                    v.set_virtualizable_position(local, location)
+                });
             }
-        })
-    }
-
-    fn get_item_size_at(
-        &self,
-        global_index: i32,
-        children: &[CoreHandle],
-        total_item_count: i32,
-        horizontal: bool,
-    ) -> f32 {
-        if total_item_count <= 0 {
-            return 0.0;
         }
-        let mut index = global_index % total_item_count;
-        if index < 0 {
-            index += total_item_count;
+        self.anchor_instance = if self.anchor_item >= 0 {
+            let segment = layout.segment_of(self.anchor_item);
+            Self::with_virtualizer_mut(&children[segment as usize], |v| {
+                v.item(self.anchor_item - layout.segment_start(segment))
+            })
+            .flatten()
+            .map(|v| v.downgrade())
+        } else {
+            None
+        };
+        self.pinned_cells = windows_columns;
+        changed.sort_by_key(CoreHandle::slot_address);
+        for child in changed {
+            Self::with_virtualizer_mut(&child, |v| v.virtualizable_changed());
         }
-        let mut running_total = 0;
-        for child in children {
-            let end = running_total
-                + Self::with_provider(child, |provider| provider.num_layout_nodes()) as i32;
-            if index < end {
-                return self.get_item_size(child, (index - running_total) as usize, horizontal);
-            }
-            running_total = end;
-        }
-        0.0
     }
 }

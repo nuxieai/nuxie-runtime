@@ -16,6 +16,7 @@ use crate::mechanical_port::source::{
             scroll_constraint_proxy::ViewportDraggableProxy,
             scroll_physics::{self, ScrollPhysicsRuntime, ScrollPhysicsType},
             scroll_virtualizer::ScrollVirtualizer,
+            virtual_layout::{VirtualGridTrack, VirtualLayout, VirtualTrackSizing},
         },
         transform_constraint::TransformConstraint,
     },
@@ -32,7 +33,7 @@ use crate::mechanical_port::source::{
         aabb::Aabb, mat2d::Mat2D, math_types, transform_components::TransformComponents,
         vec2d::Vec2D,
     },
-    virtualizing_component::VirtualizedDirection,
+    virtualizing_component::{self, VirtualizedDirection},
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -80,6 +81,7 @@ pub struct ScrollConstraint {
     pub base: ScrollConstraintBase,
     physics: Option<CoreHandle>,
     virtualizer: Option<Rc<RefCell<ScrollVirtualizer>>>,
+    virtual_layout: Option<Rc<RefCell<VirtualLayout>>>,
     // Stable shared list across virtualizer callbacks; rebuilt only by dependencies.
     layout_children: Rc<Vec<CoreHandle>>,
     components_a: TransformComponents,
@@ -119,6 +121,7 @@ impl Default for ScrollConstraint {
             base: ScrollConstraintBase::default(),
             physics: None,
             virtualizer: None,
+            virtual_layout: None,
             layout_children: Rc::new(Vec::new()),
             components_a: TransformComponents::default(),
             components_b: TransformComponents::default(),
@@ -142,6 +145,7 @@ impl Default for ScrollConstraint {
 impl Drop for ScrollConstraint {
     fn drop(&mut self) {
         self.virtualizer = None;
+        self.virtual_layout = None;
         Rc::make_mut(&mut self.layout_children).clear();
         if let Some(physics) = self.physics.take() {
             physics.remove_occurrence();
@@ -254,44 +258,27 @@ impl ScrollConstraint {
     }
 
     pub fn content_width(&self) -> f32 {
-        if self.base.virtualize() && !self.main_axis_is_column() {
-            let mut content_size = 0.0;
-            for child in self.layout_children.iter() {
-                content_size +=
-                    Self::with_layout_child(child, |child| child.layout_bounds().width())
-                        .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
-            }
-            let len_offset = if self.base.infinite() { 0 } else { 1 };
-            content_size +=
-                self.gap().x * self.layout_children.len().wrapping_sub(len_offset) as f32;
-            if !self.base.infinite() {
-                content_size += self
-                    .with_content(|content| content.padding_left() + content.padding_right())
-                    .expect("ScrollConstraint content remains LayoutComponent");
-            }
-            return content_size;
+        if self.base.virtualize() && !self.virtual_axis_is_column() {
+            return self.virtual_content_extent(
+                self.with_content(|c| c.padding_left() + c.padding_right())
+                    .unwrap(),
+            );
+        }
+        if self.loops_x() {
+            return self
+                .ensure_virtual_layout()
+                .map_or(0.0, |v| v.borrow().column_cycle_extent());
         }
         self.with_content(LayoutComponent::layout_width)
             .expect("ScrollConstraint content remains LayoutComponent")
     }
 
     pub fn content_height(&self) -> f32 {
-        if self.base.virtualize() && self.main_axis_is_column() {
-            let mut content_size = 0.0;
-            for child in self.layout_children.iter() {
-                content_size +=
-                    Self::with_layout_child(child, |child| child.layout_bounds().height())
-                        .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
-            }
-            let len_offset = if self.base.infinite() { 0 } else { 1 };
-            content_size +=
-                self.gap().y * self.layout_children.len().wrapping_sub(len_offset) as f32;
-            if !self.base.infinite() {
-                content_size += self
-                    .with_content(|content| content.padding_top() + content.padding_bottom())
-                    .expect("ScrollConstraint content remains LayoutComponent");
-            }
-            return content_size;
+        if self.base.virtualize() && self.virtual_axis_is_column() {
+            return self.virtual_content_extent(
+                self.with_content(|c| c.padding_top() + c.padding_bottom())
+                    .unwrap(),
+            );
         }
         self.with_content(LayoutComponent::layout_height)
             .expect("ScrollConstraint content remains LayoutComponent")
@@ -340,21 +327,13 @@ impl ScrollConstraint {
         }
     }
     pub fn min_offset_x(&self) -> f32 {
-        if self.base.infinite() && !self.main_axis_is_column() {
-            f32::INFINITY
-        } else {
-            0.0
-        }
+        if self.loops_x() { f32::INFINITY } else { 0.0 }
     }
     pub fn min_offset_y(&self) -> f32 {
-        if self.base.infinite() && self.main_axis_is_column() {
-            f32::INFINITY
-        } else {
-            0.0
-        }
+        if self.loops_y() { f32::INFINITY } else { 0.0 }
     }
     pub fn max_offset_x(&self) -> f32 {
-        if self.base.infinite() && !self.main_axis_is_column() {
+        if self.loops_x() {
             f32::NEG_INFINITY
         } else {
             0.0_f32.min(
@@ -367,7 +346,7 @@ impl ScrollConstraint {
         }
     }
     pub fn max_offset_y(&self) -> f32 {
-        if self.base.infinite() && self.main_axis_is_column() {
+        if self.loops_y() {
             f32::NEG_INFINITY
         } else {
             0.0_f32.min(
@@ -381,7 +360,7 @@ impl ScrollConstraint {
     }
 
     pub fn clamped_offset_x(&self) -> f32 {
-        if self.base.infinite() {
+        if self.loops_x() {
             return self.offset_x;
         }
         if self.max_offset_x() > 0.0 {
@@ -405,7 +384,7 @@ impl ScrollConstraint {
         math_types::clamp(self.offset_x, self.max_offset_x(), 0.0)
     }
     pub fn clamped_offset_y(&self) -> f32 {
-        if self.base.infinite() {
+        if self.loops_y() {
             return self.offset_y;
         }
         if self.max_offset_y() > 0.0 {
@@ -459,6 +438,348 @@ impl ScrollConstraint {
     pub fn main_axis_is_column(&self) -> bool {
         self.with_content(LayoutComponent::main_axis_is_column)
             .expect("ScrollConstraint content remains LayoutComponent")
+    }
+
+    pub fn virtual_layout(&self) -> Option<Rc<RefCell<VirtualLayout>>> {
+        self.virtual_layout.clone()
+    }
+    pub fn virtualizes_grid(&self) -> bool {
+        self.virtualize()
+            && self
+                .with_content(LayoutComponent::is_grid_container)
+                .unwrap_or(false)
+            && self.direction() != DraggableConstraintDirection::Horizontal
+            && self.scroll_children_are_lists()
+    }
+    pub fn virtualizes_grid_columns(&self) -> bool {
+        self.virtualizes_grid()
+            && (!self.infinite() || self.direction() == DraggableConstraintDirection::All)
+    }
+    pub fn indexes_grid_cells(&self) -> bool {
+        self.direction() == DraggableConstraintDirection::All && self.virtualizes_grid_columns()
+    }
+    pub fn indexes_horizontally(&self) -> bool {
+        if self.virtualize() && self.direction() == DraggableConstraintDirection::All {
+            !self.virtual_axis_is_column()
+        } else {
+            self.constrains_horizontal()
+        }
+    }
+    pub fn loops_x(&self) -> bool {
+        self.infinite() && (!self.virtual_axis_is_column() || self.virtualizes_grid_columns())
+    }
+    pub fn loops_y(&self) -> bool {
+        self.infinite() && self.virtual_axis_is_column()
+    }
+    pub fn scroll_children_are_lists(&self) -> bool {
+        self.scroll_children()
+            .iter()
+            .all(|c| c.core_type() == Some(ArtboardComponentList::TYPE_KEY))
+    }
+    pub fn virtual_axis_is_column(&self) -> bool {
+        if self.virtualizes_grid() {
+            return true;
+        }
+        let column = self.main_axis_is_column();
+        if self.virtualize()
+            && self
+                .with_content(LayoutComponent::wraps_lines)
+                .unwrap_or(false)
+        {
+            !column
+        } else {
+            column
+        }
+    }
+    fn inner_size(layout: &LayoutComponent, vertical: bool) -> f32 {
+        if vertical {
+            layout.layout_height() - layout.padding_top() - layout.padding_bottom()
+        } else {
+            layout.layout_width() - layout.padding_left() - layout.padding_right()
+        }
+    }
+    fn virtual_content_extent(&self, padding: f32) -> f32 {
+        self.ensure_virtual_layout().map_or(0.0, |v| {
+            let v = v.borrow();
+            if self.infinite() {
+                v.cycle_extent()
+            } else {
+                v.extent() + padding
+            }
+        })
+    }
+    fn ensure_virtual_layout(&self) -> Option<Rc<RefCell<VirtualLayout>>> {
+        if self
+            .virtual_layout
+            .as_ref()
+            .is_some_and(|v| v.borrow().segment_count() != self.scroll_children().len() as i32)
+        {
+            self.refresh_virtual_layout();
+        }
+        self.virtual_layout()
+    }
+    pub fn virtual_item_position(&self, child: &CoreHandle, index: i32) -> Vec2D {
+        let Some(model) = self.virtual_layout() else {
+            return Vec2D::default();
+        };
+        let Some(segment) = self.scroll_children().iter().position(|c| c == child) else {
+            return Vec2D::default();
+        };
+        self.ensure_virtual_layout();
+        if {
+            let v = model.borrow();
+            v.segment_start(segment as i32) + index >= v.item_count()
+        } {
+            self.refresh_virtual_layout();
+        }
+        let v = model.borrow();
+        let item = v.segment_start(segment as i32) + index;
+        if item >= v.item_count() {
+            return Vec2D::default();
+        }
+        let scroll = v.line_start(v.line_of_item(item)) + v.item_line_offset(item);
+        let flow = v.item_flow_offset(item);
+        if self.virtual_axis_is_column() {
+            Vec2D::new(flow, scroll)
+        } else {
+            Vec2D::new(scroll, flow)
+        }
+    }
+
+    fn refresh_virtual_layout(&self) {
+        use crate::source::layout::grid_track::{GridTrack, GridTrackCollection};
+        let Some(model) = self.virtual_layout() else {
+            return;
+        };
+        let horizontal = !self.virtual_axis_is_column();
+        let gap = self.gap();
+        let mut v = model.borrow_mut();
+        if self.virtualizes_grid() {
+            let children = self.with_content(|c| c.children().to_vec()).unwrap();
+            let columns = children
+                .iter()
+                .filter(|c| {
+                    c.with_downcast::<GridTrack, _>(|t| {
+                        t.grid_collection() == GridTrackCollection::TemplateColumns
+                    })
+                    .unwrap_or(false)
+                })
+                .count() as i32;
+            let align = self.with_content(|c| c.child_alignment().cross).unwrap();
+            v.begin_grid(gap.y, columns, align, gap.x);
+            self.with_content(|c| c.grid_column_line_offsets(v.grid_column_starts()));
+            for child in children {
+                child.with_downcast::<GridTrack, _>(|t| {
+                    let sizing = |n| match n {
+                        1 => VirtualTrackSizing::Points,
+                        2 => VirtualTrackSizing::Percent,
+                        3 => VirtualTrackSizing::Fr,
+                        _ => VirtualTrackSizing::AutoSize,
+                    };
+                    let min = sizing(t.track_type());
+                    let track = if t.track_max_type() == 0 {
+                        VirtualGridTrack {
+                            min_sizing: min,
+                            min_value: t.track_value(),
+                            max_sizing: min,
+                            max_value: t.track_value(),
+                        }
+                    } else {
+                        VirtualGridTrack {
+                            min_sizing: min,
+                            min_value: t.track_value(),
+                            max_sizing: sizing(t.track_max_type() - 1),
+                            max_value: t.track_max_value(),
+                        }
+                    };
+                    match t.grid_collection() {
+                        GridTrackCollection::TemplateRows => v.grid_rows().templates.push(track),
+                        GridTrackCollection::AutoRows => v.grid_rows().autos.push(track),
+                        GridTrackCollection::TemplateColumns => {
+                            v.grid_columns().templates.push(track)
+                        }
+                        GridTrackCollection::AutoColumns => v.grid_columns().autos.push(track),
+                        _ => {}
+                    }
+                });
+            }
+            self.with_content(|c| {
+                c.with_style(|s| {
+                    if s.layout_height_scale_type() != 2 {
+                        v.grid_rows().space = 0.0_f32.max(Self::inner_size(c, true));
+                    }
+                    if s.layout_width_scale_type() != 2 {
+                        v.grid_columns().space = 0.0_f32.max(Self::inner_size(c, false));
+                    }
+                });
+            });
+            self.with_viewport(|p| {
+                if p.with_style(|s| s.layout_type_value() == 0)
+                    .unwrap_or(false)
+                {
+                    let column = p.main_axis_is_column();
+                    v.grid_rows().resize = column;
+                    v.grid_columns().resize = !column;
+                }
+            });
+        } else if self.with_content(LayoutComponent::wraps_lines).unwrap() {
+            let (align, hugs, start, padding) = self
+                .with_content(|c| {
+                    (
+                        c.child_alignment(),
+                        c.hugs_lines(),
+                        if horizontal {
+                            c.padding_top()
+                        } else {
+                            c.padding_left()
+                        },
+                        if horizontal {
+                            c.padding_top() + c.padding_bottom()
+                        } else {
+                            c.padding_left() + c.padding_right()
+                        },
+                    )
+                })
+                .unwrap();
+            let mut extent = if hugs {
+                self.with_viewport(|p| Self::inner_size(p, horizontal))
+                    .unwrap()
+            } else {
+                self.with_content(|c| Self::inner_size(c, horizontal))
+                    .unwrap()
+            };
+            if hugs {
+                extent -= padding;
+                let reference = self.with_viewport(|p| Self::inner_size(p, false)).unwrap();
+                let margins = self
+                    .with_content(|c| {
+                        c.with_style(|s| {
+                            let resolve = |value: f32, unit: u8| {
+                                if unit == 1 {
+                                    value
+                                } else if unit == 2 {
+                                    value / 100.0 * reference
+                                } else {
+                                    0.0
+                                }
+                            };
+                            if horizontal {
+                                resolve(s.margin_top(), s.margin_top_units_value())
+                                    + resolve(s.margin_bottom(), s.margin_bottom_units_value())
+                            } else {
+                                resolve(s.margin_left(), s.margin_left_units_value())
+                                    + resolve(s.margin_right(), s.margin_right_units_value())
+                            }
+                        })
+                        .unwrap_or(0.0)
+                    })
+                    .unwrap();
+                extent -= margins;
+            }
+            v.begin_wrap(
+                if horizontal { gap.x } else { gap.y },
+                if horizontal { gap.y } else { gap.x },
+                start,
+                extent,
+                align.main,
+                align.cross,
+                hugs,
+            );
+            v.set_flow_from_layout(!hugs && !self.infinite() && self.scroll_children_are_lists());
+        } else {
+            v.begin_linear(if horizontal { gap.x } else { gap.y });
+        }
+        for child in self.scroll_children() {
+            v.begin_segment();
+            let count = Self::with_layout_child(child, |c| c.num_layout_nodes()).unwrap();
+            for index in 0..count {
+                let size = child
+                    .with_downcast::<ArtboardComponentList, _>(|c| {
+                        crate::source::virtualizing_component::VirtualizingComponent::item_size(
+                            c,
+                            index as i32,
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        let b = Self::with_layout_child(child, |c| c.layout_bounds()).unwrap();
+                        Vec2D::new(b.width(), b.height())
+                    });
+                v.add_item(
+                    if horizontal { size.x } else { size.y },
+                    if horizontal { size.y } else { size.x },
+                );
+            }
+        }
+        v.end();
+    }
+
+    fn anchor_scroll(&mut self, moved: f32, column: bool) {
+        let offset = if column {
+            self.offset_y()
+        } else {
+            self.offset_x()
+        };
+        if moved == 0.0 || offset >= 0.0 {
+            return;
+        }
+        if column {
+            self.set_authored_scroll_offset_y(offset - moved);
+            self.set_offset_y(offset - moved);
+            self.last_frame_offset_y -= moved;
+        } else {
+            self.set_authored_scroll_offset_x(offset - moved);
+            self.set_offset_x(offset - moved);
+            self.last_frame_offset_x -= moved;
+        }
+        self.with_physics_mut(|p| {
+            p.shift(if column {
+                Vec2D::new(0.0, -moved)
+            } else {
+                Vec2D::new(-moved, 0.0)
+            })
+        });
+    }
+
+    fn sync_virtual_grid_tracks(&self) {
+        if self.content_handle().is_none() {
+            return;
+        }
+        if !self.virtualizes_grid()
+            || self
+                .virtual_layout
+                .as_ref()
+                .is_none_or(|v| !v.borrow().is_grid())
+        {
+            self.with_content_mut(|c| c.virtual_grid_tracks(&[], &[]));
+            return;
+        }
+        let model = self.virtual_layout.as_ref().unwrap();
+        let mut v = model.borrow_mut();
+        let columns: Vec<_> = (0..v.column_count())
+            .map(|c| v.grid_column_size(c))
+            .collect();
+        *v.grid_column_sizes() = columns.clone();
+        let count = v.line_count();
+        let virtualizer = self.virtualizer.as_ref().unwrap().borrow();
+        let start = virtualizer.realized_line_start();
+        let end = virtualizer.realized_line_end();
+        let mut rows = Vec::new();
+        if count > 0 && end >= start {
+            let first = v.wrap_line(start);
+            let span = (end - start + 1).min(count);
+            if !self.infinite() || self.virtualizes_grid_columns() {
+                rows.extend((start..=end).map(|l| v.line_extent(l)));
+            } else if first + span <= count {
+                rows.extend((first..first + span).map(|l| v.line_extent(l)));
+            } else {
+                rows.extend((0..first + span - count).map(|l| v.line_extent(l)));
+                rows.extend((first..count).map(|l| v.line_extent(l)));
+            }
+        }
+        *v.grid_row_sizes() = rows.clone();
+        drop(v);
+        drop(virtualizer);
+        self.with_content_mut(|c| c.virtual_grid_tracks(&columns, &rows));
     }
 
     // The source argument is unused; content/viewport access follows the
@@ -529,7 +850,7 @@ impl ScrollConstraint {
     }
 
     pub fn constrain_virtualized_occurrence(owner: &CoreHandle, force: bool) {
-        let Some((virtualizer, children, offset, direction)) = owner
+        let Some((virtualizer, children)) = owner
             .with_downcast::<Self, _>(|scroll| {
                 if !scroll.base.virtualize() {
                     return None;
@@ -539,26 +860,77 @@ impl ScrollConstraint {
                 if scroll.child_constraint_applied_count < children.len() as i32 && !force {
                     return None;
                 }
-                let column = scroll.main_axis_is_column();
+                scroll.refresh_virtual_layout();
+                Some((virtualizer, children))
+            })
+            .expect("live ScrollConstraint")
+        else {
+            return;
+        };
+        let (moved, column) = owner
+            .with_downcast::<Self, _>(|s| {
+                let model = s.virtual_layout.as_ref().unwrap();
+                (
+                    virtualizer
+                        .borrow()
+                        .anchor_moved(&model.borrow(), &children),
+                    s.virtual_axis_is_column(),
+                )
+            })
+            .unwrap();
+        owner.with_downcast_mut::<Self, _>(|s| s.anchor_scroll(moved, column));
+        let (offset, direction, flow, column_start, column_viewport, columns) = owner
+            .with_downcast::<Self, _>(|s| {
                 let direction = if column {
                     VirtualizedDirection::Vertical
                 } else {
                     VirtualizedDirection::Horizontal
                 };
                 let offset = if column {
-                    scroll.clamped_offset_y()
+                    s.clamped_offset_y()
                 } else {
-                    scroll.clamped_offset_x()
+                    s.clamped_offset_x()
                 };
-                Some((virtualizer, children, offset, direction))
+                let scrolls_flow = if column {
+                    s.constrains_horizontal()
+                } else {
+                    s.constrains_vertical()
+                };
+                let flow = if scrolls_flow {
+                    -(if column {
+                        s.clamped_offset_x()
+                    } else {
+                        s.clamped_offset_y()
+                    })
+                } else {
+                    0.0
+                };
+                let columns = s.virtualizes_grid_columns();
+                (
+                    offset,
+                    direction,
+                    flow,
+                    flow - s.with_content(LayoutComponent::layout_x).unwrap(),
+                    if columns {
+                        s.with_viewport(LayoutComponent::layout_width).unwrap()
+                    } else {
+                        0.0
+                    },
+                    columns,
+                )
             })
-            .expect("live ScrollConstraint")
-        else {
-            return;
-        };
-        virtualizer
-            .borrow_mut()
-            .constrain(owner, &children, offset, direction);
+            .unwrap();
+        virtualizer.borrow_mut().constrain(
+            owner,
+            &children,
+            offset,
+            direction,
+            flow,
+            column_start,
+            column_viewport,
+            columns,
+        );
+        owner.with_downcast::<Self, _>(Self::sync_virtual_grid_tracks);
     }
     pub fn add_layout_child(&mut self, child: CoreHandle) {
         assert!(!self.layout_children.contains(&child));
@@ -588,12 +960,14 @@ impl ScrollConstraint {
         }
         let mut x = self.offset_x() + scaled.x;
         let mut y = self.offset_y() + scaled.y;
-        if !self.base.infinite() {
+        if !self.loops_x() {
             x = if self.max_offset_x() > 0.0 {
                 0.0
             } else {
                 math_types::clamp(x, self.max_offset_x(), 0.0)
             };
+        }
+        if !self.loops_y() {
             y = if self.max_offset_y() > 0.0 {
                 0.0
             } else {
@@ -620,12 +994,11 @@ impl ScrollConstraint {
         )
     }
     pub fn is_overscrolled(&self) -> bool {
-        if self.infinite() {
-            return false;
-        }
         (self.constrains_horizontal()
+            && !self.loops_x()
             && self.offset_x() != self.clamp_resolved_offset(self.offset_x(), true))
             || (self.constrains_vertical()
+                && !self.loops_y()
                 && self.offset_y() != self.clamp_resolved_offset(self.offset_y(), false))
     }
     pub fn can_stretch(&self, raw_delta: Vec2D) -> bool {
@@ -643,10 +1016,8 @@ impl ScrollConstraint {
         }
         let wants_x = self.constrains_horizontal() && delta.x != 0.0;
         let wants_y = self.constrains_vertical() && delta.y != 0.0;
-        if self.infinite() {
-            return wants_x || wants_y;
-        }
-        (wants_x && self.max_offset_x() < 0.0) || (wants_y && self.max_offset_y() < 0.0)
+        (wants_x && (self.loops_x() || self.max_offset_x() < 0.0))
+            || (wants_y && (self.loops_y() || self.max_offset_y() < 0.0))
     }
     pub fn can_consume(&self, raw_delta: Vec2D) -> bool {
         let delta = self.scaled_delta(raw_delta);
@@ -661,18 +1032,13 @@ impl ScrollConstraint {
         }
         let wants_x = self.constrains_horizontal() && delta.x != 0.0;
         let wants_y = self.constrains_vertical() && delta.y != 0.0;
-        if self.infinite() {
-            return wants_x || wants_y;
-        }
-        if wants_x
-            && self.clamp_resolved_offset(self.offset_x() + delta.x, true)
-                != self.clamp_resolved_offset(self.offset_x(), true)
-        {
-            return true;
-        }
-        wants_y
-            && self.clamp_resolved_offset(self.offset_y() + delta.y, false)
-                != self.clamp_resolved_offset(self.offset_y(), false)
+        let moves_x = self.loops_x()
+            || self.clamp_resolved_offset(self.offset_x() + delta.x, true)
+                != self.clamp_resolved_offset(self.offset_x(), true);
+        let moves_y = self.loops_y()
+            || self.clamp_resolved_offset(self.offset_y() + delta.y, false)
+                != self.clamp_resolved_offset(self.offset_y(), false);
+        (wants_x && moves_x) || (wants_y && moves_y)
     }
     pub fn scroll_by(&mut self, delta: Vec2D) {
         let scaled = self.scaled_delta(delta);
@@ -734,21 +1100,12 @@ impl ScrollConstraint {
         if self.physics.is_none() {
             return;
         }
-        let column = self.main_axis_is_column();
         let args = (
             Vec2D::new(self.max_offset_x(), self.max_offset_y()),
             Vec2D::new(self.min_offset_x(), self.min_offset_y()),
             Vec2D::new(self.offset_x(), self.offset_y()),
-            if column {
-                self.content_height()
-            } else {
-                self.content_width()
-            },
-            if column {
-                self.viewport_height()
-            } else {
-                self.viewport_width()
-            },
+            Vec2D::new(self.content_width(), self.content_height()),
+            Vec2D::new(self.viewport_width(), self.viewport_height()),
         );
         self.with_physics_mut(|physics| {
             physics.run(args.0, args.1, args.2, points, args.3, args.4)
@@ -871,10 +1228,89 @@ impl ScrollConstraint {
         let result = self.base.on_added_dirty(context);
         if self.base.virtualize() {
             self.virtualizer = Some(Rc::new(RefCell::new(ScrollVirtualizer::default())));
+            self.virtual_layout = Some(Rc::new(RefCell::new(VirtualLayout::default())));
         }
         self.set_offset_x(self.authored_scroll_offset_x());
         self.set_offset_y(self.authored_scroll_offset_y());
         result
+    }
+
+    pub fn virtualize_buffer_changed(&mut self) {
+        self.mark_virtualization_constraint_dirty();
+    }
+    fn mark_virtualization_constraint_dirty(&mut self) {
+        let parent = self
+            .parent_handle()
+            .expect("Constraint parent was validated");
+        let occurrence = crate::source::component::ComponentOccurrenceHandle::Authored(parent);
+        // Constraint::markConstraintDirty marks its parent transform. The
+        // dependency walk can return to this active ScrollConstraint.
+        if occurrence.add_dirt_from_scroll(self, ComponentDirt::TRANSFORM, false) {
+            occurrence.add_dirt_from_scroll(self, ComponentDirt::WORLD_TRANSFORM, true);
+        }
+    }
+    fn begin_virtualize_changed(&mut self) -> Option<Rc<Vec<CoreHandle>>> {
+        if self.virtualize() {
+            self.virtualizer
+                .get_or_insert_with(|| Rc::new(RefCell::new(ScrollVirtualizer::default())));
+            self.virtual_layout
+                .get_or_insert_with(|| Rc::new(RefCell::new(VirtualLayout::default())));
+            self.mark_virtualization_constraint_dirty();
+            return None;
+        }
+        self.virtualizer = None;
+        self.virtual_layout = None;
+        if !self.has_layout_parent() {
+            return None;
+        }
+        self.sync_virtual_grid_tracks();
+        Some(self.layout_children.clone())
+    }
+    fn realize_all_children(children: &[CoreHandle], active_scroll: Option<&Self>) {
+        for child in children {
+            let Some(()) = ScrollVirtualizer::with_virtualizer_mut(child, |virt| {
+                let mut held = Vec::new();
+                virt.realized_indices(&mut held);
+                for index in held {
+                    virt.set_virtualizable_cell(index, -1, -1);
+                }
+                virt.clear_virtual_window();
+            }) else {
+                continue;
+            };
+            let mut index = 0;
+            while index
+                < ScrollVirtualizer::with_virtualizer_mut(child, |virt| virt.item_count()).unwrap()
+            {
+                if ScrollVirtualizer::with_virtualizer_mut(child, |virt| virt.item(index).is_none())
+                    .unwrap()
+                {
+                    virtualizing_component::add_virtualizable_handle_with_scroll(
+                        child,
+                        index,
+                        active_scroll,
+                    );
+                }
+                index += 1;
+            }
+            ScrollVirtualizer::with_virtualizer_mut(child, |virt| virt.virtualizable_changed());
+        }
+    }
+    pub fn virtualize_changed_occurrence(owner: &CoreHandle) {
+        let Some(children) = owner
+            .with_downcast_mut::<Self, _>(Self::begin_virtualize_changed)
+            .flatten()
+        else {
+            return;
+        };
+        Self::realize_all_children(&children, None);
+        crate::source::constraints::constraint::Constraint::mark_constraint_dirty_occurrence(owner);
+    }
+    pub fn virtualize_changed(&mut self) {
+        if let Some(children) = self.begin_virtualize_changed() {
+            Self::realize_all_children(&children, Some(self));
+            self.mark_virtualization_constraint_dirty();
+        }
     }
 
     pub fn init_physics(&mut self) {
@@ -905,14 +1341,14 @@ impl ScrollConstraint {
         self.with_physics_mut(|physics| physics.clear_velocity());
     }
     fn max_offset_x_for_percent(&self) -> f32 {
-        if self.base.infinite() {
+        if self.loops_x() {
             self.content_width()
         } else {
             self.max_offset_x()
         }
     }
     fn max_offset_y_for_percent(&self) -> f32 {
-        if self.base.infinite() {
+        if self.loops_y() {
             self.content_height()
         } else {
             self.max_offset_y()
@@ -959,7 +1395,7 @@ impl ScrollConstraint {
         }
     }
     pub fn scroll_index(&self) -> f32 {
-        let intent = if self.base.constrains_horizontal() {
+        let intent = if self.indexes_horizontally() {
             self.intent_x
         } else {
             self.intent_y
@@ -1075,7 +1511,7 @@ impl ScrollConstraint {
         }
     }
     fn clamp_resolved_offset(&self, value: f32, is_x: bool) -> f32 {
-        if self.base.infinite() {
+        if if is_x { self.loops_x() } else { self.loops_y() } {
             value
         } else {
             math_types::clamp(
@@ -1295,10 +1731,28 @@ impl ScrollConstraint {
         {
             return 0.0;
         }
+        if self.indexes_grid_cells() && self.virtual_layout.is_some() {
+            let model = self.ensure_virtual_layout().unwrap();
+            let v = model.borrow();
+            if v.line_count() == 0 {
+                return 0.0;
+            }
+            let mut y = -position.y;
+            let cycle = v.cycle_extent();
+            if self.loops_y() && cycle > 0.0 {
+                y -= (y / cycle).floor() * cycle;
+            }
+            let row = v.window(y, 0.0, self.loops_y(), 0).visible_start;
+            let column = v.wrap_column(
+                v.column_window(-position.x, 0.0, 0, self.loops_x())
+                    .visible_start,
+            );
+            return (v.line_first_item(row) + column).min(v.line_last_item(row)) as f32;
+        }
         let gap = self.gap();
         if !self.has_list_children {
             let count = self.layout_children.len();
-            if self.base.constrains_horizontal() {
+            if self.indexes_horizontally() {
                 for index in 0..count {
                     let bounds = self.layout_child_bounds_for_node(&self.layout_children[index], 0);
                     let step = bounds.width() + gap.x;
@@ -1328,7 +1782,7 @@ impl ScrollConstraint {
             return 0.0;
         }
         let mut flat_index = 0.0;
-        if self.base.constrains_horizontal() {
+        if self.indexes_horizontally() {
             for child in self.layout_children.iter() {
                 let count = Self::with_layout_child(child, |child| child.num_layout_nodes())
                     .expect("ScrollConstraint layout child remains a LayoutNodeProvider");
@@ -1587,5 +2041,81 @@ impl ScrollConstraint {
             self.last_frame_offset_y = self.authored_scroll_offset_y();
         }
         self.is_scroll_bar_dragging = value;
+    }
+}
+
+#[cfg(test)]
+mod virtualize_setter_tests {
+    use super::*;
+    use crate::source::{
+        core::CoreArena,
+        generated::core_registry::{CoreField, CoreRegistry, CoreRegistryObject},
+        node::Node,
+    };
+
+    #[test]
+    fn virtualize_callbacks_run_for_borrowed_and_released_setters() {
+        struct Context<'a> {
+            arena: &'a CoreArena,
+            parent: CoreHandle,
+        }
+        impl CoreContext for Context<'_> {
+            fn core_arena(&self) -> &CoreArena {
+                self.arena
+            }
+            fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+                (id == 1).then(|| self.parent.clone())
+            }
+        }
+        let arena = CoreArena::default();
+        for path in 0..3 {
+            let parent = arena.insert(Node::default());
+            let handle = arena.insert(ScrollConstraint::default());
+            handle.with_mut(|owner| {
+                owner
+                    .as_component_mut()
+                    .unwrap()
+                    .base
+                    .set_parent_id_value(1);
+            });
+            let mut context = Context {
+                arena: &arena,
+                parent,
+            };
+            assert_eq!(
+                handle.with_downcast_mut::<ScrollConstraint, _>(
+                    |scroll| scroll.on_added_dirty(&mut context)
+                ),
+                Some(StatusCode::Ok),
+            );
+            for value in [true, false] {
+                match path {
+                    0 => {
+                        handle.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                            CoreRegistry::set_bool(scroll, 850, value);
+                        });
+                    }
+                    1 => {
+                        handle.with_downcast_mut::<ScrollConstraint, _>(|scroll| {
+                            CoreRegistryObject::set_bool(
+                                scroll,
+                                CoreField::ScrollConstraintVirtualize,
+                                value,
+                            );
+                        });
+                    }
+                    _ => {
+                        assert!(CoreRegistry::set_bool_handle(&handle, 850, value));
+                    }
+                }
+                handle
+                    .with_downcast::<ScrollConstraint, _>(|scroll| {
+                        assert_eq!(scroll.virtualize(), value);
+                        assert_eq!(scroll.virtual_layout.is_some(), value);
+                        assert_eq!(scroll.virtualizer.is_some(), value);
+                    })
+                    .unwrap();
+            }
+        }
     }
 }

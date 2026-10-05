@@ -65,6 +65,75 @@ pub enum LayoutAlignmentType {
     SpaceBetweenEnd,
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LayoutMainDistribute {
+    #[default]
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+}
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LayoutCrossAlign {
+    #[default]
+    Start,
+    Center,
+    End,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LayoutContainerAlignment {
+    pub main: LayoutMainDistribute,
+    pub cross: LayoutCrossAlign,
+}
+pub fn container_alignment(kind: LayoutAlignmentType, is_row: bool) -> LayoutContainerAlignment {
+    use LayoutAlignmentType::*;
+    let horizontal = match kind {
+        SpaceBetweenStart | SpaceBetweenCenter | SpaceBetweenEnd => {
+            return LayoutContainerAlignment {
+                main: LayoutMainDistribute::SpaceBetween,
+                cross: match kind {
+                    SpaceBetweenStart => LayoutCrossAlign::Start,
+                    SpaceBetweenCenter => LayoutCrossAlign::Center,
+                    _ => LayoutCrossAlign::End,
+                },
+            };
+        }
+        TopLeft | CenterLeft | BottomLeft => LayoutMainDistribute::Start,
+        TopCenter | Center | BottomCenter => LayoutMainDistribute::Center,
+        _ => LayoutMainDistribute::End,
+    };
+    let vertical = match kind {
+        TopLeft | TopCenter | TopRight => LayoutCrossAlign::Start,
+        CenterLeft | Center | CenterRight => LayoutCrossAlign::Center,
+        _ => LayoutCrossAlign::End,
+    };
+    if is_row {
+        LayoutContainerAlignment {
+            main: horizontal,
+            cross: vertical,
+        }
+    } else {
+        LayoutContainerAlignment {
+            main: match vertical {
+                LayoutCrossAlign::Start => LayoutMainDistribute::Start,
+                LayoutCrossAlign::Center => LayoutMainDistribute::Center,
+                LayoutCrossAlign::End => LayoutMainDistribute::End,
+            },
+            cross: match horizontal {
+                LayoutMainDistribute::Start => LayoutCrossAlign::Start,
+                LayoutMainDistribute::Center => LayoutCrossAlign::Center,
+                _ => LayoutCrossAlign::End,
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "layout_container_alignment_test.rs"]
+mod layout_container_alignment_test;
+
 impl From<u8> for LayoutAlignmentType {
     fn from(value: u8) -> Self {
         Self::from(u32::from(value))

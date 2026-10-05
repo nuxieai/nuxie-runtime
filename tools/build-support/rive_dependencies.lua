@@ -50,6 +50,13 @@ local function pinned_tag(rive_runtime, premake_file, project)
     if contents == nil then
         return nil
     end
+    if project == 'rive-app/yoga' and contents:find("'yoga.ref'", 1, true) then
+        local ref = read_file(rive_runtime .. '/dependencies/yoga.ref')
+        if ref == nil or ref:gsub('%s', '') == '' then
+            error('missing or empty pinned dependencies/yoga.ref')
+        end
+        return ref:gsub('%s', '')
+    end
     return contents:match(
         "dependency%.github%(%s*'" .. project:gsub('%W', '%%%0') .. "'%s*,%s*'([^']+)'"
     )

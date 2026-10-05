@@ -5856,8 +5856,8 @@ pub trait CoreCapabilities: Any {
         range_max: crate::mechanical_port::source::math::vec2d::Vec2D,
         value: crate::mechanical_port::source::math::vec2d::Vec2D,
         snapping_points: Vec<crate::mechanical_port::source::math::vec2d::Vec2D>,
-        content_size: f32,
-        viewport_size: f32,
+        content_size: crate::mechanical_port::source::math::vec2d::Vec2D,
+        viewport_size: crate::mechanical_port::source::math::vec2d::Vec2D,
     ) -> bool {
         let Some(physics) = self.as_scroll_physics_runtime_mut() else {
             return false;
@@ -6838,7 +6838,7 @@ pub trait CoreRegistryObject: CoreCapabilities {
     }
     fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
     fn set_bool(&mut self, field: CoreField, value: bool) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         self.set_bool_with_completion(field, value, &mut completion);
         completion.finish();
     }
@@ -8617,7 +8617,7 @@ impl CoreRegistry {
         object.set_color_with_completion(field, value, completion);
     }
     pub fn set_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: bool) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         Self::set_bool_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
@@ -17407,7 +17407,13 @@ impl CoreRegistryObject
             },
             CoreField::ScrollConstraintVirtualize => {
                 if self.base.set_virtualize_value(value) {
-                    <crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::virtualize_changed(self);
+                    if completion.is_borrowed_setter() {
+                        self.virtualize_changed();
+                    } else if let Some(owner) = self.handle() {
+                        completion.before_notification(owner, Self::virtualize_changed_occurrence);
+                    } else {
+                        self.virtualize_changed();
+                    }
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::VIRTUALIZE_PROPERTY_KEY);
                 }
             },
@@ -72697,7 +72703,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
     }
 }
 impl crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks for crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint {
-    forward_callback_methods!(crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint; scroll_offset_x_changed, scroll_offset_y_changed);
+    forward_callback_methods!(crate::mechanical_port::source::constraints::scrolling::scroll_constraint::ScrollConstraint; scroll_offset_x_changed, scroll_offset_y_changed, virtualize_changed, virtualize_buffer_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::constraints::draggable_constraint::DraggableConstraint as crate::mechanical_port::source::generated::constraints::draggable_constraint_base::DraggableConstraintBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
     }

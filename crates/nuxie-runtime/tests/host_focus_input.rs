@@ -160,3 +160,79 @@ fn host_text_input_matches_upstream_focused_node_events() {
     advance!();
     values!(true, true, true);
 }
+
+#[path = "support/focus_input.rs"]
+mod focus_input;
+
+#[test]
+fn host_key_listener_moves_focus_to_another_node() {
+    let mut artboard = import_host_artboard(&focus_input::key_moves_focus());
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    macro_rules! advance {
+        () => {
+            artboard
+                .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+                .unwrap()
+        };
+    }
+    advance!();
+    assert!(machine.focus_next());
+    advance!();
+    let events = machine.take_reported_events();
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| event.name())
+            .collect::<Vec<_>>(),
+        ["first_focused"]
+    );
+    machine.key_input(Key::B, KeyModifiers::NONE, true, false);
+    advance!();
+    assert!(machine.take_reported_events().is_empty());
+    machine.key_input(Key::A, KeyModifiers::NONE, true, false);
+    advance!();
+    let events = machine.take_reported_events();
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| event.name())
+            .collect::<Vec<_>>(),
+        ["second_focused"]
+    );
+    assert!(machine.focus_state().has_focus);
+}
+
+#[test]
+fn host_reports_focus_and_blur_events_after_advance() {
+    let mut artboard = import_host_artboard(&focus_input::focus_events(true));
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+        .unwrap();
+    assert!(machine.focus_next());
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+        .unwrap();
+    let events = machine.take_reported_events();
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| event.name())
+            .collect::<Vec<_>>(),
+        ["focus_arrived"]
+    );
+    assert!(machine.take_reported_events().is_empty());
+    machine.clear_focus();
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+        .unwrap();
+    let events = machine.take_reported_events();
+    assert_eq!(
+        events
+            .iter()
+            .filter_map(|event| event.name())
+            .collect::<Vec<_>>(),
+        ["focus_left"]
+    );
+    assert!(machine.take_reported_events().is_empty());
+}

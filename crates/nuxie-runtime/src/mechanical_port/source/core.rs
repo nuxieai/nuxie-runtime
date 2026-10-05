@@ -725,16 +725,34 @@ pub struct Core {
 /// on the object. Borrowed setters finish it synchronously before returning.
 #[derive(Default)]
 pub struct PropertySetterCompletion {
+    borrowed_setter: bool,
+    before_notification: Option<(CoreHandle, fn(&CoreHandle))>,
     notification: Option<(Rc<PropertyObservers>, u16)>,
 }
 
 impl PropertySetterCompletion {
+    pub(crate) fn borrowed_setter() -> Self {
+        Self {
+            borrowed_setter: true,
+            ..Self::default()
+        }
+    }
+    pub(crate) fn is_borrowed_setter(&self) -> bool {
+        self.borrowed_setter
+    }
+    pub(crate) fn before_notification(&mut self, owner: CoreHandle, callback: fn(&CoreHandle)) {
+        debug_assert!(self.before_notification.is_none());
+        self.before_notification = Some((owner, callback));
+    }
     pub(crate) fn record(&mut self, core: &Core, property_key: u16) {
         debug_assert!(self.notification.is_none());
         self.notification = core.observers.as_ref().map(|head| (head.clone(), property_key));
     }
 
     pub fn finish(self) {
+        if let Some((owner, callback)) = self.before_notification {
+            callback(&owner);
+        }
         if let Some((head, property_key)) = self.notification {
             head.notify(property_key);
         }

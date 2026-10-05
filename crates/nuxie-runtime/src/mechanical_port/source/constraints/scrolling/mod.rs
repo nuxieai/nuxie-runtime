@@ -6,3 +6,4 @@ pub mod scroll_constraint;
 pub mod scroll_constraint_proxy;
 pub mod scroll_physics;
 pub mod scroll_virtualizer;
+pub mod virtual_layout;

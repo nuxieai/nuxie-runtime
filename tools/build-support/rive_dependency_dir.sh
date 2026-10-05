@@ -44,6 +44,16 @@ rive_dependency_dir() {
         "s#.*dependency\.github([[:space:]]*'${project_re}'[[:space:]]*,[[:space:]]*'\([^']*\)'.*#\1#p" \
         "$premake_path" | head -n 1)"
 
+    # Public runtime mirrors now load Yoga's exact tag from this ref file.
+    # Never let the older adjacent checkout stand in for that pinned tag.
+    if [[ "$project" == rive-app/yoga ]] && grep -q "'yoga.ref'" "$premake_path"; then
+        if [[ ! -f "$rive_runtime/dependencies/yoga.ref" ]]; then
+            echo 'rive_dependency_dir: missing pinned dependencies/yoga.ref' >&2
+            return 1
+        fi
+        tag="$(tr -d '[:space:]' < "$rive_runtime/dependencies/yoga.ref")"
+    fi
+
     if [[ -z "$tag" ]]; then
         echo "rive_dependency_dir: no dependency.github('$project', ...) in $premake_path;" \
             "cannot determine the revision the pinned librive was built with" >&2

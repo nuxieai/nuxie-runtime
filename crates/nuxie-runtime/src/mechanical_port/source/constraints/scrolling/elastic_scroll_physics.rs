@@ -21,6 +21,12 @@ pub struct ElasticScrollPhysicsHelper {
 }
 
 impl ElasticScrollPhysicsHelper {
+    pub fn shift(&mut self, delta: f32) {
+        self.target += delta;
+        self.current += delta;
+        self.snap_target += delta;
+        self.run_range_min += delta;
+    }
     pub fn new(friction: f32, speed_multiplier: f32, elastic_factor: f32) -> Self {
         Self {
             friction,
@@ -195,6 +201,14 @@ impl Default for ElasticScrollPhysics {
 }
 
 impl ElasticScrollPhysics {
+    pub fn shift(&mut self, delta: Vec2D) {
+        if let Some(physics) = &mut self.physics_x {
+            physics.shift(delta.x);
+        }
+        if let Some(physics) = &mut self.physics_y {
+            physics.shift(delta.y);
+        }
+    }
     pub fn is_primed(&self) -> bool {
         self.enabled()
     }
@@ -260,8 +274,8 @@ impl ElasticScrollPhysics {
         range_max: Vec2D,
         value: Vec2D,
         snapping_points: Vec<Vec2D>,
-        content_size: f32,
-        viewport_size: f32,
+        content_size: Vec2D,
+        viewport_size: Vec2D,
     ) {
         self.base.base.run_base();
         let x_points = snapping_points.iter().map(|point| point.x).collect();
@@ -273,8 +287,8 @@ impl ElasticScrollPhysics {
                 range_max.x,
                 value.x,
                 x_points,
-                content_size,
-                viewport_size,
+                content_size.x,
+                viewport_size.x,
             );
         }
         if let Some(physics) = &mut self.physics_y {
@@ -284,8 +298,8 @@ impl ElasticScrollPhysics {
                 range_max.y,
                 value.y,
                 y_points,
-                content_size,
-                viewport_size,
+                content_size.y,
+                viewport_size.y,
             );
         }
     }
@@ -360,6 +374,9 @@ impl ElasticScrollPhysics {
 }
 
 impl ScrollPhysicsRuntime for ElasticScrollPhysics {
+    fn shift(&mut self, delta: Vec2D) {
+        ElasticScrollPhysics::shift(self, delta);
+    }
     fn is_primed(&self) -> bool {
         self.enabled()
     }
@@ -409,8 +426,8 @@ impl ScrollPhysicsRuntime for ElasticScrollPhysics {
         range_max: Vec2D,
         value: Vec2D,
         snapping_points: Vec<Vec2D>,
-        content_size: f32,
-        viewport_size: f32,
+        content_size: Vec2D,
+        viewport_size: Vec2D,
     ) {
         ElasticScrollPhysics::run(
             self,

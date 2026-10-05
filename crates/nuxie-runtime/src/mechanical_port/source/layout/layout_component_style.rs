@@ -272,86 +272,23 @@ impl LayoutComponentStyle {
             self.flex_direction(),
             YGFlexDirection::Row | YGFlexDirection::RowReverse
         );
-        match self.alignment_type() {
-            LayoutAlignmentType::TopLeft
-            | LayoutAlignmentType::TopCenter
-            | LayoutAlignmentType::TopRight => {
-                if row {
-                    style.set_align_items(YGAlign::FlexStart);
-                    style.set_align_content(YGAlign::FlexStart);
-                } else {
-                    style.set_justify_content(YGJustify::FlexStart);
-                }
-            }
-            LayoutAlignmentType::CenterLeft
-            | LayoutAlignmentType::Center
-            | LayoutAlignmentType::CenterRight => {
-                if row {
-                    style.set_align_items(YGAlign::Center);
-                    style.set_align_content(YGAlign::Center);
-                } else {
-                    style.set_justify_content(YGJustify::Center);
-                }
-            }
-            LayoutAlignmentType::BottomLeft
-            | LayoutAlignmentType::BottomCenter
-            | LayoutAlignmentType::BottomRight => {
-                if row {
-                    style.set_align_items(YGAlign::FlexEnd);
-                    style.set_align_content(YGAlign::FlexEnd);
-                } else {
-                    style.set_justify_content(YGJustify::FlexEnd);
-                }
-            }
-            _ => {}
-        }
-        match self.alignment_type() {
-            LayoutAlignmentType::TopLeft
-            | LayoutAlignmentType::CenterLeft
-            | LayoutAlignmentType::BottomLeft => {
-                if row {
-                    style.set_justify_content(YGJustify::FlexStart);
-                } else {
-                    style.set_align_items(YGAlign::FlexStart);
-                    style.set_align_content(YGAlign::FlexStart);
-                }
-            }
-            LayoutAlignmentType::TopCenter
-            | LayoutAlignmentType::Center
-            | LayoutAlignmentType::BottomCenter => {
-                if row {
-                    style.set_justify_content(YGJustify::Center);
-                } else {
-                    style.set_align_items(YGAlign::Center);
-                    style.set_align_content(YGAlign::Center);
-                }
-            }
-            LayoutAlignmentType::TopRight
-            | LayoutAlignmentType::CenterRight
-            | LayoutAlignmentType::BottomRight => {
-                if row {
-                    style.set_justify_content(YGJustify::FlexEnd);
-                } else {
-                    style.set_align_items(YGAlign::FlexEnd);
-                    style.set_align_content(YGAlign::FlexEnd);
-                }
-            }
-            LayoutAlignmentType::SpaceBetweenStart => {
-                style.set_align_items(YGAlign::FlexStart);
-                style.set_align_content(YGAlign::FlexStart);
-                style.set_justify_content(YGJustify::SpaceBetween);
-            }
-            LayoutAlignmentType::SpaceBetweenCenter => {
-                style.set_align_items(YGAlign::Center);
-                style.set_align_content(YGAlign::Center);
-                style.set_justify_content(YGJustify::SpaceBetween);
-            }
-            LayoutAlignmentType::SpaceBetweenEnd => {
-                style.set_align_items(YGAlign::FlexEnd);
-                style.set_align_content(YGAlign::FlexEnd);
-                style.set_justify_content(YGJustify::SpaceBetween);
-            }
-        }
+        use crate::source::layout::layout_enums::{
+            LayoutCrossAlign, LayoutMainDistribute, container_alignment,
+        };
+        let alignment = container_alignment(self.alignment_type(), row);
+        style.set_justify_content(match alignment.main {
+            LayoutMainDistribute::Start => YGJustify::FlexStart,
+            LayoutMainDistribute::Center => YGJustify::Center,
+            LayoutMainDistribute::End => YGJustify::FlexEnd,
+            LayoutMainDistribute::SpaceBetween => YGJustify::SpaceBetween,
+        });
+        let cross = match alignment.cross {
+            LayoutCrossAlign::Start => YGAlign::FlexStart,
+            LayoutCrossAlign::Center => YGAlign::Center,
+            LayoutCrossAlign::End => YGAlign::FlexEnd,
+        };
+        style.set_align_items(cross);
+        style.set_align_content(cross);
     }
 
     pub fn interpolator(&self) -> Option<CoreHandle> {

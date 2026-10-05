@@ -25,13 +25,10 @@ pub trait VirtualizingComponent {
     fn set_item_size(&mut self, size: Vec2D, index: i32);
     fn virtualizable_changed(&mut self);
     fn remove_virtualizable(&mut self, index: i32);
-    /// Items on screen. Only these report their measured size back, otherwise
-    /// realizing an off screen item would change the sizes the virtualizer
-    /// sums to pick this very range.
-    fn set_visible_indices(&mut self, start: i32, end: i32);
-    /// Items that exist: the visible range plus the buffer on either side.
-    /// These are the ones that get drawn.
-    fn set_realized_indices(&mut self, start: i32, end: i32);
+    fn realized_indices(&self, out: &mut Vec<i32>);
+    fn clear_virtual_window(&mut self);
+    fn add_to_virtual_window(&mut self, index: i32, visible: bool);
+    fn set_virtualizable_cell(&mut self, index: i32, column: i32, row: i32);
     fn set_virtualizable_position(&mut self, index: i32, position: Vec2D);
 }
 
@@ -41,10 +38,24 @@ pub fn add_virtualizable_handle(
     component: &crate::mechanical_port::source::core::CoreHandle,
     index: i32,
 ) -> bool {
+    add_virtualizable_handle_with_scroll(component, index, None)
+}
+
+pub(crate) fn add_virtualizable_handle_with_scroll(
+    component: &crate::source::core::CoreHandle,
+    index: i32,
+    active_scroll: Option<
+        &crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint,
+    >,
+) -> bool {
     if component.core_type() != Some(ArtboardComponentList::TYPE_KEY) {
         return false;
     }
-    ArtboardComponentList::add_virtualizable_occurrence(component, index);
+    ArtboardComponentList::add_virtualizable_with_scroll_occurrence(
+        component,
+        index,
+        active_scroll,
+    );
     true
 }
 
@@ -59,4 +70,13 @@ pub fn from(
     } else {
         None
     }
+}
+
+/// Source fromScrollChild: only a component-list provider is virtualizing.
+pub fn from_scroll_child(
+    child: Option<&crate::source::core::CoreHandle>,
+) -> Option<crate::source::core::CoreHandle> {
+    child
+        .filter(|child| child.core_type() == Some(ArtboardComponentList::TYPE_KEY))
+        .cloned()
 }

@@ -827,6 +827,9 @@ pub struct DetailedGridInfo {
 #[derive(Debug, Clone, PartialEq)]
 #[cfg(feature = "detailed_layout_info")]
 pub struct DetailedGridTracksInfo {
+    /// Solved local line offsets: each track start followed by the final end.
+    /// Host observation for Rive's virtual grid, including distributed gaps.
+    pub line_offsets: Vec<f32>,
     /// Number of leading implicit grid tracks
     pub negative_implicit_tracks: u16,
     /// Number of explicit grid tracks
@@ -866,7 +869,14 @@ impl DetailedGridTracksInfo {
 
     /// Construct DetailedGridTracksInfo from TrackCounts and GridTracks
     fn from_grid_tracks_and_track_count(track_count: TrackCounts, grid_tracks: Vec<GridTrack>) -> Self {
+        let mut line_offsets: Vec<f32> = grid_tracks.iter()
+            .filter(|track| track.kind == GridTrackKind::Track)
+            .map(|track| track.offset).collect();
+        if let Some(track) = grid_tracks.iter().rev().find(|track| track.kind == GridTrackKind::Track) {
+            line_offsets.push(track.offset + track.base_size);
+        }
         DetailedGridTracksInfo {
+            line_offsets,
             negative_implicit_tracks: track_count.negative_implicit,
             explicit_tracks: track_count.explicit,
             positive_implicit_tracks: track_count.positive_implicit,

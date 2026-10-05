@@ -51,9 +51,22 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl TextInput {
-    pub fn painted_world_bounds(&mut self,out:&mut crate::mechanical_port::source::math::aabb::Aabb)->crate::mechanical_port::source::drawable::BoundsFidelity {
-        let fidelity=crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(&self.local_bounds(),self.base.world_transform(),None,out);
-        if fidelity==crate::mechanical_port::source::drawable::BoundsFidelity::None {fidelity}else{crate::mechanical_port::source::drawable::BoundsFidelity::Approximate}
+    pub fn painted_world_bounds(
+        &mut self,
+        out: &mut crate::mechanical_port::source::math::aabb::Aabb,
+    ) -> crate::mechanical_port::source::drawable::BoundsFidelity {
+        let fidelity =
+            crate::mechanical_port::source::drawable::Drawable::painted_bounds_from_local(
+                &self.local_bounds(),
+                self.base.world_transform(),
+                None,
+                out,
+            );
+        if fidelity == crate::mechanical_port::source::drawable::BoundsFidelity::None {
+            fidelity
+        } else {
+            crate::mechanical_port::source::drawable::BoundsFidelity::Approximate
+        }
     }
     pub const TYPE_KEY: u16 = TextInputBase::TYPE_KEY;
 }
@@ -821,14 +834,14 @@ impl TextInput {
                 scroll.stop_physics();
                 if self.scroll_x != 0.0 {
                     let mut offset = scroll.authored_scroll_offset_x() + self.scroll_x * elapsed;
-                    if !scroll.infinite() {
+                    if !scroll.loops_x() {
                         offset = offset.clamp(scroll.max_offset_x(), 0.0);
                     }
                     scroll.set_authored_scroll_offset_x(offset);
                 }
                 if self.scroll_y != 0.0 {
                     let mut offset = scroll.authored_scroll_offset_y() + self.scroll_y * elapsed;
-                    if !scroll.infinite() {
+                    if !scroll.loops_y() {
                         offset = offset.clamp(scroll.max_offset_y(), 0.0);
                     }
                     scroll.set_authored_scroll_offset_y(offset);

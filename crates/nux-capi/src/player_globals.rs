@@ -70,10 +70,28 @@ pub unsafe extern "C" fn nux_player_set_global_view_model(
             } else {
                 globals.remove(&schema);
             }
+            player.observed_global_view_model_generation.set(
+                globals.values().map(RuntimeOwnedViewModelHandle::observable_mutation_generation)
+                    .max().unwrap_or(0),
+            );
             player.artboard.commit_runtime_change_or_poison(true)
         }) {
             Ok(status) => status,
             Err(status) => status,
         }
     })
+}
+
+impl NuxPlayer {
+    pub(super) fn refresh_global_view_model_invalidation(&self) -> Result<(), NuxStatus> {
+        let globals = self.global_view_models.try_borrow().map_err(|_| NuxStatus::ReentrantCall)?;
+        let generation = globals.values()
+            .map(RuntimeOwnedViewModelHandle::observable_mutation_generation)
+            .max().unwrap_or(0);
+        if generation != self.observed_global_view_model_generation.get() {
+            self.artboard.invalidate_render()?;
+            self.observed_global_view_model_generation.set(generation);
+        }
+        Ok(())
+    }
 }

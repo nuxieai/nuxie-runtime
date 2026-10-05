@@ -345,6 +345,20 @@ class AbiAndElfContractTests(unittest.TestCase):
         )
         self.assertEqual(symbols, {"nux_file_import", "nux_player_step"})
 
+    def test_committed_android_header_exports_focus_step_accessors(self) -> None:
+        header = REPO_ROOT / "crates/nux-capi/include/nux_capi.generated.h"
+        selected = subprocess.run(
+            ["clang", "-E", "-P", "-D__ANDROID__", "-DNUX_CAPI_ANDROID_VULKAN",
+             "-DNUX_CAPI_ANDROID_AUTHORED_WGSL", "-x", "c", str(header)],
+            check=True, capture_output=True, text=True,
+        ).stdout
+        exports = validate_headers(
+            header.read_text(), selected, export_partitions(REPO_ROOT)
+        )
+        self.assertTrue({
+            "nux_player_focus_state", "nux_player_step_result_focus_input",
+        }.issubset(exports))
+
     def test_full_and_android_selected_header_unions_are_distinct_and_exact(self) -> None:
         partitions = {
             "portable": ["nux_portable"],

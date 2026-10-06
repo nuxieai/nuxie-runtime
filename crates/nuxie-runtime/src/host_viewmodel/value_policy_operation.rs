@@ -10,6 +10,10 @@ use crate::mechanical_port::source::viewmodel::{
 
 type Key = (u64, usize);
 
+#[path = "value_policy_groups.rs"]
+pub(super) mod groups;
+pub use groups::{RuntimeRuleGroup, RuntimeRuleGroupMember};
+
 struct InitialOwners {
     file: RuntimeFileHandle,
     owners: BTreeMap<u64, RuntimeOwnedViewModelHandle>,
@@ -115,6 +119,7 @@ pub struct RuntimeValuePolicyOperation {
     report_bytes: usize,
     value_reports: BTreeMap<Key, BTreeSet<usize>>,
     initial: Rc<RefCell<InitialOwners>>,
+    group_refusals: BTreeMap<Key, Vec<usize>>,
 }
 
 impl RuntimeValuePolicy {
@@ -130,7 +135,7 @@ impl RuntimeValuePolicy {
             overflowed: false,
         }));
         INITIAL_OWNERS.with(|slot| {
-            *slot.borrow_mut() = if self.has_rules() {
+            *slot.borrow_mut() = if self.has_rules() || self.has_groups() {
                 Rc::downgrade(&initial)
             } else {
                 std::rc::Weak::new()
@@ -147,8 +152,9 @@ impl RuntimeValuePolicy {
             report_bytes: 0,
             value_reports: BTreeMap::new(),
             initial,
+            group_refusals: self.group_refusals.borrow().clone(),
         };
-        if self.has_rules() {
+        if self.has_rules() || self.has_groups() {
             operation.retain(self, roots)?;
         }
         Ok(operation)
@@ -218,6 +224,7 @@ impl RuntimeValuePolicyOperation {
             report_bytes: 0,
             value_reports: BTreeMap::new(),
             initial: Rc::clone(&self.initial),
+            group_refusals: BTreeMap::new(),
         };
         let mut roots = self.retained_roots();
         roots.push(root.clone());
@@ -343,6 +350,7 @@ impl RuntimeValuePolicyOperation {
             if !refused {
                 self.value_reports.remove(&key);
             }
+            self.record_group_outcome(policy, owner, key, &failures, refused)?;
             for (rule_index, target, refusal) in failures {
                 if refusal || !refused {
                     let paired_marker = key.0 == target.0
@@ -462,12 +470,12 @@ impl RuntimeValuePolicyOperation {
         Ok(changed)
     }
 
-    fn failures(
+    fn affected_rules(
         &self,
         policy: &RuntimeValuePolicy,
         owner: &RuntimeOwnedViewModelHandle,
         key: Key,
-    ) -> Vec<(usize, Key, bool)> {
+    ) -> Vec<(usize, Key)> {
         let mut failures = Vec::new();
         for (rule_index, rule) in policy.rules.iter().enumerate() {
             for (rule_owner_id, rule_owner) in &self.owners {
@@ -486,17 +494,34 @@ impl RuntimeValuePolicyOperation {
                         owner.borrow().unique_boolean_property_index_by_name(property) == Some(key.1)
                             && matches!(self.values.get(&target), Some(RuntimeViewModelChangeValue::List(items)) if items.contains(&key.0))
                     });
-                if (direct || picked) && !self.holds(policy, rule, target) {
-                    let empty = self.empty(policy, rule, target);
-                    failures.push((
-                        rule_index,
-                        target,
-                        rule.entry.mode == RuntimeValueRuleMode::Refuse && !empty,
-                    ));
+                if direct || picked {
+                    failures.push((rule_index, target));
                 }
             }
         }
         failures
+    }
+
+    fn failures(
+        &self,
+        policy: &RuntimeValuePolicy,
+        owner: &RuntimeOwnedViewModelHandle,
+        key: Key,
+    ) -> Vec<(usize, Key, bool)> {
+        self.affected_rules(policy, owner, key)
+            .into_iter()
+            .filter_map(|(index, target)| {
+                let rule = policy.rules.get(index)?;
+                (!self.holds(policy, rule, target)).then(|| {
+                    (
+                        index,
+                        target,
+                        rule.entry.mode == RuntimeValueRuleMode::Refuse
+                            && !self.empty(policy, rule, target),
+                    )
+                })
+            })
+            .collect()
     }
 
     fn empty(&self, policy: &RuntimeValuePolicy, rule: &Rule, key: Key) -> bool {

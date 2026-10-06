@@ -1,11 +1,11 @@
-//! Nuxie-owned scene video controls. Commands share the runtime queue used by
-//! Journey/SDK hosts; Luau never owns a decoder or source acquisition.
+//! Nuxie-owned video properties. Luau never owns a decoder or source acquisition.
 use luaur_rt::{Error, UserData, UserDataMethods};
 use nuxie_runtime::{
     source::core::CoreHandle,
     video::{
         Video,
-        playback::{Command, PlaybackEvent, PlaybackState, SuspensionReason},
+        playback::{PlaybackEvent, PlaybackState, SuspensionReason},
+        properties::{self, Write},
     },
 };
 use std::{cell::Cell, rc::Rc};
@@ -37,9 +37,10 @@ impl ScriptVideo {
             .with_downcast_mut::<Video, _>(operation)
             .ok_or_else(|| Error::RuntimeError("video occurrence is unavailable".into()))
     }
-    fn command(&self, command: Command) -> Result<(), Error> {
-        self.with(|v| v.playback.enqueue(command))?
+    fn write(&self, value: Write) -> Result<(), Error> {
+        self.with(|v| v.write_property(value))?
             .map_err(|error| Error::RuntimeError(format!("video command: {error:?}")))?;
+        Video::flush_property_changes(&self.handle);
         self.needs_update.set(true);
         Ok(())
     }
@@ -71,9 +72,9 @@ impl ScriptVideoGroup {
             needs_update,
         })
     }
-    fn command(&self, command: Command) -> Result<(), Error> {
+    fn write(&self, value: Write) -> Result<(), Error> {
         self.group
-            .command(command)
+            .write_property(value)
             .map_err(|error| Error::RuntimeError(format!("video group: {error:?}")))?;
         self.needs_update.set(true);
         Ok(())
@@ -81,25 +82,29 @@ impl ScriptVideoGroup {
 }
 impl UserData for ScriptVideoGroup {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("play", |_, this, ()| this.command(Command::Play));
-        methods.add_method("pause", |_, this, ()| this.command(Command::Pause));
+        methods.add_method("play", |_, this, ()| {
+            this.write(Write::Bool(properties::PAUSED, false))
+        });
+        methods.add_method("pause", |_, this, ()| {
+            this.write(Write::Bool(properties::PAUSED, true))
+        });
         methods.add_method("seek", |_, this, seconds: f64| {
-            this.command(Command::Seek(seconds))
+            this.write(Write::Number(properties::POSITION, seconds))
         });
         methods.add_method("setRate", |_, this, rate: f32| {
-            this.command(Command::Rate(rate))
+            this.write(Write::Number(properties::RATE, rate.into()))
         });
         methods.add_method("setMuted", |_, this, muted: bool| {
-            this.command(Command::Mute(muted))
+            this.write(Write::Bool(properties::MUTED, muted))
         });
         methods.add_method("setVolume", |_, this, volume: f32| {
-            this.command(Command::Volume(volume))
+            this.write(Write::Number(properties::VOLUME, volume.into()))
         });
         methods.add_method("setLooping", |_, this, enabled: bool| {
-            this.command(Command::Loop(enabled))
+            this.write(Write::Bool(properties::LOOP, enabled))
         });
         methods.add_method("setLoopRange", |_, this, (start, end): (f64, f64)| {
-            this.command(Command::LoopRange { start, end })
+            this.write(Write::LoopRange { start, end })
         });
         methods.add_method("takeError", |_, this, ()| {
             Ok(this.group.take_error().map(|error| format!("{error:?}")))
@@ -123,74 +128,31 @@ fn state_name(state: PlaybackState) -> &'static str {
 impl UserData for ScriptVideo {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("duration", |_, this, ()| {
-            this.with(|v| v.playback.duration())
+            this.with(|v| v.property_number(properties::DURATION).unwrap())
         });
-        methods.add_method("playRange", |_, this, (start, end): (f64, f64)| {
-            let id = this
-                .with(|v| v.playback.play_range(start, end))?
-                .map_err(|error| Error::RuntimeError(format!("video range: {error:?}")))?;
-            this.needs_update.set(true);
-            Ok(id)
+        methods.add_method("play", |_, this, ()| {
+            this.write(Write::Bool(properties::PAUSED, false))
         });
-        methods.add_method(
-            "scrub",
-            |_, this, (progress, start, end): (f64, f64, f64)| {
-                let id = this
-                    .with(|v| v.playback.scrub(progress, start, end))?
-                    .map_err(|error| Error::RuntimeError(format!("video scrub: {error:?}")))?;
-                this.needs_update.set(true);
-                Ok(id)
-            },
-        );
-        methods.add_method("cancelRequest", |_, this, id: u64| {
-            let cancelled = this
-                .with(|v| v.playback.cancel_request(id))?
-                .map_err(|error| Error::RuntimeError(format!("video cancellation: {error:?}")))?;
-            if cancelled {
-                this.needs_update.set(true);
-            }
-            Ok(cancelled)
+        methods.add_method("pause", |_, this, ()| {
+            this.write(Write::Bool(properties::PAUSED, true))
         });
-        methods.add_method("requestStatus", |lua, this, ()| {
-            this.with(|v| v.playback.request_status())?
-                .map(|request| {
-                    use nuxie_runtime::video::playback::RequestState;
-                    let result = lua.create_table();
-                    result.set("id", request.id)?;
-                    result.set(
-                        "state",
-                        match request.state {
-                            RequestState::Pending => "pending",
-                            RequestState::Playing => "playing",
-                            RequestState::Settled => "settled",
-                            RequestState::Completed => "completed",
-                            RequestState::Cancelled => "cancelled",
-                            RequestState::Failed => "failed",
-                        },
-                    )?;
-                    Ok::<_, Error>(result)
-                })
-                .transpose()
-        });
-        methods.add_method("play", |_, this, ()| this.command(Command::Play));
-        methods.add_method("pause", |_, this, ()| this.command(Command::Pause));
         methods.add_method("seek", |_, this, seconds: f64| {
-            this.command(Command::Seek(seconds))
+            this.write(Write::Number(properties::POSITION, seconds))
         });
         methods.add_method("setRate", |_, this, rate: f32| {
-            this.command(Command::Rate(rate))
+            this.write(Write::Number(properties::RATE, rate.into()))
         });
         methods.add_method("setVolume", |_, this, volume: f32| {
-            this.command(Command::Volume(volume))
+            this.write(Write::Number(properties::VOLUME, volume.into()))
         });
         methods.add_method("setMuted", |_, this, muted: bool| {
-            this.command(Command::Mute(muted))
+            this.write(Write::Bool(properties::MUTED, muted))
         });
         methods.add_method("setLooping", |_, this, enabled: bool| {
-            this.command(Command::Loop(enabled))
+            this.write(Write::Bool(properties::LOOP, enabled))
         });
         methods.add_method("setLoopRange", |_, this, (start, end): (f64, f64)| {
-            this.command(Command::LoopRange { start, end })
+            this.write(Write::LoopRange { start, end })
         });
         methods.add_method("image", |lua, this, ()| {
             this.with(|v| v.render_image())?
@@ -203,10 +165,10 @@ impl UserData for ScriptVideo {
         });
         methods.add_method("caption", |_, this, ()| this.with(|v| v.caption_text()));
         methods.add_method("position", |_, this, ()| {
-            this.with(|v| v.playback.position())
+            this.with(|v| v.property_number(properties::POSITION).unwrap())
         });
         methods.add_method("state", |_, this, ()| {
-            this.with(|v| state_name(v.playback.state()))
+            this.with(|v| v.property_number(properties::STATE).unwrap())
         });
         methods.add_method("isResourceLimited", |_, this, ()| {
             this.with(|v| v.playback.is_suspended(SuspensionReason::Resources))
@@ -400,52 +362,6 @@ mod tests {
         assert!(lua.load("group:play()").exec().is_err());
     }
     #[test]
-    fn luau_interactive_video_reports_latest_request_and_duration() {
-        let arena = nuxie_runtime::source::core::CoreArena::default();
-        let handle = arena.insert(Video::default());
-        let lua = luaur_rt::Lua::new();
-        lua.globals()
-            .set(
-                "video",
-                lua.create_userdata(ScriptVideo::new(
-                    handle.clone(),
-                    Rc::new(Cell::new(true)),
-                    Rc::new(Cell::new(false)),
-                ))
-                .unwrap(),
-            )
-            .unwrap();
-        lua.load("assert(video:duration() == nil); assert(video:requestStatus() == nil)")
-            .exec()
-            .unwrap();
-        handle
-            .with_downcast_mut::<Video, _>(|v| {
-                v.playback.opened(0, 10.0);
-            })
-            .unwrap();
-        lua.load("assert(video:duration() == 10); first = video:playRange(1,3); latest = video:scrub(0.5,2,6); assert(latest > first); assert(video:requestStatus().id == latest); assert(video:requestStatus().state == 'pending')").exec().unwrap();
-        handle
-            .with_downcast_mut::<Video, _>(|v| {
-                let actions = v.playback.drain_actions();
-                assert_eq!(
-                    actions
-                        .iter()
-                        .filter(|a| matches!(
-                            a,
-                            nuxie_runtime::video::playback::DecoderAction::Seek { .. }
-                        ))
-                        .count(),
-                    1
-                );
-                assert!(v.playback.accept_frame(v.playback.generation(), 4.0));
-            })
-            .unwrap();
-        lua.load("assert(video:requestStatus().state == 'settled'); assert(video:position() == 4)")
-            .exec()
-            .unwrap();
-        assert!(lua.load("video:scrub(2,0,10)").exec().is_err());
-    }
-    #[test]
     fn luau_controls_use_the_live_video_queue_and_expire_with_context() {
         let arena = nuxie_runtime::source::core::CoreArena::default();
         let handle = arena.insert(Video::default());
@@ -470,6 +386,10 @@ mod tests {
             .exec()
             .unwrap();
         assert!(needs_update.get());
+        assert_eq!(
+            handle.with_downcast::<Video, _>(|v| v.property_bool(properties::MUTED)),
+            Some(Some(true))
+        );
         handle
             .with_downcast_mut::<Video, _>(|v| {
                 use nuxie_runtime::video::playback::DecoderAction;

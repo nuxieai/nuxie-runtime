@@ -81,6 +81,71 @@ impl Default for Video {
 }
 impl Video {
     pub const TYPE_KEY: u16 = 60001;
+    pub fn property_bool(&self, key: u16) -> Option<bool> {
+        (super::properties::field_id(i32::from(key)) == Some(4))
+            .then(|| self.playback.property_values().get(key).unwrap() != 0.0)
+    }
+    pub fn property_number(&self, key: u16) -> Option<f64> {
+        if super::properties::field_id(i32::from(key)) != Some(2) {
+            return None;
+        }
+        if key == super::properties::POSITION && !self.playback.has_pending_seek() {
+            if let Some((Some(clock), _)) = self.sync_clock {
+                if clock.generation == self.playback.generation() {
+                    return Some(clock.seconds);
+                }
+            }
+        }
+        self.playback.property_values().get(key)
+    }
+    pub fn write_property(
+        &mut self,
+        value: super::properties::Write,
+    ) -> Result<(), super::playback::PlaybackError> {
+        self.playback.write_property(value)
+    }
+    pub(crate) fn set_property_bool(
+        &mut self,
+        key: u16,
+        value: bool,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
+        if self.property_bool(key) != Some(value)
+            && self
+                .write_property(super::properties::Write::Bool(key, value))
+                .is_ok()
+        {
+            self.playback.clear_property_change(key);
+            completion.record(self.core(), key);
+        }
+    }
+    pub(crate) fn set_property_number(
+        &mut self,
+        key: u16,
+        value: f32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
+        if self.property_number(key).map(|v| v as f32) != Some(value)
+            && self
+                .write_property(super::properties::Write::Number(key, value.into()))
+                .is_ok()
+        {
+            self.playback.clear_property_change(key);
+            completion.record(self.core(), key);
+        }
+    }
+    /// Notify native bindings after the mutable video borrow has ended.
+    pub fn flush_property_changes(owner: &CoreHandle) -> bool {
+        let changes = owner
+            .with_downcast_mut::<Self, _>(|video| video.playback.take_property_changes())
+            .unwrap_or(0);
+        for (index, key) in super::properties::KEYS.iter().enumerate() {
+            if changes & (1 << index) != 0 {
+                owner.notify_property_changed(*key);
+            }
+        }
+        changes != 0
+    }
     pub(crate) fn image(&self) -> &Image {
         &self.image
     }
@@ -348,7 +413,7 @@ impl CoreObject for Video {
     fn clone_boxed(&self) -> Option<Box<dyn CoreObject>> {
         Some(Box::new(Self {
             image: self.image.clone_definition(),
-            playback: Playback::new(self.playback.settings()),
+            playback: self.playback.clone_definition(),
             poster_asset_id: self.poster_asset_id,
             captions: self.captions.clone(),
             captions_valid: self.captions_valid,
@@ -359,6 +424,19 @@ impl CoreObject for Video {
         }))
     }
     fn deserialize(&mut self, key: u16, reader: &mut BinaryReader<'_>) -> bool {
+        match key {
+            super::properties::PAUSED => {
+                let value = reader.read_var_uint_as::<u32>() != 0;
+                let _ = self.write_property(super::properties::Write::Bool(key, value));
+                return true;
+            }
+            super::properties::POSITION => {
+                let value = f64::from(reader.read_float32());
+                let _ = self.write_property(super::properties::Write::Number(key, value));
+                return true;
+            }
+            _ => {}
+        }
         let mut settings = self.playback.settings();
         match key {
             60003 => settings.autoplay = reader.read_var_uint_as::<u32>() != 0,
@@ -386,7 +464,7 @@ impl CoreObject for Video {
             }
             _ => return self.image.deserialize(key, reader),
         }
-        self.playback = Playback::new(settings);
+        self.playback.configure_starting_settings(settings);
         true
     }
 }

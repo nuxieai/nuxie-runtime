@@ -8625,6 +8625,15 @@ impl CoreRegistry {
         object: &mut O,
         property_key: i32,
         value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        if crate::video::properties::field_id(property_key) == Some(4) {
+            if let Some(video) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::video::Video>()
+            {
+                video.set_property_bool(property_key as u16, value, completion);
+            }
+            return;
+        }
         let field = match property_key {
             456 => CoreField::LayerMaskIsVisible,
             457 => CoreField::LayerMaskSourceDraws,
@@ -8721,6 +8730,15 @@ impl CoreRegistry {
         object: &mut O,
         property_key: i32,
         value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        if crate::video::properties::field_id(property_key) == Some(2) {
+            if let Some(video) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::video::Video>()
+            {
+                video.set_property_number(property_key as u16, value, completion);
+            }
+            return;
+        }
         let field = match property_key {
             458 => CoreField::LayerMaskResolution,
             462 => CoreField::LayerMaskBoundsX,
@@ -9433,6 +9451,13 @@ impl CoreRegistry {
         object.get_color(field)
     }
     pub fn get_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> bool {
+        if crate::video::properties::field_id(property_key) == Some(4) {
+            return object
+                .as_registry_any()
+                .downcast_ref::<crate::video::Video>()
+                .and_then(|video| video.property_bool(property_key as u16))
+                .unwrap_or(false);
+        }
         let field = match property_key {
             456 => CoreField::LayerMaskIsVisible,
             457 => CoreField::LayerMaskSourceDraws,
@@ -9523,6 +9548,13 @@ impl CoreRegistry {
         object.get_bool(field)
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
+        if crate::video::properties::field_id(property_key) == Some(2) {
+            return object
+                .as_registry_any()
+                .downcast_ref::<crate::video::Video>()
+                .and_then(|video| video.property_number(property_key as u16))
+                .unwrap_or(0.0) as f32;
+        }
         let field = match property_key {
             458 => CoreField::LayerMaskResolution,
             462 => CoreField::LayerMaskBoundsX,
@@ -9998,6 +10030,9 @@ impl CoreRegistry {
     }
 
     pub fn property_field_id(property_key: i32) -> i32 {
+        if let Some(field) = crate::video::properties::field_id(property_key) {
+            return field;
+        }
         match property_key {
             453 | 454 => 0,
             455 | 459 | 460 => 0,
@@ -10659,6 +10694,9 @@ impl CoreRegistry {
         u16::try_from(property_key).is_ok_and(nuxie_schema::is_signed_int_property_key)
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
+        if crate::video::properties::field_id(property_key as i32).is_some() {
+            return object.as_registry_any().is::<crate::video::Video>();
+        }
         let owner_type = match property_key {
             453 | 454 => 487,
             455..=465 => 154,

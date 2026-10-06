@@ -299,14 +299,7 @@ pub unsafe extern "C" fn nux_player_video_is_visible(
 }
 pub(crate) fn command(kind: u32, value: f64, reason: u32) -> Result<Command, NuxStatus> {
     Ok(match kind {
-        0 => Command::Play,
         1 => Command::Pause,
-        2 => Command::Seek(value),
-        3 if value.is_finite() && value > 0.0 && value <= f64::from(f32::MAX) => {
-            Command::Rate(value as f32)
-        }
-        4 if value.is_finite() && (0.0..=1.0).contains(&value) => Command::Volume(value as f32),
-        5 if value == 0.0 || value == 1.0 => Command::Mute(value == 1.0),
         6 if value == 0.0 || value == 1.0 => Command::SuspendReason {
             reason: match reason {
                 1 => SuspensionReason::Hidden,
@@ -319,7 +312,6 @@ pub(crate) fn command(kind: u32, value: f64, reason: u32) -> Result<Command, Nux
         },
         7 => Command::Reenter,
         8 => Command::Dispose,
-        9 if value == 0.0 || value == 1.0 => Command::Loop(value == 1.0),
         _ => return Err(NuxStatus::InvalidArgument),
     })
 }
@@ -474,8 +466,8 @@ pub unsafe extern "C" fn nux_player_video_readiness(
     })
 }
 
-/// Queue one authored command: play=0, pause=1, seek=2, rate=3, volume=4,
-/// mute=5, suspend-reason=6, reenter=7, dispose=8, looping=9. Boolean values must be 0/1.
+/// Queue a host decision: pause=1, suspend-reason=6, reenter=7, dispose=8.
+/// A suspension value must be 0 or 1. Other command kinds are invalid.
 /// Suspension reasons are hidden=1, background=2, interruption=4, resources=8.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_video_command(
@@ -492,6 +484,7 @@ pub unsafe extern "C" fn nux_player_video_command(
                 .with_downcast_mut::<Video, _>(|v| v.playback.enqueue(command))
                 .ok_or(NuxStatus::NotFound)?
                 .map_err(playback_status)?;
+            Video::flush_property_changes(video);
             occurrence.commit_runtime_change(true)
         }))
     })
@@ -499,9 +492,7 @@ pub unsafe extern "C" fn nux_player_video_command(
 
 /// Drain queued commands and apply one decoder observation. Observation kinds:
 /// none=0, ready=1 (`value`=duration), playing=2, ended=3, buffering=4,
-/// play-blocked=5, failed=6, selected-seek-frame=7 (`value`=actual decoded PTS).
-/// Kind 7 certifies pixels selected after successful current-generation seek completion;
-/// deliver it immediately before presenting those pixels, never with a media-clock value.
+/// play-blocked=5, failed=6.
 /// Stale generations are ignored. Deliver every action
 /// synchronously in order; decode callbacks marshal back to the creator thread.
 /// A callback is required even when this step happens to emit no actions.
@@ -518,9 +509,7 @@ pub unsafe extern "C" fn nux_player_video_step(
     ffi_guard(NuxStatus::RuntimeError, || {
         status(with_video(player, component_id, |video, occurrence| {
             let callback = callback.ok_or(NuxStatus::NullArgument)?;
-            if observation > 7
-                || (matches!(observation, 1 | 7) && (!value.is_finite() || value < 0.0))
-            {
+            if observation > 6 || (observation == 1 && (!value.is_finite() || value < 0.0)) {
                 return Err(NuxStatus::InvalidArgument);
             }
             let before = video
@@ -551,9 +540,6 @@ pub unsafe extern "C" fn nux_player_video_step(
                         3 => actions.extend(v.playback.ended(generation)),
                         4 => v.playback.observed_buffering(generation),
                         5 => v.playback.observed_play_blocked(generation),
-                        7 => {
-                            v.playback.observe_selected_seek_frame(generation, value);
-                        }
                         _ => {}
                     }
                     if v.playback.state() == PlaybackState::Disposed {
@@ -612,7 +598,8 @@ pub unsafe extern "C" fn nux_player_video_step(
                     )
                 })
                 .ok_or(NuxStatus::NotFound)?;
-            occurrence.commit_runtime_change(before != after)
+            let properties_changed = Video::flush_property_changes(video);
+            occurrence.commit_runtime_change(before != after || properties_changed)
         }))
     })
 }
@@ -743,7 +730,8 @@ pub(crate) fn present_image(
     let changed = video
         .with_downcast_mut::<Video, _>(|v| v.present(generation, image, presentation_seconds))
         .ok_or(NuxStatus::NotFound)?;
-    occurrence.commit_runtime_change(changed)
+    let properties_changed = Video::flush_property_changes(video);
+    occurrence.commit_runtime_change(changed || properties_changed)
 }
 
 /// One event consumed from the occurrence's shared event queue. State=0
@@ -852,6 +840,7 @@ pub unsafe extern "C" fn nux_player_video_set_captions(
             video
                 .with_downcast_mut::<Video, _>(|v| v.set_captions(track))
                 .ok_or(NuxStatus::NotFound)?;
+            Video::flush_property_changes(video);
             occurrence.commit_runtime_change(true)
         }))
     })
@@ -892,7 +881,8 @@ pub unsafe extern "C" fn nux_player_video_caption(
 }
 
 /// Set the loop interval in seconds. Start is inclusive, end exclusive; zero
-/// end means source duration. Enable looping separately with command kind 9.
+/// end means source duration. Loop start and end are written atomically.
+/// The loop property controls whether looping is enabled.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_video_set_loop_range(
     player: *const NuxPlayer,
@@ -904,13 +894,14 @@ pub unsafe extern "C" fn nux_player_video_set_loop_range(
         status(with_video(player, component_id, |video, occurrence| {
             video
                 .with_downcast_mut::<Video, _>(|v| {
-                    v.playback.enqueue(Command::LoopRange {
+                    v.write_property(nuxie::video::properties::Write::LoopRange {
                         start: start_seconds,
                         end: end_seconds,
                     })
                 })
                 .ok_or(NuxStatus::NotFound)?
                 .map_err(playback_status)?;
+            Video::flush_property_changes(video);
             occurrence.commit_runtime_change(true)
         }))
     })
@@ -1059,7 +1050,14 @@ mod occurrence_tests {
                 NuxStatus::NotFound
             );
             assert_eq!(
-                nux_player_video_command(player, surviving[0], 0, 0.0, 0),
+                with_video(player, surviving[0], |video, _| {
+                    nuxie_runtime::source::generated::core_registry::CoreRegistry::set_bool_handle(
+                        video, 60016, false,
+                    );
+                    Ok(())
+                })
+                .map(|_| NuxStatus::Ok)
+                .unwrap(),
                 NuxStatus::Ok
             );
             ArtboardComponentList::update_list_occurrence(&host, &[]);
@@ -1198,7 +1196,14 @@ mod occurrence_tests {
                 NuxStatus::NotFound
             );
             assert_eq!(
-                nux_player_video_command(player, second[0], 0, 0.0, 0),
+                with_video(player, second[0], |video, _| {
+                    nuxie_runtime::source::generated::core_registry::CoreRegistry::set_bool_handle(
+                        video, 60016, false,
+                    );
+                    Ok(())
+                })
+                .map(|_| NuxStatus::Ok)
+                .unwrap(),
                 NuxStatus::Ok
             );
             nux_player_free(player);

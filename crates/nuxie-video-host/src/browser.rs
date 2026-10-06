@@ -105,7 +105,6 @@ pub struct BrowserPlayer {
     capture_callback: Option<Closure<dyn FnMut(f64, JsValue)>>,
     capture_request: Option<f64>,
     pending_seek_generation: Rc<Cell<Option<u64>>>,
-    completed_seek_generation: Rc<Cell<Option<u64>>>,
     _seeked_callback: Closure<dyn FnMut()>,
     max_frame_bytes: usize,
     object_url: Option<String>,
@@ -158,14 +157,12 @@ impl BrowserPlayer {
         let (canvas, context) = frame_canvas()?;
         let play_blocked = Rc::new(Cell::new(false));
         let pending_seek_generation = Rc::new(Cell::new(None));
-        let completed_seek_generation = Rc::new(Cell::new(None));
         let seeked_callback = {
             let video = video.clone();
             let pending = pending_seek_generation.clone();
-            let completed = completed_seek_generation.clone();
             Closure::wrap_assert_unwind_safe(Box::new(move || {
                 if !video.seeking() && video.ready_state() >= 2 {
-                    completed.set(pending.take());
+                    pending.set(None);
                 }
             }) as Box<dyn FnMut()>)
         };
@@ -186,7 +183,6 @@ impl BrowserPlayer {
             capture_callback: None,
             capture_request: None,
             pending_seek_generation,
-            completed_seek_generation,
             _seeked_callback: seeked_callback,
             max_frame_bytes,
             object_url: None,
@@ -328,7 +324,6 @@ impl BrowserPlayer {
                     .set(self.play_attempt.get().wrapping_add(1));
                 self.play_blocked.set(false);
                 self.pending_seek_generation.set(None);
-                self.completed_seek_generation.set(None);
                 self.generation = generation;
                 self.capture_generation.set(generation);
                 self.ended = false;
@@ -466,16 +461,7 @@ impl BrowserPlayer {
         let captured = self.capture.borrow_mut().take();
         self.arm_capture()?;
         match captured {
-            Some(Ok(frame)) => {
-                // A seek completion certifies only the actual compositor frame
-                // captured for that generation. Keep its mediaTime: currentTime
-                // can equal duration while the selected final sample starts earlier.
-                if self.completed_seek_generation.get() == Some(frame.generation) {
-                    self.completed_seek_generation.set(None);
-                    playback.observe_selected_seek_frame(frame.generation, frame.pts);
-                }
-                Ok(Some(frame))
-            }
+            Some(Ok(frame)) => Ok(Some(frame)),
             Some(Err(error)) => {
                 playback.failed(self.generation);
                 self.close();
@@ -492,7 +478,6 @@ impl BrowserPlayer {
         self.disposed = true;
         self.video.set_onseeked(None);
         self.pending_seek_generation.set(None);
-        self.completed_seek_generation.set(None);
         self.cancel_capture();
         self.play_attempt
             .set(self.play_attempt.get().wrapping_add(1));

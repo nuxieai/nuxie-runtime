@@ -146,8 +146,8 @@ fn with_group<R>(
     body(group)
 }
 
-/// Queue the same authored command on every member atomically. Command numbers
-/// and arguments match nux_player_video_command. Lifecycle vetoes still apply.
+/// Queue a host decision on every member atomically: pause=1,
+/// suspend-reason=6, reenter=7, dispose=8. Arguments match nux_player_video_command.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_video_sync_group_command(
     group: *const NuxVideoSyncGroup,
@@ -309,11 +309,17 @@ pub unsafe extern "C" fn nux_player_video_report_clock(
                         playing: sample.playing == 1,
                     })
                 };
+                let before = video.with_downcast::<nuxie::video::Video, _>(|v| {
+                    v.property_number(nuxie::video::properties::POSITION)
+                });
                 let result =
                     nuxie::video::sync::report_media_clock(video, monotonic_seconds, sample);
                 // Independent groups may correct successfully before another
                 // group reports an error. Preserve scheduling for those commands.
-                if !matches!(result, Ok(false)) {
+                let after = video.with_downcast::<nuxie::video::Video, _>(|v| {
+                    v.property_number(nuxie::video::properties::POSITION)
+                });
+                if before != after || !matches!(result, Ok(false)) {
                     occurrence.commit_runtime_change(true)?;
                 }
                 result.map(|_| ()).map_err(sync_status)

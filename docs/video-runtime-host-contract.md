@@ -49,8 +49,10 @@ for matching signed authored targets; they are not playback IDs. Multiple live
 occurrences can share this definition address without sharing playback intent.
 Each occurrence gets an independent decoder unless
 it is denied by the host's resource allocator. Shared encoded bytes do not
-share playback state. Apply commands through `nux_player_video_command` and
-`nux_player_video_set_loop_range`.
+share playback state. Bindings, keyed animation and scripts write the ordinary
+video properties. `nux_player_video_command` accepts only pause (1), suspension
+reason (6), reenter (7), and dispose (8). Other kinds return invalid argument.
+`nux_player_video_set_loop_range` writes both loop bounds atomically.
 
 On the creator thread, call `nux_player_video_step` to drain actions and deliver
 ready/playing/ended/buffering/blocked/error observations. Execute all returned
@@ -59,15 +61,6 @@ callbacks onto this thread first. Seek actions carry the new generation; tag
 frames and observations accordingly. Stale generations cannot replace the
 current scene frame. Submit canonical frame bytes with the renderer-specific
 video presentation API, using the renderer which owns the occurrence.
-
-A successful seek can select a final decoded image whose timestamp precedes the
-container duration (for example, when audio ends later). A host that has completed
-that generation’s seek and copied its selected decoded image may send observation
-`7` with the image’s actual presentation timestamp immediately before submitting
-those same pixels. This one-use receipt permits full-source endpoint scrubbing to
-settle on that image; it does not relax ordinary frame or preroll checks. A media
-clock, an ended notification, or a requested seek time is not a decoded-frame
-receipt. Hosts without this evidence keep the ordinary acceptance behavior.
 
 Lifecycle suspension must reach the actual decoder before the app stops frame
 updates. Rust managed players provide `set_suspended` for this purpose. C hosts
@@ -231,46 +224,64 @@ creation or playback mutation. Qualification fixtures now use the managed
 class. The allocator can fall back to separately declared software support
 within its budget; these platform APIs do not promise selectable software.
 
-## Script-owned interactive segments
+## Video properties and script control
 
-Luau owns segment names and onboarding logic. A script resolves a video from its
-current artboard with `ctx:video(name)` and can use:
+The Video type is 60001; VideoAsset is 60000. The extension keys are:
 
-- `video:duration()` — decoder duration in seconds, or nil before metadata.
-- `video:playRange(startSeconds, endSeconds)` — request ID for a play-once,
-  half-open range. Names can remain ordinary script tables.
-- `video:scrub(progress, startSeconds, endSeconds)` — request ID for a paused
-  seek; progress must be finite and between zero and one (inclusive).
-- `video:requestStatus()` — nil or `{id, state}` for the latest request. States
-  are `pending`, `playing`, `settled`, `completed`, `cancelled`, and `failed`.
-- `video:cancelRequest(id)` — cancel and pause only if this is still the latest
-  request; returns false for an obsolete request owner.
+| Key | Owner / property | Kind | Settable while live | Meaning |
+| --- | --- | --- | --- | --- |
+| 60000 | VideoAsset source key | string | no | Resolver-owned source identity. |
+| 60001 | VideoAsset content type | string | no | Encoded media type. |
+| 60002 | VideoAsset duration | number | no | Authored metadata hint. |
+| 60003 | Video autoplay | boolean | no | Starting play intent; paused starts as its inverse. |
+| 60004 | Video loop | boolean | yes | Repeat within the loop interval. |
+| 60005 | Video muted | boolean | yes | Effective decoder volume is zero while true. |
+| 60006 | Video volume | number | yes | Finite gain from 0 to 1, retained while muted. |
+| 60007 | Video rate | number | yes | Finite playback rate above zero. |
+| 60008 | Video priority | unsigned | no | Authored resource priority. |
+| 60009 | Video poster asset | unsigned | no | Poster asset index. |
+| 60010 | Video audio policy | unsigned | no | Automatic 0, mix 1, duck 2, exclusive 3. |
+| 60011 | Video readiness | unsigned | no | Immediate 0, wait for frame 1. |
+| 60012 | Video reentry | unsigned | no | Restart 0, resume 1, retain 2. |
+| 60013 | Video captions | string | no | Authored caption track JSON. |
+| 60014 | Video loop start | number | yes | Inclusive nonnegative seconds, below known duration. |
+| 60015 | Video loop end | number | yes | Exclusive seconds above start, or zero for source duration. |
+| 60016 | Video paused | boolean | yes | True pauses, false plays; a host pause writes true. |
+| 60017 | Video position | number | yes | Native media clock seconds; writing seeks. |
+| 60018 | Video duration | number | no | Decoder duration in seconds, zero before metadata. |
+| 60019 | Video ended | boolean | no | True exactly in the ended state. |
+| 60020 | Video state | number | no | Playback state ordinal below. |
 
-A burst of interactive requests before a host drain produces only the latest
-seek. Repeating an unchanged pending or settled scrub without intervening queued
-commands reuses its request ID instead of restarting the seek. Other playback
-commands remain ordered. Ordinary play/seek/loop/re-entry
-commands cancel interactive ownership. Request IDs survive source replacement,
-while source replacement clears the request status. Stale generation frames
-cannot settle a newer request. Consumers must match the returned ID before
-advancing their own UI. `playing` describes an active range request; lifecycle
-suspension still vetoes actual playback independently.
+State ordinals are opening 0, ready 1, playing 2, paused 3, seeking 4,
+buffering 5, ended 6, failed 7 and disposed 8. Playing requires a decoder
+observation. Temporary suspension preserves play intent and does not write
+paused. Autoplay is a starting attribute, not a live control.
 
-The core refuses decoded images outside the active play range and retains the
-last accepted in-range image on completion. This is **not an exact-endpoint
-frame guarantee**: a crossing frame is rejected rather than displayed, and a
-range that crosses its end without presenting a valid frame reports `failed`,
-not a successful hold. Pause is issued on the first observed crossing or decoder end. This is
-not sample-exact audio clipping. Interactive motion should be muted.
+Live setters use playback's validated, bounded command queue. Reads include
+pending valid writes before the host drains decoder actions. Invalid writes
+leave the last valid property value and queue unchanged. Read-only setters do
+nothing. Loop bounds can be set atomically through `setLoopRange`; individual
+bound writes validate against the current other bound. Position uses the most
+recent available native clock for the current generation, falling back to the
+accepted frame position when no current clock is available. A pending seek
+reads its target until the decoder supplies a clock for the new generation.
 
-`settled` means a frame for the current seek generation was accepted within the
-requested bounds and within 50 ms of the seek target. Same-generation preroll
-outside that tolerance is rejected. This explicit tolerance is not exact seeking;
-if a host cannot deliver such a frame the request remains pending until the caller
-cancels or the decoder reports failure.
-Scrubbing to one maps to the end timestamp and accepts that endpoint. No promise
-of constant-rate random-access decoding or bounded wall-clock completion is
-made. A script may bound its pending UI and cancel its request on timeout.
-Existing decoder failure reports set the request to `failed`. These APIs do not
-introduce a new decoder action, asset format, shared player across artboards,
-or changes to ordinary authored autoplay/loop behavior outside the request.
+Binding and animation use the ordinary core registry field types. Changes to
+position, duration, paused, ended and state dirty bindings toward their source
+values, including native decoder observations and host pauses. Native hosts
+flush these notifications after releasing the video borrow and before the next
+scene step settles bindings. C hosts report the clock even when no new image
+is available.
+
+A script obtains an occurrence with `context:video(name)`. `play()` and
+`pause()` write paused; `seek(seconds)` writes position; `setRate`, `setVolume`,
+`setMuted` and `setLooping` write their matching properties. `setLoopRange(start,
+end)` writes both bounds atomically. The same methods on `context:videoGroup`
+preflight every occurrence before changing any queue. They share the property
+path with native bindings and keyed animation.
+
+`position()`, `duration()` and `state()` read the properties above. Duration is
+zero before metadata; state returns the numeric ordinal. `nextEvent()` retains
+its event names, including string state names. Scripts own their sequencing
+through ordinary values and property writes. Native decoder generations still
+reject stale frames and observations.

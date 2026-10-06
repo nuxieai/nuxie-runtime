@@ -3,6 +3,7 @@ pub mod admission;
 pub mod captions;
 mod objects;
 pub mod playback;
+pub mod properties;
 pub mod readiness;
 pub mod resources;
 pub mod sync;

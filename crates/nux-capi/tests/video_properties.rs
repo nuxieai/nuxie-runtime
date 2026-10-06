@@ -293,3 +293,27 @@ fn muted_binding_reaches_root_copy_and_list_row_decoder_queues() {
         nux_file_free(file);
     }
 }
+
+#[test]
+fn reclaiming_a_decoder_publishes_opening_before_another_decoder_step() {
+    let s = Scene::new(false);
+    s.observe(1, 0, 12.5);
+    s.step(0.0);
+    assert_eq!(s.value(8).0, 1.0);
+    let clock = NuxVideoClockSample {
+        generation: 0,
+        seconds: 1.2,
+        rate: 1.0,
+        playing: 1,
+        available: 1,
+    };
+    ok(unsafe { nux_player_video_report_clock(s.player, 1, 1.0, &clock) });
+    s.step(0.0);
+    assert_eq!(s.value(4).0, 1.2);
+    let mut generation = 0;
+    ok(unsafe { nux_player_video_reclaim_decoder(s.player, 1, 1, &mut generation) });
+    assert_eq!(generation, 1);
+    s.step(0.0);
+    assert_eq!(s.value(8).0, 0.0);
+    assert_eq!(s.value(4).0, 0.0);
+}

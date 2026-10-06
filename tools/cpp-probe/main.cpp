@@ -289,6 +289,7 @@ size_t randomProviderTotalCalls();
 #define protected public
 #include "rive/text/text.hpp"
 #include "rive/text/font_hb.hpp"
+#include "rive/layout/layout_participant.hpp"
 #include "rive/text/raw_text.hpp"
 #include "rive/text/text_input_cursor.hpp"
 #include "rive/text/text_input_selected_text.hpp"
@@ -17941,8 +17942,87 @@ void write_audio_riv_oracle(std::ostream& out,
 #endif
 } // namespace
 
+// Pin both width-owner cases with the same face and content as the Rust test.
+int text_measure_width_samples(const char* filePath, const char* fontPath)
+{
+    std::cout << std::setprecision(9) << "[";
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        rive::LayoutParticipant participant;
+        rive::ImportResult result;
+        auto file = open_file(filePath, &result, false);
+        if (!file || result != rive::ImportResult::success)
+        {
+            return 2;
+        }
+        auto board = file->artboardDefault();
+        auto font = HBFont::Decode(read_bytes(fontPath));
+        if (!board || !font)
+        {
+            return 2;
+        }
+        auto asset = rive::make_rcp<rive::FontAsset>();
+        asset->font(font);
+        rive::Text* text = nullptr;
+        bool firstRun = true;
+        for (auto* object : board->objects())
+        {
+            if (object->is<rive::Text>() && !text)
+            {
+                text = object->as<rive::Text>();
+            }
+            if (object->is<rive::TextStyle>())
+            {
+                auto* style = object->as<rive::TextStyle>();
+                style->setAsset(asset);
+                style->fontSize(40.0f);
+                style->lineHeight(44.0f);
+            }
+            if (object->is<rive::TextValueRun>())
+            {
+                object->as<rive::TextValueRun>()->text(firstRun ? "Choose" : "");
+                firstRun = false;
+            }
+        }
+        if (!text || text->layoutParticipant())
+        {
+            return 2;
+        }
+        text->sizingValue(1);
+        text->overflowValue(0);
+        text->wrapValue(0);
+        text->width(1.0f);
+        if (mode != 0)
+        {
+            participant.layoutWidthScaleType(
+                static_cast<uint32_t>(mode == 1 ? rive::LayoutScaleType::fill
+                                                : rive::LayoutScaleType::fixed));
+            participant.layoutHeightScaleType(
+                static_cast<uint32_t>(rive::LayoutScaleType::hug));
+            text->addChild(&participant);
+        }
+        const auto measured = text->measureLayout(
+            354.0f, rive::LayoutMeasureMode::exactly,
+            std::numeric_limits<float>::quiet_NaN(),
+            rive::LayoutMeasureMode::undefined);
+        if (mode != 0)
+        {
+            std::cout << ",";
+        }
+        std::cout << "{\"participant\":" << mode
+                  << ",\"width\":" << measured.x
+                  << ",\"height\":" << measured.y << "}";
+    }
+    std::cout << "]\n";
+    return 0;
+}
+
 int main(int argc, const char* argv[])
 {
+    if (argc == 4 && std::strcmp(argv[1], "--text-measure-width-samples") == 0)
+    {
+        return text_measure_width_samples(argv[2], argv[3]);
+    }
     const char* filename = nullptr;
     ProbeOptions options;
     bool converterSamples = false;

@@ -65,18 +65,14 @@ fn push_color(bytes: &mut Vec<u8>, type_name: &str, property_name: &str, value: 
 
 /// A 64x64 artboard covered by one opaque #3366AA rectangle.
 pub fn solid_fill_artboard() -> Vec<u8> {
-    solid_fill_artboard_with_dimensions(ARTBOARD_SIZE as f32, ARTBOARD_SIZE as f32)
-}
-
-pub fn solid_fill_artboard_with_dimensions(width: f32, height: f32) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_641, 0] {
         push_var_uint(&mut bytes, value);
     }
     push_object(&mut bytes, "Backboard", |_| {});
     push_object(&mut bytes, "Artboard", |bytes| {
-        push_f32(bytes, "Artboard", "width", width);
-        push_f32(bytes, "Artboard", "height", height);
+        push_f32(bytes, "Artboard", "width", ARTBOARD_SIZE as f32);
+        push_f32(bytes, "Artboard", "height", ARTBOARD_SIZE as f32);
     });
     push_object(&mut bytes, "Shape", |bytes| {
         push_uint(bytes, "Node", "parentId", 0);

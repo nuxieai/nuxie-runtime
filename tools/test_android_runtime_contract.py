@@ -209,6 +209,11 @@ class DeterministicArchiveTests(unittest.TestCase):
 
 
 class AbiAndElfContractTests(unittest.TestCase):
+    def test_layout_size_calls_are_android_exports(self):
+        partitions = export_partitions(REPO_ROOT)
+        self.assertIn("nux_player_layout_size", partitions["portable"])
+        self.assertIn("nux_player_layout_size_set", partitions["portable"])
+
     def test_contract_fingerprint_covers_header_layout_and_all_four_partitions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

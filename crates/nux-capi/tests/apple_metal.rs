@@ -553,7 +553,7 @@ fn solid_fill_renders_authored_pixels_on_metal() {
 fn layout_fit_renders_at_surface_scale() {
     autoreleasepool(|_| {
         let required = live_metal_test_required();
-        let bytes = solid_fill::solid_fill_artboard_with_dimensions(64.0, 128.0);
+        let bytes = solid_fill_artboard();
         let mut renderer = ptr::null_mut();
         let mut result = ptr::null_mut();
         let create_status =
@@ -590,6 +590,10 @@ fn layout_fit_renders_at_surface_scale() {
         let mut player = ptr::null_mut();
         assert_eq!(
             unsafe { nux_player_new_static(artboard, &raw mut player) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_layout_size_set(player, 64.0, 128.0) },
             NuxStatus::Ok
         );
         assert!(

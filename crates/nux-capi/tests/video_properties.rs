@@ -72,7 +72,11 @@ impl Scene {
             player: ptr::null_mut(),
         };
         unsafe {
-            ok(nux_artboard_instance_new(scene.file, 0, &mut scene.artboard));
+            ok(nux_artboard_instance_new(
+                scene.file,
+                0,
+                &mut scene.artboard,
+            ));
             ok(nux_view_model_instance_new_default(
                 scene.artboard,
                 &mut scene.values,

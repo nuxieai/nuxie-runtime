@@ -550,6 +550,122 @@ fn solid_fill_renders_authored_pixels_on_metal() {
 }
 
 #[test]
+fn layout_fit_renders_at_surface_scale() {
+    autoreleasepool(|_| {
+        let required = live_metal_test_required();
+        let bytes = solid_fill::solid_fill_artboard_with_dimensions(64.0, 128.0);
+        let mut renderer = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        let create_status =
+            unsafe { nux_renderer_new_metal(128, 256, &raw mut renderer, &raw mut result) };
+        if create_status != NuxStatus::Ok && !required {
+            if !result.is_null() {
+                assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+            }
+            return;
+        }
+        assert_eq!(create_status, NuxStatus::Ok);
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut file = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_file_import_metal(
+                    renderer,
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxFileImportConfig::default(),
+                    &raw mut file,
+                    &raw mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_new_static(artboard, &raw mut player) },
+            NuxStatus::Ok
+        );
+        assert!(
+            scheduling(player, 0.0).render_required,
+            "the exact runtime requires an initial advance before its first draw"
+        );
+
+        let surface = readable_layer(renderer, 128, 256);
+        let Some(drawable) = surface.nextDrawable() else {
+            assert!(!required, "required live Metal drawable is unavailable");
+            assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+            assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+            assert_eq!(
+                unsafe { nux_artboard_instance_free(artboard) },
+                NuxStatus::Ok
+            );
+            assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+            return;
+        };
+        let stride = 512;
+        let length = stride * 256;
+        let buffer = surface
+            .device()
+            .expect("Metal device")
+            .newBufferWithLength_options(length, MTLResourceOptions::StorageModeShared)
+            .expect("shared readback buffer");
+        let mut request = operation(
+            NUX_METAL_DRAWABLE_STATE_AVAILABLE,
+            Retained::as_ptr(&drawable).cast_mut().cast(),
+        );
+        request.fit = NUX_RENDERER_FIT_LAYOUT;
+        request.layout_scale_factor = 2.0;
+        request.readback_buffer = Retained::as_ptr(&buffer).cast_mut().cast();
+        request.readback_bytes_per_row = stride;
+        let outcome = unsafe { render(renderer, player, request, NuxStatus::Ok) };
+        assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
+        assert!(outcome.draw_calls > 0, "solid fill must submit draw work");
+
+        let pixels =
+            unsafe { std::slice::from_raw_parts(buffer.contents().as_ptr().cast::<u8>(), length) };
+        let center = 64 * stride + 64 * 4;
+        let [blue, green, red, alpha] = pixels
+            .get(center..)
+            .and_then(|tail| tail.first_chunk::<4>())
+            .copied()
+            .expect("Metal drawable contains its center pixel");
+        let sampled_rgba = [red, green, blue, alpha];
+        eprintln!("METAL_SOLID_FILL_SAMPLE: rgba={sampled_rgba:?} expected={FILL_RGBA:?}");
+        let tolerance = 2;
+        assert_ne!(
+            sampled_rgba,
+            [0, 0, 0, 0xff],
+            "non-black authored fill regressed to opaque black"
+        );
+        assert!(
+            sampled_rgba
+                .iter()
+                .zip(FILL_RGBA)
+                .all(|(actual, expected)| actual.abs_diff(expected) <= tolerance),
+            "Metal center pixel {sampled_rgba:?} did not match authored fill {FILL_RGBA:?}"
+        );
+
+        let bottom = 192 * stride + 64 * 4;
+        assert_eq!(&pixels[bottom..bottom + 4], &[0x33, 0x22, 0x11, 0xff]);
+
+        assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    });
+}
+
+#[test]
 fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
     autoreleasepool(|_| {
         let first = renderer(4, 3);

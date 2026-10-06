@@ -1,3 +1,14 @@
+// Independent oracle: pinned C++ de3e86090892b68072e7d4505e8d979386fc9a30,
+// rive_cpp_probe --text-measure-width-samples new_text.riv Inter_18pt-Regular.ttf.
+// The probe uses Inter at 40 px, 44 px line advances, authored width 1,
+// and an exact offered width 354. cpp-text-width.json records the full output:
+// [{"participant":0,"width":1,"height":267.521576},
+//  {"participant":1,"width":1,"height":47.5215874},
+//  {"participant":2,"width":1,"height":47.5215874}].
+// Known gap: Rust main returns x=354 at text.rs:2210-2212, where C++ returns 1.
+// These assertions pin heights only, not that existing width-return difference:
+// https://universe.basis.dev/issue/UNIV-3932.
+
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     generated::{
@@ -33,7 +44,7 @@ fn set_text(owner: &CoreHandle, content: &str) {
     }
 }
 
-fn measure(participant_width: Option<LayoutScaleType>) -> Vec2D {
+fn measure(participant_width: Option<LayoutScaleType>, content: &str, offered_width: f32) -> Vec2D {
     let root = std::path::PathBuf::from(std::env::var_os("RIVE_RUNTIME_DIR").unwrap());
     let bytes = std::fs::read(root.join("tests/unit_tests/assets/new_text.riv")).unwrap();
     let mut factory = PersistentFactory::new(RecordingFactory::new());
@@ -47,7 +58,9 @@ fn measure(participant_width: Option<LayoutScaleType>) -> Vec2D {
     .unwrap();
     let board = file.with_file(File::artboard_default).unwrap();
     let text = board.with_artboard(|b| b.find_all_handles::<Text>())[0].clone();
-    set_text(&text, "Choose");
+    // new_text.riv's first Text has one run. Both this test and the probe
+    // populate and measure that Text; the probe also clears other Texts' runs.
+    set_text(&text, content);
     for (key, value) in [
         (TextBase::SIZING_VALUE_PROPERTY_KEY, 1),
         (TextBase::OVERFLOW_VALUE_PROPERTY_KEY, 0),
@@ -108,7 +121,7 @@ fn measure(participant_width: Option<LayoutScaleType>) -> Vec2D {
     ));
     text.with_downcast_mut::<Text, _>(|t| {
         t.measure_layout(
-            354.0,
+            offered_width,
             LayoutMeasureMode::Exactly,
             f32::NAN,
             LayoutMeasureMode::Undefined,
@@ -117,25 +130,36 @@ fn measure(participant_width: Option<LayoutScaleType>) -> Vec2D {
     .unwrap()
 }
 
-// Independent oracle: pinned C++ de3e86090892b68072e7d4505e8d979386fc9a30,
-// rive_cpp_probe --text-measure-width-samples new_text.riv Inter_18pt-Regular.ttf.
-// The probe uses Inter at 40 px, 44 px line advances, authored width 1,
-// and an exact offered width 354. Its raw heights are 47.5215874 / 267.521576.
 #[test]
 fn upstream_fill_and_fixed_participants_measure_at_the_offered_width() {
     for width in [LayoutScaleType::Fill, LayoutScaleType::Fixed] {
-        let measured = measure(Some(width));
-        // Height proves which width was used to shape. Main retains a Taffy
-        // exact-slot convention for the reported x component.
+        let measured = measure(Some(width), "Choose", 354.0);
+        // This height excludes shaping at authored width 1. The headline
+        // case below also distinguishes the offered limit from unbounded.
         assert!((measured.y - 47.5215874).abs() < 0.001, "{measured:?}");
     }
 }
 
 #[test]
-fn upstream_text_without_a_width_owner_keeps_authored_width_in_an_exact_slot() {
+fn upstream_text_without_a_width_owner_shapes_at_authored_width_in_an_exact_slot() {
     // Upstream deliberately caps measurement at authored width without a
     // fill/fixed LayoutParticipant. An exact layout offer alone does not own
-    // this axis. Do not substitute the slot width as a host adaptation.
-    let measured = measure(None);
+    // this shaping axis. The returned x difference is documented above.
+    let measured = measure(None, "Choose", 354.0);
     assert!((measured.y - 267.521576).abs() < 0.001, "{measured:?}");
+}
+
+#[test]
+fn upstream_fill_and_fixed_participants_wrap_the_headline_at_the_offered_width() {
+    // de3e8609 --text-measure-headline-samples: cpp-text-headline.json reports
+    // (width=1, height=135.521591) for both participants. The matching
+    // --text-measure-headline-unbounded-samples output is (1, 47.5215874).
+    // These observations distinguish the finite offer from unbounded shaping.
+    for width in [LayoutScaleType::Fill, LayoutScaleType::Fixed] {
+        let content = "Choose what deserves your attention.";
+        let bounded = measure(Some(width), content, 354.0);
+        let unbounded = measure(Some(width), content, f32::MAX);
+        assert!((bounded.y - 135.521591).abs() < 0.001, "{bounded:?}");
+        assert!((unbounded.y - 47.5215874).abs() < 0.001, "{unbounded:?}");
+    }
 }

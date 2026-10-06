@@ -64,3 +64,50 @@ fn authored_paused_and_position_survive_later_fields_and_instancing() {
     assert_eq!(CoreRegistry::get_double(&mut *cloned, 60017), 3.0);
     assert_eq!(CoreRegistry::get_double(&mut *cloned, 60007), 2.0);
 }
+
+#[test]
+fn seeking_to_the_last_frame_still_publishes_the_changed_media_clock_position() {
+    use nuxie_runtime::{
+        source::{
+            data_bind::data_bind::{DataBind, TO_SOURCE},
+            viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+        },
+        video::{
+            properties::{POSITION, Write},
+            sync::{MediaClock, report_media_clock},
+        },
+    };
+    let arena = CoreArena::default();
+    let video = arena.insert(Video::default());
+    video.with_downcast_mut::<Video, _>(|v| {
+        v.playback.opened(0, 12.5);
+        assert!(v.playback.accept_frame(0, 3.0));
+    });
+    let number = arena.insert(ViewModelInstanceNumber::default());
+    let binding = arena.insert(DataBind::new(TO_SOURCE, 60017, 0));
+    binding.with_mut(|b| {
+        let b = b.as_data_bind_mut().unwrap();
+        b.set_target(Some(video.clone()));
+        b.set_source(number.clone());
+    });
+    DataBind::bind_handle(&binding);
+    report_media_clock(
+        &video,
+        1.0,
+        Some(MediaClock {
+            generation: 0,
+            seconds: 3.2,
+            rate: 1.0,
+            playing: true,
+        }),
+    )
+    .unwrap();
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(3.2));
+    video.with_downcast_mut::<Video, _>(|v| {
+        v.write_property(Write::Number(POSITION, 3.0)).unwrap();
+    });
+    Video::flush_property_changes(&video);
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(3.0));
+}

@@ -362,6 +362,58 @@ mod tests {
         assert!(lua.load("group:play()").exec().is_err());
     }
     #[test]
+    fn luau_seek_publishes_a_change_from_clock_time_to_last_frame_time() {
+        use nuxie_runtime::source::{
+            core::CoreArena,
+            data_bind::data_bind::{DataBind, TO_SOURCE},
+            generated::core_registry::CoreRegistry,
+            viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+        };
+        use nuxie_runtime::video::sync::{MediaClock, report_media_clock};
+        let arena = CoreArena::default();
+        let video = arena.insert(Video::default());
+        video.with_downcast_mut::<Video, _>(|v| {
+            v.playback.opened(0, 12.5);
+            assert!(v.playback.accept_frame(0, 3.0));
+        });
+        let number = arena.insert(ViewModelInstanceNumber::default());
+        let binding = arena.insert(DataBind::new(TO_SOURCE, 60017, 0));
+        binding.with_mut(|b| {
+            let b = b.as_data_bind_mut().unwrap();
+            b.set_target(Some(video.clone()));
+            b.set_source(number.clone());
+        });
+        DataBind::bind_handle(&binding);
+        report_media_clock(
+            &video,
+            1.0,
+            Some(MediaClock {
+                generation: 0,
+                seconds: 3.2,
+                rate: 1.0,
+                playing: true,
+            }),
+        )
+        .unwrap();
+        DataBind::update_data_bind_handle(&binding, true);
+        assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(3.2));
+        let lua = luaur_rt::Lua::new();
+        lua.globals()
+            .set(
+                "video",
+                lua.create_userdata(ScriptVideo::new(
+                    video,
+                    Rc::new(Cell::new(true)),
+                    Rc::new(Cell::new(false)),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        lua.load("video:seek(3)").exec().unwrap();
+        DataBind::update_data_bind_handle(&binding, true);
+        assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(3.0));
+    }
+    #[test]
     fn luau_controls_use_the_live_video_queue_and_expire_with_context() {
         let arena = nuxie_runtime::source::core::CoreArena::default();
         let handle = arena.insert(Video::default());

@@ -156,6 +156,17 @@ pub fn replay_serialized_commands(
                 // ID zero also spells nullptr: an existing shader zero wins.
                 paint.shader(shaders.get(&shader).map(|shader| shader.as_ref()));
             }
+            SHADER_TRANSFORM => {
+                let id = reader.read_var_uint();
+                let Some(paint) = paints.get_mut(&id) else {
+                    return false;
+                };
+                let mut transform = Mat2D::IDENTITY;
+                for value in &mut transform.0 {
+                    *value = reader.read_float32();
+                }
+                paint.shader_transform(transform);
+            }
             PAINT_MODULATED_IMAGE => {
                 let id = reader.read_var_uint();
                 let raw_image_id = reader.read_var_uint();

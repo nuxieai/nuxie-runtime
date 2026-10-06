@@ -381,16 +381,11 @@ impl ScriptedViewModel {
         view_model: Option<CoreHandle>,
         view_model_instance: Option<CoreHandle>,
     ) -> Self {
-        let context = scripting_context(state).map(|context| context as *mut dyn ScriptingContext);
-        if let (Some(context), Some(instance)) = (context, view_model_instance.as_ref()) {
-            unsafe { &mut *context }.track_view_model_instance(instance.clone());
-        }
         Self {
             state,
             view_model,
             view_model_instance,
             property_refs: HashMap::new(),
-            scripting_context: context,
         }
     }
 
@@ -590,11 +585,6 @@ impl ScriptedViewModel {
 
 impl Drop for ScriptedViewModel {
     fn drop(&mut self) {
-        if let (Some(context), Some(instance)) =
-            (self.scripting_context, self.view_model_instance.as_ref())
-        {
-            unsafe { &mut *context }.untrack_view_model_instance(instance);
-        }
         let state = unsafe { &mut *self.state };
         for (_, reference) in self.property_refs.drain() {
             state.unref(reference);

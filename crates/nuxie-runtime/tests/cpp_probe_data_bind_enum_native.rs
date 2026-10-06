@@ -2039,13 +2039,13 @@ fn state_machine_default_viewmodel_enum_target_to_source_matches_cpp_probe() {
         "0".to_owned(),
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
         "0".to_owned(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-set-state-machine-bindable-enum".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
         forced_value.to_string(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
@@ -2077,8 +2077,6 @@ fn state_machine_default_viewmodel_enum_target_to_source_matches_cpp_probe() {
     rust.machine.with_instance_mut(|machine| {
         machine.bind_view_model_instance(rust.default_view_model.clone())
     });
-    rust.machine
-        .with_instance_mut(|machine| machine.advanced_data_context());
     compare_advance_at_bindings(
         &cpp_artboard.runtime_state_machine_advances[1],
         &rust.machine,
@@ -2090,8 +2088,6 @@ fn state_machine_default_viewmodel_enum_target_to_source_matches_cpp_probe() {
     );
 
     set_native_enum_target_at(&rust.machine, 0, forced_value);
-    rust.machine
-        .with_instance_mut(|machine| machine.advanced_data_context());
     compare_advance_at_bindings(
         &cpp_artboard.runtime_state_machine_advances[2],
         &rust.machine,
@@ -2716,7 +2712,7 @@ fn run_enum_to_number_target_dirty_case(
         if public_update {
             "--runtime-update-state-machine-data-binds"
         } else {
-            "--runtime-advance-state-machine-data-context"
+            "--runtime-snapshot-state-machine-data-context"
         }
         .to_owned(),
     );
@@ -2764,9 +2760,6 @@ fn run_enum_to_number_target_dirty_case(
     set_native_number_target(&rust.machine, 0, 4.46);
     if public_update {
         DataBindContainerOwner::StateMachine(rust.machine.downgrade()).update_data_binds(true);
-    } else {
-        rust.machine
-            .with_instance_mut(|machine| machine.advanced_data_context());
     }
     compare_advance_state(
         &cpp_artboard.runtime_state_machine_advances[1],
@@ -2939,7 +2932,7 @@ fn run_enum_to_string_target_case(
     ];
     match flow {
         EnumToStringTargetFlow::MainToSource => {
-            args.extend(["--runtime-advance-state-machine-data-context", "0"].map(str::to_owned))
+            args.extend(["--runtime-snapshot-state-machine-data-context", "0"].map(str::to_owned))
         }
         EnumToStringTargetFlow::PublicUpdate | EnumToStringTargetFlow::MainToTarget => {
             args.extend(["--runtime-advance-state-machine", "0", "0"].map(str::to_owned))
@@ -2960,7 +2953,7 @@ fn run_enum_to_string_target_case(
                 ["--runtime-update-state-machine-data-binds", "0"]
             }
             EnumToStringTargetFlow::MainToSource | EnumToStringTargetFlow::MainToTarget => {
-                ["--runtime-advance-state-machine-data-context", "0"]
+                ["--runtime-snapshot-state-machine-data-context", "0"]
             }
         }
         .map(str::to_owned),
@@ -2987,11 +2980,7 @@ fn run_enum_to_string_target_case(
     assert_eq!(cpp_artboard.runtime_state_machine_advances.len(), 4);
 
     let first_advanced = match flow {
-        EnumToStringTargetFlow::MainToSource => {
-            rust.machine
-                .with_instance_mut(|machine| machine.advanced_data_context());
-            false
-        }
+        EnumToStringTargetFlow::MainToSource => false,
         EnumToStringTargetFlow::PublicUpdate | EnumToStringTargetFlow::MainToTarget => rust
             .machine
             .with_instance_mut(|machine| machine.advance_seconds(0.0)),
@@ -3017,10 +3006,7 @@ fn run_enum_to_string_target_case(
         EnumToStringTargetFlow::PublicUpdate => {
             DataBindContainerOwner::StateMachine(rust.machine.downgrade()).update_data_binds(true)
         }
-        EnumToStringTargetFlow::MainToSource | EnumToStringTargetFlow::MainToTarget => {
-            rust.machine
-                .with_instance_mut(|machine| machine.advanced_data_context());
-        }
+        EnumToStringTargetFlow::MainToSource | EnumToStringTargetFlow::MainToTarget => {}
     }
     compare_advance_state(
         &cpp_artboard.runtime_state_machine_advances[1],

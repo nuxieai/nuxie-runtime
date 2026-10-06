@@ -88,6 +88,7 @@ pub trait BindContextValue {
     );
     fn refresh_target_value(&mut self, bind: CoreHandle);
     fn invalidate(&mut self);
+    fn request_source_write(&mut self);
     fn apply_to_source(
         &mut self,
         target: CoreHandle,
@@ -447,6 +448,7 @@ impl DataBind {
         };
         if invalidate {
             context.invalidate();
+            context.borrow_mut().request_source_write();
         }
         #[cfg(feature = "tools")]
         let _write_source = super::super::viewmodel::write_attribution::WriteAttributionScope::new(
@@ -592,18 +594,7 @@ impl DataBind {
                 }
             });
         }
-        let is_number = value
-            .with(|source| source.as_bind_source().map(BindSource::data_type))
-            .flatten()
-            == Some(DataType::Number);
         self.source = Some(value);
-        if let Some(target) = self.target.as_ref() {
-            target.with_mut(|target| {
-                if let Some(target) = target.as_artboard_component_list_mut() {
-                    target.should_reset_instances(is_number);
-                }
-            });
-        }
     }
 
     pub fn clear_source(&mut self) {
@@ -787,6 +778,7 @@ impl DataBind {
                 let mut context = context.borrow_mut();
                 if invalidate {
                     context.invalidate();
+                    context.request_source_write();
                 }
                 #[cfg(feature = "tools")]
                 let _write_source =
@@ -1256,7 +1248,8 @@ mod observer_tests {
     fn every_scalar_registry_family_releases_target_before_final_notification() {
         use crate::source::animation::{
             keyed_object::KeyedObject, keyframe_bool::KeyFrameBool, keyframe_color::KeyFrameColor,
-            keyframe_int::KeyFrameInt, keyframe_string::KeyFrameString, keyframe_uint::KeyFrameUint,
+            keyframe_int::KeyFrameInt, keyframe_string::KeyFrameString,
+            keyframe_uint::KeyFrameUint,
         };
         macro_rules! check {
             ($owner:ty, $key:expr, $set:ident, $get:ident, $value:expr) => {{
@@ -1872,7 +1865,10 @@ mod observer_tests {
                     number.on_changed(Some(changed));
                 });
                 // Re-enter the value setter without changing the dependency list.
-                assert!(ViewModelInstanceNumber::set_value_handle(&callback_source, 7.0));
+                assert!(ViewModelInstanceNumber::set_value_handle(
+                    &callback_source,
+                    7.0
+                ));
             }));
         });
         assert!(ViewModelInstanceNumber::set_value_handle(&source, 4.0));

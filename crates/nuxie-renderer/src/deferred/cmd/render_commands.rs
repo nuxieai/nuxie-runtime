@@ -1,5 +1,5 @@
 //! renderer/cmd/render_commands.hpp at e949498e: pointer-free wire vocabulary.
-use super::command_stream::{wire_pod, WirePod};
+use super::command_stream::{WirePod, wire_pod};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,6 +29,7 @@ pub enum RenderCmd {
     PaintAdditiveness,
     PaintBlendMode,
     PaintShader,
+    PaintShaderTransform,
     PaintModulatedImage,
     PaintInvalidateStroke,
     Save,
@@ -49,7 +50,7 @@ pub enum RenderCmd {
 }
 impl RenderCmd {
     pub fn from_byte(value: u8) -> Option<Self> {
-        const COMMANDS: [RenderCmd; 42] = [
+        const COMMANDS: [RenderCmd; 43] = [
             RenderCmd::MakePath,
             RenderCmd::MakeEmptyPath,
             RenderCmd::MakePaint,
@@ -75,6 +76,7 @@ impl RenderCmd {
             RenderCmd::PaintAdditiveness,
             RenderCmd::PaintBlendMode,
             RenderCmd::PaintShader,
+            RenderCmd::PaintShaderTransform,
             RenderCmd::PaintModulatedImage,
             RenderCmd::PaintInvalidateStroke,
             RenderCmd::Save,
@@ -191,6 +193,15 @@ wire_pod!(PaintFloatPod {
 wire_pod!(PaintShaderPod {
     paint: u32,
     shader: u32
+});
+wire_pod!(PaintMat2DPod {
+    paint: u32,
+    xx: f32,
+    xy: f32,
+    yx: f32,
+    yy: f32,
+    tx: f32,
+    ty: f32
 });
 wire_pod!(PaintModulatedImagePod {
     paint: u32,
@@ -349,6 +360,7 @@ pub const fn payload_size_of(command: RenderCmd) -> usize {
             PaintFloatPod::SIZE
         }
         RenderCmd::PaintShader => PaintShaderPod::SIZE,
+        RenderCmd::PaintShaderTransform => PaintMat2DPod::SIZE,
         RenderCmd::PaintModulatedImage => PaintModulatedImagePod::SIZE,
         RenderCmd::Save | RenderCmd::Restore => 0,
         RenderCmd::Transform => TransformPod::SIZE,

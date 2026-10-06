@@ -78,6 +78,7 @@ pub trait RiveRenderPaintContract {
         &self,
     ) -> crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler;
     fn getImageTransform(&self) -> Mat2D;
+    fn getInverseGradientTransform(&self) -> Mat2D;
     fn getModulatedGradient(
         &self,
         opacity: f32,
@@ -114,6 +115,7 @@ pub struct RiveRenderPaintData {
     pub image_sampler:
         crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
     pub image_transform: Mat2D,
+    pub inverse_gradient_transform: Mat2D,
     pub gradient_with_opacity:
         crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient>,
     pub paint_type: PaintType,
@@ -150,6 +152,9 @@ impl RiveRenderPaintContract for RiveRenderPaintData {
     }
     fn getImageTransform(&self) -> Mat2D {
         self.image_transform
+    }
+    fn getInverseGradientTransform(&self) -> Mat2D {
+        self.inverse_gradient_transform
     }
     fn getModulatedGradient(
         &self,

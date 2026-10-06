@@ -279,6 +279,7 @@ pub enum LuaAtoms {
     BlendMode,
     Feather,
     Gradient,
+    GradientTransform,
     Color,
     Stroke,
     Fill,
@@ -742,6 +743,7 @@ const ATOMS: &[LuaAtomName] = &[
         name: "gradient",
         atom: LuaAtoms::Gradient,
     },
+    LuaAtomName { name: "gradientTransform", atom: LuaAtoms::GradientTransform },
     LuaAtomName {
         name: "color",
         atom: LuaAtoms::Color,
@@ -1601,6 +1603,7 @@ impl_lua_rive!(ScriptedImageSampler, 7, "ImageSampler", no_metatable);
 pub struct ScriptedPaintData {
     pub style: RenderPaintStyle,
     pub gradient: Option<Rc<RenderShader>>,
+    pub gradient_transform: Mat2D,
     pub thickness: f32,
     pub join: StrokeJoin,
     pub cap: StrokeCap,
@@ -1620,6 +1623,7 @@ impl ScriptedPaintData {
         Self {
             style: RenderPaintStyle::Fill,
             gradient: None,
+            gradient_transform: Mat2D::default(),
             thickness: 1.0,
             join: StrokeJoin::Miter,
             cap: StrokeCap::Butt,
@@ -1643,6 +1647,9 @@ impl ScriptedPaintData {
 
     pub fn set_gradient(&mut self, value: Option<Rc<RenderShader>>) {
         self.gradient = value;
+    }
+    pub fn set_gradient_transform(&mut self, value: Mat2D) {
+        self.gradient_transform = value;
     }
 
     pub fn thickness(&self) -> f32 {
@@ -1751,6 +1758,10 @@ impl ScriptedPaint {
         self.data.set_gradient(value.clone());
         self.render_paint.shader(value.as_deref());
     }
+    pub fn set_gradient_transform(&mut self, value: Mat2D) {
+        self.data.set_gradient_transform(value);
+        self.render_paint.shader_transform(nuxie_render_api::Mat2D(*value.values()));
+    }
 }
 
 impl std::ops::Deref for ScriptedPaint {
@@ -1814,7 +1825,6 @@ pub struct ScriptReffedArtboard {
     pub artboard: Option<Box<ArtboardInstance>>,
     pub state_machine: Option<Box<StateMachineInstance>>,
     pub view_model_instance: Option<CoreHandle>,
-    pub scripting_context: *mut dyn ScriptingContext,
 }
 
 pub struct ScriptedArtboard {
@@ -1914,7 +1924,6 @@ pub struct ScriptedViewModel {
     pub view_model: Option<CoreHandle>,
     pub view_model_instance: Option<CoreHandle>,
     pub property_refs: HashMap<String, i32>,
-    pub scripting_context: Option<*mut dyn ScriptingContext>,
 }
 
 impl_lua_rive!(ScriptedViewModel, 11, "ViewModel");
@@ -2442,10 +2451,6 @@ impl ScopedAssetReference {
     }
 }
 
-pub struct TrackedViewModelInstance {
-    pub instance: CoreHandle,
-    pub registrations: i32,
-}
 
 /// GPU work inherited by a script call. Nested calls reclaim only their own work.
 #[derive(Clone, Copy, Debug, Default)]
@@ -2475,7 +2480,6 @@ pub struct ScriptingContextData {
     pub modules_to_register: Vec<RuntimeModuleDetailsHandle>,
     pub module_lookup: HashMap<String, RuntimeModuleDetailsHandle>,
     pub pending_modules: HashSet<RuntimeModuleDetailsHandle>,
-    pub tracked_view_model_instances: HashMap<CoreHandle, TrackedViewModelInstance>,
     #[cfg(feature = "tools")]
     pub asset_generator_refs: HashMap<u32, i32>,
     #[cfg(feature = "tools")]
@@ -2505,7 +2509,6 @@ impl ScriptingContextData {
             modules_to_register: Vec::new(),
             module_lookup: HashMap::new(),
             pending_modules: HashSet::new(),
-            tracked_view_model_instances: HashMap::new(),
             #[cfg(feature = "tools")]
             asset_generator_refs: HashMap::new(),
             #[cfg(feature = "tools")]
@@ -2707,56 +2710,8 @@ pub trait ScriptingContext {
         self.data_mut().pending_modules.remove(registered);
     }
 
-    fn track_view_model_instance(&mut self, instance: Option<CoreHandle>) {
-        let Some(instance) = instance else {
-            return;
-        };
-        let tracked = self
-            .data_mut()
-            .tracked_view_model_instances
-            .entry(instance.clone())
-            .or_insert(TrackedViewModelInstance {
-                instance,
-                registrations: 0,
-            });
-        tracked.registrations += 1;
-    }
 
-    fn untrack_view_model_instance(&mut self, instance: Option<&CoreHandle>) {
-        let Some(instance) = instance else {
-            return;
-        };
-        if let Some(tracked) = self
-            .data_mut()
-            .tracked_view_model_instances
-            .get_mut(instance)
-        {
-            tracked.registrations -= 1;
-            if tracked.registrations <= 0 {
-                self.data_mut()
-                    .tracked_view_model_instances
-                    .remove(instance);
-            }
-        }
-    }
 
-    fn advance_detached_view_models(&mut self) {
-        for tracked in self.data_mut().tracked_view_model_instances.values_mut() {
-            if tracked
-                .instance
-                .with(|object| {
-                    object
-                        .as_view_model_instance()
-                        .is_some_and(|instance| !instance.has_parents())
-                })
-                .unwrap_or(false)
-            {
-                crate::source::viewmodel::viewmodel_instance::ViewModelInstance::advanced_handle(
-                    &tracked.instance,
-                );
-            }
-        }
-    }
 
     fn set_render_context(&mut self, context: Option<&mut Factory>) {
         self.data_mut().render_context = context.map(|context| context as *mut Factory);

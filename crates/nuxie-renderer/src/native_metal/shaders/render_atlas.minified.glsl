@@ -1,63 +1,63 @@
 #ifdef VERTEX
-h1(g0)K(0,f,UB);K(1,f,VB);i1
+c1(d0) K(0,e,WB);K(1,e,XB);d1
 #endif
-q2 I0 W(0,f,O);i2
+l2 E0 V(0,e,S);e2
 #ifdef VERTEX
-B1(XF,g0,F,A,r){L(A,F,UB,f);L(A,F,VB,f);V(O,f);f X;uint o0;c l0;if(r9(UB,VB,r,o0,l0,O A3)){R Q4=L0(OB,o0*4u+2u);S v7=uintBitsToFloat(Q4.yzw);l0=l0*v7.x+v7.yz;X=o8(l0,j.Dd.x,j.Dd.y);
+w1(YF,d0,D,G,r){L(G,D,WB,e);L(G,D,XB,e);T(S,e);e I;uint a0;c k0;if(L9(WB,XB,r,a0,k0,S H3)){M W3=p0(LB,a0*4u+2u);O E7=uintBitsToFloat(W3.yzw);k0=k0*E7.x+E7.yz;I=E8(k0,j.Vd.x,j.Vd.y);
 #ifdef POST_INVERT_Y
-X.y=-X.y;
+I.y=-I.y;
 #endif
-}else{X=f(j.W2,j.W2,j.W2,j.W2);}c0(O);C1(X);}
+}else{I=e(j.a3,j.a3,j.a3,j.a3);}Z(S);x1(I);}
 #endif
 #ifdef FRAGMENT
 #ifdef ATLAS_FEATHERED_FILL
-e d z6(f P,bool zh L3){d o=d8(P e1);if(!zh)o=-o;return o;}
+f d K6(e U,bool ji S3){d n=p8(U k1);if(!ji) n=-n;return n;}
 #endif
 #ifdef ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH
-layout(location=0)inout R r0;
+layout(location=0) inout M w0;
 #ifdef ATLAS_FEATHERED_FILL
-void main(){float o=uintBitsToFloat(r0.x);o+=z6(O,gl_FrontFacing e1);r0.x=floatBitsToUint(o);}
+void main(){float n=uintBitsToFloat(w0.x);n+=K6(S,gl_FrontFacing k1);w0.x=floatBitsToUint(n);}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-void main(){float o=uintBitsToFloat(r0.x);o=max(o,C4(O));r0.x=floatBitsToUint(o);}
+void main(){float n=uintBitsToFloat(w0.x);n=max(n,N4(S));w0.x=floatBitsToUint(n);}
 #endif
 #elif defined(ATLAS_RENDER_TARGET_R8_PLS_EXT)
-__pixel_localEXT V1{layout(r32f)float r0;};
+__pixel_localEXT c2{layout(r32f) float w0;};
 #ifdef ATLAS_FEATHERED_FILL
-void main(){r0+=z6(O,gl_FrontFacing e1);}
+void main(){w0+=K6(S,gl_FrontFacing k1);}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-void main(){r0=max(r0,C4(O));}
+void main(){w0=max(w0,N4(S));}
 #endif
 #elif defined(ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
-layout(binding=0,r32ui)uniform highp upixelLocalANGLE r0;
+layout(binding=0,r32ui) uniform highp upixelLocalANGLE w0;
 #ifdef ATLAS_FEATHERED_FILL
-void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(r0).x);o+=z6(O,gl_FrontFacing e1);pixelLocalStoreANGLE(r0,R(floatBitsToUint(o)));}
+void main(){float n=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);n+=K6(S,gl_FrontFacing k1);pixelLocalStoreANGLE(w0,M(floatBitsToUint(n)));}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-void main(){float o=uintBitsToFloat(pixelLocalLoadANGLE(r0).x);o=max(o,C4(O));pixelLocalStoreANGLE(r0,R(floatBitsToUint(o)));}
+void main(){float n=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);n=max(n,N4(S));pixelLocalStoreANGLE(w0,M(floatBitsToUint(n)));}
 #endif
 #elif defined(ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE)
-layout(binding=0,r32i)uniform highp coherent iimage2D Y8;ivec2 ce(){return ivec2(floor(d0));}int de(float o){return int(o*dd);}
+layout(binding=0,r32i) uniform highp coherent iimage2D p9;ivec2 se(){return ivec2(floor(f0));}int te(float n){return int(n*Cd);}
 #ifdef ATLAS_FEATHERED_FILL
-void main(){int o=de(z6(O,gl_FrontFacing e1));imageAtomicAdd(Y8,ce(),o);}
+void main(){int n=te(K6(S,gl_FrontFacing k1));imageAtomicAdd(p9,se(),n);}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-void main(){int o=de(C4(O));imageAtomicMax(Y8,ce(),o);}
+void main(){int n=te(N4(S));imageAtomicMax(p9,se(),n);}
 #endif
 #elif defined(ATLAS_RENDER_TARGET_RGBA8_UNORM)
 #ifdef ATLAS_FEATHERED_FILL
-v6(i,AF){q(O,f);d o=z6(O,w6 e1);if(abs(o)>Zf-1e-3){M2(o>.0?E0(.0,.0,1./255.,.0):E0(.0,.0,.0,1./255.));}else{o*=1./xa;M2(E0(max(o,.0),max(-o,.0),.0,.0));}}
+G6(i,BF){q(S,e);d n=K6(S,H6 k1);if(abs(n)>Fg-1e-3){P2(n>.0?I0(.0,.0,1./255.,.0):I0(.0,.0,.0,1./255.));}else{n*=1./Ta;P2(I0(max(n,.0),max(-n,.0),.0,.0));}}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-f3(i,BF){q(O,f);d o=C4(O e1);o*=1./xa;M2(E0(o,.0,.0,.0));}
+j3(i,CF){q(S,e);d n=N4(S k1);n*=1./Ta;P2(I0(n,.0,.0,.0));}
 #endif
 #else
 #ifdef ATLAS_FEATHERED_FILL
-v6(float,AF){q(O,f);M2(z6(O,w6 e1));}
+G6(float,BF){q(S,e);P2(K6(S,H6 k1));}
 #endif
 #ifdef ATLAS_FEATHERED_STROKE
-f3(float,BF){q(O,f);M2(C4(O e1));}
+j3(float,CF){q(S,e);P2(N4(S k1));}
 #endif
 #endif
 #endif

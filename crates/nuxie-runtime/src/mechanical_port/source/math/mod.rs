@@ -7,7 +7,7 @@ pub mod contour_measure;
 pub mod cubic_utilities;
 pub mod hit_test;
 pub mod mat2d;
-pub mod mat2d_find_max_scale;
+pub mod mat2d_scale;
 pub mod mat4;
 pub mod math_types;
 pub mod n_slicer_helpers;

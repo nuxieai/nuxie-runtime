@@ -128,22 +128,9 @@ impl ScriptedPropertyListenerOwner {
     }
 }
 
-#[derive(Default)]
-struct TrackedViewModels {
-    instances: BTreeMap<ViewModelInstanceKey, TrackedViewModel>,
-}
-
-struct TrackedViewModel {
-    instance: ScriptViewModel,
-    registrations: usize,
-}
-
-/// Per-VM equivalent of C++ `ScriptingContext`'s owner-counted detached VMI
-/// registry. The runtime-owned instance topology decides which registered
-/// instances are detached; this registry only owns registration lifetimes.
+/// Per-VM retained scripted-property watchers and listener ownership.
 #[derive(Clone, Default)]
 pub(crate) struct ScriptViewModelFrameContext {
-    tracked: Rc<RefCell<TrackedViewModels>>,
     trigger_watches: Rc<RefCell<Vec<Rc<ScriptedTriggerWatch>>>>,
     blob_watches: Rc<RefCell<Vec<Rc<ScriptedBlobWatch>>>>,
     property_watches: Rc<RefCell<Vec<Rc<ScriptedPropertyWatch>>>>,
@@ -236,7 +223,6 @@ impl std::fmt::Debug for ScriptViewModelFrameContext {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("ScriptViewModelFrameContext")
-            .field("tracked_instances", &self.tracked.borrow().instances.len())
             .field("trigger_watches", &self.trigger_watches.borrow().len())
             .field("blob_watches", &self.blob_watches.borrow().len())
             .field("property_watches", &self.property_watches.borrow().len())
@@ -311,39 +297,6 @@ impl ScriptViewModelFrameContext {
         context
     }
 
-    fn ensure_entry<'a>(
-        tracked: &'a mut TrackedViewModels,
-        instance: &ScriptViewModel,
-    ) -> &'a mut TrackedViewModel {
-        let key = instance.identity_key();
-        tracked
-            .instances
-            .entry(key)
-            .or_insert_with(|| TrackedViewModel {
-                instance: instance.clone(),
-                registrations: 0,
-            })
-    }
-
-    pub(crate) fn register(&self, model: &ScriptViewModel) -> ScriptViewModelRegistration {
-        let key = model.identity_key();
-        if model.native_instance().is_none() {
-            return ScriptViewModelRegistration {
-                tracked: Weak::new(),
-                key,
-            };
-        }
-        {
-            let mut tracked = self.tracked.borrow_mut();
-            let entry = Self::ensure_entry(&mut tracked, model);
-            entry.registrations = entry.registrations.saturating_add(1);
-        }
-        ScriptViewModelRegistration {
-            tracked: Rc::downgrade(&self.tracked),
-            key,
-        }
-    }
-
     fn register_trigger_watch(&self, watch: &Rc<ScriptedTriggerWatch>) {
         let mut watches = self.trigger_watches.borrow_mut();
         if watches.iter().any(|candidate| Rc::ptr_eq(candidate, watch)) {
@@ -370,74 +323,12 @@ impl ScriptViewModelFrameContext {
         watches.push(Rc::clone(watch));
         *watch.retained_by.borrow_mut() = Rc::downgrade(&self.property_watches);
     }
-
-    fn clear_trigger_watch_dirt(&self) {
-        let mut retained = self.trigger_watches.borrow_mut();
-        retained.retain(|watch| {
-            let _ = watch.sink.borrow().take_dirt();
-            !watch.listeners.borrow().is_empty()
-        });
-    }
-
-    pub(crate) fn advance_detached(&self) -> bool {
-        let mut changed = false;
-        let roots = {
-            let mut tracked = self.tracked.borrow_mut();
-            tracked.instances.retain(|_, entry| entry.registrations > 0);
-            tracked
-                .instances
-                .values()
-                .filter(|entry| !entry.instance.has_parents())
-                .map(|entry| entry.instance.clone())
-                .collect::<Vec<_>>()
-        };
-        for root in roots {
-            changed |= root.advanced();
-        }
-        // Trigger reset cascades ordinary dirt even though C++ suppresses its
-        // delegate callback. Consume that reset dirt so it cannot replay the
-        // Lua listener on the next host frame.
-        self.clear_trigger_watch_dirt();
-        changed
-    }
-
-    #[cfg(test)]
-    fn registrations(&self, model: &ScriptViewModel) -> usize {
-        self.tracked
-            .borrow()
-            .instances
-            .get(&model.identity_key())
-            .map(|entry| entry.registrations)
-            .unwrap_or_default()
-    }
-}
-
-pub(crate) struct ScriptViewModelRegistration {
-    tracked: Weak<RefCell<TrackedViewModels>>,
-    key: ViewModelInstanceKey,
-}
-
-impl Drop for ScriptViewModelRegistration {
-    fn drop(&mut self) {
-        let Some(tracked) = self.tracked.upgrade() else {
-            return;
-        };
-        let mut tracked = tracked.borrow_mut();
-        let Some(entry) = tracked.instances.get_mut(&self.key) else {
-            return;
-        };
-        entry.registrations = entry.registrations.saturating_sub(1);
-        if entry.registrations == 0 {
-            tracked.instances.remove(&self.key);
-        }
-    }
 }
 
 /// Luau bindings ported from the ScriptedViewModel/ScriptedProperty trigger
 /// slice of C++ `src/lua/lua_properties.cpp`.
 struct ScriptedViewModelHandle {
     model: ScriptViewModel,
-    _registration: ScriptViewModelRegistration,
 }
 
 impl UserData for ScriptedViewModelHandle {}
@@ -770,13 +661,11 @@ fn create_scripted_view_model_retained(
     listener_owner: Option<ScriptedPropertyListenerOwner>,
 ) -> luaur_rt::Result<Table> {
     let frame_context = ScriptViewModelFrameContext::for_lua(lua);
-    let registration = frame_context.register(&model);
     let table = lua.create_table();
     table.set(
         "__rive_model",
         lua.create_userdata(ScriptedViewModelHandle {
             model: model.clone(),
-            _registration: registration,
         })?,
     )?;
 
@@ -3693,11 +3582,10 @@ mod tests {
             .expect("shared property assignment");
         assert_eq!(immediate, "first,second");
 
-        ScriptViewModelFrameContext::for_lua(&lua).advance_detached();
         let after_advance: String = lua
             .load("return table.concat(events, ',')")
             .eval()
-            .expect("events after detached advance");
+            .expect("events after synchronous dispatch");
         assert_eq!(after_advance, "first,second");
     }
 
@@ -3861,58 +3749,6 @@ mod tests {
         };
         assert!(error.contains("lt2-unported-animation.luau"), "{error}");
         assert!(error.contains("animation"), "{error}");
-    }
-
-    #[test]
-    fn registrations_retain_until_the_last_owner_and_then_stop_advancing() {
-        let (model, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
-        let context = ScriptViewModelFrameContext::default();
-        let first = context.register(&model);
-        let second = context.register(&model);
-        assert_eq!(context.registrations(&model), 2);
-
-        assert!(model.fire_trigger(&trigger));
-        assert!(context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(0));
-
-        drop(first);
-        assert_eq!(context.registrations(&model), 1);
-        assert!(model.fire_trigger(&trigger));
-        assert!(context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(0));
-
-        drop(second);
-        assert_eq!(context.registrations(&model), 0);
-        assert!(model.fire_trigger(&trigger));
-        assert!(!context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(1));
-    }
-
-    #[test]
-    fn advance_detached_view_models_tolerates_the_safe_rust_null_adaptation() {
-        // Pinned C++ constructs ScriptedViewModel(..., nullptr). Rust's
-        // ScriptViewModel cannot contain a null retained instance, so the
-        // exact safe-Rust state is an empty frame context: no registration is
-        // created, and advancing it is a no-op.
-        let context = ScriptViewModelFrameContext::default();
-        assert!(!context.advance_detached());
-    }
-
-    #[test]
-    fn only_parentless_roots_advance_and_registered_roots_recurse_to_children() {
-        let (parent, list) = model_with_property(ScriptViewModelProperty::List);
-        let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
-        assert!(parent.push_list_item(&list, &child));
-        let context = ScriptViewModelFrameContext::default();
-        let _child_registration = context.register(&child);
-
-        assert!(child.fire_trigger(&trigger));
-        assert!(!context.advance_detached());
-        assert_eq!(child.trigger(&trigger), Some(1));
-
-        let _parent_registration = context.register(&parent);
-        assert!(context.advance_detached());
-        assert_eq!(child.trigger(&trigger), Some(0));
     }
 
     #[test]
@@ -4132,31 +3968,16 @@ mod tests {
                 .expect("initialize listeners")
         );
         assert!(model.set_color("colorProp", 0xff10_1567));
-        vm.advance_detached_view_models();
         assert_eq!(
             vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(),
             2
         );
         drop(instance);
         assert!(model.set_color("colorProp", 0xff10_1568));
-        vm.advance_detached_view_models();
         assert_eq!(
             vm.lua.globals().get::<i64>("upstreamDisposeCalls").unwrap(),
             2
         );
-    }
-
-    #[test]
-    fn detached_root_recurses_through_shared_list_instances() {
-        let (parent, list) = model_with_property(ScriptViewModelProperty::List);
-        let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
-        assert!(parent.push_list_item(&list, &child));
-
-        let context = ScriptViewModelFrameContext::default();
-        let _parent_registration = context.register(&parent);
-        assert!(child.fire_trigger(&trigger));
-        assert!(context.advance_detached());
-        assert_eq!(child.trigger(&trigger), Some(0));
     }
 
     #[test]
@@ -4165,15 +3986,13 @@ mod tests {
         let (child, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
         assert!(parent.push_list_item(&list, &child));
 
-        let context = ScriptViewModelFrameContext::default();
-        let _child_registration = context.register(&child);
+        assert!(child.has_parents());
         assert!(child.fire_trigger(&trigger));
-        assert!(!context.advance_detached());
         assert_eq!(child.trigger(&trigger), Some(1));
 
         assert!(parent.remove_list_item(&list, &child, false));
-        assert!(context.advance_detached());
-        assert_eq!(child.trigger(&trigger), Some(0));
+        assert!(!child.has_parents());
+        assert_eq!(child.trigger(&trigger), Some(1));
     }
 
     #[test]
@@ -4328,10 +4147,9 @@ mod tests {
     }
 
     #[test]
-    fn scripted_trigger_fire_mutates_backing_model_and_reset_skips_listeners() {
+    fn scripted_trigger_fire_mutates_backing_model_with_cumulative_count() {
         let (model, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
         let lua = Lua::new();
-        let context = ScriptViewModelFrameContext::for_lua(&lua);
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).expect("model global");
         lua.globals()
@@ -4359,24 +4177,18 @@ mod tests {
 
         assert_eq!(model.trigger(&trigger), Some(1));
         assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 101);
-        assert!(context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(0));
-        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 101);
 
         lua.globals().set("model", Value::Nil).unwrap();
         lua.gc_collect().expect("collect scripted model wrapper");
-        assert_eq!(context.registrations(&model), 0);
         assert!(model.fire_trigger(&trigger));
         assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 202);
-        assert!(!context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(1));
+        assert_eq!(model.trigger(&trigger), Some(2));
     }
 
     #[test]
-    fn host_trigger_mutation_notifies_lua_listener_before_frame_reset() {
+    fn host_trigger_mutation_notifies_lua_listener_synchronously() {
         let (model, trigger) = model_with_property(ScriptViewModelProperty::Trigger);
         let lua = Lua::new();
-        let context = ScriptViewModelFrameContext::for_lua(&lua);
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).expect("model global");
         lua.globals()
@@ -4393,11 +4205,10 @@ mod tests {
 
         assert!(model.fire_trigger(&trigger));
         assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
-        assert!(context.advance_detached());
-        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
-        assert_eq!(model.trigger(&trigger), Some(0));
-        assert!(!context.advance_detached());
-        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
+        assert_eq!(model.trigger(&trigger), Some(1));
+        assert!(model.fire_trigger(&trigger));
+        assert_eq!(model.trigger(&trigger), Some(2));
+        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 2);
     }
 
     #[test]
@@ -4823,7 +4634,6 @@ mod tests {
         let (model, blob) =
             model_with_property_from("data_bind_blob_test.riv", ScriptViewModelProperty::Blob);
         let lua = Lua::new();
-        let context = ScriptViewModelFrameContext::for_lua(&lua);
         let table = create_scripted_view_model(&lua, model.clone()).expect("scripted model");
         lua.globals().set("model", table).expect("model global");
         lua.globals()
@@ -4838,23 +4648,21 @@ mod tests {
         .exec()
         .expect("listener registration");
 
+        let value = native_property(&model, &blob);
+        let sequence_before = value
+            .with(|v| v.as_view_model_instance_value().unwrap().change_sequence())
+            .unwrap();
         assert!(model.set_blob(&blob, Some(Arc::<[u8]>::from(&b"host"[..]))));
         assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
-        let value = native_property(&model, &blob);
         assert!(
             value
-                .with(|value| value.as_view_model_instance_value().unwrap().has_changed())
+                .with(|value| value
+                    .as_view_model_instance_value()
+                    .unwrap()
+                    .change_sequence())
                 .unwrap()
+                > sequence_before
         );
-        // Pinned advanceDetachedViewModels returns void; advanced() clears
-        // the canonical valueChanged flag without replaying its delegate.
-        context.advance_detached();
-        assert!(
-            !value
-                .with(|value| value.as_view_model_instance_value().unwrap().has_changed())
-                .unwrap()
-        );
-        assert_eq!(lua.globals().get::<i64>("listenerCalls").unwrap(), 1);
     }
 
     #[test]

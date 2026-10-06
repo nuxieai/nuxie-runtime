@@ -148,6 +148,7 @@ impl crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp
     fn getImageTexture(&self)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::Texture> { unsafe { crate::mechanical_port::source::include::rive::refcnt_hpp::ref_rcp(self.m_data.m_imageTexture.get()) } }
     fn getImageSampler(&self)->crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler { self.getImageSampler() }
     fn getImageTransform(&self)->nuxie_render_api::Mat2D { *self.getImageTransform() }
+    fn getInverseGradientTransform(&self)->nuxie_render_api::Mat2D { self.getInverseGradientTransform() }
     fn getModulatedGradient(&self, opacity:f32, color:u32)->crate::mechanical_port::source::include::rive::refcnt_hpp::rcp<Gradient> { self.getModulatedGradient(opacity, color) }
     fn getType(&self)->crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::PaintType { self.getType() }
     fn getSimpleValue(&self)->crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::SimplePaintValue { self.getSimpleValue() }

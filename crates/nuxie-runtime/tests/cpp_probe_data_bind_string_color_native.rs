@@ -2440,8 +2440,6 @@ fn run_formula_explicit_target_to_source(
     assert_eq!(cpp_artboard.runtime_state_machine_advances.len(), 4);
 
     let source = rust.bind_default_view_model(label);
-    rust.machine
-        .with_instance_mut(StateMachineInstance::advanced_data_context);
     compare_advance(
         &cpp_artboard.runtime_state_machine_advances[0],
         &rust.machine,
@@ -2456,8 +2454,6 @@ fn run_formula_explicit_target_to_source(
     assert_source(&rust, &source, label);
 
     rust.set_bindable_number(0.4, label);
-    rust.machine
-        .with_instance_mut(StateMachineInstance::advanced_data_context);
     compare_advance(
         &cpp_artboard.runtime_state_machine_advances[1],
         &rust.machine,
@@ -3319,13 +3315,13 @@ fn state_machine_default_viewmodel_color_formula_fallback_explicit_target_to_sou
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
         "0".to_owned(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-set-state-machine-bindable-number".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
         "0.4".to_owned(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
@@ -3359,13 +3355,13 @@ fn state_machine_default_viewmodel_string_formula_fallback_explicit_target_to_so
     let args = [
         "--runtime-bind-default-view-model-state-machine-context".to_owned(),
         "0".to_owned(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-set-state-machine-bindable-number".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
         "0.4".to_owned(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),

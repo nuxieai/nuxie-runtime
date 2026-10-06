@@ -1364,10 +1364,14 @@ pub struct ImageRectDraw {
     pub base: Draw,
     pub(crate) modulated_color: u32,
     pub(crate) gradient_matrix: nuxie_render_api::Mat2D,
+    pub(crate) inverse_gradient_transform: nuxie_render_api::Mat2D,
     pub(crate) gradient_ref: *const Gradient,
     pub(crate) ramp_location: ColorRampLocation,
 }
 impl ImageRectDraw {
+    pub fn inverseGradientTransform(&self) -> nuxie_render_api::Mat2D {
+        self.inverse_gradient_transform
+    }
     pub fn modulatedColor(&self) -> u32 {
         self.modulated_color
     }
@@ -1446,6 +1450,7 @@ pub struct PathDraw {
     pub(crate) feather_atlas_scissor: AABBu16,
     pub(crate) push_feather_atlas: PushFeatherAtlasFn,
     pub(crate) gradient: *const Gradient,
+    pub(crate) inverse_gradient_transform: nuxie_render_api::Mat2D,
     pub(crate) paint_type: gpu::PaintType,
     pub(crate) stroke_radius: f32,
     pub(crate) feather_radius: f32,
@@ -1454,6 +1459,9 @@ pub struct PathDraw {
     pub(crate) push_interior_triangles: PushInteriorTrianglesFn,
 }
 impl PathDraw {
+    pub fn inverseGradientTransform(&self) -> nuxie_render_api::Mat2D {
+        self.inverse_gradient_transform
+    }
     pub fn isStroke(&self) -> bool {
         self.is_stroke
     }

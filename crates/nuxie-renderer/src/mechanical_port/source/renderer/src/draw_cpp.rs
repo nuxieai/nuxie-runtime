@@ -803,6 +803,10 @@ impl PathDrawAllocation {
 // complete source-shaped owner for state that is not part of the GPU-facing
 // prefix.
 impl PathDraw {
+    pub fn calculatePixelBounds(matrix: Mat2D, path: &RiveRenderPath, paint: &dyn RiveRenderPaintContract) -> IAABB {
+        let stroke = paint.getIsStroked().then(|| paint.getStrokeParams());
+        path.calculatePixelBounds(matrix, stroke.as_ref(), paint.getFeather())
+    }
     fn allocation(&self) -> &PathDrawAllocation {
         unsafe { &*(self as *const PathDraw).cast::<PathDrawAllocation>() }
     }
@@ -1787,6 +1791,7 @@ pub unsafe fn make_path_draw_from_source(
             crate::draw::feather_atlas_scale(paint.getFeather(), paint_matrix),
             gradient,
             paint_type,
+            paint.getInverseGradientTransform(),
             simple_paint_value,
             stroke_radius,
             feather_radius,
@@ -1899,6 +1904,7 @@ pub unsafe fn make_path_draw(
     atlas_scale_factor: f32,
     gradient: rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::Gradient>,
     paint_type: gpu::PaintType,
+    inverse_gradient_transform: Mat2D,
     simple_paint_value: gpu::SimplePaintValue,
     stroke_radius: f32,
     feather_radius: f32,
@@ -1964,6 +1970,7 @@ pub unsafe fn make_path_draw(
             feather_atlas_scissor,
             push_feather_atlas,
             gradient: gradient_ptr,
+            inverse_gradient_transform,
             paint_type,
             stroke_radius,
             feather_radius,
@@ -2005,6 +2012,7 @@ pub unsafe fn make_image_rect_draw(
     scissor: Option<AABBu16>,
     image_matrix: Mat2D,
     gradient_matrix: Mat2D,
+    inverse_gradient_transform: Mat2D,
 ) -> Box<ImageRectDrawAllocation> {
     let image_texture_ptr = image_texture.get();
     let mut base = base_draw(
@@ -2029,6 +2037,7 @@ pub unsafe fn make_image_rect_draw(
             base,
             modulated_color,
             gradient_matrix,
+            inverse_gradient_transform,
             gradient_ref: gradient.get(),
             ramp_location: gpu::ColorRampLocation::default(),
         },
@@ -2053,6 +2062,7 @@ pub unsafe fn make_image_rect_draw_from_source(
     modulated_color: u32,
     image_matrix: Mat2D,
     gradient_matrix: Mat2D,
+    inverse_gradient_transform: Mat2D,
 ) -> Box<ImageRectDrawAllocation> {
     debug_assert!(!context.frameSupportsImagePaintForPathsExecutable());
     unsafe {
@@ -2070,6 +2080,7 @@ pub unsafe fn make_image_rect_draw_from_source(
             None,
             image_matrix,
             gradient_matrix,
+            inverse_gradient_transform,
         )
     }
 }

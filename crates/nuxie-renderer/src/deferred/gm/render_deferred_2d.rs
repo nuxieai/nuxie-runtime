@@ -46,6 +46,7 @@ fn draw_scene(factory: &mut dyn Factory, renderer: &mut dyn Renderer) {
     let mut paint = factory.make_render_paint();
     paint.style(RenderPaintStyle::Fill);
     paint.shader(Some(grad.as_ref()));
+    paint.shader_transform(Mat2D([0.8, 0.3, -0.3, 0.8, 20.0, -10.0]));
     renderer.draw_path(box_path.as_ref(), paint.as_ref());
     let mut tri = factory.make_empty_render_path();
     tri.fill_rule(FillRule::NonZero);

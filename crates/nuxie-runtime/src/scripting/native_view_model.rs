@@ -704,32 +704,4 @@ impl NativeScriptViewModel {
             true
         })
     }
-    pub fn advance(&self) -> bool {
-        let Some(instance) = &self.instance else {
-            return false;
-        };
-        if instance
-            .with_downcast::<ViewModelInstance, _>(|_| ())
-            .is_none()
-        {
-            return false;
-        }
-        let mut changed = false;
-        let mut index = 0;
-        while let Some(value) = instance
-            .with_downcast::<ViewModelInstance, _>(|owner| {
-                owner.property_values().get(index).cloned()
-            })
-            .flatten()
-        {
-            value.with(|value| {
-                changed |= value
-                    .as_view_model_instance_value()
-                    .is_some_and(|value| value.has_changed());
-            });
-            ViewModelInstance::advanced_value_handle(&value);
-            index += 1;
-        }
-        changed
-    }
 }

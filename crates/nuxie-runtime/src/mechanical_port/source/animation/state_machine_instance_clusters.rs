@@ -87,6 +87,15 @@ impl BindablePropertyInstances {
 
 #[derive(Default)]
 pub(super) struct SMIBindables {
+    pub change_baseline: u64,
+    pub change_searched: u64,
+    pub listener_baseline: Rc<std::cell::Cell<u64>>,
+    pub changes_used: RefCell<
+        Vec<(
+            super::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
+            CoreHandle,
+        )>,
+    >,
     pub property_instances: BindablePropertyInstances,
     pub data_binds_to_target: HashMap<CoreHandle, CoreHandle>,
     pub data_binds_to_source: HashMap<CoreHandle, CoreHandle>,

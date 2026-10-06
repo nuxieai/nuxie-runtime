@@ -845,7 +845,7 @@
     },
     {
       "name": "NuxRenderCallbacks",
-      "size": 336,
+      "size": 344,
       "alignment": 8,
       "fields": [
         {
@@ -1015,6 +1015,10 @@
         {
           "name": "modulate_color",
           "offset": 328
+        },
+        {
+          "name": "render_paint_shader_transform",
+          "offset": 336
         }
       ]
     },

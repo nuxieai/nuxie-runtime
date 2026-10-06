@@ -1226,12 +1226,12 @@ fn wave_b_data_binding_test_002_direct_port_expected_red() {
     state
         .with_downcast_mut::<ViewModelInstanceEnum, _>(|state| state.set_value_named("state-blue"))
         .expect("enum");
-    binding_set_trigger(&trigger, 1);
+    assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
     machine.advance_and_apply(0.0);
     assert_eq!(binding_fill_color(&fill), 0xff0000ff);
     assert_eq!(binding_shape_position(&shape).0, 350.0);
     assert_eq!(binding_shape_position(&shape).1, 250.0);
-    binding_set_trigger(&trigger, 1);
+    assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
     machine.advance_and_apply(0.0);
     assert_eq!(binding_shape_position(&shape).0, 350.0);
     assert_eq!(binding_shape_position(&shape).1, 350.0);
@@ -1244,7 +1244,8 @@ fn wave_b_data_binding_test_003_direct_port_expected_red() {
     let machine = binding_default_machine(&artboard, &instance);
     let trigger = binding_typed_property::<ViewModelInstanceTrigger>(&instance, "trigger-prop");
     machine.advance_and_apply(0.0);
-    binding_set_trigger(&trigger, 1);
+    assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
+    assert_eq!(trigger.with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value()).unwrap(), 1);
     machine.advance_and_apply_view_models(0.0, false);
     assert_eq!(
         trigger
@@ -1257,8 +1258,29 @@ fn wave_b_data_binding_test_003_direct_port_expected_red() {
         trigger
             .with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value())
             .unwrap(),
-        0
+        1
     );
+}
+
+#[test]
+fn upstream_trigger_values_are_monotonic_counters_7aa93402() {
+    let (_file, artboard, instance) = binding_authored_instance("data_binding_test.riv", "artboard-2");
+    let machine = binding_default_machine(&artboard, &instance);
+    let trigger = binding_typed_property::<ViewModelInstanceTrigger>(&instance, "trigger-prop");
+    let count = || trigger.with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value()).unwrap();
+    machine.advance_and_apply(0.0);
+    assert_eq!(count(), 0);
+    for i in 1..=5 {
+        assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
+        assert_eq!(count(), i);
+        machine.advance_and_apply(0.016);
+        assert_eq!(count(), i);
+    }
+    assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
+    assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
+    assert_eq!(count(), 7);
+    machine.advance_and_apply(0.016);
+    assert_eq!(count(), 7);
 }
 
 #[test]

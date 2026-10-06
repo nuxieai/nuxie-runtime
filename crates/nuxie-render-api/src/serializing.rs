@@ -386,6 +386,7 @@ impl Factory for SerializingFactory {
             additiveness: 0.0,
             blend_mode: BlendMode::SrcOver,
             shader_id: None,
+            shader_transform: Mat2D::IDENTITY,
         })
     }
 
@@ -498,6 +499,7 @@ struct SerializingRenderPaint {
     additiveness: f32,
     blend_mode: BlendMode,
     shader_id: Option<u64>,
+    shader_transform: Mat2D,
 }
 
 impl SerializingRenderPaint {
@@ -603,6 +605,19 @@ impl RenderPaint for SerializingRenderPaint {
         if self.shader_id != id {
             self.shader_id = id;
             self.write_uint(SHADER, id.unwrap_or(0));
+        }
+    }
+
+    fn shader_transform(&mut self, transform: Mat2D) {
+        if self.shader_transform == transform {
+            return;
+        }
+        self.shader_transform = transform;
+        let mut writer = self.writer.borrow_mut();
+        writer.varuint(SHADER_TRANSFORM);
+        writer.varuint(self.id);
+        for value in transform.0 {
+            writer.float(value);
         }
     }
 

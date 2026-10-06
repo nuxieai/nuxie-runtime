@@ -101,6 +101,7 @@ impl RenderPaint for MPaint {
     fn feather(&mut self, _: f32) {}
     fn blend_mode(&mut self, _: BlendMode) {}
     fn shader(&mut self, _: Option<&dyn RenderShader>) {}
+    fn shader_transform(&mut self, _: Mat2D) {}
     fn invalidate_stroke(&mut self) {}
 }
 #[derive(Clone)]
@@ -343,6 +344,7 @@ const COMMAND_NAMES: [&str; RenderCmd::ResourceNewVersion as usize + 1] = [
     "paintAdditiveness",
     "paintBlendMode",
     "paintShader",
+    "paintShaderTransform",
     "paintModulatedImage",
     "paintInvalidateStroke",
     "save",

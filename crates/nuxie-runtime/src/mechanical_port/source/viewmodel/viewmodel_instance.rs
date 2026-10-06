@@ -516,12 +516,13 @@ impl ViewModelInstance {
         };
         // Artboard-owned values are cloned by the artboard's object traversal.
         if copy_values {
+            cloned.with_downcast_mut::<Self, _>(|cloned| cloned.reserve_values(properties.len()));
             for property in &properties {
                 let Some(property) = property.clone_occurrence() else {
                     return false;
                 };
                 if cloned
-                    .with_downcast_mut::<Self, _>(|cloned| cloned.add_value(property))
+                    .with_downcast_mut::<Self, _>(|cloned| cloned.append_value(property))
                     .is_none()
                 {
                     return false;
@@ -611,117 +612,6 @@ impl ViewModelInstance {
             .expect("the BackboardImporter remains on the import stack")
             .add_file_view_model_instance(instance);
         StatusCode::Ok
-    }
-
-    pub fn advanced(&mut self) {
-        let mut index = 0;
-        while index < self.property_values.len() {
-            #[cfg(feature = "tools")]
-            let value = self.property_values[index].clone();
-            #[cfg(not(feature = "tools"))]
-            let value = &self.property_values[index];
-            value.with_mut(|value| {
-                assert!(
-                    value.view_model_instance_value_advanced(),
-                    "ViewModel property value advance capability"
-                );
-            });
-            index += 1;
-        }
-    }
-
-    /// Release the owner borrow before tools callbacks can remove entries.
-    /// The index advances even after removal, just as the upstream loop does.
-    pub fn advanced_handle(owner: &CoreHandle) {
-        #[cfg(not(feature = "tools"))]
-        owner.with_mut(|object| {
-            if let Some(instance) = object.as_view_model_instance_mut() {
-                instance.advanced();
-            }
-        });
-        #[cfg(feature = "tools")]
-        {
-            let _retained = owner.retain_arena();
-            let mut index = 0;
-            while let Some(value) = owner
-                .with(|object| {
-                    object
-                        .as_view_model_instance()
-                        .and_then(|instance| instance.property_values.get(index).cloned())
-                })
-                .flatten()
-            {
-                Self::advanced_value_handle(&value);
-                index += 1;
-            }
-        }
-    }
-
-    pub(crate) fn advanced_value_handle(value: &CoreHandle) {
-        // Keep the arena-owned occurrence alive through the complete call,
-        // including a leaf's synchronous tools callback.
-        #[cfg(feature = "tools")]
-        let _retained = value.retain_arena();
-        #[cfg(feature = "tools")]
-        {
-            if value
-                .with(|object| object.as_view_model_instance_trigger().is_some())
-                .unwrap_or(false)
-            {
-                super::viewmodel_instance_trigger::ViewModelInstanceTrigger::advanced_handle(value);
-                return;
-            }
-            let bound_artboard_instance = value
-                .with(|object| {
-                    object
-                        .as_view_model_instance_artboard()
-                        .map(|value| value.bound_view_model_instance())
-                })
-                .flatten();
-            if let Some(instance) = bound_artboard_instance {
-                if let Some(instance) = instance {
-                    Self::advanced_handle(&instance);
-                }
-                value.with_mut(|object| {
-                    object
-                        .as_view_model_instance_artboard_mut()
-                        .expect("artboard value")
-                        .base
-                        .advanced()
-                });
-                return;
-            }
-            let nested = value.with(|object| {
-                if object.as_view_model_instance_list().is_some() {
-                    return (true, None);
-                }
-                (
-                    false,
-                    object
-                        .as_view_model_instance_view_model()
-                        .map(|value| value.reference_view_model_instance()),
-                )
-            });
-            match nested {
-                Some((true, _)) => {
-                    super::viewmodel_instance_list::ViewModelInstanceList::advanced_handle(value);
-                    return;
-                }
-                Some((false, Some(instance))) => {
-                    if let Some(instance) = instance {
-                        Self::advanced_handle(&instance);
-                    }
-                    return;
-                }
-                _ => {}
-            }
-        }
-        value.with_mut(|object| {
-            assert!(
-                object.view_model_instance_value_advanced(),
-                "ViewModelInstance property values implement advanced"
-            )
-        });
     }
 
     pub fn add_parent(&mut self, parent: CoreHandle) {

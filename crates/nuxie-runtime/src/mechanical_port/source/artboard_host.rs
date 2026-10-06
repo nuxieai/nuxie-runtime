@@ -8,6 +8,12 @@ use crate::mechanical_port::source::{
 };
 
 pub trait ArtboardHost {
+    /// The host's actual inactive sequence storage is shared with mounted
+    /// artboards so a child can read it while its host is advancing it.
+    fn inactive_change_sequence_state(&self) -> std::rc::Rc<std::cell::Cell<u64>>;
+    fn inactive_change_sequence(&self) -> u64 {
+        self.inactive_change_sequence_state().get()
+    }
     fn data_bind_path_referencer(&self) -> &DataBindPathReferencer;
     fn artboard_count(&self) -> usize;
     fn artboard_instance(&self, index: i32) -> Option<RuntimeArtboardInstanceHandle>;

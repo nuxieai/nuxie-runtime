@@ -667,6 +667,16 @@ extern "C" void rive_ffi_render_paint_invalidate_stroke(
     }
 }
 
+extern "C" void rive_ffi_render_paint_shader_transform(rive_ffi_render_paint* paint,
+                                                      const float* transform)
+{
+    if (paint != nullptr && transform != nullptr)
+    {
+        paint->paint->shaderTransform(rive::Mat2D(transform[0], transform[1],
+            transform[2], transform[3], transform[4], transform[5]));
+    }
+}
+
 extern "C" rive_ffi_render_image* rive_ffi_decode_image(rive_ffi_context* ctx,
                                                         const uint8_t* bytes,
                                                         size_t len)

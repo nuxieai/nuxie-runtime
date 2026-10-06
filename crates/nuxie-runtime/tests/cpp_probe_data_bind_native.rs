@@ -2492,7 +2492,7 @@ fn state_machine_owned_viewmodel_imported_intermediate_number_source_matches_cpp
         "0".to_owned(),
         "0".to_owned(),
         "0".to_owned(),
-        "--runtime-advance-state-machine-data-context".to_owned(),
+        "--runtime-snapshot-state-machine-data-context".to_owned(),
         "0".to_owned(),
         "--runtime-advance-state-machine".to_owned(),
         "0".to_owned(),
@@ -2505,8 +2505,6 @@ fn state_machine_owned_viewmodel_imported_intermediate_number_source_matches_cpp
         .with_instance_mut(|machine| machine.bind_view_model_instance(owned));
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
     assert_eq!(cpp_artboard.runtime_state_machine_advances.len(), 2);
-    rust.machine
-        .with_instance_mut(|machine| machine.advanced_data_context());
     compare_advance(
         &cpp_artboard.runtime_state_machine_advances[0],
         &rust.machine,
@@ -3012,7 +3010,7 @@ fn assert_formula_reverse_flow(
     bytes: Vec<u8>,
     args: &[String],
     initial_data_context: bool,
-    public_update: bool,
+    _public_update: bool,
     target_value: f32,
 ) {
     let cpp = read_cpp_probe_bytes_with_args(probe, label, &bytes, args);
@@ -3022,8 +3020,6 @@ fn assert_formula_reverse_flow(
     let cpp_artboard = cpp.artboards.first().expect("C++ artboard");
     assert_eq!(cpp_artboard.runtime_state_machine_advances.len(), 4);
     if initial_data_context {
-        rust.machine
-            .with_instance_mut(|machine| machine.advanced_data_context());
         compare_advance(
             &cpp_artboard.runtime_state_machine_advances[0],
             &rust.machine,
@@ -3046,13 +3042,7 @@ fn assert_formula_reverse_flow(
         i32::from(BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY),
         target_value
     ));
-    if public_update {
-        DataBind::update_data_bind_handle(bind.as_ref().expect("formula runtime DataBind"), true);
-    } else {
-        DataBind::update_data_bind_handle(bind.as_ref().expect("formula runtime DataBind"), true);
-        rust.machine
-            .with_instance_mut(|machine| machine.advanced_data_context());
-    }
+    DataBind::update_data_bind_handle(bind.as_ref().expect("formula runtime DataBind"), true);
     compare_advance(
         &cpp_artboard.runtime_state_machine_advances[1],
         &rust.machine,
@@ -3214,13 +3204,13 @@ fn state_machine_default_viewmodel_number_formula_target_to_source_matches_cpp_p
     let args = [
         "--runtime-bind-default-view-model-state-machine-context",
         "0",
-        "--runtime-advance-state-machine-data-context",
+        "--runtime-snapshot-state-machine-data-context",
         "0",
         "--runtime-set-state-machine-bindable-number",
         "0",
         "0",
         "0.4",
-        "--runtime-advance-state-machine-data-context",
+        "--runtime-snapshot-state-machine-data-context",
         "0",
         "--runtime-advance-state-machine",
         "0",
@@ -3251,7 +3241,7 @@ fn state_machine_default_viewmodel_number_formula_main_to_target_two_way_target_
         "0",
         "0",
         "0.4",
-        "--runtime-advance-state-machine-data-context",
+        "--runtime-snapshot-state-machine-data-context",
         "0",
         "--runtime-advance-state-machine",
         "0",
@@ -3348,13 +3338,13 @@ fn state_machine_default_viewmodel_number_formula_function_target_to_source_matc
     let args = [
         "--runtime-bind-default-view-model-state-machine-context",
         "0",
-        "--runtime-advance-state-machine-data-context",
+        "--runtime-snapshot-state-machine-data-context",
         "0",
         "--runtime-set-state-machine-bindable-number",
         "0",
         "0",
         "0.4",
-        "--runtime-advance-state-machine-data-context",
+        "--runtime-snapshot-state-machine-data-context",
         "0",
         "--runtime-advance-state-machine",
         "0",
@@ -3426,7 +3416,7 @@ fn state_machine_default_viewmodel_number_formula_function_main_to_target_two_wa
         "0",
         "0",
         "4.46",
-        "--runtime-advance-state-machine-data-context",
+        "--runtime-snapshot-state-machine-data-context",
         "0",
         "--runtime-advance-state-machine",
         "0",
@@ -3488,7 +3478,7 @@ fn assert_random_reverse(label: &str, bytes: Vec<u8>, values: &[f32], public: bo
             "0",
             "0",
             "0.4",
-            "--runtime-advance-state-machine-data-context",
+            "--runtime-snapshot-state-machine-data-context",
             "0",
             "--runtime-advance-state-machine",
             "0",
@@ -3531,10 +3521,6 @@ fn assert_random_reverse(label: &str, bytes: Vec<u8>, values: &[f32], public: bo
         0.4
     ));
     DataBind::update_data_bind_handle(bind.as_ref().expect("random DataBind"), true);
-    if !public {
-        rust.machine
-            .with_instance_mut(|machine| machine.advanced_data_context());
-    }
     compare_advance(
         &board.runtime_state_machine_advances[report],
         &rust.machine,

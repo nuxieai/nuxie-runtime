@@ -3,15 +3,22 @@ use crate::mechanical_port::source::{
     generated::custom_property_trigger_base::{
         CustomPropertyTriggerBase, CustomPropertyTriggerBaseCallbacks,
     },
-    resetting_component::ResettingComponent,
 };
 
 #[derive(Default)]
 pub struct CustomPropertyTrigger {
     pub base: CustomPropertyTriggerBase,
+    change_sequence: u64,
 }
 
 impl CustomPropertyTrigger {
+    pub fn change_sequence(&self) -> u64 {
+        self.change_sequence
+    }
+
+    pub fn property_value_changed(&mut self) {
+        self.change_sequence = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::next_change_sequence();
+    }
     pub fn fire(&mut self, _value: &CallbackData<'_>) {
         self.set_property_value(self.base.property_value().wrapping_add(1));
     }
@@ -27,13 +34,10 @@ impl CustomPropertyTrigger {
     }
 }
 
-impl ResettingComponent for CustomPropertyTrigger {
-    fn reset(&mut self) {
-        self.set_property_value(0);
-    }
-}
-
 impl CustomPropertyTriggerBaseCallbacks for CustomPropertyTrigger {
+    fn property_value_changed(&mut self) {
+        CustomPropertyTrigger::property_value_changed(self);
+    }
     fn fire(&mut self, value: &mut CallbackData<'_>) {
         CustomPropertyTrigger::fire(self, value);
     }

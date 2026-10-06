@@ -6,23 +6,23 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_clockwise_path_frag[] = R"===(#ifdef FB
-R1
+S1
 #ifndef W
 B0(K2,n0);
 #endif
 o1(c3,m0);
 #ifndef W
-sb(o6,O6);
+tb(o6,O6);
 #endif
-o1(U6,V0);S1
+o1(U6,V0);T1
 #ifdef W
 z2(IB)
 #else
-T1(IB)
+U1(IB)
 #endif
 {q(a1,e);
 #ifdef GB
-q(r1,O);
+q(v1,O);
 #endif
 #ifdef DB
 q(m1,d);
@@ -43,22 +43,22 @@ d A0=
 #ifdef DB
 m1;
 #else
-Ub(S);
+Vb(S);
 #endif
-i o0;d N1;
+i o0;d O1;
 #if defined(DB)&&defined(EC)
 if(!EC)
 #endif
-{o0=Y7(
+{o0=X7(
 #ifdef GB
-r1,
+v1,
 #endif
 #ifdef N
 k3(Q0),
 #endif
-a1 e3);N1=1.;
+a1 e3);O1=1.;
 #ifdef AB
-if(AB){d Zb=v3(v5(R0));N1=min(Zb,N1);}
+if(AB){d ac=w3(v5(R0));O1=min(ac,O1);}
 #endif
 }E2;
 #if defined(DB)&&defined(EC)
@@ -68,52 +68,52 @@ D2(n0);
 #endif
 }else
 #endif
-{C d5=unpackHalf2x16(h1(V0));d D9=d5.y;d f5=D9==F0?d5.x:H0(.0);d Ze=
+{C d5=unpackHalf2x16(h1(V0));d E9=d5.y;d f5=E9==F0?d5.x:H0(.0);d bf=
 #ifndef DB
 f6(S)?max(f5,A0):
 #endif
 f5+A0;
 #ifdef A
-if(A&&l1.x!=.0){C T0=unpackHalf2x16(h1(m0));d X5=T0.y;d ac=X5==l1.x?T0.x:H0(.0);N1=min(ac,N1);}
+if(A&&l1.x!=.0){C T0=unpackHalf2x16(h1(m0));d X5=T0.y;d bc=X5==l1.x?T0.x:H0(.0);O1=min(bc,O1);}
 #endif
-N1=max(N1,.0);d i2=Aa(f5,.0,N1);d M1=Aa(Ze,.0,N1);
+O1=max(O1,.0);d i2=Ba(f5,.0,O1);d N1=Ba(bf,.0,O1);
 #ifdef OB
-d W5;if(OB){W5=Da(f0.xy,j.L3,j.M3);}
+d W5;if(OB){W5=Ea(f0.xy,j.M3,j.N3);}
 #endif
 #ifndef W
-i I1=N0(n0);
+i J1=N0(n0);
 #ifdef N
-if(N&&Q0!=j6(L4)){if(M1!=.0){if(i2==.0){o0.xyz=h5(o0.xyz,I1,k3(Q0));
+if(N&&Q0!=j6(M4)){if(N1!=.0){if(i2==.0){o0.xyz=h5(o0.xyz,J1,k3(Q0));
 #ifndef DB
-if(M1<N1){v e8=o0.xyz;
+if(N1<O1){v d8=o0.xyz;
 #ifdef OB
-if(OB){e8+=W5*j.Wd;}
+if(OB){d8+=W5*j.Xd;}
 #endif
-y0(O6,I0(e8,0.0));}
+y0(O6,I0(d8,0.0));}
 #endif
 }else{o0.xyz=N0(O6).xyz;D2(O6);}}o0.xyz*=o0.w;}
 #endif
 #endif
-o0*=c9(i2,M1,o0.w);
+o0*=c9(i2,N1,o0.w);
 #ifdef OB
 o0.xyz=M2(o0.xyz,o0.w,W5);
 #endif
 #ifndef DB
 #ifdef N
-#define af (!N||Q0==j6(L4))&&o0.w>=1.
+#define cf (!N||Q0==j6(M4))&&o0.w>=1.
 #else
-#define af o0.w>=1.
+#define cf o0.w>=1.
 #endif
-je(af,V0,packHalf2x16(H2(Ze,F0)));
+ke(cf,V0,packHalf2x16(H2(bf,F0)));
 #else
-Z1(V0);
+a2(V0);
 #endif
 #ifndef W
-ie(o0.x+o0.y+o0.z+o0.w==.0,n0,I1*(1.-o0.w)+o0);
+je(o0.x+o0.y+o0.z+o0.w==.0,n0,J1*(1.-o0.w)+o0);
 #endif
-}Z1(m0);F2;
+}a2(m0);F2;
 #ifdef W
-K1=o0;z3
+L1=o0;A3
 #else
 h2;
 #endif

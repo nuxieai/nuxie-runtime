@@ -88,6 +88,7 @@ pub struct NestedArtboard {
     cumulated_seconds: f32,
     owns_active_vmi: bool,
     host_flags: NestedArtboardHostFlags,
+    inactive_change_sequence: std::rc::Rc<std::cell::Cell<u64>>,
     // Dropped after the mounted instance and all of its dependent state.
     mounted_bindable:
         Option<crate::mechanical_port::source::bindable_artboard::RuntimeBindableArtboardHandle>,
@@ -112,6 +113,7 @@ impl Default for NestedArtboard {
             cumulated_seconds: 0.0,
             owns_active_vmi: false,
             host_flags: NestedArtboardHostFlags::NONE,
+            inactive_change_sequence: Default::default(),
             mounted_bindable: None,
         }
     }
@@ -369,7 +371,10 @@ impl NestedArtboard {
             instance.set_volume(volume);
         });
         self.instance = Some(instance.clone());
-        instance.with_artboard_mut(|instance| instance.set_host_with_parent(host, parent));
+        let inactive_change_sequence = self.inactive_change_sequence.clone();
+        instance.with_artboard_mut(|instance| {
+            instance.set_host_with_parent(host, parent, Some(inactive_change_sequence))
+        });
         self.apply_origin_override();
     }
 
@@ -1491,9 +1496,16 @@ impl NestedArtboard {
         let stopped = owner
             .with(|owner| {
                 let owner = owner.as_nested_artboard().expect("NestedArtboard owner");
-                owner.artboard_referencer.referenced_artboard().is_none()
-                    || owner.is_collapsed()
-                    || owner.base.is_paused()
+                if owner.artboard_referencer.referenced_artboard().is_none() {
+                    return true;
+                }
+                if owner.is_collapsed() || owner.base.is_paused() {
+                    owner.inactive_change_sequence.set(
+                        crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence(),
+                    );
+                    return true;
+                }
+                false
             })
             .expect("live NestedArtboard owner");
         if stopped {
@@ -1591,18 +1603,7 @@ impl NestedArtboard {
         keep_going
     }
 
-    pub fn reset_impl(&mut self) {
-        if let Some(instance) = self.instance.as_ref() {
-            instance.with_artboard_mut(|instance| instance.reset());
-        }
-        if let Some(active) = self.active_view_model_instance.as_ref() {
-            active.with_mut(|active| {
-                if let Some(active) = active.as_view_model_instance_mut() {
-                    active.advanced();
-                }
-            });
-        }
-    }
+    pub fn reset_impl(&mut self) {}
 
     pub fn file(&self) -> RuntimeFileWeakHandle {
         self.file.clone()
@@ -1737,6 +1738,9 @@ impl crate::mechanical_port::source::resetting_component::ResettingComponent for
 }
 
 impl ArtboardHost for NestedArtboard {
+    fn inactive_change_sequence_state(&self) -> std::rc::Rc<std::cell::Cell<u64>> {
+        self.inactive_change_sequence.clone()
+    }
     fn data_bind_path_referencer(&self) -> &DataBindPathReferencer {
         &self.data_bind_path_referencer
     }

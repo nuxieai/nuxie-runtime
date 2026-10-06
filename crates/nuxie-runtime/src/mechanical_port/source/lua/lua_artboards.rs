@@ -14,14 +14,12 @@ impl ScriptReffedArtboard {
         artboard: Box<ArtboardInstance>,
         view_model_instance: Option<CoreHandle>,
         parent_data_context: Option<Rc<DataContext>>,
-        scripting_context: *mut dyn ScriptingContext,
     ) -> Self {
         let mut result = Self {
             file,
             artboard: Some(artboard),
             state_machine: None,
             view_model_instance,
-            scripting_context,
         };
         result.state_machine = result.artboard_mut().default_state_machine();
         if result.view_model_instance.is_none() {
@@ -42,10 +40,6 @@ impl ScriptReffedArtboard {
             } else {
                 machine.bind_view_model_instance(view_model.clone());
             }
-        }
-        if !result.scripting_context.is_null() {
-            unsafe { &mut *result.scripting_context }
-                .track_view_model_instance(result.view_model_instance.clone());
         }
         result
     }
@@ -73,10 +67,6 @@ impl ScriptReffedArtboard {
 
 impl Drop for ScriptReffedArtboard {
     fn drop(&mut self) {
-        if !self.scripting_context.is_null() {
-            unsafe { &mut *self.scripting_context }
-                .untrack_view_model_instance(self.view_model_instance.as_ref());
-        }
         self.state_machine.take();
         self.artboard.take();
     }
@@ -90,7 +80,6 @@ impl ScriptedArtboard {
         view_model: Option<CoreHandle>,
         data_context: Option<Rc<DataContext>>,
     ) -> Self {
-        let scripting_context = state.thread_data::<dyn ScriptingContext>();
         Self {
             state: state.handle(),
             script_reffed_artboard: Some(Rc::new(ScriptReffedArtboard::new(
@@ -98,7 +87,6 @@ impl ScriptedArtboard {
                 artboard,
                 view_model,
                 data_context.clone(),
-                scripting_context,
             ))),
             data_context,
             data_ref: 0,

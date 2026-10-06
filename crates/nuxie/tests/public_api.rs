@@ -108,6 +108,9 @@ impl RenderPaint for DropTrackedRenderPaint {
     fn invalidate_stroke(&mut self) {
         self.inner.invalidate_stroke();
     }
+    fn shader_transform(&mut self, transform: RenderMat2D) {
+        self.inner.shader_transform(transform);
+    }
 }
 
 struct FailFirstImageDecodeFactory {

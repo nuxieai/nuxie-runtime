@@ -391,9 +391,8 @@ fn advance_native_state_machines(
     artboard: &RuntimeArtboardInstanceHandle,
     machines: &[RuntimeStateMachineInstanceHandle],
     seconds: f32,
-    advance_view_models: bool,
+    _advance_view_models: bool,
 ) -> RuntimeStateMachineAdvanceResult {
-    let root = artboard.core_handle();
     let frame_flags = AdvanceFlags(
         AdvanceFlags::IS_ROOT.0
             | AdvanceFlags::ANIMATE.0
@@ -421,22 +420,11 @@ fn advance_native_state_machines(
             }
         }
         changed |= artboard.advance_internal(0.0, settle_flags);
-        if advance_view_models {
-            for machine in machines {
-                machine.with_instance_mut(|machine| machine.advanced_data_context());
-            }
-        }
-        Artboard::reset_handle(&root);
         if !artboard.with_artboard(|artboard| artboard.base.has_component_dirt()) {
             break;
         }
     }
-    // Upstream ignores the detached-VM bool in its continuation result. Keep
-    // the host's separate mutation report without adding a continuation term.
     let mut keep_going = changed || seconds == 0.0;
-    if advance_view_models {
-        changed |= Artboard::advance_scripted_view_models_handle(&root);
-    }
     keep_going |= machines.iter().any(|machine| {
         machine.with_instance(|machine| {
             machine.has_pending_event_reports() || machine.has_pending_listener_view_model_reports()

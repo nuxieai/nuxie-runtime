@@ -4,7 +4,6 @@ use std::{
 };
 
 use crate::mechanical_port::source::{
-    animation::state_machine_instance::RuntimeStateMachineLayerInstanceWeakHandle,
     component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
@@ -25,6 +24,8 @@ use super::{
 pub trait ViewModelInstanceValueDelegate {
     fn value_changed(&mut self);
 }
+
+static CHANGE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 pub type ViewModelInstanceValueDelegateHandle = Rc<RefCell<dyn ViewModelInstanceValueDelegate>>;
 type ViewModelInstanceValueDelegateWeakHandle = Weak<RefCell<dyn ViewModelInstanceValueDelegate>>;
@@ -142,7 +143,6 @@ impl ValueDependentHandle {
 enum ValueFlags {
     #[default]
     None = 0,
-    ValueChanged = 1 << 1,
     DelegatesChanged = 1 << 2,
     Delegating = 1 << 3,
 }
@@ -155,13 +155,12 @@ pub struct ViewModelInstanceValue {
     delegates_copy: Vec<ViewModelInstanceValueDelegateWeakHandle>,
     dependents: Vec<ValueDependentHandle>,
     view_model_instance: Option<CoreHandle>,
-    used_layers: Vec<RuntimeStateMachineLayerInstanceWeakHandle>,
+    change_sequence: u64,
 }
 
 #[derive(Clone)]
 pub(crate) struct HostValueState {
-    value_changed: bool,
-    used_layers: Vec<RuntimeStateMachineLayerInstanceWeakHandle>,
+    change_sequence: u64,
 }
 
 impl std::ops::Deref for ViewModelInstanceValue {
@@ -186,7 +185,7 @@ impl Default for ViewModelInstanceValue {
             delegates_copy: Vec::new(),
             dependents: Vec::new(),
             view_model_instance: None,
-            used_layers: Vec::new(),
+            change_sequence: 0,
         }
     }
 }
@@ -241,8 +240,18 @@ impl ViewModelInstanceValue {
         }
     }
 
-    pub fn has_changed(&self) -> bool {
-        self.has_flag(ValueFlags::ValueChanged)
+    pub fn change_sequence(&self) -> u64 {
+        self.change_sequence
+    }
+
+    pub fn latest_change_sequence() -> u64 {
+        CHANGE_SEQUENCE.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn next_change_sequence() -> u64 {
+        CHANGE_SEQUENCE
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            .wrapping_add(1)
     }
 
     fn registration_symbol(&self) -> Option<SymbolType> {
@@ -411,21 +420,6 @@ impl ViewModelInstanceValue {
             .unwrap_or_default()
     }
 
-    pub fn advanced(&mut self) {
-        self.used_layers.clear();
-        self.clear_flag(ValueFlags::ValueChanged);
-    }
-
-    pub fn is_used_in_layer(&self, layer: &RuntimeStateMachineLayerInstanceWeakHandle) -> bool {
-        self.used_layers.iter().any(|used| used.ptr_eq(layer))
-    }
-
-    pub fn use_in_layer(&mut self, layer: RuntimeStateMachineLayerInstanceWeakHandle) {
-        if !self.is_used_in_layer(&layer) {
-            self.used_layers.push(layer);
-        }
-    }
-
     pub fn set_view_model_instance(&mut self, value: CoreHandle) {
         self.view_model_instance = Some(value);
         self.register_symbol();
@@ -478,7 +472,7 @@ impl ViewModelInstanceValue {
     }
 
     pub fn on_value_changed(&mut self) {
-        self.set_flag(ValueFlags::ValueChanged);
+        self.change_sequence = Self::next_change_sequence();
         self.delegates
             .retain(|delegate| delegate.strong_count() != 0);
         if self.delegates.is_empty() {
@@ -516,7 +510,7 @@ impl ViewModelInstanceValue {
         let Some(delegates) = owner
             .with_mut(|owner| {
                 let value = owner.as_view_model_instance_value_mut()?;
-                value.set_flag(ValueFlags::ValueChanged);
+                value.change_sequence = Self::next_change_sequence();
                 value
                     .delegates
                     .retain(|delegate| delegate.strong_count() != 0);
@@ -553,18 +547,12 @@ impl ViewModelInstanceValue {
 
     pub(crate) fn host_snapshot(&self) -> HostValueState {
         HostValueState {
-            value_changed: self.has_flag(ValueFlags::ValueChanged),
-            used_layers: self.used_layers.clone(),
+            change_sequence: self.change_sequence,
         }
     }
 
     pub(crate) fn restore_host_snapshot(&mut self, state: HostValueState) {
-        if state.value_changed {
-            self.set_flag(ValueFlags::ValueChanged);
-        } else {
-            self.clear_flag(ValueFlags::ValueChanged);
-        }
-        self.used_layers = state.used_layers;
+        self.change_sequence = state.change_sequence;
     }
 
     fn has_flag(&self, flag: ValueFlags) -> bool {

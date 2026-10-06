@@ -311,9 +311,6 @@ impl ScriptingVm for InstalledScripts {
     ) -> std::result::Result<Box<dyn ScriptInstance>, ScriptError> {
         ScriptingVm::instantiate_script(&*self.vm, name, payload, host)
     }
-    fn advance_detached_view_models(&self) -> bool {
-        ScriptingVm::advance_detached_view_models(&*self.vm)
-    }
     fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
         ScriptingVm::perform_registration(&*self.vm, modules)
     }

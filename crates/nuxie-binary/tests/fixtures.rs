@@ -4258,7 +4258,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
     assert_eq!(file.data_bind_add_effect(2, false, true), None);
     assert_eq!(file.data_bind_remove_effect(2, false, true, true), None);
     assert_eq!(
-        file.data_bind_source_effect(2, RuntimeDataType::Number),
+        file.data_bind_source_effect(2),
         None
     );
     assert_eq!(file.data_bind_clear_source_effect(2, true), None);
@@ -4582,12 +4582,10 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         "C++ DataBindContainer::addDataBind puts to-source binds without push-capable targets on the persisting list"
     );
     assert_eq!(
-        file.data_bind_source_effect(3, RuntimeDataType::Number),
+        file.data_bind_source_effect(3),
         Some(RuntimeDataBindSourceEffect {
             adds_source_dependent: true,
             sets_source: true,
-            updates_artboard_component_list_reset: false,
-            artboard_component_list_should_reset_instances: false,
         }),
         "C++ DataBind::source adds a dependent for non-once data binds and stores the source"
     );
@@ -5208,12 +5206,10 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         Some(RuntimeDataBindUpdateQueue::DirtyToSource)
     );
     assert_eq!(
-        file.data_bind_source_effect(17, RuntimeDataType::String),
+        file.data_bind_source_effect(17),
         Some(RuntimeDataBindSourceEffect {
             adds_source_dependent: false,
             sets_source: true,
-            updates_artboard_component_list_reset: false,
-            artboard_component_list_should_reset_instances: false,
         }),
         "C++ DataBind::source skips addDependent for once-only data binds"
     );
@@ -5384,8 +5380,6 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             source_effect: Some(RuntimeDataBindSourceEffect {
                 adds_source_dependent: true,
                 sets_source: true,
-                updates_artboard_component_list_reset: false,
-                artboard_component_list_should_reset_instances: false,
             }),
             bind_effect: Some(RuntimeDataBindBindEffect {
                 clears_existing_context_value: false,
@@ -5661,24 +5655,12 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
         "C++ DataBindContainer::updateDataBinds drains persisting, dirty-to-source, then dirty-to-target queues before swapping pending dirty queues and flushing additions before removals"
     );
     assert_eq!(
-        file.data_bind_source_effect(23, RuntimeDataType::Number),
+        file.data_bind_source_effect(23),
         Some(RuntimeDataBindSourceEffect {
             adds_source_dependent: true,
             sets_source: true,
-            updates_artboard_component_list_reset: true,
-            artboard_component_list_should_reset_instances: true,
         }),
-        "C++ DataBind::source asks ArtboardComponentList targets to reset instances for number sources"
-    );
-    assert_eq!(
-        file.data_bind_source_effect(23, RuntimeDataType::String),
-        Some(RuntimeDataBindSourceEffect {
-            adds_source_dependent: true,
-            sets_source: true,
-            updates_artboard_component_list_reset: true,
-            artboard_component_list_should_reset_instances: false,
-        }),
-        "C++ DataBind::source clears ArtboardComponentList reset for non-number sources"
+        "C++ DataBind::source registers its dependent and retains the source; it no longer configures frame-end list resets"
     );
     assert_eq!(
         file.data_bind_output_type(25),
@@ -5758,8 +5740,6 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             source_effect: Some(RuntimeDataBindSourceEffect {
                 adds_source_dependent: true,
                 sets_source: true,
-                updates_artboard_component_list_reset: false,
-                artboard_component_list_should_reset_instances: false,
             }),
             bind_effect: Some(RuntimeDataBindBindEffect {
                 clears_existing_context_value: false,
@@ -5812,8 +5792,6 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
             source_effect: Some(RuntimeDataBindSourceEffect {
                 adds_source_dependent: true,
                 sets_source: true,
-                updates_artboard_component_list_reset: false,
-                artboard_component_list_should_reset_instances: false,
             }),
             bind_effect: Some(RuntimeDataBindBindEffect {
                 clears_existing_context_value: false,

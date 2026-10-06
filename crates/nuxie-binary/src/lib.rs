@@ -127,8 +127,6 @@ pub struct RuntimeDataBindAddEffect {
 pub struct RuntimeDataBindSourceEffect {
     pub adds_source_dependent: bool,
     pub sets_source: bool,
-    pub updates_artboard_component_list_reset: bool,
-    pub artboard_component_list_should_reset_instances: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -2785,24 +2783,17 @@ impl RuntimeFile {
     pub fn data_bind_source_effect(
         &self,
         data_bind_id: usize,
-        source_data_type: RuntimeDataType,
     ) -> Option<RuntimeDataBindSourceEffect> {
         let data_bind = self.object(data_bind_id)?;
-        self.data_bind_source_effect_for_object(data_bind, source_data_type)
+        self.data_bind_source_effect_for_object(data_bind)
     }
 
     pub fn data_bind_source_effect_for_object(
         &self,
         data_bind: &RuntimeObject,
-        source_data_type: RuntimeDataType,
     ) -> Option<RuntimeDataBindSourceEffect> {
         self.validate_data_bind(data_bind)?;
-        let target = self.cpp_data_bind_target_for_object(data_bind);
-        Some(cpp_data_bind_source_effect(
-            data_bind,
-            target,
-            source_data_type,
-        ))
+        Some(cpp_data_bind_source_effect(data_bind))
     }
 
     pub fn data_bind_clear_source_effect(
@@ -3221,7 +3212,6 @@ impl RuntimeFile {
         let source_path_ids = self.data_bind_context_source_path_ids_for_object(data_bind)?;
         let resolved_source_path_ids =
             self.data_bind_context_resolved_source_path_ids_for_object(data_bind)?;
-        let target = self.cpp_data_bind_target_for_object(data_bind);
         let converter = self.resolved_data_converter_for_data_bind_object(data_bind);
         let converter_output_type = match converter {
             Some(converter) => Some(self.data_converter_output_type_for_object(converter)?),
@@ -3232,7 +3222,6 @@ impl RuntimeFile {
 
         Some(cpp_data_bind_context_bind_effect(
             data_bind,
-            target,
             converter.is_some(),
             converter_output_type,
             &source_path_ids,
@@ -8034,19 +8023,10 @@ fn cpp_data_bind_add_effect(
 
 fn cpp_data_bind_source_effect(
     data_bind: &RuntimeObject,
-    target: Option<&RuntimeObject>,
-    source_data_type: RuntimeDataType,
 ) -> RuntimeDataBindSourceEffect {
-    let target_is_artboard_component_list = target.is_some_and(|target| {
-        definition_by_type_key(target.type_key)
-            .is_some_and(|definition| definition.is_a("ArtboardComponentList"))
-    });
     RuntimeDataBindSourceEffect {
         adds_source_dependent: !cpp_data_bind_binds_once(data_bind),
         sets_source: true,
-        updates_artboard_component_list_reset: target_is_artboard_component_list,
-        artboard_component_list_should_reset_instances: target_is_artboard_component_list
-            && source_data_type == RuntimeDataType::Number,
     }
 }
 
@@ -8246,7 +8226,6 @@ fn cpp_data_bind_relink_effect(
 #[allow(clippy::too_many_arguments)]
 fn cpp_data_bind_context_bind_effect(
     data_bind: &RuntimeObject,
-    target: Option<&RuntimeObject>,
     has_converter: bool,
     converter_output_type: Option<RuntimeDataType>,
     source_path_ids: &[u32],
@@ -8309,11 +8288,7 @@ fn cpp_data_bind_context_bind_effect(
     if lookup_has_source {
         effect.branch = RuntimeDataBindContextBindBranch::BindSource;
         effect.clear_source_effect = Some(cpp_data_bind_clear_source_effect(data_bind, has_source));
-        effect.source_effect = Some(cpp_data_bind_source_effect(
-            data_bind,
-            target,
-            source_data_type,
-        ));
+        effect.source_effect = Some(cpp_data_bind_source_effect(data_bind));
         effect.bind_effect = Some(cpp_data_bind_bind_effect(
             data_bind,
             has_converter,

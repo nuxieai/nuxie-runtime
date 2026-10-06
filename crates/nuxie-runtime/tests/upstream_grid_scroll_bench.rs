@@ -39,6 +39,7 @@ fn ms(from: Instant) -> f64 {
 #[test]
 #[ignore = "upstream hidden [.bench]; run only for explicitly requested performance work"]
 fn bench_virtualized_grid_scroll() {
+    ArtboardComponentList::set_verify_quiet_rows(false);
     let max_count = std::env::var("BENCH_MAX")
         .map(|s| atoi(&s))
         .unwrap_or(100_000);
@@ -166,4 +167,5 @@ fn bench_virtualized_grid_scroll() {
             read::<ScrollConstraint, _>(&scroll, |s| s.content_height())
         );
     }
+    ArtboardComponentList::set_verify_quiet_rows(true);
 }

@@ -5626,12 +5626,6 @@ pub trait CoreCapabilities: Any {
         component.build_dependencies();
         true
     }
-    fn is_resetting_component(&self) -> bool {
-        false
-    }
-    fn resetting_component_reset(&mut self) -> bool {
-        false
-    }
     fn is_advancing_component(&self) -> bool {
         false
     }
@@ -6629,20 +6623,6 @@ pub trait CoreCapabilities: Any {
     }
     fn as_view_model_instance_value_mut(&mut self) -> Option<&mut crate::mechanical_port::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue>{
         None
-    }
-    fn view_model_instance_value_advanced(&mut self) -> bool {
-        if let Some(value) = self.as_view_model_instance_trigger_mut() {
-            value.advanced();
-        } else if let Some(value) = self.as_view_model_instance_list_mut() {
-            value.advanced();
-        } else if let Some(value) = self.as_view_model_instance_view_model_mut() {
-            value.advanced();
-        } else if let Some(value) = self.as_view_model_instance_value_mut() {
-            value.advanced();
-        } else {
-            return false;
-        }
-        true
     }
     fn as_view_model_instance_view_model(&self) -> Option<&crate::mechanical_port::source::viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel>{
         None
@@ -55683,13 +55663,6 @@ impl CoreCapabilities
         )
     }
 
-    fn is_resetting_component(&self) -> bool {
-        true
-    }
-    fn resetting_component_reset(&mut self) -> bool {
-        crate::mechanical_port::source::resetting_component::ResettingComponent::reset(self);
-        true
-    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
@@ -57331,13 +57304,6 @@ impl CoreCapabilities
     fn drawable_will_draw(&self) -> bool {
         self.will_draw()
     }
-    fn is_resetting_component(&self) -> bool {
-        true
-    }
-    fn resetting_component_reset(&mut self) -> bool {
-        crate::mechanical_port::source::resetting_component::ResettingComponent::reset(self);
-        true
-    }
     fn is_advancing_component(&self) -> bool {
         true
     }
@@ -58597,15 +58563,6 @@ impl CoreCapabilities
     fn component_collapse_after_container(&mut self, value: bool) -> bool {
         self.component_transform_collapse_post();
         self.base.base.collapse_after_super(value);
-        true
-    }
-    fn is_resetting_component(&self) -> bool {
-        true
-    }
-    fn resetting_component_reset(&mut self) -> bool {
-        crate::mechanical_port::source::resetting_component::ResettingComponent::reset(
-            &mut self.base.base,
-        );
         true
     }
     fn is_advancing_component(&self) -> bool {
@@ -68176,15 +68133,6 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     fn component_collapse_after_container(&mut self, value: bool) -> bool {
         self.component_transform_collapse_post();
         self.base.base.collapse_after_super(value);
-        true
-    }
-    fn is_resetting_component(&self) -> bool {
-        true
-    }
-    fn resetting_component_reset(&mut self) -> bool {
-        crate::mechanical_port::source::resetting_component::ResettingComponent::reset(
-            &mut self.base.base,
-        );
         true
     }
     fn is_advancing_component(&self) -> bool {

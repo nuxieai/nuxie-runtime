@@ -78,6 +78,7 @@ impl render::RenderPaint for StrokePositionPaint {
     fn feather(&mut self, _: f32) {}
     fn blend_mode(&mut self, _: render::BlendMode) {}
     fn shader(&mut self, _: Option<&dyn render::RenderShader>) {}
+    fn shader_transform(&mut self, _: render::Mat2D) {}
     fn invalidate_stroke(&mut self) {}
     fn stroke_position(&mut self, value: render::StrokePosition) {
         self.position = value;

@@ -135,6 +135,7 @@ pub struct DeferredRenderPaint {
     blend_mode: u8,
     shader: Option<Rc<dyn RenderShader>>,
     shader_identity: Option<usize>,
+    transform: Mat2D,
     color_known: bool,
     stroke_invalidated: Cell<bool>,
     image_id: u32,
@@ -171,6 +172,7 @@ impl DeferredRenderPaint {
             blend_mode: 3,
             shader: None,
             shader_identity: None,
+            transform: Mat2D::IDENTITY,
             color_known: true,
             stroke_invalidated: Cell::new(false),
             image_id: INVALID_RENDER_HANDLE,
@@ -307,6 +309,14 @@ impl RenderPaint for DeferredRenderPaint {
                 shader,
             },
         );
+    }
+    fn shader_transform(&mut self, transform: Mat2D) {
+        if self.transform == transform { return; }
+        self.transform = transform;
+        self.resource.bump();
+        let [xx, xy, yx, yy, tx, ty] = transform.0;
+        self.resource.base.append(RenderCmd::PaintShaderTransform,
+            &PaintMat2DPod { paint: self.resource.base.id, xx, xy, yx, yy, tx, ty });
     }
     fn modulated_image(
         &mut self,

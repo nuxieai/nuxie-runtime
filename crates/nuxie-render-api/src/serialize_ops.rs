@@ -54,6 +54,7 @@ operations! {
     DRAW_IMAGE_MESH_INSTANCED = drawImageMeshInstanced = 41,
     APPLY_LAYER_MASK = applyLayerMask = 42,
     STROKE_POSITION = strokePosition = 43,
+    SHADER_TRANSFORM = shaderTransform = 44,
 }
 
 pub(crate) fn serialize_raw_path(writer: &mut crate::serializing::Writer, path: RawPathRef<'_>) {

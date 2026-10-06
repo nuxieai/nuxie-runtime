@@ -5,12 +5,13 @@ use std::{cell::RefCell, rc::Rc};
 use luaur_rt::{Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{
     BlendMode, ColorInt, Factory as RenderFactory, RenderPaint as RenderPaintTrait,
-    RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin,
+    RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin, Mat2D,
 };
 use nuxie_runtime::ScriptPaint as RuntimeScriptPaint;
 
 use super::lua_renderer_library::RendererBindings;
 use super::renderer::ScriptedGradient;
+use super::lua_mat2d::ScriptedMat2D;
 
 impl RendererBindings {
     pub(super) fn install_paint_global(&self, lua: &Lua) -> Result<()> {
@@ -58,6 +59,7 @@ impl UserData for ScriptedPaintData {
         });
         fields.add_field_method_get("feather", |_, this| Ok(this.0.feather));
         fields.add_field_method_get("color", |_, this| Ok(this.0.color));
+        fields.add_field_method_get("gradientTransform", |lua, _| lua.create_userdata(ScriptedMat2D(Mat2D::IDENTITY)));
     }
 }
 
@@ -72,6 +74,7 @@ pub(super) struct ScriptedPaint {
     feather: f32,
     blend_mode: BlendMode,
     gradient: Option<Rc<dyn RenderShader>>,
+    gradient_transform: Mat2D,
 }
 
 impl ScriptedPaint {
@@ -87,6 +90,7 @@ impl ScriptedPaint {
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
             gradient: None,
+            gradient_transform: Mat2D::IDENTITY,
         }
     }
 
@@ -105,6 +109,7 @@ impl ScriptedPaint {
         copy.set_feather(source.feather);
         copy.set_blend_mode(source.blend_mode);
         copy.set_gradient(source.gradient.clone());
+        copy.set_gradient_transform(source.gradient_transform);
         copy
     }
 
@@ -125,6 +130,7 @@ impl ScriptedPaint {
             "blendMode" => self.set_blend_mode(parse_blend_mode(value)?),
             "feather" => self.set_feather(number_value(value, "feather")?),
             "gradient" => self.set_gradient_value(value)?,
+            "gradientTransform" => self.set_gradient_transform_value(value)?,
             "color" => self.set_color(color_value(value)?),
             _ => {}
         }
@@ -188,6 +194,20 @@ impl ScriptedPaint {
         }
         Ok(())
     }
+
+    fn set_gradient_transform(&mut self, transform: Mat2D) {
+        self.gradient_transform = transform;
+        self.render_paint.borrow_mut().shader_transform(transform);
+    }
+
+    fn set_gradient_transform_value(&mut self, value: Value) -> Result<()> {
+        let transform = match value {
+            Value::UserData(value) if value.is::<ScriptedMat2D>() => value.borrow::<ScriptedMat2D>()?.0,
+            _ => Mat2D::IDENTITY,
+        };
+        self.set_gradient_transform(transform);
+        Ok(())
+    }
 }
 
 impl UserData for ScriptedPaint {
@@ -238,6 +258,8 @@ impl UserData for ScriptedPaint {
         fields.add_field_method_set("gradient", |_, this, value: Value| {
             this.set_gradient_value(value)
         });
+        fields.add_field_method_get("gradientTransform", |lua, this| lua.create_userdata(ScriptedMat2D(this.gradient_transform)));
+        fields.add_field_method_set("gradientTransform", |_, this, value: Value| this.set_gradient_transform_value(value));
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
@@ -410,6 +432,7 @@ mod upstream_blend_mode_tests {
             self.blend = value;
         }
         fn shader(&mut self, _: Option<&dyn RenderShader>) {}
+        fn shader_transform(&mut self, _: Mat2D) {}
         fn invalidate_stroke(&mut self) {}
     }
 

@@ -1026,20 +1026,6 @@ mod lifecycle_tests {
     }
 }
 
-/// Cloneable handle for the detached view-model roots owned by one scripting
-/// VM. Hosts that retain Lua-backed script instances without retaining the
-/// [`ScriptVm`] wrapper use this to perform the one root-frame tail advance.
-#[derive(Debug, Clone)]
-pub struct DetachedViewModelFrame {
-    context: ScriptViewModelFrameContext,
-}
-
-impl DetachedViewModelFrame {
-    pub fn advance(&self) -> bool {
-        self.context.advance_detached()
-    }
-}
-
 /// Upstream rive_lua_pcall cleanup occurs after every protected return.
 trait ProtectedScriptCall {
     fn protected_call<R: FromLuaMulti>(&self, args: impl IntoLuaMulti) -> Result<R>;
@@ -2415,21 +2401,6 @@ impl ScriptVm {
             .map_err(|error| self.script_error(error))
     }
 
-    /// Consume every owner-tracked, parentless script view-model root at the
-    /// end of the host frame. The host calls this once after its root state
-    /// machine advance; script-driven child artboards deliberately do not.
-    pub fn advance_detached_view_models(&self) -> bool {
-        self.view_model_frame_context.advance_detached()
-    }
-
-    /// Retain the detached-view-model frame state independently of the VM
-    /// wrapper. Lua values remain owned by the script instances themselves.
-    pub fn detached_view_model_frame(&self) -> DetachedViewModelFrame {
-        DetachedViewModelFrame {
-            context: self.view_model_frame_context.clone(),
-        }
-    }
-
     /// Install the Rive globals that Luau bytecode resolves with GETIMPORT.
     ///
     /// This mirrors the relevant early part of C++ `ScriptingVM::init`:
@@ -3061,9 +3032,6 @@ impl RuntimeScriptingVm for ScriptVm {
         }
     }
 
-    fn advance_detached_view_models(&self) -> bool {
-        ScriptVm::advance_detached_view_models(self)
-    }
 
     fn register_script_assets(
         &self,

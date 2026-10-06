@@ -772,6 +772,12 @@ typedef struct NuxRenderCallbacks {
                           float);
   void (*modulate_opacity)(void*, float);
   void (*modulate_color)(void*, uint32_t, uint32_t);
+  /**
+   * Optional appended paint transform callback. Missing callbacks retain
+   * the callback renderer's documented null-operation behavior.
+   * The six floats are borrowed only for this call, in the same order as transform.
+   */
+  void (*render_paint_shader_transform)(void*, uint64_t, const float*);
 } NuxRenderCallbacks;
 
 /**

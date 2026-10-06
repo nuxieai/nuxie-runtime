@@ -281,14 +281,28 @@ impl ContextBinding for CoreBinding {
         let Some(source) = self.source() else {
             return false;
         };
-        if source.with_downcast::<ViewModelInstanceNumber, _>(|_| ()).is_some() {
-            return value.as_any().downcast_ref::<DataValueNumber>().is_some_and(|value| {
-                mutate(|| ViewModelInstanceNumber::set_value_handle(&source, value.value()))
-            });
+        if source
+            .with_downcast::<ViewModelInstanceNumber, _>(|_| ())
+            .is_some()
+        {
+            return value
+                .as_any()
+                .downcast_ref::<DataValueNumber>()
+                .is_some_and(|value| {
+                    mutate(|| ViewModelInstanceNumber::set_value_handle(&source, value.value()))
+                });
         }
-        if source.with_downcast::<ViewModelInstanceTrigger, _>(|_| ()).is_some() {
+        if source
+            .with_downcast::<ViewModelInstanceTrigger, _>(|_| ())
+            .is_some()
+        {
             return integer_value(value).is_some_and(|value| {
-                mutate(|| ViewModelInstanceTrigger::apply_value_handle(&source, &DataValueInteger::new(value)))
+                mutate(|| {
+                    ViewModelInstanceTrigger::apply_value_handle(
+                        &source,
+                        &DataValueInteger::new(value),
+                    )
+                })
             });
         }
         if source
@@ -533,6 +547,17 @@ impl TargetBinding for CoreBinding {
 }
 
 impl ContextApplyBinding for CoreBinding {
+    fn target_is_trigger(&self) -> bool {
+        self.target.as_ref().is_some_and(|target| target.is_type_of(crate::source::generated::custom_property_trigger_base::CustomPropertyTriggerBase::TYPE_KEY) || target.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY) || target.is_type_of(crate::source::generated::data_bind::bindable_property_trigger_base::BindablePropertyTriggerBase::TYPE_KEY))
+    }
+    fn source_is_trigger(&self) -> bool {
+        self.source().is_some_and(|source| source.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY))
+    }
+    fn fire_source_trigger(&mut self) {
+        if let Some(source) = self.source() {
+            mutate(|| ViewModelInstanceTrigger::trigger_handle(&source));
+        }
+    }
     fn set_bool(&mut self, key: u32, value: bool) {
         if let Some(target) = &self.target {
             mutate(|| CoreRegistry::set_bool_handle(target, key as i32, value));
@@ -618,7 +643,11 @@ impl ContextApplyBinding for CoreBinding {
             .and_then(|source| {
                 source.with(|source| {
                     let source = source.as_any();
-                    if let Some(source) = source.downcast_ref::<ViewModelInstanceAssetImage>() {
+                    if let Some(source) = source.downcast_ref::<ViewModelInstanceTrigger>() {
+                        source.base.property_value()
+                    } else if let Some(source) =
+                        source.downcast_ref::<ViewModelInstanceAssetImage>()
+                    {
                         source.base.property_value()
                     } else if let Some(source) = source.downcast_ref::<ViewModelInstanceAssetFont>()
                     {

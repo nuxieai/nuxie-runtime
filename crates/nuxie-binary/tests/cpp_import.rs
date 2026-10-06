@@ -11344,7 +11344,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         &update_source_binding,
         &[
             "if(toSource()&&target()&&m_ContextValue!=nullptr){",
-            "if(invalidate){m_ContextValue->invalidate();}",
+            "if(invalidate){m_ContextValue->invalidate();m_ContextValue->requestSourceWrite();}",
             "m_ContextValue->applyToSource(target(),propertyKey(),isMainToSource(),this);",
         ],
         "DataBind::updateSourceBinding changed; audit RuntimeFile::data_bind_update_effect",
@@ -11361,8 +11361,6 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "if(!bindsOnce()){",
             "value->addDependent(this);",
             "m_Source=value;",
-            "if(m_Source&&target()&&target()->is<ArtboardComponentList>()){",
-            "target()->as<ArtboardComponentList>()->shouldResetInstances(m_Source->coreType()==ViewModelInstanceNumberBase::typeKey);",
         ],
         "DataBind::source changed; audit RuntimeFile::data_bind_source_effect",
     );

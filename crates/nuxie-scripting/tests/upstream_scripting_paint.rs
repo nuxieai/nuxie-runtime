@@ -159,3 +159,25 @@ return paintCopy.gradient
     );
     assert!(matches!(assigned_gradient, Value::Nil));
 }
+
+#[test]
+fn paint_gradient_transform_round_trips() {
+    let values: (f32, f32, f32, f32, f32, f32) = eval(
+        "local paint = Paint.with({gradientTransform = Mat2D.values(0.8, 0.3, -0.3, 0.8, 20, -10)})\nlocal m = paint.gradientTransform\nreturn m.xx, m.xy, m.yx, m.yy, m.tx, m.ty",
+    );
+    for (actual, expected) in [values.0, values.1, values.2, values.3, values.4, values.5]
+        .into_iter()
+        .zip([0.8f32, 0.3, -0.3, 0.8, 20.0, -10.0])
+    {
+        assert!((actual - expected).abs() <= 100.0 * f32::EPSILON * expected.abs());
+    }
+}
+
+#[test]
+fn paint_gradient_transform_survives_assignment_and_copy() {
+    let (tx, ty): (f32, f32) = eval(
+        "local paint = Paint.new()\npaint.gradientTransform = Mat2D.withTranslation(12, 34)\nlocal m = paint:copy().gradientTransform\nreturn m.tx, m.ty",
+    );
+    assert!((tx - 12.0).abs() <= 100.0 * f32::EPSILON * 12.0);
+    assert!((ty - 34.0).abs() <= 100.0 * f32::EPSILON * 34.0);
+}

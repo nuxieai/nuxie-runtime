@@ -206,7 +206,11 @@ impl RawTextInput {
             cursor_visual_position: CursorVisualPosition::missing(),
             selection_rects: Vec::new(),
             selection_corner_radius: 5.0,
-            journal: Vec::new(),
+            journal: vec![JournalEntry {
+                cursor_from: Cursor::at_start(),
+                cursor_to: Cursor::at_start(),
+                text: String::new(),
+            }],
             journal_index: 0,
         }
     }
@@ -1029,11 +1033,16 @@ impl RawTextInput {
     }
 
     pub fn set_text(&mut self, value: String) {
-        let starting_cursor = self.cursor.clone();
         self.set_text_private(value);
         self.cursor = Cursor::collapsed(CursorPosition::zero());
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
-        self.capture_journal_entry(starting_cursor);
+        self.journal.clear();
+        self.journal.push(JournalEntry {
+            cursor_from: self.cursor.clone(),
+            cursor_to: self.cursor.clone(),
+            text: self.text(),
+        });
+        self.journal_index = 0;
     }
 
     pub fn set_text_preserve_cursor(&mut self, value: String) {

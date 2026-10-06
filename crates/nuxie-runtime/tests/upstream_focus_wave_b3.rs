@@ -807,7 +807,6 @@ impl StatefulFocusFixture {
             .expect("default view-model instance");
         machine.with_instance_mut(|machine| {
             machine.bind_view_model_instance(view_model.clone());
-            machine.advanced_data_context();
         });
         Self {
             file,
@@ -2216,9 +2215,6 @@ fn wave_b3_focus_test_080_direct_port() {
     fixture
         .machine
         .with_instance_mut(|machine| machine.bind_view_model_instance(fixture.view_model.clone()));
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.advanced_data_context());
     fixture.frames(1, 0.016);
     assert_eq!(
         primary(&focus_manager(&fixture.machine)),
@@ -2287,9 +2283,6 @@ fn wave_b3_focus_test_082_direct_port() {
     fixture
         .machine
         .with_instance_mut(|machine| machine.bind_view_model_instance(fixture.view_model.clone()));
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.advanced_data_context());
     fixture.frames(1, 0.016);
     assert_eq!(
         primary(&focus_manager(&fixture.machine)),

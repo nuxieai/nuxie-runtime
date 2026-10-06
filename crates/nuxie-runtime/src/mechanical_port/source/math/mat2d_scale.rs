@@ -11,6 +11,18 @@ fn cpp_max(a: f32, b: f32) -> f32 {
 }
 
 impl Mat2D {
+    pub fn has_uniform_scale(&self) -> bool {
+        self.has_uniform_scale_with_tolerance(EPSILON)
+    }
+
+    pub fn has_uniform_scale_with_tolerance(&self, tolerance: f32) -> bool {
+        let x_length_squared = scalar_dot(self.xx(), self.xx(), self.xy(), self.xy());
+        let y_length_squared = scalar_dot(self.yx(), self.yx(), self.yy(), self.yy());
+        let column_dot = scalar_dot(self.xx(), self.yx(), self.xy(), self.yy());
+        let epsilon = (x_length_squared + y_length_squared) * tolerance;
+        (x_length_squared - y_length_squared).abs() <= epsilon && column_dot.abs() <= epsilon
+    }
+
     pub fn find_max_scale(&self) -> f32 {
         if self.xy() == 0.0 && self.yx() == 0.0 {
             return cpp_max(self.xx().abs(), self.yy().abs());

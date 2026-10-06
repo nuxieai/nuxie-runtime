@@ -96,6 +96,7 @@ fn classify_state(state: &CoreHandle, untracked: &HashSet<CoreHandle>) -> (bool,
 
 #[derive(Default)]
 pub struct StateMachine {
+    reads_component_triggers: bool,
     pub base: StateMachineBase,
     layers: Vec<CoreHandle>,
     inputs: Vec<Option<CoreHandle>>,
@@ -104,6 +105,9 @@ pub struct StateMachine {
     scripted_objects: Vec<CoreHandle>,
 }
 impl StateMachine {
+    pub fn reads_component_triggers(&self) -> bool {
+        self.reads_component_triggers
+    }
     pub fn set_name(&mut self, value: String) {
         use crate::mechanical_port::source::generated::animation::animation_base::{
             AnimationBase, AnimationBaseCallbacks,
@@ -189,6 +193,11 @@ impl StateMachine {
             }).expect("StateMachineLayer");
             for state in states {
                 let (safe, ignore_time) = classify_state(&state, &untracked);
+                self.reads_component_triggers |= state.with(|state| {
+                    (0..state.layer_state_transition_count().unwrap_or(0)).filter_map(|i| state.layer_state_transition(i)).any(|transition| transition.with(|transition| {
+                        transition.as_state_transition().is_some_and(|transition| (0..transition.condition_count()).filter_map(|i| transition.condition(i)).any(|condition| condition.with_downcast::<crate::source::animation::transition_viewmodel_condition::TransitionViewModelCondition, _>(|condition| condition.reads_component_trigger()).unwrap_or(false)))
+                    }).unwrap_or(false))
+                }).unwrap_or(false);
                 state.with_mut(|state| state.set_layer_state_settle_flags(safe, ignore_time));
             }
         }

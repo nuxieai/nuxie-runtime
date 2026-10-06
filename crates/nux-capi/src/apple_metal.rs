@@ -2207,7 +2207,11 @@ mod tests {
         let mut outcome = NuxRendererOutcome::default();
         let mut result = ptr::dangling_mut();
         let status = crate::with_platform_callback(|| {
-            call_with_probe(operation_with_probe(probe), &raw mut outcome, &raw mut result)
+            call_with_probe(
+                operation_with_probe(probe),
+                &raw mut outcome,
+                &raw mut result,
+            )
         });
         assert_eq!(status, NuxStatus::ReentrantCall);
         assert!(result.is_null());

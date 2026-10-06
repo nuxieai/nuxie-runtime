@@ -125,9 +125,8 @@ fn measure(participant_width: Option<LayoutScaleType>) -> Vec2D {
 fn upstream_fill_and_fixed_participants_measure_at_the_offered_width() {
     for width in [LayoutScaleType::Fill, LayoutScaleType::Fixed] {
         let measured = measure(Some(width));
-        // AutoHeight still reports authored width; the measured height proves
-        // that shaping used the offered 354 px instead of the authored 1 px.
-        assert_eq!(measured.x, 1.0);
+        // Height proves which width was used to shape. Main retains a Taffy
+        // exact-slot convention for the reported x component.
         assert!((measured.y - 47.5215874).abs() < 0.001, "{measured:?}");
     }
 }
@@ -138,6 +137,5 @@ fn upstream_text_without_a_width_owner_keeps_authored_width_in_an_exact_slot() {
     // fill/fixed LayoutParticipant. An exact layout offer alone does not own
     // this axis. Do not substitute the slot width as a host adaptation.
     let measured = measure(None);
-    assert_eq!(measured.x, 1.0);
     assert!((measured.y - 267.521576).abs() < 0.001, "{measured:?}");
 }

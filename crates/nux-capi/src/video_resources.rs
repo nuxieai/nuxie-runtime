@@ -147,6 +147,7 @@ pub unsafe extern "C" fn nux_player_video_reclaim_decoder(
                         Ok(generation)
                     })
                     .ok_or(NuxStatus::NotFound)??;
+                Video::flush_property_changes(video);
                 occurrence.commit_runtime_change(true)?;
                 unsafe {
                     *out_generation = generation;

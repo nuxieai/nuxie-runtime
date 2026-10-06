@@ -44,7 +44,7 @@ mod native_webgpu;
 ))]
 pub use external_image::ExternalImageTextures;
 #[cfg(all(feature = "native-vulkan-experimental", target_os = "android"))]
-pub use mechanical_port::vulkan::hardware_buffer::{hardware_buffer_size, VideoColor, VideoMatrix};
+pub use mechanical_port::vulkan::hardware_buffer::{VideoColor, VideoMatrix, hardware_buffer_size};
 #[cfg(feature = "native-vulkan-experimental")]
 mod video_frame_geometry;
 #[cfg(feature = "renderer-webgpu")]
@@ -82,6 +82,15 @@ pub use native_webgl2::{WebGl2Factory, WebGl2Frame};
     target_os = "unknown"
 ))]
 pub use mechanical_port::webgl2::scratch_pass_browser_tests::run_scratch_pass_browser_tests;
+
+#[cfg(all(
+    feature = "webgl2-test-support",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+pub use mechanical_port::webgl2::screen_target_browser_tests::{
+    run_screen_target_benchmark, run_screen_target_browser_tests,
+};
 
 mod tessellation_relocation;
 pub(crate) use tessellation_relocation::relocate_tessellation_logically;

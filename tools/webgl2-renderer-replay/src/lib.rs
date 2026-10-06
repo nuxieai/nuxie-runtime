@@ -13,6 +13,18 @@ mod wasm {
     }
 
     #[wasm_bindgen]
+    pub fn run_webgl2_screen_target_tests(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+        nuxie_renderer::run_screen_target_browser_tests(canvas).map_err(js_error)
+    }
+
+    #[wasm_bindgen]
+    pub fn run_webgl2_screen_target_benchmark(
+        canvas: HtmlCanvasElement,
+    ) -> Result<String, JsValue> {
+        nuxie_renderer::run_screen_target_benchmark(canvas).map_err(js_error)
+    }
+
+    #[wasm_bindgen]
     pub struct WebGl2ReplayResult {
         width: u32,
         height: u32,

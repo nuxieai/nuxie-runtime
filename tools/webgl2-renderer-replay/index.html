@@ -7,7 +7,7 @@
   <body data-status="loading">
     <pre id="status">loading exact WebGL2 candidate</pre>
     <script type="module">
-      import init, { run_webgl2_replay, run_webgl2_scratch_pass_tests } from "./pkg/webgl2_renderer_replay.js";
+      import init, { run_webgl2_replay, run_webgl2_scratch_pass_tests, run_webgl2_screen_target_tests, run_webgl2_screen_target_benchmark } from "./pkg/webgl2_renderer_replay.js";
 
       const status = document.querySelector("#status");
       window.webgl2CandidateReady = init().then(() => {
@@ -45,6 +45,16 @@
       window.runWebgl2ScratchPassTests = async () => {
         await window.webgl2CandidateReady;
         return run_webgl2_scratch_pass_tests(document.createElement("canvas"));
+      };
+
+      window.runWebgl2ScreenTargetTests = async () => {
+        await window.webgl2CandidateReady;
+        return run_webgl2_screen_target_tests(document.createElement("canvas"));
+      };
+
+      window.runWebgl2ScreenTargetBenchmark = async () => {
+        await window.webgl2CandidateReady;
+        return run_webgl2_screen_target_benchmark(document.createElement("canvas"));
       };
 
       const candidateWorker = new URLSearchParams(location.search).has(

@@ -88,6 +88,13 @@ pub(crate) mod webgl2 {
     ))]
     #[path = "scratch_pass_browser_tests.rs"]
     pub(crate) mod scratch_pass_browser_tests;
+    #[cfg(all(
+        feature = "webgl2-test-support",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    #[path = "screen_target_browser_tests.rs"]
+    pub(crate) mod screen_target_browser_tests;
     // This module is the Rust equivalent of the source's member/friend
     // boundary. Only the cross-backend load/store dependency and opaque
     // ContextGL type escape; coupled GL owner records stay unnameable outside
@@ -473,8 +480,8 @@ pub(crate) mod source {
                 pub(crate) mod draw_clockwise_atomic_path_frag;
                 pub(crate) mod draw_clockwise_clip_frag;
                 pub(crate) mod draw_clockwise_path_frag;
-                pub(crate) mod draw_depthstencil_object_frag;
                 pub(crate) mod draw_depthstencil_fill_vert;
+                pub(crate) mod draw_depthstencil_object_frag;
                 pub(crate) mod draw_fullscreen_quad_vert;
                 pub(crate) mod draw_image_mesh_vert;
                 pub(crate) mod draw_input_attachment_frag;

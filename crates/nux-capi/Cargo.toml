@@ -31,7 +31,7 @@ luaur-common = "=0.1.8"
 luaur-compiler = "=0.1.8"
 nuxie = { path = "../nuxie", default-features = false, features = ["test-support"] }
 nuxie-render-api = { path = "../nuxie-render-api" }
-nuxie-runtime = { path = "../nuxie-runtime", default-features = false }
+nuxie-runtime = { path = "../nuxie-runtime", default-features = false, features = ["policy-pass-counter"] }
 nuxie-project-data = { path = "../nuxie-project-data" }
 nuxie-schema = { path = "../nuxie-schema" }
 serde_json = "1"

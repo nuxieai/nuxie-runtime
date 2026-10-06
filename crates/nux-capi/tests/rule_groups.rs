@@ -536,3 +536,22 @@ fn empty_group_is_valid_and_removal_stops_computation() {
     h.mutate(&[h.boolean("valid", false)]);
     assert!(!Snapshot::new(h.first).valid());
 }
+
+#[test]
+fn settled_player_steps_make_no_policy_passes() {
+    use nuxie_runtime::RuntimeValuePolicy;
+
+    let h = Handles::new();
+    h.install(false);
+    RuntimeValuePolicy::take_test_pass_count();
+    h.step();
+    assert!(RuntimeValuePolicy::take_test_pass_count() > 0);
+    for _ in 0..3 {
+        assert_eq!(h.step().view_model_change_count, 0);
+        assert_eq!(
+            RuntimeValuePolicy::take_test_pass_count(),
+            0,
+            "quiet player step makes no rule, marker or group pass"
+        );
+    }
+}

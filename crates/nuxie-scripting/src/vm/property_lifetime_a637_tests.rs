@@ -697,7 +697,7 @@ fn stale_property_cleanup_does_not_dispose_a_reused_weak_registry_slot() {
     let first_wrapper = create_scripted_view_model(&lua, models.facade(&screen.instance)).unwrap();
     let first: AnyUserData = first_wrapper.get("DelayCounter").unwrap();
     let old_state = scripted_property_state(&first).unwrap();
-    let old_slot = first.to_pointer() as usize as u64;
+    let old_slot = property_weak_key(first.to_pointer());
     drop(first);
     drop(first_wrapper);
     lua.gc_collect().unwrap();
@@ -721,4 +721,36 @@ fn stale_property_cleanup_does_not_dispose_a_reused_weak_registry_slot() {
     lua.globals().set("second", second).unwrap();
     lua.load("second.value = 6").exec().unwrap();
     assert_eq!(counter(&screen), 6.0);
+}
+
+#[test]
+#[cfg(target_pointer_width = "64")]
+fn tagged_property_pointer_round_trips_through_weak_table() {
+    let lua = Lua::new();
+    let weak_properties = lua.create_table();
+    let meta = lua.create_table();
+    meta.set("__mode", "v").unwrap();
+    weak_properties.set_metatable(Some(meta)).unwrap();
+    let tagged = 0xB400_0071_2345_6780_u64 as usize as *const std::ffi::c_void;
+    let untagged = 0x0000_0071_2345_6780_u64 as usize as *const std::ffi::c_void;
+    let tagged_value = lua.create_table();
+    let untagged_value = lua.create_table();
+    let adjacent = 0xB400_0071_2345_6790_u64 as usize as *const std::ffi::c_void;
+    let adjacent_value = lua.create_table();
+    weak_properties
+        .raw_set(property_weak_key(tagged), tagged_value.clone())
+        .unwrap();
+    weak_properties
+        .raw_set(property_weak_key(untagged), untagged_value.clone())
+        .unwrap();
+    weak_properties
+        .raw_set(property_weak_key(adjacent), adjacent_value.clone())
+        .unwrap();
+    let actual: Table = weak_properties.raw_get(property_weak_key(adjacent)).unwrap();
+    assert_eq!(actual.to_pointer(), adjacent_value.to_pointer());
+    let actual: Table = weak_properties.raw_get(property_weak_key(tagged)).unwrap();
+    assert_eq!(actual.to_pointer(), tagged_value.to_pointer());
+    let actual: Table = weak_properties.raw_get(property_weak_key(untagged)).unwrap();
+    assert_eq!(actual.to_pointer(), untagged_value.to_pointer());
+    assert_eq!(property_weak_key(tagged).0 as usize as u64, 0xB400_0071_2345_6780);
 }

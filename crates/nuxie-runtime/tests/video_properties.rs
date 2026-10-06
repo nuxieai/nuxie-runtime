@@ -111,3 +111,59 @@ fn seeking_to_the_last_frame_still_publishes_the_changed_media_clock_position() 
     DataBind::update_data_bind_handle(&binding, true);
     assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(3.0));
 }
+
+#[test]
+fn synchronization_correction_publishes_follower_position() {
+    use nuxie_runtime::{
+        source::{
+            data_bind::data_bind::{DataBind, TO_SOURCE},
+            viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+        },
+        video::{
+            playback::Command,
+            sync::{MediaClock, SynchronizationGroup, report_media_clock},
+        },
+    };
+    let arena = CoreArena::default();
+    let leader = arena.insert(Video::default());
+    let follower = arena.insert(Video::default());
+    for member in [&leader, &follower] {
+        member.with_downcast_mut::<Video, _>(|v| {
+            v.playback.opened(0, 12.5);
+            v.playback.enqueue(Command::Play).unwrap();
+            v.playback.drain_actions();
+            v.playback.observed_playing(0);
+        });
+    }
+    let number = arena.insert(ViewModelInstanceNumber::default());
+    let binding = arena.insert(DataBind::new(TO_SOURCE, 60017, 0));
+    binding.with_mut(|b| {
+        let b = b.as_data_bind_mut().unwrap();
+        b.set_target(Some(follower.clone()));
+        b.set_source(number.clone());
+    });
+    DataBind::bind_handle(&binding);
+    let clock = |seconds| MediaClock {
+        generation: 0,
+        seconds,
+        rate: 1.0,
+        playing: true,
+    };
+    report_media_clock(&follower, 1.0, Some(clock(0.7))).unwrap();
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(0.7));
+    let mut group =
+        SynchronizationGroup::new(leader.clone(), vec![follower.clone()], 0.05, 0.1).unwrap();
+    let measurements = group
+        .correct(1.0, |member| {
+            Some(clock(if member.identity_key() == leader.identity_key() {
+                1.0
+            } else {
+                0.7
+            }))
+        })
+        .unwrap();
+    assert!(measurements[0].corrected);
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(1.0));
+}

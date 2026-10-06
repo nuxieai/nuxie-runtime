@@ -182,6 +182,11 @@ impl SynchronizationGroup {
             self.seek_compensation[index] = compensation;
             self.pending_seek[index] = generation;
         }
+        for measurement in &measurements {
+            if measurement.corrected {
+                Video::flush_property_changes(&self.followers[measurement.follower]);
+            }
+        }
         Ok(measurements)
     }
 }

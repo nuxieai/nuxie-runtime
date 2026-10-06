@@ -68,12 +68,21 @@ fn run(
     policy.prepare_capture(&capture);
     let mut operation = policy.begin_rules(roots).unwrap();
     operation
-        .apply_groups(policy, roots, |_, _| Ok(()))
+        .apply_initial_groups(policy, roots, |_, _| Ok(()))
         .unwrap();
     action();
     let mut settled = false;
+    let mut cursor = 0;
     for _ in 0..16 {
+        if !operation
+            .needs_policy_pass(policy, &capture, cursor)
+            .unwrap()
+        {
+            settled = true;
+            break;
+        }
         let rules = operation.apply(policy, &capture, roots).unwrap();
+        cursor = capture.write_count().unwrap();
         let retained = operation.retained_roots();
         let markers = policy
             .apply_markers(&capture, &retained, |owner, index, value| {
@@ -278,11 +287,7 @@ fn kept_validity_ordered_errors_and_latest_refusal() {
         );
         assert_eq!(
             errors(&root, "text_errors"),
-            expected(if reverse {
-                &["pattern", "length"]
-            } else {
-                &["length", "pattern"]
-            })
+            expected(&["length", "pattern"])
         );
         assert_eq!(
             root.borrow().boolean_value_by_property_name("valid"),
@@ -400,7 +405,6 @@ fn kept_validity_ordered_errors_and_latest_refusal() {
 }
 
 #[test]
-#[ignore = "Unchanged native write visibility needs a compiler contract or port exception; question pending"]
 fn native_unchanged_acceptance_requires_an_observable_write() {
     use crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber;
     let mut factory = PersistentFactory::new(RecordingFactory::new());
@@ -457,8 +461,151 @@ fn native_unchanged_acceptance_requires_an_observable_write() {
         },
         true,
     );
-    assert!(
-        errors(&root, "n_errors").is_empty(),
-        "accepted unchanged native write should clear latest refusal"
+    // The native setter emits nothing for an unchanged value. Until a real
+    // change occurs, the host cannot distinguish this from no write at all.
+    assert_eq!(errors(&root, "n_errors"), expected(&["max"]));
+    run(
+        &policy,
+        roots,
+        || {
+            root.borrow()
+                .property_by_path(&[0])
+                .unwrap()
+                .with_downcast_mut::<ViewModelInstanceNumber, _>(|number| number.set_value(301.0))
+                .unwrap();
+        },
+        true,
     );
+    assert!(errors(&root, "n_errors").is_empty());
+}
+
+#[test]
+fn optional_empty_picks_start_valid_and_quiet_steps_skip_passes() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    let roots = std::slice::from_ref(&root);
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_rules(&[entry(
+            "picks",
+            RuntimeValueRuleKind::PickedCount {
+                property: "b".into(),
+                minimum: 1,
+                maximum: 3,
+            },
+            RuntimeValueRuleMode::Mark,
+            "minimum",
+        )])
+        .unwrap();
+    policy
+        .set_groups(&[RuntimeRuleGroup {
+            model: "Values".into(),
+            valid: "valid".into(),
+            members: vec![RuntimeRuleGroupMember {
+                property: "picks".into(),
+                errors_path: "picks_errors".into(),
+                item_model: "ErrorEntry".into(),
+                code_property: "code".into(),
+                message_property: "message".into(),
+            }],
+        }])
+        .unwrap();
+    assert!(run(&policy, roots, || {}, true) > 0);
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid"),
+        Some(true)
+    );
+    assert!(errors(&root, "picks_errors").is_empty());
+    assert!(policy.passes.replace(0) > 0);
+    assert_eq!(run(&policy, roots, || {}, true), 0);
+    assert_eq!(
+        policy.passes.replace(0),
+        0,
+        "quiet step performs no policy pass"
+    );
+    policy.invalidate();
+    assert_eq!(run(&policy, roots, || {}, true), 0);
+    assert_eq!(
+        policy.passes.replace(0),
+        1,
+        "invalidated roots recompute their initial outputs"
+    );
+}
+#[test]
+fn processed_script_refusal_still_updates_groups_with_an_empty_capture() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    let roots = std::slice::from_ref(&root);
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_rules(&[entry(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+            "max",
+        )])
+        .unwrap();
+    let mut group = table();
+    group.members.truncate(1);
+    policy.set_groups(&[group]).unwrap();
+    run(
+        &policy,
+        roots,
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 300.0);
+        },
+        true,
+    );
+    let transaction = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(roots).unwrap();
+    assert!(
+        !operation
+            .apply_initial_groups(&policy, roots, |_, _| Ok(()))
+            .unwrap()
+    );
+    assert!(
+        !operation
+            .checked_write(
+                &policy,
+                &root,
+                "n",
+                RuntimeViewModelChangeValue::Number(400.0),
+                None,
+                || panic!("refused writer must not run")
+            )
+            .unwrap()
+            .applied
+    );
+    operation.apply_pending_writes(&policy, roots).unwrap();
+    assert_eq!(capture.write_count().unwrap(), 0);
+    assert!(operation.needs_policy_pass(&policy, &capture, 0).unwrap());
+    operation
+        .apply_groups(&policy, roots, |_, _| Ok(()))
+        .unwrap();
+    assert_eq!(errors(&root, "n_errors"), expected(&["max"]));
+    drop(capture);
+    transaction.commit();
+    operation.commit_groups(&policy);
 }

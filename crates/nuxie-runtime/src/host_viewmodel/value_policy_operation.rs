@@ -120,6 +120,8 @@ pub struct RuntimeValuePolicyOperation {
     value_reports: BTreeMap<Key, BTreeSet<usize>>,
     initial: Rc<RefCell<InitialOwners>>,
     group_refusals: BTreeMap<Key, Vec<usize>>,
+    group_roots: Vec<RuntimeOwnedViewModelHandle>,
+    groups_revision: u64,
 }
 
 impl RuntimeValuePolicy {
@@ -153,6 +155,8 @@ impl RuntimeValuePolicy {
             value_reports: BTreeMap::new(),
             initial,
             group_refusals: self.group_refusals.borrow().clone(),
+            group_roots: roots.to_vec(),
+            groups_revision: self.revision.get(),
         };
         if self.has_rules() || self.has_groups() {
             operation.retain(self, roots)?;
@@ -198,6 +202,7 @@ impl RuntimeValuePolicyOperation {
         marker: Option<bool>,
         write: impl FnOnce() -> Result<(), RuntimeValuePolicyError>,
     ) -> Result<RuntimeCheckedValueWrite, RuntimeValuePolicyError> {
+        policy.invalidate();
         if !policy.has_rules() {
             write()?;
             return Ok(RuntimeCheckedValueWrite {
@@ -225,6 +230,8 @@ impl RuntimeValuePolicyOperation {
             value_reports: BTreeMap::new(),
             initial: Rc::clone(&self.initial),
             group_refusals: BTreeMap::new(),
+            group_roots: Vec::new(),
+            groups_revision: policy.revision.get(),
         };
         let mut roots = self.retained_roots();
         roots.push(root.clone());
@@ -296,6 +303,16 @@ impl RuntimeValuePolicyOperation {
         if !policy.has_rules() {
             return Ok(false);
         }
+        if capture
+            .write_count()
+            .map_err(|_| RuntimeValuePolicyError::LimitExceeded)?
+            == self.cursor
+        {
+            return Ok(std::mem::take(&mut self.pending_flush));
+        }
+        policy.invalidate();
+        #[cfg(test)]
+        policy.passes.set(policy.passes.get().saturating_add(1));
         self.absorb_initial()?;
         self.retain(policy, roots)?;
         let retained = self.owners.values().cloned().collect::<Vec<_>>();

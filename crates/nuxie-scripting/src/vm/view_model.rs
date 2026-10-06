@@ -674,6 +674,12 @@ fn property_watch_cleanup(property: &AnyUserData) -> Box<dyn Fn()> {
     unreachable!("scripted property userdata")
 }
 
+// Numeric Lua keys lose address bits above f64's exact integer range. Keep the
+// complete tagged pointer as an opaque key; it is never dereferenced here.
+fn property_weak_key(pointer: *const std::ffi::c_void) -> luaur_rt::LightUserData {
+    luaur_rt::LightUserData(pointer.cast_mut())
+}
+
 fn patch_property_userdata(
     lua: &Lua,
     model: ScriptViewModel,
@@ -713,7 +719,7 @@ fn patch_property_userdata(
             table
         }
     };
-    let identity = property.to_pointer() as usize as u64;
+    let identity = property_weak_key(property.to_pointer());
     weak_properties.raw_set(identity, property.clone())?;
     let weak_lua = super::lua_main_ref::main_lua(lua)
         .ok_or_else(|| luaur_rt::Error::runtime("missing main scripting state"))?

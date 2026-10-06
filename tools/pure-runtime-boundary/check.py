@@ -216,6 +216,8 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "ScriptVm",
     "ScriptHostExtensionInstance",
     "RuntimeValueRuleReport",
+    "RuntimeRuleGroup",
+    "RuntimeRuleGroupMember",
     "RuntimeValueRule",
     "RuntimeValueRuleKind",
     "RuntimeValueRuleMode",

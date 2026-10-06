@@ -969,6 +969,18 @@ typedef struct NuxPlayerInfo {
   struct NuxStringView name;
 } NuxPlayerInfo;
 
+/**
+ * The player's laid-out size in points, read after stepping.
+ */
+typedef struct NuxPlayerLayoutSize {
+  /**
+   * Initialize to `sizeof(NuxPlayerLayoutSize)`.
+   */
+  uint32_t struct_size;
+  float width;
+  float height;
+} NuxPlayerLayoutSize;
+
 typedef struct NuxPlayerInputChange {
   /**
    * One of the `NuxPlayerInputKind` constants. Stored as an integer so an
@@ -2265,6 +2277,21 @@ NuxStatus nux_player_free(struct NuxPlayer *player);
  * Read selected-player metadata into a versioned caller-owned struct.
  */
 NuxStatus nux_player_info(const struct NuxPlayer *player, struct NuxPlayerInfo *out_info);
+
+/**
+ * Read the laid-out root width and height in points into a caller-sized struct.
+ * After changing the layout size, step by zero before reading the settled size.
+ */
+NuxStatus nux_player_layout_size(const struct NuxPlayer *player,
+                                 struct NuxPlayerLayoutSize *out_size);
+
+/**
+ * Set the player's root layout size in points. Both dimensions must be finite
+ * and positive. The layout settles on the next `nux_player_step`; hosts must
+ * step by zero after each size change and before the first draw.
+ * A changed size invalidates the rendered frame.
+ */
+NuxStatus nux_player_layout_size_set(struct NuxPlayer *player, float width, float height);
 
 /**
  * Select the artboard's default scene using the pinned C++ order: authored

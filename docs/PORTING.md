@@ -1506,7 +1506,10 @@ from this additive-only rule, retained explicitly for sync-upstream.
 
 - **pointer-action-admission** (X5): `StateMachineInstance::pointer_activation_allowed`
   in the mechanical port refuses disabled or hidden controls and their ancestors
-  or mounted hosts before pointer delivery. Pinned upstream
+  or mounted hosts for Down, Up and Click listener actions inside
+  `perform_listener_changes`. Enter, Exit, Move and all other pointer kinds,
+  including drag kinds, deliberately bypass this check so pointer cleanup
+  still runs. Pinned upstream
   `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
   `src/animation/state_machine_listener.cpp:220-243`, has no such admission rule.
   `tests/host_semantic_actions.rs` covers refusal and readmission.

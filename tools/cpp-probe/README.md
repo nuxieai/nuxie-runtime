@@ -59,3 +59,29 @@ This is the independent oracle for `upstream_text_measure_width.rs`. Upstream
 uses the offer only when a fill/fixed participant owns the text's width axis;
 otherwise it caps measurement at authored width. AutoHeight's reported width
 remains authored width in all three cases.
+
+`--text-measure-headline-samples` and
+`--text-measure-headline-unbounded-samples` take the same two asset arguments.
+They use `Choose what deserves your attention.` with fill/fixed participants,
+first with an exact offer of 354, then with `float::max` as the offered width.
+These distinguish a finite shaping limit from an unbounded one.
+
+Rust main's AutoHeight return value uses x=354 for the exact slot where this
+C++ probe returns authored width 1. The Rust tests assert heights only; this
+known gap is recorded in `docs/PORTING.md` and
+[UNIV-3932](https://universe.basis.dev/issue/UNIV-3932).
+
+## Supplemental selection observations
+
+`--text-selection-samples <new_text.riv>` uses the embedded font at size 24
+and the same first-four-Text setup as the Rust selection test's `Scene`.
+It reports selection rect counts for `a\r\nb` at ranges (1,2) and (2,3),
+with AutoWidth and wrap value 1. It also reports ordered line counts at
+AutoHeight, width 8, wrap value 0 for two ASCII spaces plus U+2003 between
+`a` characters, and for three U+2003 characters between them. These are
+supplemental cases, not cases from upstream `text_selection_test.cpp`.
+
+At `de3e8609`, the supplemental selection output is
+`[{"sample":0,"crRects":1,"lfRects":0,"orderedLines":2},{"sample":1,"orderedLines":2},{"sample":2,"orderedLines":2}]`.
+The headline heights are 135.521591 at width 354 and 47.5215874 unbounded,
+for both participant types. AutoHeight reports width 1 in each case.

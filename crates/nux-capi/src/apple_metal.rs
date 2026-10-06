@@ -1181,6 +1181,22 @@ unsafe fn read_operation(
             "render operation struct_size is too small",
         ));
     }
+    let mut value = NuxMetalRenderOperation::default();
+    let read_len = usize::try_from(caller_size)
+        .unwrap_or(usize::MAX)
+        .min(std::mem::size_of::<NuxMetalRenderOperation>());
+    unsafe {
+        ptr::copy_nonoverlapping(
+            operation.cast::<u8>(),
+            (&mut value as *mut NuxMetalRenderOperation).cast::<u8>(),
+            read_len,
+        );
+    }
+    Ok(value)
+}
+
+fn validate_operation_extensions(operation: &NuxMetalRenderOperation) -> Result<(), ApiFailure> {
+    let caller_size = operation.struct_size;
     let capture_offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
     let capture_end = std::mem::offset_of!(NuxMetalRenderOperation, readback_bytes_per_row)
         + std::mem::size_of::<usize>();
@@ -1197,18 +1213,7 @@ unsafe fn read_operation(
             "render operation contains an incomplete layout extension",
         ));
     }
-    let mut value = NuxMetalRenderOperation::default();
-    let read_len = usize::try_from(caller_size)
-        .unwrap_or(usize::MAX)
-        .min(std::mem::size_of::<NuxMetalRenderOperation>());
-    unsafe {
-        ptr::copy_nonoverlapping(
-            operation.cast::<u8>(),
-            (&mut value as *mut NuxMetalRenderOperation).cast::<u8>(),
-            read_len,
-        );
-    }
-    Ok(value)
+    Ok(())
 }
 
 fn validate_operation_fit(operation: &NuxMetalRenderOperation) -> Result<(), ApiFailure> {
@@ -1664,6 +1669,9 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             Ok(completion) => completion,
             Err(failure) => return with_optional_failure_result(out_result, || Err(failure)),
         };
+        if let Err(failure) = validate_operation_extensions(&operation) {
+            return with_optional_failure_result(out_result, || Err(failure));
+        }
         if let Err(failure) = validate_operation_fit(&operation) {
             return with_optional_failure_result(out_result, || Err(failure));
         }
@@ -2095,7 +2103,9 @@ mod tests {
         assert_eq!(legacy.readback_bytes_per_row, 0);
         for partial in (offset + 1)..size {
             operation.struct_size = u32::try_from(partial).unwrap();
-            let error = unsafe { read_operation(&operation) }.expect_err("partial capture prefix");
+            let error =
+                validate_operation_extensions(&unsafe { read_operation(&operation) }.unwrap())
+                    .expect_err("partial capture prefix");
             assert_eq!(error.status, NuxStatus::InvalidStructSize);
         }
         operation.struct_size = u32::try_from(size).unwrap();
@@ -2124,7 +2134,9 @@ mod tests {
         for partial in 65..72 {
             operation.struct_size = partial;
             assert_eq!(
-                unsafe { read_operation(&operation) }.unwrap_err().status,
+                validate_operation_extensions(&unsafe { read_operation(&operation) }.unwrap())
+                    .unwrap_err()
+                    .status,
                 NuxStatus::InvalidStructSize
             );
         }
@@ -2160,6 +2172,25 @@ mod tests {
             assert_eq!(
                 call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
                 NuxStatus::InvalidArgument
+            );
+            wait_for_completion(unsafe { &*probe });
+            drop(unsafe { Box::from_raw(probe) });
+        }
+    }
+
+    #[test]
+    fn incomplete_extensions_release_readable_completion_once() {
+        for size in [56, 68] {
+            let probe = Box::into_raw(Box::new(CompletionProbe {
+                calls: AtomicUsize::new(0),
+                inline: AtomicBool::new(false),
+            }));
+            let mut operation = operation_with_probe(probe);
+            operation.struct_size = size;
+            let mut outcome = NuxRendererOutcome::default();
+            assert_eq!(
+                call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+                NuxStatus::InvalidStructSize
             );
             wait_for_completion(unsafe { &*probe });
             drop(unsafe { Box::from_raw(probe) });

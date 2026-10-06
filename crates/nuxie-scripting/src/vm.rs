@@ -22,6 +22,7 @@ mod lua_data_value;
 mod lua_font;
 pub(crate) mod lua_image;
 mod lua_image_decode;
+mod lua_input;
 mod lua_main_ref;
 mod lua_mat4;
 mod lua_math;
@@ -653,6 +654,9 @@ const RIVE_LUA_ATOMS: &[(&[u8], i16)] = &[
     (b"artboardNames", 358),
     (b"bindableArtboard", 359),
     (b"getArtboard", 360),
+    (b"delta", 361),
+    (b"precise", 362),
+    (b"pointerScroll", 363),
 ];
 
 const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
@@ -676,8 +680,8 @@ const fn has_rive_lua_atom_range(first: i16, last: i16) -> bool {
 }
 
 const _: () = assert!(
-    has_rive_lua_atom_range(283, 349),
-    "text atoms must register in every build"
+    has_rive_lua_atom_range(283, 363),
+    "text and scroll atoms must register in every build"
 );
 
 const RIVE_LUA_ATOM_SLOT_COUNT: usize = 1024;
@@ -1118,6 +1122,16 @@ impl ScriptProgram {
             .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
         let getter: Function = environment.get(getter)?;
         getter.protected_call(())
+    }
+
+    #[doc(hidden)]
+    pub fn upstream_test_module_bool_setter(&self, setter: &str, value: bool) -> Result<()> {
+        let environment = self
+            .generator
+            .environment()
+            .ok_or_else(|| Error::runtime("script generator has no Lua environment"))?;
+        let setter: Function = environment.get(setter)?;
+        setter.protected_call(value)
     }
 }
 
@@ -3032,7 +3046,6 @@ impl RuntimeScriptingVm for ScriptVm {
         }
     }
 
-
     fn register_script_assets(
         &self,
         scripts: &[ScriptAssetRegistration<'_>],
@@ -3493,7 +3506,8 @@ impl ScriptInstance for LuaScriptInstance {
         .map_err(|error| self.script_error(error))?;
 
         let _property_owner = self.enter_property_owner(&lua);
-        let call_result = function.protected_call::<()>((table, argument));
+        // Keep the event anchored through the hit-result read, matching callHitEvent.
+        let call_result = function.protected_call::<()>((table, argument.clone()));
         let hit = match hit_result.get() {
             listener_invocation::ScriptedPointerHitResult::None => {
                 nuxie_runtime::ScriptedDrawablePointerHit::None
@@ -3510,6 +3524,53 @@ impl ScriptInstance for LuaScriptInstance {
             if error.resource_code().is_some() {
                 return Err(error);
             }
+            eprintln!("{} failed", method.as_str());
+        }
+        Ok(nuxie_runtime::ScriptedDrawablePointerResult { invoked: true, hit })
+    }
+
+    fn call_scripted_drawable_scroll(
+        &mut self,
+        pointer_id: i32,
+        local_x: f32,
+        local_y: f32,
+        event: nuxie_runtime::source::scroll_event::ScrollEvent,
+        timestamp: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> std::result::Result<nuxie_runtime::ScriptedDrawablePointerResult, ScriptError> {
+        self.reset_execution_budget();
+        let Some(table) = self.table.clone() else {
+            return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
+        };
+        let value: Value = table
+            .get("pointerScroll")
+            .map_err(|error| self.script_error(error))?;
+        let Value::Function(function) = value else {
+            return Ok(nuxie_runtime::ScriptedDrawablePointerResult::default());
+        };
+        let lua = table.lua();
+        let (argument, hit_result) =
+            lua_input::scroll_event_argument(&lua, pointer_id, local_x, local_y, event, timestamp)
+                .map_err(|error| self.script_error(error))?;
+        let _property_owner = self.enter_property_owner(&lua);
+        let call_result = function.protected_call::<()>((table, argument.clone()));
+        let hit = match hit_result.get() {
+            listener_invocation::ScriptedPointerHitResult::None => {
+                nuxie_runtime::ScriptedDrawablePointerHit::None
+            }
+            listener_invocation::ScriptedPointerHitResult::Hit => {
+                nuxie_runtime::ScriptedDrawablePointerHit::Hit
+            }
+            listener_invocation::ScriptedPointerHitResult::HitOpaque => {
+                nuxie_runtime::ScriptedDrawablePointerHit::HitOpaque
+            }
+        };
+        if let Err(error) = call_result {
+            let error = self.script_error(error);
+            if error.resource_code().is_some() {
+                return Err(error);
+            }
+            eprintln!("pointerScroll failed");
         }
         Ok(nuxie_runtime::ScriptedDrawablePointerResult { invoked: true, hit })
     }

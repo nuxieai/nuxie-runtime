@@ -307,6 +307,22 @@ impl ScriptArtboard for NativeScriptArtboard {
         Ok(())
     }
 
+    fn dispatch_scroll(
+        &mut self,
+        pointer_id: i32,
+        x: f32,
+        y: f32,
+        event: crate::source::scroll_event::ScrollEvent,
+        timestamp_seconds: f32,
+    ) -> Result<u32, ScriptError> {
+        let Some(machine) = &self.owner.machine else {
+            return Ok(0);
+        };
+        Ok(machine.with_instance_mut(|machine| {
+            machine.pointer_scroll(Vec2D::new(x, y), &event, timestamp_seconds, pointer_id) as u32
+        }))
+    }
+
     fn dispatch_input(
         &mut self,
         method: ScriptMethod,

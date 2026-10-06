@@ -1,4 +1,4 @@
-//! Complete native `runtime/scroll_input_test.cpp` at upstream 7e450bdc.
+//! Native `runtime/scroll_input_test.cpp`, updated through upstream de3e8609.
 use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::{RuntimeStateMachineInstanceHandle, StateMachineInstance},
@@ -540,4 +540,23 @@ fn wheel_can_be_disabled_while_drag_works() {
     assert!(s.get(ScrollConstraint::offset_y) < 0.0);
     s.smi
         .with_instance_mut(|m| m.pointer_up(Vec2D::new(50.0, 150.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+}
+
+#[test]
+fn wheel_disabled_view_ignores_inertia_cancel() {
+    let s = Scene::vertical();
+    let over = Vec2D::new(50.0, 250.0);
+    s.send(trackpad(ScrollPhase::Begin, 0.0, 0.0));
+    s.send(trackpad(ScrollPhase::Update, 0.0, -40.0));
+    s.send(trackpad(ScrollPhase::End, 0.0, 0.0));
+    assert!(s.running());
+    assert!(CoreRegistry::set_bool_handle(
+        &s.scroll,
+        ScrollConstraintBase::WHEEL_INTERACTIVE_PROPERTY_KEY.into(),
+        false,
+    ));
+    let cancel = trackpad(ScrollPhase::InertiaCancel, 0.0, 0.0);
+    assert!(!s.smi.with_instance_mut(|m| m.wants_scroll(over, &cancel)));
+    assert_eq!(s.send_at(over, cancel), HitResult::None);
+    assert!(s.running());
 }

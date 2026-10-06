@@ -1441,7 +1441,13 @@ pub trait HitComponent {
     fn occludes_pointer(&self, _position: Vec2D) -> bool {
         false
     }
-    fn process_scroll(&self, _position: Vec2D, _event: &ScrollEvent, _timestamp: f32) -> HitResult {
+    fn process_scroll(
+        &self,
+        _position: Vec2D,
+        _event: &ScrollEvent,
+        _timestamp: f32,
+        _pointer_id: i32,
+    ) -> HitResult {
         HitResult::None
     }
 }
@@ -1678,7 +1684,13 @@ impl HitComponent for HitDrawable {
             }
         }
     }
-    fn process_scroll(&self, _position: Vec2D, event: &ScrollEvent, timestamp: f32) -> HitResult {
+    fn process_scroll(
+        &self,
+        _position: Vec2D,
+        event: &ScrollEvent,
+        timestamp: f32,
+        _pointer_id: i32,
+    ) -> HitResult {
         let Some(proxy) = self.scroll_proxy_for(event) else {
             return HitResult::None;
         };
@@ -1899,7 +1911,13 @@ impl HitComponent for HitNestedArtboard {
         }
         false
     }
-    fn process_scroll(&self, position: Vec2D, event: &ScrollEvent, timestamp: f32) -> HitResult {
+    fn process_scroll(
+        &self,
+        position: Vec2D,
+        event: &ScrollEvent,
+        timestamp: f32,
+        pointer_id: i32,
+    ) -> HitResult {
         let Some(local) = nested_world_to_local(&self.component, position) else {
             return HitResult::None;
         };
@@ -1914,7 +1932,7 @@ impl HitComponent for HitNestedArtboard {
             if let Some(machine) = nested_state_machine(&animation) {
                 if machine.with_instance_mut(StateMachineInstance::has_scroll_latch) {
                     return machine.with_instance_mut(|machine| {
-                        machine.pointer_scroll(local, &mapped, timestamp, 0)
+                        machine.pointer_scroll(local, &mapped, timestamp, pointer_id)
                     });
                 }
             }
@@ -1922,7 +1940,7 @@ impl HitComponent for HitNestedArtboard {
         for animation in nested_animations(&self.component) {
             if let Some(machine) = nested_state_machine(&animation) {
                 let result = machine.with_instance_mut(|machine| {
-                    machine.pointer_scroll(local, &mapped, timestamp, 0)
+                    machine.pointer_scroll(local, &mapped, timestamp, pointer_id)
                 });
                 if result != HitResult::None {
                     return result;
@@ -2167,7 +2185,13 @@ impl HitComponent for HitComponentList {
             }
         }
     }
-    fn process_scroll(&self, position: Vec2D, event: &ScrollEvent, timestamp: f32) -> HitResult {
+    fn process_scroll(
+        &self,
+        position: Vec2D,
+        event: &ScrollEvent,
+        timestamp: f32,
+        pointer_id: i32,
+    ) -> HitResult {
         if component_is_collapsed(&self.component) {
             return HitResult::None;
         }
@@ -2194,7 +2218,7 @@ impl HitComponent for HitComponentList {
                     ..*event
                 };
                 let result = machine.with_instance_mut(|machine| {
-                    machine.pointer_scroll(local, &mapped, timestamp, 0)
+                    machine.pointer_scroll(local, &mapped, timestamp, pointer_id)
                 });
                 if pass == 0 || result != HitResult::None {
                     return result;
@@ -3925,7 +3949,7 @@ impl StateMachineInstance {
         mut position: Vec2D,
         event: &ScrollEvent,
         timestamp: f32,
-        _pointer_id: i32,
+        pointer_id: i32,
     ) -> HitResult {
         let mut mapped = *event;
         if !self.map_to_content_space(&mut position, Some(&mut mapped.delta)) {
@@ -3940,22 +3964,24 @@ impl StateMachineInstance {
             self.scroll_latch = None;
         }
         let mut target = self.scroll_latch.clone();
-        if target.is_none() {
+        let mut result = HitResult::None;
+        if let Some(target) = &target {
+            result = target.process_scroll(position, &mapped, timestamp, pointer_id);
+        } else {
             for hit in &self.hit_components {
                 if hit.wants_scroll(position, &mapped) {
-                    target = Some(hit.clone());
-                    break;
+                    result = hit.process_scroll(position, &mapped, timestamp, pointer_id);
+                    if result != HitResult::None {
+                        target = Some(hit.clone());
+                        break;
+                    }
                 }
                 if hit.occludes_scroll(position) {
                     break;
                 }
             }
         }
-        let Some(target) = target else {
-            return HitResult::None;
-        };
-        let result = target.process_scroll(position, &mapped, timestamp);
-        self.scroll_latch = target.scroll_gesture_active().then_some(target);
+        self.scroll_latch = target.filter(|target| target.scroll_gesture_active());
         result
     }
 

@@ -279,6 +279,7 @@ pub enum ScriptMethod {
     PointerUp,
     PointerEnter,
     PointerExit,
+    PointerScroll,
     KeyboardEvent,
     TextEvent,
     GamepadConnected,
@@ -305,6 +306,7 @@ impl ScriptMethod {
             ScriptMethod::PointerUp => "pointerUp",
             ScriptMethod::PointerEnter => "pointerEnter",
             ScriptMethod::PointerExit => "pointerExit",
+            ScriptMethod::PointerScroll => "pointerScroll",
             ScriptMethod::KeyboardEvent => "keyboardEvent",
             ScriptMethod::TextEvent => "textEvent",
             ScriptMethod::GamepadConnected => "gamepadConnected",
@@ -2090,6 +2092,15 @@ pub trait ScriptArtboard {
         invocation: &ScriptListenerInvocation,
     ) -> Result<u32, ScriptError>;
 
+    fn dispatch_scroll(
+        &mut self,
+        pointer_id: i32,
+        x: f32,
+        y: f32,
+        event: crate::source::scroll_event::ScrollEvent,
+        timestamp_seconds: f32,
+    ) -> Result<u32, ScriptError>;
+
     fn data(&self) -> Option<ScriptViewModel> {
         None
     }
@@ -2396,6 +2407,19 @@ pub trait ScriptInstance {
         _local_x: f32,
         _local_y: f32,
         _hit_type: crate::source::listener_type::ListenerType,
+        _timestamp: f32,
+        _host: &mut dyn ScriptHost,
+    ) -> Result<ScriptedDrawablePointerResult, ScriptError> {
+        Ok(ScriptedDrawablePointerResult::default())
+    }
+
+    /// Position and delta have already been transformed into drawable space.
+    fn call_scripted_drawable_scroll(
+        &mut self,
+        _pointer_id: i32,
+        _local_x: f32,
+        _local_y: f32,
+        _event: crate::source::scroll_event::ScrollEvent,
         _timestamp: f32,
         _host: &mut dyn ScriptHost,
     ) -> Result<ScriptedDrawablePointerResult, ScriptError> {

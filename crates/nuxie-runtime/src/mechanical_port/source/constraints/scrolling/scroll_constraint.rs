@@ -1167,7 +1167,7 @@ impl ScrollConstraint {
         }
         if self.is_scrolling && flags.contains(AdvanceFlags::NEW_FRAME) {
             self.scroll_idle_seconds += elapsed_seconds;
-            if self.scroll_idle_seconds >= 0.1 {
+            if self.scroll_idle_seconds >= crate::source::scroll_event::SCROLL_IDLE_SECONDS {
                 if self.snap() || self.is_overscrolled() {
                     self.prime_physics();
                     self.start_physics();

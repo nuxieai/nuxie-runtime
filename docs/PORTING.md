@@ -1431,6 +1431,12 @@ and concrete evidence.
 - **A8 terminal-script-resource-limits:** terminal VM limit failures cannot be
   retried or allowed to continue traversal.
 
+The editor missing-paint guard is a port correction, not an adaptation:
+`editor` mirrors `WITH_RIVE_EDITOR` at pinned upstream
+`de3e86090892b68072e7d4505e8d979386fc9a30`,
+`src/shapes/paint/stroke.cpp:89-101`, returning before renderer invalidation
+and superclass dirt changes. Default runtime builds retain the assertion.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++

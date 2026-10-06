@@ -77,7 +77,7 @@ unsafe fn rule(
     entry: &NuxValueRule,
     bytes: &mut usize,
 ) -> Result<nuxie::RuntimeValueRule, NuxStatus> {
-    use nuxie::RuntimeValueRuleKind as Kind;
+    use nuxie::RuntimeValueRuleKind;
     let mode = match entry.mode {
         NUX_VALUE_RULE_MARK => nuxie::RuntimeValueRuleMode::Mark,
         NUX_VALUE_RULE_REFUSE => nuxie::RuntimeValueRuleMode::Refuse,
@@ -119,11 +119,15 @@ unsafe fn rule(
         usize::MAX
     };
     let kind = match entry.kind {
-        NUX_VALUE_RULE_NUMBER_MINIMUM => Kind::NumberMinimum(entry.number_bound),
-        NUX_VALUE_RULE_NUMBER_MAXIMUM => Kind::NumberMaximum(entry.number_bound),
-        NUX_VALUE_RULE_TEXT_MINIMUM => Kind::TextMinimum(copied(entry.text, bytes)?),
-        NUX_VALUE_RULE_TEXT_MAXIMUM => Kind::TextMaximum(copied(entry.text, bytes)?),
-        NUX_VALUE_RULE_PATTERN => Kind::Pattern(copied(entry.text, bytes)?),
+        NUX_VALUE_RULE_NUMBER_MINIMUM => RuntimeValueRuleKind::NumberMinimum(entry.number_bound),
+        NUX_VALUE_RULE_NUMBER_MAXIMUM => RuntimeValueRuleKind::NumberMaximum(entry.number_bound),
+        NUX_VALUE_RULE_TEXT_MINIMUM => {
+            RuntimeValueRuleKind::TextMinimum(copied(entry.text, bytes)?)
+        }
+        NUX_VALUE_RULE_TEXT_MAXIMUM => {
+            RuntimeValueRuleKind::TextMaximum(copied(entry.text, bytes)?)
+        }
+        NUX_VALUE_RULE_PATTERN => RuntimeValueRuleKind::Pattern(copied(entry.text, bytes)?),
         NUX_VALUE_RULE_ALLOWED_VALUES => {
             if entry.value_count > 4096 {
                 return Err(NuxStatus::LimitExceeded);
@@ -146,23 +150,23 @@ unsafe fn rule(
             } else {
                 unsafe { slice::from_raw_parts(entry.values, entry.value_count) }
             };
-            Kind::AllowedValues(
+            RuntimeValueRuleKind::AllowedValues(
                 values
                     .iter()
                     .map(|value| copied(*value, bytes))
                     .collect::<Result<_, _>>()?,
             )
         }
-        NUX_VALUE_RULE_ITEM_COUNT => Kind::ItemCount { minimum, maximum },
-        NUX_VALUE_RULE_PICKED_COUNT => Kind::PickedCount {
+        NUX_VALUE_RULE_ITEM_COUNT => RuntimeValueRuleKind::ItemCount { minimum, maximum },
+        NUX_VALUE_RULE_PICKED_COUNT => RuntimeValueRuleKind::PickedCount {
             property: copied(entry.picked_property, bytes)?,
             minimum,
             maximum,
         },
-        NUX_VALUE_RULE_LENGTH => Kind::Length { minimum, maximum },
-        NUX_VALUE_RULE_REQUIRED => Kind::Required,
-        NUX_VALUE_RULE_URL => Kind::Url,
-        NUX_VALUE_RULE_DATE => Kind::Date,
+        NUX_VALUE_RULE_LENGTH => RuntimeValueRuleKind::Length { minimum, maximum },
+        NUX_VALUE_RULE_REQUIRED => RuntimeValueRuleKind::Required,
+        NUX_VALUE_RULE_URL => RuntimeValueRuleKind::Url,
+        NUX_VALUE_RULE_DATE => RuntimeValueRuleKind::Date,
         _ => return Err(NuxStatus::InvalidArgument),
     };
     Ok(nuxie::RuntimeValueRule {

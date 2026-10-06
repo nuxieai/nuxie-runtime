@@ -7,18 +7,38 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7aa93402a27c800db8a36acc8672612c100ea9b1`
+- LAST_SYNCED_SHA: `de3e86090892b68072e7d4505e8d979386fc9a30`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `de3e86090892b68072e7d4505e8d979386fc9a30` (refreshed 2026-10-06 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 195 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (217 after `5892bb05`); this
+  Zero upstream commits remain after this checkpoint at the fetched target.
+  All 196 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (218 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `de3e8609`, integrated atop downstream `f465a95aba`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including focused correction rereviews, are clean. Source review corrected
+  the ScrollEvent phase constructor to match upstream's C-string boundary;
+  a supplemental NUL/invalid-UTF8-suffix regression passes. The first scripting
+  run exposed three constructor fixtures missing upstream's Rive-global
+  registration; the setup was corrected through the existing public API and
+  rereviewed without changing production behavior or assertions.
+  Final runtime/input suites pass 290 (two ignored), scripting suites pass 398
+  (one ignored), including all six new upstream scripting cases and the new
+  runtime wheel-cancellation regression. WebGPU/WebGL2 wasm32-unknown-unknown,
+  Android arm64 Vulkan with scripting/scriptnet, and no-default runtime compile.
+  Source/pipeline tests pass 12 and manifest tests 27; the generated manifest
+  is current. The initial manifest invocation used its default checkout rather
+  than the pinned upstream; the explicit pinned-directory rerun passes.
+  Structural correspondence remains 1,065 mirrored owners, not semantic proof.
+  No renderer code changed. Broad Golden/Silver/Metal results at `7aa93402`
+  below were not rerun for this bounded input change; existing binary/probe
+  failures remain explicit. No browser pixels or physical Android execution
+  is claimed. Wasm guest execution and dependent bindings remain deferred.
 - Validation at `7aa93402`, integrated atop downstream `b8a3b3574a`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including focused correction rereviews, are clean. Native runtime/affected
@@ -328,6 +348,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `de3e86090892b68072e7d4505e8d979386fc9a30` | Translate scripted scroll targeting, local position/delta dispatch, pointer IDs through nested/list and scripted-artboard routes, handler-decline fallthrough, claimed-gesture latching, quiet timeout and collapse/cancel behavior. Add the live Lua ScrollEvent constructor, readonly fields, hit claim, global atoms and artboard method; anchor pointer/scroll userdata across protected calls. Preserve the legacy 21-bit serialized method default while adding opt-in bit 21. Wheel-disabled constraints now decline inertia cancellation. Port all six scripting tests and the runtime scroll regression; add a supplemental constructor C-string-boundary regression after source review. Source-equivalence and separate Rust-integration reviews are clean. The approved live luaur implementation owns Lua changes; excluded historical Lua mirrors are not a second execution backend. Guest Wasm VM calls, ABI/IDL/generated imports and browser guest forwarding remain parked; private editor-preview changes absent from the public delta are not claimed imported. Validation is recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7aa93402a27c800db8a36acc8672612c100ea9b1` | Translate monotonic trigger/change sequences, per-state-machine windows and per-layer consumption, listener baselines and inactive ancestor markers; remove frame-tail view-model resets and detached Lua tracking. Translate component-trigger pending state, text-input caret/hit/undo corrections, component-list replacement/layout invalidation and clone changes. Add paint shader transforms across runtime/render API, GPU matrices, deferred commands, SRIV opcode 44, SVG, Lua, renderer FFI and C ABI; preserve optional callback prefix handling. Translate stroke-cap full-width spokes and regenerate affected backend shaders. Port all 15 new trigger-window tests and revised text/list/render tests; capture fresh C++ Metal GMs. C++ CoreGraphics/Skia/Canvas2D/test-host adapters are unshipped. Guest Wasm console/timer/render bindings remain parked; private .rive_head metadata is not implementation evidence. Reviews and validation are recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `160085c654874d35ad654a750e782d7c78e050d9` | Translate layout-owned virtual grid contributions from every item, solved row/column lines and gaps, cached virtual inputs/item versions, original grid-cell pinning and sparse realized-item traversal. Remove the superseded runtime track-sizing model. Preserve Taffy through native contribution sizing at the approved layout boundary; the public Yoga dependency is the behavioral reference, not a runtime C dependency. Translate linear-time list updates, inline first-parent/LazyVector dependency storage, ordered symbol entries, append/reserve creation and nesting-stack changes. Core emptyId is already an associated constant. Port revised/new upstream tests; the upstream hidden scroll benchmark remains ignored and is not a performance campaign. Private .rive_head metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |
 | `dc75beed2defe9bfe53dfbc30b8649649905b602` | Translate the shared virtual layout model, wrapping lines, grid row/column windows, two-axis scrolling and carousel cycles, anchoring, per-axis physics sizes/shifts, grid placement/track observation, list realization and layout/style/text-input integration. Port the new model, sweep, alignment, component-list, anchor and physics tests and consume the new grid fixture from this pin. Retain the approved Taffy engine, exposing solved grid line offsets for the same runtime observations. C++ oracle dependency resolution follows the new public yoga.ref; private packages/yoga source is not imported. Private metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |

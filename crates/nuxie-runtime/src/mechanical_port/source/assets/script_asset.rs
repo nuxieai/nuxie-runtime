@@ -166,7 +166,8 @@ impl OptionalScriptedMethods {
     const WANTS_GAMEPAD_DISCONNECT_BIT: i32 = 1 << 19;
     const WANTS_GAMEPAD_EVENT_BIT: i32 = 1 << 20;
 
-    pub const METHOD_MASK: u32 = (1 << 21) - 1;
+    const WANTS_POINTER_SCROLL_BIT: i32 = 1 << 21;
+    pub const METHOD_MASK: u32 = (1 << 22) - 1;
 
     pub fn implemented_methods(&self) -> i32 {
         self.implemented_methods
@@ -187,6 +188,7 @@ impl OptionalScriptedMethods {
                 | Self::WANTS_POINTER_UP_BIT
                 | Self::WANTS_POINTER_EXIT_BIT
                 | Self::WANTS_POINTER_CANCEL_BIT
+                | Self::WANTS_POINTER_SCROLL_BIT
                 | Self::WANTS_GAMEPAD_CONNECT_BIT
                 | Self::WANTS_GAMEPAD_DISCONNECT_BIT
                 | Self::WANTS_GAMEPAD_EVENT_BIT,
@@ -225,6 +227,9 @@ impl OptionalScriptedMethods {
     }
     pub fn wants_pointer_cancel(&self) -> bool {
         self.has(Self::WANTS_POINTER_CANCEL_BIT)
+    }
+    pub fn wants_pointer_scroll(&self) -> bool {
+        self.has(Self::WANTS_POINTER_SCROLL_BIT)
     }
     pub fn wants_gamepad_connect(&self) -> bool {
         self.has(Self::WANTS_GAMEPAD_CONNECT_BIT)

@@ -98,7 +98,7 @@ impl DraggableProxy for ViewportDraggableProxy {
         self.constraint
             .with_downcast::<ScrollConstraint, _>(|c| {
                 if event.phase == ScrollPhase::InertiaCancel {
-                    return c.is_scrolling() || physics_running(c);
+                    return c.wheel_enabled() && (c.is_scrolling() || physics_running(c));
                 }
                 if event.precise {
                     return c.can_consume(event.delta) || c.can_stretch(event.delta);

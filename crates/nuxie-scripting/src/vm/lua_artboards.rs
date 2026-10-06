@@ -171,6 +171,20 @@ impl UserData for ScriptedArtboard {
                     .map_err(|error| Error::runtime(error.to_string()))
             });
         }
+        methods.add_method("pointerScroll", |_, this, event: AnyUserData| {
+            let event = event.borrow::<super::lua_input::ScriptedScrollEvent>()?;
+            this.owner
+                .artboard
+                .retained_handle()
+                .dispatch_scroll(
+                    event.id,
+                    event.position.x,
+                    event.position.y,
+                    event.event,
+                    event.timestamp,
+                )
+                .map_err(|error| Error::runtime(error.to_string()))
+        });
         methods.add_method("instance", |lua, this, view_model: Option<Table>| {
             let view_model = view_model.as_ref().map(model_from_table).transpose()?;
             let instance = this.bindings.with_factory(|factory| {

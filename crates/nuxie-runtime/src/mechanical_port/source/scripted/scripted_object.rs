@@ -55,7 +55,8 @@ pub const WANTS_TEXT_INPUT_BIT: u32 = 1 << 17;
 pub const WANTS_GAMEPAD_CONNECT_BIT: u32 = 1 << 18;
 pub const WANTS_GAMEPAD_DISCONNECT_BIT: u32 = 1 << 19;
 pub const WANTS_GAMEPAD_EVENT_BIT: u32 = 1 << 20;
-pub const METHOD_MASK: u32 = (1 << 21) - 1;
+pub const WANTS_POINTER_SCROLL_BIT: u32 = 1 << 21;
+pub const METHOD_MASK: u32 = (1 << 22) - 1;
 
 /// One arena-owned scripted clone and the cloned bindings its runtime host
 /// must retain in its `DataBindContainer`.
@@ -1095,6 +1096,9 @@ impl ScriptedObject {
     pub fn wants_pointer_cancel(&self) -> bool {
         self.implemented_methods & WANTS_POINTER_CANCEL_BIT != 0
     }
+    pub fn wants_pointer_scroll(&self) -> bool {
+        self.implemented_methods & WANTS_POINTER_SCROLL_BIT != 0
+    }
     pub fn wants_gamepad_connect(&self) -> bool {
         self.implemented_methods & WANTS_GAMEPAD_CONNECT_BIT != 0
     }
@@ -1111,6 +1115,7 @@ impl ScriptedObject {
                 | WANTS_POINTER_UP_BIT
                 | WANTS_POINTER_EXIT_BIT
                 | WANTS_POINTER_CANCEL_BIT
+                | WANTS_POINTER_SCROLL_BIT
                 | WANTS_GAMEPAD_CONNECT_BIT
                 | WANTS_GAMEPAD_DISCONNECT_BIT
                 | WANTS_GAMEPAD_EVENT_BIT)

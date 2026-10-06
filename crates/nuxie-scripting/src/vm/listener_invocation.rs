@@ -19,7 +19,8 @@ pub(super) fn install_pointer_event_global(lua: &Lua) -> Result<()> {
             ))
         })?,
     )?;
-    lua.globals().set("PointerEvent", pointer_event)
+    lua.globals().set("PointerEvent", pointer_event)?;
+    super::lua_input::install(lua)
 }
 
 #[derive(Clone)]

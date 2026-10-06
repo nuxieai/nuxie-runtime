@@ -1,5 +1,8 @@
 use super::math::vec2d::Vec2D;
 
+/// Quiet timeout for gestures without their own end event.
+pub const SCROLL_IDLE_SECONDS: f32 = 0.1;
+
 /// Position within an indirect scroll gesture. Phaseless wheels only update.
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

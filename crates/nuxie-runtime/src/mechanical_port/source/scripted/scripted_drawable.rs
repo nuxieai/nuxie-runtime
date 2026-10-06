@@ -8,11 +8,13 @@ use crate::mechanical_port::source::{
         core_registry::CoreCapabilities, scripted::scripted_drawable_base::ScriptedDrawableBase,
     },
     hit_info::HitInfo,
+    hit_result::HitResult,
     importers::import_stack::ImportStack,
     input::focusable::{Key, KeyModifiers},
     math::{mat2d::Mat2D, vec2d::Vec2D},
     renderer::Renderer,
     scripted::scripted_object::{ScriptProtocol, ScriptUpdateRequestHost, ScriptedObject},
+    scroll_event::{SCROLL_IDLE_SECONDS, ScrollEvent, ScrollPhase},
     status_code::StatusCode,
 };
 use crate::scripting::{ScriptMethod, ScriptedDrawableInputResult};
@@ -22,6 +24,8 @@ pub struct ScriptedDrawable {
     pub scripted: ScriptedObject,
     pub properties: Vec<CoreHandle>,
     is_advance_active: bool,
+    scroll_latched: bool,
+    scroll_idle_seconds: f32,
     force_advance: bool,
 }
 
@@ -43,6 +47,8 @@ impl Default for ScriptedDrawable {
             scripted: ScriptedObject::default(),
             properties: Vec::new(),
             is_advance_active: true,
+            scroll_latched: false,
+            scroll_idle_seconds: 0.0,
             force_advance: false,
         }
     }
@@ -188,6 +194,18 @@ impl ScriptedDrawable {
         if elapsed_seconds == 0.0 && !forced {
             return false;
         }
+        owner.with_mut(|owner| {
+            let drawable = owner
+                .as_scripted_drawable_mut()
+                .expect("scripted advance owner");
+            if drawable.scroll_latched
+                && flags.contains(AdvanceFlags::ADVANCE_NESTED)
+                && flags.contains(AdvanceFlags::NEW_FRAME)
+            {
+                drawable.scroll_idle_seconds += elapsed_seconds;
+                drawable.scroll_latched = drawable.scroll_idle_seconds < SCROLL_IDLE_SECONDS;
+            }
+        });
         let instance = owner
             .with_mut(|owner| {
                 if owner.as_component()?.is_collapsed() {
@@ -205,7 +223,9 @@ impl ScriptedDrawable {
             })
             .flatten();
         let Some(instance) = instance else {
-            return false;
+            return owner
+                .with(|owner| owner.as_scripted_drawable().unwrap().scroll_latched)
+                .unwrap_or(false);
         };
         let elapsed = if flags.0 & AdvanceFlags::ADVANCE_NESTED.0 == 0 {
             0.0
@@ -229,6 +249,9 @@ impl ScriptedDrawable {
             });
         }
         advanced
+            || owner
+                .with(|owner| owner.as_scripted_drawable().unwrap().scroll_latched)
+                .unwrap_or(false)
     }
 
     pub fn add_scripted_dirt(&mut self, value: ComponentDirt, recurse: bool) -> bool {
@@ -355,6 +378,13 @@ impl ScriptedDrawable {
         self.is_advance_active = true;
         self.add_scripted_dirt(ComponentDirt::PAINT, false);
     }
+    pub fn scroll_latched(&self) -> bool {
+        self.scroll_latched
+    }
+    pub fn set_scroll_latched(&mut self, value: bool) {
+        self.scroll_latched = value;
+        self.scroll_idle_seconds = 0.0;
+    }
     pub fn script_protocol(&self) -> ScriptProtocol {
         ScriptProtocol::Node
     }
@@ -450,6 +480,126 @@ impl crate::mechanical_port::source::animation::state_machine_instance::HitCompo
         _hit_type: crate::mechanical_port::source::listener_type::ListenerType,
         _pointer_id: i32,
     ) {
+    }
+    fn has_scroll_target(&self, position: Vec2D) -> bool {
+        let Some((is_layout, artboard)) = self
+            .drawable
+            .with(|owner| {
+                let drawable = owner.as_scripted_drawable()?;
+                let component = owner.as_component()?;
+                if !drawable.scripted.wants_pointer_scroll() || component.is_collapsed() {
+                    return None;
+                }
+                Some((
+                    owner.as_scripted_layout().is_some(),
+                    component.artboard_handle(),
+                ))
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        if is_layout {
+            return self.hit_test_bounded(position);
+        }
+        artboard
+            .and_then(|artboard| {
+                artboard.with(|owner| {
+                    owner
+                        .as_artboard()
+                        .is_some_and(|artboard| artboard.bounds().contains(position))
+                })
+            })
+            .unwrap_or(false)
+    }
+    fn wants_scroll(&self, position: Vec2D, _event: &ScrollEvent) -> bool {
+        self.has_scroll_target(position)
+    }
+    fn scroll_gesture_active(&self) -> bool {
+        self.drawable
+            .with_mut(|owner| {
+                let collapsed = owner.as_component().unwrap().is_collapsed();
+                let drawable = owner.as_scripted_drawable_mut().unwrap();
+                if collapsed {
+                    drawable.set_scroll_latched(false);
+                }
+                drawable.scroll_latched()
+            })
+            .unwrap_or(false)
+    }
+    fn cancel_scroll(&self) {
+        self.drawable.with_mut(|owner| {
+            owner
+                .as_scripted_drawable_mut()
+                .unwrap()
+                .set_scroll_latched(false)
+        });
+    }
+    fn process_scroll(
+        &self,
+        position: Vec2D,
+        event: &ScrollEvent,
+        timestamp: f32,
+        pointer_id: i32,
+    ) -> HitResult {
+        use crate::scripting::ScriptedDrawablePointerHit;
+        let state = self
+            .drawable
+            .with(|owner| {
+                let drawable = owner.as_scripted_drawable()?;
+                drawable.scripted.script_asset()?;
+                if owner.as_component()?.is_collapsed() {
+                    return None;
+                }
+                let instance = drawable.scripted.runtime_instance()?;
+                let mut inverse = Mat2D::default();
+                if !owner
+                    .as_world_transform_component()?
+                    .world_transform()
+                    .invert(&mut inverse)
+                {
+                    return None;
+                }
+                Some((instance, inverse))
+            })
+            .flatten();
+        let Some((instance, inverse)) = state else {
+            self.cancel_scroll();
+            return HitResult::None;
+        };
+        let local = inverse * position;
+        let mapped = ScrollEvent {
+            delta: inverse * (position + event.delta) - local,
+            ..*event
+        };
+        let mut host = ScriptUpdateRequestHost::default();
+        let result = instance
+            .borrow_mut()
+            .call_scripted_drawable_scroll(
+                pointer_id, local.x, local.y, mapped, timestamp, &mut host,
+            )
+            .unwrap_or_default();
+        if host.take_requested() {
+            ScriptedObject::apply_update_request(&self.drawable);
+        }
+        self.drawable.with_mut(|owner| {
+            let drawable = owner.as_scripted_drawable_mut().unwrap();
+            if result.invoked {
+                drawable.wake_advance();
+            }
+            let latchable = matches!(event.phase, ScrollPhase::Begin | ScrollPhase::Momentum)
+                || (event.phase == ScrollPhase::Update && event.precise);
+            drawable.set_scroll_latched(
+                latchable
+                    && (result.hit != ScriptedDrawablePointerHit::None
+                        || drawable.scroll_latched()),
+            );
+        });
+        match result.hit {
+            ScriptedDrawablePointerHit::None => HitResult::None,
+            ScriptedDrawablePointerHit::Hit => HitResult::Hit,
+            ScriptedDrawablePointerHit::HitOpaque => HitResult::HitOpaque,
+        }
     }
     fn process_event(
         &self,

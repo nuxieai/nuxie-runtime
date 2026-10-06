@@ -1,4 +1,5 @@
-//! All sixteen cases from d7d5fdd8 tests/unit_tests/runtime/text_selection_test.cpp.
+//! Sixteen cases from de3e8609 tests/unit_tests/runtime/text_selection_test.cpp,
+//! plus explicitly marked supplemental regressions.
 use nuxie_render_api::{
     BlendMode, ImageSampler, Mat2D, PersistentFactory, RecordingFactory, RenderBuffer, RenderImage,
     RenderPaint, RenderPath, Renderer,
@@ -668,9 +669,10 @@ fn replacing_style_file_releases_controller_borrow_before_source_text_destructio
     assert!(selection.selected_text().is_empty());
 }
 
+// Supplemental C++ probe case, not from text_selection_test.cpp.
+// de3e8609 --text-selection-samples: cpp-text-selection.json, sample 0.
 #[test]
 fn regular_selection_keeps_upstream_cr_cell_and_skips_line_feed() {
-    // d7d5fdd8 src/text/cursor.cpp:254-316 emits every overlapping glyph cell.
     let mut scene = Scene::new();
     let text = scene.texts[0].clone();
     set_text(&text, "a\r\nb");
@@ -682,17 +684,21 @@ fn regular_selection_keeps_upstream_cr_cell_and_skips_line_feed() {
     assert!(scene.selection.selection_rects(&text).is_empty());
 }
 
+// Supplemental C++ probe cases, not from text_selection_test.cpp.
+// de3e8609 --text-selection-samples: cpp-text-selection.json, samples 1 and 2.
 #[test]
 fn regular_unicode_whitespace_does_not_create_a_third_soft_wrap_line() {
-    let scene = Scene::new();
-    let text = scene.texts[0].clone();
-    set_text(&text, "a  \u{2003}a");
-    integer(&text, TextBase::SIZING_VALUE_PROPERTY_KEY, 1);
-    integer(&text, TextBase::WRAP_VALUE_PROPERTY_KEY, 0);
-    scalar(&text, TextBase::WIDTH_PROPERTY_KEY, 8.0);
-    scene.advance();
-    text.with_downcast::<Text, _>(|text| {
-        assert_eq!(text.ordered_lines().len(), 2);
-    })
-    .unwrap();
+    for content in ["a  \u{2003}a", "a\u{2003}\u{2003}\u{2003}a"] {
+        let scene = Scene::new();
+        let text = scene.texts[0].clone();
+        set_text(&text, content);
+        integer(&text, TextBase::SIZING_VALUE_PROPERTY_KEY, 1);
+        integer(&text, TextBase::WRAP_VALUE_PROPERTY_KEY, 0);
+        scalar(&text, TextBase::WIDTH_PROPERTY_KEY, 8.0);
+        scene.advance();
+        text.with_downcast::<Text, _>(|text| {
+            assert_eq!(text.ordered_lines().len(), 2);
+        })
+        .unwrap();
+    }
 }

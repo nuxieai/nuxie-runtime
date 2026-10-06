@@ -9538,6 +9538,15 @@ impl CoreRegistry {
         value: bool,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        if crate::video::properties::field_id(property_key) == Some(4) {
+            if let Some(video) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::video::Video>()
+            {
+                video.set_property_bool(property_key as u16, value, completion);
+            }
+            return;
+        }
         let field = match property_key {
             456 => CoreField::LayerMaskIsVisible,
             457 => CoreField::LayerMaskSourceDraws,
@@ -9641,6 +9650,15 @@ impl CoreRegistry {
         value: f32,
         completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
     ) {
+        if crate::video::properties::field_id(property_key) == Some(2) {
+            if let Some(video) = object
+                .as_registry_any_mut()
+                .downcast_mut::<crate::video::Video>()
+            {
+                video.set_property_number(property_key as u16, value, completion);
+            }
+            return;
+        }
         // Property keys are dense enough to index a table built at compile
         // time from the registry's key-to-field arms (`double_core_field`);
         // a key past the table asks the arms directly.
@@ -10129,6 +10147,13 @@ impl CoreRegistry {
         object.get_color(field)
     }
     pub fn get_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> bool {
+        if crate::video::properties::field_id(property_key) == Some(4) {
+            return object
+                .as_registry_any()
+                .downcast_ref::<crate::video::Video>()
+                .and_then(|video| video.property_bool(property_key as u16))
+                .unwrap_or(false);
+        }
         let field = match property_key {
             456 => CoreField::LayerMaskIsVisible,
             457 => CoreField::LayerMaskSourceDraws,
@@ -10219,6 +10244,13 @@ impl CoreRegistry {
         object.get_bool(field)
     }
     pub fn get_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> f32 {
+        if crate::video::properties::field_id(property_key) == Some(2) {
+            return object
+                .as_registry_any()
+                .downcast_ref::<crate::video::Video>()
+                .and_then(|video| video.property_number(property_key as u16))
+                .unwrap_or(0.0) as f32;
+        }
         // The same key-to-field arms as setDouble, as a compile-time table.
         let Some(field) = double_field(property_key) else {
             return 0.0;
@@ -10550,6 +10582,9 @@ impl CoreRegistry {
     }
 
     pub fn property_field_id(property_key: i32) -> i32 {
+        if let Some(field) = crate::video::properties::field_id(property_key) {
+            return field;
+        }
         match property_key {
             486 => 1,
             485 => 1,
@@ -11860,6 +11895,9 @@ impl CoreRegistry {
         }
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
+        if crate::video::properties::field_id(property_key as i32).is_some() {
+            return object.as_registry_any().is::<crate::video::Video>();
+        }
         if matches!(property_key, 118 | 136 | 210 | 218) {
             return ColorChannelsBase::from(object).is_some();
         }

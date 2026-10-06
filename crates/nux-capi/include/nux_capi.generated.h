@@ -2856,7 +2856,8 @@ NuxStatus nux_renderer_reattach(struct NuxRenderer *renderer,
  * until this synchronous function returns. Once the operation supplies a
  * readable non-null completion callback and context pair, completion is called
  * exactly once on every path, including failure. Do not release that context
- * again on an error return. Invocation is deferred, never inline.
+ * again on an error return. This includes rejection of calls made from
+ * platform callbacks. Invocation is deferred, never inline.
  */
 NuxStatus nux_renderer_render_player(struct NuxRenderer *renderer,
                                      struct NuxPlayer *player,

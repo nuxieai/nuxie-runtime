@@ -1661,7 +1661,8 @@ pub unsafe extern "C" fn nux_renderer_reattach(
 /// until this synchronous function returns. Once the operation supplies a
 /// readable non-null completion callback and context pair, completion is called
 /// exactly once on every path, including failure. Do not release that context
-/// again on an error return. Invocation is deferred, never inline.
+/// again on an error return. This includes rejection of calls made from
+/// platform callbacks. Invocation is deferred, never inline.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_renderer_render_player(
     renderer: *mut NuxRenderer,
@@ -1670,6 +1671,15 @@ pub unsafe extern "C" fn nux_renderer_render_player(
     out_outcome: *mut NuxRendererOutcome,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
+    if super::platform_callback_active() {
+        // The common firewall rejects reentry before its body runs. Consume
+        // only the readable completion pair here, without touching handles.
+        let _ = std::panic::catch_unwind(|| {
+            if let Ok(operation) = unsafe { read_operation(operation) } {
+                let _completion = PendingCompletion::new(&operation);
+            }
+        });
+    }
     ffi_guard_with_result(out_result, || {
         let operation = match unsafe { read_operation(operation) } {
             Ok(operation) => operation,
@@ -2186,6 +2196,23 @@ mod tests {
             wait_for_completion(unsafe { &*probe });
             drop(unsafe { Box::from_raw(probe) });
         }
+    }
+
+    #[test]
+    fn callback_reentry_releases_readable_completion_once() {
+        let probe = Box::into_raw(Box::new(CompletionProbe {
+            calls: AtomicUsize::new(0),
+            inline: AtomicBool::new(false),
+        }));
+        let mut outcome = NuxRendererOutcome::default();
+        let mut result = ptr::dangling_mut();
+        let status = crate::with_platform_callback(|| {
+            call_with_probe(operation_with_probe(probe), &raw mut outcome, &raw mut result)
+        });
+        assert_eq!(status, NuxStatus::ReentrantCall);
+        assert!(result.is_null());
+        wait_for_completion(unsafe { &*probe });
+        drop(unsafe { Box::from_raw(probe) });
     }
 
     #[test]

@@ -1551,7 +1551,9 @@ typedef uint32_t NuxRendererFit;
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef struct NuxMetalRenderOperation {
   /**
-   * Must be initialized to `sizeof(NuxMetalRenderOperation)`.
+   * Use `sizeof(NuxMetalRenderOperation)`: 72 bytes or more includes layout.
+   * The 64-byte prefix omits layout; sizes 65 through 71 are refused.
+   * Legacy prefixes through the fit field remain supported.
    */
   uint32_t struct_size;
   /**
@@ -1571,7 +1573,9 @@ typedef struct NuxMetalRenderOperation {
    */
   void *completion_context;
   /**
-   * Both completion fields must be null or non-null together.
+   * Both completion fields must be null or non-null together. A readable
+   * non-null pair transfers the context to this callback exactly once on
+   * every return path, including errors; never release it again on error.
    */
   void (*completion_callback)(void *context);
   /**
@@ -2849,7 +2853,10 @@ NuxStatus nux_renderer_reattach(struct NuxRenderer *renderer,
 /**
  * Renders the player's retained artboard into a caller-acquired
  * CAMetalDrawable and schedules presentation. The drawable is borrowed only
- * until this synchronous function returns.
+ * until this synchronous function returns. Once the operation supplies a
+ * readable non-null completion callback and context pair, completion is called
+ * exactly once on every path, including failure. Do not release that context
+ * again on an error return. Invocation is deferred, never inline.
  */
 NuxStatus nux_renderer_render_player(struct NuxRenderer *renderer,
                                      struct NuxPlayer *player,

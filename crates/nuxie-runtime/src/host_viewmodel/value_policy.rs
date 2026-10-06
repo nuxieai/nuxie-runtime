@@ -39,8 +39,12 @@ pub struct RuntimeValueMarker {
     pub marker: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RuntimeValuePolicyError {
+    /// The replacement table contains an invalid pattern with this caller code.
+    InvalidPattern {
+        code: String,
+    },
     NotFound,
     InvalidArgument,
     LimitExceeded,
@@ -208,7 +212,17 @@ impl RuntimeValuePolicy {
             rules.push(Rule {
                 model,
                 property,
-                compiled: RuntimeCompiledValueRule::compile(entry.kind.clone())?,
+                compiled: RuntimeCompiledValueRule::compile(entry.kind.clone()).map_err(
+                    |error| {
+                        if matches!(entry.kind, RuntimeValueRuleKind::Pattern(_)) {
+                            RuntimeValuePolicyError::InvalidPattern {
+                                code: entry.code.clone(),
+                            }
+                        } else {
+                            error
+                        }
+                    },
+                )?,
                 entry: entry.clone(),
             });
         }

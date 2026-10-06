@@ -50,7 +50,18 @@ fn shared_vectors() {
             None,
             false,
         ),
-        (R::Pattern("[".into()), V::Text("anything"), None, true),
+        (
+            R::Pattern(r"[a\/\{\|\}\-]+".into()),
+            V::Text("a/{|}-"),
+            None,
+            true,
+        ),
+        (
+            R::Pattern(r"[a\/\{\|\}\-]+".into()),
+            V::Text("$"),
+            None,
+            false,
+        ),
         (
             R::Pattern(r"[\p{ASCII}&&\p{Letter}]+".into()),
             V::Text("ABC"),
@@ -359,6 +370,17 @@ fn decimal_bounds_use_native_precision() {
             RuntimeCompiledValueRule::compile(kind)
                 .unwrap()
                 .holds(V::Number(value), None)
+        );
+    }
+}
+
+#[test]
+fn uncompilable_patterns_are_rejected() {
+    // An unterminated class and a character forbidden unescaped inside a v class.
+    for pattern in ["[", "[a|b]"] {
+        assert!(
+            RuntimeCompiledValueRule::compile(R::Pattern(pattern.into())).is_err(),
+            "invalid pattern {pattern:?} must not become an always-passing rule"
         );
     }
 }

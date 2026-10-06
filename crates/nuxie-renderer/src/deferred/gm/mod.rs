@@ -7,6 +7,8 @@ mod bitmap_cache_pixel;
 mod layer_mask_pixel;
 mod clipstrokes;
 mod image_paint;
+mod gradienttransform;
+mod emptypath;
 mod mesh_instanced;
 mod ore_deferred_context;
 mod ore_deferred_multipass;

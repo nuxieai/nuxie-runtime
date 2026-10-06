@@ -568,11 +568,6 @@ impl RuntimeOwnedViewModelInstance {
         }
         Some(result)
     }
-    pub fn advanced(&mut self) {
-        mutate(|| {
-            ViewModelInstance::advanced_handle(&self.instance);
-        });
-    }
     pub fn has_parents(&self) -> bool {
         self.instance
             .with_downcast::<ViewModelInstance, _>(ViewModelInstance::has_parents)

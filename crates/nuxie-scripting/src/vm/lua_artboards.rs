@@ -22,9 +22,7 @@ use super::lua_paint::ScriptedPaintData;
 use super::lua_path::{ScriptedPath, create_scripted_path};
 use super::lua_renderer::ScriptedRenderer;
 use super::lua_renderer_library::RendererBindings;
-use super::view_model::{
-    ScriptViewModelRegistration, create_scripted_view_model, model_from_table,
-};
+use super::view_model::{create_scripted_view_model, model_from_table};
 
 impl RendererBindings {
     pub(crate) fn create_scripted_artboard(
@@ -37,7 +35,6 @@ impl RendererBindings {
 }
 
 struct ScriptedArtboardOwner {
-    _registration: Option<ScriptViewModelRegistration>,
     artboard: Box<dyn ScriptArtboard>,
 }
 
@@ -85,15 +82,8 @@ impl UserData for ScriptedAnimation {
 
 impl ScriptedArtboard {
     fn new(artboard: Box<dyn ScriptArtboard>, bindings: RendererBindings) -> Self {
-        let registration = artboard
-            .data()
-            .as_ref()
-            .map(|model| bindings.view_model_frame_context.register(model));
         Self {
-            owner: Rc::new(ScriptedArtboardOwner {
-                artboard,
-                _registration: registration,
-            }),
+            owner: Rc::new(ScriptedArtboardOwner { artboard }),
             bindings,
             data: RefCell::new(None),
         }
@@ -763,22 +753,6 @@ end
     }
 
     #[test]
-    fn scripted_artboard_keeps_its_bound_instance_registered_for_its_lifetime() {
-        let (model, trigger, native) = trigger_artboard();
-        let context = ScriptViewModelFrameContext::default();
-        let artboard = ScriptedArtboard::new(native, RendererBindings::new(context.clone()));
-
-        assert!(model.fire_trigger(&trigger));
-        assert!(context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(0));
-
-        drop(artboard);
-        assert!(model.fire_trigger(&trigger));
-        assert!(!context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(1));
-    }
-
-    #[test]
     fn scripted_child_artboard_advance_does_not_consume_detached_view_models() {
         let (model, trigger, native) = trigger_artboard();
         let context = ScriptViewModelFrameContext::default();
@@ -797,8 +771,8 @@ end
             .expect("child advance succeeds");
         assert_eq!(model.trigger(&trigger), Some(1));
 
-        assert!(context.advance_detached());
-        assert_eq!(model.trigger(&trigger), Some(0));
+        assert!(model.fire_trigger(&trigger));
+        assert_eq!(model.trigger(&trigger), Some(2));
     }
 
     fn fixture_userdata(lua: &Lua, fixture: &str, artboard_name: Option<&str>) -> AnyUserData {

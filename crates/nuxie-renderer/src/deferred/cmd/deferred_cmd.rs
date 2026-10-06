@@ -497,6 +497,7 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                             fresh.feather(shadow.feather);
                             fresh.additiveness(shadow.additiveness);
                             fresh.blend_mode(blend(shadow.blend_mode));
+                            fresh.shader_transform(shadow.transform);
                             if shadow.shader != INVALID_RENDER_HANDLE {
                                 fresh.shader(table.shaders.get(shadow.shader).as_deref());
                             }
@@ -660,6 +661,14 @@ pub(crate) fn replay_render_commands_with_optional_factory(
                         .borrow_mut()
                         .shader(table.shaders.get(c.shader).as_deref());
                     table.paint_shadows[c.paint as usize].shader = c.shader;
+                }
+            }
+            RenderCmd::PaintShaderTransform => {
+                let c: PaintMat2DPod = reader.read();
+                if let Some(paint) = table.paints.get(c.paint) {
+                    let transform = Mat2D([c.xx, c.xy, c.yx, c.yy, c.tx, c.ty]);
+                    paint.borrow_mut().shader_transform(transform);
+                    table.paint_shadows[c.paint as usize].transform = transform;
                 }
             }
             RenderCmd::PaintModulatedImage => {

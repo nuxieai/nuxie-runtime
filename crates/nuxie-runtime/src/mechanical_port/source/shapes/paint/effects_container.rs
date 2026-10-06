@@ -267,6 +267,7 @@ mod tests {
         fn blend_mode(&mut self, _: render::BlendMode) {}
         fn additiveness(&mut self, _: f32) {}
         fn shader(&mut self, _: Option<&dyn render::RenderShader>) {}
+        fn shader_transform(&mut self, _: render::Mat2D) {}
         fn invalidate_stroke(&mut self) {
             self.calls.set(self.calls.get() + 1);
             (self.callback)();

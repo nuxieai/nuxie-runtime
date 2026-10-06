@@ -99,6 +99,7 @@ struct ArtboardDirtyState {
 /// fixed at onAddedDirty; mounting/onAddedClean installs that exact identity.
 struct ArtboardHostAttachment {
     host: CoreHandle,
+    inactive_change_sequence: Rc<Cell<u64>>,
     parent_artboard: Option<CoreHandle>,
     artboard: Option<CoreHandle>,
     quiet_rows: Option<crate::source::artboard_component_list::QuietRowHostState>,
@@ -230,7 +231,6 @@ pub struct Artboard {
     // The BitmapCache child, collected in initialize(). None unless the
     // artboard has one; the object itself owns the offscreen render state.
     bitmap_cache: Option<CoreHandle>,
-    resettables: Vec<CoreHandle>,
     scripted_objects: Vec<CoreHandle>,
     advancing_components: Vec<AdvancingComponentHandle>,
     instance_value_binds_source: Option<CoreHandle>,
@@ -322,7 +322,6 @@ impl Default for Artboard {
             artboard_hosts: Vec::new(),
             joysticks: Vec::new(),
             bitmap_cache: None,
-            resettables: Vec::new(),
             scripted_objects: Vec::new(),
             advancing_components: Vec::new(),
             instance_value_binds_source: None,
@@ -1008,14 +1007,6 @@ impl Artboard {
             }
             if code == StatusCode::Ok && object.is_type_of(crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::TYPE_KEY) {
                 crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::on_added_clean_occurrence(&object);
-            }
-            if object
-                .with(|object| object.is_resetting_component())
-                .unwrap_or(false)
-            {
-                root.with_downcast_mut::<Artboard, _>(|artboard| {
-                    artboard.resettables.push(object.clone())
-                });
             }
             if object.is_type_of(crate::mechanical_port::source::generated::draw_rules_base::DrawRulesBase::TYPE_KEY) {
                 let parent_id = object
@@ -2042,21 +2033,6 @@ impl Artboard {
         }
     }
 
-    pub fn advance_scripted_view_models(&mut self) {
-        if let Some(vm) = &self.scripting_vm {
-            vm.with_vm_mut(|vm| {
-                vm.advance_detached_view_models();
-            });
-        }
-    }
-
-    pub fn advance_scripted_view_models_handle(root: &CoreHandle) -> bool {
-        let vm = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.scripting_vm.clone())
-            .flatten();
-        vm.is_some_and(|vm| vm.with_vm_mut(|vm| vm.advance_detached_view_models()))
-    }
-
     pub fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
         self.objects.get(id as usize)?.clone()
     }
@@ -2111,7 +2087,6 @@ impl Artboard {
     pub fn row_quiet_state(&self) -> QuietState {
         if !self.artboard_hosts.is_empty()
             || !self.joysticks.is_empty()
-            || !self.resettables.is_empty()
             || !self.scripted_objects.is_empty()
         {
             return QuietState::Never;
@@ -2202,17 +2177,27 @@ impl Artboard {
             host.with(|host| host.as_artboard_host()?.parent_artboard())
                 .flatten()
         });
-        self.set_host_with_parent(host, parent);
+        let inactive_change_sequence = host.as_ref().map(|host| {
+            host.with(|object| {
+                object
+                    .as_artboard_host()
+                    .map(ArtboardHost::inactive_change_sequence_state)
+            })
+            .flatten()
+            .expect("ArtboardHost mount")
+        });
+        self.set_host_with_parent(host, parent, inactive_change_sequence);
     }
 
     /// A host calling while already mutably borrowed supplies its own actual
-    /// parentArtboard, avoiding a second borrow to query that same pointer.
+    /// parentArtboard and sequence storage, avoiding a second borrow of it.
     pub(crate) fn set_host_with_parent(
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
+        inactive_change_sequence: Option<Rc<Cell<u64>>>,
     ) {
-        let parent = self.set_host_state(host, parent_artboard);
+        let parent = self.set_host_state(host, parent_artboard, inactive_change_sequence);
         if let Some(this) = crate::mechanical_port::source::core::CoreObject::core(self).handle() {
             Self::sync_layout_after_host_attachment(&this, parent);
         }
@@ -2225,12 +2210,22 @@ impl Artboard {
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
     ) {
+        let inactive_change_sequence = host.as_ref().map(|host| {
+            host.with(|object| {
+                object
+                    .as_artboard_host()
+                    .map(ArtboardHost::inactive_change_sequence_state)
+            })
+            .flatten()
+            .expect("ArtboardHost mount")
+        });
         let parent = this
             .with_mut(|object| {
-                object
-                    .as_artboard_mut()
-                    .expect("Artboard")
-                    .set_host_state(host, parent_artboard)
+                object.as_artboard_mut().expect("Artboard").set_host_state(
+                    host,
+                    parent_artboard,
+                    inactive_change_sequence,
+                )
             })
             .expect("live Artboard");
         Self::sync_layout_after_host_attachment(this, parent);
@@ -2240,9 +2235,12 @@ impl Artboard {
         &mut self,
         host: Option<CoreHandle>,
         parent_artboard: Option<CoreHandle>,
+        inactive_change_sequence: Option<Rc<Cell<u64>>>,
     ) -> Option<CoreHandle> {
         self.added_to_host();
         *self.dirty_state.0.host.borrow_mut() = host.map(|host| ArtboardHostAttachment {
+            inactive_change_sequence: inactive_change_sequence
+                .expect("ArtboardHost sequence state"),
             quiet_rows: if host.is_type_of(ArtboardComponentList::TYPE_KEY) {
                 Some(
                     host.with_downcast::<ArtboardComponentList, _>(
@@ -2294,13 +2292,22 @@ impl Artboard {
         StatusCode::Ok
     }
 
-    fn parent_artboard(&self) -> Option<CoreHandle> {
+    pub(crate) fn parent_artboard(&self) -> Option<CoreHandle> {
         self.dirty_state
             .0
             .host
             .borrow()
             .as_ref()
             .and_then(|attachment| attachment.parent_artboard.clone())
+    }
+
+    pub(crate) fn host_change_context(&self) -> Option<(u64, Option<CoreHandle>)> {
+        self.dirty_state.0.host.borrow().as_ref().map(|attachment| {
+            (
+                attachment.inactive_change_sequence.get(),
+                attachment.parent_artboard.clone(),
+            )
+        })
     }
 
     pub fn layout_width(&self) -> f32 {
@@ -2792,31 +2799,10 @@ impl Artboard {
         did_update | Self::advance_data_binds_handle(root, elapsed_seconds)
     }
 
-    pub fn reset(&mut self) {
-        if self.resettables.is_empty() {
-            return;
-        }
-        let resettable_count = self.resettables.len();
-        for index in 0..resettable_count {
-            let resettable = self.resettables[index].clone();
-            resettable.with_mut(|resettable| {
-                resettable.resetting_component_reset();
-            });
-        }
-    }
+    /// Kept as upstream's public no-op: nothing is consumed at frame end.
+    pub fn reset(&mut self) {}
 
-    pub fn reset_handle(root: &CoreHandle) {
-        let resettable_count = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.resettables.len())
-            .expect("live Artboard reset");
-        for index in 0..resettable_count {
-            let resettable = root
-                .with_downcast::<Artboard, _>(|artboard| artboard.resettables.get(index).cloned())
-                .flatten()
-                .expect("resettable array remains stable during reset");
-            resettable.with_mut(|resettable| resettable.resetting_component_reset());
-        }
-    }
+    pub fn reset_handle(_root: &CoreHandle) {}
 
     pub fn advance_handle(root: &CoreHandle, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         Self::poll_async_work_handle(root);

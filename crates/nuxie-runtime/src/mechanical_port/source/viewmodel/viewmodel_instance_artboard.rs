@@ -94,13 +94,6 @@ impl ViewModelInstanceArtboard {
         self.set_property_value(data_value.value());
     }
 
-    pub fn advanced(&mut self) {
-        if let Some(instance) = &self.bound_view_model_instance {
-            super::viewmodel_instance::ViewModelInstance::advanced_handle(instance);
-        }
-        self.base.advanced();
-    }
-
     #[cfg(feature = "tools")]
     pub fn on_changed(&mut self, callback: Option<fn(&mut Self, u32)>) {
         self.changed_callback = callback;

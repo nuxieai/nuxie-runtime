@@ -129,6 +129,10 @@ pub struct NuxRenderCallbacks {
     >,
     pub modulate_opacity: Option<unsafe extern "C" fn(*mut c_void, f32)>,
     pub modulate_color: Option<unsafe extern "C" fn(*mut c_void, u32, u32)>,
+    /// Optional appended paint transform callback. Missing callbacks retain
+    /// the callback renderer's documented null-operation behavior.
+    /// The six floats are borrowed only for this call, in the same order as transform.
+    pub render_paint_shader_transform: Option<unsafe extern "C" fn(*mut c_void, u64, *const f32)>,
 }
 
 /// ABI-v3 prefix that every callback table must provide. Future additive tail
@@ -206,6 +210,7 @@ impl NuxRenderCallbacks {
                 draw_image_mesh,
                 modulate_opacity,
                 modulate_color,
+                render_paint_shader_transform,
             )
     }
 }
@@ -447,6 +452,14 @@ impl RenderPaint for CallbackRenderPaint {
 
     fn invalidate_stroke(&mut self) {
         call!(self.callbacks, render_paint_invalidate_stroke, self.handle);
+    }
+    fn shader_transform(&mut self, transform: Mat2D) {
+        call!(
+            self.callbacks,
+            render_paint_shader_transform,
+            self.handle,
+            transform.0.as_ptr()
+        );
     }
 }
 
@@ -821,6 +834,41 @@ mod tests {
         unsafe { *user_data.cast::<(u32, u32)>() = (color, replace) };
     }
 
+    unsafe extern "C" fn capture_shader_transform(
+        user_data: *mut c_void,
+        paint: u64,
+        matrix: *const f32,
+    ) {
+        assert_eq!(paint, 91);
+        // SAFETY: the test retains the capture and the callback borrows six floats.
+        unsafe { *user_data.cast::<[f32; 6]>() = *matrix.cast::<[f32; 6]>() };
+    }
+
+    #[test]
+    fn shader_transform_forwards_and_requires_its_complete_callback_tail() {
+        let mut capture = [0.0f32; 6];
+        let mut callbacks = NuxRenderCallbacks {
+            user_data: (&mut capture as *mut [f32; 6]).cast(),
+            render_paint_shader_transform: Some(capture_shader_transform),
+            ..NuxRenderCallbacks::default()
+        };
+        let full = unsafe { crate::read_render_callbacks(&callbacks) }.unwrap();
+        let mut paint = CallbackRenderPaint {
+            callbacks: full,
+            handle: 91,
+        };
+        paint.shader_transform(Mat2D([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]));
+        assert_eq!(capture, [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        for size in NUX_RENDER_CALLBACKS_V3_MIN_SIZE..=std::mem::size_of::<NuxRenderCallbacks>() {
+            callbacks.struct_size = size as u32;
+            let prefix = unsafe { crate::read_render_callbacks(&callbacks) }.unwrap();
+            assert_eq!(
+                prefix.render_paint_shader_transform.is_some(),
+                size == std::mem::size_of::<NuxRenderCallbacks>()
+            );
+        }
+    }
+
     #[test]
     fn color_modulation_forwards_and_reads_only_complete_callback_tails() {
         let mut capture = (0u32, 0u32);
@@ -835,10 +883,13 @@ mod tests {
         assert_eq!(capture, (0x80402010, 1));
         renderer.modulate_color(0xffaabbcc, false);
         assert_eq!(capture, (0xffaabbcc, 0));
-        for size in NUX_RENDER_CALLBACKS_V3_MIN_SIZE..std::mem::size_of::<NuxRenderCallbacks>() {
+        for size in NUX_RENDER_CALLBACKS_V3_MIN_SIZE..=std::mem::size_of::<NuxRenderCallbacks>() {
             callbacks.struct_size = size as u32;
             let prefix = unsafe { crate::read_render_callbacks(&callbacks) }.unwrap();
-            assert!(prefix.modulate_color.is_none());
+            assert_eq!(
+                prefix.modulate_color.is_some(),
+                size >= std::mem::offset_of!(NuxRenderCallbacks, render_paint_shader_transform)
+            );
         }
         let mut different = full;
         different.modulate_color = None;

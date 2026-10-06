@@ -7,18 +7,53 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `160085c654874d35ad654a750e782d7c78e050d9`
+- LAST_SYNCED_SHA: `7aa93402a27c800db8a36acc8672612c100ea9b1`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `160085c654874d35ad654a750e782d7c78e050d9` (refreshed 2026-10-05 by the daily upstream sync).
+- Current target: `de3e86090892b68072e7d4505e8d979386fc9a30` (refreshed 2026-10-06 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are no upstream commits after the checkpoint at this fetched target.
-  All 194 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (216 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 195 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (217 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `7aa93402`, integrated atop downstream `b8a3b3574a`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including focused correction rereviews, are clean. Native runtime/affected
+  tests pass 656 (three ignored), with the unchanged converter Silver failure;
+  all 15 new change-window tests pass. Scripting passes 376 (one ignored), and
+  render API/SRIV/C ABI tests pass 93. Native Metal passes 666 (six ignored)
+  on Apple M5 Max, macOS 26.6.2, Xcode 27.0, using exact pixel comparisons and
+  the C++ capture's non-instrumented shader execution. The instrumented run
+  exhibited four small pixel differences which disappear under matching
+  execution settings; no pixel tolerance changed. Fresh pinned C++ captures
+  cover gradient transforms, expanded empty paths and stroke-position shapes.
+  All four instrumented Metal resource-shader integration tests pass after
+  refreshing only the regenerated fixture identity and retaining old captures.
+  WebGPU/WebGL2 on wasm32-unknown-unknown, Android arm64 Vulkan with
+  scripting/scriptnet, and no-default runtime compile.
+  Fresh pinned ordinary/scripted Golden comparisons each cover 364 entries
+  with zero failures and the existing one/two recorded divergences.
+  All 231 runtime Silver cases ran: 85 byte-exact, 121 within unchanged epsilon,
+  seven recorded divergences, 17 unsupported cases, and only
+  `data_converter_to_number` (frame 41, op 2120, expected 1850 fields, got 1443).
+  Broader binary/probe suites are not all green: binary tests pass 169 with
+  15 failures (older C++ source-shape assertions, malformed contents, overwide
+  LEB128 and artboard referencers); old-pin/source-baseline checks reproduce
+  their causes. The new requestSourceWrite source assertion is translated,
+  not removed. Three native probe targets pass 112 with 12 random-function
+  failures: the unchanged release C++ oracle inlines upstream rand() and
+  bypasses its old out-of-line deterministic hook. Those cases provide no
+  valid random differential evidence and are not counted as parity passes.
+  Source/pipeline checks pass 12, manifest tests 27, boundary helper tests 168;
+  the broad boundary scan retains the same 49 diagnostics as untouched
+  `b8a3b3574a`. Source correspondence covers 1,065 mirrored owners structurally,
+  not semantically. Shader authority (81 owners/163 artifacts), 98 SPIR-V
+  hashes, and C ABI v4 layout (63 types/447 fields) pass. Historical v3 and
+  prior capture provenance are retained. No browser-pixel or physical Android
+  execution is claimed; guest execution remains deferred.
 - Validation at `160085c6`, integrated atop downstream `97e52f7db0`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including correction rereviews, are clean. The new contribution matrix
@@ -293,6 +328,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `7aa93402a27c800db8a36acc8672612c100ea9b1` | Translate monotonic trigger/change sequences, per-state-machine windows and per-layer consumption, listener baselines and inactive ancestor markers; remove frame-tail view-model resets and detached Lua tracking. Translate component-trigger pending state, text-input caret/hit/undo corrections, component-list replacement/layout invalidation and clone changes. Add paint shader transforms across runtime/render API, GPU matrices, deferred commands, SRIV opcode 44, SVG, Lua, renderer FFI and C ABI; preserve optional callback prefix handling. Translate stroke-cap full-width spokes and regenerate affected backend shaders. Port all 15 new trigger-window tests and revised text/list/render tests; capture fresh C++ Metal GMs. C++ CoreGraphics/Skia/Canvas2D/test-host adapters are unshipped. Guest Wasm console/timer/render bindings remain parked; private .rive_head metadata is not implementation evidence. Reviews and validation are recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `160085c654874d35ad654a750e782d7c78e050d9` | Translate layout-owned virtual grid contributions from every item, solved row/column lines and gaps, cached virtual inputs/item versions, original grid-cell pinning and sparse realized-item traversal. Remove the superseded runtime track-sizing model. Preserve Taffy through native contribution sizing at the approved layout boundary; the public Yoga dependency is the behavioral reference, not a runtime C dependency. Translate linear-time list updates, inline first-parent/LazyVector dependency storage, ordered symbol entries, append/reserve creation and nesting-stack changes. Core emptyId is already an associated constant. Port revised/new upstream tests; the upstream hidden scroll benchmark remains ignored and is not a performance campaign. Private .rive_head metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |
 | `dc75beed2defe9bfe53dfbc30b8649649905b602` | Translate the shared virtual layout model, wrapping lines, grid row/column windows, two-axis scrolling and carousel cycles, anchoring, per-axis physics sizes/shifts, grid placement/track observation, list realization and layout/style/text-input integration. Port the new model, sweep, alignment, component-list, anchor and physics tests and consume the new grid fixture from this pin. Retain the approved Taffy engine, exposing solved grid line offsets for the same runtime observations. C++ oracle dependency resolution follows the new public yoga.ref; private packages/yoga source is not imported. Private metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |
 | `de0417920b48a6e8540314c1ec2db091ae9f23fc` | C++ header dependency fix only: write attribution now includes cstddef explicitly for size_t. The paired Rust owner already uses the built-in usize for depth and needs no import or behavior change. Advance active pins after independent source and separate integration review; private .rive_head metadata is not imported. | — |

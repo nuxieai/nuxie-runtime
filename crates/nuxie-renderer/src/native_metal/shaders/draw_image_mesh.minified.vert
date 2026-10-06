@@ -1,64 +1,64 @@
 #ifdef VERTEX
-h1(n3)K(0,c,OC);i1 h1(C3)K(1,c,PC);i1 h1(p1)K(v9,f,WB);K(w9,f,RB);K(x9,f,NB);K(y9,uint,XB);K(z9,uint,YB);K(A9,uint,ZB);K(B9,uint,LC);i1
+c1(x3) K(0,c,PC);d1 c1(K3) K(1,c,QC);d1 c1(B1) K(M9,e,YB);K(N9,e,SB);K(O9,e,PB);K(P9,uint,ZB);K(Q9,uint,AC);K(R9,uint,BC);K(S9,uint,LC);K(aa,e,HC);d1
 #endif
-q2 I0 W(0,c,I5);
+l2 E0 V(0,c,V5);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT W(1,d,O3);
+OPTIONALLY_FLAT V(1,d,Z3);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-I0 W(2,f,O0);
+E0 V(2,e,R0);
 #endif
-OPTIONALLY_FLAT W(3,i,K1);
+OPTIONALLY_FLAT V(3,i,R1);
 #ifdef ENABLE_ADVANCED_BLEND
-V2 W(4,N,D1);
+Z2 V(4,Q,I1);
 #endif
-i2
+e2
 #ifdef VERTEX
-Y3 Z3 I6(EC,n3,o3,C3,D3,p1,h0,A){L(A,o3,OC,c);L(A,D3,PC,c);L(r,h0,WB,f);L(r,h0,RB,f);L(r,h0,NB,f);L(r,h0,XB,uint);L(r,h0,YB,uint);L(r,h0,ZB,uint);L(r,h0,LC,uint);V(I5,c);
+k4 l4 T6(RB,x3,y3,K3,L3,B1,h0,G){L(G,y3,PC,c);L(G,L3,QC,c);L(r,h0,YB,e);L(r,h0,SB,e);L(r,h0,PB,e);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,BC,uint);L(r,h0,LC,uint);L(r,h0,HC,e);T(V5,c);
 #ifdef ENABLE_CLIPPING
-V(O3,d);
+T(Z3,d);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-V(O0,f);
+T(R0,e);
 #endif
-V(K1,i);
+T(R1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-V(D1,N);
+T(I1,Q);
 #endif
-c l0=P0(L1(WB),OC)+NB.xy;I5=PC;
+c k0=M0(n1(YB),PC)+PB.xy;V5=QC*HC.zw+HC.xy;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){O3=r8(YB,j.c6);}
+if(ENABLE_CLIPPING){Z3=l6(AC,j.U4);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-O0=T7(L1(RB),NB.zw,l0 z5);
+R0=h8(n1(SB),PB.zw,k0 Z4);
 #else
-Mc(L1(RB),NB.zw,l0 z5);
+Ha(n1(SB),PB.zw,k0 Z4);
 #endif
 }
 #endif
-f X=Q3(l0);
+e I=I3(k0);
 #ifdef POST_INVERT_Y
-X.y=-X.y;
+I.y=-I.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-X.z=la(LC);
+I.z=H8(LC,0xffu);
 #endif
-K1=unpackUnorm4x8(XB);
+R1=unpackUnorm4x8(ZB);
 #ifdef ENABLE_ADVANCED_BLEND
-D1=a2(ZB);
+I1=Q1(BC);
 #endif
-c0(I5);
+Z(V5);
 #ifdef ENABLE_CLIPPING
-c0(O3);
+Z(Z3);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-c0(O0);
+Z(R0);
 #endif
-c0(K1);
+Z(R1);
 #ifdef ENABLE_ADVANCED_BLEND
-c0(D1);
+Z(I1);
 #endif
-C1(X);}
+x1(I);}
 #endif

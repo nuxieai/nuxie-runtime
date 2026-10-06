@@ -1,72 +1,72 @@
-struct Ef {
+struct Gf {
     k2_: array<vec2<u32>>,
 }
 
-struct m0ge {
+struct m0he {
     k2_: array<u32>,
 }
 
-struct Ff {
+struct Hf {
     k2_: array<vec4<f32>>,
 }
 
 struct UB {
-    Qc: f32,
-    Td: f32,
-    bg: f32,
-    cg: f32,
+    Rc: f32,
+    Ud: f32,
+    dg: f32,
+    eg: f32,
     A6_: u32,
-    X9_: u32,
-    Nf: u32,
-    Of: u32,
-    j8_: vec4<i32>,
-    Lh: vec2<f32>,
-    Ud: vec2<f32>,
+    Y9_: u32,
+    Pf: u32,
+    Qf: u32,
+    i8_: vec4<i32>,
+    Nh: vec2<f32>,
+    Vd: vec2<f32>,
     j2_: u32,
-    Ph: f32,
-    T4_: u32,
+    Rh: f32,
+    U4_: u32,
     a3_: f32,
-    Vd: f32,
-    Hf: u32,
-    L3_: f32,
-    M3_: f32,
     Wd: f32,
-    Ih: u32,
-    W9_: u32,
-    wc: f32,
+    Jf: u32,
+    M3_: f32,
+    N3_: f32,
+    Xd: f32,
+    Kh: u32,
+    X9_: u32,
     xc: f32,
+    yc: f32,
 }
 
-struct K4ge {
+struct L4he {
     k2_: array<u32>,
 }
 
-@id(7) override ri: bool = true;
-@id(4) override oi: bool = true;
-@id(0) override ki: bool = true;
-@id(1) override li: bool = true;
-@id(2) override mi: bool = true;
+@id(7) override ti: bool = true;
+@id(4) override qi: bool = true;
+@id(0) override mi: bool = true;
+@id(1) override ni: bool = true;
+@id(2) override oi: bool = true;
 
 @group(0) @binding(3)
-var<storage> WC: Ef;
+var<storage> WC: Gf;
 @group(2) @binding(1)
-var<storage, read_write> m0_: m0ge;
+var<storage, read_write> m0_: m0he;
 @group(0) @binding(4)
-var<storage> JB: Ff;
+var<storage> JB: Hf;
 var<private> gl_FragCoord_1: vec4<f32>;
 @group(0) @binding(0)
 var<uniform> j: UB;
 @group(0) @binding(8)
 var ED: texture_2d<f32>;
 @group(3) @binding(8)
-var ha: sampler;
+var ia: sampler;
 @group(2) @binding(3)
-var<storage, read_write> K4_: K4ge;
+var<storage, read_write> L4_: L4he;
 var<private> F0_1: u32;
 var<private> m1_1: f32;
-var<private> K1_: vec4<f32>;
+var<private> L1_: vec4<f32>;
 @group(3) @binding(9)
-var wa: sampler;
+var xa: sampler;
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(1) @binding(11)
@@ -98,7 +98,7 @@ fn main_1() {
     let _e63 = bitcast<vec2<u32>>(vec2<i32>(floor(_e60)));
     let _e65 = j.A6_;
     let _e94 = bitcast<i32>((((((_e63.y >> bitcast<u32>(5u)) * (((_e65 + 31u) & 4294967264u) << bitcast<u32>(5u))) + ((_e63.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e63.x & 28u) << bitcast<u32>(5u)) + ((_e63.y & 28u) << bitcast<u32>(2i)))) + (((_e63.y & 3u) << bitcast<u32>(2i)) + (_e63.x & 3u))));
-    let _e97 = K4_.k2_[_e94];
+    let _e97 = L4_.k2_[_e94];
     let _e99 = (_e97 >> bitcast<u32>(17u));
     let _e100 = F0_1;
     if (_e99 == _e100) {
@@ -108,7 +108,7 @@ fn main_1() {
     }
     let _e106 = phi_1210_;
     let _e107 = m1_1;
-    K4_.k2_[_e94] = (_e106 + bitcast<u32>(i32(round((_e107 * 2048f)))));
+    L4_.k2_[_e94] = (_e106 + bitcast<u32>(i32(round((_e107 * 2048f)))));
     phi_1264_ = 0u;
     phi_1260_ = vec4<f32>(0f, 0f, 0f, 0f);
     if (_e99 != _e100) {
@@ -117,8 +117,8 @@ fn main_1() {
         phi_1214_ = _e117;
         if ((_e120.x & 768u) != 0u) {
             let _e124 = abs(_e117);
-            phi_833_ = oi;
-            if oi {
+            phi_833_ = qi;
+            if qi {
                 phi_833_ = ((_e120.x & 512u) != 0u);
             }
             let _e128 = phi_833_;
@@ -132,7 +132,7 @@ fn main_1() {
         let _e138 = phi_1214_;
         let _e139 = clamp(_e138, 0f, 1f);
         phi_1218_ = _e139;
-        if ki {
+        if mi {
             let _e141 = (_e120.x >> bitcast<u32>(16u));
             phi_1219_ = _e139;
             if (_e141 != 0u) {
@@ -149,8 +149,8 @@ fn main_1() {
             phi_1218_ = _e155;
         }
         let _e157 = phi_1218_;
-        phi_870_ = li;
-        if li {
+        phi_870_ = ni;
+        if ni {
             phi_870_ = ((_e120.x & 1024u) != 0u);
         }
         let _e161 = phi_870_;
@@ -166,7 +166,7 @@ fn main_1() {
         let _e192 = phi_1221_;
         let _e193 = (_e120.x & 15u);
         if (_e193 <= 1u) {
-            let _e203 = (ki && (_e193 == 0u));
+            let _e203 = (mi && (_e193 == 0u));
             phi_1249_ = 0u;
             if _e203 {
                 phi_1249_ = (_e120.y | pack2x16float(vec2<f32>(_e192, 0f)));
@@ -186,11 +186,11 @@ fn main_1() {
             }
             let _e233 = phi_1220_;
             let _e240 = bitcast<f32>(_e120.y);
-            let _e243 = j.wc;
-            let _e246 = j.xc;
-            let _e249 = textureSampleLevel(ED, ha, vec2<f32>(((clamp(_e233, 0f, 1f) * _e225.z) + _e225.w), ((floor(_e240) * _e243) + _e246)), 0f);
+            let _e243 = j.xc;
+            let _e246 = j.yc;
+            let _e249 = textureSampleLevel(ED, ia, vec2<f32>(((clamp(_e233, 0f, 1f) * _e225.z) + _e225.w), ((floor(_e240) * _e243) + _e246)), 0f);
             phi_1247_ = _e249;
-            if !((mi && (((_e120.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
+            if !((oi && (((_e120.x >> bitcast<u32>(4i)) & 15u) != 0u))) {
                 let _e253 = (_e249.xyz * _e249.w);
                 phi_1247_ = vec4<f32>(_e253.x, _e253.y, _e253.z, (_e249.w * (fract(_e240) * 1.0039216f)));
             }
@@ -206,9 +206,9 @@ fn main_1() {
     let _e269 = phi_1264_;
     let _e271 = phi_1260_;
     let _e272 = _e271.xyz;
-    let _e275 = j.L3_;
-    let _e277 = j.M3_;
-    if (ri && (_e271.w != 0f)) {
+    let _e275 = j.M3_;
+    let _e277 = j.N3_;
+    if (ti && (_e271.w != 0f)) {
         phi_1261_ = (vec3(((fract((52.982918f * fract(((0.06711056f * _e59.x) + (0.00583715f * _e59.y))))) * _e275) + _e277)) + _e272);
     } else {
         phi_1261_ = _e272;
@@ -216,7 +216,7 @@ fn main_1() {
     let _e293 = phi_1261_;
     let _e299 = vec4<f32>(_e293.x, _e271.y, _e271.z, _e271.w);
     let _e305 = vec4<f32>(_e299.x, _e293.y, _e299.z, _e299.w);
-    K1_ = vec4<f32>(_e305.x, _e305.y, _e293.z, _e305.w);
+    L1_ = vec4<f32>(_e305.x, _e305.y, _e293.z, _e305.w);
     if (_e269 != 0u) {
         m0_.k2_[_e94] = _e269;
     }
@@ -229,6 +229,6 @@ fn main(@builtin(position) gl_FragCoord: vec4<f32>, @location(1) @interpolate(fl
     F0_1 = F0_;
     m1_1 = m1_;
     main_1();
-    let _e7 = K1_;
+    let _e7 = L1_;
     return _e7;
 }

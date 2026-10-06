@@ -182,6 +182,7 @@ pub(crate) struct Data {
     pub m_paintType: gpu::PaintType,
     pub m_simpleValue: gpu::SimplePaintValue,
     pub(crate) m_gradient: ManuallyDrop<rcp<Gradient>>,
+    pub m_inverseGradientTransform: Mat2D,
     pub m_imageTexture: ManuallyDrop<rcp<Texture>>,
     pub m_imageSampler: ImageSampler,
     pub m_thickness: f32,
@@ -205,6 +206,7 @@ impl Default for RiveRenderPaint {
                 m_paintType: gpu::PaintType::solidColor,
                 m_simpleValue: gpu::SimplePaintValue::default(),
                 m_gradient: ManuallyDrop::new(rcp::new()),
+                m_inverseGradientTransform: Mat2D::IDENTITY,
                 m_imageTexture: ManuallyDrop::new(rcp::new()),
                 m_imageSampler: ImageSampler::LinearClamp(),
                 m_thickness: 1.0,
@@ -243,6 +245,12 @@ impl Drop for Data {
 impl RiveRenderPaint {
     pub fn new() -> Self {
         Self::default()
+    }
+    pub fn shaderTransform(&mut self, transform: &Mat2D) {
+        self.m_data.m_inverseGradientTransform = transform.invert().unwrap_or(Mat2D::IDENTITY);
+    }
+    pub fn getInverseGradientTransform(&self) -> Mat2D {
+        self.m_data.m_inverseGradientTransform
     }
     pub fn base_ptr(&self) -> *mut SourceRenderPaint {
         self as *const Self as *mut SourceRenderPaint
@@ -577,6 +585,9 @@ impl RenderPaintContract for RiveRenderPaint {
         unsafe { self.shader_source(shader) };
     }
     fn invalidateStroke(&mut self) {}
+    fn shaderTransform(&mut self, transform: &Mat2D) {
+        RiveRenderPaint::shaderTransform(self, transform);
+    }
     fn modulatedImage(
         &mut self,
         image: *const SourceRenderImage,
@@ -619,6 +630,9 @@ impl RenderPaint for RiveRenderPaint {
     }
     fn shader(&mut self, shader: Option<&dyn RenderShader>) {
         self.shader_api(shader)
+    }
+    fn shader_transform(&mut self, transform: Mat2D) {
+        self.shaderTransform(&transform);
     }
     fn invalidate_stroke(&mut self) {}
     fn modulated_image(
@@ -753,6 +767,9 @@ impl RenderPaint for RiveRenderPaintHandle {
     }
     fn shader(&mut self, shader: Option<&dyn RenderShader>) {
         self.source_mut().shader_api(shader);
+    }
+    fn shader_transform(&mut self, transform: Mat2D) {
+        self.source_mut().shaderTransform(&transform);
     }
     fn invalidate_stroke(&mut self) {}
     fn modulated_image(

@@ -72,6 +72,23 @@ use crate::mechanical_port::source::include::rive::renderer_hpp::{
 };
 use nuxie_render_api::{ColorInt, FillRule, RawPath};
 
+/// Source RTTI helper. `path` must be null or a live intrusive RenderPath.
+pub unsafe fn asRiveRenderPath(path: *mut RenderPath) -> *mut RiveRenderPath {
+    unsafe { crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(path) }
+}
+/// Const counterpart of the source RTTI helper; the result is never mutated.
+pub unsafe fn asRiveRenderPathConst(path: *const RenderPath) -> *const RiveRenderPath {
+    unsafe { asRiveRenderPath(path.cast_mut()).cast_const() }
+}
+/// Source RTTI helper. `paint` must be null or a live intrusive RenderPaint.
+pub unsafe fn asRiveRenderPaint(paint: *mut RenderPaint) -> *mut RiveRenderPaint {
+    unsafe { crate::mechanical_port::source::include::utils::lite_rtti_hpp::lite_rtti_cast_or_assert(paint) }
+}
+/// Const counterpart of the source RTTI helper; the result is never mutated.
+pub unsafe fn asRiveRenderPaintConst(paint: *const RenderPaint) -> *const RiveRenderPaint {
+    unsafe { asRiveRenderPaint(paint.cast_mut()).cast_const() }
+}
+
 impl RiveRenderFactory {
     pub fn implementation_source_identity() -> &'static str {
         "renderer/src/rive_render_factory.cpp@4ac7b32798da0482e441ef09304dc3b480ed3ee5"

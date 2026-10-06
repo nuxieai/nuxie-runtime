@@ -94,7 +94,6 @@ use crate::mechanical_port::source::{
     view_model_type::ViewModelType,
     viewmodel::{
         viewmodel::ViewModel,
-        viewmodel_instance_trigger::ViewModelInstanceTrigger,
         viewmodel_instance_value::{ValueDependentHandle, ViewModelInstanceValue},
         viewmodel_value_dependent::ViewModelValueDependent,
     },
@@ -580,11 +579,13 @@ impl StateMachineLayerInstance {
                 .flatten()
                 .expect("an authored StateTransition must expose early-exit enablement")
         {
+            machine.mark_view_model_changes_searched();
             return false;
         }
         self.waiting_for_exit = false;
         self.ensure_any_state_instance(machine);
         if self.settled.get() {
+            machine.mark_view_model_changes_searched();
             #[cfg(feature = "testing")]
             {
                 self.verify_settled(machine);
@@ -592,6 +593,7 @@ impl StateMachineLayerInstance {
             }
             return false;
         }
+        machine.mark_view_model_changes_searched();
         if self.try_change_state_from(machine, self.any_state_instance.clone()) {
             return true;
         }
@@ -1628,11 +1630,14 @@ impl HitComponent for HitDrawable {
             return false;
         }
         self.listeners.borrow().iter().any(|group| {
-            group.with_group(|group| group.listener_handle()).is_some_and(|listener| {
-                listener.with(|listener| listener.state_machine_listener_listens_to_button(button))
-                    .flatten()
-                    .unwrap_or(false)
-            })
+            group
+                .with_group(|group| group.listener_handle())
+                .is_some_and(|listener| {
+                    listener
+                        .with(|listener| listener.state_machine_listener_listens_to_button(button))
+                        .flatten()
+                        .unwrap_or(false)
+                })
         })
     }
     fn occludes_pointer(&self, position: Vec2D) -> bool {
@@ -1810,7 +1815,8 @@ impl HitComponent for HitNestedArtboard {
         };
         for animation in nested_animations(&self.component) {
             if let Some(machine) = nested_state_machine(&animation) {
-                if machine.with_instance_mut(|machine| machine.listens_to_button_at(local, button)) {
+                if machine.with_instance_mut(|machine| machine.listens_to_button_at(local, button))
+                {
                     return true;
                 }
             }
@@ -2054,11 +2060,13 @@ impl HitComponent for HitComponentList {
             return false;
         }
         for index in component_list_indices(&self.component).into_iter().rev() {
-            let Some(local) = component_list_world_to_local(&self.component, position, index) else {
+            let Some(local) = component_list_world_to_local(&self.component, position, index)
+            else {
                 continue;
             };
             if let Some(machine) = component_list_state_machine(&self.component, index) {
-                if machine.with_instance_mut(|machine| machine.listens_to_button_at(local, button)) {
+                if machine.with_instance_mut(|machine| machine.listens_to_button_at(local, button))
+                {
                     return true;
                 }
             }
@@ -2366,17 +2374,6 @@ fn data_context_property(
         .flatten()
 }
 
-fn trigger_value(value: &CoreHandle) -> Option<u32> {
-    if !value.is_type_of(crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY) {
-        return None;
-    }
-    Some(
-        value
-            .with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value())
-            .expect("a retained trigger value has its concrete owner"),
-    )
-}
-
 struct ListenerViewModelPropertyBinding {
     parent: RuntimeListenerViewModelWeakHandle,
     view_model_instance_value: Option<CoreHandle>,
@@ -2459,14 +2456,16 @@ impl ListenerViewModelPropertyBinding {
                             .add_dependent(identity);
                     });
                 }
+                self.parent
+                    .with_listener_mut(|parent| parent.report_if_pending(&value));
             }
         }
     }
 
     fn add_dirt(&mut self) {
-        if let Some(value) = self.view_model_instance_value.clone() {
+        if self.view_model_instance_value.is_some() {
             self.parent
-                .with_listener_mut(|parent| parent.report_to_state_machine(trigger_value(&value)));
+                .with_listener_mut(|parent| parent.report_to_state_machine());
         }
     }
 }
@@ -2493,7 +2492,7 @@ impl ViewModelValueDependent for ListenerViewModelPropertyBinding {
         _value: ComponentDirt,
         _recurse: bool,
         source: &CoreHandle,
-        trigger_value: u32,
+        _trigger_value: u32,
     ) {
         if let Some(value) = self.view_model_instance_value.as_ref() {
             assert_eq!(
@@ -2501,13 +2500,14 @@ impl ViewModelValueDependent for ListenerViewModelPropertyBinding {
                 "a property binding is notified by its retained source"
             );
             self.parent.with_listener_mut(|parent| {
-                parent.report_to_state_machine(Some(trigger_value));
+                parent.report_to_state_machine();
             });
         }
     }
 }
 
 struct ListenerViewModel {
+    listener_baseline: Rc<Cell<u64>>,
     occurrence: RuntimeListenerViewModelWeakHandle,
     machine: RuntimeStateMachineInstanceWeakHandle,
     reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
@@ -2563,8 +2563,10 @@ impl ListenerViewModel {
         reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
         listener: CoreHandle,
         machine: RuntimeStateMachineInstanceWeakHandle,
+        listener_baseline: Rc<Cell<u64>>,
     ) -> RuntimeListenerViewModelHandle {
         RuntimeListenerViewModelHandle::new(Self {
+            listener_baseline,
             occurrence: RuntimeListenerViewModelWeakHandle::default(),
             machine,
             reported_listener_view_models,
@@ -2627,20 +2629,21 @@ impl ListenerViewModel {
             .filter_map(|binding| {
                 binding.with_binding(|binding| binding.view_model_instance_value.clone())
             })
-            .filter(|value| trigger_value(value).is_some_and(|value| value != 0))
             .collect();
         for value in pending {
-            self.report_to_state_machine(trigger_value(&value));
+            self.report_if_pending(&value);
         }
     }
 
-    fn report_to_state_machine(&mut self, trigger_value: Option<u32>) {
-        if trigger_value.is_none_or(|value| value != 0) {
-            self.machine.wake_row();
-            self.reported_listener_view_models
-                .borrow_mut()
-                .push(self.occurrence.clone());
-        }
+    fn report_if_pending(&mut self, value: &CoreHandle) {
+        if value.is_type_of(crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase::TYPE_KEY) && value.with(|v| v.as_view_model_instance_value().is_some_and(|v| v.change_sequence() > self.listener_baseline.get())).unwrap_or(false) { self.report_to_state_machine(); }
+    }
+
+    fn report_to_state_machine(&mut self) {
+        self.machine.wake_row();
+        self.reported_listener_view_models
+            .borrow_mut()
+            .push(self.occurrence.clone());
     }
 }
 
@@ -2778,7 +2781,7 @@ impl RuntimeStateMachineInstanceHandle {
         self.advance_and_apply_view_models(seconds, true)
     }
 
-    pub fn advance_and_apply_view_models(&self, seconds: f32, advance_view_models: bool) -> bool {
+    pub fn advance_and_apply_view_models(&self, seconds: f32, _advance_view_models: bool) -> bool {
         let root_flags = AdvanceFlags(
             AdvanceFlags::IS_ROOT.0
                 | AdvanceFlags::ANIMATE.0
@@ -2824,13 +2827,6 @@ impl RuntimeStateMachineInstanceHandle {
             if artboard.advance_internal(0.0, loop_flags) {
                 keep_going = true;
             }
-            if advance_view_models {
-                let context = self.1.data_bind_context();
-                if let Some(context) = context {
-                    context.with_context(DataContext::advanced);
-                }
-            }
-            Artboard::reset_handle(&artboard.core_handle());
             if !artboard.with_artboard(|artboard| artboard.base.has_component_dirt()) {
                 break;
             }
@@ -2839,9 +2835,6 @@ impl RuntimeStateMachineInstanceHandle {
             self.with_instance(|machine| (machine.focus_manager(), machine.root_artboard()));
         if let Some(manager) = manager {
             manager.with_focus_manager_mut(|manager| manager.finish_pending_focus_requests(root));
-        }
-        if advance_view_models {
-            Artboard::advance_scripted_view_models_handle(&artboard.core_handle());
         }
         keep_going || self.with_instance(StateMachineInstance::has_pending_reports)
     }
@@ -3098,7 +3091,11 @@ impl StateMachineInstance {
     }
 
     fn ensure_bindables(&mut self) -> &mut SMIBindables {
-        self.bindables.ensure_allocated()
+        if self.bindables.get().is_none() {
+            self.bindables.ensure_allocated();
+            self.forget_view_model_changes();
+        }
+        self.bindables.get_mut().expect("allocated bindables")
     }
 
     fn input_extras(&self) -> Option<std::cell::Ref<'_, SMIInputExtras>> {
@@ -3214,6 +3211,13 @@ impl StateMachineInstance {
                 instance.layers.push(layer_instance);
             }
 
+            if instance
+                .machine
+                .with_downcast::<StateMachine, _>(StateMachine::reads_component_triggers)
+                .unwrap_or(false)
+            {
+                instance.ensure_bindables();
+            }
             instance.initialize_data_binds();
             let mut hit_lookup = HashMap::new();
             instance.initialize_listeners(&mut hit_lookup);
@@ -3484,11 +3488,13 @@ impl StateMachineInstance {
             }
             if self.listener_has(&listener, ListenerType::ViewModel) {
                 let machine = self.occurrence.clone();
+                let listener_baseline = self.ensure_bindables().listener_baseline.clone();
                 let reporting = self.ensure_reporting();
                 reporting.listener_view_models.push(ListenerViewModel::new(
                     reporting.reported_listener_view_models.clone(),
                     listener,
                     machine,
+                    listener_baseline,
                 ));
                 continue;
             }
@@ -4120,7 +4126,13 @@ impl StateMachineInstance {
     }
 
     pub fn pointer_move(&mut self, position: Vec2D, timestamp: f32, id: i32) -> HitResult {
-        self.update_listeners(position, ListenerType::Move, id, timestamp, PointerButton::Primary)
+        self.update_listeners(
+            position,
+            ListenerType::Move,
+            id,
+            timestamp,
+            PointerButton::Primary,
+        )
     }
 
     pub fn pointer_down(&mut self, position: Vec2D, id: i32, button: PointerButton) -> HitResult {
@@ -4132,7 +4144,13 @@ impl StateMachineInstance {
     }
 
     pub fn pointer_exit(&mut self, position: Vec2D, id: i32) -> HitResult {
-        self.update_listeners(position, ListenerType::Exit, id, 0.0, PointerButton::Primary)
+        self.update_listeners(
+            position,
+            ListenerType::Exit,
+            id,
+            0.0,
+            PointerButton::Primary,
+        )
     }
 
     pub fn drag_start(
@@ -4149,7 +4167,13 @@ impl StateMachineInstance {
         self.update_listeners(position, ListenerType::DragStart, pointer_id, 0.0, button)
     }
 
-    pub fn drag_end(&mut self, position: Vec2D, timestamp: f32, pointer_id: i32, button: PointerButton) -> HitResult {
+    pub fn drag_end(
+        &mut self,
+        position: Vec2D,
+        timestamp: f32,
+        pointer_id: i32,
+        button: PointerButton,
+    ) -> HitResult {
         self.enable_pointer_events(pointer_id);
         let hit = self.update_listeners(position, ListenerType::DragEnd, pointer_id, 0.0, button);
         self.pointer_move(position, timestamp, pointer_id);
@@ -4497,6 +4521,11 @@ impl StateMachineInstance {
             self.sort_hit_components();
         }
         if new_frame {
+            if let Some(bindables) = self.bindables.get_mut() {
+                bindables.change_baseline = bindables.change_searched;
+                bindables.changes_used.get_mut().clear();
+                bindables.listener_baseline.set(crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence());
+            }
             // Capture before either queue so host drains retain focus and blur reports too.
             let queued_input_report_start = self
                 .reporting
@@ -4544,17 +4573,7 @@ impl StateMachineInstance {
         self.advance(seconds, true)
     }
 
-    pub fn advanced_data_context(&mut self) {
-        if let Some(data_context) = self.data_context() {
-            data_context.with_context(DataContext::advanced);
-        }
-    }
-
-    pub fn reset(&mut self) {
-        self.advanced_data_context();
-        self.artboard_instance
-            .with_artboard_mut(|artboard| artboard.base.reset());
-    }
+    pub fn reset(&mut self) {}
 
     pub fn mark_needs_advance(&mut self) {
         self.needs_advance.set(true);
@@ -4625,6 +4644,7 @@ impl StateMachineInstance {
 
     pub fn reset_state(&mut self) {
         self.wake_row();
+        self.forget_view_model_changes();
         let layers = self.layers.clone();
         for layer in layers {
             layer.with_layer_mut(|layer| layer.reset_state(self));
@@ -4874,16 +4894,97 @@ impl StateMachineInstance {
         let Some(source) = source else {
             return false;
         };
-        source
-            .with(|source| {
-                source.as_view_model_instance_value().is_some_and(|source| {
-                    source.has_changed()
-                        && layer
-                            .as_ref()
-                            .is_none_or(|layer| !source.is_used_in_layer(layer))
+        self.view_model_value_changed(&source, layer.as_ref())
+    }
+
+    pub fn change_pending(&self, sequence: u64) -> bool {
+        self.bindables
+            .get()
+            .is_some_and(|b| sequence > b.change_baseline)
+    }
+
+    pub fn view_model_trigger_pending_for_listeners(&self, value: &CoreHandle) -> bool {
+        self.bindables.get().is_some_and(|b| {
+            value
+                .with(|v| {
+                    v.as_view_model_instance_value()
+                        .is_some_and(|v| v.change_sequence() > b.listener_baseline.get())
                 })
+                .unwrap_or(false)
+        })
+    }
+
+    pub fn view_model_value_changed(
+        &self,
+        value: &CoreHandle,
+        layer: Option<&RuntimeStateMachineLayerInstanceWeakHandle>,
+    ) -> bool {
+        let Some(b) = self.bindables.get() else {
+            return false;
+        };
+        if !value
+            .with(|v| {
+                v.as_view_model_instance_value()
+                    .is_some_and(|v| v.change_sequence() > b.change_baseline)
             })
             .unwrap_or(false)
+        {
+            return false;
+        }
+        !layer.is_some_and(|layer| {
+            b.changes_used
+                .borrow()
+                .iter()
+                .any(|(used_layer, used_value)| used_layer.ptr_eq(layer) && used_value == value)
+        })
+    }
+
+    pub fn use_view_model_value(
+        &self,
+        value: &CoreHandle,
+        layer: RuntimeStateMachineLayerInstanceWeakHandle,
+    ) {
+        let Some(b) = self.bindables.get() else {
+            return;
+        };
+        let mut used = b.changes_used.borrow_mut();
+        if !used.iter().any(|(l, v)| l.ptr_eq(&layer) && v == value) {
+            used.push((layer, value.clone()));
+        }
+    }
+
+    fn mark_view_model_changes_searched(&mut self) {
+        let Some(b) = self.bindables.get_mut() else {
+            return;
+        };
+        b.change_searched = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
+        let mut inactive = 0;
+        let mut artboard = self.artboard_instance.upgrade().map(|a| a.core_handle());
+        while let Some(current) = artboard {
+            let context = current
+                .with(|object| {
+                    object
+                        .as_artboard()
+                        .and_then(|artboard| artboard.host_change_context())
+                })
+                .flatten();
+            let Some((sequence, parent)) = context else {
+                break;
+            };
+            inactive = inactive.max(sequence);
+            artboard = parent;
+        }
+        b.change_baseline = b.change_baseline.max(inactive);
+    }
+
+    fn forget_view_model_changes(&mut self) {
+        if let Some(b) = self.bindables.get_mut() {
+            let sequence = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
+            b.change_baseline = sequence;
+            b.change_searched = sequence;
+            b.listener_baseline.set(sequence);
+            b.changes_used.get_mut().clear();
+        }
     }
 
     pub fn use_bindable_property_in_layer(
@@ -4904,11 +5005,7 @@ impl StateMachineInstance {
             .with(|data_bind| data_bind.as_data_bind().and_then(DataBind::source))
             .flatten();
         if let Some(source) = source {
-            source.with_mut(|source| {
-                if let Some(source) = source.as_view_model_instance_value_mut() {
-                    source.use_in_layer(layer);
-                }
-            });
+            self.use_view_model_value(&source, layer);
         }
     }
 

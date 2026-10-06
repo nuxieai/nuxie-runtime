@@ -84,6 +84,8 @@ pub struct ScrollConstraint {
     virtual_layout: Option<Rc<RefCell<VirtualLayout>>>,
     virtual_inputs: RefCell<Vec<f32>>,
     virtual_versions: RefCell<Vec<u32>>,
+    pending_inputs: RefCell<Vec<f32>>,
+    pending_versions: RefCell<Vec<u32>>,
     column_lines: RefCell<Vec<f32>>,
     row_lines: RefCell<Vec<f32>>,
     contributions_stale: Cell<bool>,
@@ -129,6 +131,8 @@ impl Default for ScrollConstraint {
             virtual_layout: None,
             virtual_inputs: RefCell::new(Vec::new()),
             virtual_versions: RefCell::new(Vec::new()),
+            pending_inputs: RefCell::new(Vec::new()),
+            pending_versions: RefCell::new(Vec::new()),
             column_lines: RefCell::new(Vec::new()),
             row_lines: RefCell::new(Vec::new()),
             contributions_stale: Cell::new(false),
@@ -577,8 +581,10 @@ impl ScrollConstraint {
         let horizontal = !self.virtual_axis_is_column();
         let mut gap = self.gap();
         let children = self.scroll_children();
-        let mut inputs = Vec::new();
-        let mut versions = Vec::new();
+        let mut inputs = self.pending_inputs.borrow_mut();
+        let mut versions = self.pending_versions.borrow_mut();
+        inputs.clear();
+        versions.clear();
         for child in children {
             if let Some(version) =
                 child.with_downcast::<ArtboardComponentList, _>(|c| c.items_version())
@@ -588,6 +594,8 @@ impl ScrollConstraint {
                 versions.push(0);
                 let bounds = Self::with_layout_child(child, |c| c.layout_bounds()).unwrap();
                 inputs.extend([bounds.width(), bounds.height()]);
+                inputs
+                    .push(Self::with_layout_child(child, |c| c.num_layout_nodes()).unwrap() as f32);
             }
         }
         let grid = self.virtualizes_grid();
@@ -638,8 +646,6 @@ impl ScrollConstraint {
                     rows as f32,
                     column_lines.len() as f32,
                 ]);
-                inputs.extend_from_slice(&column_lines);
-                inputs.extend_from_slice(&row_lines);
             });
         } else if wraps {
             let (wrap_hugs, start, padding) = self
@@ -706,14 +712,20 @@ impl ScrollConstraint {
                 flow_from_layout as u8 as f32,
             ]);
         }
-        if inputs == *self.virtual_inputs.borrow()
-            && versions == *self.virtual_versions.borrow()
-            && model.borrow().segment_count() == children.len() as i32
+        if *inputs == *self.virtual_inputs.borrow()
+            && *versions == *self.virtual_versions.borrow()
+            && {
+                let mut model = model.borrow_mut();
+                model.segment_count() == children.len() as i32
+                    && (!grid
+                        || (*self.column_lines.borrow() == *model.grid_column_starts()
+                            && *self.row_lines.borrow() == *model.grid_row_starts()))
+            }
         {
             return false;
         }
-        *self.virtual_inputs.borrow_mut() = inputs;
-        *self.virtual_versions.borrow_mut() = versions;
+        std::mem::swap(&mut *self.virtual_inputs.borrow_mut(), &mut *inputs);
+        std::mem::swap(&mut *self.virtual_versions.borrow_mut(), &mut *versions);
         self.contributions_stale.set(true);
         let mut v = model.borrow_mut();
         if grid {

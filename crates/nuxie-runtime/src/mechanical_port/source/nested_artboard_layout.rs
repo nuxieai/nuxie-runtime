@@ -365,6 +365,9 @@ impl LayoutNodeProvider for NestedArtboardLayout {
 }
 
 impl ArtboardHost for NestedArtboardLayout {
+    fn inactive_change_sequence_state(&self) -> std::rc::Rc<std::cell::Cell<u64>> {
+        self.base.base.inactive_change_sequence_state()
+    }
     fn data_bind_path_referencer(
         &self,
     ) -> &crate::mechanical_port::source::data_bind_path_referencer::DataBindPathReferencer {

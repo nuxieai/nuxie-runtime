@@ -432,6 +432,8 @@ class RecordingRenderPaint : public rive::RenderPaint
 public:
     explicit RecordingRenderPaint(uint64_t id) : m_id(id) {}
 
+    void shaderTransform(const rive::Mat2D& value) override { m_shaderTransform = value; }
+
     void style(rive::RenderPaintStyle style) override { m_style = style; }
     void color(rive::ColorInt value) override { m_color = value; }
     void thickness(float value) override { m_thickness = value; }
@@ -465,12 +467,18 @@ public:
             << ",cap=" << static_cast<int>(m_cap)
             << ",feather=" << floatToString(m_feather)
             << ",blendMode=" << static_cast<int>(m_blendMode)
-            << ",shader=" << shaderId << '}';
+            << ",shader=" << shaderId;
+        if (m_shaderTransform != rive::Mat2D())
+        {
+            out << ",shaderTransform=" << matToString(m_shaderTransform);
+        }
+        out << '}';
         return out.str();
     }
 
 private:
     uint64_t m_id;
+    rive::Mat2D m_shaderTransform;
     rive::RenderPaintStyle m_style = rive::RenderPaintStyle::fill;
     rive::ColorInt m_color = 0xff000000;
     float m_thickness = 1.0f;
@@ -484,6 +492,7 @@ private:
 class NullRenderPaint : public rive::RenderPaint
 {
 public:
+    void shaderTransform(const rive::Mat2D&) override {}
     void style(rive::RenderPaintStyle style) override { m_style = style; }
     void color(rive::ColorInt value) override { m_color = value; }
     void thickness(float value) override { m_thickness = value; }

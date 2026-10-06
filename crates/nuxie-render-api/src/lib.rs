@@ -272,6 +272,18 @@ fn map_points_fma(point_lane: f32, matrix_lane: f32, addend_lane: f32) -> f32 {
 impl Mat2D {
     pub const IDENTITY: Self = Self([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
 
+    pub fn has_uniform_scale(self) -> bool {
+        self.has_uniform_scale_with_tolerance(1.0 / 4096.0)
+    }
+    pub fn has_uniform_scale_with_tolerance(self, tolerance: f32) -> bool {
+        let [xx, xy, yx, yy, _, _] = self.0;
+        let x_length_squared = xx * xx + xy * xy;
+        let y_length_squared = yx * yx + yy * yy;
+        let column_dot = xx * yx + xy * yy;
+        let epsilon = (x_length_squared + y_length_squared) * tolerance;
+        (x_length_squared - y_length_squared).abs() <= epsilon && column_dot.abs() <= epsilon
+    }
+
     pub fn transform_point(self, point: Vec2D) -> Vec2D {
         Vec2D::transform_mat2d(point, self)
     }
@@ -2690,6 +2702,7 @@ pub trait RenderPaint: Any {
     fn additiveness(&mut self, _value: f32) {}
     fn blend_mode(&mut self, value: BlendMode);
     fn shader(&mut self, shader: Option<&dyn RenderShader>);
+    fn shader_transform(&mut self, transform: Mat2D);
     fn invalidate_stroke(&mut self);
     fn stroke(&mut self, params: &StrokeParams) {
         self.style(RenderPaintStyle::Stroke);
@@ -3684,6 +3697,7 @@ struct RecordingPaintSnapshot {
     feather: f32,
     blend_mode: BlendMode,
     shader: Option<RecordingShaderSnapshot>,
+    shader_transform: Mat2D,
 }
 
 #[derive(Debug, Clone)]
@@ -4250,6 +4264,7 @@ impl Factory for RecordingFactory {
             feather: 0.0,
             blend_mode: BlendMode::SrcOver,
             shader: None,
+            shader_transform: Mat2D::IDENTITY,
         };
         self.stream.borrow_mut().line_with(|line| {
             line.push_str("makeRenderPaint ");
@@ -4435,6 +4450,7 @@ impl RenderPaint for NullRenderPaint {
     }
 
     fn shader(&mut self, _shader: Option<&dyn RenderShader>) {}
+    fn shader_transform(&mut self, _transform: Mat2D) {}
 
     fn invalidate_stroke(&mut self) {}
 
@@ -4673,6 +4689,7 @@ struct RecordingRenderPaint {
     feather: f32,
     blend_mode: BlendMode,
     shader: Option<RecordingShaderSnapshot>,
+    shader_transform: Mat2D,
 }
 
 impl RecordingRenderPaint {
@@ -4687,6 +4704,7 @@ impl RecordingRenderPaint {
             feather: self.feather,
             blend_mode: self.blend_mode,
             shader: self.shader.clone(),
+            shader_transform: self.shader_transform,
         }
     }
 
@@ -4709,11 +4727,13 @@ impl RecordingRenderPaint {
         write_float(out, self.feather);
         write!(
             out,
-            ",blendMode={},shader={}}}",
+            ",blendMode={},shader={}",
             self.blend_mode as u8,
             self.shader.as_ref().map_or(0, |shader| shader.id)
         )
         .expect("writing to a String cannot fail");
+        write_paint_shader_transform(out, self.shader_transform);
+        out.push('}');
     }
 }
 
@@ -4754,6 +4774,10 @@ impl RenderPaint for RecordingRenderPaint {
         self.shader = shader
             .and_then(|shader| shader.as_any().downcast_ref::<RecordingRenderShader>())
             .map(RecordingRenderShader::snapshot);
+    }
+
+    fn shader_transform(&mut self, transform: Mat2D) {
+        self.shader_transform = transform;
     }
 
     fn invalidate_stroke(&mut self) {}
@@ -5248,7 +5272,19 @@ fn write_canonical_paint(
     write!(out, ",blendMode={},shader=", paint.blend_mode as u8)
         .expect("writing to a String cannot fail");
     write_canonical_shader(out, paint.shader.as_ref(), shader_ids);
+    write_paint_shader_transform(out, paint.shader_transform);
     out.push('}');
+}
+
+fn write_paint_shader_transform(out: &mut String, transform: Mat2D) {
+    if transform != Mat2D::IDENTITY {
+        out.push_str(",shaderTransform=[");
+        for (i, value) in transform.0.into_iter().enumerate() {
+            if i != 0 { out.push(','); }
+            write_float(out, value);
+        }
+        out.push(']');
+    }
 }
 
 fn write_canonical_shader(

@@ -39,6 +39,9 @@ macro_rules! impl_bind_context_value {
             fn invalidate(&mut self) {
                 self.base.invalidate();
             }
+            fn request_source_write(&mut self) {
+                self.base.source_write_requested = true;
+            }
             fn invalidation_handle(&self) -> std::rc::Rc<std::cell::Cell<bool>> {
                 self.base.invalidation_handle()
             }
@@ -106,6 +109,9 @@ pub trait ContextBinding: TargetBinding {
     fn apply_source_value(&mut self, value: &dyn DataValue) -> bool;
 }
 pub trait ContextApplyBinding: ContextBinding {
+    fn target_is_trigger(&self) -> bool;
+    fn source_is_trigger(&self) -> bool;
+    fn fire_source_trigger(&mut self);
     fn set_bool(&mut self, property_key: u32, value: bool);
     fn set_color(&mut self, property_key: u32, value: i32);
     fn set_double(&mut self, property_key: u32, value: f32);
@@ -148,8 +154,9 @@ pub trait ContextApplyBinding: ContextBinding {
 }
 pub struct DataBindContextValue {
     data_value: Option<Box<dyn DataValue>>,
-    target_value: DataBindContextTargetValue,
-    is_valid: Rc<Cell<bool>>,
+    pub(super) target_value: DataBindContextTargetValue,
+    pub(super) is_valid: Rc<Cell<bool>>,
+    pub(super) source_write_requested: bool,
 }
 impl DataBindContextValue {
     pub fn new(data_bind: &mut dyn ContextBinding) -> Self {
@@ -162,6 +169,7 @@ impl DataBindContextValue {
             data_value,
             target_value,
             is_valid: Rc::new(Cell::new(false)),
+            source_write_requested: false,
         }
     }
     pub fn invalidate(&mut self) {

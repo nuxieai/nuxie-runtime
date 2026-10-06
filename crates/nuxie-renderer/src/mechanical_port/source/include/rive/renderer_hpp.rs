@@ -651,6 +651,7 @@ pub trait RenderPaintContract {
     fn blendMode(&mut self, value: BlendMode);
     // rcp<RenderShader> is an intrusive owning transfer, not a borrowed link.
     unsafe fn shader(&mut self, shader: rcp<RenderShader>);
+    fn shaderTransform(&mut self, transform: &Mat2D);
     fn invalidateStroke(&mut self);
     fn stroke(&mut self, params: &StrokeParams) {
         self.style(RenderPaintStyle::stroke);

@@ -16,15 +16,26 @@ use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, R
 use std::path::PathBuf;
 
 fn input_fixture() -> (RuntimeFileHandle, RuntimeArtboardInstanceHandle, CoreHandle) {
+    named_input_fixture("text_input.riv", "Text Input - Multiline")
+}
+
+fn named_input_fixture(
+    asset: &str,
+    name: &str,
+) -> (RuntimeFileHandle, RuntimeArtboardInstanceHandle, CoreHandle) {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    let bytes = std::fs::read(PathBuf::from(root).join("tests/unit_tests/assets/text_input.riv"))
-        .expect("pinned text_input.riv");
+    let bytes = std::fs::read(
+        PathBuf::from(root)
+            .join("tests/unit_tests/assets")
+            .join(asset),
+    )
+    .expect("pinned text input asset");
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
     let file = File::import(&bytes, retained, None, None, None).expect("native File import");
     let artboard = file
-        .with_file(|file| file.artboard_named("Text Input - Multiline"))
+        .with_file(|file| file.artboard_named(name))
         .expect("named native artboard");
     let input = artboard
         .with_artboard(|artboard| {
@@ -41,6 +52,111 @@ fn input_fixture() -> (RuntimeFileHandle, RuntimeArtboardInstanceHandle, CoreHan
 
 fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R {
     handle.with_downcast_mut(f).expect("live TextInput")
+}
+
+#[test]
+fn caret_hides_while_text_is_selected() {
+    use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("state machine");
+    machine.advance_and_apply(0.0);
+    let find = |key| {
+        artboard
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.is_type_of(key))
+                    .cloned()
+            })
+            .expect("authored child")
+    };
+    let cursor = find(TextInputCursor::TYPE_KEY);
+    machine.with_instance_mut(|m| m.set_focus(Some(find(FocusData::TYPE_KEY))));
+    with_input(&input, |i| {
+        i.raw_text_input().set_text("hello world".into())
+    });
+    machine.advance_and_apply(0.0);
+    with_input(&input, |i| {
+        i.raw_text_input().set_cursor(Cursor::new(
+            CursorPosition::unresolved(0),
+            CursorPosition::unresolved(5),
+        ))
+    });
+    machine.advance_and_apply(0.0);
+    assert!(!cursor_has_local_path(&cursor));
+    with_input(&input, |i| {
+        i.raw_text_input()
+            .set_cursor(Cursor::collapsed(CursorPosition::unresolved(5)))
+    });
+    machine.advance_and_apply(0.0);
+    assert!(cursor_has_local_path(&cursor));
+}
+
+#[test]
+fn press_past_the_end_of_text_puts_caret_at_end() {
+    use nuxie_runtime::source::{math::vec2d::Vec2D, pointer_button::PointerButton};
+    for name in ["SingleLine", "Multiline"] {
+        let (_file, artboard, input) = named_input_fixture("text_input_tray.riv", name);
+        let machine = artboard
+            .state_machine_instance_handle(0)
+            .expect("state machine");
+        CoreRegistry::set_string_handle(
+            &input,
+            i32::from(property_key_for_name("TextInput", "text")),
+            "Hello world".into(),
+        );
+        machine.advance_and_apply(0.0);
+        machine.with_instance_mut(|m| {
+            m.pointer_down(Vec2D::new(70.0, 160.0), 0, PointerButton::Primary)
+        });
+        machine.with_instance_mut(|m| {
+            m.pointer_up(Vec2D::new(70.0, 160.0), 0, PointerButton::Primary)
+        });
+        machine.advance_and_apply(0.0);
+        assert!(input_cursor(&input).unwrap().1 < 11, "{name}");
+        machine.with_instance_mut(|m| {
+            m.pointer_down(Vec2D::new(420.0, 160.0), 0, PointerButton::Primary)
+        });
+        machine.with_instance_mut(|m| {
+            m.pointer_up(Vec2D::new(420.0, 160.0), 0, PointerButton::Primary)
+        });
+        machine.advance_and_apply(0.0);
+        assert_eq!(input_cursor(&input), Some((11, 11)), "{name}");
+    }
+}
+
+#[test]
+fn undo_reaches_first_edit_and_stops_at_initial_text() {
+    let (_file, artboard, input) = named_input_fixture("text_input_tray.riv", "SingleLine");
+    artboard.advance_default(0.0);
+    let undo = || {
+        with_input(&input, |i| {
+            i.key_input(
+                Key::from_raw(90),
+                KeyModifiers::from_raw(8 | 2),
+                true,
+                false,
+            )
+        })
+    };
+    with_input(&input, |i| i.text_input("abc"));
+    undo();
+    assert_eq!(with_input(&input, |i| i.base.text().to_owned()), "");
+    CoreRegistry::set_string_handle(
+        &input,
+        i32::from(property_key_for_name("TextInput", "text")),
+        "Hello".into(),
+    );
+    artboard.advance_default(0.0);
+    with_input(&input, |i| i.text_input("!"));
+    assert_eq!(with_input(&input, |i| i.base.text().to_owned()), "!Hello");
+    undo();
+    assert_eq!(with_input(&input, |i| i.base.text().to_owned()), "Hello");
+    undo();
+    assert_eq!(with_input(&input, |i| i.base.text().to_owned()), "Hello");
 }
 
 #[test]
@@ -197,8 +313,20 @@ fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
     let mut bounds = Aabb::default();
     assert!(with_input(&input, |input| input.world_bounds(&mut bounds)));
     let press_position = Vec2D::new(bounds.left() + 8.0, bounds.top() + 8.0);
-    machine.with_instance_mut(|machine| machine.pointer_down(press_position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            press_position,
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            press_position,
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     machine.advance_and_apply(0.0);
     assert!(with_input(&input, |input| input.is_focused()));
     assert_eq!(
@@ -209,7 +337,13 @@ fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
     // Already focused, a press places the caret and a drag extends from it.
     // Far enough from the first press not to count as a double click.
     let second_press = Vec2D::new(bounds.left() + 40.0, bounds.top() + 8.0);
-    machine.with_instance_mut(|machine| machine.pointer_down(second_press, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            second_press,
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     machine.advance_and_apply(0.0);
     assert!(with_input(&input, |input| input
         .raw_text_input()
@@ -225,7 +359,13 @@ fn select_all_on_focus_press_selects_all_later_press_places_the_caret() {
         with_input(&input, |input| input.raw_text_input().selected_text()),
         "hello world"
     );
-    machine.with_instance_mut(|machine| machine.pointer_up(press_position, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            press_position,
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
 }
 
 #[test]
@@ -240,7 +380,13 @@ fn collapsing_an_artboard_ends_a_text_input_drag() {
         input.raw_text_input().set_text("hello world".into())
     });
     machine.advance_and_apply(0.0);
-    machine.with_instance_mut(|m| m.pointer_down(Vec2D::new(8.0, 8.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|m| {
+        m.pointer_down(
+            Vec2D::new(8.0, 8.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     assert!(with_input(&input, |input| input.is_dragging()));
     for key in [
         TransformComponentBase::SCALE_X_PROPERTY_KEY,

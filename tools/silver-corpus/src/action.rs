@@ -1560,7 +1560,6 @@ fn bind_context(
     if let Some(machine) = machine {
         machine.with_instance_mut(|machine| {
             machine.bind_data_context(context.clone());
-            machine.advanced_data_context();
         });
     } else {
         instance.clear_data_context();

@@ -106,12 +106,6 @@ impl ViewModelInstanceViewModel {
         }
     }
 
-    pub fn advanced(&mut self) {
-        if let Some(instance) = &self.reference_view_model_instance {
-            super::viewmodel_instance::ViewModelInstance::advanced_handle(instance);
-        }
-    }
-
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         let status = self.base.import(import_stack);
         if import_stack

@@ -77,6 +77,7 @@ impl ScriptInputTrigger {
     }
 
     pub fn property_value_changed(&mut self) {
+        self.base.base.property_value_changed();
         if self.property_value() != 0 {
             let name = self.name().to_owned();
             let object = self

@@ -257,47 +257,6 @@ impl ViewModelInstanceList {
         source.clone_occurrence()
     }
 
-    pub fn advanced(&mut self) {
-        let mut index = 0;
-        while index < self.list_items.len() {
-            #[cfg(feature = "tools")]
-            let item = self.list_items[index].clone();
-            #[cfg(not(feature = "tools"))]
-            let item = &self.list_items[index];
-            if let Some(instance) = Self::item_instance(&item) {
-                super::viewmodel_instance::ViewModelInstance::advanced_handle(&instance);
-            }
-            index += 1;
-        }
-        self.base.advanced();
-    }
-
-    #[cfg(feature = "tools")]
-    pub(crate) fn advanced_handle(owner: &CoreHandle) {
-        let mut index = 0;
-        while let Some(item) = owner
-            .with(|object| {
-                object
-                    .as_view_model_instance_list()
-                    .and_then(|list| list.list_items.get(index).cloned())
-            })
-            .flatten()
-        {
-            let _retained = item.retain_arena();
-            if let Some(instance) = Self::item_instance(&item) {
-                super::viewmodel_instance::ViewModelInstance::advanced_handle(&instance);
-            }
-            index += 1;
-        }
-        owner.with_mut(|object| {
-            object
-                .as_view_model_instance_list_mut()
-                .expect("view model list")
-                .base
-                .advanced()
-        });
-    }
-
     pub fn set_parent_view_model_instance(&mut self, parent: Option<CoreHandle>) {
         self.parent_view_model_instance = parent;
     }

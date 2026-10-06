@@ -1,35 +1,35 @@
-struct Te {
+struct Ve {
     k2_: array<u32>,
 }
 
 struct UB {
-    Qc: f32,
-    Td: f32,
-    bg: f32,
-    cg: f32,
+    Rc: f32,
+    Ud: f32,
+    dg: f32,
+    eg: f32,
     A6_: u32,
-    X9_: u32,
-    Nf: u32,
-    Of: u32,
-    j8_: vec4<i32>,
-    Lh: vec2<f32>,
-    Ud: vec2<f32>,
+    Y9_: u32,
+    Pf: u32,
+    Qf: u32,
+    i8_: vec4<i32>,
+    Nh: vec2<f32>,
+    Vd: vec2<f32>,
     j2_: u32,
-    Ph: f32,
-    T4_: u32,
+    Rh: f32,
+    U4_: u32,
     a3_: f32,
-    Vd: f32,
-    Hf: u32,
-    L3_: f32,
-    M3_: f32,
     Wd: f32,
-    Ih: u32,
-    W9_: u32,
-    wc: f32,
+    Jf: u32,
+    M3_: f32,
+    N3_: f32,
+    Xd: f32,
+    Kh: u32,
+    X9_: u32,
     xc: f32,
+    yc: f32,
 }
 
-struct Te_1 {
+struct Ve_1 {
     k2_: array<atomic<u32>>,
 }
 
@@ -38,19 +38,19 @@ struct FragmentOutput {
     @location(0) member_1: vec4<f32>,
 }
 
-@id(10) override ui: bool = false;
+@id(10) override wi: bool = false;
 
 var<private> S_1: vec4<f32>;
-var<private> q3_1: vec2<u32>;
-var<private> F4_1: vec2<f32>;
+var<private> r3_1: vec2<u32>;
+var<private> G4_1: vec2<f32>;
 @group(0) @binding(6)
-var<storage, read_write> V0_: Te_1;
+var<storage, read_write> V0_: Ve_1;
 @group(0) @binding(0)
 var<uniform> j: UB;
 var<private> m0_: vec4<f32>;
-var<private> K1_: vec4<f32>;
+var<private> L1_: vec4<f32>;
 @group(3) @binding(9)
-var wa: sampler;
+var xa: sampler;
 @group(0) @binding(8)
 var ED: texture_2d<f32>;
 @group(0) @binding(9)
@@ -58,7 +58,7 @@ var YC: texture_2d<f32>;
 @group(1) @binding(11)
 var CC: texture_2d<f32>;
 @group(3) @binding(8)
-var ha: sampler;
+var ia: sampler;
 @group(1) @binding(13)
 var r5_: sampler;
 var<private> a1_1: vec4<f32>;
@@ -66,7 +66,7 @@ var<private> F0_1: f32;
 var<private> l1_1: vec2<f32>;
 var<private> R0_1: vec4<f32>;
 var<private> Q0_1: f32;
-var<private> r1_1: vec3<f32>;
+var<private> v1_1: vec3<f32>;
 
 fn main_1() {
     var phi_183_: bool;
@@ -78,10 +78,10 @@ fn main_1() {
     var phi_470_: f32;
 
     let _e39 = S_1[0u];
-    if ui {
-        let _e41 = q3_1[1u];
-        let _e43 = q3_1[0u];
-        let _e44 = F4_1;
+    if wi {
+        let _e41 = r3_1[1u];
+        let _e43 = r3_1[0u];
+        let _e44 = G4_1;
         let _e46 = vec2<u32>(floor(_e44));
         let _e76 = atomicLoad((&V0_.k2_[(_e43 + (((((_e46.y >> bitcast<u32>(5u)) * (_e41 << bitcast<u32>(5u))) + ((_e46.x >> bitcast<u32>(5u)) << bitcast<u32>(10u))) + (((_e46.x & 28u) << bitcast<u32>(5u)) + ((_e46.y & 28u) << bitcast<u32>(2i)))) + (((_e46.y & 3u) << bitcast<u32>(2i)) + (_e46.x & 3u))))]));
         let _e77 = (_e39 >= 1f);
@@ -129,27 +129,27 @@ fn main_1() {
         }
         let _e127 = phi_470_;
         m0_ = vec4(_e127);
-        K1_ = vec4<f32>(1f, 1f, 1f, 1f);
+        L1_ = vec4<f32>(1f, 1f, 1f, 1f);
     } else {
         m0_ = vec4(_e39);
-        K1_ = vec4<f32>(0f, 0f, 0f, 0f);
+        L1_ = vec4<f32>(0f, 0f, 0f, 0f);
     }
     return;
 }
 
 @fragment
-fn main(@location(2) S: vec4<f32>, @location(7) @interpolate(flat, either) q3_: vec2<u32>, @location(8) F4_: vec2<f32>, @location(0) a1_: vec4<f32>, @location(3) @interpolate(flat, either) F0_: f32, @location(4) @interpolate(flat, either) l1_: vec2<f32>, @location(5) R0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) r1_: vec3<f32>) -> FragmentOutput {
+fn main(@location(2) S: vec4<f32>, @location(7) @interpolate(flat, either) r3_: vec2<u32>, @location(8) G4_: vec2<f32>, @location(0) a1_: vec4<f32>, @location(3) @interpolate(flat, either) F0_: f32, @location(4) @interpolate(flat, either) l1_: vec2<f32>, @location(5) R0_: vec4<f32>, @location(6) @interpolate(flat, either) Q0_: f32, @location(9) v1_: vec3<f32>) -> FragmentOutput {
     S_1 = S;
-    q3_1 = q3_;
-    F4_1 = F4_;
+    r3_1 = r3_;
+    G4_1 = G4_;
     a1_1 = a1_;
     F0_1 = F0_;
     l1_1 = l1_;
     R0_1 = R0_;
     Q0_1 = Q0_;
-    r1_1 = r1_;
+    v1_1 = v1_;
     main_1();
     let _e20 = m0_;
-    let _e21 = K1_;
+    let _e21 = L1_;
     return FragmentOutput(_e20, _e21);
 }

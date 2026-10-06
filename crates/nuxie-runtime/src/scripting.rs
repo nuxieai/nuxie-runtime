@@ -1156,9 +1156,6 @@ impl ScriptViewModel {
         );
     }
 
-    pub fn advanced(&self) -> bool {
-        self.native().advance()
-    }
 
     /// Read the retained runtime's structural parent topology.
     pub fn has_parents(&self) -> bool {
@@ -1480,33 +1477,14 @@ impl ScriptViewModel {
     }
 
     /// Fire a trigger the same way C++ `ViewModelInstanceTrigger::trigger()`
-    /// does: increment the backing counter and leave consumption/reset to the
-    /// end-of-frame `advanced()` pass.
+    /// does: increment the backing counter. State machines track their own
+    /// pending-change windows without resetting the counter.
     pub fn fire_trigger(&self, name: &str) -> bool {
         let native = self.native();
         let changed = native.fire_trigger(name);
         return self
             .finish_property_change(&native.property_path(name).unwrap_or_default(), changed);
     }
-
-    /// Consume transient values at the end of a script host frame.
-    ///
-    /// This mirrors C++ `ViewModelInstance::advanced()`: triggers are reset
-    /// without invoking script listeners, embedded view models recurse, and
-    /// shared list instances recurse exactly once even if the graph cycles.
-    pub fn advance_script_frame(&self) -> bool {
-        let native = self.native();
-        return native.advance();
-    }
-
-    /// Advance a shared owned instance without requiring its schema wrapper.
-    /// Scripting backends use this for owner-counted registrations that retain
-    /// precisely the backing instance, matching C++ `rcp<ViewModelInstance>`.
-
-    /// Advance several owned roots with one identity set shared across their
-    /// complete embedded/list graphs. This is the frame-context entry point:
-    /// registry relationships can name an instance that is also reachable
-    /// structurally, and it must still be consumed only once per frame.
 
     pub fn view_model(&self, name: &str) -> Option<Self> {
         let native = self.native();
@@ -2870,9 +2848,6 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
     fn poll_async_work(&self) -> Result<bool, ScriptError> {
         (**self).poll_async_work()
     }
-    fn advance_detached_view_models(&self) -> bool {
-        (**self).advance_detached_view_models()
-    }
     fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
         (**self).perform_registration(modules)
     }
@@ -2951,13 +2926,6 @@ pub trait ScriptingVm {
     /// and before any root-frame script callbacks run.
     fn poll_async_work(&self) -> Result<bool, ScriptError> {
         Ok(false)
-    }
-
-    /// Consume detached script-created view-model instances once at the end
-    /// of a root host frame. Child/script-driven artboard advances must not
-    /// call this hook.
-    fn advance_detached_view_models(&self) -> bool {
-        false
     }
 
     fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {

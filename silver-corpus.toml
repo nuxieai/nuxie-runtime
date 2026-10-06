@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "160085c654874d35ad654a750e782d7c78e050d9"
+upstream_ref = "7aa93402a27c800db8a36acc8672612c100ea9b1"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -30,7 +30,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/blend_mode_test.cpp"
 provenance_test = "an animated additive amount records its blend mode and amount "
-producer_line = 301
+producer_line = 302
 note = "Exact comparison contract for the literal 64-draw additive producer at 3d0d3f56: default artboard, machine 0, fresh VMI bound directly, zero advance/draw then 63 .016-second frames. Enrollment alone is not a validation result."
 
 [[case]]
@@ -250,7 +250,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboard properties conditions work without binding"
-producer_line = 2403
+producer_line = 2439
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -316,7 +316,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Bidirectional data binding with source to target precedence"
-producer_line = 1968
+producer_line = 2004
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -338,7 +338,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Bidirectional data binding with target to source precedence"
-producer_line = 2005
+producer_line = 2041
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -866,7 +866,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Computed root transform list"
-producer_line = 1191
+producer_line = 1227
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -888,7 +888,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Computed root transform nested artboard"
-producer_line = 1155
+producer_line = 1191
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -932,7 +932,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Custom enum properties"
-producer_line = 1421
+producer_line = 1457
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -954,7 +954,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Custom Property Trigger Binding"
-producer_line = 1270
+producer_line = 1306
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1064,7 +1064,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Data binding solos - target to source"
-producer_line = 1342
+producer_line = 1378
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1086,7 +1086,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Data binding solos"
-producer_line = 1306
+producer_line = 1342
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1196,7 +1196,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Convert to number"
-producer_line = 1582
+producer_line = 1618
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1240,7 +1240,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboards as conditions"
-producer_line = 2109
+producer_line = 2145
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1746,7 +1746,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Format text with commas"
-producer_line = 1847
+producer_line = 1883
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3402,7 +3402,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "List to path"
-producer_line = 1819
+producer_line = 1855
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3446,7 +3446,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Listen to view model value changes in state machines"
-producer_line = 2385
+producer_line = 2421
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3930,7 +3930,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model path"
-producer_line = 2177
+producer_line = 2213
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3952,7 +3952,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model state machine fire trigger"
-producer_line = 2273
+producer_line = 2309
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3974,7 +3974,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model state machine listener"
-producer_line = 2223
+producer_line = 2259
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3996,7 +3996,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model scripted input"
-producer_line = 2345
+producer_line = 2381
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4018,7 +4018,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding"
-producer_line = 2132
+producer_line = 2168
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5294,7 +5294,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "State machine fire triggers"
-producer_line = 1385
+producer_line = 1421
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5316,7 +5316,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component dynamic artboard swap via VMI artboard "
-producer_line = 637
+producer_line = 632
 note = "Unsupported feature: missing runtime surface live-bindable-artboard-value-and-bound-view-model-swap; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5360,7 +5360,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component Keyed Triggers"
-producer_line = 953
+producer_line = 948
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5404,7 +5404,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful Component list bridge binds clean up on item remove"
-producer_line = 921
+producer_line = 916
 note = "Unsupported feature: missing runtime surface stateful-component-list-bridge-detach-and-rebind-lifecycle; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5470,7 +5470,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/component_test.cpp"
 provenance_test = "Stateful nested artboard borrows stateful child on matching VM and "
-producer_line = 810
+producer_line = 805
 note = "Unsupported feature: missing runtime surface live-bindable-artboard-source-swap-with-stateful-child-borrowing; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5756,7 +5756,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Interpolate color and number"
-producer_line = 1931
+producer_line = 1967
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5888,7 +5888,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Transition self conditions"
-producer_line = 1119
+producer_line = 1155
 note = "Unsupported feature: missing runtime surface runtime-owned-composite-list-and-view-model-comparator-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -5910,7 +5910,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Trigger based listeners"
-producer_line = 1230
+producer_line = 1266
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5932,7 +5932,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Trigger fires single change on listener"
-producer_line = 1546
+producer_line = 1582
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

@@ -176,6 +176,7 @@ impl ScriptedPaint {
         result.set_feather(source.feather());
         result.set_blend_mode(source.blend_mode());
         result.set_gradient(source.gradient.clone());
+        result.set_gradient_transform(source.gradient_transform);
         result
     }
 }
@@ -199,6 +200,11 @@ fn paint_set_value(
         LuaAtoms::Gradient => {
             let gradient = state.to_rive_optional::<ScriptedGradient>(value_index);
             paint.set_gradient(gradient.and_then(|value| value.shader.clone()));
+        }
+        LuaAtoms::GradientTransform => {
+            let transform = state.to_rive_optional::<ScriptedMat2D>(value_index)
+                .map(|value| value.value).unwrap_or_default();
+            paint.set_gradient_transform(transform);
         }
         LuaAtoms::Color => paint.set_color(state.check_unsigned(value_index)),
         _ => return false,
@@ -261,6 +267,7 @@ fn paint_index(state: &mut LuaState) -> i32 {
         LuaAtoms::BlendMode => paint.push_blend_mode(state),
         LuaAtoms::Feather => state.push_number(paint.feather() as f64),
         LuaAtoms::Gradient => paint.push_gradient(state),
+        LuaAtoms::GradientTransform => { state.new_rive(ScriptedMat2D { value: paint.gradient_transform }); },
         LuaAtoms::Color => state.push_unsigned(paint.color()),
         _ => return 0,
     }

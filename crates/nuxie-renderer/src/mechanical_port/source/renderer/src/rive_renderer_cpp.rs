@@ -2215,6 +2215,7 @@ impl RendererContract for RiveRenderer {
                     None,
                     image_matrix,
                     gradient_matrix,
+                    q.getInverseGradientTransform(),
                 )
             }));
             self.restore();
@@ -2369,6 +2370,7 @@ impl RendererContract for RiveRenderer {
                     gpu::DrawContents::none,
                     0,
                     None,
+                    Mat2D::IDENTITY,
                     Mat2D::IDENTITY,
                     Mat2D::IDENTITY,
                 )

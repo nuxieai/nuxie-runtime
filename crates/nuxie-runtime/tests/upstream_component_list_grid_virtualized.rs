@@ -7,6 +7,16 @@ use nuxie_runtime::source::{
     viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem,
 };
 use support::*;
+
+#[test]
+fn lists_never_share_a_version_a_scroll_could_confuse() {
+    let a = ScrollFixture::grid();
+    let b = ScrollFixture::grid();
+    assert_ne!(
+        read::<ArtboardComponentList, _>(&a.list, |v| v.items_version()),
+        read::<ArtboardComponentList, _>(&b.list, |v| v.items_version())
+    );
+}
 #[test]
 fn grid_virtualized_list_windows_rows() {
     let f = ScrollFixture::grid();

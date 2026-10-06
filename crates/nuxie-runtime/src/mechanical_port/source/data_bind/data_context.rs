@@ -428,17 +428,6 @@ impl DataContext {
             .and_then(|index| self.instances[index].clone())
     }
 
-    pub fn advanced(&self) {
-        for instance in &self.instances {
-            let instance = instance
-                .as_ref()
-                .expect("DataContext::advanced requires non-null view model entries");
-            crate::source::viewmodel::viewmodel_instance::ViewModelInstance::advanced_handle(
-                instance,
-            );
-        }
-    }
-
     fn instance_view_model_id(instance: &CoreHandle) -> Option<u32> {
         instance
             .with(|instance| {

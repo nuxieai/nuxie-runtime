@@ -140,7 +140,15 @@ impl TextInput {
         if !self.base.world_transform().invert(&mut inverse_world) {
             return false;
         }
-        if !self.local_bounds().contains(inverse_world * position) {
+        let mut bounds = self.local_bounds();
+        if !self.layout_width.is_nan() && !self.layout_height.is_nan() {
+            Aabb::expand_to_point(&mut bounds, Vec2D::new(0.0, 0.0));
+            Aabb::expand_to_point(
+                &mut bounds,
+                Vec2D::new(self.layout_width, self.layout_height),
+            );
+        }
+        if !bounds.contains(inverse_world * position) {
             return false;
         }
         self.base.base.hit_test_point(&position, skip, primary)
@@ -880,6 +888,9 @@ impl TextInput {
         self.focused
     }
     pub fn is_cursor_visible(&self) -> bool {
+        if !self.raw_text_input.cursor().is_collapsed() {
+            return false;
+        }
         self.focused && self.cursor_blink_visible
     }
     pub fn accepts_keyboard_input(&self) -> bool {

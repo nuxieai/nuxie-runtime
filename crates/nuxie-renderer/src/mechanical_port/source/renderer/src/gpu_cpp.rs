@@ -3709,6 +3709,7 @@ pub fn getGradientMatrixAndSpan(
     paint_type: PaintType,
     coeffs: [f32; 3],
     location: ColorRampLocation,
+    inverse_gradient_transform: Mat2D,
     view_matrix: Mat2D,
     render_target: &RenderTarget,
     platform_features: &PlatformFeatures,
@@ -3720,6 +3721,7 @@ pub fn getGradientMatrixAndSpan(
             Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, render_target.height() as f32]),
         );
     }
+    matrix = multiply_mat2d(inverse_gradient_transform, matrix);
     if paint_type == PaintType::linearGradient {
         matrix = multiply_mat2d(
             Mat2D([coeffs[0], 0.0, coeffs[1], 0.0, coeffs[2], 0.0]),
@@ -3751,6 +3753,7 @@ pub fn set_paint_aux_data(
     paintType: PaintType,
     simplePaintValue: SimplePaintValue,
     gradientCoeffs: Option<[f32; 3]>,
+    inverseGradientTransform: Mat2D,
     imageSize: Option<(u32, u32)>,
     clipRectInverseMatrix: Option<Mat2D>,
     renderTarget: &RenderTarget,
@@ -3765,6 +3768,7 @@ pub fn set_paint_aux_data(
             paintType,
             coeffs,
             unsafe { simplePaintValue.colorRampLocation },
+            inverseGradientTransform,
             viewMatrix,
             renderTarget,
             platformFeatures,
@@ -3819,6 +3823,7 @@ impl PaintAuxData {
         paintType: PaintType,
         simplePaintValue: SimplePaintValue,
         gradientCoeffs: Option<[f32; 3]>,
+        inverseGradientTransform: Mat2D,
         imageSize: Option<(u32, u32)>,
         clipRectInverseMatrix: Option<Mat2D>,
         renderTarget: &RenderTarget,
@@ -3831,6 +3836,7 @@ impl PaintAuxData {
             paintType,
             simplePaintValue,
             gradientCoeffs,
+            inverseGradientTransform,
             imageSize,
             clipRectInverseMatrix,
             renderTarget,

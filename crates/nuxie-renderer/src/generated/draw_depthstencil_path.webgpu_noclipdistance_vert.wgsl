@@ -1,43 +1,43 @@
-struct nh {
+struct ph {
     k2_: array<vec4<u32>>,
 }
 
-struct mh {
+struct oh {
     k2_: array<vec4<u32>>,
 }
 
-struct Ef {
+struct Gf {
     k2_: array<vec2<u32>>,
 }
 
 struct UB {
-    Qc: f32,
-    Td: f32,
-    bg: f32,
-    cg: f32,
+    Rc: f32,
+    Ud: f32,
+    dg: f32,
+    eg: f32,
     A6_: u32,
-    X9_: u32,
-    Nf: u32,
-    Of: u32,
-    j8_: vec4<i32>,
-    Lh: vec2<f32>,
-    Ud: vec2<f32>,
+    Y9_: u32,
+    Pf: u32,
+    Qf: u32,
+    i8_: vec4<i32>,
+    Nh: vec2<f32>,
+    Vd: vec2<f32>,
     j2_: u32,
-    Ph: f32,
-    T4_: u32,
+    Rh: f32,
+    U4_: u32,
     a3_: f32,
-    Vd: f32,
-    Hf: u32,
-    L3_: f32,
-    M3_: f32,
     Wd: f32,
-    Ih: u32,
-    W9_: u32,
-    wc: f32,
+    Jf: u32,
+    M3_: f32,
+    N3_: f32,
+    Xd: f32,
+    Kh: u32,
+    X9_: u32,
     xc: f32,
+    yc: f32,
 }
 
-struct Ff {
+struct Hf {
     k2_: array<vec4<f32>>,
 }
 
@@ -56,35 +56,35 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override ki: bool = true;
-@id(2) override mi: bool = true;
-@id(8) override si: bool = true;
+@id(0) override mi: bool = true;
+@id(2) override oi: bool = true;
+@id(8) override ui: bool = true;
 
 @group(0) @binding(7)
 var TB: texture_2d<u32>;
 @group(0) @binding(5)
-var<storage> ZC: nh;
+var<storage> ZC: ph;
 @group(0) @binding(2)
-var<storage> LB: mh;
+var<storage> LB: oh;
 var<private> gl_VertexIndex_1: i32;
 var<private> gl_InstanceIndex_1: i32;
 var<private> WB_1: vec4<f32>;
 var<private> XB_1: vec4<f32>;
 @group(0) @binding(3)
-var<storage> WC: Ef;
+var<storage> WC: Gf;
 @group(0) @binding(0)
 var<uniform> j: UB;
 var<private> l1_: vec2<f32>;
 var<private> Q0_: f32;
 @group(0) @binding(4)
-var<storage> JB: Ff;
+var<storage> JB: Hf;
 var<private> a1_: vec4<f32>;
-var<private> r1_: vec3<f32>;
+var<private> v1_: vec3<f32>;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 @group(0) @binding(9)
 var YC: texture_2d<f32>;
 @group(3) @binding(9)
-var wa: sampler;
+var xa: sampler;
 
 fn main_1() {
     var phi_2174_: f32;
@@ -349,7 +349,7 @@ fn main_1() {
     let _e420 = LB.k2_[(_e114 + 2u)];
     let _e424 = WC.k2_[_e112];
     let _e426 = (_e424.x & 15u);
-    if ki {
+    if mi {
         let _e427 = (_e426 == 0u);
         if _e427 {
             phi_2324_ = _e424.y;
@@ -358,7 +358,7 @@ fn main_1() {
         }
         let _e430 = phi_2324_;
         let _e432 = (_e430 >> bitcast<u32>(16i));
-        let _e434 = j.T4_;
+        let _e434 = j.U4_;
         if (_e432 == 0u) {
             phi_2325_ = 0f;
         } else {
@@ -372,15 +372,15 @@ fn main_1() {
         let _e444 = phi_2326_;
         l1_[0u] = _e444;
     }
-    if mi {
+    if oi {
         Q0_ = f32(((_e424.x >> bitcast<u32>(4i)) & 15u));
     }
     if (_e426 == 1u) {
         a1_ = unpack4x8unorm(_e424.y);
     } else {
-        if (ki && (_e426 == 0u)) {
+        if (mi && (_e426 == 0u)) {
             let _e456 = (_e424.x >> bitcast<u32>(16i));
-            let _e458 = j.T4_;
+            let _e458 = j.U4_;
             if (_e456 == 0u) {
                 phi_2363_ = 0f;
             } else {
@@ -414,8 +414,8 @@ fn main_1() {
             a1_[3u] = -(_e542);
         }
     }
-    phi_1094_ = si;
-    if si {
+    phi_1094_ = ui;
+    if ui {
         phi_1094_ = ((_e424.x & 2048u) != 0u);
     }
     let _e547 = phi_1094_;
@@ -429,13 +429,13 @@ fn main_1() {
             phi_2364_ = (-1f - f32(((_e424.x & 24576u) >> bitcast<u32>(13u))));
         }
         let _e577 = phi_2364_;
-        r1_ = vec3<f32>(_e566.x, _e566.y, _e577);
+        v1_ = vec3<f32>(_e566.x, _e566.y, _e577);
     } else {
-        r1_ = vec3<f32>(0f, 0f, 0f);
+        v1_ = vec3<f32>(0f, 0f, 0f);
     }
     if !(_e409) {
-        let _e583 = j.bg;
-        let _e585 = j.cg;
+        let _e583 = j.dg;
+        let _e585 = j.eg;
         let _e593 = vec4<f32>(((_e416.x * _e583) - 1f), ((_e416.y * _e585) - sign(_e585)), 0f, 1f);
         phi_2378_ = vec4<f32>(_e593.x, _e593.y, ((f32(((_e420.x << bitcast<u32>(8u)) | 255u)) * 0.000000059604645f) + 0.000000029802322f), _e593.w);
     } else {
@@ -457,7 +457,7 @@ fn main(@builtin(vertex_index) gl_VertexIndex: u32, @builtin(instance_index) gl_
     let _e16 = l1_;
     let _e17 = Q0_;
     let _e18 = a1_;
-    let _e19 = r1_;
+    let _e19 = v1_;
     let _e20 = unnamed.gl_Position;
     return VertexOutput(_e16, _e17, _e18, _e19, _e20);
 }

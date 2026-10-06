@@ -885,6 +885,9 @@ impl RenderPaint for FfiRenderPaint {
     fn invalidate_stroke(&mut self) {
         unsafe { ffi::rive_ffi_render_paint_invalidate_stroke(self.handle.as_ptr()) };
     }
+    fn shader_transform(&mut self, transform: Mat2D) {
+        unsafe { ffi::rive_ffi_render_paint_shader_transform(self.handle.as_ptr(), transform.0.as_ptr()) };
+    }
 }
 
 struct FfiRenderPath {
@@ -1315,6 +1318,7 @@ mod ffi {
         pub fn rive_ffi_render_paint_additiveness(paint: *mut RenderPaint, additiveness: f32);
         pub fn rive_ffi_render_paint_blend_mode(paint: *mut RenderPaint, blend_mode: u8);
         pub fn rive_ffi_render_paint_shader(paint: *mut RenderPaint, shader: *mut RenderShader);
+        pub fn rive_ffi_render_paint_shader_transform(paint: *mut RenderPaint, transform: *const f32);
         pub fn rive_ffi_render_paint_invalidate_stroke(paint: *mut RenderPaint);
 
         pub fn rive_ffi_decode_image(

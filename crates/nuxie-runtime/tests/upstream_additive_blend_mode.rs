@@ -40,6 +40,7 @@ impl render::RenderPaint for RecordingPaint {
         self.additive = value;
     }
     fn shader(&mut self, _: Option<&dyn render::RenderShader>) {}
+    fn shader_transform(&mut self, _: render::Mat2D) {}
     fn invalidate_stroke(&mut self) {}
 }
 

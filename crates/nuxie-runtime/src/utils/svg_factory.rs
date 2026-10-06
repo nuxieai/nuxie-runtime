@@ -160,7 +160,7 @@ impl RenderPath for SVGRenderPath {
 }
 
 pub trait SVGRenderShader: RenderShader {
-    fn emit_defs(&self, out: &mut String, id: &str, precision: i32);
+    fn emit_defs(&self, out: &mut String, id: &str, transform: Mat2D, precision: i32);
 }
 #[derive(Clone)]
 pub struct SVGLinearGradientShader {
@@ -216,9 +216,11 @@ fn emit_color_stop(out: &mut String, color: ColorInt, offset: f32, precision: i3
     .unwrap();
 }
 impl SVGRenderShader for SVGLinearGradientShader {
-    fn emit_defs(&self, out: &mut String, id: &str, precision: i32) {
+    fn emit_defs(&self, out: &mut String, id: &str, transform: Mat2D, precision: i32) {
         let (sx, sy, ex, ey, colors, stops) = &*self.data;
-        writeln!(out,"<linearGradient id=\"{}\" x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" gradientUnits=\"userSpaceOnUse\">",id,format_float(*sx,precision),format_float(*sy,precision),format_float(*ex,precision),format_float(*ey,precision)).unwrap();
+        write!(out,"<linearGradient id=\"{}\" x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" gradientUnits=\"userSpaceOnUse\"",id,format_float(*sx,precision),format_float(*sy,precision),format_float(*ex,precision),format_float(*ey,precision)).unwrap();
+        emit_gradient_transform(out, transform, precision);
+        out.push_str(">\n");
         for (color, stop) in colors.iter().zip(stops) {
             emit_color_stop(out, *color, *stop, precision);
         }
@@ -226,13 +228,26 @@ impl SVGRenderShader for SVGLinearGradientShader {
     }
 }
 impl SVGRenderShader for SVGRadialGradientShader {
-    fn emit_defs(&self, out: &mut String, id: &str, precision: i32) {
+    fn emit_defs(&self, out: &mut String, id: &str, transform: Mat2D, precision: i32) {
         let (cx, cy, radius, colors, stops) = &*self.data;
-        writeln!(out,"<radialGradient id=\"{}\" cx=\"{}\" cy=\"{}\" r=\"{}\" gradientUnits=\"userSpaceOnUse\">",id,format_float(*cx,precision),format_float(*cy,precision),format_float(*radius,precision)).unwrap();
+        write!(out,"<radialGradient id=\"{}\" cx=\"{}\" cy=\"{}\" r=\"{}\" gradientUnits=\"userSpaceOnUse\"",id,format_float(*cx,precision),format_float(*cy,precision),format_float(*radius,precision)).unwrap();
+        emit_gradient_transform(out, transform, precision);
+        out.push_str(">\n");
         for (color, stop) in colors.iter().zip(stops) {
             emit_color_stop(out, *color, *stop, precision);
         }
         out.push_str("</radialGradient>\n");
+    }
+}
+
+fn emit_gradient_transform(out: &mut String, transform: Mat2D, precision: i32) {
+    if transform != Mat2D::IDENTITY {
+        out.push_str(" gradientTransform=\"matrix(");
+        for (i, value) in transform.0.into_iter().enumerate() {
+            if i != 0 { out.push(' '); }
+            out.push_str(&format_float(value, precision));
+        }
+        out.push_str(")\"");
     }
 }
 
@@ -244,6 +259,7 @@ pub struct SVGRenderPaint {
     cap: StrokeCap,
     blend_mode: BlendMode,
     shader: Option<Rc<dyn RenderShader>>,
+    shader_transform: Mat2D,
 }
 impl Default for SVGRenderPaint {
     fn default() -> Self {
@@ -255,10 +271,12 @@ impl Default for SVGRenderPaint {
             cap: StrokeCap::Butt,
             blend_mode: BlendMode::SrcOver,
             shader: None,
+            shader_transform: Mat2D::IDENTITY,
         }
     }
 }
 impl SVGRenderPaint {
+    pub fn get_shader_transform(&self) -> Mat2D { self.shader_transform }
     pub fn is_stroke(&self) -> bool {
         self.is_stroke
     }
@@ -315,6 +333,7 @@ impl RenderPaint for SVGRenderPaint {
     fn shader(&mut self, value: Option<&dyn RenderShader>) {
         self.shader = value.map(RenderShader::retain_shader);
     }
+    fn shader_transform(&mut self, transform: Mat2D) { self.shader_transform = transform; }
     fn invalidate_stroke(&mut self) {}
     fn feather(&mut self, _value: f32) {}
 }

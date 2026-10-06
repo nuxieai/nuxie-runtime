@@ -165,6 +165,7 @@ void rive_ffi_render_paint_blend_mode(rive_ffi_render_paint*,
 void rive_ffi_render_paint_shader(rive_ffi_render_paint*,
                                   const rive_ffi_render_shader*);
 void rive_ffi_render_paint_invalidate_stroke(rive_ffi_render_paint*);
+void rive_ffi_render_paint_shader_transform(rive_ffi_render_paint*, const float*);
 
 rive_ffi_render_image* rive_ffi_decode_image(rive_ffi_context*,
                                              const uint8_t* bytes,

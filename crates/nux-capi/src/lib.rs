@@ -885,6 +885,11 @@ unsafe fn read_render_callbacks(
     // Never materialize a partially supplied optional function pointer.
     let read_len = if struct_size_supports(caller_size, std::mem::size_of::<NuxRenderCallbacks>()) {
         std::mem::size_of::<NuxRenderCallbacks>()
+    } else if struct_size_supports(
+        caller_size,
+        std::mem::offset_of!(NuxRenderCallbacks, render_paint_shader_transform),
+    ) {
+        std::mem::offset_of!(NuxRenderCallbacks, render_paint_shader_transform)
     } else {
         NUX_RENDER_CALLBACKS_V3_MIN_SIZE
     };

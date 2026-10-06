@@ -17,7 +17,6 @@ use crate::mechanical_port::source::{
         bindable_property_integer::BindablePropertyInteger,
         bindable_property_number::BindablePropertyNumber,
         bindable_property_string::BindablePropertyString,
-        bindable_property_trigger::BindablePropertyTrigger,
         bindable_property_viewmodel::BindablePropertyViewModel,
     },
     generated::{
@@ -150,6 +149,15 @@ impl Default for TransitionViewModelCondition {
 }
 
 impl TransitionViewModelCondition {
+    pub fn reads_component_trigger(&self) -> bool {
+        [self.left_comparator(), self.right_comparator()]
+            .into_iter()
+            .flatten()
+            .any(|c| {
+                c.is_type_of(TransitionPropertyComponentComparatorBase::TYPE_KEY)
+                    && Self::component_kind(&c) == Some(ComparandKind::Trigger)
+            })
+    }
     pub fn left_comparator(&self) -> Option<CoreHandle> {
         self.left_comparator.clone()
     }
@@ -315,7 +323,18 @@ impl TransitionViewModelCondition {
                         comparator.transition_comparator_component_property_key()?,
                     ))
                 })??;
-                machine.component_comparison_value(object_id, property_key)
+                if Self::component_kind(comparator) == Some(ComparandKind::Trigger) {
+                    let sequence = machine.resolve_artboard_object(object_id).and_then(|target| target.with(|target| {
+                        if let Some(value) = target.as_any().downcast_ref::<crate::source::custom_property_trigger::CustomPropertyTrigger>() { value.change_sequence() }
+                        else if let Some(value) = target.as_any().downcast_ref::<crate::source::script_input_trigger::ScriptInputTrigger>() { value.base.base.change_sequence() }
+                        else { target.as_view_model_instance_value().map_or(0, |v| v.change_sequence()) }
+                    })).unwrap_or(0);
+                    Some(RuntimeComparisonValue::Uint(u32::from(
+                        machine.change_pending(sequence),
+                    )))
+                } else {
+                    machine.component_comparison_value(object_id, property_key)
+                }
             }
             ComparandRecipe::ViewModelProperty { property, kind } => {
                 let property = machine.bindable_property_instance(property)?;
@@ -351,9 +370,25 @@ impl TransitionViewModelCondition {
                         })
                     }
                     ComparandKind::Trigger => {
-                        property.with_downcast::<BindablePropertyTrigger, _>(|property| {
-                            RuntimeComparisonValue::Uint(property.base.base.property_value())
-                        })
+                        let source =
+                            machine
+                                .bindable_data_bind_to_target(&property)
+                                .and_then(|bind| {
+                                    bind.with(|bind| {
+                                        bind.as_data_bind().and_then(|bind| bind.source())
+                                    })
+                                    .flatten()
+                                });
+                        let pending = source
+                            .and_then(|source| {
+                                source.with(|source| {
+                                    source.as_view_model_instance_value().is_some_and(|value| {
+                                        machine.change_pending(value.change_sequence())
+                                    })
+                                })
+                            })
+                            .unwrap_or(false);
+                        Some(RuntimeComparisonValue::Uint(u32::from(pending)))
                     }
                     ComparandKind::Asset => {
                         property.with_downcast::<BindablePropertyAsset, _>(|property| {

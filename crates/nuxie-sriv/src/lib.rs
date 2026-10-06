@@ -68,6 +68,7 @@ pub enum OpKind {
     DrawImageMeshInstanced = 41,
     ApplyLayerMask = 42,
     StrokePosition = 43,
+    ShaderTransform = 44,
 }
 
 impl OpKind {
@@ -115,6 +116,7 @@ impl OpKind {
             41 => Self::DrawImageMeshInstanced,
             42 => Self::ApplyLayerMask,
             43 => Self::StrokePosition,
+            44 => Self::ShaderTransform,
             _ => {
                 return Err(ParseError::new(
                     offset,
@@ -170,6 +172,7 @@ impl Display for OpKind {
             Self::DrawImageMeshInstanced => "drawImageMeshInstanced",
             Self::ApplyLayerMask => "applyLayerMask",
             Self::StrokePosition => "strokePosition",
+            Self::ShaderTransform => "shaderTransform",
         })
     }
 }
@@ -515,6 +518,19 @@ fn parse_fields(
             push_uint(reader, fields, "strokeposition_paint_id")?;
             push_uint(reader, fields, "strokeposition_value")?;
         }
+        OpKind::ShaderTransform => {
+            push_uint(reader, fields, "shadertransform_paint_id")?;
+            for name in [
+                "setgradienttransform[0]",
+                "setgradienttransform[1]",
+                "setgradienttransform[2]",
+                "setgradienttransform[3]",
+                "setgradienttransform[4]",
+                "setgradienttransform[5]",
+            ] {
+                push_float(reader, fields, name)?;
+            }
+        }
         OpKind::ApplyLayerMask => {
             push_uint(reader, fields, "layermask_id")?;
             push_uint(reader, fields, "layermask_mode")?;
@@ -833,6 +849,34 @@ mod tests {
 
     fn float(value: f32) -> [u8; 4] {
         value.to_bits().to_le_bytes()
+    }
+
+    #[test]
+    fn shader_transform_compares_paint_identity_and_all_six_floats() {
+        let mut bytes = header();
+        bytes.extend([44, 9]);
+        for value in [1.0, 0.0, 0.0, 1.0, 2.0, 3.0] {
+            bytes.extend(float(value));
+        }
+        let expected = parse_sriv(&bytes).unwrap();
+        assert_eq!(expected.operations[0].kind, OpKind::ShaderTransform);
+        assert_eq!(expected.operations[0].kind.to_string(), "shaderTransform");
+        assert_eq!(expected.operations[0].fields.len(), 7);
+        assert!(compare_sriv(&expected, &expected).is_ok());
+        for index in 0..7 {
+            let mut actual = expected.clone();
+            actual.operations[0].fields[index].value = if index == 0 {
+                Value::Uint(10)
+            } else {
+                Value::Float(42.0f32.to_bits())
+            };
+            assert_eq!(
+                compare_sriv(&expected, &actual).unwrap_err().field,
+                Some(expected.operations[0].fields[index].name)
+            );
+        }
+        bytes.pop();
+        assert!(parse_sriv(&bytes).is_err());
     }
 
     #[test]

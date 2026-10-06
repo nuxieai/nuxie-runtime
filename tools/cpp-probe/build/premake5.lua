@@ -165,6 +165,8 @@ targetname(runner_name)
 targetdir('%{cfg.system}/bin/%{cfg.buildcfg}')
 objdir('%{cfg.system}/obj/%{cfg.buildcfg}' .. (with_scripting and '/scripting' or '/ordinary'))
 includedirs(include_dirs)
+-- Match the pinned librive ABI when constructing layout participants.
+forceincludes({ dep_root .. '/rive_yoga_renames.h' })
 defines({ '_RIVE_INTERNAL_', 'WITH_RIVE_TEXT', 'WITH_RIVE_LAYOUT', 'YOGA_EXPORT=' })
 if os.host() == 'macosx' then
     defines({ 'RIVE_MACOSX' })

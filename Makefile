@@ -316,6 +316,7 @@ lint-gate:
 .PHONY: feature-compile-gate feature-compile-gate-portable feature-compile-gate-apple
 feature-compile-gate-portable:
 	@tools/report-all.sh "feature-compile-gate (portable)" \
+		"nuxie-runtime --features editor" "cargo test -p nuxie-runtime --features editor --lib --test editor_stroke_invalidation" \
 		"nuxie-runtime --features threading" "cargo check -p nuxie-runtime --features threading --lib --test work_pool" \
 		"nuxie-runtime --features tools" "cargo check -p nuxie-runtime --features tools --lib --tests" \
 		"nuxie-ore-metal --features tools" "cargo test -p nuxie-ore-metal --features tools --lib" \

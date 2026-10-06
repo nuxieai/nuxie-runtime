@@ -746,11 +746,18 @@ fn tagged_property_pointer_round_trips_through_weak_table() {
     weak_properties
         .raw_set(property_weak_key(adjacent), adjacent_value.clone())
         .unwrap();
-    let actual: Table = weak_properties.raw_get(property_weak_key(adjacent)).unwrap();
+    let actual: Table = weak_properties
+        .raw_get(property_weak_key(adjacent))
+        .unwrap();
     assert_eq!(actual.to_pointer(), adjacent_value.to_pointer());
     let actual: Table = weak_properties.raw_get(property_weak_key(tagged)).unwrap();
     assert_eq!(actual.to_pointer(), tagged_value.to_pointer());
-    let actual: Table = weak_properties.raw_get(property_weak_key(untagged)).unwrap();
+    let actual: Table = weak_properties
+        .raw_get(property_weak_key(untagged))
+        .unwrap();
     assert_eq!(actual.to_pointer(), untagged_value.to_pointer());
-    assert_eq!(property_weak_key(tagged).0 as usize as u64, 0xB400_0071_2345_6780);
+    assert_eq!(
+        property_weak_key(tagged).0 as usize as u64,
+        0xB400_0071_2345_6780
+    );
 }

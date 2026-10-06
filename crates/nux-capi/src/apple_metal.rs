@@ -230,14 +230,19 @@ pub const NUX_METAL_DRAWABLE_STATE_TIMEOUT: NuxMetalDrawableState = 1;
 pub const NUX_METAL_DRAWABLE_STATE_OCCLUDED: NuxMetalDrawableState = 2;
 
 /// Called exactly once after Metal finishes using a submitted drawable, or
-/// after the operation is skipped or rejected. Invocation is always deferred
+/// after the operation is skipped or rejected. Once a readable non-null pair
+/// is supplied, every return path calls it exactly once, including errors.
+/// The caller must not release the context again when the call returns an error.
+/// Invocation is always deferred
 /// to a system dispatch queue and never occurs inline on the calling stack.
 type RendererCompletionCallback = unsafe extern "C" fn(context: *mut c_void);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxMetalRenderOperation {
-    /// Must be initialized to `sizeof(NuxMetalRenderOperation)`.
+    /// Use `sizeof(NuxMetalRenderOperation)`: 72 bytes or more includes layout.
+    /// The 64-byte prefix omits layout; sizes 65 through 71 are refused.
+    /// Legacy prefixes through the fit field remain supported.
     pub struct_size: u32,
     /// Swift-reported drawable availability; Rust never queries UI state.
     pub drawable_state: NuxMetalDrawableState,
@@ -247,7 +252,9 @@ pub struct NuxMetalRenderOperation {
     pub clear_color: u32,
     /// Caller-owned context consumed by `completion_callback`.
     pub completion_context: *mut c_void,
-    /// Both completion fields must be null or non-null together.
+    /// Both completion fields must be null or non-null together. A readable
+    /// non-null pair transfers the context to this callback exactly once on
+    /// every return path, including errors; never release it again on error.
     pub completion_callback: Option<unsafe extern "C" fn(context: *mut c_void)>,
     /// Optional viewport-fit policy. Older struct prefixes default to NONE.
     pub fit: NuxRendererFit,
@@ -1651,7 +1658,10 @@ pub unsafe extern "C" fn nux_renderer_reattach(
 
 /// Renders the player's retained artboard into a caller-acquired
 /// CAMetalDrawable and schedules presentation. The drawable is borrowed only
-/// until this synchronous function returns.
+/// until this synchronous function returns. Once the operation supplies a
+/// readable non-null completion callback and context pair, completion is called
+/// exactly once on every path, including failure. Do not release that context
+/// again on an error return. Invocation is deferred, never inline.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_renderer_render_player(
     renderer: *mut NuxRenderer,
@@ -2176,6 +2186,23 @@ mod tests {
             wait_for_completion(unsafe { &*probe });
             drop(unsafe { Box::from_raw(probe) });
         }
+    }
+
+    #[test]
+    fn unsupported_fit_releases_readable_completion_once() {
+        let probe = Box::into_raw(Box::new(CompletionProbe {
+            calls: AtomicUsize::new(0),
+            inline: AtomicBool::new(false),
+        }));
+        let mut operation = operation_with_probe(probe);
+        operation.fit = u32::MAX;
+        let mut outcome = NuxRendererOutcome::default();
+        assert_eq!(
+            call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+            NuxStatus::InvalidArgument
+        );
+        wait_for_completion(unsafe { &*probe });
+        drop(unsafe { Box::from_raw(probe) });
     }
 
     #[test]

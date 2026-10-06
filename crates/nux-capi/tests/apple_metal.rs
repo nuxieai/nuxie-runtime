@@ -551,6 +551,25 @@ fn solid_fill_renders_authored_pixels_on_metal() {
 
 #[test]
 fn layout_fit_renders_at_surface_scale() {
+    assert_layout_pixels(
+        64.0,
+        128.0,
+        2.0,
+        &[(64, 32, true), (64, 160, false), (112, 112, true)],
+    );
+}
+
+#[test]
+fn layout_fit_preserves_scale_when_layout_is_smaller_than_surface() {
+    assert_layout_pixels(
+        64.0,
+        64.0,
+        1.0,
+        &[(64, 128, true), (16, 128, false), (64, 80, false)],
+    );
+}
+
+fn assert_layout_pixels(width: f32, height: f32, scale: f32, samples: &[(usize, usize, bool)]) {
     autoreleasepool(|_| {
         let required = live_metal_test_required();
         let bytes = solid_fill_artboard();
@@ -593,7 +612,7 @@ fn layout_fit_renders_at_surface_scale() {
             NuxStatus::Ok
         );
         assert_eq!(
-            unsafe { nux_player_layout_size_set(player, 64.0, 128.0) },
+            unsafe { nux_player_layout_size_set(player, width, height) },
             NuxStatus::Ok
         );
         assert!(
@@ -625,7 +644,7 @@ fn layout_fit_renders_at_surface_scale() {
             Retained::as_ptr(&drawable).cast_mut().cast(),
         );
         request.fit = NUX_RENDERER_FIT_LAYOUT;
-        request.layout_scale_factor = 2.0;
+        request.layout_scale_factor = scale;
         request.readback_buffer = Retained::as_ptr(&buffer).cast_mut().cast();
         request.readback_bytes_per_row = stride;
         let outcome = unsafe { render(renderer, player, request, NuxStatus::Ok) };
@@ -634,30 +653,20 @@ fn layout_fit_renders_at_surface_scale() {
 
         let pixels =
             unsafe { std::slice::from_raw_parts(buffer.contents().as_ptr().cast::<u8>(), length) };
-        let center = 64 * stride + 64 * 4;
-        let [blue, green, red, alpha] = pixels
-            .get(center..)
-            .and_then(|tail| tail.first_chunk::<4>())
-            .copied()
-            .expect("Metal drawable contains its center pixel");
-        let sampled_rgba = [red, green, blue, alpha];
-        eprintln!("METAL_SOLID_FILL_SAMPLE: rgba={sampled_rgba:?} expected={FILL_RGBA:?}");
-        let tolerance = 2;
-        assert_ne!(
-            sampled_rgba,
-            [0, 0, 0, 0xff],
-            "non-black authored fill regressed to opaque black"
-        );
-        assert!(
-            sampled_rgba
-                .iter()
-                .zip(FILL_RGBA)
-                .all(|(actual, expected)| actual.abs_diff(expected) <= tolerance),
-            "Metal center pixel {sampled_rgba:?} did not match authored fill {FILL_RGBA:?}"
-        );
-
-        let bottom = 192 * stride + 64 * 4;
-        assert_eq!(&pixels[bottom..bottom + 4], &[0x33, 0x22, 0x11, 0xff]);
+        for &(x, y, filled) in samples {
+            let offset = y * stride + x * 4;
+            let [blue, green, red, alpha] = pixels[offset..offset + 4].try_into().unwrap();
+            let actual = [red, green, blue, alpha];
+            let expected = if filled {
+                FILL_RGBA
+            } else {
+                [0x11, 0x22, 0x33, 0xff]
+            };
+            assert!(
+                actual.iter().zip(expected).all(|(a, e)| a.abs_diff(e) <= 2),
+                "layout {width}x{height} scale {scale}, pixel ({x}, {y}): {actual:?}, expected {expected:?}"
+            );
+        }
 
         assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
         assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);

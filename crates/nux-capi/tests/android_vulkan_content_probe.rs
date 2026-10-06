@@ -66,6 +66,7 @@ fn scripted_gpu_canvas_renders_through_android_vulkan() {
                     player,
                     0xFF000000,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    0.0,
                     &mut frame,
                     &mut result,
                 ),
@@ -330,6 +331,7 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
                 player,
                 0xff00_0000,
                 NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+                0.0,
                 &mut frame,
                 &mut result,
             ),
@@ -430,6 +432,7 @@ fn fixture_renders_content_through_the_android_vulkan_arm() {
             player,
             0xFFFF00FF,
             NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+            0.0,
             &mut frame,
             &mut result,
         );

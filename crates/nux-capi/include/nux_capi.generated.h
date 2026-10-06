@@ -1579,6 +1579,11 @@ typedef struct NuxMetalRenderOperation {
    * The buffer must hold this stride times drawable.height bytes.
    */
   size_t readback_bytes_per_row;
+  /**
+   * Points-to-pixels scale for Rive's layout fit; finite and positive.
+   * Set the player's layout size first, then step by zero before drawing.
+   */
+  float layout_scale_factor;
 } NuxMetalRenderOperation;
 #endif
 
@@ -1811,6 +1816,15 @@ typedef struct NuxViewModelSnapshotValueView {
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 /**
+ * Draw with Rive's centered layout fit at `layout_scale_factor`.
+ * Set the player's layout size to the surface size divided by that scale,
+ * then step by zero before the first draw and after each size change.
+ */
+#define NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT 2
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
  * Preserve authored artboard coordinates without applying a viewport fit.
  */
 #define NUX_ANDROID_VULKAN_RENDERER_FIT_NONE 0
@@ -1897,6 +1911,15 @@ typedef struct NuxViewModelSnapshotValueView {
  * Uniformly scale and center the authored artboard inside the renderer surface.
  */
 #define NUX_RENDERER_FIT_CONTAIN_CENTER 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Draw with Rive's centered layout fit at `layout_scale_factor`.
+ * Set the player's layout size to the surface size divided by that scale,
+ * then step by zero before the first draw and after each size change.
+ */
+#define NUX_RENDERER_FIT_LAYOUT 2
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
@@ -2706,6 +2729,7 @@ NuxStatus nux_renderer_android_vulkan_present_player(struct NuxAndroidVulkanRend
                                                      struct NuxPlayer *player,
                                                      uint32_t clear_color,
                                                      NuxAndroidVulkanRendererFit fit,
+                                                     float layout_scale_factor,
                                                      NuxAndroidVulkanPresentation *out_presentation,
                                                      struct NuxCapiResult **out_result);
 #endif
@@ -2720,6 +2744,7 @@ NuxStatus nux_renderer_android_vulkan_render_player(struct NuxAndroidVulkanRende
                                                     struct NuxPlayer *player,
                                                     uint32_t clear_color,
                                                     NuxAndroidVulkanRendererFit fit,
+                                                    float layout_scale_factor,
                                                     struct NuxAndroidVulkanFrame **out_frame,
                                                     struct NuxCapiResult **out_result);
 #endif

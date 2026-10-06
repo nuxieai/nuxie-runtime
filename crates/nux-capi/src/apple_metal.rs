@@ -219,6 +219,10 @@ pub type NuxRendererFit = u32;
 pub const NUX_RENDERER_FIT_NONE: NuxRendererFit = 0;
 /// Uniformly scale and center the authored artboard inside the renderer surface.
 pub const NUX_RENDERER_FIT_CONTAIN_CENTER: NuxRendererFit = 1;
+/// Draw with Rive's centered layout fit at `layout_scale_factor`.
+/// Set the player's layout size to the surface size divided by that scale,
+/// then step by zero before the first draw and after each size change.
+pub const NUX_RENDERER_FIT_LAYOUT: NuxRendererFit = 2;
 
 pub type NuxMetalDrawableState = u32;
 pub const NUX_METAL_DRAWABLE_STATE_AVAILABLE: NuxMetalDrawableState = 0;
@@ -256,6 +260,9 @@ pub struct NuxMetalRenderOperation {
     /// Destination row stride, a multiple of 256 and at least drawable.width * 4.
     /// The buffer must hold this stride times drawable.height bytes.
     pub readback_bytes_per_row: usize,
+    /// Points-to-pixels scale for Rive's layout fit; finite and positive.
+    /// Set the player's layout size first, then step by zero before drawing.
+    pub layout_scale_factor: f32,
 }
 
 pub const NUX_METAL_RENDER_OPERATION_V3_MIN_SIZE: usize =
@@ -274,6 +281,7 @@ impl Default for NuxMetalRenderOperation {
             fit: NUX_RENDERER_FIT_NONE,
             readback_buffer: ptr::null_mut(),
             readback_bytes_per_row: 0,
+            layout_scale_factor: 0.0,
         }
     }
 }
@@ -1174,11 +1182,19 @@ unsafe fn read_operation(
         ));
     }
     let capture_offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
+    let capture_end = std::mem::offset_of!(NuxMetalRenderOperation, readback_bytes_per_row)
+        + std::mem::size_of::<usize>();
     let full_size = std::mem::size_of::<NuxMetalRenderOperation>();
-    if caller_size as usize > capture_offset && (caller_size as usize) < full_size {
+    if caller_size as usize > capture_offset && (caller_size as usize) < capture_end {
         return Err(ApiFailure::new(
             NuxStatus::InvalidStructSize,
             "render operation contains an incomplete readback extension",
+        ));
+    }
+    if caller_size as usize > capture_end && (caller_size as usize) < full_size {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidStructSize,
+            "render operation contains an incomplete layout extension",
         ));
     }
     let mut value = NuxMetalRenderOperation::default();
@@ -1194,6 +1210,14 @@ unsafe fn read_operation(
     }
     match value.fit {
         NUX_RENDERER_FIT_NONE | NUX_RENDERER_FIT_CONTAIN_CENTER => {}
+        NUX_RENDERER_FIT_LAYOUT => {
+            if !value.layout_scale_factor.is_finite() || value.layout_scale_factor <= 0.0 {
+                return Err(ApiFailure::new(
+                    NuxStatus::InvalidArgument,
+                    "layout scale must be finite and positive",
+                ));
+            }
+        }
         _ => {
             return Err(ApiFailure::new(
                 NuxStatus::InvalidArgument,
@@ -1763,6 +1787,15 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     artboard.artboard_bounds(),
                     (state.pixel_width, state.pixel_height),
                 )?)
+            } else if operation.fit == NUX_RENDERER_FIT_LAYOUT {
+                Some(
+                    super::renderer_layout::layout_transform(
+                        artboard.artboard_bounds(),
+                        (state.pixel_width, state.pixel_height),
+                        operation.layout_scale_factor,
+                    )
+                    .map_err(|message| ApiFailure::new(NuxStatus::InvalidArgument, message))?,
+                )
             } else {
                 None
             };
@@ -1942,6 +1975,40 @@ mod tests {
     }
 
     #[test]
+    fn layout_fit_uses_points_to_pixels_and_artboard_origin() {
+        use crate::renderer_layout::layout_transform;
+        for (bounds, viewport, scale, expected) in [
+            (
+                (0.0, 0.0, 393.0, 852.0),
+                (1179, 2556),
+                3.0,
+                [3.0, 0.0, 0.0, 3.0, 0.0, 0.0],
+            ),
+            (
+                (0.0, 0.0, 375.0, 667.0),
+                (750, 1334),
+                2.0,
+                [2.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+            ),
+            (
+                (10.0, 20.0, 393.0, 852.0),
+                (1179, 2556),
+                3.0,
+                [3.0, 0.0, 0.0, 3.0, -30.0, -60.0],
+            ),
+        ] {
+            assert_eq!(
+                layout_transform(bounds, viewport, scale).unwrap(),
+                Mat2D(expected)
+            );
+        }
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert!(layout_transform((0.0, 0.0, 393.0, 852.0), (1179, 2556), scale).is_err());
+        }
+        assert!(layout_transform((0.0, 0.0, f32::MAX, f32::MAX), (1, 1), f32::MAX).is_err());
+    }
+
+    #[test]
     fn centered_contain_fit_scales_and_letterboxes_authored_bounds() {
         assert_eq!(NUX_RENDERER_FIT_NONE, 0);
         assert_eq!(NUX_RENDERER_FIT_CONTAIN_CENTER, 1);
@@ -2006,7 +2073,8 @@ mod tests {
     #[test]
     fn readback_extension_requires_its_complete_prefix() {
         let offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
-        let size = std::mem::size_of::<NuxMetalRenderOperation>();
+        let size = std::mem::offset_of!(NuxMetalRenderOperation, readback_bytes_per_row)
+            + std::mem::size_of::<usize>();
         let mut operation = NuxMetalRenderOperation {
             fit: NUX_RENDERER_FIT_CONTAIN_CENTER,
             readback_buffer: ptr::dangling_mut(),
@@ -2027,6 +2095,44 @@ mod tests {
         let complete = unsafe { read_operation(&operation) }.expect("full capture prefix");
         assert_eq!(complete.readback_buffer, operation.readback_buffer);
         assert_eq!(complete.readback_bytes_per_row, 256);
+    }
+
+    #[test]
+    fn layout_operation_requires_a_complete_extension_and_positive_scale() {
+        let mut operation = NuxMetalRenderOperation {
+            struct_size: 64,
+            fit: NUX_RENDERER_FIT_CONTAIN_CENTER,
+            layout_scale_factor: 2.0,
+            ..NuxMetalRenderOperation::default()
+        };
+        let prefix = unsafe { read_operation(&operation) }.unwrap();
+        assert_eq!(prefix.layout_scale_factor, 0.0);
+        operation.fit = NUX_RENDERER_FIT_LAYOUT;
+        assert_eq!(
+            unsafe { read_operation(&operation) }.unwrap_err().status,
+            NuxStatus::InvalidArgument
+        );
+        for partial in 65..72 {
+            operation.struct_size = partial;
+            assert_eq!(
+                unsafe { read_operation(&operation) }.unwrap_err().status,
+                NuxStatus::InvalidStructSize
+            );
+        }
+        operation.struct_size = 72;
+        assert_eq!(
+            unsafe { read_operation(&operation) }
+                .unwrap()
+                .layout_scale_factor,
+            2.0
+        );
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            operation.layout_scale_factor = scale;
+            assert_eq!(
+                unsafe { read_operation(&operation) }.unwrap_err().status,
+                NuxStatus::InvalidArgument
+            );
+        }
     }
 
     #[test]

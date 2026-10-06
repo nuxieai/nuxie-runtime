@@ -1208,10 +1208,14 @@ unsafe fn read_operation(
             read_len,
         );
     }
-    match value.fit {
+    Ok(value)
+}
+
+fn validate_operation_fit(operation: &NuxMetalRenderOperation) -> Result<(), ApiFailure> {
+    match operation.fit {
         NUX_RENDERER_FIT_NONE | NUX_RENDERER_FIT_CONTAIN_CENTER => {}
         NUX_RENDERER_FIT_LAYOUT => {
-            if !value.layout_scale_factor.is_finite() || value.layout_scale_factor <= 0.0 {
+            if !operation.layout_scale_factor.is_finite() || operation.layout_scale_factor <= 0.0 {
                 return Err(ApiFailure::new(
                     NuxStatus::InvalidArgument,
                     "layout scale must be finite and positive",
@@ -1225,7 +1229,7 @@ unsafe fn read_operation(
             ));
         }
     }
-    Ok(value)
+    Ok(())
 }
 
 fn centered_contain_transform(
@@ -1660,6 +1664,9 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             Ok(completion) => completion,
             Err(failure) => return with_optional_failure_result(out_result, || Err(failure)),
         };
+        if let Err(failure) = validate_operation_fit(&operation) {
+            return with_optional_failure_result(out_result, || Err(failure));
+        }
         if unsafe { reject_aliased_outputs(out_outcome, out_result) } {
             return NuxStatus::InvalidArgument;
         }
@@ -2067,7 +2074,7 @@ mod tests {
             fit: u32::MAX,
             ..NuxMetalRenderOperation::default()
         };
-        assert!(unsafe { read_operation(&raw const invalid) }.is_err());
+        assert!(validate_operation_fit(&invalid).is_err());
     }
 
     #[test]
@@ -2109,7 +2116,9 @@ mod tests {
         assert_eq!(prefix.layout_scale_factor, 0.0);
         operation.fit = NUX_RENDERER_FIT_LAYOUT;
         assert_eq!(
-            unsafe { read_operation(&operation) }.unwrap_err().status,
+            validate_operation_fit(&unsafe { read_operation(&operation) }.unwrap())
+                .unwrap_err()
+                .status,
             NuxStatus::InvalidArgument
         );
         for partial in 65..72 {
@@ -2129,9 +2138,31 @@ mod tests {
         for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
             operation.layout_scale_factor = scale;
             assert_eq!(
-                unsafe { read_operation(&operation) }.unwrap_err().status,
+                validate_operation_fit(&unsafe { read_operation(&operation) }.unwrap())
+                    .unwrap_err()
+                    .status,
                 NuxStatus::InvalidArgument
             );
+        }
+    }
+
+    #[test]
+    fn invalid_layout_scale_releases_accepted_completion_once() {
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            let probe = Box::into_raw(Box::new(CompletionProbe {
+                calls: AtomicUsize::new(0),
+                inline: AtomicBool::new(false),
+            }));
+            let mut operation = operation_with_probe(probe);
+            operation.fit = NUX_RENDERER_FIT_LAYOUT;
+            operation.layout_scale_factor = scale;
+            let mut outcome = NuxRendererOutcome::default();
+            assert_eq!(
+                call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+                NuxStatus::InvalidArgument
+            );
+            wait_for_completion(unsafe { &*probe });
+            drop(unsafe { Box::from_raw(probe) });
         }
     }
 

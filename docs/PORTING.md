@@ -1438,7 +1438,7 @@ and concrete evidence.
   axis. Only Exactly measurement differs; AtMost and Undefined retain the
   native width policy. The reported AutoHeight width also uses the exact
   host slot when provided, instead of authored width (`text.cpp:1598-1601`).
-  Pinned upstream `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
+  Pinned upstream `160085c654874d35ad654a750e782d7c78e050d9`,
   `src/text/text.cpp:1482-1520`, uses the offered width only when
   `layoutOwnsWidth()` is true. Preserve the one-line host bridge during
   sync-upstream. `tests/runtime_regressions.rs` pins hard and soft wrapping at
@@ -1497,8 +1497,8 @@ from this additive-only rule, retained explicitly for sync-upstream.
   eligibility changes afterward.
   This host extension also governs the command server, which dispatches
   through that public handle. It deliberately differs from pinned upstream
-  `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
-  `src/animation/state_machine_instance.cpp:3711-3743` and
+  `160085c654874d35ad654a750e782d7c78e050d9`,
+  `src/animation/state_machine_instance.cpp:3713-3745` and
   `src/semantic/semantic_data.cpp:550-573`, whose dispatch forwards to
   registered listeners without these eligibility checks. Native listener
   delivery is unchanged. `tests/host_semantic_actions.rs` pins the host
@@ -1510,8 +1510,8 @@ from this additive-only rule, retained explicitly for sync-upstream.
   `perform_listener_changes`. Enter, Exit, Move and all other pointer kinds,
   including drag kinds, deliberately bypass this check so pointer cleanup
   still runs. Pinned upstream
-  `7acbdfecbb78854c0ebaf8b7fe15bd29ebc2f3c6`,
-  `src/animation/state_machine_listener.cpp:220-243`, has no such admission rule.
+  `160085c654874d35ad654a750e782d7c78e050d9`,
+  `src/animation/state_machine_listener.cpp:221-245`, has no such admission rule.
   `tests/host_semantic_actions.rs` covers refusal and readmission.
 - **phone-semantic-action-admission** (X6): `SemanticNode::is_action_eligible`
   is a Nuxie-only port method used by every nux-capi phone accessibility action.

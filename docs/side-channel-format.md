@@ -75,7 +75,7 @@ corresponding ported facade. Citations:
   `StateMachineInstance::drain_semantics_diff(artboard)`; that call also
   synchronizes live mounted occurrences before producing the diff.
 - `semanticAction`: C++ `fireSemanticAction` is void and records resolution to
-  a non-boundary SemanticData (`state_machine_instance.cpp:3711-3743` at the
+  a non-boundary SemanticData (`state_machine_instance.cpp:3713-3745` at the
   pinned revision). Rust records the bool returned by host action admission.
   A disabled/hidden target, ancestor or mounted host, or an unsupported action,
   produces Rust `missing` where C++ can report `dispatched`. This deliberate

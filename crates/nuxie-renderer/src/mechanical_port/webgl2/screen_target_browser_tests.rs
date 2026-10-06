@@ -23,6 +23,22 @@ fn solid(pixels: &[u8], width: u32, height: u32, color: [u8; 4]) -> Result<(), S
     Ok(())
 }
 
+fn load_screen(factory: &mut WebGl2Factory) -> Result<(), String> {
+    let target = factory.ore_render_target().ok_or("no screen to load")?;
+    let ore = factory.ore().ok_or("no Ore context")?;
+    let mut ore = ore.borrow_mut();
+    ore.beginFrame(&FrameDescriptor::new(1, 2));
+    let view = unsafe { ore.wrapRenderTarget(target) }.ok_or("screen load target refused")?;
+    let mut pass = RenderPassDesc::default();
+    pass.colorAttachments[0].view = Some(&view);
+    pass.colorAttachments[0].loadOp = LoadOp::load;
+    ore.beginRenderPass(&pass, None)
+        .ok_or("screen load pass refused")?
+        .finish();
+    ore.endFrame();
+    Ok(())
+}
+
 pub fn run_screen_target_browser_tests(canvas: HtmlCanvasElement) -> Result<String, String> {
     let mut factory = WebGl2Factory::new(canvas, 37, 23).map_err(|e| e.to_string())?;
     let mut failures = Vec::new();
@@ -59,6 +75,9 @@ pub fn run_screen_target_browser_tests(canvas: HtmlCanvasElement) -> Result<Stri
                 .ok_or("screen clear pass refused")?
                 .finish();
             ore.endFrame();
+            drop(ore);
+            // Acquiring the target again must keep the preceding pass's green.
+            load_screen(&mut factory)?;
         } else {
             failures.push(format!("{mode:?}: no Ore screen target"));
         }
@@ -87,6 +106,26 @@ pub fn run_screen_target_browser_tests(canvas: HtmlCanvasElement) -> Result<Stri
             23,
             [0, 0, 255, 255],
         )?;
+        factory.set_target_preserved(true);
+        let frame = factory
+            .begin_frame(0xffff0000, mode)
+            .map_err(|e| e.to_string())?;
+        if factory.ore_target_desc().width != 0 {
+            // A new Ore frame loads the host's blue, not its old green texture.
+            load_screen(&mut factory)?;
+            factory.after_deferred_ore_frame();
+            solid(
+                &frame.finish().map_err(|e| e.to_string())?,
+                37,
+                23,
+                [0, 0, 255, 255],
+            )?;
+        } else {
+            drop(frame);
+        }
+        if factory.ore_render_target().is_some() {
+            return Err("screen target escaped the finished frame".into());
+        }
     }
     factory.set_target_preserved(true);
     factory.resize(19, 11).map_err(|e| e.to_string())?;

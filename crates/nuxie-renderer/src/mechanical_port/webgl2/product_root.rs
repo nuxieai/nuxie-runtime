@@ -8,14 +8,15 @@ use std::sync::Arc;
 use web_sys::HtmlCanvasElement;
 
 use super::browser_provider::BrowserWebGl2Provider;
-use super::gles3_decl::{GLExecutionDomain, GL_NONE, GL_READ_FRAMEBUFFER};
+use super::gles3_decl::*;
+use super::gl_utils_decl::Texture;
 use super::render_context_gl_decl::{ContextOptions, RenderContextGLImpl};
-use super::render_target_gl_decl::FramebufferRenderTargetGL;
+use super::render_target_gl_decl::{FramebufferRenderTargetGL, TextureRenderTargetGL};
 use crate::exact_source_adapter::ExactSourceBackend;
 use crate::exact_gpu_canvas::ExactGpuCanvas;
 use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    FlushResources, FrameDescriptor, RenderContext, RenderContextContract,
+    FlushResources, FrameDescriptor, LoadAction, RenderContext, RenderContextContract,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_helper_impl_hpp::RenderContextHelperBackendContract;
 use crate::{RenderMode, RendererError};
@@ -25,10 +26,53 @@ use nuxie_render_api::{
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 
+struct ScreenTarget {
+    target: rcp<TextureRenderTargetGL>,
+    // The translated target borrows this texture. Keep them alive together when
+    // Ore retains the screen target for replay.
+    texture: Texture,
+}
+
+impl ScreenTarget {
+    fn new(width: u32, height: u32, execution: GLExecutionStamp) -> Rc<Self> {
+        execution.withCurrent(|| {
+            let texture = Texture::new();
+            recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, texture.id()));
+            recordGLCommand(GLCommand::TexStorage2D {
+                target: GL_TEXTURE_2D,
+                levels: 1,
+                internal_format: GL_RGBA8,
+                width,
+                height,
+            });
+            let target = make_rcp(|| {
+                let mut target = TextureRenderTargetGL::new(width, height, execution.clone());
+                target.setTargetTexture(texture.id());
+                target.setBottomUp(false);
+                target
+            });
+            Rc::new(Self { target, texture })
+        })
+    }
+}
+
+impl Drop for ScreenTarget {
+    fn drop(&mut self) {
+        let execution = unsafe { &*self.target.get() }.executionStamp().clone();
+        let _ = execution.withDeleteCurrent(|| {
+            self.target.operator_assign_null();
+            self.texture.reset(0);
+        });
+    }
+}
+
 pub(crate) struct WebGl2ProductBackend {
     context: Option<Pin<Box<RenderContext>>>,
     gpu_canvas: Option<ExactGpuCanvas<super::ContextGL>>,
     target: rcp<FramebufferRenderTargetGL>,
+    ore_screen: Option<Rc<ScreenTarget>>,
+    ore_target_acquired: bool,
+    target_preserved: bool,
     canvas: HtmlCanvasElement,
     sample_count: u32,
     width: u32,
@@ -73,6 +117,9 @@ impl WebGl2ProductBackend {
             context: Some(context),
             gpu_canvas: None,
             target,
+            ore_screen: None,
+            ore_target_acquired: false,
+            target_preserved: false,
             canvas,
             sample_count,
             width,
@@ -153,10 +200,43 @@ impl WebGl2ProductBackend {
         });
         self.target.operator_assign_null();
         self.target = replacement;
+        self.ore_screen = None;
+        self.target_preserved = false;
         self.implementation_mut().invalidateGLState();
         self.width = width;
         self.height = height;
         Ok(())
+    }
+
+    fn copy_screen(&mut self, to_canvas: bool) {
+        let execution = self.execution_domain();
+        let screen = self.ore_screen.as_ref().expect("acquired screen target");
+        execution.withCurrent(|| {
+            let texture = unsafe { &mut *screen.target.get() };
+            if to_canvas {
+                texture.bindDestinationFramebuffer(GL_READ_FRAMEBUFFER);
+                recordGLCommand(GLCommand::BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0));
+            } else {
+                recordGLCommand(GLCommand::BindFramebuffer(GL_READ_FRAMEBUFFER, 0));
+                texture.bindDestinationFramebuffer(GL_DRAW_FRAMEBUFFER);
+            }
+            recordGLCommand(GLCommand::Disable(GL_SCISSOR_TEST));
+            recordGLCommand(GLCommand::BlitFramebuffer(
+                [
+                    0,
+                    0,
+                    self.width as i32,
+                    self.height as i32,
+                    0,
+                    self.height as i32,
+                    self.width as i32,
+                    0,
+                ],
+                GL_COLOR_BUFFER_BIT,
+                GL_NEAREST,
+            ));
+        });
+        self.implementation_mut().invalidateGLState();
     }
 
     fn finish_frame_inner(
@@ -169,6 +249,13 @@ impl WebGl2ProductBackend {
                 "exact WebGL2 frame ownership mismatch".into(),
             ));
         }
+        // Keep ordinary rendering on the original framebuffer: flipping its
+        // geometry would change MSAA sample coverage. Only Ore needs the
+        // top-down texture, so copy its result back before Rive draws.
+        if self.ore_target_acquired && self.target_preserved {
+            self.copy_screen(true);
+        }
+        self.ore_target_acquired = false;
         let resources = FlushResources {
             renderTarget: self.target.get().cast(),
             externalCommandBuffer: std::ptr::null_mut(),
@@ -197,6 +284,46 @@ impl WebGl2ProductBackend {
 }
 
 impl ExactSourceBackend for WebGl2ProductBackend {
+    fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
+        nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, false)
+    }
+
+    fn ore_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
+        if !self.active_frame {
+            return None;
+        }
+        if self.ore_screen.is_none() {
+            let execution = (&*self.implementation_mut().rust_execution).clone();
+            self.ore_screen = Some(ScreenTarget::new(self.width, self.height, execution));
+        }
+        if !self.ore_target_acquired {
+            // Ore load operations start from the canvas's previous contents.
+            // Later passes in this frame must keep what earlier passes wrote.
+            self.copy_screen(false);
+            self.ore_target_acquired = true;
+        }
+        let screen = self.ore_screen.as_ref()?;
+        Some(nuxie_ore_metal::context::RenderTargetInfo {
+            target: screen.target.get().cast(),
+            width: self.width,
+            height: self.height,
+            owner: Some(screen.clone()),
+        })
+    }
+
+    fn set_target_preserved(&mut self, preserved: bool) {
+        self.target_preserved = preserved;
+        if self.active_frame {
+            unsafe { Pin::get_unchecked_mut(self.context_pin()) }
+                .m_frame_descriptor
+                .loadAction = if preserved {
+                LoadAction::preserveRenderTarget
+            } else {
+                LoadAction::clear
+            };
+        }
+    }
+
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
         self.context_pin()
     }
@@ -219,6 +346,11 @@ impl ExactSourceBackend for WebGl2ProductBackend {
             renderTargetWidth: self.width,
             renderTargetHeight: self.height,
             clearColor: clear_color,
+            loadAction: if self.target_preserved {
+                LoadAction::preserveRenderTarget
+            } else {
+                LoadAction::clear
+            },
             ..FrameDescriptor::default()
         };
         match mode {
@@ -235,6 +367,7 @@ impl ExactSourceBackend for WebGl2ProductBackend {
         }
         unsafe { Pin::get_unchecked_mut(self.context_pin()) }.beginFrameExecutable(&descriptor);
         self.frame_number = self.frame_number.wrapping_add(1);
+        self.ore_target_acquired = false;
         self.active_frame = true;
         Ok(self.frame_number)
     }
@@ -249,6 +382,7 @@ impl ExactSourceBackend for WebGl2ProductBackend {
     }
 
     fn abort_frame(&mut self) {
+        self.ore_target_acquired = false;
         if self.active_frame {
             unsafe { Pin::get_unchecked_mut(self.context_pin()) }.abortFrameExecutable();
             self.active_frame = false;
@@ -319,6 +453,7 @@ impl Drop for WebGl2ProductBackend {
         self.abort_frame();
         self.gpu_canvas.take();
         self.target.operator_assign_null();
+        self.ore_screen.take();
         self.context.take();
     }
 }

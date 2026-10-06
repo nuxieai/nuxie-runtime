@@ -34,6 +34,8 @@ nux_player_field_view_model_instance
 nux_player_focus_state
 nux_player_free
 nux_player_info
+nux_player_layout_size
+nux_player_layout_size_set
 nux_player_new_default
 nux_player_new_default_with_result
 nux_player_new_linear_animation_named

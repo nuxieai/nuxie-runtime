@@ -654,6 +654,25 @@
       ]
     },
     {
+      "name": "NuxPlayerLayoutSize",
+      "size": 12,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "width",
+          "offset": 4
+        },
+        {
+          "name": "height",
+          "offset": 8
+        }
+      ]
+    },
+    {
       "name": "NuxPlayerPointerEvent",
       "size": 20,
       "alignment": 4,

@@ -164,5 +164,10 @@ fn build(groups: bool) -> Vec<u8> {
     object(&mut b, "Artboard", |b| {
         uint(b, "Artboard", "viewModelId", 0)
     });
+    if groups {
+        object(&mut b, "Artboard", |b| {
+            uint(b, "Artboard", "viewModelId", 2)
+        });
+    }
     b
 }

@@ -211,6 +211,8 @@ PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
     "RuntimeValuePolicy",
     "RuntimeValuePolicyError",
     "RuntimeValuePolicyOperation",
+    "RuntimeCheckedValueInput",
+    "runtime_checked_value_write",
     "ScriptVm",
     "ScriptHostExtensionInstance",
     "RuntimeValueRuleReport",

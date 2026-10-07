@@ -264,47 +264,30 @@ impl RuntimeOwnedViewModelHandle {
         let Ok(index) = i32::try_from(index) else {
             return false;
         };
-        let Some(list) = ViewModelInstanceValueRuntime::new(property.clone(), DataType::List)
+        // Preserve the artboard-backed construction path: observers must see
+        // the completed item when add_item_at publishes the insertion.
+        if let Some(list_item) = self
+            .native_file()
+            .with_file_mut(|file| file.view_model_instance_list_item(item.native_handle()))
+        {
+            return mutate(|| {
+                property.with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                    list.add_item_at(list_item, index)
+                })
+            })
+            .unwrap_or(false);
+        }
+        // Native data-list insertion does not require an item artboard.
+        let Some(list) = ViewModelInstanceValueRuntime::new(property, DataType::List)
             .and_then(ViewModelInstanceListRuntime::new)
         else {
             return false;
         };
-        // Keep the host's optional artboard association, without requiring an
-        // artboard for the native data-list insertion.
-        let model_id = item
-            .native_handle()
-            .with_downcast::<ViewModelInstance, _>(|instance| instance.base.view_model_id());
-        let artboard = self.native_file().with_file(|file| {
-            file.artboards().into_iter().find(|artboard| {
-                artboard
-                    .with(|value| {
-                        value
-                            .as_artboard()
-                            .map(|artboard| artboard.base.view_model_id())
-                    })
-                    .flatten()
-                    == model_id
-            })
-        });
         mutate(|| {
-            if !list.add_instance_at(
+            list.add_instance_at(
                 NativeInstance::new(item.native_handle()).into_handle(),
                 index,
-            ) {
-                return false;
-            }
-            if let Some(artboard) = artboard
-                && let Some(inserted) = property
-                    .with_downcast::<ViewModelInstanceList, _>(|list| {
-                        list.list_items().get(index as usize).cloned()
-                    })
-                    .flatten()
-            {
-                inserted.with_downcast_mut::<ViewModelInstanceListItem, _>(|item| {
-                    item.set_artboard(Some(artboard));
-                });
-            }
-            true
+            )
         })
     }
     pub fn push_list_item_by_property_name_path(&self, path: &str, item: &Self) -> bool {

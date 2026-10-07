@@ -85,21 +85,43 @@ impl Playback {
         let mut settings = self.settings();
         let mut paused = !self.wants_play();
         let mut position = self.position();
+        let clamp_loop = |position: f64, settings: &super::playback::PlaybackSettings| {
+            let end = if settings.loop_end == 0.0 {
+                self.duration()
+            } else {
+                Some(self.duration().map_or(settings.loop_end, |duration| {
+                    duration.min(settings.loop_end)
+                }))
+            };
+            if settings.looping
+                && (position < settings.loop_start || end.is_some_and(|end| position >= end))
+            {
+                settings.loop_start
+            } else {
+                position
+            }
+        };
         for command in self.property_commands() {
             match *command {
                 Command::Play => paused = false,
                 Command::Pause | Command::Dispose => paused = true,
-                Command::Seek(value) => position = self.duration().map_or(value, |d| value.min(d)),
+                Command::Seek(value) => {
+                    position = clamp_loop(self.duration().map_or(value, |d| value.min(d)), &settings);
+                }
                 Command::Rate(value) => settings.rate = value,
                 Command::Volume(value) => settings.volume = value,
                 Command::Mute(value) => settings.muted = value,
-                Command::Loop(value) => settings.looping = value,
+                Command::Loop(value) => {
+                    settings.looping = value;
+                    position = clamp_loop(position, &settings);
+                }
                 Command::LoopRange { start, end } => {
                     settings.loop_start = start;
                     settings.loop_end = end;
+                    position = clamp_loop(position, &settings);
                 }
                 Command::Reenter if settings.reentry == 0 => {
-                    position = 0.0;
+                    position = clamp_loop(0.0, &settings);
                     paused = !settings.autoplay;
                 }
                 _ => {}

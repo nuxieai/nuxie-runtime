@@ -264,7 +264,9 @@ nothing. Loop bounds can be set atomically through `setLoopRange`; individual
 bound writes validate against the current other bound. Position uses the most
 recent available native clock for the current generation, falling back to the
 accepted frame position when no current clock is available. A pending seek
-reads its target until the decoder supplies a clock for the new generation.
+reads its target clamped to the known duration and active loop interval until
+the decoder supplies a clock for the new generation. Pending loop and range
+writes are projected in the same order that decoder actions are drained.
 
 Binding and animation use the ordinary core registry field types. Changes to
 position, duration, paused, ended and state dirty bindings toward their source

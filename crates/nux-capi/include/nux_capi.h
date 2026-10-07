@@ -69,7 +69,11 @@
  *    but are not reported as unrelated root-subscription rows. Host mutations
  *    are reported in their mutation result, not repeated by a later step.
  * 10. nux_player_step fully validates the bounded batch before mutation and
- *    executes under the shared artboard-occurrence gate. Reentrant access from
+ *    executes under the shared artboard-occurrence gate. With a nonempty host
+ *    table or explicit global and no captured writes, quiet scene growth past
+ *    the bound is reported by the next step as LIMIT_EXCEEDED before advancement,
+ *    without poisoning; removing all tables and globals restores validation
+ *    on the growing step. Reentrant access from
  *    any callback returns REENTRANT_CALL. An unexpected post-mutation failure
  *    rolls back pending external host effects and terminally poisons that
  *    occurrence; every later read, mutate, or draw fails with RUNTIME_ERROR,

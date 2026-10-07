@@ -2377,9 +2377,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
     };
     #[cfg(feature = "scripting")]
     {
-        let shares_command_module = prepared
-            .as_ref()
-            .is_some_and(|config| config.module_name == "value_rules");
+        let command_module = prepared.as_ref().map(|config| config.module_name.clone());
         let (execution_limits, extension): (_, Arc<dyn nuxie::ScriptHostExtension>) =
             if let Some(prepared) = prepared {
                 let execution_limits = ScriptExecutionLimits::new()
@@ -2407,7 +2405,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
                 )
             };
         let (extension, value_rule_file) =
-            value_rule_script::Extension::wrap(extension, shares_command_module);
+            value_rule_script::Extension::wrap(extension, command_module);
         let capability = match native_shader_authority {
             NativeShaderImportAuthority::Denied => {
                 // SAFETY: this helper is reachable only from the explicit
@@ -2456,12 +2454,15 @@ pub(crate) fn import_file_with_prepared_host_commands(
 }
 
 /// Import exact caller-authenticated bytes and install the configured command
-/// module plus `value_rules.set(root, path, value)` for synchronous checked writes.
+/// module with `command(name, payload)` and `set(root, path, value)` for
+/// synchronous checked native writes. No additional module name is reserved;
+/// imports without a command module install no checked-write module.
 /// Empty root selects the bound model; other roots name host-installed globals.
-/// The configured module exposes `command(name, payload)`; if named value_rules,
-/// both functions share that module. This function performs no package/signature
-/// authentication; choosing this explicit import path is the caller's trust
-/// assertion. Ordinary `nux_file_import` remains script-inert.
+/// An accepted `set` returns true and no code, including a marking breach.
+/// A refused `set` returns false and the refusing rule's code.
+/// This function performs no package/signature authentication; choosing this
+/// explicit import path is the caller's trust assertion. Ordinary
+/// `nux_file_import` remains script-inert.
 ///
 /// No foreign callback is installed. Commands are returned only through a
 /// successful `NuxPlayerStepResult` after its runtime transaction commits.

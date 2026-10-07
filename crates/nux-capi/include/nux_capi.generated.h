@@ -2257,12 +2257,15 @@ NuxStatus nux_file_import_metal(struct NuxRenderer *renderer,
 
 /**
  * Import exact caller-authenticated bytes and install the configured command
- * module plus `value_rules.set(root, path, value)` for synchronous checked writes.
+ * module with `command(name, payload)` and `set(root, path, value)` for
+ * synchronous checked native writes. No additional module name is reserved;
+ * imports without a command module install no checked-write module.
  * Empty root selects the bound model; other roots name host-installed globals.
- * The configured module exposes `command(name, payload)`; if named value_rules,
- * both functions share that module. This function performs no package/signature
- * authentication; choosing this explicit import path is the caller's trust
- * assertion. Ordinary `nux_file_import` remains script-inert.
+ * An accepted `set` returns true and no code, including a marking breach.
+ * A refused `set` returns false and the refusing rule's code.
+ * This function performs no package/signature authentication; choosing this
+ * explicit import path is the caller's trust assertion. Ordinary
+ * `nux_file_import` remains script-inert.
  *
  * No foreign callback is installed. Commands are returned only through a
  * successful `NuxPlayerStepResult` after its runtime transaction commits.

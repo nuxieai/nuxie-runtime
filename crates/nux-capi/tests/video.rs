@@ -29,8 +29,34 @@ unsafe fn import_video(
     status
 }
 
+#[path = "support/video_properties.rs"]
+mod video_properties;
 fn scene() -> Vec<u8> {
-    scene_with_readiness(0)
+    video_properties::fixture(0, false)
+}
+unsafe fn bind_video_values(artboard: *mut NuxArtboardInstance) -> *mut NuxViewModelInstance {
+    let mut values = ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            nux_view_model_instance_new_default(artboard, &mut values),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(artboard, values),
+            NuxStatus::Ok
+        );
+    }
+    values
+}
+unsafe fn settle_video_values(player: *mut NuxPlayer) {
+    let mut result = ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            nux_player_step(player, &NuxPlayerStep::default(), &mut result),
+            NuxStatus::Ok
+        );
+        nux_player_step_result_free(result);
+    }
 }
 
 fn scene_with_readiness(readiness: u32) -> Vec<u8> {
@@ -303,7 +329,8 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
             nux_artboard_instance_new(file, 0, &mut artboard),
             NuxStatus::Ok
         );
-        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        let values = bind_video_values(artboard);
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
         // The player retains the actual scene after its initial handles close.
         assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
@@ -344,28 +371,15 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
             NuxStatus::InvalidArgument
         );
         assert_eq!(
-            nux_player_video_command(player, 1, 0, 0.0, 0),
+            nux_view_model_instance_set_bool(values, c"paused".as_ptr(), false),
             NuxStatus::Ok
         );
+        settle_video_values(player);
         assert_eq!(
             nux_player_video_step(player, 1, 1, 0, 2.0, Some(action), context),
             NuxStatus::Ok
         );
         assert_eq!(probe.actions, vec![(3, 1.0, 0), (4, 1.0, 0), (0, 0.0, 0)]);
-        // Selected-seek receipts share the observation ABI but require real,
-        // finite decoded timestamps. Without an interactive request they are inert.
-        for value in [f64::NAN, f64::INFINITY, -1.0] {
-            assert_eq!(
-                nux_player_video_step(player, 1, 7, 0, value, Some(action), context),
-                NuxStatus::InvalidArgument
-            );
-        }
-        probe.actions.clear();
-        assert_eq!(
-            nux_player_video_step(player, 1, 7, 0, 1.9666666667, Some(action), context),
-            NuxStatus::Ok
-        );
-        assert!(probe.actions.is_empty());
         let mut event = NuxVideoEvent {
             kind: 99,
             state: 99,
@@ -401,9 +415,10 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
         }
         probe.actions.clear();
         assert_eq!(
-            nux_player_video_command(player, 1, 2, 1.5, 0),
+            nux_view_model_instance_set_number(values, c"seek".as_ptr(), 1.5),
             NuxStatus::Ok
         );
+        settle_video_values(player);
         assert_eq!(
             nux_player_video_step(player, 1, 0, 0, 0.0, Some(action), context),
             NuxStatus::Ok
@@ -420,6 +435,7 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
         );
         assert_eq!(probe.infos[0].1, 1);
         assert_eq!(probe.infos[0].2, 4); // stale playing did not complete the seek
+        nux_view_model_instance_free(values);
         assert_eq!(nux_player_free(player), NuxStatus::Ok);
         assert_eq!(
             nux_player_video_command(player, 1, 0, 0.0, 0),
@@ -790,7 +806,8 @@ fn captions_are_copied_atomically_and_follow_media_seek() {
             nux_artboard_instance_new(file, 0, &mut artboard),
             NuxStatus::Ok
         );
-        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        let values = bind_video_values(artboard);
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
         let first = String::from("Hello");
         let cues = [
             NuxVideoCaptionCue {
@@ -839,9 +856,10 @@ fn captions_are_copied_atomically_and_follow_media_seek() {
             ..Default::default()
         };
         assert_eq!(
-            nux_player_video_command(player, 1, 2, 1.0, 0),
+            nux_view_model_instance_set_number(values, c"seek".as_ptr(), 1.0),
             NuxStatus::Ok
         );
+        settle_video_values(player);
         assert_eq!(
             nux_player_video_step(
                 player,
@@ -868,6 +886,7 @@ fn captions_are_copied_atomically_and_follow_media_seek() {
             NuxStatus::Ok
         );
         assert_eq!(output, (String::new(), String::new()));
+        nux_view_model_instance_free(values);
         nux_player_free(player);
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
@@ -918,7 +937,14 @@ fn synchronization_c_api_uses_native_clocks_and_retains_thread_affine_occurrence
                 nux_artboard_instance_new(file, 0, &mut artboard),
                 NuxStatus::Ok
             );
+            let values = bind_video_values(artboard);
+            assert_eq!(
+                nux_view_model_instance_set_bool(values, c"paused".as_ptr(), false),
+                NuxStatus::Ok
+            );
             assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+            settle_video_values(player);
+            nux_view_model_instance_free(values);
             assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
             assert_eq!(nux_file_free(file), NuxStatus::Ok);
         }
@@ -1004,7 +1030,7 @@ fn synchronization_c_api_uses_native_clocks_and_retains_thread_affine_occurrence
         let before = [revision(leader), revision(follower)];
         assert_eq!([revision(leader), revision(follower)], before);
         assert_eq!(
-            nux_video_sync_group_command(group, 0, 0.0, 0),
+            nux_video_sync_group_command(group, 6, 0.0, 2),
             NuxStatus::Ok
         );
         assert!(revision(leader) > before[0]);
@@ -1090,7 +1116,7 @@ fn synchronization_c_api_uses_native_clocks_and_retains_thread_affine_occurrence
         );
         assert_eq!(nux_video_sync_group_free(group), NuxStatus::Ok);
         assert_eq!(
-            nux_video_sync_group_command(group, 0, 0.0, 0),
+            nux_video_sync_group_command(group, 6, 0.0, 2),
             NuxStatus::HandleMismatch
         );
         assert_eq!(nux_video_sync_group_free(ptr::null_mut()), NuxStatus::Ok);

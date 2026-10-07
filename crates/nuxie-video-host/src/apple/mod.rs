@@ -313,11 +313,9 @@ impl ApplePlayer {
                 Vec::new()
             }
             Some(Observation::Ended(generation)) => playback.ended(generation),
-            Some(Observation::SelectedSeekFrame(frame)) => {
-                playback.observe_selected_seek_frame(frame.generation, frame.pts);
+            Some(Observation::SelectedSeekFrame(frame) | Observation::Frame(frame)) => {
                 return Ok(Some(frame));
             }
-            Some(Observation::Frame(frame)) => return Ok(Some(frame)),
             None => Vec::new(),
         };
         for action in actions {

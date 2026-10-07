@@ -104,6 +104,9 @@ impl SynchronizationGroup {
                 .ok_or(SyncError::InvalidMember)?
                 .map_err(SyncError::Command)?;
         }
+        for member in std::iter::once(&self.leader).chain(&self.followers) {
+            Video::flush_property_changes(member);
+        }
         self.pending_seek.fill(None);
         self.last_correction.fill(None);
         Ok(())
@@ -481,6 +484,18 @@ impl RegisteredSynchronizationGroup {
         }
         self.controller.borrow_mut().command(command)
     }
+    pub fn write_property(&self, value: super::properties::Write) -> Result<(), SyncError> {
+        if !self.alive.get() {
+            return Err(SyncError::InvalidMember);
+        }
+        let mut controller = self.controller.borrow_mut();
+        let command = controller
+            .leader
+            .with_downcast::<Video, _>(|video| value.command(&video.playback))
+            .ok_or(SyncError::InvalidMember)?
+            .map_err(SyncError::Command)?;
+        controller.command(command)
+    }
     /// Consume the most recent asynchronous correction error, if any.
     pub fn take_error(&self) -> Option<SyncError> {
         self.error.take()
@@ -512,7 +527,11 @@ pub fn report_media_clock(
             if video.sync_clock.is_some_and(|(_, previous)| now < previous) {
                 return Err(SyncError::InvalidTime);
             }
+            let before = video.property_number(super::properties::POSITION);
             video.sync_clock = Some((sample, now));
+            if before != video.property_number(super::properties::POSITION) {
+                video.playback.mark_position_changed();
+            }
             video
                 .sync_groups
                 .retain(|weak| weak.upgrade().is_some_and(|group| group.alive.get()));
@@ -523,6 +542,7 @@ pub fn report_media_clock(
                 .collect::<Vec<_>>())
         })
         .ok_or(SyncError::InvalidMember)??;
+    Video::flush_property_changes(member);
     let mut corrected = false;
     let mut error = None;
     for group in groups {

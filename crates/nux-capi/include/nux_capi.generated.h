@@ -2759,8 +2759,8 @@ NuxStatus nux_player_video_caption(const struct NuxPlayer *player,
                                    void *user_data);
 
 /**
- * Queue one authored command: play=0, pause=1, seek=2, rate=3, volume=4,
- * mute=5, suspend-reason=6, reenter=7, dispose=8, looping=9. Boolean values must be 0/1.
+ * Queue a host decision: pause=1, suspend-reason=6, reenter=7, dispose=8.
+ * A suspension value must be 0 or 1. Other command kinds are invalid.
  * Suspension reasons are hidden=1, background=2, interruption=4, resources=8.
  */
 NuxStatus nux_player_video_command(const struct NuxPlayer *player,
@@ -2896,7 +2896,8 @@ NuxStatus nux_player_video_set_captions(const struct NuxPlayer *player,
 
 /**
  * Set the loop interval in seconds. Start is inclusive, end exclusive; zero
- * end means source duration. Enable looping separately with command kind 9.
+ * end means source duration. Loop start and end are written atomically.
+ * The loop property controls whether looping is enabled.
  */
 NuxStatus nux_player_video_set_loop_range(const struct NuxPlayer *player,
                                           size_t component_id,
@@ -2906,9 +2907,7 @@ NuxStatus nux_player_video_set_loop_range(const struct NuxPlayer *player,
 /**
  * Drain queued commands and apply one decoder observation. Observation kinds:
  * none=0, ready=1 (`value`=duration), playing=2, ended=3, buffering=4,
- * play-blocked=5, failed=6, selected-seek-frame=7 (`value`=actual decoded PTS).
- * Kind 7 certifies pixels selected after successful current-generation seek completion;
- * deliver it immediately before presenting those pixels, never with a media-clock value.
+ * play-blocked=5, failed=6.
  * Stale generations are ignored. Deliver every action
  * synchronously in order; decode callbacks marshal back to the creator thread.
  * A callback is required even when this step happens to emit no actions.
@@ -3216,8 +3215,8 @@ NuxStatus nux_video_allocate_decoders(const struct NuxVideoDecoderRequest *reque
                                       uint32_t *out_allocations);
 
 /**
- * Queue the same authored command on every member atomically. Command numbers
- * and arguments match nux_player_video_command. Lifecycle vetoes still apply.
+ * Queue a host decision on every member atomically: pause=1,
+ * suspend-reason=6, reenter=7, dispose=8. Arguments match nux_player_video_command.
  */
 NuxStatus nux_video_sync_group_command(const struct NuxVideoSyncGroup *group,
                                        uint32_t kind,

@@ -3290,6 +3290,26 @@ NuxStatus nux_view_model_instance_free(struct NuxViewModelInstance *view_model);
 NuxStatus nux_view_model_instance_identity(const struct NuxViewModelInstance *instance,
                                            uint64_t *out_identity);
 
+/**
+ * Acquire a retained handle to the existing ViewModel instance at `index` of
+ * owner's list property. list_path uses reference-property path syntax, without
+ * list indices. The result preserves native identity, values and aliases and
+ * remains valid after move, removal or freeing owner. Release with
+ * nux_view_model_instance_free. Acquisition never creates an instance or artboard,
+ * mounts, changes membership/order, emits notifications, or advances/presents.
+ * Call on owner's runtime thread. On failure a valid out_instance is set to NULL.
+ * Compare the acquired identity with any earlier snapshot: indices are positions.
+ * Returns NULL_ARGUMENT for required null pointers; INVALID_ARGUMENT for invalid
+ * UTF-8 or empty/malformed paths; NOT_FOUND for absent/non-list properties,
+ * out-of-range indices or null children; HANDLE_MISMATCH for invalid/stale handles;
+ * WRONG_THREAD or REENTRANT_CALL for lane/borrow violations; LIMIT_EXCEEDED for
+ * paths over 4096 bytes; RUNTIME_ERROR for unexpected guarded failures.
+ */
+NuxStatus nux_view_model_instance_list_item_acquire(const struct NuxViewModelInstance *owner,
+                                                    struct NuxStringView list_path,
+                                                    size_t index,
+                                                    struct NuxViewModelInstance **out_instance);
+
 NuxStatus nux_view_model_instance_new(const struct NuxFile *file,
                                       size_t schema_index,
                                       struct NuxViewModelInstance **out_instance);

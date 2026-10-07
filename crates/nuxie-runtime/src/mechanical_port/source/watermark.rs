@@ -177,7 +177,9 @@ impl Watermark {
         }
         self.started = true;
         let seconds = self.clamp_elapsed(elapsed_seconds);
-        let more = self.state_machine.advance_and_apply(seconds);
+        // The host entry point counts the host file's pending async work;
+        // that must not keep its watermark running.
+        let more = self.state_machine.advance_and_apply_view_models(seconds, true);
         self.elapsed_seconds += seconds;
         self.finished = !more || self.elapsed_seconds >= WATERMARK_MAX_SECONDS;
         // The finishing frame is still drawn. Only the next call hands over.

@@ -2797,12 +2797,16 @@ impl RuntimeStateMachineInstanceHandle {
                 .upgrade()
                 .expect("live state machine artboard")
         });
+        // The host entry point reaches advance_internal, which does not poll.
+        // Deliver completions before script callbacks and without an arena borrow.
+        Artboard::poll_async_work_handle(&artboard.core_handle());
         if artboard.with_artboard_mut(|artboard| artboard.advance_watermark(seconds)) {
             // Settle the host at time zero while keeping its ticker running.
             self.advance_and_apply_view_models(0.0, true);
             return true;
         }
         self.advance_and_apply_view_models(seconds, true)
+            || artboard.with_artboard(|artboard| artboard.has_pending_async_work())
     }
 
     pub fn advance_and_apply_view_models(&self, seconds: f32, _advance_view_models: bool) -> bool {

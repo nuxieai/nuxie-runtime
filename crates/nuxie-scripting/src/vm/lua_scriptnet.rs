@@ -154,6 +154,10 @@ fn bad(message: &str) -> luaur_rt::Error {
 pub(super) fn shutdown(lua: &Lua) {
     drop(lua.remove_app_data::<Registry>());
 }
+pub(super) fn has_pending_work(lua: &Lua) -> bool {
+    lua.app_data_ref::<Registry>()
+        .is_some_and(|registry| net::has_pending_work_for_owner(registry.owner))
+}
 pub(super) fn install(lua: &Lua) -> Result<()> {
     super::lua_main_ref::install_main_lua(lua);
     if lua.app_data_ref::<Registry>().is_none() {

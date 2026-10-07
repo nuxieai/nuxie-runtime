@@ -2398,6 +2398,13 @@ impl ScriptVm {
         &self.lua
     }
 
+    /// Context owner identity for literal upstream WorkPool host tests.
+    #[cfg(feature = "upstream-test-seams")]
+    #[doc(hidden)]
+    pub fn upstream_test_async_owner_id(&self) -> u64 {
+        lua_image_decode::upstream_test_owner_id(&self.lua)
+    }
+
     /// Exact `ScriptedRenderer::end()` result seam for literal upstream test
     /// ports that live outside this crate. This is deliberately absent from
     /// normal runtime builds.
@@ -3034,6 +3041,16 @@ impl RuntimeScriptingVm for ScriptVm {
             Some(Rc::clone(&self.script_cycle_active)),
             self.logging.clone(),
         )))
+    }
+
+    fn has_pending_async_work(&self) -> bool {
+        if lua_image_decode::has_pending_work(&self.lua) {
+            return true;
+        }
+        #[cfg(feature = "scriptnet")]
+        return lua_scriptnet::has_pending_work(&self.lua);
+        #[cfg(not(feature = "scriptnet"))]
+        false
     }
 
     fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {

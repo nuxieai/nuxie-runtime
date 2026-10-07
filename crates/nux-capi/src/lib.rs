@@ -4277,6 +4277,20 @@ fn player_step_body(
         .cloned()
         .collect::<Vec<_>>();
     subscribed_roots.extend(bound_view_model.iter().cloned());
+    let retained_subscribed_owners = if has_markers {
+        match value_policy::retain_scope(&subscribed_roots) {
+            Ok(owners) => owners,
+            Err(status) => {
+                return publish_player_step_failure(
+                    out_result,
+                    status,
+                    "value policy subscription scope exceeds the limit",
+                );
+            }
+        }
+    } else {
+        Vec::new()
+    };
     let has_subscriptions = !subscribed_roots.is_empty() || has_markers;
     let scene_view_model_roots = match has_subscriptions {
         true => match player_view_models::scene_roots_across(
@@ -4611,7 +4625,7 @@ fn player_step_body(
         .iter()
         .map(|(owner, _)| owner.clone())
         .collect::<Vec<_>>();
-    let mut subscribed_owners = Vec::new();
+    let mut subscribed_owners = retained_subscribed_owners;
     for root in &subscribed_roots {
         let Some(owners) = root.reachable_change_owner_snapshot() else {
             player.artboard.poisoned.set(true);

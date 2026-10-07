@@ -167,6 +167,11 @@ pub struct RuntimeViewModelChangeCapture {
 }
 
 impl RuntimeViewModelChangeCapture {
+    pub(crate) fn with_current<R>(action: impl FnOnce(&Self) -> R) -> Option<R> {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| slot.borrow().as_ref().map(|_| ()))?;
+        Some(action(&Self { armed: false }))
+    }
+
     pub fn begin() -> Option<Self> {
         Self::begin_bounded(4_096, 8 * 1024 * 1024)
     }

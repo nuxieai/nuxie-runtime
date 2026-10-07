@@ -119,7 +119,12 @@ fn global_cpp_slot_identity_and_fresh_default_through_c_api() {
         assert!(checked_non_global);
         nux_view_model_catalog_free(catalog);
         nux_view_model_instance_free(instance);
+        let retained_globals = Rc::downgrade(&(*player).global_view_models);
         nux_player_free(player);
+        assert!(retained_globals.upgrade().is_none());
+        let occurrence = &(*artboard).occurrence;
+        assert_eq!(occurrence.refresh_bound_view_model_invalidation(), Ok(()));
+        assert!(occurrence.host_global_view_models.borrow().is_empty());
         nux_artboard_instance_free(artboard);
         nux_file_free(file);
     }

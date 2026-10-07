@@ -92,6 +92,13 @@ pub struct RuntimeValueRuleReport {
     pub attempted: RuntimeViewModelChangeValue,
 }
 
+#[derive(Clone, Debug)]
+pub struct RuntimeCheckedValueWrite {
+    pub applied: bool,
+    /// Refusing rules on refusal, marking breaches on success, in table order.
+    pub rule_indices: Vec<usize>,
+}
+
 /// One operation's retained native owners and last accepted observations.
 /// The caller's graph transaction owns failure rollback. Drop this state at
 /// commit; it is not a second persistent store of view-model values.
@@ -101,6 +108,7 @@ pub struct RuntimeValuePolicyOperation {
     native_lists: BTreeMap<Key, Vec<CoreHandle>>,
     suppressed: BTreeSet<Key>,
     cursor: usize,
+    pending_flush: bool,
     reports: Vec<RuntimeValueRuleReport>,
     initial: Rc<RefCell<InitialOwners>>,
 }
@@ -130,6 +138,7 @@ impl RuntimeValuePolicy {
             native_lists: BTreeMap::new(),
             suppressed: BTreeSet::new(),
             cursor: 0,
+            pending_flush: false,
             reports: Vec::new(),
             initial,
         };
@@ -147,6 +156,117 @@ impl RuntimeValuePolicyOperation {
 
     pub fn retained_roots(&self) -> Vec<RuntimeOwnedViewModelHandle> {
         self.owners.values().cloned().collect()
+    }
+
+    pub fn apply_pending_writes(
+        &mut self,
+        policy: &RuntimeValuePolicy,
+        roots: &[RuntimeOwnedViewModelHandle],
+    ) -> Result<bool, RuntimeValuePolicyError> {
+        let changed = RuntimeViewModelChangeCapture::with_current(|capture| {
+            self.apply(policy, capture, roots)
+        })
+        .ok_or(RuntimeValuePolicyError::BorrowConflict)??;
+        self.pending_flush |= changed;
+        Ok(changed)
+    }
+
+    /// Check the candidate before invoking its native writer. The optional
+    /// marker is the explicit paired write the caller will make after this
+    /// value (false for a clear); absent means an ordinary nonempty write.
+    /// Accepted writes still enter the operation's native journal. Run `apply`
+    /// before calling this from a script if earlier unchecked native writes
+    /// are pending, and again at the operation boundary before publication.
+    pub fn checked_write(
+        &mut self,
+        policy: &RuntimeValuePolicy,
+        root: &RuntimeOwnedViewModelHandle,
+        path: &str,
+        candidate: RuntimeViewModelChangeValue,
+        marker: Option<bool>,
+        write: impl FnOnce() -> Result<(), RuntimeValuePolicyError>,
+    ) -> Result<RuntimeCheckedValueWrite, RuntimeValuePolicyError> {
+        if !policy.has_rules() {
+            write()?;
+            return Ok(RuntimeCheckedValueWrite {
+                applied: true,
+                rule_indices: Vec::new(),
+            });
+        }
+        let (owner, index) = policy.resolve_property(root, path)?;
+        let key = (owner.instance_identity(), index);
+        if self.suppressed.contains(&key) {
+            return Ok(RuntimeCheckedValueWrite {
+                applied: false,
+                rule_indices: Vec::new(),
+            });
+        }
+        let mut probe = Self {
+            owners: BTreeMap::new(),
+            values: BTreeMap::new(),
+            native_lists: BTreeMap::new(),
+            suppressed: BTreeSet::new(),
+            cursor: 0,
+            pending_flush: false,
+            reports: Vec::new(),
+            initial: Rc::clone(&self.initial),
+        };
+        let mut roots = self.retained_roots();
+        roots.push(root.clone());
+        probe.retain(policy, &roots)?;
+        let current = probe
+            .values
+            .get(&key)
+            .ok_or(RuntimeValuePolicyError::InvalidArgument)?;
+        if std::mem::discriminant(current) != std::mem::discriminant(&candidate) {
+            return Err(RuntimeValuePolicyError::InvalidArgument);
+        }
+        probe.values.insert(key, candidate.clone());
+        let model = owner.borrow().view_model_index();
+        let marker_key = policy
+            .markers
+            .iter()
+            .find(|pair| pair.model == model && pair.value == index)
+            .map(|pair| (key.0, pair.marker));
+        if let Some(marker_key) = marker_key {
+            probe.values.insert(
+                marker_key,
+                RuntimeViewModelChangeValue::Boolean(marker.unwrap_or(true)),
+            );
+        }
+        let failures = probe.failures(policy, &owner, key);
+        let refused = failures.iter().any(|(_, _, refused)| *refused);
+        let mut rule_indices = Vec::new();
+        for (rule_index, _, refusal) in failures {
+            if refusal || !refused {
+                rule_indices.push(rule_index);
+            }
+        }
+        if let Some(marker_key) = marker_key {
+            if refused {
+                self.suppressed.insert(marker_key);
+            } else {
+                self.suppressed.remove(&marker_key);
+            }
+        }
+        if refused {
+            let property = owner
+                .borrow()
+                .property_by_path(&[index])
+                .ok_or(RuntimeValuePolicyError::NotFound)?;
+            // The ordered attempt is evaluated with every other write at the
+            // boundary, but the refused native writer is never invoked.
+            crate::view_model_cell::capture_view_model_change(
+                instance::identity(&property) as usize,
+                candidate,
+            );
+        } else {
+            write()?;
+        }
+        Ok(RuntimeCheckedValueWrite {
+            applied: !refused,
+            rule_indices,
+        })
     }
 
     /// Evaluate newly captured writes in native order, then restore only the
@@ -208,34 +328,7 @@ impl RuntimeValuePolicyOperation {
                 self.values
                     .insert(marker_key, RuntimeViewModelChangeValue::Boolean(effective));
             }
-            let mut failures = Vec::new();
-            for (rule_index, rule) in policy.rules.iter().enumerate() {
-                for (rule_owner_id, rule_owner) in &self.owners {
-                    if rule_owner.borrow().view_model_index() != rule.model {
-                        continue;
-                    }
-                    let target = (*rule_owner_id, rule.property);
-                    let direct = target == key
-                        || policy.markers.iter().any(|pair| {
-                            pair.model == rule.model
-                                && pair.value == rule.property
-                                && *rule_owner_id == id
-                                && pair.marker == key.1
-                        });
-                    let picked = picked_property(policy, rule).is_some_and(|property| {
-                        owner.borrow().unique_boolean_property_index_by_name(property) == Some(key.1)
-                            && matches!(self.values.get(&target), Some(RuntimeViewModelChangeValue::List(items)) if items.contains(&id))
-                    });
-                    if (direct || picked) && !self.holds(policy, rule, target) {
-                        let empty = self.empty(policy, rule, target);
-                        failures.push((
-                            rule_index,
-                            target,
-                            rule.entry.mode == RuntimeValueRuleMode::Refuse && !empty,
-                        ));
-                    }
-                }
-            }
+            let failures = self.failures(policy, owner, key);
             let refused = failures.iter().any(|(_, _, refused)| *refused);
             for (rule_index, target, refusal) in failures {
                 if refusal || !refused {
@@ -282,7 +375,7 @@ impl RuntimeValuePolicyOperation {
                 }
             }
         }
-        let mut changed = false;
+        let mut changed = std::mem::take(&mut self.pending_flush);
         for key in restore {
             changed |= self.restore(capture, key)?;
         }
@@ -294,6 +387,43 @@ impl RuntimeValuePolicyOperation {
             .checked_sub(omitted.len())
             .ok_or(RuntimeValuePolicyError::InvalidArgument)?;
         Ok(changed)
+    }
+
+    fn failures(
+        &self,
+        policy: &RuntimeValuePolicy,
+        owner: &RuntimeOwnedViewModelHandle,
+        key: Key,
+    ) -> Vec<(usize, Key, bool)> {
+        let mut failures = Vec::new();
+        for (rule_index, rule) in policy.rules.iter().enumerate() {
+            for (rule_owner_id, rule_owner) in &self.owners {
+                if rule_owner.borrow().view_model_index() != rule.model {
+                    continue;
+                }
+                let target = (*rule_owner_id, rule.property);
+                let direct = target == key
+                    || policy.markers.iter().any(|pair| {
+                        pair.model == rule.model
+                            && pair.value == rule.property
+                            && *rule_owner_id == key.0
+                            && pair.marker == key.1
+                    });
+                let picked = picked_property(policy, rule).is_some_and(|property| {
+                        owner.borrow().unique_boolean_property_index_by_name(property) == Some(key.1)
+                            && matches!(self.values.get(&target), Some(RuntimeViewModelChangeValue::List(items)) if items.contains(&key.0))
+                    });
+                if (direct || picked) && !self.holds(policy, rule, target) {
+                    let empty = self.empty(policy, rule, target);
+                    failures.push((
+                        rule_index,
+                        target,
+                        rule.entry.mode == RuntimeValueRuleMode::Refuse && !empty,
+                    ));
+                }
+            }
+        }
+        failures
     }
 
     fn empty(&self, policy: &RuntimeValuePolicy, rule: &Rule, key: Key) -> bool {
@@ -562,7 +692,7 @@ impl RuntimeValuePolicyOperation {
     }
 }
 
-fn read(property: &CoreHandle) -> Option<RuntimeViewModelChangeValue> {
+pub(super) fn read(property: &CoreHandle) -> Option<RuntimeViewModelChangeValue> {
     property
         .with(|property| {
             let value = property.as_any();

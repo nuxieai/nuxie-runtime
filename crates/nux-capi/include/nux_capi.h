@@ -174,8 +174,9 @@
  *    A file without rules retains ordinary native behavior.
  * 19. Installed rule groups write a computed boolean and ordered lists of
  *    caller-authored rule codes/messages into ordinary view-model properties.
- *    All active errors are retained in rule installation order; an accepted
- *    write clears the latest refusal. The boolean follows only kept values.
+ *    Latest refusal rules come first, then kept-value failures, with installed
+ *    order within each partition and no duplicates. An accepted write clears
+ *    the latest refusal. The boolean follows only kept values.
  *    Install markers and rules before groups, before the first operation.
  *
  * PANIC SAFETY

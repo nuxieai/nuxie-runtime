@@ -174,3 +174,92 @@ fn rule_and_group_install_respect_thread_and_operation_borrow() {
         nux_file_free(file);
     }
 }
+
+#[test]
+fn rule_report_getters_preserve_failure_status_and_reject_reentry() {
+    unsafe {
+        let mut step = ptr::null_mut();
+        assert_eq!(
+            publish_player_step_failure(&mut step, NuxStatus::LimitExceeded, "bounded result"),
+            NuxStatus::LimitExceeded
+        );
+        let mut mutation = ptr::null_mut();
+        let invalid_batch = NuxViewModelMutationBatch {
+            mutation_count: usize::MAX,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_view_model_mutate(&invalid_batch, &mut mutation),
+            NuxStatus::LimitExceeded
+        );
+        let mut row = NuxValueRuleReportView::default();
+        let mut identity = 99;
+        assert_eq!(
+            nux_player_step_result_rule_report(step, 0, &mut row),
+            NuxStatus::LimitExceeded
+        );
+        assert_eq!(
+            nux_player_step_result_rule_report_list_item(step, 0, 0, &mut identity),
+            NuxStatus::LimitExceeded
+        );
+        assert_eq!(identity, 0);
+        assert_eq!(
+            nux_view_model_mutation_result_rule_report(mutation, 0, &mut row),
+            NuxStatus::LimitExceeded
+        );
+        assert_eq!(
+            nux_view_model_mutation_result_rule_report_list_item(mutation, 0, 0, &mut identity),
+            NuxStatus::LimitExceeded
+        );
+        let step_call = enter_handle(step, HandleKind::PlayerStepResult).unwrap();
+        let mutation_call = enter_handle(mutation, HandleKind::ViewModelMutationResult).unwrap();
+        assert_eq!(
+            nux_player_step_result_rule_report(step, 0, &mut row),
+            NuxStatus::ReentrantCall
+        );
+        assert_eq!(
+            nux_player_step_result_rule_report_list_item(step, 0, 0, &mut identity),
+            NuxStatus::ReentrantCall
+        );
+        assert_eq!(
+            nux_view_model_mutation_result_rule_report(mutation, 0, &mut row),
+            NuxStatus::ReentrantCall
+        );
+        assert_eq!(
+            nux_view_model_mutation_result_rule_report_list_item(mutation, 0, 0, &mut identity),
+            NuxStatus::ReentrantCall
+        );
+        drop(step_call);
+        drop(mutation_call);
+        nux_player_step_result_free(step);
+        nux_view_model_mutation_result_free(mutation);
+    }
+}
+
+#[test]
+fn empty_attempted_step_list_has_no_member_identity() {
+    // Exercise the result-view contract directly with an owned empty list.
+    let mut result = player_step_failure(NuxStatus::Ok, "");
+    result.rule_reports.push(nuxie::RuntimeValueRuleReport {
+        owner_instance_identity: 1,
+        property_index: 0,
+        rule_index: 0,
+        rule_owner_instance_identity: 1,
+        rule_property_index: 0,
+        refused: true,
+        attempted: RuntimeViewModelChangeValue::List(Vec::new()),
+    });
+    let result = Box::into_raw(Box::new(result));
+    register_handle(result, HandleKind::PlayerStepResult, thread::current().id());
+    unsafe {
+        for index in [0, usize::MAX] {
+            let mut identity = 99;
+            assert_eq!(
+                nux_player_step_result_rule_report_list_item(result, 0, index, &mut identity),
+                NuxStatus::NotFound
+            );
+            assert_eq!(identity, 0);
+        }
+        nux_player_step_result_free(result);
+    }
+}

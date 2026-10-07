@@ -904,6 +904,21 @@ fn list_refusal_retains_attempted_member_identities_until_result_free() {
         NuxStatus::Ok
     );
     assert_eq!(identity, expected);
+    for index in [2, usize::MAX] {
+        identity = 99;
+        assert_eq!(
+            unsafe {
+                nux_view_model_mutation_result_rule_report_list_item(
+                    result,
+                    0,
+                    index,
+                    &mut identity,
+                )
+            },
+            NuxStatus::NotFound
+        );
+        assert_eq!(identity, 0);
+    }
     unsafe {
         nux_view_model_instance_free(container);
         nux_view_model_mutation_result_free(result);

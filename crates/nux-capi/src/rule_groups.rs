@@ -36,9 +36,9 @@ fn copied(view: NuxStringView, bytes: &mut usize) -> Result<String, NuxStatus> {
 /// markers first, before the first step or mutation. Invalid names, kinds,
 /// duplicate outputs or output/input conflicts reject the entire table.
 /// At most 4096 groups plus members and 8 MiB of copied input are accepted.
-/// Each list contains all current failures and the latest refused write's
-/// refusing rules, deduplicated in rule installation order. An accepted write
-/// clears that refusal. The computed boolean depends only on kept values.
+/// Each list puts the latest refusal's rules first, then kept-value failures,
+/// with installed order within each partition and no duplicates. An accepted
+/// write clears that refusal. The computed boolean depends only on kept values.
 /// Writes to outputs are corrected in the same operation; quiet outputs emit
 /// no rows. Replacing groups or rules clears retained refusal history.
 #[unsafe(no_mangle)]

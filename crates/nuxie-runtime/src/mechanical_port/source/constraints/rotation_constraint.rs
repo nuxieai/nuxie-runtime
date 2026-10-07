@@ -95,11 +95,26 @@ impl RotationConstraint {
             }
             self.components_b = (inverse * transform_b).decompose();
         }
-        if self.base.max() && self.components_b.rotation() > self.base.max_value() {
-            self.components_b.set_rotation(self.base.max_value());
-        }
-        if self.base.min() && self.components_b.rotation() < self.base.min_value() {
-            self.components_b.set_rotation(self.base.min_value());
+        if self.base.min() || self.base.max() {
+            // Compare decomposed angles within the turn centered on the limits.
+            let center = if self.base.min() && self.base.max() {
+                (self.base.min_value() + self.base.max_value()) * 0.5
+            } else if self.base.max() {
+                self.base.max_value()
+            } else {
+                self.base.min_value()
+            };
+            let mut rotation = self.components_b.rotation() - center;
+            rotation -= math_types::PI * 2.0
+                * ((rotation + math_types::PI) / (math_types::PI * 2.0)).floor();
+            rotation += center;
+            if self.base.max() && rotation > self.base.max_value() {
+                rotation = self.base.max_value();
+            }
+            if self.base.min() && rotation < self.base.min_value() {
+                rotation = self.base.min_value();
+            }
+            self.components_b.set_rotation(rotation);
         }
         if clamp_local {
             transform_b = Mat2D::compose(&self.components_b);

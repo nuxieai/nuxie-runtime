@@ -7,18 +7,27 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8092a195ec9cd456e5199164565adb88887f737a`
+- LAST_SYNCED_SHA: `04104ce23473313d181489440c98fb087b991b68`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `05d690ee5a8879d738679f8ebad17c4a61af50ac` (refreshed 2026-10-07 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Six upstream commits remain after this checkpoint at the fetched target.
-  All 201 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (223 after `5892bb05`); this
+  Five upstream commits remain after this checkpoint at the fetched target.
+  All 202 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (224 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `04104ce2`, integrated atop downstream `3856efcd95`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Rotation limits now compare within a turn centered on the configured
+  limits, preserving upstream f32 grouping and max-before-min order. Runtime,
+  rotation and IK-stacking tests pass 239 (two ignored), including all three
+  upstream rotation cases and all eight programmatic rows. Source/pipeline
+  tests pass 12, manifest tests pass 27 and generated inventory is current.
+  No tolerance changed. No broad corpus/platform rerun is claimed for this
+  bounded arithmetic change; prior limitations remain explicit.
 - Validation at `8092a195`, integrated atop downstream `55ffba4e9b`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including correction rereviews, are clean. Translate animation pre-apply
@@ -413,6 +422,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `04104ce23473313d181489440c98fb087b991b68` | Translate limit-centered rotation wrapping across the half turn, preserving f32 expression grouping and max/min clamp order. Port all three upstream rotation cases, including the new authored fixture and eight programmatic rows; consume the pinned fixture without fallback. Both reviews and focused runtime/IK validation pass; no assertion or tolerance weakened. Private editor metadata is not implementation evidence. | — |
 | `8092a195ec9cd456e5199164565adb88887f737a` | Translate finished-animation async continuation/pre-apply polling, current-file and foreign-bound VM pending checks, recursive hosted-artboard traversal and shared foreign-file identity guard. Preserve global pool completion order across the approved Rust per-VM decoder handoff queues. Move the three existing host tests to upstream's new test owner and add both new upstream cases plus a real cross-VM callback-order regression. File's immutable getter was already equivalent; standalone C++ player polling removal is unshipped. Guest held-outcome registry remains deferred. Both reviews, correction rereviews and applicable validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `84a3719f80a439ac5f3a7cc7bdc34b785544d5ac` | Guest AOT boot-time O3/O0 selection, synchronized caching, compiler/Windows support and removal of live tier transplantation remain deferred. Remove the exact obsolete deferred owner because upstream deletes its header/source; preserve historical provenance. No shared runtime/Luau/renderer changes or private editor implementation are claimed. Both reviews and inventory validation pass. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `f9d7e648a957e9683dc1d5ebe56b4f2311409a8f` | Account for the shared browser-image decoder extraction through the approved live Rust codec/work-pool adaptation, not as a deferred owner. Guest browser VM, typed calls, ABI/IDL, generated bridges, guarded File/decodedFile/command-server startup and guest harnesses remain deferred. No private editor implementation is claimed. Both reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

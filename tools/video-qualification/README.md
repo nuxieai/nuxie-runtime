@@ -39,9 +39,6 @@ once through the CPU path it replaced (Canvas2D bytes, premultiplied, then
 uploaded), and requires every channel of every pixel to agree within 3. The
 default source is the translucent `parity-alpha.webm`; `?video=parity-opaque.mp4`
 checks H.264. Both fixtures are asymmetric, so a flip cannot pass.
-`/endpoint.html` checks a 10fps final sample 100ms before the source endpoint:
-first scrub, coalesced repeated scrub, departure and return, and superseding
-an in-flight seek. It requires settled playback and actual blue decoded pixels.
 Append `?embedded=1` to exercise an MP4 embedded in the imported scene and
 resolved through a Blob URL. The page displays a pass/failure and submitted frame count. These are owned
 local fixture pages; no provider requests or credentials are involved. The
@@ -387,9 +384,8 @@ and `parity-opaque.mp4` with a maximum channel difference of 0 over five frames
 each, so colors, alpha and orientation match the earlier byte path exactly.
 Copying a WebCodecs VideoFrame or the video element directly instead failed
 this proof: Chrome's WebGPU import converts the BT.709 transfer curve, which
-brightens mid-tones by about 11 levels (gray 125 to 136). Every other browser
-proof passed on both renderers; `endpoint.html` timed out once and passed on
-three reruns. The 720p benchmarks passed at 29.29 fps (WebGPU, frame-work p50
+brightens mid-tones by about 11 levels (gray 125 to 136). The browser
+composition and synchronization proofs passed on both renderers. The 720p benchmarks passed at 29.29 fps (WebGPU, frame-work p50
 3.4 ms, p95 5.5 ms) and 29.03 fps (WebGL2, p50 7.4 ms, p95 8.3 ms); both
 timings still include the proof's own readback of the rendered target.
 

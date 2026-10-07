@@ -23,6 +23,8 @@ RENAMED_OWNERS = {
 # 845a82a9 extracts these implementations from existing Lua owners. The Rust
 # backend-neutral traits and native Luau implementation already own this code.
 ADAPTED_OWNERS = {
+    # Browser helper extraction uses the approved Rust decoder/work-pool owner.
+    "async/browser_image_decode": Path("crates/nuxie-scripting/src/vm/lua_image_decode.rs"),
     "lua/lua_asset_reference": Path("crates/nuxie-scripting/src/vm/lua_blob.rs"),
     "lua/lua_atoms": Path("crates/nuxie-scripting/src/vm.rs"),
     "lua/lua_script_backend": Path("crates/nuxie-scripting/src/vm.rs"),

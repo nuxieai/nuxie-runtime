@@ -618,12 +618,12 @@ pub(crate) fn capture_unchanged_native_write(property: &CoreHandle) {
                 Some(RuntimeViewModelChangeValue::Enum(u64::from(
                     value.base.property_value(),
                 )))
-            } else if let Some(value) = value.downcast_ref::<ViewModelInstanceString>() {
-                Some(RuntimeViewModelChangeValue::String(Arc::from(
-                    value.value().as_bytes(),
-                )))
             } else {
-                None
+                value
+                    .downcast_ref::<ViewModelInstanceString>()
+                    .map(|value| {
+                        RuntimeViewModelChangeValue::String(Arc::from(value.value().as_bytes()))
+                    })
             }
         })
         .flatten();

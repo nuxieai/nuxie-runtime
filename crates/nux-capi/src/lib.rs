@@ -4419,7 +4419,7 @@ fn player_step_body(
         policy.prepare_capture(capture);
     }
     let initial_groups_changed = match (policy, rule_operation.as_ref()) {
-        (Some(policy), Some(operation)) => match operation.borrow_mut().apply_groups(
+        (Some(policy), Some(operation)) => match operation.borrow_mut().apply_initial_groups(
             policy,
             &scene_view_model_roots,
             |_, _| Ok(()),
@@ -4617,7 +4617,31 @@ fn player_step_body(
             };
             roots.extend(retained_policy_scope);
             if let Some(policy) = policy {
+                let mut policy_cursor = 0;
                 loop {
+                    let pending = match rule_operation.as_ref() {
+                        Some(operation) => {
+                            operation
+                                .borrow()
+                                .needs_policy_pass(policy, &capture, policy_cursor)
+                        }
+                        None => capture
+                            .write_count()
+                            .map(|count| count != policy_cursor)
+                            .map_err(|_| nuxie::RuntimeValuePolicyError::LimitExceeded),
+                    };
+                    match pending {
+                        Ok(false) => break,
+                        Ok(true) => {}
+                        Err(error) => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(
+                                out_result,
+                                value_policy::status(error),
+                                "value policy capture exceeds its bound",
+                            );
+                        }
+                    }
                     let rules_changed = match rule_operation
                         .as_ref()
                         .map(|operation| operation.borrow_mut().apply(policy, &capture, &roots))
@@ -4630,6 +4654,17 @@ fn player_step_body(
                                 out_result,
                                 value_policy::status(error),
                                 "value rule pass failed",
+                            );
+                        }
+                    };
+                    policy_cursor = match capture.write_count() {
+                        Ok(count) => count,
+                        Err(_) => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(
+                                out_result,
+                                NuxStatus::LimitExceeded,
+                                "value policy capture exceeds its bound",
                             );
                         }
                     };
@@ -4854,9 +4889,6 @@ fn player_step_body(
     if let Some(transaction) = view_model_transaction.take() {
         transaction.commit();
     }
-    if let (Some(policy), Some(operation)) = (policy, rule_operation.as_ref()) {
-        operation.borrow_mut().commit_groups(policy);
-    }
     if let Some(next) = bound_view_model_generation_commit {
         for owner in &changed_view_model_owners {
             owner.mark_observable_mutation(next);
@@ -4878,6 +4910,9 @@ fn player_step_body(
                 .max()
                 .unwrap_or(0),
         );
+    }
+    if let (Some(policy), Some(operation)) = (policy, rule_operation.as_ref()) {
+        operation.borrow_mut().commit_groups(policy);
     }
     unsafe { (*pending.handle).scheduling.settled = runtime_settled };
     if runtime_dirty {
@@ -6129,6 +6164,9 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         else {
             return NuxStatus::LimitExceeded;
         };
+        if let Some(policy) = instance.view_model_catalog.value_policy.borrow().as_ref() {
+            policy.invalidate();
+        }
         artboard.bind_owned_view_model_handle(view_model.instance.clone());
         *bound_view_model = Some(view_model.instance.clone());
         instance

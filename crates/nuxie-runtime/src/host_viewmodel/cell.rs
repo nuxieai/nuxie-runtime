@@ -203,6 +203,19 @@ impl RuntimeViewModelChangeCapture {
         });
     }
 
+    /// Number of retained journal rows, without resolving owners or cloning values.
+    pub fn write_count(&self) -> Result<usize, RuntimeViewModelChangeLimitExceeded> {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            let slot = slot.borrow();
+            let state = slot.as_ref().ok_or(RuntimeViewModelChangeLimitExceeded)?;
+            if state.overflowed {
+                Err(RuntimeViewModelChangeLimitExceeded)
+            } else {
+                Ok(state.changes.len())
+            }
+        })
+    }
+
     pub(crate) fn snapshot(
         &self,
     ) -> Result<Vec<RuntimeViewModelCapturedChange>, RuntimeViewModelChangeLimitExceeded> {

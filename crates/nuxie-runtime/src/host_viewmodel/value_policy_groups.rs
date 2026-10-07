@@ -33,9 +33,31 @@ struct Member {
     message: usize,
 }
 
+pub(crate) struct SettledGroups {
+    revision: u64,
+    roots: Vec<(u64, u64)>,
+    refusals: BTreeMap<Key, Vec<usize>>,
+}
+
+fn root_revisions(roots: &[RuntimeOwnedViewModelHandle]) -> Vec<(u64, u64)> {
+    let mut keys = roots
+        .iter()
+        .map(|root| {
+            (
+                root.instance_identity(),
+                root.observable_mutation_generation(),
+            )
+        })
+        .collect::<Vec<_>>();
+    keys.sort_unstable();
+    keys.dedup();
+    keys
+}
+
 impl RuntimeValuePolicy {
     /// Replace the whole group table atomically. Install rules and markers
-    /// first. Each output list contains the active rules in installer order.
+    /// first. Outputs put latest refusals before kept-value failures, preserving
+    /// installed order within each partition and omitting duplicates.
     pub fn set_groups(
         &mut self,
         entries: &[RuntimeRuleGroup],
@@ -157,6 +179,7 @@ impl RuntimeValuePolicy {
             });
         }
         validate_inputs(&groups, &self.rules, &self.markers)?;
+        self.invalidate();
         self.groups = groups;
         self.group_refusals.borrow_mut().clear();
         Ok(())
@@ -270,6 +293,47 @@ impl RuntimeValuePolicyOperation {
         Ok(())
     }
 
+    /// Initialize outputs only when tables, roots, writes or refusals changed.
+    pub fn apply_initial_groups(
+        &mut self,
+        policy: &RuntimeValuePolicy,
+        roots: &[RuntimeOwnedViewModelHandle],
+        checkpoint: impl FnMut(
+            &RuntimeOwnedViewModelHandle,
+            usize,
+        ) -> Result<(), RuntimeValuePolicyError>,
+    ) -> Result<bool, RuntimeValuePolicyError> {
+        let current = root_revisions(roots);
+        let settled = policy.settled_groups.borrow();
+        let unchanged = settled.as_ref().is_some_and(|settled| {
+            settled.revision == policy.revision.get()
+                && settled.roots == current
+                && settled.refusals == self.group_refusals
+        });
+        drop(settled);
+        if unchanged {
+            self.groups_revision = policy.revision.get();
+            return Ok(false);
+        }
+        self.apply_groups(policy, roots, checkpoint)
+    }
+
+    /// Empty captures can still carry a script's already-processed refusal.
+    /// Retain that pending work while skipping genuinely quiet settling passes.
+    pub fn needs_policy_pass(
+        &self,
+        policy: &RuntimeValuePolicy,
+        capture: &RuntimeViewModelChangeCapture,
+        cursor: usize,
+    ) -> Result<bool, RuntimeValuePolicyError> {
+        Ok(capture
+            .write_count()
+            .map_err(|_| RuntimeValuePolicyError::LimitExceeded)?
+            != cursor
+            || self.pending_flush
+            || (policy.has_groups() && self.groups_revision != policy.revision.get()))
+    }
+
     /// Compute outputs from current native values and this operation's latest
     /// refusal. The caller checkpoints each target before the ordinary write.
     /// Repeat after binding updates until quiet, before publishing the journal.
@@ -285,6 +349,8 @@ impl RuntimeValuePolicyOperation {
         if !policy.has_groups() {
             return Ok(false);
         }
+        #[cfg(test)]
+        policy.passes.set(policy.passes.get().saturating_add(1));
         self.absorb_initial()?;
         self.retain(policy, roots)?;
         let mut probe = Self {
@@ -300,6 +366,8 @@ impl RuntimeValuePolicyOperation {
             value_reports: BTreeMap::new(),
             initial: Rc::clone(&self.initial),
             group_refusals: BTreeMap::new(),
+            group_roots: Vec::new(),
+            groups_revision: policy.revision.get(),
         };
         probe.retain(policy, &self.retained_roots())?;
         let mut occupied = BTreeSet::new();
@@ -318,27 +386,31 @@ impl RuntimeValuePolicyOperation {
                 for member in &group.members {
                     let key = (*id, member.property);
                     let mut errors = Vec::new();
+                    let refusals = self.group_refusals.get(&key);
+                    let mut failed = Vec::new();
+                    let mut refused = Vec::new();
                     for (index, rule) in policy.rules.iter().enumerate() {
                         if rule.model != group.model || rule.property != member.property {
                             continue;
                         }
                         let holds = probe.holds(policy, rule, key);
                         valid &= holds;
-                        if !holds
-                            || self
-                                .group_refusals
-                                .get(&key)
-                                .is_some_and(|indices| indices.contains(&index))
-                        {
-                            error_count = error_count.saturating_add(1);
-                            error_bytes = error_bytes
-                                .saturating_add(rule.entry.code.len())
-                                .saturating_add(rule.entry.message.len());
-                            if error_count > 4_096 || error_bytes > 8 * 1024 * 1024 {
-                                return Err(RuntimeValuePolicyError::LimitExceeded);
-                            }
-                            errors.push((&rule.entry.code, &rule.entry.message));
+                        if refusals.is_some_and(|indices| indices.contains(&index)) {
+                            refused.push(rule);
+                        } else if !holds {
+                            failed.push(rule);
                         }
+                    }
+                    // Refusal first; each partition preserves installed order.
+                    for rule in refused.into_iter().chain(failed) {
+                        error_count = error_count.saturating_add(1);
+                        error_bytes = error_bytes
+                            .saturating_add(rule.entry.code.len())
+                            .saturating_add(rule.entry.message.len());
+                        if error_count > 4_096 || error_bytes > 8 * 1024 * 1024 {
+                            return Err(RuntimeValuePolicyError::LimitExceeded);
+                        }
+                        errors.push((&rule.entry.code, &rule.entry.message));
                     }
                     let (index, parents) = member
                         .path
@@ -451,6 +523,7 @@ impl RuntimeValuePolicyOperation {
         }
         self.absorb_initial()?;
         self.retain(policy, roots)?;
+        self.groups_revision = policy.revision.get();
         Ok(changed)
     }
 
@@ -459,6 +532,11 @@ impl RuntimeValuePolicyOperation {
     pub fn commit_groups(&mut self, policy: &RuntimeValuePolicy) {
         if policy.has_groups() {
             *policy.group_refusals.borrow_mut() = std::mem::take(&mut self.group_refusals);
+            *policy.settled_groups.borrow_mut() = Some(SettledGroups {
+                revision: policy.revision.get(),
+                roots: root_revisions(&self.group_roots),
+                refusals: policy.group_refusals.borrow().clone(),
+            });
         }
     }
 }

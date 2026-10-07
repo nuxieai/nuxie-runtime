@@ -231,6 +231,26 @@ impl RuntimeValuePolicyOperation {
                 continue;
             }
             if !refused {
+                // Turning presence on is also the marker pass's derived write.
+                // It is not another accepted value write and cannot clear a
+                // later refusal. An explicit clear (false) still clears it.
+                let presence_only = self.value_reports.contains_key(&target)
+                    && self.group_refusals.contains_key(&target)
+                    && target.0 == key.0
+                    && policy.markers.iter().any(|pair| {
+                        pair.value == target.1
+                            && pair.marker == key.1
+                            && self.owners.get(&target.0).is_some_and(|owner| {
+                                owner.borrow().view_model_index() == pair.model
+                            })
+                    })
+                    && matches!(
+                        self.values.get(&key),
+                        Some(RuntimeViewModelChangeValue::Boolean(true))
+                    );
+                if presence_only {
+                    continue;
+                }
                 self.group_refusals.remove(&target);
             } else {
                 let indices = failures
@@ -393,13 +413,19 @@ impl RuntimeValuePolicyOperation {
                             .set_string_by_property_index(member.code, code.as_bytes());
                         item.borrow_mut()
                             .set_string_by_property_index(member.message, message.as_bytes());
-                        let mut native_item = ViewModelInstanceListItem::default();
-                        native_item.set_view_model_instance(Some(item.native_handle()));
-                        replacement.push(
-                            policy
-                                .file
-                                .with_file(|file| file.core_arena().insert(native_item)),
-                        );
+                        let native_item = policy
+                            .file
+                            .with_file_mut(|file| {
+                                file.view_model_instance_list_item(item.native_handle())
+                            })
+                            .unwrap_or_else(|| {
+                                let mut native_item = ViewModelInstanceListItem::default();
+                                native_item.set_view_model_instance(Some(item.native_handle()));
+                                policy
+                                    .file
+                                    .with_file(|file| file.core_arena().insert(native_item))
+                            });
+                        replacement.push(native_item);
                     }
                     property
                         .with_downcast_mut::<ViewModelInstanceList, _>(|list| {

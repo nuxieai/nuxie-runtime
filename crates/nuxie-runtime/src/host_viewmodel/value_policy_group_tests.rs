@@ -74,8 +74,9 @@ fn run(
     let mut settled = false;
     for _ in 0..16 {
         let rules = operation.apply(policy, &capture, roots).unwrap();
+        let retained = operation.retained_roots();
         let markers = policy
-            .apply_markers(&capture, roots, |owner, index, value| {
+            .apply_markers(&capture, &retained, |owner, index, value| {
                 Ok(owner
                     .borrow_mut()
                     .set_boolean_by_property_index(index, value))
@@ -184,6 +185,31 @@ fn kept_validity_ordered_errors_and_latest_refusal() {
             true,
         );
         assert_eq!(errors(&root, "n_errors"), expected(&["required"]));
+        use crate::mechanical_port::source::{
+            artboard::Artboard,
+            viewmodel::{
+                viewmodel_instance_list::ViewModelInstanceList,
+                viewmodel_instance_list_item::ViewModelInstanceListItem,
+            },
+        };
+        let list = root.borrow().property_by_path(&[10]).unwrap();
+        let item = list
+            .with_downcast::<ViewModelInstanceList, _>(|list| list.list_items()[0].clone())
+            .unwrap();
+        let artboard = item
+            .with_downcast::<ViewModelInstanceListItem, _>(ViewModelInstanceListItem::artboard)
+            .flatten();
+        assert!(
+            artboard.is_some(),
+            "generated error row uses the authored matching artboard"
+        );
+        assert_eq!(
+            artboard
+                .unwrap()
+                .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id()),
+            Some(2)
+        );
+
         assert_eq!(
             root.borrow().boolean_value_by_property_name("valid"),
             Some(false)
@@ -200,6 +226,11 @@ fn kept_validity_ordered_errors_and_latest_refusal() {
         assert_eq!(
             root.borrow().boolean_value_by_property_name("valid"),
             Some(true)
+        );
+        assert_eq!(
+            errors(&root, "n_errors"),
+            expected(&["max"]),
+            "derived marker cannot erase the newest refusal"
         );
         run(
             &policy,
@@ -365,5 +396,69 @@ fn kept_validity_ordered_errors_and_latest_refusal() {
             .instance_identity(),
         text_errors[0].instance_identity(),
         "another group's write does not replace this list"
+    );
+}
+
+#[test]
+#[ignore = "Unchanged native write visibility needs a compiler contract or port exception; question pending"]
+fn native_unchanged_acceptance_requires_an_observable_write() {
+    use crate::mechanical_port::source::viewmodel::viewmodel_instance_number::ViewModelInstanceNumber;
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    let roots = std::slice::from_ref(&root);
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_rules(&[entry(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+            "max",
+        )])
+        .unwrap();
+    let mut group = table();
+    group.members.truncate(1);
+    policy.set_groups(&[group]).unwrap();
+    run(
+        &policy,
+        roots,
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 300.0);
+        },
+        true,
+    );
+    run(
+        &policy,
+        roots,
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 400.0);
+        },
+        true,
+    );
+    assert_eq!(errors(&root, "n_errors"), expected(&["max"]));
+    run(
+        &policy,
+        roots,
+        || {
+            root.borrow()
+                .property_by_path(&[0])
+                .unwrap()
+                .with_downcast_mut::<ViewModelInstanceNumber, _>(|number| number.set_value(300.0))
+                .unwrap();
+        },
+        true,
+    );
+    assert!(
+        errors(&root, "n_errors").is_empty(),
+        "accepted unchanged native write should clear latest refusal"
     );
 }

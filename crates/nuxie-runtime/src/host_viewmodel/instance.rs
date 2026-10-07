@@ -634,6 +634,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         if previous == value {
+            super::capture_unchanged_native_write(&property);
             return false;
         }
         mutate(|| ViewModelInstanceNumber::set_value_handle(&property, value))
@@ -700,6 +701,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         if previous == value {
+            super::capture_unchanged_native_write(&property);
             return false;
         }
         mutate(|| {
@@ -769,6 +771,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         if previous == value {
+            super::capture_unchanged_native_write(&property);
             return false;
         }
         mutate(|| {
@@ -838,6 +841,7 @@ impl RuntimeOwnedViewModelInstance {
             return false;
         };
         if previous == value {
+            super::capture_unchanged_native_write(&property);
             return false;
         }
         mutate(|| {

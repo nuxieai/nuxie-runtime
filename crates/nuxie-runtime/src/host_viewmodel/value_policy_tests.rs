@@ -1143,3 +1143,57 @@ fn implicit_marker_after_accepted_then_refused_write_settles() {
     );
     checkpoint.commit();
 }
+#[test]
+fn implicit_marker_does_not_repeat_a_kept_breach_after_refusal() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    policy
+        .set_rules(&[
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMinimum(10.0),
+                RuntimeValueRuleMode::Mark,
+            ),
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMaximum(365.0),
+                RuntimeValueRuleMode::Refuse,
+            ),
+        ])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(roots).unwrap();
+    root.borrow_mut().set_number_by_property_name("n", 5.0);
+    root.borrow_mut().set_number_by_property_name("n", 400.0);
+    let mut settled = false;
+    for _ in 0..16 {
+        let rules = operation.apply(&policy, &capture, roots).unwrap();
+        let markers = policy
+            .apply_markers(&capture, roots, |owner, index, value| {
+                Ok(owner
+                    .borrow_mut()
+                    .set_boolean_by_property_index(index, value))
+            })
+            .unwrap();
+        if !rules && !markers {
+            settled = true;
+            break;
+        }
+    }
+    assert!(settled);
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(5.0));
+    assert_eq!(
+        operation
+            .reports()
+            .iter()
+            .map(|report| (report.rule_index, report.refused))
+            .collect::<Vec<_>>(),
+        vec![(0, false), (1, true)],
+        "one marking breach and one refused attempt, without a duplicate from the implicit marker"
+    );
+    drop(capture);
+    checkpoint.commit();
+}

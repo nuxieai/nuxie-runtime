@@ -1044,7 +1044,6 @@ fn host_created_owner_uses_its_value_before_the_first_write() {
 }
 
 #[test]
-#[ignore = "Native creation checkpoint needs a port exception or compiler contract; project question pending"]
 fn native_created_owner_needs_a_checkpoint_before_its_first_write() {
     use crate::mechanical_port::source::viewmodel::{
         viewmodel_instance::ViewModelInstance, viewmodel_instance_number::ViewModelInstanceNumber,
@@ -1080,7 +1079,9 @@ fn native_created_owner_needs_a_checkpoint_before_its_first_write() {
         .unwrap();
     assert_eq!(
         created.borrow().number_value_by_property_name("n"),
-        Some(0.0)
+        // No host checkpoint exists before this native write. The compiler
+        // rejects ruled form models used as component-owned or list-row models.
+        Some(400.0)
     );
     checkpoint.commit();
 }
@@ -1193,6 +1194,103 @@ fn implicit_marker_does_not_repeat_a_kept_breach_after_refusal() {
             .collect::<Vec<_>>(),
         vec![(0, false), (1, true)],
         "one marking breach and one refused attempt, without a duplicate from the implicit marker"
+    );
+    drop(capture);
+    checkpoint.commit();
+}
+
+#[test]
+fn checked_scalar_core_without_lua() {
+    use crate::{RuntimeCheckedValueInput, runtime_checked_value_write};
+    let (mut policy, root, _file, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    let mut low = installed_rule(
+        "n",
+        RuntimeValueRuleKind::NumberMinimum(10.0),
+        RuntimeValueRuleMode::Mark,
+    );
+    low.code = "low".into();
+    let mut high = installed_rule(
+        "n",
+        RuntimeValueRuleKind::NumberMaximum(365.0),
+        RuntimeValueRuleMode::Refuse,
+    );
+    high.code = "high".into();
+    policy.set_rules(&[low, high]).unwrap();
+    let roots = [(String::new(), root.clone())].into();
+    assert_eq!(
+        runtime_checked_value_write(
+            &policy,
+            None,
+            &roots,
+            "",
+            "n",
+            RuntimeCheckedValueInput::Number(400.0)
+        ),
+        Err(RuntimeValuePolicyError::InvalidArgument)
+    );
+    let owners = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(owners, 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(owners).unwrap();
+    for (value, applied, code, kept) in [
+        (5.0, true, Some("low"), 5.0),
+        (400.0, false, Some("high"), 5.0),
+        (20.0, true, None, 20.0),
+    ] {
+        assert_eq!(
+            runtime_checked_value_write(
+                &policy,
+                Some(&mut operation),
+                &roots,
+                "",
+                "n",
+                RuntimeCheckedValueInput::Number(value)
+            )
+            .unwrap(),
+            (applied, code.map(str::to_owned))
+        );
+        assert_eq!(root.borrow().number_value_by_property_name("n"), Some(kept));
+    }
+    assert_eq!(
+        runtime_checked_value_write(
+            &policy,
+            Some(&mut operation),
+            &roots,
+            "",
+            "n",
+            RuntimeCheckedValueInput::Clear
+        )
+        .unwrap(),
+        (true, None)
+    );
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(false)
+    );
+    assert_eq!(
+        runtime_checked_value_write(
+            &policy,
+            Some(&mut operation),
+            &roots,
+            "missing",
+            "n",
+            RuntimeCheckedValueInput::Number(1.0)
+        ),
+        Err(RuntimeValuePolicyError::NotFound)
+    );
+    assert_eq!(
+        runtime_checked_value_write(
+            &policy,
+            Some(&mut operation),
+            &roots,
+            "",
+            "n",
+            RuntimeCheckedValueInput::Boolean(true)
+        ),
+        Err(RuntimeValuePolicyError::InvalidArgument)
     );
     drop(capture);
     checkpoint.commit();

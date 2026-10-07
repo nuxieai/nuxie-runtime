@@ -119,12 +119,14 @@ pub fn fixture(listener: bool) -> Vec<u8> {
         uint(b, "ViewModelInstance", "viewModelId", 2);
     });
     object(&mut bytes, "Artboard", |b| {
+        string(b, "Artboard", "name", "GlobalValuesRow");
         uint(b, "Artboard", "viewModelId", 2);
         float(b, "Artboard", "width", 60.0);
         float(b, "Artboard", "height", 30.0);
     });
     label(&mut bytes);
     object(&mut bytes, "Artboard", |b| {
+        string(b, "Artboard", "name", "GlobalValuesScreen");
         uint(b, "Artboard", "viewModelId", 1);
         float(b, "Artboard", "width", 400.0);
         float(b, "Artboard", "height", 100.0);

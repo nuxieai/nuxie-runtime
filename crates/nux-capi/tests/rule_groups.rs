@@ -516,3 +516,30 @@ fn listener_initial_value_pair_retains_latest_refusal_and_settles() {
     drop(state);
     assert_eq!(h.step().view_model_change_count, 0);
 }
+#[test]
+fn empty_group_is_valid_and_removal_stops_computation() {
+    let h = Handles::new();
+    let group = NuxRuleGroup {
+        model: view("First"),
+        valid: view("valid"),
+        members: ptr::null(),
+        member_count: 0,
+    };
+    // Every rule holds when the group has no members. No rule/marker table
+    // is needed, and the first step must initialize the computed boolean.
+    assert_eq!(
+        unsafe { nux_file_set_rule_groups(h.file, &group, 1) },
+        NuxStatus::Ok
+    );
+    h.step();
+    assert!(Snapshot::new(h.first).valid());
+    assert_eq!(h.step().view_model_change_count, 0);
+    h.mutate(&[h.boolean("valid", false)]);
+    assert!(Snapshot::new(h.first).valid());
+    assert_eq!(
+        unsafe { nux_file_set_rule_groups(h.file, ptr::null(), 0) },
+        NuxStatus::Ok
+    );
+    h.mutate(&[h.boolean("valid", false)]);
+    assert!(!Snapshot::new(h.first).valid());
+}

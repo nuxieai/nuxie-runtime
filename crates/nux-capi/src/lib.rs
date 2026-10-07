@@ -15,8 +15,10 @@ pub use video::*;
 pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
+mod player_globals;
 mod player_view_models;
 pub use layout_size::*;
+pub use player_globals::*;
 mod render_callbacks;
 
 pub use asset_catalog::*;
@@ -804,6 +806,7 @@ impl Drop for ScriptEffectTransaction {
 /// Product-neutral selected player. This surface establishes selection,
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
+    global_view_models: RefCell<std::collections::BTreeMap<usize, RuntimeOwnedViewModelHandle>>,
     video_occurrences: RefCell<video::VideoOccurrences>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
@@ -3152,6 +3155,7 @@ fn publish_player(
 ) -> NuxStatus {
     unsafe {
         let handle = Box::into_raw(Box::new(NuxPlayer {
+            global_view_models: RefCell::new(std::collections::BTreeMap::new()),
             video_occurrences: RefCell::new(video::VideoOccurrences::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
@@ -5901,6 +5905,8 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
 mod event_source_tests;
 #[cfg(test)]
 mod focus_input_tests;
+#[cfg(test)]
+mod player_globals_tests;
 
 #[cfg(test)]
 mod firewall_tests {

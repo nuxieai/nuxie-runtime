@@ -127,3 +127,50 @@ fn marker_install_respects_thread_and_operation_borrow() {
         nux_file_free(file);
     }
 }
+
+#[test]
+fn rule_and_group_install_respect_thread_and_operation_borrow() {
+    unsafe {
+        let bytes = fixture::fixture(None, &[], false);
+        let mut file = ptr::null_mut();
+        assert_eq!(
+            nux_file_import(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file
+            ),
+            NuxStatus::Ok
+        );
+        let address = file as usize;
+        let statuses = std::thread::spawn(move || {
+            (
+                nux_file_set_value_rules(address as *mut NuxFile, ptr::null(), 0),
+                nux_file_set_rule_groups(address as *mut NuxFile, ptr::null(), 0),
+            )
+        })
+        .join()
+        .unwrap();
+        assert_eq!(statuses, (NuxStatus::WrongThread, NuxStatus::WrongThread));
+        let catalog = &(*file).view_model_catalog;
+        let operation = catalog.value_policy.borrow();
+        assert_eq!(
+            nux_file_set_value_rules(file, ptr::null(), 0),
+            NuxStatus::ReentrantCall
+        );
+        assert_eq!(
+            nux_file_set_rule_groups(file, ptr::null(), 0),
+            NuxStatus::ReentrantCall
+        );
+        drop(operation);
+        assert_eq!(
+            nux_file_set_value_rules(file, ptr::null(), 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_file_set_rule_groups(file, ptr::null(), 0),
+            NuxStatus::Ok
+        );
+        nux_file_free(file);
+    }
+}

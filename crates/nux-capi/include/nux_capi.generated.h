@@ -987,6 +987,8 @@ typedef struct NuxRuleGroupMember {
 
 /**
  * A model's computed boolean and ordered error lists. All strings are copied.
+ * These descriptors have no struct_size; pass their complete current layouts.
+ * Entries, members and strings are borrowed only until the installer returns.
  */
 typedef struct NuxRuleGroup {
   struct NuxStringView model;
@@ -1011,6 +1013,12 @@ typedef struct NuxValueMarker {
  * pattern; values by allowed-values; picked_property by picked-count.
  * Count and length bounds use bound_flags to select minimum/maximum.
  * Unused operands must be zero or empty. code and message are caller-authored.
+ * Numeric bounds require numbers; text bounds, length, pattern, URL and DATE
+ * require strings; allowed-values accepts strings or enums; item/picked counts
+ * require lists (picked_property names a boolean); required accepts number,
+ * boolean, color, enum, string or list. This descriptor has no struct_size;
+ * pass the current complete layout. Arrays and strings are borrowed only until
+ * the installer returns and may then be released.
  */
 typedef struct NuxValueRule {
   struct NuxStringView model;
@@ -2332,6 +2340,13 @@ NuxStatus nux_file_import_with_video_capabilities(const uint8_t *bytes,
  * write clears that refusal. The computed boolean depends only on kept values.
  * Writes to outputs are corrected in the same operation; quiet outputs emit
  * no rows. Replacing groups or rules clears retained refusal history.
+ * NULL file/nonempty NULL array returns NULL_ARGUMENT; wrong handle kind returns
+ * HANDLE_MISMATCH; wrong thread returns WRONG_THREAD; active call/policy borrow
+ * returns REENTRANT_CALL. Missing names return NOT_FOUND; invalid UTF-8, kinds
+ * or conflicting outputs return INVALID_ARGUMENT; count/byte overflow returns
+ * LIMIT_EXCEEDED. Unexpected failures return RUNTIME_ERROR. Failure preserves
+ * the installed table. The valid output must be boolean; errors_path must name
+ * a list whose item_model has the named string code/message properties.
  */
 NuxStatus nux_file_set_rule_groups(struct NuxFile *file,
                                    const struct NuxRuleGroup *entries,
@@ -2356,6 +2371,12 @@ NuxStatus nux_file_set_value_markers(struct NuxFile *file,
  * Use nux_file_set_value_rules_with_result to read an invalid pattern's code.
  * Existing values never cause install failure or emit operation reports.
  * Marker tables remain installed. Only explicitly named properties have rules.
+ * Returns NULL_ARGUMENT for a NULL file or nonempty NULL input, HANDLE_MISMATCH
+ * for a wrong handle kind, WRONG_THREAD off the owning thread, REENTRANT_CALL
+ * during an active call or policy borrow, NOT_FOUND for absent model/property,
+ * INVALID_ARGUMENT for invalid UTF-8, types, operands or patterns, and
+ * LIMIT_EXCEEDED above 4096 rules/allowed values or 8 MiB of copied input.
+ * Unexpected failures return RUNTIME_ERROR. Failed replacement keeps the table.
  */
 NuxStatus nux_file_set_value_rules(struct NuxFile *file,
                                    const struct NuxValueRule *entries,
@@ -2630,6 +2651,13 @@ NuxStatus nux_player_step_result_pointer(const struct NuxPlayerStepResult *resul
 
 /**
  * Read a rule report from a successful step, in attempted-write order.
+ * NULL result/output returns NULL_ARGUMENT; wrong handle kind returns
+ * HANDLE_MISMATCH; wrong thread returns WRONG_THREAD; active access returns
+ * REENTRANT_CALL. A failed result returns its operation status. An absent index
+ * returns NOT_FOUND. Initialize out.struct_size to sizeof(NuxValueRuleReportView);
+ * a smaller buffer returns INVALID_STRUCT_SIZE. A larger buffer's tail is left
+ * untouched. The nested attempted view is output, not a second input size.
+ * Borrowed text bytes and retained list identities live until result free.
  */
 NuxStatus nux_player_step_result_rule_report(const struct NuxPlayerStepResult *result,
                                              size_t index,
@@ -2637,6 +2665,11 @@ NuxStatus nux_player_step_result_rule_report(const struct NuxPlayerStepResult *r
 
 /**
  * Read one attempted list member's identity from a rule report.
+ * NULL output returns NULL_ARGUMENT; otherwise it is cleared before validation.
+ * Handle/thread/reentry and failed-result statuses match the report getter.
+ * Missing report/item returns NOT_FOUND; a non-list report returns
+ * INVALID_ARGUMENT. The returned identity belongs to the result's retained
+ * attempted list and is available until result free.
  */
 NuxStatus nux_player_step_result_rule_report_list_item(const struct NuxPlayerStepResult *result,
                                                        size_t report_index,
@@ -3341,6 +3374,13 @@ NuxStatus nux_view_model_mutation_result_info(const struct NuxViewModelMutationR
 
 /**
  * Read a rule report; refusing writes are excluded from applied_count.
+ * NULL result/output returns NULL_ARGUMENT; wrong handle kind returns
+ * HANDLE_MISMATCH; wrong thread returns WRONG_THREAD; active access returns
+ * REENTRANT_CALL. A failed result returns its operation status. An absent index
+ * returns NOT_FOUND. Initialize out.struct_size to sizeof(NuxValueRuleReportView);
+ * a smaller buffer returns INVALID_STRUCT_SIZE. A larger buffer's tail is left
+ * untouched. The nested attempted view is output, not a second input size.
+ * Borrowed text bytes and retained list identities live until result free.
  */
 NuxStatus nux_view_model_mutation_result_rule_report(const struct NuxViewModelMutationResult *result,
                                                      size_t index,
@@ -3348,6 +3388,11 @@ NuxStatus nux_view_model_mutation_result_rule_report(const struct NuxViewModelMu
 
 /**
  * Read one attempted list member's identity from a rule report.
+ * NULL output returns NULL_ARGUMENT; otherwise it is cleared before validation.
+ * Handle/thread/reentry and failed-result statuses match the report getter.
+ * Missing report/item returns NOT_FOUND; a non-list report returns
+ * INVALID_ARGUMENT. The returned identity belongs to the result's retained
+ * attempted list and is available until result free.
  */
 NuxStatus nux_view_model_mutation_result_rule_report_list_item(const struct NuxViewModelMutationResult *result,
                                                                size_t report_index,

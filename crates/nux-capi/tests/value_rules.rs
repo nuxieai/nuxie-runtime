@@ -1446,3 +1446,160 @@ fn file_value_rules_module_runs_without_host_tables() {
     assert_eq!(info.rule_report_count, 0);
     assert_number(&handles, 37.0);
 }
+
+// Both result families must expose the same caller-buffer and handle errors.
+fn assert_report_errors(address: usize, step: bool, wrong_kind: usize) {
+    let report = move |address: usize, index, out| unsafe {
+        if step {
+            nux_player_step_result_rule_report(address as *const _, index, out)
+        } else {
+            nux_view_model_mutation_result_rule_report(address as *const _, index, out)
+        }
+    };
+    let item = move |address: usize, index, out| unsafe {
+        if step {
+            nux_player_step_result_rule_report_list_item(address as *const _, index, 0, out)
+        } else {
+            nux_view_model_mutation_result_rule_report_list_item(address as *const _, index, 0, out)
+        }
+    };
+    let mut row = NuxValueRuleReportView::default();
+    let mut identity = 99;
+    assert_eq!(report(0, 0, &mut row), NuxStatus::NullArgument);
+    assert_eq!(item(0, 0, &mut identity), NuxStatus::NullArgument);
+    assert_eq!(identity, 0);
+    assert_eq!(report(wrong_kind, 0, &mut row), NuxStatus::HandleMismatch);
+    assert_eq!(
+        item(wrong_kind, 0, &mut identity),
+        NuxStatus::HandleMismatch
+    );
+    assert_eq!(report(address, 0, ptr::null_mut()), NuxStatus::NullArgument);
+    assert_eq!(item(address, 0, ptr::null_mut()), NuxStatus::NullArgument);
+    assert_eq!(report(address, usize::MAX, &mut row), NuxStatus::NotFound);
+    assert_eq!(
+        item(address, usize::MAX, &mut identity),
+        NuxStatus::NotFound
+    );
+    assert_eq!(item(address, 0, &mut identity), NuxStatus::InvalidArgument);
+    row.struct_size = 0;
+    assert_eq!(report(address, 0, &mut row), NuxStatus::InvalidStructSize);
+    row.struct_size = (std::mem::size_of::<NuxValueRuleReportView>() - 1) as u32;
+    assert_eq!(report(address, 0, &mut row), NuxStatus::InvalidStructSize);
+    row = NuxValueRuleReportView::default();
+    assert_eq!(report(address, 0, &mut row), NuxStatus::Ok);
+    let statuses = std::thread::spawn(move || {
+        let mut row = NuxValueRuleReportView::default();
+        let mut identity = 99;
+        (
+            report(address, 0, &mut row),
+            item(address, 0, &mut identity),
+        )
+    })
+    .join()
+    .unwrap();
+    assert_eq!(statuses, (NuxStatus::WrongThread, NuxStatus::WrongThread));
+}
+
+#[test]
+fn report_getters_reject_invalid_handles_buffers_and_indices() {
+    let bytes = fixture::fixture(None, &[fixture::Action::Number(400.0)], false);
+    let mut file = ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_file_import(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file,
+            )
+        },
+        NuxStatus::Ok
+    );
+    let h = handles_from_file(file);
+    let mut maximum = rule("n", NUX_VALUE_RULE_NUMBER_MAXIMUM, NUX_VALUE_RULE_REFUSE);
+    maximum.number_bound = 365.0;
+    assert_eq!(h.install(&[maximum]), NuxStatus::Ok);
+    let mutation = h.mutate(&[h.write("n", 400.0)]);
+    assert_report_errors(mutation as usize, false, file as usize);
+    unsafe {
+        nux_view_model_mutation_result_free(mutation);
+    }
+    let player = Player::new(&h);
+    let (initial, _) = player.step(false);
+    unsafe {
+        nux_player_step_result_free(initial);
+    }
+    let (result, info) = player.step(true);
+    assert_eq!(info.rule_report_count, 1);
+    assert_report_errors(result as usize, true, file as usize);
+    unsafe {
+        nux_player_step_result_free(result);
+    }
+}
+
+#[test]
+fn rule_install_rejects_bad_inputs_without_replacing_the_table() {
+    let h = Handles::new();
+    let mut maximum = rule("n", NUX_VALUE_RULE_NUMBER_MAXIMUM, NUX_VALUE_RULE_REFUSE);
+    maximum.number_bound = 365.0;
+    assert_eq!(h.install(&[maximum]), NuxStatus::Ok);
+    unsafe {
+        assert_eq!(
+            nux_file_set_value_rules(ptr::null_mut(), ptr::null(), 0),
+            NuxStatus::NullArgument
+        );
+        assert_eq!(
+            nux_file_set_value_rules(h.value.cast(), ptr::null(), 0),
+            NuxStatus::HandleMismatch
+        );
+        assert_eq!(
+            nux_file_set_value_rules(h.file, ptr::null(), 1),
+            NuxStatus::NullArgument
+        );
+        assert_eq!(
+            nux_file_set_value_rules(h.file, ptr::null(), 4097),
+            NuxStatus::LimitExceeded
+        );
+    }
+    for entry in [
+        NuxValueRule {
+            mode: 99,
+            ..maximum
+        },
+        NuxValueRule {
+            kind: 99,
+            ..maximum
+        },
+        NuxValueRule {
+            bound_flags: 4,
+            ..maximum
+        },
+        NuxValueRule {
+            model: view("Missing"),
+            ..maximum
+        },
+        NuxValueRule {
+            property: view("b"),
+            ..maximum
+        },
+        NuxValueRule {
+            model: NuxStringView {
+                data: ptr::null(),
+                len: 1,
+            },
+            ..maximum
+        },
+    ] {
+        let status = h.install(&[entry]);
+        assert!(matches!(
+            status,
+            NuxStatus::InvalidArgument | NuxStatus::NullArgument | NuxStatus::NotFound
+        ));
+        let result = h.mutate(&[h.write("n", 400.0)]);
+        assert_eq!(result_info(result).applied_count, 0);
+        assert_eq!(result_info(result).rule_report_count, 1);
+        unsafe {
+            nux_view_model_mutation_result_free(result);
+        }
+    }
+}

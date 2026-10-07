@@ -91,6 +91,11 @@
  *    imports without a command module install no checked-write module.
  *    An accepted set returns true and no code, including a marking breach.
  *    A refused set returns false and the refusing rule's code.
+ *    root is an empty string for the bound root or an explicitly set global's
+ *    schema name; path is a slash-separated property path. The value must be a
+ *    matching scalar or nil (clear). Invalid roots, paths, types, unavailable
+ *    step context or exceeded limits raise a script error, not a refusal.
+ *    Arguments are consumed synchronously; no caller bytes are retained.
  *    Ordinary nux_file_import remains script-inert.
  *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,
  *    caller-asserted trust boundary for exporter-authored WGSL. It performs no

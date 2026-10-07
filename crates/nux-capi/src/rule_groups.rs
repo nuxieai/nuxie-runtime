@@ -13,6 +13,8 @@ pub struct NuxRuleGroupMember {
 }
 
 /// A model's computed boolean and ordered error lists. All strings are copied.
+/// These descriptors have no struct_size; pass their complete current layouts.
+/// Entries, members and strings are borrowed only until the installer returns.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct NuxRuleGroup {
@@ -41,6 +43,13 @@ fn copied(view: NuxStringView, bytes: &mut usize) -> Result<String, NuxStatus> {
 /// write clears that refusal. The computed boolean depends only on kept values.
 /// Writes to outputs are corrected in the same operation; quiet outputs emit
 /// no rows. Replacing groups or rules clears retained refusal history.
+/// NULL file/nonempty NULL array returns NULL_ARGUMENT; wrong handle kind returns
+/// HANDLE_MISMATCH; wrong thread returns WRONG_THREAD; active call/policy borrow
+/// returns REENTRANT_CALL. Missing names return NOT_FOUND; invalid UTF-8, kinds
+/// or conflicting outputs return INVALID_ARGUMENT; count/byte overflow returns
+/// LIMIT_EXCEEDED. Unexpected failures return RUNTIME_ERROR. Failure preserves
+/// the installed table. The valid output must be boolean; errors_path must name
+/// a list whose item_model has the named string code/message properties.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_file_set_rule_groups(
     file: *mut NuxFile,

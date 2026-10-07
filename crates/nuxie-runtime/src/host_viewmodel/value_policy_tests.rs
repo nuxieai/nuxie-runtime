@@ -923,3 +923,69 @@ fn value_and_its_marker_report_a_marking_breach_once() {
         checkpoint.commit();
     }
 }
+
+#[test]
+fn split_count_bounds_reject_an_empty_interval_atomically() {
+    use RuntimeValueRuleKind::{ItemCount, Length, PickedCount};
+    let (mut policy, _root, _file, _factory) = setup();
+    let original = installed_rule(
+        "n",
+        RuntimeValueRuleKind::NumberMinimum(10.0),
+        RuntimeValueRuleMode::Mark,
+    );
+    policy.set_rules(&[original]).unwrap();
+    for (model, property, lower, upper) in [
+        (
+            "Values",
+            "text",
+            Length {
+                minimum: 3,
+                maximum: usize::MAX,
+            },
+            Length {
+                minimum: 0,
+                maximum: 2,
+            },
+        ),
+        (
+            "Container",
+            "rows",
+            ItemCount {
+                minimum: 3,
+                maximum: usize::MAX,
+            },
+            ItemCount {
+                minimum: 0,
+                maximum: 2,
+            },
+        ),
+        (
+            "Container",
+            "rows",
+            PickedCount {
+                property: "b".into(),
+                minimum: 3,
+                maximum: usize::MAX,
+            },
+            PickedCount {
+                property: "b".into(),
+                minimum: 0,
+                maximum: 2,
+            },
+        ),
+    ] {
+        let mut lower = installed_rule(property, lower, RuntimeValueRuleMode::Mark);
+        lower.model = model.into();
+        let mut upper = installed_rule(property, upper, RuntimeValueRuleMode::Refuse);
+        upper.model = model.into();
+        // No count can be both at least three and at most two, regardless
+        // of whether those bounds occupy one entry or separate entries.
+        assert_eq!(
+            policy.set_rules(&[lower, upper]),
+            Err(RuntimeValuePolicyError::InvalidArgument),
+            "{model}.{property}"
+        );
+        assert_eq!(policy.rule(0).unwrap().property, "n");
+        assert!(policy.rule(1).is_none());
+    }
+}

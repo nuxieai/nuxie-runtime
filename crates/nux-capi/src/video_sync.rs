@@ -309,17 +309,16 @@ pub unsafe extern "C" fn nux_player_video_report_clock(
                         playing: sample.playing == 1,
                     })
                 };
-                let before = video.with_downcast::<nuxie::video::Video, _>(|v| {
-                    v.property_number(nuxie::video::properties::POSITION)
-                });
-                let result =
-                    nuxie::video::sync::report_media_clock(video, monotonic_seconds, sample);
+                let result = nuxie::video::sync::report_media_clock_with_changes(
+                    video,
+                    monotonic_seconds,
+                    sample,
+                );
                 // Independent groups may correct successfully before another
                 // group reports an error. Preserve scheduling for those commands.
-                let after = video.with_downcast::<nuxie::video::Video, _>(|v| {
-                    v.property_number(nuxie::video::properties::POSITION)
-                });
-                if before != after || !matches!(result, Ok(false)) {
+                if result.as_ref().map_or(true, |report| {
+                    report.corrected || report.properties_dirtied
+                }) {
                     occurrence.commit_runtime_change(true)?;
                 }
                 result.map(|_| ()).map_err(sync_status)

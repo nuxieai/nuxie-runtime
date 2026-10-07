@@ -1704,3 +1704,63 @@ fn android_hardware_buffer_frames_validate_before_importing() {
         nux_renderer_android_vulkan_free(other);
     }
 }
+
+#[test]
+fn an_unbound_video_clock_does_not_change_render_revision() {
+    unsafe extern "C" fn action(_: *mut c_void, _: *const NuxVideoAction) {}
+    unsafe fn revision(player: *mut NuxPlayer) -> u64 {
+        let mut result = ptr::null_mut();
+        let mut scheduling = NuxPlayerSchedulingInfo::default();
+        unsafe {
+            assert_eq!(
+                nux_player_step(player, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut scheduling),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+        }
+        scheduling.render_revision
+    }
+    unsafe {
+        let bytes = scene_with_readiness(0);
+        let (mut file, mut artboard, mut player) =
+            (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        assert_eq!(
+            import_video(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file,
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_video_step(player, 1, 1, 0, 12.5, Some(action), ptr::null_mut()),
+            NuxStatus::Ok
+        );
+        let before = revision(player);
+        let sample = NuxVideoClockSample {
+            generation: 0,
+            seconds: 3.2,
+            rate: 1.0,
+            playing: 1,
+            available: 1,
+        };
+        assert_eq!(
+            nux_player_video_report_clock(player, 1, 1.0, &sample),
+            NuxStatus::Ok
+        );
+        assert_eq!(revision(player), before);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
+}

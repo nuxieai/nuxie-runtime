@@ -516,6 +516,20 @@ pub fn report_media_clock(
     now: f64,
     sample: Option<MediaClock>,
 ) -> Result<bool, SyncError> {
+    report_media_clock_with_changes(member, now, sample).map(|report| report.corrected)
+}
+
+/// Work published by a native clock sample, separate from the sample itself.
+pub struct MediaClockReport {
+    pub corrected: bool,
+    pub properties_dirtied: bool,
+}
+
+pub fn report_media_clock_with_changes(
+    member: &CoreHandle,
+    now: f64,
+    sample: Option<MediaClock>,
+) -> Result<MediaClockReport, SyncError> {
     if !now.is_finite() || now < 0.0 {
         return Err(SyncError::InvalidTime);
     }
@@ -547,7 +561,7 @@ pub fn report_media_clock(
                 .collect::<Vec<_>>())
         })
         .ok_or(SyncError::InvalidMember)??;
-    Video::flush_property_changes(member);
+    let properties_dirtied = Video::flush_property_changes(member);
     let mut corrected = false;
     let mut error = None;
     for group in groups {
@@ -579,7 +593,10 @@ pub fn report_media_clock(
     }
     match error {
         Some(error) => Err(error),
-        None => Ok(corrected),
+        None => Ok(MediaClockReport {
+            corrected,
+            properties_dirtied,
+        }),
     }
 }
 

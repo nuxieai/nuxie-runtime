@@ -817,12 +817,20 @@ impl DataBind {
         }
     }
 
-    pub(crate) fn add_dirt_handle(owner: &CoreHandle, value: u32, _recurse: bool) {
+    pub(crate) fn add_dirt_handle(owner: &CoreHandle, value: u32, recurse: bool) {
+        Self::add_dirt_handle_with_report(owner, value, recurse);
+    }
+
+    pub(crate) fn add_dirt_handle_with_report(
+        owner: &CoreHandle,
+        value: u32,
+        _recurse: bool,
+    ) -> bool {
         let callback = owner
             .with_mut(|owner| owner.as_data_bind_mut()?.begin_add_dirt(value))
             .flatten();
         let Some(callback) = callback else {
-            return;
+            return false;
         };
         if let Some(callback) = callback {
             callback();
@@ -837,6 +845,7 @@ impl DataBind {
             // No child borrow spans that callback or the subsequent enqueue.
             container.add_dirty_data_bind(owner.clone());
         }
+        true
     }
 
     fn begin_add_dirt(&mut self, value: u32) -> Option<Option<fn()>> {
@@ -1120,6 +1129,62 @@ impl Drop for DataBind {
 mod observer_tests {
     use super::*;
     use crate::source::{generated::core_registry::CoreRegistry, node::Node};
+
+    fn video_observer() -> (CoreArena, CoreHandle, CoreHandle) {
+        use crate::video::Video;
+        let arena = CoreArena::default();
+        let video = arena.insert(Video::default());
+        video.with_downcast_mut::<Video, _>(|v| {
+            v.playback.opened(0, 12.5);
+        });
+        Video::flush_property_changes(&video);
+        let bind = arena.insert(DataBind::new(TO_SOURCE, 60017, 0));
+        bind.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_target(Some(video.clone()));
+        });
+        (arena, video, bind)
+    }
+
+    #[test]
+    fn video_notification_reports_only_newly_accepted_binding_dirt() {
+        use crate::video::Video;
+        let (_arena, video, bind) = video_observer();
+        video.with_downcast_mut::<Video, _>(|v| {
+            assert!(v.playback.accept_frame(0, 1.0));
+        });
+        assert!(Video::flush_property_changes(&video));
+        assert_eq!(
+            bind.with(|owner| owner.as_data_bind().unwrap().dirt()),
+            Some(BINDINGS_TARGET)
+        );
+        video.with_downcast_mut::<Video, _>(|v| {
+            assert!(v.playback.accept_frame(0, 2.0));
+        });
+        assert!(!Video::flush_property_changes(&video));
+    }
+
+    #[test]
+    fn video_notification_does_not_report_suppressed_binding_dirt() {
+        use crate::video::Video;
+        let (_arena, video, bind) = video_observer();
+        bind.with_mut(|owner| {
+            owner
+                .as_data_bind_mut()
+                .unwrap()
+                .set_flag(SUPPRESS_DIRT, true);
+        });
+        video.with_downcast_mut::<Video, _>(|v| {
+            assert!(v.playback.accept_frame(0, 1.0));
+        });
+        assert!(!Video::flush_property_changes(&video));
+        assert_eq!(
+            bind.with(|owner| owner.as_data_bind().unwrap().dirt()),
+            Some(0)
+        );
+    }
 
     thread_local! {
         static EVENTS: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };

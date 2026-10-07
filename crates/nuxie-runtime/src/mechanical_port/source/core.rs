@@ -434,6 +434,11 @@ impl CoreHandle {
             observers.notify(property_key);
         }
     }
+    pub(crate) fn notify_property_changed_with_dirt_report(&self, property_key: u16) -> bool {
+        self.property_observers()
+            .is_some_and(|observers| observers.notify_with_dirt_report(property_key))
+    }
+
     pub(crate) fn property_observers(&self) -> Option<Rc<PropertyObservers>> {
         self.slot()?.property_observers.borrow().upgrade()
     }
@@ -813,6 +818,11 @@ impl PropertyObservers {
     }
 
     pub(crate) fn notify(&self, property_key: u16) {
+        self.notify_with_dirt_report(property_key);
+    }
+
+    fn notify_with_dirt_report(&self, property_key: u16) -> bool {
+        let mut dirtied = false;
         let mut current = self.first.borrow().clone();
         while let Some(observer) = current {
             if observer
@@ -820,7 +830,7 @@ impl PropertyObservers {
                 .flatten()
                 == Some(u32::from(property_key))
             {
-                DataBind::add_dirt_handle(
+                dirtied |= DataBind::add_dirt_handle_with_report(
                     &observer,
                     u32::from(ComponentDirt::BINDINGS_TARGET.0),
                     false,
@@ -832,6 +842,7 @@ impl PropertyObservers {
                 .with(|owner| owner.as_data_bind().and_then(DataBind::next_observer))
                 .flatten();
         }
+        dirtied
     }
 
     fn detach_all(&self) {

@@ -61,6 +61,8 @@ pub struct Video {
     captions_valid: bool,
     poster: Option<CoreHandle>,
     showing_poster: bool,
+    // Notification watermark only; property reads still use playback and clock.
+    notified_position: f32,
     pub(crate) sync_clock: Option<(Option<super::sync::MediaClock>, f64)>,
     pub(crate) sync_groups: Vec<std::rc::Weak<super::sync::RegisteredSynchronizationGroup>>,
 }
@@ -74,6 +76,7 @@ impl Default for Video {
             captions_valid: true,
             poster: None,
             showing_poster: true,
+            notified_position: 0.0,
             sync_clock: None,
             sync_groups: Vec::new(),
         }
@@ -131,20 +134,34 @@ impl Video {
                 .is_ok()
         {
             self.playback.clear_property_change(key);
+            if key == super::properties::POSITION {
+                self.notified_position = self.property_number(key).unwrap() as f32;
+            }
             completion.record(self.core(), key);
         }
     }
     /// Notify native bindings after the mutable video borrow has ended.
+    /// Return true only when a binding accepted new dirt.
     pub fn flush_property_changes(owner: &CoreHandle) -> bool {
         let changes = owner
-            .with_downcast_mut::<Self, _>(|video| video.playback.take_property_changes())
+            .with_downcast_mut::<Self, _>(|video| {
+                let position = video.property_number(super::properties::POSITION).unwrap() as f32;
+                if position == video.notified_position {
+                    video.playback.clear_property_change(super::properties::POSITION);
+                } else {
+                    video.playback.mark_position_changed();
+                    video.notified_position = position;
+                }
+                video.playback.take_property_changes()
+            })
             .unwrap_or(0);
+        let mut dirtied = false;
         for (index, key) in super::properties::KEYS.iter().enumerate() {
             if changes & (1 << index) != 0 {
-                owner.notify_property_changed(*key);
+                dirtied |= owner.notify_property_changed_with_dirt_report(*key);
             }
         }
-        changes != 0
+        dirtied
     }
     pub(crate) fn image(&self) -> &Image {
         &self.image
@@ -419,6 +436,7 @@ impl CoreObject for Video {
             captions_valid: self.captions_valid,
             poster: self.poster.clone(),
             showing_poster: true,
+            notified_position: 0.0,
             sync_clock: None,
             sync_groups: Vec::new(),
         }))

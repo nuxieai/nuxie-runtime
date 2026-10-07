@@ -1561,40 +1561,54 @@ fn rule_install_rejects_bad_inputs_without_replacing_the_table() {
             NuxStatus::LimitExceeded
         );
     }
-    for entry in [
-        NuxValueRule {
-            mode: 99,
-            ..maximum
-        },
-        NuxValueRule {
-            kind: 99,
-            ..maximum
-        },
-        NuxValueRule {
-            bound_flags: 4,
-            ..maximum
-        },
-        NuxValueRule {
-            model: view("Missing"),
-            ..maximum
-        },
-        NuxValueRule {
-            property: view("b"),
-            ..maximum
-        },
-        NuxValueRule {
-            model: NuxStringView {
-                data: ptr::null(),
-                len: 1,
+    for (entry, expected) in [
+        (
+            NuxValueRule {
+                mode: 99,
+                ..maximum
             },
-            ..maximum
-        },
+            NuxStatus::InvalidArgument,
+        ),
+        (
+            NuxValueRule {
+                kind: 99,
+                ..maximum
+            },
+            NuxStatus::InvalidArgument,
+        ),
+        (
+            NuxValueRule {
+                bound_flags: 4,
+                ..maximum
+            },
+            NuxStatus::InvalidArgument,
+        ),
+        (
+            NuxValueRule {
+                model: view("Missing"),
+                ..maximum
+            },
+            NuxStatus::NotFound,
+        ),
+        (
+            NuxValueRule {
+                property: view("b"),
+                ..maximum
+            },
+            NuxStatus::InvalidArgument,
+        ),
+        (
+            NuxValueRule {
+                model: NuxStringView {
+                    data: ptr::null(),
+                    len: 1,
+                },
+                ..maximum
+            },
+            NuxStatus::NullArgument,
+        ),
     ] {
-        let status = h.install(&[entry]);
-        assert!(matches!(
-            status,
-            NuxStatus::InvalidArgument | NuxStatus::NullArgument | NuxStatus::NotFound
-        ));
+        assert_eq!(h.install(&[entry]), expected);
         let result = h.mutate(&[h.write("n", 400.0)]);
         assert_eq!(result_info(result).applied_count, 0);
         assert_eq!(result_info(result).rule_report_count, 1);

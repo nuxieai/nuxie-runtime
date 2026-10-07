@@ -1712,8 +1712,7 @@ fn authored_failure_rolls_back_commands_and_poisons_the_occurrence() {
     }
 }
 
-#[test]
-fn field_string_reverse_converter_preserves_source_and_recovers() {
+fn number_field_fixture(native_input: bool) -> Vec<u8> {
     let mut payload = vec![0];
     payload.extend(compile_luau(
         br#"
@@ -1763,6 +1762,19 @@ fn field_string_reverse_converter_preserves_source_and_recovers() {
     push_object(&mut bytes, "FileAssetContents", |b| {
         push_blob(b, "FileAssetContents", "bytes", &payload)
     });
+    if native_input {
+        push_object(&mut bytes, "FontAsset", |b| {
+            push_uint(b, "FontAsset", "assetId", 1);
+        });
+        push_object(&mut bytes, "FileAssetContents", |b| {
+            push_blob(
+                b,
+                "FileAssetContents",
+                "bytes",
+                include_bytes!("../../../fixtures/fonts/roboto-input.ttf"),
+            );
+        });
+    }
     push_object(&mut bytes, "Artboard", |b| {
         push_f32(b, "Artboard", "width", 200.0);
         push_f32(b, "Artboard", "height", 80.0);
@@ -1780,16 +1792,54 @@ fn field_string_reverse_converter_preserves_source_and_recovers() {
         push_uint(b, "Component", "parentId", 1);
         push_uint(b, "SemanticData", "role", 6);
     });
-    push_object(&mut bytes, "CustomPropertyString", |b| {
-        push_uint(b, "Component", "parentId", 0);
+    let kind = if native_input {
+        "TextInput"
+    } else {
+        "CustomPropertyString"
+    };
+    push_object(&mut bytes, kind, |b| {
+        push_uint(b, "Component", "parentId", if native_input { 1 } else { 0 });
         push_string(b, "Component", "name", "editable");
+        if native_input {
+            push_uint(b, "TextInput", "selectAllOnFocus", 1);
+        }
     });
     push_object(&mut bytes, "DataBindContext", |b| {
-        push_uint(b, "DataBindContext", "propertyKey", 246);
+        push_uint(
+            b,
+            "DataBindContext",
+            "propertyKey",
+            if native_input { 817 } else { 246 },
+        );
         push_blob(b, "DataBindContext", "sourcePathIds", &[0, 0]);
         push_uint(b, "DataBindContext", "converterId", 0);
         push_uint(b, "DataBindContext", "flags", 10);
     });
+    if native_input {
+        push_object(&mut bytes, "TextStylePaint", |b| {
+            push_uint(b, "Component", "parentId", 4);
+            // Script asset is index 0; embedded font is index 1.
+            push_uint(b, "TextStyle", "fontAssetId", 1);
+            push_f32(b, "TextStyle", "fontSize", 24.0);
+        });
+        push_object(&mut bytes, "FocusData", |b| {
+            push_uint(b, "Component", "parentId", 4);
+            push_uint(b, "FocusData", "focusFlags", 7);
+        });
+        push_object(&mut bytes, "StateMachine", |_| {});
+        // Authored text-input listener registers the native keyboard group;
+        // its TextInput target consumes text before any listener actions.
+        push_object(&mut bytes, "StateMachineListenerSingle", |b| {
+            push_uint(b, "StateMachineListener", "targetId", 4);
+            push_uint(b, "StateMachineListenerSingle", "listenerTypeValue", 8);
+        });
+    }
+    bytes
+}
+
+#[test]
+fn field_string_reverse_converter_preserves_source_and_recovers() {
+    let bytes = number_field_fixture(false);
     let file = trusted_import(
         &bytes,
         &NuxHostCommandImportConfig {
@@ -2482,5 +2532,138 @@ fn legacy_capture_overflow_conservatively_invalidates_a_sibling_occurrence() {
         nux_artboard_instance_free(second_artboard);
         nux_view_model_instance_free(view_model);
         nux_file_free(file);
+    }
+}
+
+#[test]
+fn number_bound_field_preserves_typed_draft_after_presentation() {
+    // Handwritten oracle: typing 2, 1, . replaces authored 90, yielding
+    // native drafts 2, 21, 21. and converted numbers 2, 21, 21.
+    let bytes = number_field_fixture(true);
+    let file = trusted_import(
+        &bytes,
+        &NuxHostCommandImportConfig {
+            module_name: view("bridge"),
+            ..Default::default()
+        },
+    );
+    unsafe {
+        let mut artboard = std::ptr::null_mut();
+        let mut model = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_authored(file, 0, 0, &mut model),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(artboard, model),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
+        assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+        let present = |inputs: &[NuxPlayerFocusInput]| {
+            let step = NuxPlayerStep {
+                focus_inputs: inputs.as_ptr(),
+                focus_input_count: inputs.len(),
+                elapsed_seconds: 0.016,
+                ..Default::default()
+            };
+            let mut result = std::ptr::null_mut();
+            assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+            for index in 0..inputs.len() {
+                let mut handled = 0;
+                assert_eq!(
+                    nux_player_step_result_focus_input(result, index, &mut handled),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    handled, 1,
+                    "focus input kind {} was consumed",
+                    inputs[index].kind
+                );
+            }
+            let mut info = NuxPlayerSchedulingInfo::default();
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut info),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_acknowledge_presented(player, info.render_revision),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+        };
+        present(&[]);
+        assert_eq!(view_model_number(model, "amount"), 90.0);
+        present(&[NuxPlayerFocusInput {
+            kind: NUX_PLAYER_FOCUS_KIND_NEXT,
+            ..Default::default()
+        }]);
+        let mut focus = NuxPlayerFocusState::default();
+        assert_eq!(nux_player_focus_state(player, &mut focus), NuxStatus::Ok);
+        assert_eq!(focus.has_focus, 1);
+        assert_eq!(focus.expects_keyboard_input, 1);
+        // The last empty step independently checks that a later settle does not
+        // normalize the draft merely because the number is already 21.
+        for (typed, expected_draft, expected_number) in [
+            ("", "90", 90.0),
+            ("2", "2", 2.0),
+            ("1", "21", 21.0),
+            (".", "21.", 21.0),
+            ("", "21.", 21.0),
+        ] {
+            if typed.is_empty() {
+                present(&[]);
+            } else {
+                present(&[NuxPlayerFocusInput {
+                    kind: NUX_PLAYER_FOCUS_KIND_TEXT,
+                    text: view(typed),
+                    ..Default::default()
+                }]);
+            }
+            assert_eq!(view_model_number(model, "amount"), expected_number);
+            let mut snapshot = std::ptr::null_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            let mut node = NuxSemanticNodeView {
+                struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_semantic_snapshot_node(snapshot, 0, &mut node),
+                NuxStatus::Ok
+            );
+            assert_eq!(node.role, NUX_SEMANTIC_ROLE_TEXT_FIELD);
+            assert_eq!(node.value.len, 0);
+            let mut draft = [0u8; 32];
+            let mut length = 0;
+            assert_eq!(
+                nux_player_field_string_copy(
+                    player,
+                    snapshot,
+                    node.id,
+                    view("editable"),
+                    draft.as_mut_ptr(),
+                    draft.len(),
+                    &mut length
+                ),
+                NuxStatus::Ok
+            );
+            assert!(
+                draft.get(..length) == Some(expected_draft.as_bytes()),
+                "native numeric draft is preserved after presentation"
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+        }
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_view_model_instance_free(model), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
     }
 }

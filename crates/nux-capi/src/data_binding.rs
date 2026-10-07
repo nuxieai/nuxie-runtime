@@ -3245,6 +3245,13 @@ mod transaction_tests {
 }
 
 /// Read a rule report; refusing writes are excluded from applied_count.
+/// NULL result/output returns NULL_ARGUMENT; wrong handle kind returns
+/// HANDLE_MISMATCH; wrong thread returns WRONG_THREAD; active access returns
+/// REENTRANT_CALL. A failed result returns its operation status. An absent index
+/// returns NOT_FOUND. Initialize out.struct_size to sizeof(NuxValueRuleReportView);
+/// a smaller buffer returns INVALID_STRUCT_SIZE. A larger buffer's tail is left
+/// untouched. The nested attempted view is output, not a second input size.
+/// Borrowed text bytes and retained list identities live until result free.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_view_model_mutation_result_rule_report(
     result: *const NuxViewModelMutationResult,
@@ -3274,6 +3281,11 @@ pub unsafe extern "C" fn nux_view_model_mutation_result_rule_report(
 }
 
 /// Read one attempted list member's identity from a rule report.
+/// NULL output returns NULL_ARGUMENT; otherwise it is cleared before validation.
+/// Handle/thread/reentry and failed-result statuses match the report getter.
+/// Missing report/item returns NOT_FOUND; a non-list report returns
+/// INVALID_ARGUMENT. The returned identity belongs to the result's retained
+/// attempted list and is available until result free.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_view_model_mutation_result_rule_report_list_item(
     result: *const NuxViewModelMutationResult,

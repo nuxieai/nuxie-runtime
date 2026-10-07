@@ -55,6 +55,13 @@ impl RuntimeValuePolicy {
         }
     }
 
+    /// Publish marker bindings without advancing animations or listeners.
+    /// Call after a marker pass changes a value, then run the marker pass again
+    /// to include any writes caused by those bindings in the same journal.
+    pub fn flush_marker_bindings(&self, artboard: &crate::ArtboardInstance) -> bool {
+        self.has_markers() && artboard.native_handle().update_pass(true)
+    }
+
     pub fn set_markers(
         &mut self,
         entries: &[RuntimeValueMarker],

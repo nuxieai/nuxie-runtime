@@ -16,6 +16,8 @@ pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
 mod player_globals;
+mod value_policy;
+pub use value_policy::{NuxValueMarker, nux_file_set_value_markers};
 mod player_view_models;
 pub use layout_size::*;
 pub use player_globals::*;
@@ -4205,6 +4207,18 @@ fn player_step_body(
             "player render revision overflowed during view-model invalidation",
         );
     }
+    let policy = match player.view_model_catalog.value_policy.try_borrow() {
+        Ok(policy) => policy,
+        Err(_) => {
+            return publish_player_step_failure(
+                out_result,
+                NuxStatus::ReentrantCall,
+                "value policy is active",
+            );
+        }
+    };
+    let policy = policy.as_ref();
+    let has_markers = policy.is_some_and(nuxie::RuntimeValuePolicy::has_markers);
     let mut bound_view_model = match player.artboard.bound_view_model.try_borrow() {
         Ok(bound) => bound.clone(),
         Err(_) => {
@@ -4263,7 +4277,7 @@ fn player_step_body(
         .cloned()
         .collect::<Vec<_>>();
     subscribed_roots.extend(bound_view_model.iter().cloned());
-    let has_subscriptions = !subscribed_roots.is_empty();
+    let has_subscriptions = !subscribed_roots.is_empty() || has_markers;
     let scene_view_model_roots = match has_subscriptions {
         true => match player_view_models::scene_roots_across(
             &artboard,
@@ -4280,6 +4294,20 @@ fn player_step_body(
             }
         },
         false => Vec::new(),
+    };
+    let retained_policy_scope = if has_markers {
+        match value_policy::retain_scope(&scene_view_model_roots) {
+            Ok(roots) => roots,
+            Err(status) => {
+                return publish_player_step_failure(
+                    out_result,
+                    status,
+                    "value policy scope exceeds the limit",
+                );
+            }
+        }
+    } else {
+        Vec::new()
     };
     let mut view_model_transaction = match has_subscriptions {
         true => match RuntimeOwnedViewModelGraphTransaction::begin(
@@ -4334,7 +4362,10 @@ fn player_step_body(
         .scripted
         .clone()
         .map(ScriptEffectTransaction::begin);
-    let (keep_going, mut runtime_dirty, runtime_settled) = match &mut *player_instance {
+    if let (Some(policy), Some(capture)) = (policy, change_capture.as_ref()) {
+        policy.prepare_capture(capture);
+    }
+    let (mut keep_going, mut runtime_dirty, mut runtime_settled) = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
             // Upstream command_server.cpp separates bindViewModelInstance from
             // advanceStateMachine. Binding reports pending triggers, so it must
@@ -4493,7 +4524,7 @@ fn player_step_body(
     let (host_commands, host_values) = (Vec::new(), Vec::new());
     let resolved_view_model_changes = match change_capture {
         Some(capture) => {
-            let roots = match player_view_models::scene_roots_across(
+            let mut roots = match player_view_models::scene_roots_across(
                 &artboard,
                 &subscribed_roots,
                 MAX_PLAYER_STEP_STATE_CHANGES,
@@ -4508,6 +4539,58 @@ fn player_step_body(
                     );
                 }
             };
+            roots.extend(retained_policy_scope);
+            if let Some(policy) = policy {
+                loop {
+                    match policy.apply_markers(&capture, &roots, |owner, index, value| {
+                        let mut owner = owner
+                            .try_borrow_mut()
+                            .map_err(|_| nuxie::RuntimeValuePolicyError::BorrowConflict)?;
+                        Ok(owner.set_boolean_by_property_index(index, value))
+                    }) {
+                        Ok(false) => break,
+                        Ok(true) => {
+                            runtime_dirty = true;
+                            keep_going = true;
+                            runtime_settled = false;
+                            policy.flush_marker_bindings(&artboard);
+                            match player_view_models::scene_roots_across(
+                                &artboard,
+                                &subscribed_roots,
+                                MAX_PLAYER_STEP_STATE_CHANGES,
+                            ) {
+                                Ok(current) => {
+                                    let mut known = roots
+                                        .iter()
+                                        .map(RuntimeOwnedViewModelHandle::instance_identity)
+                                        .collect::<std::collections::BTreeSet<_>>();
+                                    roots.extend(
+                                        current
+                                            .into_iter()
+                                            .filter(|root| known.insert(root.instance_identity())),
+                                    );
+                                }
+                                Err(status) => {
+                                    player.artboard.poisoned.set(true);
+                                    return publish_player_step_failure(
+                                        out_result,
+                                        status,
+                                        "value policy binding scope is invalid",
+                                    );
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(
+                                out_result,
+                                value_policy::status(error),
+                                "value policy pass failed",
+                            );
+                        }
+                    }
+                }
+            }
             match RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
                 &roots, capture,
             ) {
@@ -5936,6 +6019,8 @@ mod event_source_tests;
 mod focus_input_tests;
 #[cfg(test)]
 mod player_globals_tests;
+#[cfg(test)]
+mod value_policy_tests;
 
 #[cfg(test)]
 mod firewall_tests {

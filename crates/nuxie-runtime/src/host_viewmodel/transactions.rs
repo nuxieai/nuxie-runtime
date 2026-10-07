@@ -363,6 +363,23 @@ impl RuntimeOwnedViewModelTransaction {
                 .set_boolean_by_property_name_path(path, value)
         })
     }
+    pub fn try_set_boolean_by_property_index(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        index: usize,
+        value: bool,
+    ) -> Option<bool> {
+        let property = owner.borrow().property_by_path(&[index])?;
+        let snapshot = Snapshot::capture(property)?;
+        self.0.files.push(owner.native_file());
+        self.0.snapshots.push(snapshot);
+        Some(
+            owner
+                .borrow_mut()
+                .set_boolean_by_property_index(index, value),
+        )
+    }
+
     pub fn set_string(
         &mut self,
         owner: &RuntimeOwnedViewModelHandle,
@@ -588,22 +605,28 @@ pub(crate) fn capture_unchanged_native_write(property: &CoreHandle) {
     if !crate::view_model_cell::is_capturing_view_model_changes() {
         return;
     }
-    let value = property.with(|property| {
-        let value = property.as_any();
-        if let Some(value) = value.downcast_ref::<ViewModelInstanceNumber>() {
-            Some(RuntimeViewModelChangeValue::Number(value.value()))
-        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceBoolean>() {
-            Some(RuntimeViewModelChangeValue::Boolean(value.value()))
-        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceColor>() {
-            Some(RuntimeViewModelChangeValue::Color(value.value() as u32))
-        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceEnum>() {
-            Some(RuntimeViewModelChangeValue::Enum(u64::from(value.base.property_value())))
-        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceString>() {
-            Some(RuntimeViewModelChangeValue::String(Arc::from(value.value().as_bytes())))
-        } else {
-            None
-        }
-    }).flatten();
+    let value = property
+        .with(|property| {
+            let value = property.as_any();
+            if let Some(value) = value.downcast_ref::<ViewModelInstanceNumber>() {
+                Some(RuntimeViewModelChangeValue::Number(value.value()))
+            } else if let Some(value) = value.downcast_ref::<ViewModelInstanceBoolean>() {
+                Some(RuntimeViewModelChangeValue::Boolean(value.value()))
+            } else if let Some(value) = value.downcast_ref::<ViewModelInstanceColor>() {
+                Some(RuntimeViewModelChangeValue::Color(value.value() as u32))
+            } else if let Some(value) = value.downcast_ref::<ViewModelInstanceEnum>() {
+                Some(RuntimeViewModelChangeValue::Enum(u64::from(
+                    value.base.property_value(),
+                )))
+            } else if let Some(value) = value.downcast_ref::<ViewModelInstanceString>() {
+                Some(RuntimeViewModelChangeValue::String(Arc::from(
+                    value.value().as_bytes(),
+                )))
+            } else {
+                None
+            }
+        })
+        .flatten();
     if let Some(value) = value {
         crate::view_model_cell::capture_unchanged_view_model_write(
             instance::identity(property) as usize,
@@ -675,7 +698,12 @@ impl RuntimeOwnedViewModelHandle {
     ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
         Self::resolve_captured_changes(
             roots,
-            capture.finish().ok()?.into_iter().filter(|change| change.publish).collect(),
+            capture
+                .finish()
+                .ok()?
+                .into_iter()
+                .filter(|change| change.publish)
+                .collect(),
         )
     }
 

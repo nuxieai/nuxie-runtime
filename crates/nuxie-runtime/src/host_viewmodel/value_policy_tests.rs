@@ -112,6 +112,22 @@ fn fixture() -> Vec<u8> {
             uint(b, &kind, "viewModelPropertyId", i as u64)
         });
     }
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Container")
+    });
+    object(&mut b, "ViewModelPropertyList", |b| {
+        string(b, "ViewModelPropertyList", "name", "rows")
+    });
+    object(&mut b, "ViewModelInstance", |b| {
+        uint(b, "ViewModelInstance", "viewModelId", 1)
+    });
+    object(&mut b, "ViewModelInstanceList", |b| {
+        uint(b, "ViewModelInstanceList", "viewModelPropertyId", 0)
+    });
+    object(&mut b, "ViewModelInstanceListItem", |b| {
+        uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
+        uint(b, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+    });
     b
 }
 fn setup() -> (
@@ -415,4 +431,77 @@ fn no_table_keeps_unchanged_writes_out_of_the_bounded_journal() {
         root.borrow().boolean_value_by_property_name("n_set"),
         Some(false)
     );
+}
+
+#[test]
+fn removed_list_item_keeps_its_write_order_until_publication() {
+    let (mut policy, _, file, _factory) = setup();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 1, 0).unwrap(),
+    );
+    let child = root.list_items_by_property_name_path("rows").unwrap()[0].clone();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    let retained = root.reachable_change_owner_snapshot().unwrap();
+    let transaction = RuntimeOwnedViewModelGraphTransaction::begin(&retained, 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    child.borrow_mut().set_number_by_property_name("n", 5.0);
+    assert!(root.remove_list_item_by_property_name_path("rows", 0));
+    policy
+        .apply_markers(&capture, &retained, |owner, index, value| {
+            Ok(owner
+                .borrow_mut()
+                .set_boolean_by_property_index(index, value))
+        })
+        .unwrap();
+    let changes =
+        RuntimeOwnedViewModelHandle::resolve_change_capture_across(&retained, capture).unwrap();
+    assert_eq!(
+        child.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+    assert_eq!(root.list_item_count_by_property_name_path("rows"), Some(0));
+    assert!(changes.iter().any(|change| change.owner_instance_identity
+        == child.instance_identity()
+        && change.property_index == 1
+        && change.value == RuntimeViewModelChangeValue::Boolean(true)));
+    transaction.commit();
+}
+
+#[test]
+fn replacement_with_fewer_entries_stops_tracking_removed_pairs() {
+    let (mut policy, root, _, _factory) = setup();
+    policy
+        .set_markers(&[pair("n", "n_set"), pair("b", "b_set")])
+        .unwrap();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    run(&policy, &root, || {
+        root.borrow_mut().set_number_by_property_name("n", 5.0);
+        root.borrow_mut().set_boolean_by_property_name("b", true);
+    });
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("b_set"),
+        Some(false)
+    );
+}
+
+#[test]
+fn markers_do_not_validate_number_contents() {
+    let (mut policy, root, _, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    for number in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -0.0] {
+        root.borrow_mut()
+            .set_boolean_by_property_name("n_set", false);
+        run(&policy, &root, || {
+            root.borrow_mut().set_number_by_property_name("n", number);
+        });
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("n_set"),
+            Some(true)
+        );
+    }
 }

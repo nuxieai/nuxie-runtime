@@ -55,7 +55,6 @@ impl RuntimeValuePolicy {
             let (model, valid, native) = self.property(&entry.model, &entry.valid)?;
             if !native.is_type_of(ViewModelPropertyBooleanBase::TYPE_KEY)
                 || !targets.insert((model, vec![valid]))
-                || entry.members.is_empty()
             {
                 return Err(RuntimeValuePolicyError::InvalidArgument);
             }

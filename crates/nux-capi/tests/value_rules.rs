@@ -213,7 +213,7 @@ fn marker_replacement_preserves_rules_and_refusal_does_not_set_marker() {
     }
 }
 #[test]
-fn invalid_install_is_atomic_and_invalid_pattern_is_ignored() {
+fn invalid_install_is_atomic_and_invalid_pattern_is_rejected() {
     let h = Handles::new();
     let mut maximum = rule("n", NUX_VALUE_RULE_NUMBER_MAXIMUM, NUX_VALUE_RULE_REFUSE);
     maximum.number_bound = 3.0;
@@ -231,29 +231,11 @@ fn invalid_install_is_atomic_and_invalid_pattern_is_ignored() {
     }
     let mut pattern = rule("text", NUX_VALUE_RULE_PATTERN, NUX_VALUE_RULE_MARK);
     pattern.text = view("[");
-    assert_eq!(h.install(&[pattern]), NuxStatus::Ok);
-    let text = b"anything";
-    let write = NuxViewModelMutation {
-        instance: h.value,
-        path: view("text"),
-        kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
-        bytes_value: NuxByteView {
-            data: text.as_ptr(),
-            len: text.len(),
-        },
-        ..Default::default()
-    };
-    let result = h.mutate(&[write]);
-    assert_eq!(
-        (
-            result_info(result).applied_count,
-            result_info(result).rule_report_count
-        ),
-        (1, 0)
-    );
-    unsafe {
-        nux_view_model_mutation_result_free(result);
-    }
+    assert_eq!(h.install(&[pattern]), NuxStatus::InvalidArgument);
+    let result = h.mutate(&[h.write("n", 4.0)]);
+    assert_eq!(result_info(result).applied_count, 0);
+    assert_eq!(result_info(result).rule_report_count, 1);
+    unsafe { nux_view_model_mutation_result_free(result) };
 }
 
 struct Player {
@@ -1281,5 +1263,72 @@ fn installed_minimum_mode_controls_host_and_listener_writes() {
                 },
             );
         }
+    }
+}
+
+#[test]
+fn invalid_pattern_install_returns_owned_rule_code_and_preserves_the_table() {
+    for replace in [false, true] {
+        let h = Handles::new();
+        let mut maximum = rule("n", NUX_VALUE_RULE_NUMBER_MAXIMUM, NUX_VALUE_RULE_REFUSE);
+        maximum.number_bound = 3.0;
+        if replace {
+            assert_eq!(h.install(&[maximum]), NuxStatus::Ok);
+        }
+        let code = String::from("authored-pattern-code");
+        let mut pattern = rule("text", NUX_VALUE_RULE_PATTERN, NUX_VALUE_RULE_MARK);
+        pattern.text = view("[");
+        pattern.code = view(&code);
+        let rules = [
+            rule("text", NUX_VALUE_RULE_REQUIRED, NUX_VALUE_RULE_MARK),
+            pattern,
+        ];
+        let mut diagnostic = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_file_set_value_rules_with_result(
+                    h.file,
+                    rules.as_ptr(),
+                    rules.len(),
+                    &mut diagnostic,
+                )
+            },
+            NuxStatus::InvalidArgument
+        );
+        drop(code);
+        let mut details = NuxCapiDiagnosticView::default();
+        assert_eq!(
+            unsafe { nux_capi_result_diagnostic(diagnostic, &mut details) },
+            NuxStatus::Ok
+        );
+        assert_eq!(details.status, NuxStatus::InvalidArgument);
+        assert_eq!(
+            unsafe { std::slice::from_raw_parts(details.code.data.cast::<u8>(), details.code.len) },
+            b"authored-pattern-code"
+        );
+        unsafe { nux_capi_result_free(diagnostic) };
+        let result = h.mutate(&[h.write("n", 4.0)]);
+        assert_eq!(result_info(result).applied_count, usize::from(!replace));
+        assert_eq!(result_info(result).rule_report_count, usize::from(replace));
+        unsafe { nux_view_model_mutation_result_free(result) };
+        assert_eq!(
+            unsafe {
+                nux_file_set_value_rules_with_result(h.file, ptr::null(), 0, &mut diagnostic)
+            },
+            NuxStatus::Ok
+        );
+        assert!(diagnostic.is_null());
+        assert_eq!(
+            unsafe {
+                nux_file_set_value_rules_with_result(
+                    ptr::null_mut(),
+                    ptr::null(),
+                    0,
+                    &mut diagnostic,
+                )
+            },
+            NuxStatus::NullArgument
+        );
+        assert!(diagnostic.is_null());
     }
 }

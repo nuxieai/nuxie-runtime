@@ -4297,6 +4297,9 @@ fn player_step_body(
         .values()
         .cloned()
         .collect::<Vec<_>>();
+    // Preserve main's post-advance validation unless the host opted into
+    // a policy or an explicit global override.
+    let can_skip_quiet_graphs = policy.is_some() || !subscribed_roots.is_empty();
     subscribed_roots.extend(bound_view_model.iter().cloned());
     let retained_subscribed_owners = if has_value_policy {
         match value_policy::retain_scope(&subscribed_roots) {
@@ -4602,7 +4605,8 @@ fn player_step_body(
         // A script refusal may need group output even after its capture rows
         // were consumed. Skip graph resolution only when both are quiet.
         Some(capture)
-            if capture.write_count().is_ok_and(|count| count == 0)
+            if can_skip_quiet_graphs
+                && capture.write_count().is_ok_and(|count| count == 0)
                 && match (rule_operation.as_ref(), policy) {
                     (Some(operation), Some(policy)) => operation
                         .borrow()
@@ -4790,7 +4794,7 @@ fn player_step_body(
         .map(|(owner, _)| owner.clone())
         .collect::<Vec<_>>();
     let mut subscribed_owners = retained_subscribed_owners;
-    if !resolved_view_model_changes.is_empty() {
+    if !can_skip_quiet_graphs || !resolved_view_model_changes.is_empty() {
         for root in &subscribed_roots {
             let Some(owners) = root.reachable_change_owner_snapshot() else {
                 player.artboard.poisoned.set(true);

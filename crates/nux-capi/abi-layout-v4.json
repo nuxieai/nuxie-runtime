@@ -806,7 +806,7 @@
     },
     {
       "name": "NuxPlayerStepInfo",
-      "size": 56,
+      "size": 64,
       "alignment": 8,
       "fields": [
         {
@@ -840,6 +840,10 @@
         {
           "name": "focus_input_result_count",
           "offset": 48
+        },
+        {
+          "name": "rule_report_count",
+          "offset": 56
         }
       ]
     },
@@ -1478,6 +1482,92 @@
       ]
     },
     {
+      "name": "NuxValueRule",
+      "size": 152,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "model",
+          "offset": 0
+        },
+        {
+          "name": "property",
+          "offset": 16
+        },
+        {
+          "name": "kind",
+          "offset": 32
+        },
+        {
+          "name": "mode",
+          "offset": 36
+        },
+        {
+          "name": "number_bound",
+          "offset": 40
+        },
+        {
+          "name": "text",
+          "offset": 48
+        },
+        {
+          "name": "values",
+          "offset": 64
+        },
+        {
+          "name": "value_count",
+          "offset": 72
+        },
+        {
+          "name": "picked_property",
+          "offset": 80
+        },
+        {
+          "name": "bound_flags",
+          "offset": 96
+        },
+        {
+          "name": "minimum",
+          "offset": 104
+        },
+        {
+          "name": "maximum",
+          "offset": 112
+        },
+        {
+          "name": "code",
+          "offset": 120
+        },
+        {
+          "name": "message",
+          "offset": 136
+        }
+      ]
+    },
+    {
+      "name": "NuxValueRuleReportView",
+      "size": 120,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "rule_index",
+          "offset": 8
+        },
+        {
+          "name": "refused",
+          "offset": 16
+        },
+        {
+          "name": "attempted",
+          "offset": 24
+        }
+      ]
+    },
+    {
       "name": "NuxVideoAction",
       "size": 24,
       "alignment": 8,
@@ -2049,7 +2139,7 @@
     },
     {
       "name": "NuxViewModelMutationResultInfo",
-      "size": 64,
+      "size": 72,
       "alignment": 8,
       "fields": [
         {
@@ -2079,6 +2169,10 @@
         {
           "name": "change_count",
           "offset": 56
+        },
+        {
+          "name": "rule_report_count",
+          "offset": 64
         }
       ]
     },

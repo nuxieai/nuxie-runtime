@@ -32,6 +32,6 @@ pub(crate) use transactions::{
     capture_native_change, capture_native_list_change, capture_native_view_model_change,
     capture_unchanged_native_write,
 };
-pub use value_policy::*;
 pub(crate) use value_policy::capture_initial_policy_owner;
+pub use value_policy::*;
 pub use value_rules::*;

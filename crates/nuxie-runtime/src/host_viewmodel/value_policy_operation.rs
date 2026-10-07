@@ -88,6 +88,8 @@ pub struct RuntimeValueRuleReport {
     pub owner_instance_identity: u64,
     pub property_index: usize,
     pub rule_index: usize,
+    pub rule_owner_instance_identity: u64,
+    pub rule_property_index: usize,
     pub refused: bool,
     pub attempted: RuntimeViewModelChangeValue,
 }
@@ -110,6 +112,8 @@ pub struct RuntimeValuePolicyOperation {
     cursor: usize,
     pending_flush: bool,
     reports: Vec<RuntimeValueRuleReport>,
+    report_bytes: usize,
+    value_reports: BTreeMap<Key, BTreeSet<usize>>,
     initial: Rc<RefCell<InitialOwners>>,
 }
 
@@ -140,6 +144,8 @@ impl RuntimeValuePolicy {
             cursor: 0,
             pending_flush: false,
             reports: Vec::new(),
+            report_bytes: 0,
+            value_reports: BTreeMap::new(),
             initial,
         };
         if self.has_rules() {
@@ -209,6 +215,8 @@ impl RuntimeValuePolicyOperation {
             cursor: 0,
             pending_flush: false,
             reports: Vec::new(),
+            report_bytes: 0,
+            value_reports: BTreeMap::new(),
             initial: Rc::clone(&self.initial),
         };
         let mut roots = self.retained_roots();
@@ -300,6 +308,7 @@ impl RuntimeValuePolicyOperation {
                 restore.insert(key);
                 continue;
             }
+            self.value_reports.remove(&key);
             let pair = policy
                 .markers
                 .iter()
@@ -332,13 +341,48 @@ impl RuntimeValuePolicyOperation {
             let refused = failures.iter().any(|(_, _, refused)| *refused);
             for (rule_index, target, refusal) in failures {
                 if refusal || !refused {
+                    let paired_marker = key.0 == target.0
+                        && policy.markers.iter().any(|pair| {
+                            pair.model == model && pair.value == target.1 && pair.marker == key.1
+                        });
+                    if paired_marker
+                        && self
+                            .value_reports
+                            .get(&target)
+                            .is_some_and(|reported| reported.contains(&rule_index))
+                    {
+                        continue;
+                    }
+                    if key == target {
+                        self.value_reports
+                            .entry(key)
+                            .or_default()
+                            .insert(rule_index);
+                    }
                     if self.reports.len() == 4_096 {
                         return Err(RuntimeValuePolicyError::LimitExceeded);
                     }
+                    let payload_bytes = match &change.value {
+                        RuntimeViewModelChangeValue::String(value) => value.len(),
+                        RuntimeViewModelChangeValue::List(items) => {
+                            items.len().saturating_mul(std::mem::size_of::<u64>())
+                        }
+                        _ => 0,
+                    };
+                    self.report_bytes = self
+                        .report_bytes
+                        .checked_add(payload_bytes)
+                        .and_then(|bytes| {
+                            bytes.checked_add(std::mem::size_of::<RuntimeValueRuleReport>())
+                        })
+                        .filter(|bytes| *bytes <= 8 * 1024 * 1024)
+                        .ok_or(RuntimeValuePolicyError::LimitExceeded)?;
                     self.reports.push(RuntimeValueRuleReport {
-                        owner_instance_identity: target.0,
-                        property_index: target.1,
+                        owner_instance_identity: key.0,
+                        property_index: key.1,
                         rule_index,
+                        rule_owner_instance_identity: target.0,
+                        rule_property_index: target.1,
                         refused: refusal,
                         attempted: change.value.clone(),
                     });

@@ -197,7 +197,8 @@ fn checked(
             RuntimeViewModelChangeValue::Boolean(value)
         }
         (Input::Text(value), RuntimeViewModelChangeValue::String(_))
-            if value.len() <= MAX_PLAYER_STEP_RESULT_BYTES =>
+            if value.len() <= MAX_PLAYER_STEP_RESULT_BYTES
+                && std::str::from_utf8(&value).is_ok() =>
         {
             RuntimeViewModelChangeValue::String(Arc::from(value))
         }

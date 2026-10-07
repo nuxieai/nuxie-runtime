@@ -145,6 +145,14 @@ fn binding(
     });
 }
 pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8> {
+    fixture_input(script, actions, input, false)
+}
+
+pub fn text_input_fixture() -> Vec<u8> {
+    fixture_input(None, &[], true, true)
+}
+
+fn fixture_input(script: Option<&[u8]>, actions: &[Action], input: bool, text: bool) -> Vec<u8> {
     let mut b = values();
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "Aux");
@@ -196,10 +204,11 @@ pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8
         object(&mut b, "TextInput", |b| {
             uint(b, "Component", "parentId", 1);
             string(b, "Component", "name", "editable");
-            string(b, "TextInput", "text", "0");
+            string(b, "TextInput", "text", if text { "" } else { "0" });
         }); // 4
-        binding(&mut b, "TextInput", "text", 0, Some(0), 0);
-        binding(&mut b, "TextInput", "text", 0, Some(1), 1);
+        let source = if text { 6 } else { 0 };
+        binding(&mut b, "TextInput", "text", source, (!text).then_some(0), 0);
+        binding(&mut b, "TextInput", "text", source, (!text).then_some(1), 1);
         object(&mut b, "FocusData", |b| {
             uint(b, "Component", "parentId", 4);
             uint(b, "FocusData", "focusFlags", 7);
@@ -268,6 +277,14 @@ pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8
 
 #[cfg(feature = "scripting")]
 pub fn occurrences(script: &[u8]) -> Vec<u8> {
+    occurrences_bound(script, 1)
+}
+
+pub fn occurrences_values(script: &[u8]) -> Vec<u8> {
+    occurrences_bound(script, 0)
+}
+
+fn occurrences_bound(script: &[u8], label_source: u8) -> Vec<u8> {
     let mut b = values();
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "Root")
@@ -308,7 +325,7 @@ pub fn occurrences(script: &[u8]) -> Vec<u8> {
         uint(b, "Component", "parentId", 1);
         uint(b, "SemanticData", "role", 7);
     });
-    binding(&mut b, "SemanticData", "label", 1, Some(0), 0);
+    binding(&mut b, "SemanticData", "label", label_source, Some(0), 0);
     object(&mut b, "Fill", |b| uint(b, "Component", "parentId", 1));
     object(&mut b, "SolidColor", |b| {
         uint(b, "Component", "parentId", 4);

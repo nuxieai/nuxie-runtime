@@ -10,129 +10,10 @@ use crate::{
     RuntimeValueRuleMode, RuntimeViewModelChangeCapture, RuntimeViewModelChangeValue,
 };
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
-fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
-    loop {
-        let mut byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
-        }
-        bytes.push(byte);
-        if value == 0 {
-            break;
-        }
-    }
-}
+#[path = "../../tests/support/value_policy_fixture.rs"]
+mod fixture;
+use fixture::fixture;
 
-fn property_key(type_name: &str, property_name: &str) -> u16 {
-    let definition = nuxie_schema::definition_by_name(type_name).unwrap();
-    std::iter::once(definition.name)
-        .chain(definition.ancestors.iter().copied())
-        .filter_map(nuxie_schema::definition_by_name)
-        .flat_map(|owner| owner.properties)
-        .find(|property| property.name == property_name)
-        .unwrap()
-        .key
-        .int
-}
-
-fn object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
-    push_var_uint(
-        bytes,
-        u64::from(
-            nuxie_schema::definition_by_name(type_name)
-                .unwrap()
-                .type_key
-                .int,
-        ),
-    );
-    properties(bytes);
-    push_var_uint(bytes, 0);
-}
-
-fn uint(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: u64) {
-    push_var_uint(bytes, u64::from(property_key(type_name, name)));
-    push_var_uint(bytes, value);
-}
-
-fn string(bytes: &mut Vec<u8>, type_name: &str, name: &str, value: &str) {
-    push_var_uint(bytes, u64::from(property_key(type_name, name)));
-    push_var_uint(bytes, value.len() as u64);
-    bytes.extend_from_slice(value.as_bytes());
-}
-
-fn fixture() -> Vec<u8> {
-    let mut b = b"RIVE".to_vec();
-    for v in [7, 0, 3593, 0] {
-        push_var_uint(&mut b, v);
-    }
-    object(&mut b, "Backboard", |_| {});
-    object(&mut b, "ViewModel", |b| {
-        string(b, "ViewModel", "name", "Values")
-    });
-    for (kind, name) in [
-        ("Number", "n"),
-        ("Boolean", "n_set"),
-        ("Boolean", "b"),
-        ("Boolean", "b_set"),
-        ("Color", "c"),
-        ("Boolean", "c_set"),
-        ("String", "text"),
-    ] {
-        let kind = format!("ViewModelProperty{kind}");
-        object(&mut b, &kind, |b| string(b, &kind, "name", name));
-    }
-    object(&mut b, "DataEnumCustom", |b| {
-        string(b, "DataEnumCustom", "name", "Options")
-    });
-    for key in ["first", "second"] {
-        object(&mut b, "DataEnumValue", |b| {
-            string(b, "DataEnumValue", "key", key);
-            string(b, "DataEnumValue", "value", key);
-        });
-    }
-    object(&mut b, "ViewModelPropertyEnumCustom", |b| {
-        string(b, "ViewModelPropertyEnumCustom", "name", "choice");
-        uint(b, "ViewModelPropertyEnumCustom", "enumId", 0);
-    });
-    object(&mut b, "ViewModelPropertyBoolean", |b| {
-        string(b, "ViewModelPropertyBoolean", "name", "choice_set")
-    });
-    object(&mut b, "ViewModelInstance", |b| {
-        uint(b, "ViewModelInstance", "viewModelId", 0)
-    });
-    for (i, kind) in [
-        "Number", "Boolean", "Boolean", "Boolean", "Color", "Boolean", "String", "Enum", "Boolean",
-    ]
-    .iter()
-    .enumerate()
-    {
-        let kind = format!("ViewModelInstance{kind}");
-        object(&mut b, &kind, |b| {
-            uint(b, &kind, "viewModelPropertyId", i as u64)
-        });
-    }
-    object(&mut b, "ViewModel", |b| {
-        string(b, "ViewModel", "name", "Container")
-    });
-    object(&mut b, "ViewModelPropertyList", |b| {
-        string(b, "ViewModelPropertyList", "name", "rows")
-    });
-    object(&mut b, "ViewModelInstance", |b| {
-        uint(b, "ViewModelInstance", "viewModelId", 1)
-    });
-    object(&mut b, "ViewModelInstanceList", |b| {
-        uint(b, "ViewModelInstanceList", "viewModelPropertyId", 0)
-    });
-    object(&mut b, "ViewModelInstanceListItem", |b| {
-        uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
-        uint(b, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
-    });
-    object(&mut b, "Artboard", |b| {
-        uint(b, "Artboard", "viewModelId", 0)
-    });
-    b
-}
 fn setup() -> (
     RuntimeValuePolicy,
     RuntimeOwnedViewModelHandle,
@@ -695,6 +576,11 @@ fn picked_limit_restores_only_the_third_item_and_list_limit_restores_membership(
         Some(false)
     );
     assert_eq!(operation.reports().len(), 1);
+    assert_eq!(
+        operation.reports()[0].owner_instance_identity,
+        third.instance_identity()
+    );
+    assert_eq!(operation.reports()[0].property_index, 2);
     assert_eq!(container.resolve_change_capture(capture).unwrap().len(), 2);
     checkpoint.commit();
 
@@ -970,4 +856,70 @@ fn checked_reports_follow_attempt_order_across_early_script_flushes() {
         RuntimeViewModelChangeValue::Number(20.0)
     ));
     checkpoint.commit();
+}
+
+#[test]
+fn report_payloads_share_the_operation_byte_bound() {
+    let (mut policy, root, _file, _factory) = setup();
+    let rules = (0..1025)
+        .map(|_| {
+            installed_rule(
+                "text",
+                RuntimeValueRuleKind::Length {
+                    minimum: 0,
+                    maximum: 1,
+                },
+                RuntimeValueRuleMode::Mark,
+            )
+        })
+        .collect::<Vec<_>>();
+    policy.set_rules(&rules).unwrap();
+    let roots = std::slice::from_ref(&root);
+    let _checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    root.borrow_mut()
+        .set_string_by_property_name("text", &vec![b'x'; 8192]);
+    assert_eq!(
+        operation.apply(&policy, &capture, roots),
+        Err(RuntimeValuePolicyError::LimitExceeded)
+    );
+}
+
+#[test]
+fn value_and_its_marker_report_a_marking_breach_once() {
+    for explicit in [true, false] {
+        let (mut policy, root, _file, _factory) = setup();
+        policy.set_markers(&[pair("n", "n_set")]).unwrap();
+        policy
+            .set_rules(&[installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMinimum(10.0),
+                RuntimeValueRuleMode::Mark,
+            )])
+            .unwrap();
+        let roots = std::slice::from_ref(&root);
+        let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+        let mut operation = policy.begin_rules(roots).unwrap();
+        let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+        policy.prepare_capture(&capture);
+        root.borrow_mut().set_number_by_property_name("n", 5.0);
+        if explicit {
+            root.borrow_mut()
+                .set_boolean_by_property_name("n_set", true);
+        }
+        operation.apply(&policy, &capture, roots).unwrap();
+        policy
+            .apply_markers(&capture, roots, |owner, index, value| {
+                Ok(owner
+                    .borrow_mut()
+                    .set_boolean_by_property_index(index, value))
+            })
+            .unwrap();
+        operation.apply(&policy, &capture, roots).unwrap();
+        assert_eq!(operation.reports().len(), 1, "explicit marker: {explicit}");
+        drop(capture);
+        checkpoint.commit();
+    }
 }

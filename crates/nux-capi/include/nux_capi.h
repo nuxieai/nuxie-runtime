@@ -62,10 +62,12 @@
  *    task. This includes every view-model change and its bytes_value/list-item
  *    views. Optional string fields use NULL+0 for absent and non-NULL+0 for
  *    authored present-empty.
- *    View-model change rows describe only the graph explicitly bound by the
- *    host. Nested-occurrence-local and global ViewModels still participate in
- *    the operation's bounded checkpoint, validation, and render invalidation;
- *    their changes are not exposed as unrelated root-subscription rows.
+ *    View-model change rows describe the explicitly bound graph and each
+ *    global explicitly set on this player by the host, using each changed
+ *    owner's instance identity. Default globals and nested-occurrence-local
+ *    ViewModels participate in the bounded checkpoint and render invalidation
+ *    but are not reported as unrelated root-subscription rows. Host mutations
+ *    are reported in their mutation result, not repeated by a later step.
  * 10. nux_player_step fully validates the bounded batch before mutation and
  *    executes under the shared artboard-occurrence gate. Reentrant access from
  *    any callback returns REENTRANT_CALL. An unexpected post-mutation failure

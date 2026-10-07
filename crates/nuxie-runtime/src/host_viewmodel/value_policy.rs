@@ -63,6 +63,8 @@ pub struct RuntimeValuePolicy {
     file: RuntimeFileHandle,
     markers: Vec<Marker>,
     rules: Vec<Rule>,
+    groups: Vec<operation::groups::Group>,
+    group_refusals: RefCell<BTreeMap<(u64, usize), Vec<usize>>>,
 }
 
 impl RuntimeValuePolicy {
@@ -71,6 +73,8 @@ impl RuntimeValuePolicy {
             file,
             markers: Vec::new(),
             rules: Vec::new(),
+            groups: Vec::new(),
+            group_refusals: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -80,6 +84,10 @@ impl RuntimeValuePolicy {
 
     pub fn has_rules(&self) -> bool {
         !self.rules.is_empty()
+    }
+
+    pub fn has_groups(&self) -> bool {
+        !self.groups.is_empty()
     }
 
     pub fn rule(&self, index: usize) -> Option<&RuntimeValueRule> {
@@ -267,14 +275,16 @@ impl RuntimeValuePolicy {
                 }
             }
         }
+        self.validate_group_inputs(&rules, &self.markers)?;
         self.rules = rules;
+        self.group_refusals.borrow_mut().clear();
         Ok(())
     }
 
     /// Enable ordered host/script writes before an operation starts. A file
     /// without markers or rules keeps the ordinary change-only journal unchanged.
     pub fn prepare_capture(&self, capture: &RuntimeViewModelChangeCapture) {
-        if self.has_markers() || self.has_rules() {
+        if self.has_markers() || self.has_rules() || self.has_groups() {
             capture.track_unchanged_writes();
         }
     }
@@ -283,7 +293,8 @@ impl RuntimeValuePolicy {
     /// Call after a marker pass changes a value, then run the marker pass again
     /// to include any writes caused by those bindings in the same journal.
     pub fn flush_marker_bindings(&self, artboard: &crate::ArtboardInstance) -> bool {
-        (self.has_markers() || self.has_rules()) && artboard.native_handle().update_pass(true)
+        (self.has_markers() || self.has_rules() || self.has_groups())
+            && artboard.native_handle().update_pass(true)
     }
 
     pub fn set_markers(
@@ -322,6 +333,7 @@ impl RuntimeValuePolicy {
         if !values.is_disjoint(&targets) {
             return Err(RuntimeValuePolicyError::InvalidArgument);
         }
+        self.validate_group_inputs(&self.rules, &markers)?;
         self.markers = markers;
         Ok(())
     }
@@ -432,3 +444,7 @@ mod tests;
 mod operation;
 pub(crate) use operation::capture_initial_policy_owner;
 pub use operation::*;
+
+#[cfg(test)]
+#[path = "value_policy_group_tests.rs"]
+mod group_tests;

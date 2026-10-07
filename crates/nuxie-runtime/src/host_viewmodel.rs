@@ -30,4 +30,5 @@ pub use source_handles::*;
 pub use transactions::*;
 pub(crate) use transactions::{
     capture_native_change, capture_native_list_change, capture_native_view_model_change,
+    capture_unchanged_native_write,
 };

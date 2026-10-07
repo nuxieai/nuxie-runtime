@@ -16,6 +16,7 @@ pub enum RuntimeCheckedValueInput {
 /// graph transaction and capture, and publish reports only after committing.
 /// An operation is required when rules are installed. With no rules, the native
 /// write and marker clear also work without an operation.
+/// Accepted writes return no code; only a refusal returns its first rule code.
 pub fn runtime_checked_value_write(
     policy: &RuntimeValuePolicy,
     operation: Option<&mut RuntimeValuePolicyOperation>,
@@ -97,11 +98,15 @@ pub fn runtime_checked_value_write(
         operation.apply_pending_writes(policy, &roots.values().cloned().collect::<Vec<_>>())?;
         let result =
             operation.checked_write(policy, root, path, candidate.clone(), marker, write)?;
-        let code = result
-            .rule_indices
-            .first()
-            .and_then(|index| policy.rule(*index))
-            .map(|rule| rule.code.clone());
+        let code = if result.applied {
+            None
+        } else {
+            result
+                .rule_indices
+                .first()
+                .and_then(|index| policy.rule(*index))
+                .map(|rule| rule.code.clone())
+        };
         Ok((result.applied, code))
     } else {
         write()?;

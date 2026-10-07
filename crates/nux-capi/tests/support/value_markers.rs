@@ -119,6 +119,7 @@ fn float(bytes: &mut Vec<u8>, kind: &str, name: &str, value: f32) {
 )]
 pub enum Action {
     Number(f32),
+    Text(&'static str),
     Marker(bool),
     Script,
 }
@@ -237,6 +238,20 @@ fn fixture_input(script: Option<&[u8]>, actions: &[Action], input: bool, text: b
                     "BindablePropertyNumber",
                     "propertyValue",
                     0,
+                    None,
+                    1,
+                );
+                object(&mut b, "ListenerViewModelChange", |_| {});
+            }
+            Action::Text(value) => {
+                object(&mut b, "BindablePropertyString", |b| {
+                    string(b, "BindablePropertyString", "propertyValue", value)
+                });
+                binding(
+                    &mut b,
+                    "BindablePropertyString",
+                    "propertyValue",
+                    6,
                     None,
                     1,
                 );
@@ -386,6 +401,31 @@ fn occurrences_bound(script: &[u8], label_source: u8) -> Vec<u8> {
     });
     object(&mut b, "StateMachine", |b| {
         string(b, "StateMachine", "name", "Root")
+    });
+    b
+}
+
+#[allow(dead_code, reason = "shared fixture module used by several test files")]
+pub fn list_fixture() -> Vec<u8> {
+    let mut b = values();
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Container")
+    });
+    object(&mut b, "ViewModelPropertyList", |b| {
+        string(b, "ViewModelPropertyList", "name", "rows")
+    });
+    object(&mut b, "ViewModelInstance", |b| {
+        uint(b, "ViewModelInstance", "viewModelId", 1)
+    });
+    object(&mut b, "ViewModelInstanceList", |b| {
+        uint(b, "ViewModelInstanceList", "viewModelPropertyId", 0)
+    });
+    object(&mut b, "ViewModelInstanceListItem", |b| {
+        uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
+        uint(b, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+    });
+    object(&mut b, "Artboard", |b| {
+        uint(b, "Artboard", "viewModelId", 0)
     });
     b
 }

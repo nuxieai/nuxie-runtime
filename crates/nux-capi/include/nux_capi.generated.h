@@ -2414,10 +2414,18 @@ NuxStatus nux_player_acknowledge_presented(struct NuxPlayer *player, uint64_t re
 NuxStatus nux_player_enable_semantics(struct NuxPlayer *player);
 
 /**
- * Copy a field's editable UTF-8 value into caller-owned memory, without
- * a terminator. A null buffer with zero capacity queries the required length.
+ * Copy the native draft UTF-8 text without a terminator. `name` is the exact
+ * native TextInput component name supplied by the release table; `node_id`
+ * identifies its TextField in the validated presented snapshot. Resolve only
+ * in that field's current occurrence and within its owner subtree. Secure text
+ * is returned only through this explicit buffer, never semantic/diagnostic
+ * capture. This read does not focus, edit, advance, present or invalidate the
+ * snapshot, and does not require action-dispatch clipping eligibility.
+ * A null buffer with zero capacity queries the required byte count.
  * Insufficient capacity returns LIMIT_EXCEEDED without copying partial text.
- * This explicit execution read is not included in semantic/diagnostic captures.
+ * Hidden/disabled fields or ancestors and absent targets return NOT_FOUND;
+ * stale/foreign snapshots return HANDLE_MISMATCH; ambiguous names return
+ * INVALID_ARGUMENT. Existing editable-property compatibility is retained.
  */
 NuxStatus nux_player_field_string_copy(const struct NuxPlayer *player,
                                        const struct NuxSemanticSnapshot *snapshot,

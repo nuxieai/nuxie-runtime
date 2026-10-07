@@ -17,7 +17,9 @@ pub use video_sync::*;
 mod layout_size;
 mod player_globals;
 mod value_policy;
+mod value_rules;
 pub use value_policy::{NuxValueMarker, nux_file_set_value_markers};
+pub use value_rules::*;
 mod player_view_models;
 pub use layout_size::*;
 pub use player_globals::*;
@@ -1416,6 +1418,7 @@ pub struct NuxPlayerStepInfo {
     pub host_command_count: usize,
     pub view_model_change_count: usize,
     pub focus_input_result_count: usize,
+    pub rule_report_count: usize,
 }
 
 pub const NUX_PLAYER_STEP_INFO_V3_MIN_SIZE: usize =
@@ -1432,6 +1435,7 @@ impl Default for NuxPlayerStepInfo {
             host_command_count: 0,
             view_model_change_count: 0,
             focus_input_result_count: 0,
+            rule_report_count: 0,
         }
     }
 }
@@ -2373,7 +2377,9 @@ pub(crate) fn import_file_with_prepared_host_commands(
     };
     #[cfg(feature = "scripting")]
     {
-        let shares_command_module = prepared.as_ref().is_some_and(|config| config.module_name == "value_rules");
+        let shares_command_module = prepared
+            .as_ref()
+            .is_some_and(|config| config.module_name == "value_rules");
         let (execution_limits, extension): (_, Arc<dyn nuxie::ScriptHostExtension>) =
             if let Some(prepared) = prepared {
                 let execution_limits = ScriptExecutionLimits::new()
@@ -2400,7 +2406,8 @@ pub(crate) fn import_file_with_prepared_host_commands(
                     Arc::new(nuxie::NoopScriptHostExtension),
                 )
             };
-        let (extension, value_rule_file) = value_rule_script::Extension::wrap(extension, shares_command_module);
+        let (extension, value_rule_file) =
+            value_rule_script::Extension::wrap(extension, shares_command_module);
         let capability = match native_shader_authority {
             NativeShaderImportAuthority::Denied => {
                 // SAFETY: this helper is reachable only from the explicit
@@ -2448,9 +2455,11 @@ pub(crate) fn import_file_with_prepared_host_commands(
     }
 }
 
-/// Import exact caller-authenticated bytes and install one generic script
-/// module named by `config`. The module exposes only
-/// `command(name, payload)`. This function performs no package/signature
+/// Import exact caller-authenticated bytes and install the configured command
+/// module plus `value_rules.set(root, path, value)` for synchronous checked writes.
+/// Empty root selects the bound model; other roots name host-installed globals.
+/// The configured module exposes `command(name, payload)`; if named value_rules,
+/// both functions share that module. This function performs no package/signature
 /// authentication; choosing this explicit import path is the caller's trust
 /// assertion. Ordinary `nux_file_import` remains script-inert.
 ///
@@ -4374,12 +4383,23 @@ fn player_step_body(
     } else {
         None
     };
-    let rule_operation = match policy.filter(|policy| policy.has_rules()).map(|policy| policy.begin_rules(&scene_view_model_roots)).transpose() {
+    let rule_operation = match policy
+        .filter(|policy| policy.has_rules())
+        .map(|policy| policy.begin_rules(&scene_view_model_roots))
+        .transpose()
+    {
         Ok(operation) => operation.map(|operation| Rc::new(RefCell::new(operation))),
-        Err(error) => return publish_player_step_failure(out_result, value_policy::status(error), "value rule checkpoint failed"),
+        Err(error) => {
+            return publish_player_step_failure(
+                out_result,
+                value_policy::status(error),
+                "value rule checkpoint failed",
+            );
+        }
     };
     #[cfg(feature = "scripting")]
-    let _value_rule_script = value_rule_script::enter(player, bound_view_model.as_ref(), rule_operation.clone());
+    let _value_rule_script =
+        value_rule_script::enter(player, bound_view_model.as_ref(), rule_operation.clone());
     let mut rule_reports = Vec::new();
     let mut pointer_results = Vec::with_capacity(prepared.pointers.len());
     let mut focus_input_results = Vec::with_capacity(prepared.focus_inputs.len());
@@ -4571,19 +4591,28 @@ fn player_step_body(
             roots.extend(retained_policy_scope);
             if let Some(policy) = policy {
                 loop {
-                    let rules_changed = match rule_operation.as_ref().map(|operation| operation.borrow_mut().apply(policy, &capture, &roots)).transpose() {
+                    let rules_changed = match rule_operation
+                        .as_ref()
+                        .map(|operation| operation.borrow_mut().apply(policy, &capture, &roots))
+                        .transpose()
+                    {
                         Ok(changed) => changed.unwrap_or(false),
                         Err(error) => {
                             player.artboard.poisoned.set(true);
-                            return publish_player_step_failure(out_result, value_policy::status(error), "value rule pass failed");
+                            return publish_player_step_failure(
+                                out_result,
+                                value_policy::status(error),
+                                "value rule pass failed",
+                            );
                         }
                     };
-                    let marker_result = policy.apply_markers(&capture, &roots, |owner, index, value| {
-                        let mut owner = owner
-                            .try_borrow_mut()
-                            .map_err(|_| nuxie::RuntimeValuePolicyError::BorrowConflict)?;
-                        Ok(owner.set_boolean_by_property_index(index, value))
-                    });
+                    let marker_result =
+                        policy.apply_markers(&capture, &roots, |owner, index, value| {
+                            let mut owner = owner
+                                .try_borrow_mut()
+                                .map_err(|_| nuxie::RuntimeValuePolicyError::BorrowConflict)?;
+                            Ok(owner.set_boolean_by_property_index(index, value))
+                        });
                     match marker_result.map(|changed| changed || rules_changed) {
                         Ok(false) => break,
                         Ok(true) => {
@@ -4880,6 +4909,7 @@ pub unsafe extern "C" fn nux_player_step_result_info(
             host_command_count: result.host_commands.len(),
             view_model_change_count: result.view_model_changes.len(),
             focus_input_result_count: result.focus_input_results.len(),
+            rule_report_count: result.rule_reports.len(),
         };
         unsafe { write_caller_struct(out_info, &value, NUX_PLAYER_STEP_INFO_V3_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)

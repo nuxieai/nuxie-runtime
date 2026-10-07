@@ -14,7 +14,9 @@ fn view(s: &str) -> NuxStringView {
     }
 }
 fn import() -> *mut NuxFile {
-    let bytes = global_values::fixture();
+    import_bytes(global_values::fixture(false))
+}
+fn import_bytes(bytes: Vec<u8>) -> *mut NuxFile {
     let mut file = ptr::null_mut();
     assert_eq!(
         unsafe {
@@ -211,22 +213,177 @@ fn one_global_instance_updates_two_players_and_invalidates_both() {
     let v = model(f, 0);
     write(v, true);
     for p in [first, second] {
-        assert_eq!(unsafe { nux_player_set_global_view_model(p, view("Flags"), v) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_player_set_global_view_model(p, view("Flags"), v) },
+            NuxStatus::Ok
+        );
         assert_eq!(labels(p), ["1", "1", "1"]);
     }
     let first_revision = step_and_present(first);
     let second_revision = step_and_present(second);
     write(v, false);
     for (p, revision) in [(first, first_revision), (second, second_revision)] {
-        assert_eq!(unsafe { nux_player_acknowledge_presented(p, revision) }, NuxStatus::HandleMismatch);
+        assert_eq!(
+            unsafe { nux_player_acknowledge_presented(p, revision) },
+            NuxStatus::HandleMismatch
+        );
         assert_eq!(labels(p), ["0", "0", "0"]);
     }
-    assert_eq!(unsafe { nux_player_set_global_view_model(first, view("Flags"), ptr::null()) }, NuxStatus::Ok);
+    assert_eq!(
+        unsafe { nux_player_set_global_view_model(first, view("Flags"), ptr::null()) },
+        NuxStatus::Ok
+    );
     write(v, true);
     assert_eq!(labels(first), ["0", "0", "0"]);
     assert_eq!(labels(second), ["1", "1", "1"]);
-    unsafe { nux_player_free(first); nux_artboard_instance_free(a); nux_file_free(f); }
+    unsafe {
+        nux_player_free(first);
+        nux_artboard_instance_free(a);
+        nux_file_free(f);
+    }
     write(v, false);
     assert_eq!(labels(second), ["0", "0", "0"]);
-    unsafe { nux_player_free(second); nux_artboard_instance_free(b); nux_view_model_instance_free(v); }
+    unsafe {
+        nux_player_free(second);
+        nux_artboard_instance_free(b);
+        nux_view_model_instance_free(v);
+    }
+}
+
+#[test]
+fn listener_global_write_is_reported_only_for_host_set_roots() {
+    for host_set in [false, true] {
+        let f = import_bytes(global_values::fixture(true));
+        let (a, p) = player(f, 1);
+        let v = model(f, 0);
+        if host_set {
+            assert_eq!(
+                unsafe { nux_player_set_global_view_model(p, view("Flags"), v) },
+                NuxStatus::Ok
+            );
+        } else {
+            // Bind defaults through the same clear operation without subscribing.
+            assert_eq!(
+                unsafe { nux_player_set_global_view_model(p, view("Flags"), ptr::null()) },
+                NuxStatus::Ok
+            );
+        }
+        assert_eq!(labels(p), ["0", "0", "0"]);
+        let mut identity = 0;
+        assert_eq!(
+            unsafe { nux_view_model_instance_identity(v, &mut identity) },
+            NuxStatus::Ok
+        );
+        let pointer = NuxPlayerPointerEvent {
+            kind: NUX_PLAYER_POINTER_KIND_DOWN,
+            x: 10.0,
+            y: 5.0,
+            pointer_id: 1,
+            timestamp_seconds: 0.0,
+        };
+        let step = NuxPlayerStep {
+            pointers: &pointer,
+            pointer_count: 1,
+            correlation_id: 3593,
+            ..NuxPlayerStep::default()
+        };
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_step(p, &step, &mut result) },
+            NuxStatus::Ok
+        );
+        let mut info = NuxPlayerStepInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.view_model_change_count, usize::from(host_set));
+        if host_set {
+            let mut change = NuxViewModelChangeView::default();
+            assert_eq!(
+                unsafe { nux_player_step_result_view_model_change(result, 0, &mut change) },
+                NuxStatus::Ok
+            );
+            assert_eq!(change.owner_instance_id, identity);
+            assert_eq!(change.property_index, 0);
+            assert_eq!(change.kind, NUX_VIEW_MODEL_VALUE_KIND_BOOL);
+            assert_eq!(change.bool_value, 1);
+            assert_eq!(change.origin, NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME);
+            assert_eq!(change.correlation_id, 3593);
+        }
+        unsafe {
+            nux_player_step_result_free(result);
+        }
+        assert_eq!(labels(p), ["1", "1", "1"]);
+        unsafe {
+            nux_view_model_instance_free(v);
+            nux_player_free(p);
+            nux_artboard_instance_free(a);
+            nux_file_free(f);
+        }
+    }
+}
+
+#[test]
+fn host_global_mutation_is_reported_once_in_the_mutation_result() {
+    let f = import();
+    let (a, p) = player(f, 1);
+    let v = model(f, 0);
+    unsafe {
+        assert_eq!(
+            nux_player_set_global_view_model(p, view("Flags"), v),
+            NuxStatus::Ok
+        );
+        let mut identity = 0;
+        assert_eq!(
+            nux_view_model_instance_identity(v, &mut identity),
+            NuxStatus::Ok
+        );
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL,
+            instance: v,
+            path: view("enabled"),
+            bool_value: 1,
+            ..NuxViewModelMutation::default()
+        };
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            correlation_id: 42,
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = ptr::null_mut();
+        assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+        let mut change = NuxViewModelChangeView::default();
+        assert_eq!(
+            nux_view_model_mutation_result_change(result, 0, &mut change),
+            NuxStatus::Ok
+        );
+        assert_eq!(change.owner_instance_id, identity);
+        assert_eq!(change.bool_value, 1);
+        assert_eq!(change.origin, NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER);
+        assert_eq!(change.correlation_id, 42);
+        assert_eq!(
+            nux_view_model_mutation_result_change(result, 1, &mut change),
+            NuxStatus::NotFound
+        );
+        nux_view_model_mutation_result_free(result);
+        let mut step_result = ptr::null_mut();
+        assert_eq!(
+            nux_player_step(p, &NuxPlayerStep::default(), &mut step_result),
+            NuxStatus::Ok
+        );
+        let mut info = NuxPlayerStepInfo::default();
+        assert_eq!(
+            nux_player_step_result_info(step_result, &mut info),
+            NuxStatus::Ok
+        );
+        assert_eq!(info.view_model_change_count, 0);
+        nux_player_step_result_free(step_result);
+        assert_eq!(labels(p), ["1", "1", "1"]);
+        nux_player_free(p);
+        nux_artboard_instance_free(a);
+        nux_view_model_instance_free(v);
+        nux_file_free(f);
+    }
 }

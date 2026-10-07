@@ -7,18 +7,29 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ae4e1776466164bfabd64ecedecf2d8f347fa0fc`
+- LAST_SYNCED_SHA: `a68b6dabe1a30f15c1c36f79b7c66eee8b079b6e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `05d690ee5a8879d738679f8ebad17c4a61af50ac` (refreshed 2026-10-07 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Ten upstream commits remain after this checkpoint at the fetched target.
-  All 197 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (219 after `5892bb05`); this
+  Nine upstream commits remain after this checkpoint at the fetched target.
+  All 198 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (220 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `a68b6dab`, integrated atop downstream `1e53c494d0`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All three script-module asset tests pass, source/pipeline tests pass
+  12, manifest tests pass 27, and the generated inventory is current. The shared
+  AnimaScript module-name constant is translated; this does not enable guest
+  execution. Guest VM adoption, registration, mixed-backend Luau guards, WAMR
+  and guest-browser bindings remain deferred under UNIV-3728. Existing omitted
+  VM-presence assertions were not removed or weakened by this update. Private
+  editor implementation is absent from the public delta and is not claimed
+  imported. Active pins advance together; historical evidence is unchanged.
+  No broad corpus/platform rerun is claimed for this constant-only change.
 - Validation at `ae4e1776`, integrated atop downstream `0af32351b6`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean, including missing VM-handle forwarding and receiver-coercion correction
@@ -365,6 +376,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `a68b6dabe1a30f15c1c36f79b7c66eee8b079b6e` | Translate the shared AnimaScript module-name constant. Guest VM adoption/registration, mixed-backend Luau guards, WAMR and guest-browser binding changes remain parked. Existing omitted VM-presence assertions are not newly weakened; private editor code absent from the public delta is not claimed imported. Both independent reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ae4e1776466164bfabd64ecedecf2d8f347fa0fc` | Translate host SMI completion polling before advance, per-file VM pending continuation and watermark internal-overload use; owner-scoped pool counts and all-thread network request lookup. Preserve Lua-thread completion handoff and count its undelivered queue along with the existing per-VM decoder/network owners. Port all five new upstream regressions. Browser decoding uses the approved Rust codec/pool; Emscripten symbol-glue fixes have no product counterpart and the common failure text already matches. Guest Wasm pending-work query remains parked. Private CLI changes absent from the public delta are not claimed. Both review passes and correction rereviews are clean; validation and the unchanged threaded-test race are recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `de3e86090892b68072e7d4505e8d979386fc9a30` | Translate scripted scroll targeting, local position/delta dispatch, pointer IDs through nested/list and scripted-artboard routes, handler-decline fallthrough, claimed-gesture latching, quiet timeout and collapse/cancel behavior. Add the live Lua ScrollEvent constructor, readonly fields, hit claim, global atoms and artboard method; anchor pointer/scroll userdata across protected calls. Preserve the legacy 21-bit serialized method default while adding opt-in bit 21. Wheel-disabled constraints now decline inertia cancellation. Port all six scripting tests and the runtime scroll regression; add a supplemental constructor C-string-boundary regression after source review. Source-equivalence and separate Rust-integration reviews are clean. The approved live luaur implementation owns Lua changes; excluded historical Lua mirrors are not a second execution backend. Guest Wasm VM calls, ABI/IDL/generated imports and browser guest forwarding remain parked; private editor-preview changes absent from the public delta are not claimed imported. Validation is recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7aa93402a27c800db8a36acc8672612c100ea9b1` | Translate monotonic trigger/change sequences, per-state-machine windows and per-layer consumption, listener baselines and inactive ancestor markers; remove frame-tail view-model resets and detached Lua tracking. Translate component-trigger pending state, text-input caret/hit/undo corrections, component-list replacement/layout invalidation and clone changes. Add paint shader transforms across runtime/render API, GPU matrices, deferred commands, SRIV opcode 44, SVG, Lua, renderer FFI and C ABI; preserve optional callback prefix handling. Translate stroke-cap full-width spokes and regenerate affected backend shaders. Port all 15 new trigger-window tests and revised text/list/render tests; capture fresh C++ Metal GMs. C++ CoreGraphics/Skia/Canvas2D/test-host adapters are unshipped. Guest Wasm console/timer/render bindings remain parked; private .rive_head metadata is not implementation evidence. Reviews and validation are recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

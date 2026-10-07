@@ -3,8 +3,6 @@ use nux_capi::*;
 use std::ptr;
 #[path = "support/value_markers.rs"]
 mod fixture;
-#[path = "../../nuxie-runtime/tests/support/value_policy_fixture.rs"]
-mod list_fixture;
 fn view(value: &str) -> NuxStringView {
     NuxStringView {
         data: value.as_ptr().cast(),
@@ -782,7 +780,7 @@ fn text_binding_rules_use_installed_modes_and_return_kept_text() {
 }
 
 fn list_handles() -> Handles {
-    let bytes = list_fixture::fixture();
+    let bytes = fixture::list_fixture();
     let mut file = ptr::null_mut();
     assert_eq!(
         unsafe {
@@ -1002,5 +1000,286 @@ fn native_copy_and_list_row_bindings_read_kept_values_in_the_same_step() {
     unsafe {
         nux_semantic_snapshot_free(snapshot);
         nux_player_step_result_free(result);
+    }
+}
+
+#[cfg(feature = "scripting")]
+#[test]
+fn text_rules_cover_host_listener_and_both_script_write_paths() {
+    let _flags = luaur_common::ScopedAllFlags::enter(true);
+    let options = [view("yes"), view("no")];
+    // The expected kept values are the same literal contract used by the
+    // text-input test, independently of which native writer produces them.
+    for (kind, mode, attempted, kept, operand, minimum, maximum) in [
+        (
+            NUX_VALUE_RULE_LENGTH,
+            NUX_VALUE_RULE_REFUSE,
+            "abc",
+            "",
+            "",
+            0,
+            2,
+        ),
+        (
+            NUX_VALUE_RULE_LENGTH,
+            NUX_VALUE_RULE_MARK,
+            "a",
+            "a",
+            "",
+            2,
+            20,
+        ),
+        (
+            NUX_VALUE_RULE_PATTERN,
+            NUX_VALUE_RULE_MARK,
+            "1",
+            "1",
+            "[a-z]+",
+            0,
+            0,
+        ),
+        (
+            NUX_VALUE_RULE_URL,
+            NUX_VALUE_RULE_MARK,
+            "relative",
+            "relative",
+            "",
+            0,
+            0,
+        ),
+        (
+            NUX_VALUE_RULE_DATE,
+            NUX_VALUE_RULE_MARK,
+            "2026-02-29",
+            "2026-02-29",
+            "",
+            0,
+            0,
+        ),
+        (
+            NUX_VALUE_RULE_TEXT_MINIMUM,
+            NUX_VALUE_RULE_MARK,
+            "2025-12-31",
+            "2025-12-31",
+            "2026-01-01",
+            0,
+            0,
+        ),
+        (
+            NUX_VALUE_RULE_TEXT_MAXIMUM,
+            NUX_VALUE_RULE_REFUSE,
+            "2027-01-01",
+            "",
+            "2026-12-31",
+            0,
+            0,
+        ),
+        (
+            NUX_VALUE_RULE_ALLOWED_VALUES,
+            NUX_VALUE_RULE_REFUSE,
+            "maybe",
+            "",
+            "",
+            0,
+            0,
+        ),
+    ] {
+        for writer in ["host", "listener", "script", "checked-script"] {
+            let action = if writer == "checked-script" {
+                format!(
+                    "local ok, code = require('value_rules').set('', 'text', '{attempted}'); assert(ok == {} and code == 'authored-code')",
+                    mode == NUX_VALUE_RULE_MARK
+                )
+            } else {
+                format!("context:viewModel().text.value = '{attempted}'")
+            };
+            let source = format!(
+                "return function(context) return {{ init = function() return true end, performAction = function() {action} end }} end"
+            );
+            let mut size = 0;
+            let code = luaur_compiler::functions::luau_compile::luau_compile(
+                source.as_ptr().cast(),
+                source.len(),
+                ptr::null_mut(),
+                &mut size,
+            );
+            assert!(!code.is_null());
+            let mut payload = vec![0];
+            payload.extend_from_slice(unsafe { std::slice::from_raw_parts(code.cast(), size) });
+            let actions = match writer {
+                "host" => vec![],
+                "listener" => vec![fixture::Action::Text(attempted)],
+                _ => vec![fixture::Action::Script],
+            };
+            let bytes = fixture::fixture(Some(&payload), &actions, false);
+            let mut file = ptr::null_mut();
+            let mut import_result = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_file_import_trusted_with_host_commands(
+                        bytes.as_ptr(),
+                        bytes.len(),
+                        &NuxRenderCallbacks::default(),
+                        &NuxHostCommandImportConfig {
+                            module_name: view("commands"),
+                            ..Default::default()
+                        },
+                        &mut file,
+                        &mut import_result,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            unsafe {
+                nux_capi_result_free(import_result);
+            }
+            let h = handles_from_file(file);
+            let mut entry = rule("text", kind, mode);
+            entry.text = view(operand);
+            if kind == NUX_VALUE_RULE_LENGTH {
+                entry.minimum = minimum;
+                entry.maximum = maximum;
+                entry.bound_flags = NUX_VALUE_RULE_HAS_MINIMUM | NUX_VALUE_RULE_HAS_MAXIMUM;
+            }
+            if kind == NUX_VALUE_RULE_ALLOWED_VALUES {
+                entry.values = options.as_ptr();
+                entry.value_count = options.len();
+            }
+            assert_eq!(h.install(&[entry]), NuxStatus::Ok);
+            let player = Player::new(&h);
+            let (initial, info) = player.step(false);
+            assert_eq!(info.rule_report_count, 0);
+            unsafe {
+                nux_player_step_result_free(initial);
+            }
+            let observed = if writer == "host" {
+                let result = h.mutate(&[NuxViewModelMutation {
+                    instance: h.value,
+                    path: view("text"),
+                    kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+                    bytes_value: NuxByteView {
+                        data: attempted.as_ptr(),
+                        len: attempted.len(),
+                    },
+                    ..Default::default()
+                }]);
+                assert_eq!(result_info(result).rule_report_count, 1, "{writer}: {kind}");
+                let observed = report(result, 0).refused;
+                unsafe {
+                    nux_view_model_mutation_result_free(result);
+                }
+                observed
+            } else {
+                let (result, info) = player.step(true);
+                assert_eq!(info.rule_report_count, 1, "{writer}: {kind}");
+                let mut report = NuxValueRuleReportView::default();
+                assert_eq!(
+                    unsafe { nux_player_step_result_rule_report(result, 0, &mut report) },
+                    NuxStatus::Ok
+                );
+                let observed = report.refused;
+                unsafe {
+                    nux_player_step_result_free(result);
+                }
+                observed
+            };
+            assert_eq!(
+                observed,
+                u32::from(mode == NUX_VALUE_RULE_REFUSE),
+                "{writer}: {kind}"
+            );
+            let mut snapshot = ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_view_model_instance_snapshot(h.value, &mut snapshot) },
+                NuxStatus::Ok
+            );
+            let mut value = NuxViewModelSnapshotValueView::default();
+            assert_eq!(
+                unsafe { nux_view_model_snapshot_value(snapshot, 6, &mut value) },
+                NuxStatus::Ok
+            );
+            let observed = if value.bytes_value.len == 0 {
+                &[]
+            } else {
+                unsafe { std::slice::from_raw_parts(value.bytes_value.data, value.bytes_value.len) }
+            };
+            assert_eq!(observed, kept.as_bytes(), "{writer}: {kind}");
+            unsafe {
+                nux_view_model_snapshot_free(snapshot);
+            }
+        }
+    }
+}
+
+#[test]
+fn installed_minimum_mode_controls_host_and_listener_writes() {
+    for mode in [NUX_VALUE_RULE_MARK, NUX_VALUE_RULE_REFUSE] {
+        for writer in ["host", "listener"] {
+            let bytes = fixture::fixture(None, &[fixture::Action::Number(0.0)], false);
+            let mut file = ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    nux_file_import(
+                        bytes.as_ptr(),
+                        bytes.len(),
+                        &NuxRenderCallbacks::default(),
+                        &mut file,
+                    )
+                },
+                NuxStatus::Ok
+            );
+            let h = handles_from_file(file);
+            let mut entry = rule("n", NUX_VALUE_RULE_NUMBER_MINIMUM, mode);
+            entry.number_bound = 1.0;
+            assert_eq!(h.install(&[entry]), NuxStatus::Ok);
+            let player = Player::new(&h);
+            let (initial, info) = player.step(false);
+            assert_eq!(info.rule_report_count, 0);
+            unsafe {
+                nux_player_step_result_free(initial);
+            }
+            let prime = h.mutate(&[h.write("n", 1.0)]);
+            assert_eq!(result_info(prime).rule_report_count, 0);
+            unsafe {
+                nux_view_model_mutation_result_free(prime);
+            }
+            let refused = if writer == "host" {
+                let result = h.mutate(&[h.write("n", 0.0)]);
+                assert_eq!(result_info(result).rule_report_count, 1);
+                assert_eq!(
+                    result_info(result).applied_count,
+                    usize::from(mode == NUX_VALUE_RULE_MARK)
+                );
+                let refused = report(result, 0).refused;
+                unsafe {
+                    nux_view_model_mutation_result_free(result);
+                }
+                refused
+            } else {
+                let (result, info) = player.step(true);
+                assert_eq!(info.rule_report_count, 1);
+                let mut report = NuxValueRuleReportView::default();
+                assert_eq!(
+                    unsafe { nux_player_step_result_rule_report(result, 0, &mut report) },
+                    NuxStatus::Ok
+                );
+                let refused = report.refused;
+                unsafe {
+                    nux_player_step_result_free(result);
+                }
+                refused
+            };
+            // One step below the installed minimum stays at one in refuse
+            // mode and lands at zero in mark mode. The installer decides.
+            assert_eq!(refused, u32::from(mode == NUX_VALUE_RULE_REFUSE));
+            assert_number(
+                &h,
+                if mode == NUX_VALUE_RULE_REFUSE {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+        }
     }
 }

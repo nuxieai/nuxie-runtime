@@ -33,4 +33,5 @@ pub(crate) use transactions::{
     capture_unchanged_native_write,
 };
 pub use value_policy::*;
+pub(crate) use value_policy::capture_initial_policy_owner;
 pub use value_rules::*;

@@ -1,0 +1,1 @@
+Exact F5 published goals fixture from the iOS SDK forms-saves/goals evidence. Publisher 81fa73c87f0638d151d0a4082fbcab1cd61ec73c. SHA-256 a62578818e941eb3366fae0cde4348ac60af3a0294dc6a97a4e054292f03f1cb. Initial titles are Read and Walk. Tests acquire the existing child instead of treating list indices as property paths.

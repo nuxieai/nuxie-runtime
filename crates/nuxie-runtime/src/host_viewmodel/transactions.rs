@@ -363,6 +363,19 @@ impl RuntimeOwnedViewModelTransaction {
                 .set_boolean_by_property_name_path(path, value)
         })
     }
+    /// Retain a property's rollback state before a computed policy write.
+    pub fn checkpoint_property_by_index(
+        &mut self,
+        owner: &RuntimeOwnedViewModelHandle,
+        index: usize,
+    ) -> Option<()> {
+        let property = owner.borrow().property_by_path(&[index])?;
+        let snapshot = Snapshot::capture(property)?;
+        self.0.files.push(owner.native_file());
+        self.0.snapshots.push(snapshot);
+        Some(())
+    }
+
     pub fn try_set_boolean_by_property_index(
         &mut self,
         owner: &RuntimeOwnedViewModelHandle,

@@ -217,6 +217,7 @@ class AbiAndElfContractTests(unittest.TestCase):
         self.assertIn("nux_file_set_value_markers", partitions["portable"])
         self.assertIn("nux_file_set_value_rules", partitions["portable"])
         self.assertIn("nux_file_set_value_rules_with_result", partitions["portable"])
+        self.assertIn("nux_file_set_rule_groups", partitions["portable"])
         self.assertIn("nux_player_step_result_rule_report", partitions["portable"])
         self.assertIn("nux_player_step_result_rule_report_list_item", partitions["portable"])
         self.assertIn("nux_view_model_mutation_result_rule_report", partitions["portable"])

@@ -113,7 +113,10 @@ fn float(bytes: &mut Vec<u8>, kind: &str, name: &str, value: f32) {
     bytes.extend_from_slice(&value.to_le_bytes());
 }
 #[derive(Clone, Copy)]
-#[allow(dead_code, reason = "shared by unit and integration tests with different listener cases")]
+#[allow(
+    dead_code,
+    reason = "shared by unit and integration tests with different listener cases"
+)]
 pub enum Action {
     Number(f32),
     Marker(bool),

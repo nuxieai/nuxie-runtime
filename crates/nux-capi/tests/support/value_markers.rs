@@ -454,3 +454,84 @@ pub fn list_fixture() -> Vec<u8> {
     });
     b
 }
+
+/// The first advance mounts 41 rows with 101 leaves each, crossing the
+/// scene-artboard bound while the view-model graph stays small and unchanged.
+pub fn quiet_scene_growth() -> Vec<u8> {
+    let mut b = b"RIVE".to_vec();
+    for value in [7, 0, 3593, 0] {
+        push_var_uint(&mut b, value);
+    }
+    object(&mut b, "Backboard", |_| {});
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Row")
+    });
+    object(&mut b, "ViewModelPropertyNumber", |b| {
+        string(b, "ViewModelPropertyNumber", "name", "n")
+    });
+    for _ in 0..41 {
+        object(&mut b, "ViewModelInstance", |b| {
+            uint(b, "ViewModelInstance", "viewModelId", 0)
+        });
+        object(&mut b, "ViewModelInstanceNumber", |b| {
+            uint(b, "ViewModelInstanceNumber", "viewModelPropertyId", 0)
+        });
+    }
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Root")
+    });
+    object(&mut b, "ViewModelPropertyList", |b| {
+        string(b, "ViewModelPropertyList", "name", "rows")
+    });
+    object(&mut b, "ViewModelInstance", |b| {
+        uint(b, "ViewModelInstance", "viewModelId", 1)
+    });
+    object(&mut b, "ViewModelInstanceList", |b| {
+        uint(b, "ViewModelInstanceList", "viewModelPropertyId", 0)
+    });
+    for index in 0..41 {
+        object(&mut b, "ViewModelInstanceListItem", |b| {
+            uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
+            uint(b, "ViewModelInstanceListItem", "viewModelInstanceId", index);
+        });
+    }
+    object(&mut b, "Artboard", |b| {
+        string(b, "Component", "name", "Leaf");
+        float(b, "Artboard", "width", 1.0);
+        float(b, "Artboard", "height", 1.0);
+    });
+    object(&mut b, "Artboard", |b| {
+        string(b, "Component", "name", "Row");
+        uint(b, "Artboard", "viewModelId", 0);
+        float(b, "Artboard", "width", 10.0);
+        float(b, "Artboard", "height", 10.0);
+    });
+    for _ in 0..101 {
+        object(&mut b, "NestedArtboard", |b| {
+            uint(b, "Component", "parentId", 0);
+            uint(b, "NestedArtboard", "artboardId", 0);
+        });
+    }
+    object(&mut b, "Artboard", |b| {
+        string(b, "Component", "name", "Root");
+        uint(b, "Artboard", "viewModelId", 1);
+        float(b, "Artboard", "width", 100.0);
+        float(b, "Artboard", "height", 100.0);
+    });
+    object(&mut b, "ArtboardComponentList", |b| {
+        uint(b, "Component", "parentId", 0);
+    });
+    object(&mut b, "DataBindContext", |b| {
+        uint(
+            b,
+            "DataBind",
+            "propertyKey",
+            u64::from(property_key("ArtboardComponentList", "listSource")),
+        );
+        blob(b, "DataBindContext", "sourcePathIds", &[1, 0]);
+    });
+    object(&mut b, "StateMachine", |b| {
+        string(b, "StateMachine", "name", "Main")
+    });
+    b
+}

@@ -645,7 +645,20 @@ impl RuntimeOwnedViewModelHandle {
         roots: &[Self],
         capture: RuntimeViewModelChangeCapture,
     ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
-        let captured = capture.finish().ok()?;
+        Self::resolve_captured_changes(roots, capture.finish().ok()?)
+    }
+
+    pub(super) fn resolve_change_snapshot(
+        roots: &[Self],
+        capture: &RuntimeViewModelChangeCapture,
+    ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
+        Self::resolve_captured_changes(roots, capture.snapshot().ok()?)
+    }
+
+    fn resolve_captured_changes(
+        roots: &[Self],
+        captured: Vec<crate::view_model_cell::RuntimeViewModelCapturedChange>,
+    ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
         let mut owners = BTreeMap::new();
         for root in roots {
             for owner in root.reachable_change_owner_snapshot()? {

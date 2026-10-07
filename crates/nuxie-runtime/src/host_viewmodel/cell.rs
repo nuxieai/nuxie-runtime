@@ -184,6 +184,20 @@ impl RuntimeViewModelChangeCapture {
         })
     }
 
+    pub(crate) fn snapshot(
+        &self,
+    ) -> Result<Vec<RuntimeViewModelCapturedChange>, RuntimeViewModelChangeLimitExceeded> {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            let slot = slot.borrow();
+            let state = slot.as_ref().ok_or(RuntimeViewModelChangeLimitExceeded)?;
+            if state.overflowed {
+                Err(RuntimeViewModelChangeLimitExceeded)
+            } else {
+                Ok(state.changes.clone())
+            }
+        })
+    }
+
     pub(crate) fn finish(
         mut self,
     ) -> Result<Vec<RuntimeViewModelCapturedChange>, RuntimeViewModelChangeLimitExceeded> {

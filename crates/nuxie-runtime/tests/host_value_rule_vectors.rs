@@ -335,9 +335,18 @@ fn invalid_bounds_are_install_errors() {
 #[test]
 fn empty_picks_skip_minimum() {
     let rule = RuntimeCompiledValueRule::compile(R::PickedCount {
-        property: "picked".into(), minimum: 2, maximum: 3,
-    }).unwrap();
-    assert!(rule.holds(V::List { items: 5, picked: Some(0) }, None));
+        property: "picked".into(),
+        minimum: 2,
+        maximum: 3,
+    })
+    .unwrap();
+    assert!(rule.holds(
+        V::List {
+            items: 5,
+            picked: Some(0)
+        },
+        None
+    ));
 }
 
 #[test]
@@ -346,6 +355,10 @@ fn decimal_bounds_use_native_precision() {
         (R::NumberMaximum(1.1), 1.1f32),
         (R::NumberMinimum(9.99), 9.99f32),
     ] {
-        assert!(RuntimeCompiledValueRule::compile(kind).unwrap().holds(V::Number(value), None));
+        assert!(
+            RuntimeCompiledValueRule::compile(kind)
+                .unwrap()
+                .holds(V::Number(value), None)
+        );
     }
 }

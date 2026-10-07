@@ -1069,7 +1069,7 @@ fn text_rules_cover_host_listener_and_both_script_write_paths() {
         for writer in ["host", "listener", "script", "checked-script"] {
             let action = if writer == "checked-script" {
                 format!(
-                    "local ok, code = require('value_rules').set('', 'text', '{attempted}'); assert(ok == {} and code == {})",
+                    "local ok, code = require('commands').set('', 'text', '{attempted}'); assert(ok == {} and code == {})",
                     mode == NUX_VALUE_RULE_MARK,
                     if mode == NUX_VALUE_RULE_MARK {
                         "nil"
@@ -1336,4 +1336,68 @@ fn invalid_pattern_install_returns_owned_rule_code_and_preserves_the_table() {
         );
         assert!(diagnostic.is_null());
     }
+}
+
+#[cfg(feature = "scripting")]
+#[test]
+fn file_value_rules_module_runs_without_host_tables() {
+    let _flags = luaur_common::ScopedAllFlags::enter(true);
+    fn compile(source: &[u8]) -> Vec<u8> {
+        let mut size = 0;
+        let code = luaur_compiler::functions::luau_compile::luau_compile(
+            source.as_ptr().cast(),
+            source.len(),
+            ptr::null_mut(),
+            &mut size,
+        );
+        assert!(!code.is_null());
+        let mut payload = vec![0];
+        payload.extend_from_slice(unsafe { std::slice::from_raw_parts(code.cast(), size) });
+        payload
+    }
+    let module = compile(b"return { authored = function() return 37 end }");
+    let action = compile(
+        br#"return function(context)
+            return { init = function() return true end,
+                performAction = function()
+                    context:viewModel().n.value = require('value_rules').authored()
+                end }
+        end"#,
+    );
+    let bytes = fixture::fixture_with_value_rules_module(&action, &module);
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..Default::default()
+    };
+    let mut file = ptr::null_mut();
+    let mut import_result = ptr::null_mut();
+    assert_eq!(
+        unsafe {
+            nux_file_import_trusted_with_host_commands(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &config,
+                &mut file,
+                &mut import_result,
+            )
+        },
+        NuxStatus::Ok
+    );
+    unsafe {
+        nux_capi_result_free(import_result);
+    }
+    // No marker, rule, group or global table is installed.
+    let handles = handles_from_file(file);
+    let player = Player::new(&handles);
+    let (initial, _) = player.step(false);
+    unsafe {
+        nux_player_step_result_free(initial);
+    }
+    let (result, info) = player.step(true);
+    unsafe {
+        nux_player_step_result_free(result);
+    }
+    assert_eq!(info.rule_report_count, 0);
+    assert_number(&handles, 37.0);
 }

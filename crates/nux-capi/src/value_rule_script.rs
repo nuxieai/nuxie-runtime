@@ -7,7 +7,7 @@ type Operation = Rc<RefCell<nuxie::RuntimeValuePolicyOperation>>;
 pub(super) struct Extension {
     inner: Arc<dyn nuxie::ScriptHostExtension>,
     file: FileSlot,
-    shares_command_module: bool,
+    command_module: Option<String>,
 }
 
 impl std::fmt::Debug for Extension {
@@ -19,14 +19,14 @@ impl std::fmt::Debug for Extension {
 impl Extension {
     pub(super) fn wrap(
         inner: Arc<dyn nuxie::ScriptHostExtension>,
-        shares_command_module: bool,
+        command_module: Option<String>,
     ) -> (Arc<Self>, FileSlot) {
         let file = Rc::new(RefCell::new(None));
         (
             Arc::new(Self {
                 inner,
                 file: Rc::clone(&file),
-                shares_command_module,
+                command_module,
             }),
             file,
         )
@@ -47,18 +47,16 @@ impl nuxie::ScriptHostExtension for Extension {
         vm: &nuxie::ScriptVm,
     ) -> Result<Box<dyn nuxie::ScriptHostExtensionInstance>, nuxie::ScriptError> {
         let inner = self.inner.install(vm)?;
-        let lua = vm.lua();
-        let module = lua.create_table();
-        // Preserve the caller's command function if it chose this exact name.
-        let module = if self.shares_command_module {
-            vm.registered_module("value_rules")
-                .map_err(script_error)?
-                .as_table()
-                .cloned()
-                .ok_or_else(|| script_error("host command module is unavailable"))?
-        } else {
-            module
+        let Some(module_name) = self.command_module.as_deref() else {
+            return Ok(inner);
         };
+        let lua = vm.lua();
+        let module = vm
+            .registered_module(module_name)
+            .map_err(script_error)?
+            .as_table()
+            .cloned()
+            .ok_or_else(|| script_error("host command module is unavailable"))?;
         module.set_readonly(false);
         let file = Rc::clone(&self.file);
         let setter = lua
@@ -80,7 +78,7 @@ impl nuxie::ScriptHostExtension for Extension {
             .map_err(script_error)?;
         module.set("set", setter).map_err(script_error)?;
         module.set_readonly(true);
-        vm.register_host_module("value_rules", module)
+        vm.register_host_module(module_name, module)
             .map_err(script_error)?;
         Ok(inner)
     }

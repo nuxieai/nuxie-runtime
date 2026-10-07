@@ -7,18 +7,27 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f9d7e648a957e9683dc1d5ebe56b4f2311409a8f`
+- LAST_SYNCED_SHA: `84a3719f80a439ac5f3a7cc7bdc34b785544d5ac`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `05d690ee5a8879d738679f8ebad17c4a61af50ac` (refreshed 2026-10-07 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Eight upstream commits remain after this checkpoint at the fetched target.
-  All 199 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (221 after `5892bb05`); this
+  Seven upstream commits remain after this checkpoint at the fetched target.
+  All 200 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (222 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `84a3719f`, integrated atop downstream `cf8edf978d`:
+  independent source-scope and subsequent Rust-integration reviews are clean.
+  All public executable changes are deferred guest AOT boot/cache/Windows and
+  tier-transplant removal work. Remove only the deleted source owner's deferred
+  inventory entry; no Rust implementation existed to delete. Source/pipeline
+  tests pass 12, manifest tests pass 27, generated inventory is current, and
+  structural coverage is 1,065 mirrored/13 adapted/15 deferred owners. No Rust
+  behavior, dependency or assertion changed; no guest AOT or broad runtime
+  validation is claimed. Historical evidence and UNIV-3728 remain intact.
 - Validation at `f9d7e648`, integrated atop downstream `1ab231ff46`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Eight existing live Lua image-decoder tests pass; source/pipeline tests
@@ -388,6 +397,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `84a3719f80a439ac5f3a7cc7bdc34b785544d5ac` | Guest AOT boot-time O3/O0 selection, synchronized caching, compiler/Windows support and removal of live tier transplantation remain deferred. Remove the exact obsolete deferred owner because upstream deletes its header/source; preserve historical provenance. No shared runtime/Luau/renderer changes or private editor implementation are claimed. Both reviews and inventory validation pass. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `f9d7e648a957e9683dc1d5ebe56b4f2311409a8f` | Account for the shared browser-image decoder extraction through the approved live Rust codec/work-pool adaptation, not as a deferred owner. Guest browser VM, typed calls, ABI/IDL, generated bridges, guarded File/decodedFile/command-server startup and guest harnesses remain deferred. No private editor implementation is claimed. Both reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `a68b6dabe1a30f15c1c36f79b7c66eee8b079b6e` | Translate the shared AnimaScript module-name constant. Guest VM adoption/registration, mixed-backend Luau guards, WAMR and guest-browser binding changes remain parked. Existing omitted VM-presence assertions are not newly weakened; private editor code absent from the public delta is not claimed imported. Both independent reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ae4e1776466164bfabd64ecedecf2d8f347fa0fc` | Translate host SMI completion polling before advance, per-file VM pending continuation and watermark internal-overload use; owner-scoped pool counts and all-thread network request lookup. Preserve Lua-thread completion handoff and count its undelivered queue along with the existing per-VM decoder/network owners. Port all five new upstream regressions. Browser decoding uses the approved Rust codec/pool; Emscripten symbol-glue fixes have no product counterpart and the common failure text already matches. Guest Wasm pending-work query remains parked. Private CLI changes absent from the public delta are not claimed. Both review passes and correction rereviews are clean; validation and the unchanged threaded-test race are recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

@@ -139,6 +139,7 @@ pub enum RuntimeViewModelChangeValue {
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeViewModelCapturedChange {
     pub(crate) cell_identity: usize,
+    pub(crate) publish: bool,
     pub(crate) value: RuntimeViewModelChangeValue,
 }
 
@@ -149,6 +150,7 @@ struct RuntimeViewModelChangeCaptureState {
     maximum_value_bytes: usize,
     value_bytes: usize,
     overflowed: bool,
+    track_unchanged: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,9 +181,18 @@ impl RuntimeViewModelChangeCapture {
                 maximum_value_bytes,
                 value_bytes: 0,
                 overflowed: false,
+                track_unchanged: false,
             });
             Some(Self { armed: true })
         })
+    }
+
+    pub(crate) fn track_unchanged_writes(&self) {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            if let Some(state) = slot.borrow_mut().as_mut() {
+                state.track_unchanged = true;
+            }
+        });
     }
 
     pub(crate) fn snapshot(
@@ -227,9 +238,20 @@ impl Drop for RuntimeViewModelChangeCapture {
 }
 
 pub(crate) fn capture_view_model_change(cell_identity: usize, value: RuntimeViewModelChangeValue) {
+    capture_view_model_write(cell_identity, value, true);
+}
+
+pub(crate) fn capture_unchanged_view_model_write(
+    cell_identity: usize,
+    value: RuntimeViewModelChangeValue,
+) {
+    capture_view_model_write(cell_identity, value, false);
+}
+
+fn capture_view_model_write(cell_identity: usize, value: RuntimeViewModelChangeValue, publish: bool) {
     VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
         if let Some(state) = slot.borrow_mut().as_mut() {
-            if state.overflowed {
+            if state.overflowed || (!publish && !state.track_unchanged) {
                 return;
             }
             let value_bytes = match &value {
@@ -250,6 +272,7 @@ pub(crate) fn capture_view_model_change(cell_identity: usize, value: RuntimeView
             state.value_bytes = total;
             state.changes.push(RuntimeViewModelCapturedChange {
                 cell_identity,
+                publish,
                 value,
             });
         }

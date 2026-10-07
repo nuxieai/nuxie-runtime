@@ -143,6 +143,7 @@ fn run(
     let roots = std::slice::from_ref(root);
     let transaction = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
     let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
     action();
     policy
         .apply_markers(&capture, roots, |owner, index, value| {
@@ -298,4 +299,120 @@ fn every_instance_of_the_file_uses_the_table() {
             Some(true)
         );
     }
+}
+
+#[test]
+fn unchanged_host_values_count_but_do_not_publish_duplicate_value_rows() {
+    let (mut policy, root, _, _factory) = setup();
+    policy
+        .set_markers(&[
+            pair("n", "n_set"),
+            pair("b", "b_set"),
+            pair("c", "c_set"),
+            pair("choice", "choice_set"),
+        ])
+        .unwrap();
+    let color = root.borrow().color_value_by_property_name("c").unwrap();
+    let changes = run(&policy, &root, || {
+        root.borrow_mut().set_number_by_property_name("n", 0.0);
+        root.borrow_mut().set_boolean_by_property_name("b", false);
+        root.borrow_mut().set_color_by_property_name("c", color);
+        root.borrow_mut().set_enum_by_property_name("choice", 0);
+    });
+    assert_eq!(
+        changes
+            .iter()
+            .map(|change| change.property_index)
+            .collect::<Vec<_>>(),
+        vec![1, 3, 5, 8]
+    );
+    for name in ["n_set", "b_set", "c_set", "choice_set"] {
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name(name),
+            Some(true)
+        );
+    }
+}
+#[test]
+fn unchanged_explicit_clear_marker_wins_only_after_the_last_value_write() {
+    let (mut policy, root, _, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    run(&policy, &root, || {
+        root.borrow_mut().set_number_by_property_name("n", 0.0);
+        root.borrow_mut()
+            .set_boolean_by_property_name("n_set", false);
+    });
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(false)
+    );
+    run(&policy, &root, || {
+        root.borrow_mut()
+            .set_boolean_by_property_name("n_set", false);
+        root.borrow_mut().set_number_by_property_name("n", 0.0);
+    });
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+}
+
+#[test]
+fn unchanged_script_adapter_writes_set_markers_in_operation_order() {
+    let (mut policy, root, file, _factory) = setup();
+    policy
+        .set_markers(&[
+            pair("n", "n_set"),
+            pair("b", "b_set"),
+            pair("c", "c_set"),
+            pair("choice", "choice_set"),
+        ])
+        .unwrap();
+    let script =
+        crate::scripting::ScriptViewModel::from_native(root.native_handle(), file).unwrap();
+    let color = root.borrow().color_value_by_property_name("c").unwrap();
+    let changes = run(&policy, &root, || {
+        assert!(!script.set_number("n", 0.0));
+        assert!(!script.set_boolean("b", false));
+        assert!(!script.set_color("c", color));
+        assert!(!script.set_enum_value("choice", "first"));
+    });
+    assert_eq!(
+        changes
+            .iter()
+            .map(|change| change.property_index)
+            .collect::<Vec<_>>(),
+        vec![1, 3, 5, 8]
+    );
+    root.borrow_mut()
+        .set_boolean_by_property_name("n_set", false);
+    run(&policy, &root, || {
+        script.set_number("n", 0.0);
+        script.set_boolean("n_set", false);
+    });
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(false)
+    );
+    run(&policy, &root, || {
+        script.set_boolean("n_set", false);
+        script.set_number("n", 0.0);
+    });
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+}
+
+#[test]
+fn no_table_keeps_unchanged_writes_out_of_the_bounded_journal() {
+    let (policy, root, _, _factory) = setup();
+    let capture = RuntimeViewModelChangeCapture::begin_bounded(0, 0).unwrap();
+    policy.prepare_capture(&capture);
+    root.borrow_mut().set_number_by_property_name("n", 0.0);
+    assert!(root.resolve_change_capture(capture).unwrap().is_empty());
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(false)
+    );
 }

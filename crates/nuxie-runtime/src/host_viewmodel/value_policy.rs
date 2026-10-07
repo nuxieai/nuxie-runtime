@@ -47,6 +47,14 @@ impl RuntimeValuePolicy {
         !self.markers.is_empty()
     }
 
+    /// Enable ordered host/script writes before an operation starts. A file
+    /// without markers keeps the ordinary change-only journal unchanged.
+    pub fn prepare_capture(&self, capture: &RuntimeViewModelChangeCapture) {
+        if self.has_markers() {
+            capture.track_unchanged_writes();
+        }
+    }
+
     pub fn set_markers(
         &mut self,
         entries: &[RuntimeValueMarker],

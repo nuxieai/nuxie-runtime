@@ -71,7 +71,9 @@ fn field_string_property(
     if name.len() > 4096 {
         return Err(NuxStatus::LimitExceeded);
     }
-    let data = eligible_data(node)?;
+    // An explicit execution read is not action dispatch. The caller validated
+    // the presented occurrence; a rendered clip must not hide its native draft.
+    let data = field_data(node)?;
     if !data
         .with_downcast::<SemanticData, _>(|data| data.base.role() == NUX_SEMANTIC_ROLE_TEXT_FIELD)
         .unwrap_or(false)
@@ -119,6 +121,30 @@ fn field_string_property(
         [] => Err(NuxStatus::NotFound),
         _ => Err(NuxStatus::InvalidArgument),
     }
+}
+
+fn field_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
+    let manager = node.borrow().manager().ok_or(NuxStatus::NotFound)?;
+    let mut current = Some(node.clone());
+    let mut seen = std::collections::HashSet::new();
+    while let Some(ancestor) = current {
+        if !seen.insert(Rc::as_ptr(&ancestor)) || seen.len() > MAX_NODES {
+            return Err(NuxStatus::NotFound);
+        }
+        let ancestor = ancestor.borrow();
+        if ancestor.state_flags & (SemanticState::HIDDEN.0 | SemanticState::DISABLED.0) != 0
+            || !ancestor
+                .manager()
+                .is_some_and(|owner| owner.ptr_eq(&manager))
+        {
+            return Err(NuxStatus::NotFound);
+        }
+        current = ancestor.parent();
+    }
+    node.borrow()
+        .semantic_data
+        .clone()
+        .ok_or(NuxStatus::NotFound)
 }
 
 fn eligible_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
@@ -176,8 +202,11 @@ pub(super) unsafe fn with_presented_field_property(
         manager.node_by_id(node_id).ok_or(NuxStatus::NotFound)
     });
     let property = match node.and_then(|node| {
-        if writable && node.borrow().state_flags & SemanticState::READ_ONLY.0 != 0 {
-            return Err(NuxStatus::NotFound);
+        if writable {
+            eligible_data(&node)?;
+            if node.borrow().state_flags & SemanticState::READ_ONLY.0 != 0 {
+                return Err(NuxStatus::NotFound);
+            }
         }
         field_string_property(&node, &name)
     }) {
@@ -260,10 +289,18 @@ pub unsafe extern "C" fn nux_player_field_view_model_instance(
     })
 }
 
-/// Copy a field's editable UTF-8 value into caller-owned memory, without
-/// a terminator. A null buffer with zero capacity queries the required length.
+/// Copy the native draft UTF-8 text without a terminator. `name` is the exact
+/// native TextInput component name supplied by the release table; `node_id`
+/// identifies its TextField in the validated presented snapshot. Resolve only
+/// in that field's current occurrence and within its owner subtree. Secure text
+/// is returned only through this explicit buffer, never semantic/diagnostic
+/// capture. This read does not focus, edit, advance, present or invalidate the
+/// snapshot, and does not require action-dispatch clipping eligibility.
+/// A null buffer with zero capacity queries the required byte count.
 /// Insufficient capacity returns LIMIT_EXCEEDED without copying partial text.
-/// This explicit execution read is not included in semantic/diagnostic captures.
+/// Hidden/disabled fields or ancestors and absent targets return NOT_FOUND;
+/// stale/foreign snapshots return HANDLE_MISMATCH; ambiguous names return
+/// INVALID_ARGUMENT. Existing editable-property compatibility is retained.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_field_string_copy(
     player: *const NuxPlayer,
@@ -1845,3 +1882,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "field_read_tests.rs"]
+mod field_read_tests;

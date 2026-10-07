@@ -1082,6 +1082,9 @@ impl ScriptViewModel {
         instance: Option<crate::mechanical_port::source::core::CoreHandle>,
         file: crate::mechanical_port::source::file::RuntimeFileHandle,
     ) -> Self {
+        if let Some(instance) = instance.as_ref() {
+            crate::host_viewmodel::capture_initial_policy_owner(&file, instance);
+        }
         let native = NativeScriptViewModel {
             instance,
             model,

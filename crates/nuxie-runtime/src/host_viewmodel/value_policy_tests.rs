@@ -6,8 +6,8 @@
 use crate::{
     File, RuntimeFactoryHandle, RuntimeFileHandle, RuntimeOwnedViewModelGraphTransaction,
     RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance, RuntimeValueMarker,
-    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeViewModelChangeCapture,
-    RuntimeViewModelChangeValue,
+    RuntimeValuePolicy, RuntimeValuePolicyError, RuntimeValueRule, RuntimeValueRuleKind,
+    RuntimeValueRuleMode, RuntimeViewModelChangeCapture, RuntimeViewModelChangeValue,
 };
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 fn push_var_uint(bytes: &mut Vec<u8>, mut value: u64) {
@@ -127,6 +127,9 @@ fn fixture() -> Vec<u8> {
     object(&mut b, "ViewModelInstanceListItem", |b| {
         uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
         uint(b, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+    });
+    object(&mut b, "Artboard", |b| {
+        uint(b, "Artboard", "viewModelId", 0)
     });
     b
 }
@@ -504,4 +507,337 @@ fn markers_do_not_validate_number_contents() {
             Some(true)
         );
     }
+}
+
+fn installed_rule(
+    property: &str,
+    kind: RuntimeValueRuleKind,
+    mode: RuntimeValueRuleMode,
+) -> RuntimeValueRule {
+    RuntimeValueRule {
+        model: "Values".into(),
+        property: property.into(),
+        kind,
+        mode,
+        code: "bound".into(),
+        message: "Installed message".into(),
+    }
+}
+
+#[test]
+fn rules_restore_last_accepted_write_and_omit_refused_rows() {
+    for writes in [[300.0, 400.0], [400.0, 300.0], [400.0, 400.0]] {
+        let (mut policy, root, _file, _factory) = setup();
+        policy.set_markers(&[pair("n", "n_set")]).unwrap();
+        policy
+            .set_rules(&[installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMaximum(365.0),
+                RuntimeValueRuleMode::Refuse,
+            )])
+            .unwrap();
+        let roots = std::slice::from_ref(&root);
+        let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+        let mut operation = policy.begin_rules(roots).unwrap();
+        let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+        policy.prepare_capture(&capture);
+        for value in writes {
+            root.borrow_mut().set_number_by_property_name("n", value);
+            root.borrow_mut()
+                .set_boolean_by_property_name("n_set", true);
+        }
+        operation.apply(&policy, &capture, roots).unwrap();
+        policy
+            .apply_markers(&capture, roots, |owner, index, value| {
+                Ok(owner
+                    .borrow_mut()
+                    .set_boolean_by_property_index(index, value))
+            })
+            .unwrap();
+        let accepted = writes.contains(&300.0);
+        assert_eq!(
+            root.borrow().number_value_by_property_name("n"),
+            Some(if accepted { 300.0 } else { 0.0 })
+        );
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("n_set"),
+            Some(accepted)
+        );
+        assert_eq!(
+            operation
+                .reports()
+                .iter()
+                .filter(|report| report.refused)
+                .count(),
+            if accepted { 1 } else { 2 }
+        );
+        let changes = root.resolve_change_capture(capture).unwrap();
+        assert!(
+            !changes
+                .iter()
+                .any(|change| change.value == RuntimeViewModelChangeValue::Number(400.0))
+        );
+        if accepted {
+            assert!(
+                changes
+                    .iter()
+                    .any(|change| change.value == RuntimeViewModelChangeValue::Number(300.0))
+            );
+            assert!(
+                changes
+                    .iter()
+                    .any(|change| change.value == RuntimeViewModelChangeValue::Boolean(true))
+            );
+        } else {
+            assert!(changes.is_empty());
+        }
+        checkpoint.commit();
+    }
+}
+
+#[test]
+fn rule_install_is_atomic_and_marking_keeps_the_write() {
+    let (mut policy, root, _file, _factory) = setup();
+    let rule = installed_rule(
+        "n",
+        RuntimeValueRuleKind::NumberMinimum(10.0),
+        RuntimeValueRuleMode::Mark,
+    );
+    policy.set_rules(std::slice::from_ref(&rule)).unwrap();
+    let mut bad = rule.clone();
+    bad.property = "missing".into();
+    assert_eq!(
+        policy.set_rules(&[bad]),
+        Err(RuntimeValuePolicyError::NotFound)
+    );
+    assert_eq!(policy.rule(0).unwrap().property, "n");
+    assert_eq!(
+        policy.set_rules(&[installed_rule(
+            "b",
+            RuntimeValueRuleKind::NumberMinimum(0.0),
+            RuntimeValueRuleMode::Refuse
+        )]),
+        Err(RuntimeValuePolicyError::InvalidArgument)
+    );
+    assert_eq!(
+        policy.set_rules(&[
+            rule,
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMaximum(5.0),
+                RuntimeValueRuleMode::Refuse
+            )
+        ]),
+        Err(RuntimeValuePolicyError::InvalidArgument)
+    );
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    root.borrow_mut().set_number_by_property_name("n", 1.0);
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(1.0));
+    assert_eq!(operation.reports().len(), 1);
+    assert!(!operation.reports()[0].refused);
+    assert_eq!(root.resolve_change_capture(capture).unwrap().len(), 1);
+    checkpoint.commit();
+}
+
+#[test]
+fn picked_limit_restores_only_the_third_item_and_list_limit_restores_membership() {
+    let (mut policy, first, file, _factory) = setup();
+    let container = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 1, 0).unwrap(),
+    );
+    container.clear_list_items_by_property_name_path("rows");
+    let second = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(file.clone(), 0).unwrap(),
+    );
+    let third =
+        RuntimeOwnedViewModelHandle::new(RuntimeOwnedViewModelInstance::new(file, 0).unwrap());
+    for item in [&first, &second, &third] {
+        assert!(container.push_list_item_by_property_name_path("rows", item));
+    }
+    policy
+        .set_rules(&[RuntimeValueRule {
+            model: "Container".into(),
+            property: "rows".into(),
+            kind: RuntimeValueRuleKind::PickedCount {
+                property: "b".into(),
+                minimum: 0,
+                maximum: 2,
+            },
+            mode: RuntimeValueRuleMode::Refuse,
+            code: "limit".into(),
+            message: "Two at most".into(),
+        }])
+        .unwrap();
+    let roots = std::slice::from_ref(&container);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    for item in [&first, &second, &third] {
+        item.borrow_mut().set_boolean_by_property_name("b", true);
+    }
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(
+        first.borrow().boolean_value_by_property_name("b"),
+        Some(true)
+    );
+    assert_eq!(
+        second.borrow().boolean_value_by_property_name("b"),
+        Some(true)
+    );
+    assert_eq!(
+        third.borrow().boolean_value_by_property_name("b"),
+        Some(false)
+    );
+    assert_eq!(operation.reports().len(), 1);
+    assert_eq!(container.resolve_change_capture(capture).unwrap().len(), 2);
+    checkpoint.commit();
+
+    policy
+        .set_rules(&[RuntimeValueRule {
+            model: "Container".into(),
+            property: "rows".into(),
+            kind: RuntimeValueRuleKind::ItemCount {
+                minimum: 2,
+                maximum: 3,
+            },
+            mode: RuntimeValueRuleMode::Refuse,
+            code: "count".into(),
+            message: "At least two".into(),
+        }])
+        .unwrap();
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    assert!(container.remove_list_item_by_property_name_path("rows", 2));
+    assert!(container.remove_list_item_by_property_name_path("rows", 1));
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(
+        container.list_item_count_by_property_name_path("rows"),
+        Some(2)
+    );
+    let kept = container.list_items_by_property_name_path("rows").unwrap();
+    assert_eq!(kept[0].instance_identity(), first.instance_identity());
+    assert_eq!(kept[1].instance_identity(), second.instance_identity());
+    assert_eq!(operation.reports().len(), 1);
+    assert_eq!(container.resolve_change_capture(capture).unwrap().len(), 1);
+    checkpoint.commit();
+}
+
+#[test]
+fn refusal_correction_does_not_consume_the_write_budget_or_repeat_a_report() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy
+        .set_rules(&[installed_rule(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+        )])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin_bounded(1, 1024).unwrap();
+    policy.prepare_capture(&capture);
+    root.borrow_mut().set_number_by_property_name("n", 400.0);
+    assert!(operation.apply(&policy, &capture, roots).unwrap());
+    assert!(!operation.apply(&policy, &capture, roots).unwrap());
+    assert_eq!(operation.reports().len(), 1);
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+    assert!(root.resolve_change_capture(capture).unwrap().is_empty());
+    checkpoint.commit();
+}
+
+#[test]
+fn explicit_empty_clear_lands_and_only_selected_properties_have_rules() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    policy
+        .set_rules(&[
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMinimum(10.0),
+                RuntimeValueRuleMode::Refuse,
+            ),
+            installed_rule(
+                "n",
+                RuntimeValueRuleKind::Required,
+                RuntimeValueRuleMode::Mark,
+            ),
+        ])
+        .unwrap();
+    root.borrow_mut().set_number_by_property_name("n", 20.0);
+    root.borrow_mut()
+        .set_boolean_by_property_name("n_set", true);
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    root.borrow_mut().set_number_by_property_name("n", 0.0);
+    root.borrow_mut()
+        .set_boolean_by_property_name("n_set", false);
+    root.borrow_mut()
+        .set_string_by_property_name("text", b"unrestricted");
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(false)
+    );
+    assert!(
+        operation
+            .reports()
+            .iter()
+            .all(|report| !report.refused && report.rule_index == 1)
+    );
+    assert_eq!(root.resolve_change_capture(capture).unwrap().len(), 3);
+    checkpoint.commit();
+}
+
+#[test]
+fn script_created_detached_owner_uses_its_value_before_the_first_write() {
+    let (mut policy, root, file, _factory) = setup();
+    policy
+        .set_rules(&[installed_rule(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+        )])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let created = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::new(file.clone(), 0).unwrap(),
+    );
+    let script = crate::ScriptViewModel::from_native(created.native_handle(), file).unwrap();
+    assert!(script.set_number("n", 400.0));
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(
+        created.borrow().number_value_by_property_name("n"),
+        Some(0.0)
+    );
+    assert_eq!(operation.reports().len(), 1);
+    assert_eq!(
+        operation.reports()[0].owner_instance_identity,
+        created.instance_identity()
+    );
+    assert!(
+        RuntimeOwnedViewModelHandle::resolve_change_capture_across(
+            &operation.retained_roots(),
+            capture
+        )
+        .unwrap()
+        .is_empty()
+    );
+    checkpoint.commit();
 }

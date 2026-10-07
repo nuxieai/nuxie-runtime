@@ -153,7 +153,22 @@ pub fn text_input_fixture() -> Vec<u8> {
     fixture_input(None, &[], true, true)
 }
 
+#[cfg(feature = "scripting")]
+pub fn fixture_with_value_rules_module(script: &[u8], module: &[u8]) -> Vec<u8> {
+    fixture_input_with_module(Some(script), &[Action::Script], false, false, Some(module))
+}
+
 fn fixture_input(script: Option<&[u8]>, actions: &[Action], input: bool, text: bool) -> Vec<u8> {
+    fixture_input_with_module(script, actions, input, text, None)
+}
+
+fn fixture_input_with_module(
+    script: Option<&[u8]>,
+    actions: &[Action],
+    input: bool,
+    text: bool,
+    module: Option<&[u8]>,
+) -> Vec<u8> {
     let mut b = values();
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "Aux");
@@ -171,6 +186,16 @@ fn fixture_input(script: Option<&[u8]>, actions: &[Action], input: bool, text: b
         });
         object(&mut b, "FileAssetContents", |b| {
             blob(b, "FileAssetContents", "bytes", script)
+        });
+    }
+    if let Some(module) = module {
+        object(&mut b, "ScriptAsset", |b| {
+            uint(b, "ScriptAsset", "assetId", 1);
+            string(b, "ScriptAsset", "name", "value_rules");
+            uint(b, "ScriptAsset", "isModule", 1);
+        });
+        object(&mut b, "FileAssetContents", |b| {
+            blob(b, "FileAssetContents", "bytes", module)
         });
     }
     if input {

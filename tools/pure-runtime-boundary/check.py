@@ -251,6 +251,9 @@ PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
     },
 }
 PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
+    "crates/nux-capi/src/renderer_layout.rs": {
+        "render_api": {"Aabb", "Fit", "Vec2D", "compute_alignment"},
+    },
     "crates/nux-capi/src/android_vulkan/deferred.rs": {
         "render_api": {
             "BlendMode",

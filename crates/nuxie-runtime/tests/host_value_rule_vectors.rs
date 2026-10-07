@@ -1,10 +1,59 @@
 //! Handwritten shared vectors from project-runtime-host.md section 3.1 and
 //! its settled URL/calendar notes. This table can be copied by other hosts.
-use nuxie_runtime::{RuntimeCompiledValueRule, RuntimeRuleValue as V, RuntimeValueRuleKind as R};
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::{
+    File, RuntimeCompiledValueRule, RuntimeFactoryHandle, RuntimeRuleValue as V,
+    RuntimeValuePolicy, RuntimeValueRule, RuntimeValueRuleKind as R, RuntimeValueRuleMode,
+};
+#[path = "support/value_policy_fixture.rs"]
+mod fixture;
+
+const EMAIL_PATTERN: &str = r"[a-zA-Z0-9\.\!\#\$\%\&'\*\+\/\=\?\^_\`\{\|\}\~\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*";
+
+fn email_vectors() -> [(&'static str, bool); 16] {
+    [
+        ("a@b", true),
+        ("a+b@localhost", true),
+        ("first.last@example.com", true),
+        ("user/name@example.com", true),
+        ("a{b}@example.com", true),
+        ("a|b@example.com", true),
+        ("a-b@example-host.org", true),
+        (
+            "x@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+            true,
+        ),
+        ("o'neil@example.com", true),
+        ("~!#$%&*=?^_`@example.com", true),
+        ("a b@example.com", false),
+        ("@example.com", false),
+        ("a@", false),
+        ("a@-example.com", false),
+        ("a@example-.com", false),
+        (
+            "a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+            false,
+        ),
+    ]
+}
 
 #[test]
 fn shared_vectors() {
-    let cases = vec![
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&fixture::fixture(), retained, None, None, None).unwrap();
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_rules(&[RuntimeValueRule {
+            model: "Values".into(),
+            property: "text".into(),
+            kind: R::Pattern(EMAIL_PATTERN.into()),
+            mode: RuntimeValueRuleMode::Mark,
+            code: "email".into(),
+            message: "email format".into(),
+        }])
+        .expect("shared email pattern must install as a marking rule");
+    let mut cases = vec![
         (
             R::Length {
                 minimum: 2,
@@ -278,6 +327,14 @@ fn shared_vectors() {
         (R::Url, V::Text("/relative"), None, false),
         (R::Url, V::Text("https://[bad]/"), None, false),
     ];
+    cases.extend(email_vectors().map(|(value, expected)| {
+        (
+            R::Pattern(EMAIL_PATTERN.into()),
+            V::Text(value),
+            None,
+            expected,
+        )
+    }));
     for (index, (rule, value, marker, expected)) in cases.into_iter().enumerate() {
         let rule = RuntimeCompiledValueRule::compile(rule).unwrap();
         assert_eq!(

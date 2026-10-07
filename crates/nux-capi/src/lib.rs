@@ -4299,7 +4299,7 @@ fn player_step_body(
         .collect::<Vec<_>>();
     // Preserve main's post-advance validation unless the host opted into
     // a policy or an explicit global override.
-    let can_skip_quiet_graphs = policy.is_some() || !subscribed_roots.is_empty();
+    let can_skip_quiet_graphs = has_value_policy || !subscribed_roots.is_empty();
     subscribed_roots.extend(bound_view_model.iter().cloned());
     let retained_subscribed_owners = if has_value_policy {
         match value_policy::retain_scope(&subscribed_roots) {

@@ -108,7 +108,7 @@ pub struct RuntimeValuePolicyOperation {
     owners: BTreeMap<u64, RuntimeOwnedViewModelHandle>,
     values: BTreeMap<Key, RuntimeViewModelChangeValue>,
     native_lists: BTreeMap<Key, Vec<CoreHandle>>,
-    suppressed: BTreeSet<Key>,
+    suppressed: BTreeMap<Key, Vec<usize>>,
     cursor: usize,
     pending_flush: bool,
     reports: Vec<RuntimeValueRuleReport>,
@@ -140,7 +140,7 @@ impl RuntimeValuePolicy {
             owners: BTreeMap::new(),
             values: BTreeMap::new(),
             native_lists: BTreeMap::new(),
-            suppressed: BTreeSet::new(),
+            suppressed: BTreeMap::new(),
             cursor: 0,
             pending_flush: false,
             reports: Vec::new(),
@@ -201,17 +201,17 @@ impl RuntimeValuePolicyOperation {
         }
         let (owner, index) = policy.resolve_property(root, path)?;
         let key = (owner.instance_identity(), index);
-        if self.suppressed.contains(&key) {
+        if let Some(rule_indices) = self.suppressed.get(&key) {
             return Ok(RuntimeCheckedValueWrite {
                 applied: false,
-                rule_indices: Vec::new(),
+                rule_indices: rule_indices.clone(),
             });
         }
         let mut probe = Self {
             owners: BTreeMap::new(),
             values: BTreeMap::new(),
             native_lists: BTreeMap::new(),
-            suppressed: BTreeSet::new(),
+            suppressed: BTreeMap::new(),
             cursor: 0,
             pending_flush: false,
             reports: Vec::new(),
@@ -252,7 +252,7 @@ impl RuntimeValuePolicyOperation {
         }
         if let Some(marker_key) = marker_key {
             if refused {
-                self.suppressed.insert(marker_key);
+                self.suppressed.insert(marker_key, rule_indices.clone());
             } else {
                 self.suppressed.remove(&marker_key);
             }
@@ -303,7 +303,7 @@ impl RuntimeValuePolicyOperation {
             let id = owner.instance_identity();
             let model = owner.borrow().view_model_index();
             let key = (id, change.property_index);
-            if self.suppressed.contains(&key) {
+            if self.suppressed.contains_key(&key) {
                 omitted.insert(order);
                 restore.insert(key);
                 continue;
@@ -338,6 +338,10 @@ impl RuntimeValuePolicyOperation {
             }
             let failures = self.failures(policy, owner, key);
             let refused = failures.iter().any(|(_, _, refused)| *refused);
+            let refusing_rules = failures
+                .iter()
+                .filter_map(|(index, _, refused)| refused.then_some(*index))
+                .collect::<Vec<_>>();
             // A refusal keeps the prior accepted value, including the marking
             // breaches already reported for its eventual paired marker.
             if !refused {
@@ -418,7 +422,7 @@ impl RuntimeValuePolicyOperation {
                         marker_key,
                         previous_marker.ok_or(RuntimeValuePolicyError::BorrowConflict)?,
                     );
-                    self.suppressed.insert(marker_key);
+                    self.suppressed.insert(marker_key, refusing_rules);
                     restore.insert(marker_key);
                 }
             }

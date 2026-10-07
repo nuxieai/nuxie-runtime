@@ -14,32 +14,40 @@
       "initialValue": "0"
     },
     "loop": {
-      "type": "uint",
+      "type": "bool",
       "key": {
         "int": 60004
       },
-      "initialValue": "0"
+      "initialValue": "false",
+      "bindable": true,
+      "animates": true
     },
     "muted": {
-      "type": "uint",
+      "type": "bool",
       "key": {
         "int": 60005
       },
-      "initialValue": "0"
+      "initialValue": "false",
+      "bindable": true,
+      "animates": true
     },
     "volume": {
       "type": "double",
       "key": {
         "int": 60006
       },
-      "initialValue": "1"
+      "initialValue": "1",
+      "bindable": true,
+      "animates": true
     },
     "playbackRate": {
       "type": "double",
       "key": {
         "int": 60007
       },
-      "initialValue": "1"
+      "initialValue": "1",
+      "bindable": true,
+      "animates": true
     },
     "priority": {
       "type": "uint",
@@ -89,7 +97,9 @@
       "key": {
         "int": 60014
       },
-      "initialValue": "0"
+      "initialValue": "0",
+      "bindable": true,
+      "animates": true
     },
     "loopEnd": {
       "type": "double",
@@ -97,7 +107,59 @@
         "int": 60015
       },
       "initialValue": "0",
-      "description": "Exclusive loop end in seconds; zero selects source duration."
+      "description": "Exclusive loop end in seconds; zero selects source duration.",
+      "bindable": true,
+      "animates": true
+    },
+    "paused": {
+      "type": "bool",
+      "key": {
+        "int": 60016
+      },
+      "initialValue": "true",
+      "bindable": true,
+      "animates": true,
+      "computed": false
+    },
+    "position": {
+      "type": "double",
+      "key": {
+        "int": 60017
+      },
+      "initialValue": "0",
+      "bindable": true,
+      "animates": true,
+      "computed": false
+    },
+    "duration": {
+      "type": "double",
+      "key": {
+        "int": 60018
+      },
+      "initialValue": "0",
+      "bindable": true,
+      "animates": false,
+      "computed": true
+    },
+    "ended": {
+      "type": "bool",
+      "key": {
+        "int": 60019
+      },
+      "initialValue": "false",
+      "bindable": true,
+      "animates": false,
+      "computed": true
+    },
+    "state": {
+      "type": "double",
+      "key": {
+        "int": 60020
+      },
+      "initialValue": "0",
+      "bindable": true,
+      "animates": false,
+      "computed": true
     }
   }
 }

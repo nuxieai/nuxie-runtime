@@ -100,6 +100,8 @@ fn build(groups: bool) -> Vec<u8> {
             ("List", "n_errors"),
             ("List", "text_errors"),
             ("Boolean", "valid_text"),
+            ("List", "picks"),
+            ("List", "picks_errors"),
         ] {
             let kind = format!("ViewModelProperty{kind}");
             object(&mut b, &kind, |b| string(b, &kind, "name", name));
@@ -120,7 +122,14 @@ fn build(groups: bool) -> Vec<u8> {
         });
     }
     if groups {
-        for (index, kind) in [(9, "Boolean"), (10, "List"), (11, "List"), (12, "Boolean")] {
+        for (index, kind) in [
+            (9, "Boolean"),
+            (10, "List"),
+            (11, "List"),
+            (12, "Boolean"),
+            (13, "List"),
+            (14, "List"),
+        ] {
             let kind = format!("ViewModelInstance{kind}");
             object(&mut b, &kind, |b| {
                 uint(b, &kind, "viewModelPropertyId", index)

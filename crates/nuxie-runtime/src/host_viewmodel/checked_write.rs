@@ -109,6 +109,7 @@ pub fn runtime_checked_value_write(
         };
         Ok((result.applied, code))
     } else {
+        policy.invalidate();
         write()?;
         Ok((true, None))
     }

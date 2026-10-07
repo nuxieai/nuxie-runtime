@@ -2570,7 +2570,10 @@ pub unsafe extern "C" fn nux_view_model_mutate(
             }
             let mut rule_operation = policy
                 .filter(|policy| policy.has_rules() || policy.has_groups())
-                .map(|policy| policy.begin_rules(&roots))
+                .map(|policy| {
+                    policy.invalidate();
+                    policy.begin_rules(&roots)
+                })
                 .transpose()
                 .map_err(value_policy::status)?;
             if let (Some(policy), Some(operation)) = (policy, rule_operation.as_mut()) {

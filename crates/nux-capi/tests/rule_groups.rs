@@ -418,17 +418,10 @@ fn computed_nested_lists_match_kept_values_and_declared_order() {
         let errors = s.errors("email");
         assert_eq!(
             errors,
-            if reverse {
-                vec![
-                    ("pattern".into(), "Digits only".into()),
-                    ("length".into(), "At most two".into()),
-                ]
-            } else {
-                vec![
-                    ("length".into(), "At most two".into()),
-                    ("pattern".into(), "Digits only".into()),
-                ]
-            }
+            vec![
+                ("length".into(), "At most two".into()),
+                ("pattern".into(), "Digits only".into()),
+            ]
         );
         drop(s);
         let listener = h.pointer_step(true);

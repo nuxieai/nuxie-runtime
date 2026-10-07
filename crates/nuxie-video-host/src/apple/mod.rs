@@ -104,15 +104,10 @@ impl Drop for PixelBuffer {
     }
 }
 pub enum Observation {
-    Ready {
-        generation: u64,
-        duration: f64,
-    },
+    Ready { generation: u64, duration: f64 },
     Playing(u64),
     Ended(u64),
     Frame(Frame),
-    /// Actual decoded image selected by a successful seek in this generation.
-    SelectedSeekFrame(Frame),
 }
 /// Session ownership is explicit because AVAudioSession is process-wide.
 /// Apps with an existing audio engine keep ownership and implement authored
@@ -252,11 +247,7 @@ impl ApplePlayer {
                         height,
                     }),
                 };
-                Some(if kind == 5 {
-                    Observation::SelectedSeekFrame(frame)
-                } else {
-                    Observation::Frame(frame)
-                })
+                Some(Observation::Frame(frame))
             }
             _ => return Err(AppleError::DecodeFailed),
         })
@@ -313,7 +304,7 @@ impl ApplePlayer {
                 Vec::new()
             }
             Some(Observation::Ended(generation)) => playback.ended(generation),
-            Some(Observation::SelectedSeekFrame(frame) | Observation::Frame(frame)) => {
+            Some(Observation::Frame(frame)) => {
                 return Ok(Some(frame));
             }
             None => Vec::new(),

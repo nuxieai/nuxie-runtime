@@ -316,9 +316,10 @@ pub unsafe extern "C" fn nux_player_video_report_clock(
                 );
                 // Independent groups may correct successfully before another
                 // group reports an error. Preserve scheduling for those commands.
-                if result.as_ref().map_or(true, |report| {
-                    report.corrected || report.properties_dirtied
-                }) {
+                if result
+                    .as_ref()
+                    .map_or(true, |report| report.corrected || report.properties_dirtied)
+                {
                     occurrence.commit_runtime_change(true)?;
                 }
                 result.map(|_| ()).map_err(sync_status)

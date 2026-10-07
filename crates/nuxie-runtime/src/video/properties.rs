@@ -106,7 +106,8 @@ impl Playback {
                 Command::Play => paused = false,
                 Command::Pause | Command::Dispose => paused = true,
                 Command::Seek(value) => {
-                    position = clamp_loop(self.duration().map_or(value, |d| value.min(d)), &settings);
+                    position =
+                        clamp_loop(self.duration().map_or(value, |d| value.min(d)), &settings);
                 }
                 Command::Rate(value) => settings.rate = value,
                 Command::Volume(value) => settings.volume = value,

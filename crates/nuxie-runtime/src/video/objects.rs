@@ -147,7 +147,9 @@ impl Video {
             .with_downcast_mut::<Self, _>(|video| {
                 let position = video.property_number(super::properties::POSITION).unwrap() as f32;
                 if position == video.notified_position {
-                    video.playback.clear_property_change(super::properties::POSITION);
+                    video
+                        .playback
+                        .clear_property_change(super::properties::POSITION);
                 } else {
                     video.playback.mark_position_changed();
                     video.notified_position = position;

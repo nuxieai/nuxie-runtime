@@ -736,7 +736,7 @@ pub fn run_metal_parity(source: &str) {
                 continue;
             }
             Some(Observation::Ended(_)) => break,
-            Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => frame,
+            Some(Observation::Frame(frame)) => frame,
             _ => continue,
         };
         // A fixed shader mode draws both images through the same shader.

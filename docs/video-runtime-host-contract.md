@@ -233,7 +233,7 @@ The Video type is 60001; VideoAsset is 60000. The extension keys are:
 | 60000 | VideoAsset source key | string | no | Resolver-owned source identity. |
 | 60001 | VideoAsset content type | string | no | Encoded media type. |
 | 60002 | VideoAsset duration | number | no | Authored metadata hint. |
-| 60003 | Video autoplay | boolean | no | Starting play intent; paused starts as its inverse. |
+| 60003 | Video autoplay | unsigned | no | Zero is paused, nonzero starts play intent; paused starts as its inverse. |
 | 60004 | Video loop | boolean | yes | Repeat within the loop interval. |
 | 60005 | Video muted | boolean | yes | Effective decoder volume is zero while true. |
 | 60006 | Video volume | number | yes | Finite gain from 0 to 1, retained while muted. |
@@ -260,7 +260,13 @@ paused. Autoplay is a starting attribute, not a live control.
 Live setters use playback's validated, bounded command queue. Reads include
 pending valid writes before the host drains decoder actions. Invalid writes
 leave the last valid property value and queue unchanged. Read-only setters do
-nothing. Loop bounds can be set atomically through `setLoopRange`; individual
+nothing. Each occurrence accepts at most 256 pending command writes before a
+drain. A valid registry/binding write beyond that limit leaves the property
+and queue unchanged; script writes return a queue-full error. Hosts must drain
+video actions each frame and before admitting another burst of writes. Writes
+retain their order, including settings on either side of a seek.
+
+Loop bounds can be set atomically through `setLoopRange`; individual
 bound writes validate against the current other bound. Position uses the most
 recent available native clock for the current generation, falling back to the
 accepted frame position when no current clock is available. A pending seek
@@ -273,7 +279,8 @@ position, duration, paused, ended and state dirty bindings toward their source
 values, including native decoder observations and host pauses. Native hosts
 flush these notifications after releasing the video borrow and before the next
 scene step settles bindings. C hosts report the clock even when no new image
-is available.
+is available. After any video call, a C host must take one more scene step
+before it idles so the dirty bindings reach their view-model values.
 
 A script obtains an occurrence with `context:video(name)`. `play()` and
 `pause()` write paused; `seek(seconds)` writes position; `setRate`, `setVolume`,

@@ -100,7 +100,11 @@ mod proof {
     unsafe fn settle_values(player: *mut NuxPlayer) {
         let mut result = ptr::null_mut();
         unsafe {
-            ok(nux_player_step(player, &NuxPlayerStep::default(), &mut result));
+            ok(nux_player_step(
+                player,
+                &NuxPlayerStep::default(),
+                &mut result,
+            ));
             nux_player_step_result_free(result);
         }
     }
@@ -241,7 +245,7 @@ mod proof {
                         Some(Observation::Ended(generation)) => {
                             step(player, 1, 3, generation, 0.0, decoder)
                         }
-                        Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
+                        Some(Observation::Frame(frame)) => {
                             let buffer = pixel_buffer(&frame);
                             ok(nux_player_video_present_metal_pixel_buffer(
                                 renderer,
@@ -421,7 +425,7 @@ mod proof {
                     Some(Observation::Ended(generation)) => {
                         step(player, catalog.id, 3, generation, 0.0, &mut decoder)
                     }
-                    Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
+                    Some(Observation::Frame(frame)) => {
                         ok(nux_player_video_present_metal_pixel_buffer(
                             renderer,
                             player,

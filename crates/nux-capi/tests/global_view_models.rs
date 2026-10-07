@@ -67,7 +67,7 @@ fn write(v: *mut NuxViewModelInstance, value: bool) {
         nux_view_model_mutation_result_free(r);
     }
 }
-fn labels(p: *mut NuxPlayer) -> Vec<String> {
+fn step_and_present(p: *mut NuxPlayer) -> u64 {
     unsafe {
         let mut r = ptr::null_mut();
         assert_eq!(
@@ -84,6 +84,12 @@ fn labels(p: *mut NuxPlayer) -> Vec<String> {
             NuxStatus::Ok
         );
         nux_player_step_result_free(r);
+        result_info.render_revision
+    }
+}
+fn labels(p: *mut NuxPlayer) -> Vec<String> {
+    step_and_present(p);
+    unsafe {
         let mut s = ptr::null_mut();
         assert_eq!(nux_player_semantic_snapshot(p, &mut s), NuxStatus::Ok);
         let mut info = NuxSemanticSnapshotInfo {
@@ -195,4 +201,32 @@ fn global_refusals_preserve_the_bound_instance() {
         nux_file_free(f);
         nux_file_free(other_f);
     }
+}
+
+#[test]
+fn one_global_instance_updates_two_players_and_invalidates_both() {
+    let f = import();
+    let (a, first) = player(f, 1);
+    let (b, second) = player(f, 1);
+    let v = model(f, 0);
+    write(v, true);
+    for p in [first, second] {
+        assert_eq!(unsafe { nux_player_set_global_view_model(p, view("Flags"), v) }, NuxStatus::Ok);
+        assert_eq!(labels(p), ["1", "1", "1"]);
+    }
+    let first_revision = step_and_present(first);
+    let second_revision = step_and_present(second);
+    write(v, false);
+    for (p, revision) in [(first, first_revision), (second, second_revision)] {
+        assert_eq!(unsafe { nux_player_acknowledge_presented(p, revision) }, NuxStatus::HandleMismatch);
+        assert_eq!(labels(p), ["0", "0", "0"]);
+    }
+    assert_eq!(unsafe { nux_player_set_global_view_model(first, view("Flags"), ptr::null()) }, NuxStatus::Ok);
+    write(v, true);
+    assert_eq!(labels(first), ["0", "0", "0"]);
+    assert_eq!(labels(second), ["1", "1", "1"]);
+    unsafe { nux_player_free(first); nux_artboard_instance_free(a); nux_file_free(f); }
+    write(v, false);
+    assert_eq!(labels(second), ["0", "0", "0"]);
+    unsafe { nux_player_free(second); nux_artboard_instance_free(b); nux_view_model_instance_free(v); }
 }

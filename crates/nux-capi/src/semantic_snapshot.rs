@@ -1231,7 +1231,14 @@ mod tests {
                         ),
                         NuxStatus::Ok
                     );
-                    assert_eq!(&bytes[..length], expected.as_bytes());
+                    if native_input == Some(true) {
+                        assert!(
+                            bytes.get(..length) == Some(expected.as_bytes()),
+                            "secure field copy matches its expected value"
+                        );
+                    } else {
+                        assert_eq!(&bytes[..length], expected.as_bytes());
+                    }
                 }
                 assert!(
                     (&(*snapshot).nodes)

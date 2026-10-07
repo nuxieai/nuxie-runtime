@@ -4,13 +4,13 @@ use std::ptr;
 #[path = "support/layout.rs"]
 mod layout;
 
-struct Scene {
+struct LayoutHandles {
     file: *mut NuxFile,
     artboard: *mut NuxArtboardInstance,
     player: *mut NuxPlayer,
 }
 
-impl Scene {
+impl LayoutHandles {
     fn new() -> Self {
         let bytes = layout::layout_artboard();
         let mut file = ptr::null_mut();
@@ -114,7 +114,7 @@ impl Scene {
     }
 }
 
-impl Drop for Scene {
+impl Drop for LayoutHandles {
     fn drop(&mut self) {
         unsafe {
             assert_eq!(nux_player_free(self.player), NuxStatus::Ok);
@@ -126,7 +126,7 @@ impl Drop for Scene {
 
 #[test]
 fn layout_size_reflows_percentage_width_through_c() {
-    let scene = Scene::new();
+    let scene = LayoutHandles::new();
     for width in [300.0, 500.0] {
         assert_eq!(scene.set(width, 600.0), NuxStatus::Ok);
         scene.step();
@@ -137,7 +137,7 @@ fn layout_size_reflows_percentage_width_through_c() {
 
 #[test]
 fn layout_size_refuses_invalid_inputs_without_changing_size_or_revision() {
-    let scene = Scene::new();
+    let scene = LayoutHandles::new();
     assert_eq!(scene.set(300.0, 600.0), NuxStatus::Ok);
     let revision = scene.step().render_revision;
     for (width, height) in [
@@ -160,7 +160,7 @@ fn layout_size_refuses_invalid_inputs_without_changing_size_or_revision() {
 
 #[test]
 fn layout_size_checks_nulls_and_output_prefix() {
-    let scene = Scene::new();
+    let scene = LayoutHandles::new();
     let mut size = NuxPlayerLayoutSize::default();
     unsafe {
         assert_eq!(
@@ -190,7 +190,7 @@ fn layout_size_checks_nulls_and_output_prefix() {
 
 #[test]
 fn layout_size_accepts_large_finite_dimensions() {
-    let scene = Scene::new();
+    let scene = LayoutHandles::new();
     assert_eq!(scene.set(1.0e20, 1.0e20), NuxStatus::Ok);
     scene.step();
     assert_eq!(scene.size(), (1.0e20, 1.0e20));

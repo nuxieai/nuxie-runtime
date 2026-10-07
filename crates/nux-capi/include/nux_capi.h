@@ -172,6 +172,11 @@
  *    only accepted writes. Rule reports are ordered by attempted write, then
  *    installer order, and borrow attempted bytes until their result is freed.
  *    A file without rules retains ordinary native behavior.
+ * 19. Installed rule groups write a computed boolean and ordered lists of
+ *    caller-authored rule codes/messages into ordinary view-model properties.
+ *    All active errors are retained in rule installation order; an accepted
+ *    write clears the latest refusal. The boolean follows only kept values.
+ *    Install markers and rules before groups, before the first operation.
  *
  * PANIC SAFETY
  *

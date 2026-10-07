@@ -308,7 +308,6 @@ impl RuntimeValuePolicyOperation {
                 restore.insert(key);
                 continue;
             }
-            self.value_reports.remove(&key);
             let pair = policy
                 .markers
                 .iter()
@@ -339,6 +338,11 @@ impl RuntimeValuePolicyOperation {
             }
             let failures = self.failures(policy, owner, key);
             let refused = failures.iter().any(|(_, _, refused)| *refused);
+            // A refusal keeps the prior accepted value, including the marking
+            // breaches already reported for its eventual paired marker.
+            if !refused {
+                self.value_reports.remove(&key);
+            }
             for (rule_index, target, refusal) in failures {
                 if refusal || !refused {
                     let paired_marker = key.0 == target.0

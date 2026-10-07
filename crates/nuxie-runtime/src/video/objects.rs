@@ -128,10 +128,12 @@ impl Video {
         value: f32,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
-        if self.property_number(key).map(|v| v as f32) != Some(value)
+        let before = self.property_number(key).map(|v| v as f32);
+        if before != Some(value)
             && self
                 .write_property(super::properties::Write::Number(key, value.into()))
                 .is_ok()
+            && self.property_number(key).map(|v| v as f32) != before
         {
             self.playback.clear_property_change(key);
             if key == super::properties::POSITION {

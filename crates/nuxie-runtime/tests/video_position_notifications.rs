@@ -148,3 +148,47 @@ fn a_loop_write_keeps_its_pending_position_notification() {
     DataBind::update_data_bind_handle(&binding, true);
     assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(2.0));
 }
+
+#[test]
+fn clamped_position_write_seeks_without_notifying_an_unchanged_value() {
+    use nuxie_runtime::video::{
+        playback::{DecoderAction, Playback, PlaybackSettings},
+        properties::POSITION,
+    };
+    let arena = CoreArena::default();
+    let video = arena.insert(Video::default());
+    video.with_downcast_mut::<Video, _>(|v| {
+        v.playback = Playback::new(PlaybackSettings {
+            looping: true,
+            loop_start: 2.0,
+            loop_end: 5.0,
+            ..PlaybackSettings::default()
+        });
+        v.playback.opened(0, 12.5);
+    });
+    Video::flush_property_changes(&video);
+    let number = arena.insert(ViewModelInstanceNumber::default());
+    let binding = arena.insert(DataBind::new(TO_SOURCE, POSITION as u32, 0));
+    binding.with_mut(|b| {
+        let b = b.as_data_bind_mut().unwrap();
+        b.set_target(Some(video.clone()));
+        b.set_source(number.clone());
+    });
+    DataBind::bind_handle(&binding);
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(2.0));
+    assert_eq!(binding.with(|b| b.as_data_bind().unwrap().dirt()), Some(0));
+    CoreRegistry::set_double_handle(&video, POSITION.into(), 8.0);
+    assert_eq!(
+        CoreRegistry::get_double_handle(&video, POSITION.into()),
+        Some(2.0)
+    );
+    assert_eq!(binding.with(|b| b.as_data_bind().unwrap().dirt()), Some(0));
+    assert!(!Video::flush_property_changes(&video));
+    video.with_downcast_mut::<Video, _>(|v| {
+        assert!(v.playback.drain_actions().contains(&DecoderAction::Seek {
+            seconds: 2.0,
+            generation: 1
+        }));
+    });
+}

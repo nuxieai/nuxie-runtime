@@ -357,7 +357,11 @@ fn computed_nested_lists_match_kept_values_and_declared_order() {
     for reverse in [false, true] {
         let h = Handles::new();
         h.install(reverse);
-        h.step();
+        assert_eq!(
+            h.step().rule_report_count,
+            0,
+            "initial failures compute state without write reports"
+        );
         let s = Snapshot::new(h.first);
         assert!(!s.valid());
         assert_eq!(
@@ -467,5 +471,48 @@ fn computed_nested_lists_match_kept_values_and_declared_order() {
             );
         }
         assert_eq!(h.step().view_model_change_count, 0);
+        let wrong_target = NuxRuleGroupMember {
+            property: view("email"),
+            errors_path: view("email"),
+            item_model: view("ErrorEntry"),
+            code_property: view("rule"),
+            message_property: view("message"),
+        };
+        let bad_group = NuxRuleGroup {
+            model: view("First"),
+            valid: view("valid"),
+            members: &wrong_target,
+            member_count: 1,
+        };
+        unsafe {
+            assert_eq!(
+                nux_file_set_rule_groups(h.file, &bad_group, 1),
+                NuxStatus::InvalidArgument
+            );
+        }
+        assert_eq!(
+            h.step().view_model_change_count,
+            0,
+            "bad whole-table replacement keeps previous groups"
+        );
     }
+}
+
+#[test]
+fn listener_initial_value_pair_retains_latest_refusal_and_settles() {
+    let h = Handles::new();
+    h.install(false);
+    h.step();
+    let info = h.pointer_step(true);
+    assert_eq!(info.rule_report_count, 1);
+    let state = Snapshot::new(h.first);
+    assert_eq!(state.get(state.root, "trip_days").number_value, 300.0);
+    assert_eq!(state.get(state.root, "trip_days_set").bool_value, 1);
+    assert_eq!(
+        state.errors("trip_days"),
+        vec![("max".into(), "At most 365".into())]
+    );
+    assert!(!state.valid(), "the other required fields are still empty");
+    drop(state);
+    assert_eq!(h.step().view_model_change_count, 0);
 }

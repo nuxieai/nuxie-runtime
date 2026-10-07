@@ -4633,6 +4633,21 @@ fn player_step_body(
                             );
                         }
                     };
+                    if policy.has_groups()
+                        && let Some(operation) = rule_operation.as_ref()
+                    {
+                        let mut known = roots
+                            .iter()
+                            .map(RuntimeOwnedViewModelHandle::instance_identity)
+                            .collect::<std::collections::BTreeSet<_>>();
+                        roots.extend(
+                            operation
+                                .borrow()
+                                .retained_roots()
+                                .into_iter()
+                                .filter(|owner| known.insert(owner.instance_identity())),
+                        );
+                    }
                     let marker_result =
                         policy.apply_markers(&capture, &roots, |owner, index, value| {
                             let mut owner = owner

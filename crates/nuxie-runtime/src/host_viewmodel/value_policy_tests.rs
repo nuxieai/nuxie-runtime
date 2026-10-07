@@ -768,6 +768,7 @@ fn checked_write_refuses_before_mutation_and_keeps_other_writes() {
         )
         .unwrap();
     assert!(!marker.applied);
+    assert_eq!(marker.rule_indices, vec![0]);
     let result = operation
         .checked_write(
             &policy,
@@ -1317,4 +1318,43 @@ fn invalid_pattern_install_reports_its_code_and_preserves_rules() {
         assert_eq!(policy.rule(0).unwrap().property, "n");
         assert!(policy.rule(1).is_none());
     }
+}
+
+#[test]
+fn suppressed_marker_returns_native_refusal_code() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    policy
+        .set_rules(&[installed_rule(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+        )])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let mut operation = policy.begin_rules(roots).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    root.borrow_mut().set_number_by_property_name("n", 400.0);
+    let named_roots = [(String::new(), root.clone())].into();
+    let answer = crate::runtime_checked_value_write(
+        &policy,
+        Some(&mut operation),
+        &named_roots,
+        "",
+        "n_set",
+        crate::RuntimeCheckedValueInput::Boolean(true),
+    )
+    .unwrap();
+    assert_eq!(answer, (false, Some("bound".into())));
+    assert_eq!(root.borrow().number_value_by_property_name("n"), Some(0.0));
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(false)
+    );
+    operation.apply(&policy, &capture, roots).unwrap();
+    assert_eq!(operation.reports().len(), 1);
+    assert!(root.resolve_change_capture(capture).unwrap().is_empty());
+    checkpoint.commit();
 }

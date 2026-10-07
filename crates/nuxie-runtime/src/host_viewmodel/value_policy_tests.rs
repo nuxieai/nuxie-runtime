@@ -1080,7 +1080,7 @@ fn native_created_owner_needs_a_checkpoint_before_its_first_write() {
     assert_eq!(
         created.borrow().number_value_by_property_name("n"),
         // No host checkpoint exists before this native write. The compiler
-        // rejects ruled form models used as component-owned or list-row models.
+        // rejects ruled models used as component-owned or list-row models.
         Some(400.0)
     );
     checkpoint.commit();

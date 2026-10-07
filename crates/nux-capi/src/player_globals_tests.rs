@@ -181,3 +181,71 @@ fn global_wrong_thread_and_reentry_do_not_change_the_slot() {
         nux_file_free(file);
     }
 }
+
+#[path = "../tests/support/global_values.rs"]
+mod global_values;
+
+#[test]
+fn failed_global_step_rolls_back_and_poisons_the_occurrence() {
+    unsafe {
+        let bytes = global_values::fixture(true);
+        let mut f = ptr::null_mut();
+        assert_eq!(
+            nux_file_import(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut f
+            ),
+            NuxStatus::Ok
+        );
+        let mut a = ptr::null_mut();
+        let mut p = ptr::null_mut();
+        let mut v = ptr::null_mut();
+        assert_eq!(nux_artboard_instance_new(f, 1, &mut a), NuxStatus::Ok);
+        assert_eq!(nux_player_new_default(a, &mut p), NuxStatus::Ok);
+        assert_eq!(nux_view_model_instance_new(f, 0, &mut v), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_set_global_view_model(p, NuxStringView::from_static("Flags"), v),
+            NuxStatus::Ok
+        );
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            nux_player_step(p, &NuxPlayerStep::default(), &mut result),
+            NuxStatus::Ok
+        );
+        nux_player_step_result_free(result);
+        let pointer = NuxPlayerPointerEvent {
+            kind: NUX_PLAYER_POINTER_KIND_DOWN,
+            x: 10.0,
+            y: 5.0,
+            pointer_id: 1,
+            timestamp_seconds: 0.0,
+        };
+        let step = NuxPlayerStep {
+            pointers: &pointer,
+            pointer_count: 1,
+            ..NuxPlayerStep::default()
+        };
+        PANIC_BEFORE_STEP_RESULT_REGISTRATION.with(|armed| armed.set(true));
+        assert_eq!(
+            nux_player_step(p, &step, &mut result),
+            NuxStatus::RuntimeError
+        );
+        assert_eq!(
+            (*v).instance
+                .borrow()
+                .boolean_value_by_property_name("enabled"),
+            Some(false)
+        );
+        nux_player_step_result_free(result);
+        assert_eq!(
+            nux_player_set_global_view_model(p, NuxStringView::from_static("Flags"), ptr::null()),
+            NuxStatus::RuntimeError
+        );
+        nux_player_free(p);
+        nux_artboard_instance_free(a);
+        nux_view_model_instance_free(v);
+        nux_file_free(f);
+    }
+}

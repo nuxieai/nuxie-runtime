@@ -807,6 +807,7 @@ impl Drop for ScriptEffectTransaction {
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
     global_view_models: RefCell<std::collections::BTreeMap<usize, RuntimeOwnedViewModelHandle>>,
+    observed_global_view_model_generation: Cell<u64>,
     video_occurrences: RefCell<video::VideoOccurrences>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
@@ -3156,6 +3157,7 @@ fn publish_player(
     unsafe {
         let handle = Box::into_raw(Box::new(NuxPlayer {
             global_view_models: RefCell::new(std::collections::BTreeMap::new()),
+            observed_global_view_model_generation: Cell::new(0),
             video_occurrences: RefCell::new(video::VideoOccurrences::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
@@ -4184,7 +4186,11 @@ fn player_step_body(
             "player render revision overflowed during renderer invalidation",
         );
     }
-    if let Err(status) = player.artboard.refresh_bound_view_model_invalidation() {
+    if let Err(status) = player
+        .artboard
+        .refresh_bound_view_model_invalidation()
+        .and_then(|()| player.refresh_global_view_model_invalidation())
+    {
         player.artboard.poisoned.set(true);
         return publish_player_step_failure(
             out_result,
@@ -4777,7 +4783,11 @@ pub unsafe extern "C" fn nux_player_acknowledge_presented(
             player.artboard.poisoned.set(true);
             return status;
         }
-        if let Err(status) = player.artboard.refresh_bound_view_model_invalidation() {
+        if let Err(status) = player
+            .artboard
+            .refresh_bound_view_model_invalidation()
+            .and_then(|()| player.refresh_global_view_model_invalidation())
+        {
             player.artboard.poisoned.set(true);
             return status;
         }

@@ -2569,10 +2569,19 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 roots = value_policy::retain_scope(&roots)?;
             }
             let mut rule_operation = policy
-                .filter(|policy| policy.has_rules())
+                .filter(|policy| policy.has_rules() || policy.has_groups())
                 .map(|policy| policy.begin_rules(&roots))
                 .transpose()
                 .map_err(value_policy::status)?;
+            if let (Some(policy), Some(operation)) = (policy, rule_operation.as_mut()) {
+                operation
+                    .apply_groups(policy, &roots, |owner, index| {
+                        transaction
+                            .checkpoint_property_by_index(owner, index)
+                            .ok_or(nuxie::RuntimeValuePolicyError::BorrowConflict)
+                    })
+                    .map_err(value_policy::status)?;
+            }
             let mut applied_count = 0usize;
             for (index, mutation) in resolved.iter().enumerate() {
                 let applied =
@@ -2612,6 +2621,16 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                     })
                     .map_err(value_policy::status)?;
             }
+            if let (Some(policy), Some(operation)) = (policy, rule_operation.as_mut()) {
+                operation
+                    .apply_groups(policy, &roots, |owner, index| {
+                        transaction
+                            .checkpoint_property_by_index(owner, index)
+                            .ok_or(nuxie::RuntimeValuePolicyError::BorrowConflict)
+                    })
+                    .map_err(value_policy::status)?;
+                roots.extend(operation.retained_roots());
+            }
             let owner_changes =
                 RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
                     &roots, capture,
@@ -2641,12 +2660,17 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 batch.correlation_id,
                 (
                     changes,
-                    rule_operation.map_or_else(Vec::new, |operation| operation.reports().to_vec()),
+                    rule_operation
+                        .as_ref()
+                        .map_or_else(Vec::new, |operation| operation.reports().to_vec()),
                 ),
                 transaction,
                 mutation_generation,
                 &changed_owners,
             );
+            if let (Some(policy), Some(operation)) = (policy, rule_operation.as_mut()) {
+                operation.commit_groups(policy);
+            }
             Ok(())
         }));
         let failure_status = match commit {

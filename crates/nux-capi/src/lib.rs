@@ -16,8 +16,10 @@ pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
 mod player_globals;
+mod rule_groups;
 mod value_policy;
 mod value_rules;
+pub use rule_groups::*;
 pub use value_policy::{NuxValueMarker, nux_file_set_value_markers};
 pub use value_rules::*;
 mod player_view_models;
@@ -4236,7 +4238,8 @@ fn player_step_body(
         }
     };
     let policy = policy.as_ref();
-    let has_value_policy = policy.is_some_and(|policy| policy.has_markers() || policy.has_rules());
+    let has_value_policy = policy
+        .is_some_and(|policy| policy.has_markers() || policy.has_rules() || policy.has_groups());
     let mut bound_view_model = match player.artboard.bound_view_model.try_borrow() {
         Ok(bound) => bound.clone(),
         Err(_) => {
@@ -4385,7 +4388,7 @@ fn player_step_body(
         None
     };
     let rule_operation = match policy
-        .filter(|policy| policy.has_rules())
+        .filter(|policy| policy.has_rules() || policy.has_groups())
         .map(|policy| policy.begin_rules(&scene_view_model_roots))
         .transpose()
     {
@@ -4415,6 +4418,24 @@ fn player_step_body(
     if let (Some(policy), Some(capture)) = (policy, change_capture.as_ref()) {
         policy.prepare_capture(capture);
     }
+    let initial_groups_changed = match (policy, rule_operation.as_ref()) {
+        (Some(policy), Some(operation)) => match operation.borrow_mut().apply_groups(
+            policy,
+            &scene_view_model_roots,
+            |_, _| Ok(()),
+        ) {
+            Ok(changed) => changed,
+            Err(error) => {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    value_policy::status(error),
+                    "initial rule group pass failed",
+                );
+            }
+        },
+        _ => false,
+    };
     let (mut keep_going, mut runtime_dirty, mut runtime_settled) = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
             // Upstream command_server.cpp separates bindViewModelInstance from
@@ -4572,6 +4593,11 @@ fn player_step_body(
     let (host_commands, host_values) = flatten_host_commands(commands);
     #[cfg(not(feature = "scripting"))]
     let (host_commands, host_values) = (Vec::new(), Vec::new());
+    if initial_groups_changed {
+        runtime_dirty = true;
+        keep_going = true;
+        runtime_settled = false;
+    }
     let resolved_view_model_changes = match change_capture {
         Some(capture) => {
             let mut roots = match player_view_models::scene_roots_across(
@@ -4614,7 +4640,19 @@ fn player_step_body(
                                 .map_err(|_| nuxie::RuntimeValuePolicyError::BorrowConflict)?;
                             Ok(owner.set_boolean_by_property_index(index, value))
                         });
-                    match marker_result.map(|changed| changed || rules_changed) {
+                    let group_result = marker_result.and_then(|markers_changed| {
+                        let groups_changed = rule_operation
+                            .as_ref()
+                            .map(|operation| {
+                                operation
+                                    .borrow_mut()
+                                    .apply_groups(policy, &roots, |_, _| Ok(()))
+                            })
+                            .transpose()?
+                            .unwrap_or(false);
+                        Ok(markers_changed || rules_changed || groups_changed)
+                    });
+                    match group_result {
                         Ok(false) => break,
                         Ok(true) => {
                             runtime_dirty = true;
@@ -4800,6 +4838,9 @@ fn player_step_body(
     }
     if let Some(transaction) = view_model_transaction.take() {
         transaction.commit();
+    }
+    if let (Some(policy), Some(operation)) = (policy, rule_operation.as_ref()) {
+        operation.borrow_mut().commit_groups(policy);
     }
     if let Some(next) = bound_view_model_generation_commit {
         for owner in &changed_view_model_owners {

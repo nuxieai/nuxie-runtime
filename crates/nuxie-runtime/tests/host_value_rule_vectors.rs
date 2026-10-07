@@ -173,6 +173,8 @@ fn shared_vectors() {
             false,
         ),
         (R::NumberMinimum(0.0), V::Number(-0.0), None, true),
+        (R::NumberMaximum(1.1), V::Number(1.1f32), None, true),
+        (R::NumberMinimum(9.99), V::Number(9.99f32), None, true),
         (R::NumberMaximum(0.0), V::Number(f32::NAN), None, false),
         (R::NumberMaximum(0.0), V::Number(f32::INFINITY), None, false),
         (
@@ -241,6 +243,19 @@ fn shared_vectors() {
             },
             None,
             false,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 3,
+            },
+            V::List {
+                items: 5,
+                picked: Some(0),
+            },
+            None,
+            true,
         ),
         (
             R::PickedCount {
@@ -372,72 +387,51 @@ fn only_required_rejects_empty_text() {
     );
 }
 
+/// Shared installation rows: a kind and whether installation accepts it.
 #[test]
-fn invalid_bounds_are_install_errors() {
-    for rule in [
-        R::NumberMinimum(f64::NAN),
-        R::NumberMaximum(f64::INFINITY),
-        R::Length {
-            minimum: 2,
-            maximum: 1,
-        },
-        R::ItemCount {
-            minimum: 2,
-            maximum: 1,
-        },
-        R::PickedCount {
-            property: "picked".into(),
-            minimum: 2,
-            maximum: 1,
-        },
-        R::PickedCount {
-            property: "".into(),
-            minimum: 0,
-            maximum: 1,
-        },
-    ] {
-        assert!(RuntimeCompiledValueRule::compile(rule).is_err());
-    }
-}
-
-#[test]
-fn empty_picks_skip_minimum() {
-    let rule = RuntimeCompiledValueRule::compile(R::PickedCount {
-        property: "picked".into(),
-        minimum: 2,
-        maximum: 3,
-    })
-    .unwrap();
-    assert!(rule.holds(
-        V::List {
-            items: 5,
-            picked: Some(0)
-        },
-        None
-    ));
-}
-
-#[test]
-fn decimal_bounds_use_native_precision() {
-    for (kind, value) in [
-        (R::NumberMaximum(1.1), 1.1f32),
-        (R::NumberMinimum(9.99), 9.99f32),
-    ] {
-        assert!(
-            RuntimeCompiledValueRule::compile(kind)
-                .unwrap()
-                .holds(V::Number(value), None)
-        );
-    }
-}
-
-#[test]
-fn uncompilable_patterns_are_rejected() {
-    // An unterminated class and a character forbidden unescaped inside a v class.
-    for pattern in ["[", "[a|b]"] {
-        assert!(
-            RuntimeCompiledValueRule::compile(R::Pattern(pattern.into())).is_err(),
-            "invalid pattern {pattern:?} must not become an always-passing rule"
+fn shared_installation_vectors() {
+    let cases = [
+        (R::NumberMinimum(f64::NAN), false),
+        (R::NumberMaximum(f64::INFINITY), false),
+        (
+            R::Length {
+                minimum: 2,
+                maximum: 1,
+            },
+            false,
+        ),
+        (
+            R::ItemCount {
+                minimum: 2,
+                maximum: 1,
+            },
+            false,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 1,
+            },
+            false,
+        ),
+        (
+            R::PickedCount {
+                property: "".into(),
+                minimum: 0,
+                maximum: 1,
+            },
+            false,
+        ),
+        (R::Pattern("[".into()), false),
+        (R::Pattern("[a|b]".into()), false),
+        (R::Pattern(EMAIL_PATTERN.into()), true),
+    ];
+    for (index, (rule, accepted)) in cases.into_iter().enumerate() {
+        assert_eq!(
+            RuntimeCompiledValueRule::compile(rule).is_ok(),
+            accepted,
+            "installation vector {index}"
         );
     }
 }

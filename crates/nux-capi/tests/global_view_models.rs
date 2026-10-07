@@ -387,3 +387,36 @@ fn host_global_mutation_is_reported_once_in_the_mutation_result() {
         nux_file_free(f);
     }
 }
+
+#[test]
+fn host_global_mutation_invalidates_semantic_snapshots_before_the_next_step() {
+    let f = import();
+    let (a, p) = player(f, 1);
+    let v = model(f, 0);
+    unsafe {
+        assert_eq!(
+            nux_player_set_global_view_model(p, view("Flags"), v),
+            NuxStatus::Ok
+        );
+        step_and_present(p);
+        let mut old = ptr::null_mut();
+        assert_eq!(nux_player_semantic_snapshot(p, &mut old), NuxStatus::Ok);
+        write(v, true);
+        let mut fresh = ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(p, &mut fresh),
+            NuxStatus::HandleMismatch
+        );
+        assert!(fresh.is_null());
+        assert_eq!(
+            nux_player_validate_semantic_snapshot(p, old),
+            NuxStatus::HandleMismatch
+        );
+        nux_semantic_snapshot_free(old);
+        assert_eq!(labels(p), ["1", "1", "1"]);
+        nux_player_free(p);
+        nux_artboard_instance_free(a);
+        nux_view_model_instance_free(v);
+        nux_file_free(f);
+    }
+}

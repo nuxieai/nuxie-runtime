@@ -349,8 +349,8 @@ impl RuntimeValuePolicyOperation {
         if !policy.has_groups() {
             return Ok(false);
         }
-        #[cfg(test)]
-        policy.passes.set(policy.passes.get().saturating_add(1));
+        #[cfg(any(test, feature = "policy-pass-counter"))]
+        RuntimeValuePolicy::record_test_pass();
         self.absorb_initial()?;
         self.retain(policy, roots)?;
         let mut probe = Self {

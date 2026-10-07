@@ -989,3 +989,98 @@ fn split_count_bounds_reject_an_empty_interval_atomically() {
         assert!(policy.rule(1).is_none());
     }
 }
+
+#[test]
+fn host_created_owner_uses_its_value_before_the_first_write() {
+    for constructor in ["new", "authored", "named"] {
+        let (mut policy, root, file, _factory) = setup();
+        policy
+            .set_rules(&[installed_rule(
+                "n",
+                RuntimeValueRuleKind::NumberMaximum(365.0),
+                RuntimeValueRuleMode::Refuse,
+            )])
+            .unwrap();
+        let checkpoint =
+            RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096)
+                .unwrap();
+        let mut operation = policy.begin_rules(std::slice::from_ref(&root)).unwrap();
+        let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+        policy.prepare_capture(&capture);
+        let instance = match constructor {
+            "new" => RuntimeOwnedViewModelInstance::new(file, 0).unwrap(),
+            "authored" => RuntimeOwnedViewModelInstance::from_instance(file, 0, 0).unwrap(),
+            _ => RuntimeOwnedViewModelInstance::from_instance_name(file, 0, "").unwrap(),
+        };
+        let created = RuntimeOwnedViewModelHandle::new(instance);
+        assert_eq!(
+            created.borrow().number_value_by_property_name("n"),
+            Some(0.0),
+            "{constructor}"
+        );
+        assert!(created.borrow_mut().set_number_by_property_name("n", 400.0));
+        // The owner only enters the caller's graph after its first write.
+        // Its checkpoint is the constructor's zero, never the attempted 400.
+        operation
+            .apply(&policy, &capture, &[root, created.clone()])
+            .unwrap();
+        assert_eq!(
+            created.borrow().number_value_by_property_name("n"),
+            Some(0.0),
+            "{constructor}"
+        );
+        assert_eq!(operation.reports().len(), 1);
+        assert!(operation.reports()[0].refused);
+        assert!(
+            RuntimeOwnedViewModelHandle::resolve_change_capture_across(
+                &operation.retained_roots(),
+                capture
+            )
+            .unwrap()
+            .is_empty()
+        );
+        checkpoint.commit();
+    }
+}
+
+#[test]
+#[ignore = "Native creation checkpoint needs a port exception or compiler contract; project question pending"]
+fn native_created_owner_needs_a_checkpoint_before_its_first_write() {
+    use crate::mechanical_port::source::viewmodel::{
+        viewmodel_instance::ViewModelInstance, viewmodel_instance_number::ViewModelInstanceNumber,
+    };
+    let (mut policy, root, file, _factory) = setup();
+    policy
+        .set_rules(&[installed_rule(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+        )])
+        .unwrap();
+    let checkpoint =
+        RuntimeOwnedViewModelGraphTransaction::begin(std::slice::from_ref(&root), 4096).unwrap();
+    let mut operation = policy.begin_rules(std::slice::from_ref(&root)).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    // This is the factory used by native number-to-list conversion and
+    // nested-artboard default models. Neither path constructs a host adapter.
+    let native = file
+        .with_file(|file| file.create_default_view_model_instance(file.view_model(0).unwrap()))
+        .unwrap();
+    let number = native
+        .with_downcast::<ViewModelInstance, _>(|owner| owner.property_values().first().cloned())
+        .flatten()
+        .unwrap();
+    number
+        .with_downcast_mut::<ViewModelInstanceNumber, _>(|value| value.set_value(400.0))
+        .unwrap();
+    let created = RuntimeOwnedViewModelHandle::from_native(file, native).unwrap();
+    operation
+        .apply(&policy, &capture, &[root, created.clone()])
+        .unwrap();
+    assert_eq!(
+        created.borrow().number_value_by_property_name("n"),
+        Some(0.0)
+    );
+    checkpoint.commit();
+}

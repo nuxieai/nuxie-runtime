@@ -2872,6 +2872,12 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
     fn poll_async_work(&self) -> Result<bool, ScriptError> {
         (**self).poll_async_work()
     }
+    fn pending_async_work_sequence(&self) -> Option<u64> {
+        (**self).pending_async_work_sequence()
+    }
+    fn poll_next_async_work(&self) -> Result<bool, ScriptError> {
+        (**self).poll_next_async_work()
+    }
     fn has_pending_async_work(&self) -> bool {
         (**self).has_pending_async_work()
     }
@@ -2953,6 +2959,16 @@ pub trait ScriptingVm {
     /// and before any root-frame script callbacks run.
     fn poll_async_work(&self) -> Result<bool, ScriptError> {
         Ok(false)
+    }
+
+    /// Work-pool delivery order of the next queued completion, if supported.
+    fn pending_async_work_sequence(&self) -> Option<u64> {
+        None
+    }
+
+    /// Deliver one ordered completion without draining later callbacks.
+    fn poll_next_async_work(&self) -> Result<bool, ScriptError> {
+        self.poll_async_work()
     }
 
     /// Undelivered work belonging to this VM, not another file's context.

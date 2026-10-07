@@ -47,6 +47,10 @@ pub trait ArtboardHost {
     }
     fn set_file(&mut self, value: Option<RuntimeFileWeakHandle>);
     fn file(&self) -> Option<RuntimeFileWeakHandle>;
+    /// The file the hosted artboard was bound in from, when it isn't file().
+    fn foreign_file(&self) -> Option<RuntimeFileWeakHandle> {
+        None
+    }
     fn host_component(&self) -> Option<CoreHandle>;
     // Upstream ArtboardHost provides a no-op default; only hosts that relink
     // their own context override it (include/rive/artboard_host.hpp).

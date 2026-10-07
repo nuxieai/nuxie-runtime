@@ -2017,26 +2017,116 @@ impl Artboard {
     }
 
     pub fn poll_async_work(&mut self) {
+        let mut vms = Vec::new();
+        self.collect_async_work_vms(&mut vms);
         crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
-        if let Some(vm) = &self.scripting_vm {
-            let _ = vm.poll_async_work();
-        }
+        Self::deliver_async_work(&vms);
     }
 
     pub fn poll_async_work_handle(root: &CoreHandle) {
+        let mut vms = Vec::new();
+        root.with_downcast::<Artboard, _>(|artboard| artboard.collect_async_work_vms(&mut vms));
         crate::mechanical_port::source::r#async::work_pool::rive_poll_async_work(32);
-        let vm = root
-            .with_downcast::<Artboard, _>(|artboard| artboard.scripting_vm.clone())
-            .flatten();
-        if let Some(vm) = vm {
-            let _ = vm.poll_async_work();
+        Self::deliver_async_work(&vms);
+    }
+
+    fn deliver_async_work(vms: &[RuntimeScriptingVmHandle]) {
+        // Backends without queued ordering retain their single poll boundary.
+        for vm in vms {
+            if vm.pending_async_work_sequence().is_none() {
+                let _ = vm.poll_async_work();
+            }
+        }
+        // VM traversal order must not reorder the shared pool's completions.
+        while let Some((_, vm)) = vms
+            .iter()
+            .filter_map(|vm| {
+                vm.pending_async_work_sequence()
+                    .map(|sequence| (sequence, vm))
+            })
+            .min_by_key(|(sequence, _)| *sequence)
+        {
+            let _ = vm.poll_next_async_work();
+        }
+    }
+
+    // Rust work callbacks enqueue decoded images for the owning Lua thread.
+    // Drain each reachable VM at the same root poll boundary where upstream's
+    // global work pool delivers its Lua callbacks, outside all core borrows.
+    fn collect_async_work_vms(&self, vms: &mut Vec<RuntimeScriptingVmHandle>) {
+        let add_vm = |vms: &mut Vec<RuntimeScriptingVmHandle>, vm| {
+            if let Some(vm) = vm {
+                if !vms.iter().any(|existing| existing.ptr_eq(&vm)) {
+                    vms.push(vm);
+                }
+            }
+        };
+        let file_vm = self
+            .artboard_file()
+            .and_then(|file| file.upgrade())
+            .and_then(|file| file.with_file(|file| file.scripting_vm()));
+        add_vm(vms, file_vm);
+        for host in &self.artboard_hosts {
+            let Some((foreign, instances)) = host
+                .with(|owner| {
+                    let host = owner.as_artboard_host()?;
+                    Some((
+                        host.foreign_file(),
+                        (0..host.artboard_count() as i32)
+                            .filter_map(|index| host.artboard_instance(index))
+                            .collect::<Vec<_>>(),
+                    ))
+                })
+                .flatten()
+            else {
+                continue;
+            };
+            add_vm(
+                vms,
+                foreign
+                    .and_then(|file| file.upgrade())
+                    .and_then(|file| file.with_file(|file| file.scripting_vm())),
+            );
+            for instance in instances {
+                instance.with_artboard(|instance| instance.collect_async_work_vms(vms));
+            }
         }
     }
 
     pub fn has_pending_async_work(&self) -> bool {
-        self.scripting_vm
-            .as_ref()
-            .is_some_and(|vm| vm.has_pending_async_work())
+        let file_has_pending = |file: RuntimeFileWeakHandle| {
+            file.upgrade()
+                .and_then(|file| file.with_file(|file| file.scripting_vm()))
+                .is_some_and(|vm| vm.has_pending_async_work())
+        };
+        if self.artboard_file().is_some_and(&file_has_pending) {
+            return true;
+        }
+        for host in &self.artboard_hosts {
+            let Some((foreign, instances)) = host
+                .with(|owner| {
+                    let host = owner.as_artboard_host()?;
+                    Some((
+                        host.foreign_file(),
+                        (0..host.artboard_count() as i32)
+                            .filter_map(|index| host.artboard_instance(index))
+                            .collect::<Vec<_>>(),
+                    ))
+                })
+                .flatten()
+            else {
+                continue;
+            };
+            if foreign.is_some_and(&file_has_pending) {
+                return true;
+            }
+            for instance in instances {
+                if instance.with_artboard(|instance| instance.has_pending_async_work()) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     pub fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {

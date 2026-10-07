@@ -458,6 +458,10 @@ impl LinearAnimationInstance {
         Some(owner)
     }
     pub fn advance_and_apply(&mut self, seconds: f32) -> bool {
+        // Scripted interpolators run in apply(), before Artboard::advance polls.
+        if let Some(artboard) = self.scene.artboard_instance().upgrade() {
+            Artboard::poll_async_work_handle(&artboard.core_handle());
+        }
         let mut reporter = PendingKeyedCallbacks::default();
         let mut more = self.advance(seconds, Some(&mut reporter));
         for (object_id, property_key, elapsed_seconds) in reporter.0 {
@@ -472,6 +476,13 @@ impl LinearAnimationInstance {
             more = true
         }
         more || self.keep_going()
+            || self
+                .scene
+                .artboard_instance()
+                .upgrade()
+                .is_some_and(|artboard| {
+                    artboard.with_artboard(|artboard| artboard.has_pending_async_work())
+                })
     }
     pub fn advance_and_report_to_self(&mut self, seconds: f32) -> bool {
         let mut reporter = PendingKeyedCallbacks::default();

@@ -11,7 +11,7 @@ use crate::{
 };
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 #[path = "../../tests/support/value_policy_fixture.rs"]
-mod fixture;
+pub(super) mod fixture;
 use fixture::fixture;
 
 fn setup() -> (

@@ -1,0 +1,369 @@
+#![allow(clippy::unwrap_used, reason = "fixture assertions")]
+use super::tests::fixture;
+use super::*;
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+
+fn entry(
+    property: &str,
+    kind: RuntimeValueRuleKind,
+    mode: RuntimeValueRuleMode,
+    code: &str,
+) -> RuntimeValueRule {
+    RuntimeValueRule {
+        model: "Values".into(),
+        property: property.into(),
+        kind,
+        mode,
+        code: code.into(),
+        message: format!("message {code}"),
+    }
+}
+fn table() -> RuntimeRuleGroup {
+    RuntimeRuleGroup {
+        model: "Values".into(),
+        valid: "valid".into(),
+        members: ["n", "text"]
+            .map(|property| RuntimeRuleGroupMember {
+                property: property.into(),
+                errors_path: format!("{property}_errors"),
+                item_model: "ErrorEntry".into(),
+                code_property: "code".into(),
+                message_property: "message".into(),
+            })
+            .into(),
+    }
+}
+fn errors(root: &RuntimeOwnedViewModelHandle, property: &str) -> Vec<(String, String)> {
+    root.list_items_by_property_name_path(property)
+        .unwrap()
+        .iter()
+        .map(|item| {
+            let get = |name| {
+                String::from_utf8(
+                    item.borrow()
+                        .string_value_by_property_name(name)
+                        .unwrap()
+                        .to_vec(),
+                )
+                .unwrap()
+            };
+            (get("code"), get("message"))
+        })
+        .collect()
+}
+fn expected(codes: &[&str]) -> Vec<(String, String)> {
+    codes
+        .iter()
+        .map(|code| ((*code).into(), format!("message {code}")))
+        .collect()
+}
+fn run(
+    policy: &RuntimeValuePolicy,
+    roots: &[RuntimeOwnedViewModelHandle],
+    action: impl FnOnce(),
+    commit: bool,
+) -> usize {
+    let transaction = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(roots).unwrap();
+    operation
+        .apply_groups(policy, roots, |_, _| Ok(()))
+        .unwrap();
+    action();
+    let mut settled = false;
+    for _ in 0..16 {
+        let rules = operation.apply(policy, &capture, roots).unwrap();
+        let markers = policy
+            .apply_markers(&capture, roots, |owner, index, value| {
+                Ok(owner
+                    .borrow_mut()
+                    .set_boolean_by_property_index(index, value))
+            })
+            .unwrap();
+        let groups = operation
+            .apply_groups(policy, roots, |_, _| Ok(()))
+            .unwrap();
+        if !rules && !markers && !groups {
+            settled = true;
+            break;
+        }
+    }
+    assert!(settled, "native policy passes must reach a fixed point");
+    let rows = RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
+        &operation.retained_roots(),
+        capture,
+    )
+    .unwrap();
+    if commit {
+        transaction.commit();
+        operation.commit_groups(policy);
+    }
+    rows.len()
+}
+
+#[test]
+fn kept_validity_ordered_errors_and_latest_refusal() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = crate::File::import(
+        &fixture::group_fixture(),
+        crate::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let root = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    let second = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+    );
+    let roots = [root.clone(), second.clone()];
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_markers(&[RuntimeValueMarker {
+            model: "Values".into(),
+            value: "n".into(),
+            marker: "n_set".into(),
+        }])
+        .unwrap();
+    let numeric = vec![
+        entry(
+            "n",
+            RuntimeValueRuleKind::Required,
+            RuntimeValueRuleMode::Mark,
+            "required",
+        ),
+        entry(
+            "n",
+            RuntimeValueRuleKind::NumberMinimum(1.0),
+            RuntimeValueRuleMode::Mark,
+            "min",
+        ),
+        entry(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+            "max",
+        ),
+    ];
+    for reverse in [false, true] {
+        let maximum = entry(
+            "text",
+            RuntimeValueRuleKind::Length {
+                minimum: 0,
+                maximum: 2,
+            },
+            RuntimeValueRuleMode::Refuse,
+            "length",
+        );
+        let pattern = entry(
+            "text",
+            RuntimeValueRuleKind::Pattern("[0-9]+".into()),
+            RuntimeValueRuleMode::Mark,
+            "pattern",
+        );
+        let mut rules = numeric.clone();
+        rules.extend(if reverse {
+            [pattern, maximum]
+        } else {
+            [maximum, pattern]
+        });
+        policy.set_rules(&rules).unwrap();
+        policy.set_groups(&[table()]).unwrap();
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut().set_number_by_property_name("n", 0.0);
+                root.borrow_mut()
+                    .set_boolean_by_property_name("n_set", false);
+                root.borrow_mut().set_string_by_property_name("text", b"");
+            },
+            true,
+        );
+        assert_eq!(errors(&root, "n_errors"), expected(&["required"]));
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("valid"),
+            Some(false)
+        );
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut().set_number_by_property_name("n", 365.0);
+                root.borrow_mut().set_number_by_property_name("n", 366.0);
+            },
+            true,
+        );
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("valid"),
+            Some(true)
+        );
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut().set_number_by_property_name("n", 366.0);
+            },
+            true,
+        );
+        assert_eq!(
+            root.borrow().number_value_by_property_name("n"),
+            Some(365.0)
+        );
+        assert_eq!(errors(&root, "n_errors"), expected(&["max"]));
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("valid"),
+            Some(true)
+        );
+        assert_eq!(
+            run(&policy, &roots, || {}, true),
+            0,
+            "quiet preserves latest refusal without rows"
+        );
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut().set_number_by_property_name("n", 365.0);
+            },
+            true,
+        );
+        assert!(
+            errors(&root, "n_errors").is_empty(),
+            "accepted unchanged host write clears refusal"
+        );
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut().set_string_by_property_name("text", b"ab");
+                root.borrow_mut()
+                    .set_string_by_property_name("text", b"abc");
+            },
+            true,
+        );
+        assert_eq!(
+            errors(&root, "text_errors"),
+            expected(if reverse {
+                &["pattern", "length"]
+            } else {
+                &["length", "pattern"]
+            })
+        );
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("valid"),
+            Some(false)
+        );
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut()
+                    .set_boolean_by_property_name("valid", true);
+                root.clear_list_items_by_property_name_path("text_errors");
+            },
+            true,
+        );
+        assert_eq!(
+            root.borrow().boolean_value_by_property_name("valid"),
+            Some(false)
+        );
+        assert_eq!(errors(&root, "text_errors").len(), 2);
+        let before = errors(&root, "text_errors");
+        run(
+            &policy,
+            &roots,
+            || {
+                root.borrow_mut().set_string_by_property_name("text", b"1");
+            },
+            false,
+        );
+        assert_eq!(
+            errors(&root, "text_errors"),
+            before,
+            "failed native transaction restores output lists"
+        );
+        run(&policy, &roots, || {}, true);
+        assert_eq!(
+            errors(&root, "text_errors"),
+            before,
+            "failed operation does not clear refusal history"
+        );
+        run(
+            &policy,
+            &roots,
+            || {
+                second.borrow_mut().set_number_by_property_name("n", 2.0);
+            },
+            true,
+        );
+        assert_eq!(
+            errors(&root, "text_errors"),
+            before,
+            "other instance cannot alter this instance's errors"
+        );
+        let mut bad = table();
+        bad.members[0].errors_path = "missing".into();
+        assert_eq!(
+            policy.set_groups(&[bad]),
+            Err(RuntimeValuePolicyError::NotFound)
+        );
+        assert_eq!(
+            run(&policy, &roots, || {}, true),
+            0,
+            "bad replacement retained previous table"
+        );
+    }
+    let mut number_group = table();
+    number_group.members.truncate(1);
+    let mut text_group = table();
+    text_group.valid = "valid_text".into();
+    text_group.members.remove(0);
+    policy.set_groups(&[number_group, text_group]).unwrap();
+    run(
+        &policy,
+        &roots,
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 2.0);
+            root.borrow_mut().set_string_by_property_name("text", b"ab");
+        },
+        true,
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid"),
+        Some(true)
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid_text"),
+        Some(false)
+    );
+    let text_errors = root
+        .list_items_by_property_name_path("text_errors")
+        .unwrap();
+    run(
+        &policy,
+        &roots,
+        || {
+            root.borrow_mut().set_number_by_property_name("n", 0.0);
+        },
+        true,
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid"),
+        Some(false)
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("valid_text"),
+        Some(false)
+    );
+    assert_eq!(
+        root.list_items_by_property_name_path("text_errors")
+            .unwrap()[0]
+            .instance_identity(),
+        text_errors[0].instance_identity(),
+        "another group's write does not replace this list"
+    );
+}

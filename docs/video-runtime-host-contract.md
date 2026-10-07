@@ -280,8 +280,9 @@ end)` writes both bounds atomically. The same methods on `context:videoGroup`
 preflight every occurrence before changing any queue. They share the property
 path with native bindings and keyed animation.
 
-`position()`, `duration()` and `state()` read the properties above. Duration is
-zero before metadata; state returns the numeric ordinal. `nextEvent()` retains
-its event names, including string state names. Scripts own their sequencing
+`position()` reads the position property. `duration()` reads decoder metadata
+and returns nil until it is known, including a numeric zero when the known
+duration is zero. `state()` uses the same state names as `nextEvent()`. Bound
+duration and state properties retain the numeric values in the table. Scripts own their sequencing
 through ordinary values and property writes. Native decoder generations still
 reject stale frames and observations.

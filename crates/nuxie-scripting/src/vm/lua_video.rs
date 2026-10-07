@@ -128,7 +128,7 @@ fn state_name(state: PlaybackState) -> &'static str {
 impl UserData for ScriptVideo {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("duration", |_, this, ()| {
-            this.with(|v| v.property_number(properties::DURATION).unwrap())
+            this.with(|v| v.playback.duration())
         });
         methods.add_method("play", |_, this, ()| {
             this.write(Write::Bool(properties::PAUSED, false))
@@ -168,7 +168,7 @@ impl UserData for ScriptVideo {
             this.with(|v| v.property_number(properties::POSITION).unwrap())
         });
         methods.add_method("state", |_, this, ()| {
-            this.with(|v| v.property_number(properties::STATE).unwrap())
+            this.with(|v| state_name(v.playback.state()))
         });
         methods.add_method("isResourceLimited", |_, this, ()| {
             this.with(|v| v.playback.is_suspended(SuspensionReason::Resources))
@@ -195,6 +195,74 @@ impl UserData for ScriptVideo {
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
+    #[test]
+    fn video_state_matches_event_names_and_unknown_duration_is_nil() {
+        let arena = nuxie_runtime::source::core::CoreArena::default();
+        let handle = arena.insert(Video::default());
+        let lua = luaur_rt::Lua::new();
+        lua.globals()
+            .set(
+                "video",
+                lua.create_userdata(ScriptVideo::new(
+                    handle.clone(),
+                    Rc::new(Cell::new(true)),
+                    Rc::new(Cell::new(false)),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        lua.load("assert(video:state() == 'opening'); assert(video:duration() == nil)")
+            .exec()
+            .unwrap();
+        handle.with_downcast_mut::<Video, _>(|v| {
+            v.playback.opened(0, 12.5);
+        });
+        lua.load("assert(video:state() == 'ready'); assert(video:duration() == 12.5)")
+            .exec()
+            .unwrap();
+        lua.load("video:play()").exec().unwrap();
+        handle.with_downcast_mut::<Video, _>(|v| {
+            v.playback.drain_actions();
+            v.playback.observed_playing(0);
+        });
+        lua.load("assert(video:state() == 'playing')")
+            .exec()
+            .unwrap();
+        handle.with_downcast_mut::<Video, _>(|v| {
+            v.playback.ended(0);
+        });
+        lua.load("assert(video:state() == 'ended')").exec().unwrap();
+        assert_eq!(
+            handle
+                .with_downcast::<Video, _>(|v| v.property_number(properties::STATE))
+                .flatten(),
+            Some(6.0)
+        );
+    }
+
+    #[test]
+    fn video_duration_distinguishes_unknown_from_known_zero() {
+        let arena = nuxie_runtime::source::core::CoreArena::default();
+        let handle = arena.insert(Video::default());
+        let lua = luaur_rt::Lua::new();
+        lua.globals()
+            .set(
+                "video",
+                lua.create_userdata(ScriptVideo::new(
+                    handle.clone(),
+                    Rc::new(Cell::new(true)),
+                    Rc::new(Cell::new(false)),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        lua.load("assert(video:duration() == nil)").exec().unwrap();
+        handle.with_downcast_mut::<Video, _>(|v| {
+            v.playback.opened(0, 0.0);
+        });
+        lua.load("assert(video:duration() == 0)").exec().unwrap();
+    }
+
     #[derive(Clone)]
     struct FrameImage(Rc<()>);
     impl nuxie_render_api::RenderImage for FrameImage {

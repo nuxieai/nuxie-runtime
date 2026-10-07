@@ -1459,6 +1459,25 @@
       ]
     },
     {
+      "name": "NuxValueMarker",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "model",
+          "offset": 0
+        },
+        {
+          "name": "value",
+          "offset": 16
+        },
+        {
+          "name": "marker",
+          "offset": 32
+        }
+      ]
+    },
+    {
       "name": "NuxVideoAction",
       "size": 24,
       "alignment": 8,

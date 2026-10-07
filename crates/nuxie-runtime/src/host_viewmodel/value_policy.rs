@@ -123,7 +123,11 @@ impl RuntimeValuePolicy {
                 .view_model(model_index)
                 .ok_or(RuntimeValuePolicyError::NotFound)?;
             let properties = model
-                .with(|model| model.as_view_model().map(|model| model.properties().to_vec()))
+                .with(|model| {
+                    model
+                        .as_view_model()
+                        .map(|model| model.properties().to_vec())
+                })
                 .flatten()
                 .ok_or(RuntimeValuePolicyError::NotFound)?;
             properties

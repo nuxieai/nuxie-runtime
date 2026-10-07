@@ -218,6 +218,19 @@ impl RuntimeOwnedViewModelHandle {
             .map(|instance| Self::from_native(self.native_file(), instance))
             .collect()
     }
+    /// Retain the native child at this position, preserving null-item indices.
+    /// Mirrors upstream ViewModelInstanceListRuntime::instanceAt (9-31).
+    pub fn list_item_by_property_name_path(&self, path: &str, index: usize) -> Option<Self> {
+        let item = self
+            .list_property(path)?
+            .with_downcast::<ViewModelInstanceList, _>(|list| {
+                list.list_items().get(index).cloned()
+            })??;
+        let instance = item.with_downcast::<ViewModelInstanceListItem, _>(
+            ViewModelInstanceListItem::view_model_instance,
+        )??;
+        Self::from_native(self.native_file(), instance)
+    }
     pub fn list_items_by_property_name_path(&self, path: &str) -> Option<Vec<Self>> {
         self.testing_list_items_by_property_name(path)
     }

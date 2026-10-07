@@ -13,7 +13,8 @@ pub struct NuxValueMarker {
 pub(super) fn status(error: nuxie::RuntimeValuePolicyError) -> NuxStatus {
     match error {
         nuxie::RuntimeValuePolicyError::NotFound => NuxStatus::NotFound,
-        nuxie::RuntimeValuePolicyError::InvalidArgument => NuxStatus::InvalidArgument,
+        nuxie::RuntimeValuePolicyError::InvalidArgument
+        | nuxie::RuntimeValuePolicyError::InvalidPattern { .. } => NuxStatus::InvalidArgument,
         nuxie::RuntimeValuePolicyError::LimitExceeded => NuxStatus::LimitExceeded,
         nuxie::RuntimeValuePolicyError::BorrowConflict => NuxStatus::ReentrantCall,
     }

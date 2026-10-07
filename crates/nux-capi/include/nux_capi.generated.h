@@ -2312,13 +2312,28 @@ NuxStatus nux_file_set_value_markers(struct NuxFile *file,
 
 /**
  * Atomically replace this file's ordered rule table; NULL+0 removes it.
- * Bad names/kinds/bounds refuse the whole table. Invalid patterns always hold.
+ * Bad names/kinds/bounds or invalid patterns refuse the whole table.
+ * Use nux_file_set_value_rules_with_result to read an invalid pattern's code.
  * Existing values never cause install failure or emit operation reports.
  * Marker tables remain installed. Only explicitly named properties have rules.
  */
 NuxStatus nux_file_set_value_rules(struct NuxFile *file,
                                    const struct NuxValueRule *entries,
                                    size_t count);
+
+/**
+ * Atomically replace rules with the same contract as nux_file_set_value_rules.
+ * An invalid pattern returns INVALID_ARGUMENT and an owned diagnostic whose
+ * code is the caller's rule code (bounded to 4096 UTF-8 bytes, as diagnostics
+ * normally are). The previous table remains installed. Read the diagnostic
+ * with nux_capi_result_diagnostic and release it with nux_capi_result_free.
+ * out_result is optional and cleared before validation; successful installs
+ * and non-pattern validation failures leave it NULL.
+ */
+NuxStatus nux_file_set_value_rules_with_result(struct NuxFile *file,
+                                               const struct NuxValueRule *entries,
+                                               size_t count,
+                                               struct NuxCapiResult **out_result);
 
 NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
                                       struct NuxViewModelCatalog **out_catalog);

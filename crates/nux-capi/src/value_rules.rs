@@ -180,7 +180,8 @@ unsafe fn rule(
 }
 
 /// Atomically replace this file's ordered rule table; NULL+0 removes it.
-/// Bad names/kinds/bounds refuse the whole table. Invalid patterns always hold.
+/// Bad names/kinds/bounds or invalid patterns refuse the whole table.
+/// Use nux_file_set_value_rules_with_result to read an invalid pattern's code.
 /// Existing values never cause install failure or emit operation reports.
 /// Marker tables remain installed. Only explicitly named properties have rules.
 #[unsafe(no_mangle)]
@@ -189,7 +190,35 @@ pub unsafe extern "C" fn nux_file_set_value_rules(
     entries: *const NuxValueRule,
     count: usize,
 ) -> NuxStatus {
-    ffi_guard(NuxStatus::RuntimeError, || {
+    unsafe { nux_file_set_value_rules_with_result(file, entries, count, ptr::null_mut()) }
+}
+
+/// Atomically replace rules with the same contract as nux_file_set_value_rules.
+/// An invalid pattern returns INVALID_ARGUMENT and an owned diagnostic whose
+/// code is the caller's rule code (bounded to 4096 UTF-8 bytes, as diagnostics
+/// normally are). The previous table remains installed. Read the diagnostic
+/// with nux_capi_result_diagnostic and release it with nux_capi_result_free.
+/// out_result is optional and cleared before validation; successful installs
+/// and non-pattern validation failures leave it NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_file_set_value_rules_with_result(
+    file: *mut NuxFile,
+    entries: *const NuxValueRule,
+    count: usize,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    // Installation publishes only a diagnostic, with no new file handle.
+    let no_file_out = ptr::null_mut::<*mut NuxFile>();
+    ffi_guard_with_handle_result(no_file_out, out_result, HandleKind::File, || {
+        let install_error = |error: nuxie::RuntimeValuePolicyError| {
+            if let nuxie::RuntimeValuePolicyError::InvalidPattern { code } = &error
+                && !out_result.is_null()
+            {
+                publish_result(out_result, NuxStatus::InvalidArgument, "invalid pattern");
+                unsafe { (**out_result).code = bounded_diagnostic_bytes(code) };
+            }
+            value_policy::status(error)
+        };
         let _call = match enter_handle(file, HandleKind::File) {
             Ok(guard) => guard,
             Err(status) => return status,
@@ -223,7 +252,7 @@ pub unsafe extern "C" fn nux_file_set_value_rules(
         if let Some(policy) = slot.as_mut() {
             return policy
                 .set_rules(&owned)
-                .map_or_else(value_policy::status, |()| NuxStatus::Ok);
+                .map_or_else(install_error, |()| NuxStatus::Ok);
         }
         let mut policy = nuxie::RuntimeValuePolicy::new(file.file.clone());
         match policy.set_rules(&owned) {
@@ -231,7 +260,7 @@ pub unsafe extern "C" fn nux_file_set_value_rules(
                 *slot = Some(policy);
                 NuxStatus::Ok
             }
-            Err(error) => value_policy::status(error),
+            Err(error) => install_error(error),
         }
     })
 }

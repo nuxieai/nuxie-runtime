@@ -46,7 +46,7 @@ pub struct RuntimeCompiledValueRule {
 }
 
 impl RuntimeCompiledValueRule {
-    /// Compile once at installation. An invalid pattern is deliberately inert.
+    /// Compile once at installation. Invalid patterns reject the rule.
     pub fn compile(kind: RuntimeValueRuleKind) -> Result<Self, RuntimeValuePolicyError> {
         use RuntimeValueRuleKind::*;
         match &kind {
@@ -68,7 +68,10 @@ impl RuntimeCompiledValueRule {
             _ => {}
         }
         let pattern = match &kind {
-            Pattern(source) => regress::Regex::with_flags(&format!("^(?:{source})$"), "v").ok(),
+            Pattern(source) => Some(
+                regress::Regex::with_flags(&format!("^(?:{source})$"), "v")
+                    .map_err(|_| RuntimeValuePolicyError::InvalidArgument)?,
+            ),
             _ => None,
         };
         let number_bound = match &kind {
@@ -142,7 +145,7 @@ impl RuntimeCompiledValueRule {
             (Pattern(_), RuntimeRuleValue::Text(text)) => self
                 .pattern
                 .as_ref()
-                .is_none_or(|pattern| pattern.find(text).is_some()),
+                .is_some_and(|pattern| pattern.find(text).is_some()),
             (Url, RuntimeRuleValue::Text(text)) => url::Url::parse(text).is_ok(),
             (Date, RuntimeRuleValue::Text(text)) => calendar_day(text),
             _ => false,

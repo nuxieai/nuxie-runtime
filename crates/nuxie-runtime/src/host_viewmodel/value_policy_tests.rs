@@ -1295,3 +1295,26 @@ fn checked_scalar_core_without_lua() {
     drop(capture);
     checkpoint.commit();
 }
+
+#[test]
+fn invalid_pattern_install_reports_its_code_and_preserves_rules() {
+    let (mut policy, _root, _file, _factory) = setup();
+    let kept = installed_rule(
+        "n",
+        RuntimeValueRuleKind::NumberMaximum(3.0),
+        RuntimeValueRuleMode::Refuse,
+    );
+    policy.set_rules(std::slice::from_ref(&kept)).unwrap();
+    for mode in [RuntimeValueRuleMode::Mark, RuntimeValueRuleMode::Refuse] {
+        let mut pattern = installed_rule("text", RuntimeValueRuleKind::Pattern("[".into()), mode);
+        pattern.code = "authored-pattern-code".into();
+        assert_eq!(
+            policy.set_rules(&[kept.clone(), pattern]),
+            Err(RuntimeValuePolicyError::InvalidPattern {
+                code: "authored-pattern-code".into(),
+            })
+        );
+        assert_eq!(policy.rule(0).unwrap().property, "n");
+        assert!(policy.rule(1).is_none());
+    }
+}

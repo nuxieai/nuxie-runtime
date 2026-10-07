@@ -101,6 +101,9 @@ pub unsafe extern "C" fn nux_file_set_value_markers(
         let Ok(mut slot) = file.view_model_catalog.value_policy.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
+        if let Some(policy) = slot.as_mut() {
+            return policy.set_markers(&owned).map_or_else(status, |()| NuxStatus::Ok);
+        }
         let mut next = nuxie::RuntimeValuePolicy::new(file.file.clone());
         match next.set_markers(&owned) {
             Ok(()) => {

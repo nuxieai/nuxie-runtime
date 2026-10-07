@@ -210,6 +210,20 @@ pub fn fixture() -> Vec<u8> {
         uint(b, "StateMachineListener", "targetId", 1);
         uint(b, "StateMachineListenerSingle", "listenerTypeValue", 2);
     });
+    for value in [300.0, 400.0] {
+        object(&mut b, "BindablePropertyNumber", |b| {
+            float(b, "BindablePropertyNumber", "propertyValue", value)
+        });
+        binding(
+            &mut b,
+            "BindablePropertyNumber",
+            "propertyValue",
+            0,
+            None,
+            1,
+        );
+        object(&mut b, "ListenerViewModelChange", |_| {});
+    }
     object(&mut b, "BindablePropertyBoolean", |b| {
         uint(b, "BindablePropertyBoolean", "propertyValue", 1)
     });

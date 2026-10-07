@@ -476,3 +476,132 @@ fn artboard_free_list_keeps_bounds_cycles_move_remove_and_refill() {
     assert!(root.insert_list_item_by_property_name_path("primary/products", 0, &item));
     assert_eq!(product_ids(&owner), ["basic"]);
 }
+
+#[cfg(feature = "tools")]
+mod insertion_observers {
+    use super::*;
+    use nuxie_runtime::source::{
+        core::CoreHandle, viewmodel::viewmodel_instance_list::ViewModelInstanceList,
+    };
+    use std::cell::Cell;
+
+    thread_local! {
+        static CALLS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    fn observe_artboard(list: &mut ViewModelInstanceList) {
+        CALLS.with(|calls| calls.set(calls.get() + 1));
+        let artboard = list.list_items()[1]
+            .with(|item| item.as_view_model_instance_list_item().unwrap().artboard())
+            .unwrap()
+            .expect("the observer must see the completed artboard association");
+        assert_eq!(
+            artboard.with(|value| value.as_artboard().unwrap().base.view_model_id()),
+            Some(3)
+        );
+    }
+
+    fn reorder(list: &mut ViewModelInstanceList) {
+        CALLS.with(|calls| calls.set(calls.get() + 1));
+        list.on_changed(None);
+        list.swap(1, 2);
+    }
+
+    fn association(item: &CoreHandle) -> Option<CoreHandle> {
+        item.with(|item| item.as_view_model_instance_list_item().unwrap().artboard())
+            .unwrap()
+    }
+
+    fn insertion_with_observer(callback: fn(&mut ViewModelInstanceList), reordered: bool) {
+        let (file, _factory, root) = import_nested_list_fixture();
+        let owner = root
+            .linked_view_model_by_property_name_path("primary")
+            .unwrap();
+        let property = owner
+            .native_handle()
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .unwrap()
+                    .property_value_by_id(1)
+            })
+            .unwrap()
+            .unwrap();
+        let before = property
+            .with(|value| {
+                value
+                    .as_view_model_instance_list()
+                    .unwrap()
+                    .list_items()
+                    .to_vec()
+            })
+            .unwrap();
+        let existing_artboard = file.with_file(|file| file.artboard_handle(0)).unwrap();
+        for old in &before {
+            old.with_mut(|value| {
+                value
+                    .as_view_model_instance_list_item_mut()
+                    .unwrap()
+                    .set_artboard(Some(existing_artboard.clone()))
+            });
+        }
+        let item = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(file.clone(), 3, 0).unwrap(),
+        );
+        CALLS.with(|calls| calls.set(0));
+        property.with_mut(|value| {
+            value
+                .as_view_model_instance_list_mut()
+                .unwrap()
+                .on_changed(Some(callback))
+        });
+        assert!(owner.insert_list_item_by_property_name_path("products", 1, &item));
+        assert_eq!(CALLS.with(Cell::get), 1);
+        let after = property
+            .with(|value| {
+                value
+                    .as_view_model_instance_list()
+                    .unwrap()
+                    .list_items()
+                    .to_vec()
+            })
+            .unwrap();
+        let inserted_index = if reordered { 2 } else { 1 };
+        assert_eq!(
+            product_ids(&owner),
+            if reordered {
+                vec!["basic", "pro", "other"]
+            } else {
+                vec!["basic", "other", "pro"]
+            }
+        );
+        assert_eq!(
+            after[inserted_index]
+                .with(|value| value
+                    .as_view_model_instance_list_item()
+                    .unwrap()
+                    .view_model_instance())
+                .unwrap(),
+            Some(item.native_handle())
+        );
+        assert_eq!(
+            association(&after[inserted_index]),
+            file.with_file(|file| file.artboard_handle(1))
+        );
+        assert_eq!(after[0], before[0]);
+        assert_eq!(after[if reordered { 1 } else { 2 }], before[1]);
+        for old in &before {
+            assert_eq!(association(old), Some(existing_artboard.clone()));
+        }
+    }
+
+    #[test]
+    fn callback_sees_matching_artboard_before_insert_returns() {
+        insertion_with_observer(observe_artboard, false);
+    }
+
+    #[test]
+    fn callback_reorder_preserves_each_items_identity_and_artboard() {
+        insertion_with_observer(reorder, true);
+    }
+}

@@ -65,6 +65,10 @@ pub struct RuntimeValuePolicy {
     rules: Vec<Rule>,
     groups: Vec<operation::groups::Group>,
     group_refusals: RefCell<BTreeMap<(u64, usize), Vec<usize>>>,
+    revision: std::cell::Cell<u64>,
+    settled_groups: RefCell<Option<operation::groups::SettledGroups>>,
+    #[cfg(test)]
+    passes: std::cell::Cell<usize>,
 }
 
 impl RuntimeValuePolicy {
@@ -75,7 +79,18 @@ impl RuntimeValuePolicy {
             rules: Vec::new(),
             groups: Vec::new(),
             group_refusals: RefCell::new(BTreeMap::new()),
+            revision: std::cell::Cell::new(0),
+            settled_groups: RefCell::new(None),
+            #[cfg(test)]
+            passes: std::cell::Cell::new(0),
         }
+    }
+
+    /// Invalidate settled outputs after a bind, global replacement or host write.
+    /// Callers using ordinary native setters outside an operation must call this.
+    pub fn invalidate(&self) {
+        self.revision.set(self.revision.get().wrapping_add(1));
+        self.settled_groups.borrow_mut().take();
     }
 
     pub fn has_markers(&self) -> bool {
@@ -276,6 +291,7 @@ impl RuntimeValuePolicy {
             }
         }
         self.validate_group_inputs(&rules, &self.markers)?;
+        self.invalidate();
         self.rules = rules;
         self.group_refusals.borrow_mut().clear();
         Ok(())
@@ -334,6 +350,7 @@ impl RuntimeValuePolicy {
             return Err(RuntimeValuePolicyError::InvalidArgument);
         }
         self.validate_group_inputs(&self.rules, &markers)?;
+        self.invalidate();
         self.markers = markers;
         Ok(())
     }
@@ -398,6 +415,15 @@ impl RuntimeValuePolicy {
         if self.markers.is_empty() {
             return Ok(false);
         }
+        if capture
+            .write_count()
+            .map_err(|_| RuntimeValuePolicyError::LimitExceeded)?
+            == 0
+        {
+            return Ok(false);
+        }
+        #[cfg(test)]
+        self.passes.set(self.passes.get().saturating_add(1));
         if roots
             .iter()
             .any(|root| !root.native_file().ptr_eq(&self.file))

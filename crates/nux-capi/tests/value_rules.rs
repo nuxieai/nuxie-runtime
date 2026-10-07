@@ -1069,8 +1069,13 @@ fn text_rules_cover_host_listener_and_both_script_write_paths() {
         for writer in ["host", "listener", "script", "checked-script"] {
             let action = if writer == "checked-script" {
                 format!(
-                    "local ok, code = require('value_rules').set('', 'text', '{attempted}'); assert(ok == {} and code == 'authored-code')",
-                    mode == NUX_VALUE_RULE_MARK
+                    "local ok, code = require('value_rules').set('', 'text', '{attempted}'); assert(ok == {} and code == {})",
+                    mode == NUX_VALUE_RULE_MARK,
+                    if mode == NUX_VALUE_RULE_MARK {
+                        "nil"
+                    } else {
+                        "'authored-code'"
+                    }
                 )
             } else {
                 format!("context:viewModel().text.value = '{attempted}'")

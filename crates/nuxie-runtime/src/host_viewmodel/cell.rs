@@ -248,7 +248,11 @@ pub(crate) fn capture_unchanged_view_model_write(
     capture_view_model_write(cell_identity, value, false);
 }
 
-fn capture_view_model_write(cell_identity: usize, value: RuntimeViewModelChangeValue, publish: bool) {
+fn capture_view_model_write(
+    cell_identity: usize,
+    value: RuntimeViewModelChangeValue,
+    publish: bool,
+) {
     VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
         if let Some(state) = slot.borrow_mut().as_mut() {
             if state.overflowed || (!publish && !state.track_unchanged) {

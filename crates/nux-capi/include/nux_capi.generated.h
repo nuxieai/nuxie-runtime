@@ -582,7 +582,7 @@ typedef struct NuxStateMachineInstance NuxStateMachineInstance;
 typedef struct NuxVideoSyncGroup NuxVideoSyncGroup;
 
 /**
- * Immutable owned projection of every data-binding schema in one file.
+ * Owned schemas and the shared host policy retained by one imported file.
  */
 typedef struct NuxViewModelCatalog NuxViewModelCatalog;
 
@@ -940,6 +940,16 @@ typedef struct NuxFileImportConfig {
   const struct NuxVideoPlaybackCapabilities *video_playback;
 } NuxFileImportConfig;
 #endif
+
+/**
+ * One number, boolean, color or enum value and its boolean marker, named in
+ * the file's catalog. Both properties belong to the named model.
+ */
+typedef struct NuxValueMarker {
+  struct NuxStringView model;
+  struct NuxStringView value;
+  struct NuxStringView marker;
+} NuxValueMarker;
 
 /**
  * Read-only caller-sized focus state for a state-machine player.
@@ -2214,6 +2224,19 @@ NuxStatus nux_file_import_with_video_capabilities(const uint8_t *bytes,
                                                   const struct NuxVideoPlaybackCapabilities *capabilities,
                                                   struct NuxFile **out_file,
                                                   struct NuxCapiResult **out_result);
+
+/**
+ * Replace this file's whole marker table. NULL+0 removes all markers.
+ * The next step or mutation applies the table to every matching instance,
+ * including native nested/list instances. Value-first, marker-last writes
+ * preserve explicit clears. Unchanged host/script writes count; unchanged
+ * native listener/binding writes are not observable by the host journal.
+ * NOT_FOUND names an absent model/property; INVALID_ARGUMENT rejects kinds,
+ * duplicates and marker/value overlap. A refused install changes nothing.
+ */
+NuxStatus nux_file_set_value_markers(struct NuxFile *file,
+                                     const struct NuxValueMarker *entries,
+                                     size_t count);
 
 NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
                                       struct NuxViewModelCatalog **out_catalog);

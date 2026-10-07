@@ -199,13 +199,14 @@ struct OwnedCatalogInstance {
     name: Option<Box<[u8]>>,
 }
 
-/// Immutable owned projection of every data-binding schema in one file.
+/// Owned schemas and the shared host policy retained by one imported file.
 #[derive(Clone)]
 pub struct NuxViewModelCatalog {
     schemas: Vec<OwnedCatalogSchema>,
     properties: Vec<OwnedCatalogProperty>,
     instances: Vec<OwnedCatalogInstance>,
     enum_labels: Vec<Box<[u8]>>,
+    pub(super) value_policy: Rc<RefCell<Option<nuxie::RuntimeValuePolicy>>>,
 }
 
 impl NuxViewModelCatalog {
@@ -444,6 +445,7 @@ pub(super) fn build_catalog_from_bytes(bytes: &[u8]) -> Result<NuxViewModelCatal
         properties,
         instances,
         enum_labels,
+        value_policy: Rc::new(RefCell::new(None)),
     })
 }
 
@@ -2335,6 +2337,7 @@ pub unsafe extern "C" fn nux_view_model_mutate(
         }
         let mut live = BTreeMap::new();
         let mut provenance: Option<Arc<()>> = None;
+        let mut policy_cell = None;
         for address in addresses {
             let instance = unsafe { &*(address as *const NuxViewModelInstance) };
             if provenance
@@ -2350,6 +2353,7 @@ pub unsafe extern "C" fn nux_view_model_mutate(
                 return NuxStatus::HandleMismatch;
             }
             provenance.get_or_insert_with(|| Arc::clone(&instance.file_provenance));
+            policy_cell.get_or_insert_with(|| Rc::clone(&instance.view_model_catalog.value_policy));
             let Ok(value) = instance.instance.try_borrow() else {
                 publish_mutation_result(
                     out_result,
@@ -2362,6 +2366,23 @@ pub unsafe extern "C" fn nux_view_model_mutate(
             drop(value);
             live.insert(address, instance.instance.clone());
         }
+        let policy = match policy_cell
+            .as_ref()
+            .map(|cell| cell.try_borrow())
+            .transpose()
+        {
+            Ok(policy) => policy,
+            Err(_) => {
+                publish_mutation_result(
+                    out_result,
+                    NuxStatus::ReentrantCall,
+                    0,
+                    "value policy is active",
+                );
+                return NuxStatus::ReentrantCall;
+            }
+        };
+        let policy = policy.as_ref().and_then(|policy| policy.as_ref());
         // The runtime transaction owns each write and captures its exact-cell
         // or exact-topology inverse before mutating. Dirt and listener effects
         // stay buffered until the success result is fully published.
@@ -2371,11 +2392,29 @@ pub unsafe extern "C" fn nux_view_model_mutate(
             let capture =
                 RuntimeViewModelChangeCapture::begin_bounded(MAX_MUTATIONS, MAX_TOTAL_BYTES)
                     .ok_or(NuxStatus::RuntimeError)?;
+            if let Some(policy) = policy {
+                policy.prepare_capture(&capture);
+            }
+            let mut roots = live.values().cloned().collect::<Vec<_>>();
+            if policy.is_some_and(nuxie::RuntimeValuePolicy::has_markers) {
+                roots = value_policy::retain_scope(&roots)?;
+            }
             for (index, mutation) in resolved.iter().enumerate() {
                 apply_transaction_mutation(&mut transaction, &live, mutation)?;
                 maybe_panic_during_vm_commit(index + 1);
             }
-            let roots = live.values().cloned().collect::<Vec<_>>();
+            if policy.is_some_and(nuxie::RuntimeValuePolicy::has_markers) {
+                roots.extend(live.values().cloned());
+            }
+            if let Some(policy) = policy {
+                policy
+                    .apply_markers(&capture, &roots, |owner, index, value| {
+                        transaction
+                            .try_set_boolean_by_property_index(owner, index, value)
+                            .ok_or(nuxie::RuntimeValuePolicyError::BorrowConflict)
+                    })
+                    .map_err(value_policy::status)?;
+            }
             let owner_changes =
                 RuntimeOwnedViewModelHandle::resolve_change_capture_across_with_owners(
                     &roots, capture,

@@ -65,6 +65,9 @@ pub unsafe extern "C" fn nux_player_set_global_view_model(
             if !machine.bind_global_view_model_handle(name, retained.as_ref()) {
                 return NuxStatus::NotFound;
             }
+            if let Some(policy) = player.view_model_catalog.value_policy.borrow().as_ref() {
+                policy.invalidate();
+            }
             if let Some(retained) = retained {
                 globals.insert(schema, retained);
             } else {

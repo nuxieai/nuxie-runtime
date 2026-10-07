@@ -337,3 +337,142 @@ fn nested_list_relation_revalidates_before_applying_any_boolean() {
             .can_apply_list_string_match_boolean(&secondary)
     );
 }
+
+fn product_ids(owner: &RuntimeOwnedViewModelHandle) -> Vec<String> {
+    owner
+        .list_items_by_property_name_path("products")
+        .unwrap()
+        .iter()
+        .map(|item| {
+            String::from_utf8(
+                item.borrow()
+                    .string_value_by_property_name("productId")
+                    .unwrap()
+                    .to_vec(),
+            )
+            .unwrap()
+        })
+        .collect()
+}
+
+fn insert_without_item_artboard(index: usize, expected: &[&str]) {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 2, 0).unwrap(),
+    );
+    assert!(
+        item.borrow_mut()
+            .set_string_by_property_name("productId", b"new")
+    );
+    assert!(owner.insert_list_item_by_property_name_path("products", index, &item));
+    assert_eq!(product_ids(&owner), expected);
+    assert_eq!(
+        owner.list_items_by_property_name_path("products").unwrap()[index].native_handle(),
+        item.native_handle()
+    );
+}
+
+#[test]
+fn insert_without_item_artboard_at_start() {
+    insert_without_item_artboard(0, &["new", "basic", "pro"]);
+}
+
+#[test]
+fn insert_without_item_artboard_at_middle() {
+    insert_without_item_artboard(1, &["basic", "new", "pro"]);
+}
+
+#[test]
+fn insert_without_item_artboard_at_end() {
+    insert_without_item_artboard(2, &["basic", "pro", "new"]);
+}
+
+#[test]
+fn insert_without_item_artboard_rolls_back_identity_and_values() {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let before: Vec<_> = owner
+        .list_items_by_property_name_path("products")
+        .unwrap()
+        .iter()
+        .map(|item| item.native_handle())
+        .collect();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 2, 0).unwrap(),
+    );
+    {
+        let mut transaction = nuxie_runtime::RuntimeOwnedViewModelTransaction::begin().unwrap();
+        assert!(transaction.list_insert(&owner, "products", 1, &item));
+        assert_eq!(product_ids(&owner), ["basic", "basic", "pro"]);
+    }
+    assert_eq!(product_ids(&owner), ["basic", "pro"]);
+    assert_eq!(
+        owner
+            .list_items_by_property_name_path("products")
+            .unwrap()
+            .iter()
+            .map(|item| item.native_handle())
+            .collect::<Vec<_>>(),
+        before
+    );
+}
+
+#[test]
+fn insert_with_item_artboard_preserves_association() {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 3, 0).unwrap(),
+    );
+    assert!(owner.insert_list_item_by_property_name_path("products", 1, &item));
+    assert_eq!(product_ids(&owner), ["basic", "other", "pro"]);
+    let property = owner
+        .native_handle()
+        .with(|instance| {
+            instance
+                .as_view_model_instance()
+                .unwrap()
+                .property_value_by_id(1)
+        })
+        .unwrap()
+        .unwrap();
+    let inserted = property
+        .with(|property| property.as_view_model_instance_list().unwrap().list_items()[1].clone())
+        .unwrap();
+    assert_eq!(
+        inserted
+            .with(|item| item.as_view_model_instance_list_item().unwrap().artboard())
+            .unwrap(),
+        file.with_file(|file| file.artboard_handle(1))
+    );
+}
+
+#[test]
+fn artboard_free_list_keeps_bounds_cycles_move_remove_and_refill() {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 2, 0).unwrap(),
+    );
+    assert!(!owner.insert_list_item_by_property_name_path("products", 3, &item));
+    assert!(!owner.insert_list_item_by_property_name_path("products", usize::MAX, &item));
+    assert!(!owner.insert_list_item_by_property_name_path("products", 0, &owner));
+    assert!(!owner.insert_list_item_by_property_name_path("products", 0, &root));
+    assert_eq!(product_ids(&owner), ["basic", "pro"]);
+    assert!(owner.move_list_item_by_property_name_path("products", 0, 1));
+    assert_eq!(product_ids(&owner), ["pro", "basic"]);
+    assert!(owner.remove_list_item_by_property_name_path("products", 1));
+    assert!(owner.remove_list_item_by_property_name_path("products", 0));
+    assert_eq!(product_ids(&owner), Vec::<String>::new());
+    assert!(root.insert_list_item_by_property_name_path("primary/products", 0, &item));
+    assert_eq!(product_ids(&owner), ["basic"]);
+}

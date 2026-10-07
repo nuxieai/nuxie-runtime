@@ -42,6 +42,7 @@ pub enum RuntimeRuleValue<'a> {
 pub struct RuntimeCompiledValueRule {
     kind: RuntimeValueRuleKind,
     pattern: Option<regress::Regex>,
+    number_bound: Option<f32>,
 }
 
 impl RuntimeCompiledValueRule {
@@ -70,7 +71,15 @@ impl RuntimeCompiledValueRule {
             Pattern(source) => regress::Regex::with_flags(&format!("^(?:{source})$"), "v").ok(),
             _ => None,
         };
-        Ok(Self { kind, pattern })
+        let number_bound = match &kind {
+            NumberMinimum(bound) | NumberMaximum(bound) => Some(*bound as f32),
+            _ => None,
+        };
+        Ok(Self {
+            kind,
+            pattern,
+            number_bound,
+        })
     }
 
     pub fn kind(&self) -> &RuntimeValueRuleKind {
@@ -78,11 +87,18 @@ impl RuntimeCompiledValueRule {
     }
 
     /// `marker` is the installed pair's effective is-set value, when present.
-    /// Empty text bypasses every check except required. Type mismatches fail;
+    /// Empty text and unanswered lists bypass every check except required. Type mismatches fail;
     /// the file table additionally rejects them before installing a rule.
     pub fn holds(&self, value: RuntimeRuleValue<'_>, marker: Option<bool>) -> bool {
         use RuntimeValueRuleKind::*;
-        if matches!(value, RuntimeRuleValue::Text("")) && !matches!(self.kind, Required) {
+        let empty = match value {
+            RuntimeRuleValue::Text("") => true,
+            RuntimeRuleValue::List { items, picked } => {
+                picked == Some(0) || (matches!(self.kind, ItemCount { .. }) && items == 0)
+            }
+            _ => false,
+        };
+        if empty && !matches!(self.kind, Required) {
             return true;
         }
         match (&self.kind, value) {
@@ -90,11 +106,11 @@ impl RuntimeCompiledValueRule {
             (Required, RuntimeRuleValue::Text(text)) => !text.is_empty(),
             (Required, RuntimeRuleValue::List { items, picked }) => picked.unwrap_or(items) > 0,
             (Required, _) => true,
-            (NumberMinimum(bound), RuntimeRuleValue::Number(number)) => {
-                number.is_finite() && f64::from(number) >= *bound
+            (NumberMinimum(_), RuntimeRuleValue::Number(number)) => {
+                number.is_finite() && self.number_bound.is_some_and(|bound| number >= bound)
             }
-            (NumberMaximum(bound), RuntimeRuleValue::Number(number)) => {
-                number.is_finite() && f64::from(number) <= *bound
+            (NumberMaximum(_), RuntimeRuleValue::Number(number)) => {
+                number.is_finite() && self.number_bound.is_some_and(|bound| number <= bound)
             }
             (TextMinimum(bound), RuntimeRuleValue::Text(text)) => {
                 text.encode_utf16().cmp(bound.encode_utf16()).is_ge()

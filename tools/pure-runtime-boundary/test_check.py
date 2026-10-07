@@ -2473,6 +2473,21 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertTrue(check(owner, "use nuxie::render_api::*;"))
         self.assertTrue(check(owner, "use nuxie::Aabb;"))
 
+    def test_video_property_facade_paths_are_scoped_to_their_adapters(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        cases = (
+            ("crates/nux-capi/src/video.rs", "video::properties::Write"),
+            ("crates/nux-capi/src/video_sync.rs", "video::sync::report_media_clock_with_changes"),
+        )
+        for owner, symbol in cases:
+            with self.subTest(owner=owner):
+                source = f"use nuxie::{symbol};"
+                self.assertEqual(check(owner, source), [])
+                self.assertTrue(check("crates/nux-capi/src/other.rs", source))
+                module = symbol.rsplit("::", 1)[0]
+                self.assertTrue(check(owner, f"use nuxie::{module}::Unknown;"))
+                self.assertTrue(check(owner, f"use nuxie::{module}::*;"))
+
     def test_borrowed_raw_path_facade_symbol_is_exact(self) -> None:
         check = BOUNDARY_TOOL.portable_abi_facade_source_errors
         owner = "crates/nux-capi/src/render_callbacks.rs"

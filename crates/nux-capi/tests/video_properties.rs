@@ -57,13 +57,13 @@ fn observe(player: *mut NuxPlayer, id: usize, kind: u32, generation: u64, value:
     }
     actions
 }
-struct Scene {
+struct VideoFixture {
     file: *mut NuxFile,
     artboard: *mut NuxArtboardInstance,
     values: *mut NuxViewModelInstance,
     player: *mut NuxPlayer,
 }
-impl Scene {
+impl VideoFixture {
     fn new(timeline: bool) -> Self {
         let mut scene = Self {
             file: import(&fixture::fixture(0, timeline)),
@@ -128,7 +128,7 @@ impl Scene {
         observe(self.player, 1, kind, generation, value)
     }
 }
-impl Drop for Scene {
+impl Drop for VideoFixture {
     fn drop(&mut self) {
         unsafe {
             nux_player_free(self.player);
@@ -141,7 +141,7 @@ impl Drop for Scene {
 
 #[test]
 fn bindings_control_video_and_decoder_observations_flow_back_in_one_step() {
-    let s = Scene::new(false);
+    let s = VideoFixture::new(false);
     s.observe(1, 0, 12.5);
     s.step(0.0);
     assert_eq!(s.value(5).0, 12.5);
@@ -189,7 +189,7 @@ fn bindings_control_video_and_decoder_observations_flow_back_in_one_step() {
 
 #[test]
 fn linear_volume_key_reaches_decoder_at_half_a_second() {
-    let s = Scene::new(true);
+    let s = VideoFixture::new(true);
     s.observe(1, 0, 12.5);
     s.step(0.5);
     assert!(s.observe(0, 0, 0.0).contains(&(4, 0.5, 0)));
@@ -198,8 +198,8 @@ fn linear_volume_key_reaches_decoder_at_half_a_second() {
 
 #[test]
 fn only_host_command_kinds_are_accepted_for_players_and_groups() {
-    let a = Scene::new(false);
-    let b = Scene::new(false);
+    let a = VideoFixture::new(false);
+    let b = VideoFixture::new(false);
     unsafe {
         let members = [
             NuxVideoSyncMember {
@@ -296,7 +296,7 @@ fn muted_binding_reaches_root_copy_and_list_row_decoder_queues() {
 
 #[test]
 fn reclaiming_a_decoder_publishes_opening_before_another_decoder_step() {
-    let s = Scene::new(false);
+    let s = VideoFixture::new(false);
     s.observe(1, 0, 12.5);
     s.step(0.0);
     assert_eq!(s.value(8).0, 1.0);

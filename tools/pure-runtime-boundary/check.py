@@ -372,7 +372,7 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
     "crates/nux-capi/src/video.rs": {
         "runtime::generated::core_registry::CoreCapabilities",
         "runtime::semantic::semantic_snapshot::Bounds",
-        "video::Video", "video::VideoAsset",
+        "video::Video", "video::VideoAsset", "video::properties::Write",
         "video::playback::Command", "video::playback::DecoderAction",
         "video::playback::PlaybackError", "video::playback::PlaybackEvent",
         "video::playback::PlaybackState", "video::playback::SuspensionReason",
@@ -389,7 +389,7 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
     "crates/nux-capi/src/video_sync.rs": {
         "video::playback::Command", "video::playback::PlaybackError",
         "video::sync::MediaClock", "video::sync::SyncError",
-        "video::sync::SynchronizationGroup", "video::sync::report_media_clock",
+        "video::sync::SynchronizationGroup", "video::sync::report_media_clock_with_changes",
     },
 }
 

@@ -408,11 +408,15 @@ impl RuntimeOwnedViewModelInstance {
             view_model_index,
         })
     }
+    fn from_created_native(file: RuntimeFileHandle, instance: CoreHandle) -> Option<Self> {
+        crate::host_viewmodel::capture_initial_policy_owner(&file, &instance);
+        Self::from_native(file, instance)
+    }
     pub fn new(file: RuntimeFileHandle, view_model_index: usize) -> Option<Self> {
         let instance = file.with_file_mut(|file| {
             file.create_view_model_instance(file.view_model(view_model_index)?)
         })?;
-        Self::from_native(file, instance)
+        Self::from_created_native(file, instance)
     }
     pub fn from_instance(
         file: RuntimeFileHandle,
@@ -422,7 +426,7 @@ impl RuntimeOwnedViewModelInstance {
         let instance = file.with_file(|file| {
             file.create_view_model_instance_at(view_model_index, instance_index)
         })?;
-        Self::from_native(file, instance)
+        Self::from_created_native(file, instance)
     }
     pub fn from_instance_name(
         file: RuntimeFileHandle,
@@ -435,7 +439,7 @@ impl RuntimeOwnedViewModelInstance {
                 model.with(|model| model.as_view_model().unwrap().base.name().to_owned())?;
             file.create_view_model_instance_named(&model_name, name)
         })?;
-        Self::from_native(file, instance)
+        Self::from_created_native(file, instance)
     }
     pub fn native_handle(&self) -> CoreHandle {
         self.instance.clone()

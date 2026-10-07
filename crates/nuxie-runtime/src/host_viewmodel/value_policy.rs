@@ -90,23 +90,46 @@ impl RuntimeValuePolicy {
         if !root.native_file().ptr_eq(&self.file) {
             return Err(RuntimeValuePolicyError::InvalidArgument);
         }
-        let path = root.borrow().path_named(path).ok_or(RuntimeValuePolicyError::NotFound)?;
+        let path = root
+            .borrow()
+            .path_named(path)
+            .ok_or(RuntimeValuePolicyError::NotFound)?;
         let (index, parents) = path.split_last().ok_or(RuntimeValuePolicyError::NotFound)?;
-        let owner = if parents.is_empty() { root.clone() }
-            else { root.linked_view_model_by_property_path(parents).ok_or(RuntimeValuePolicyError::NotFound)? };
+        let owner = if parents.is_empty() {
+            root.clone()
+        } else {
+            root.linked_view_model_by_property_path(parents)
+                .ok_or(RuntimeValuePolicyError::NotFound)?
+        };
         Ok((owner, *index))
     }
 
-    pub fn property_value(&self, root: &RuntimeOwnedViewModelHandle, path: &str) -> Result<RuntimeViewModelChangeValue, RuntimeValuePolicyError> {
+    pub fn property_value(
+        &self,
+        root: &RuntimeOwnedViewModelHandle,
+        path: &str,
+    ) -> Result<RuntimeViewModelChangeValue, RuntimeValuePolicyError> {
         let (owner, index) = self.resolve_property(root, path)?;
-        let property = owner.borrow().property_by_path(&[index]).ok_or(RuntimeValuePolicyError::NotFound)?;
+        let property = owner
+            .borrow()
+            .property_by_path(&[index])
+            .ok_or(RuntimeValuePolicyError::NotFound)?;
         operation::read(&property).ok_or(RuntimeValuePolicyError::InvalidArgument)
     }
 
-    pub fn marker_property(&self, owner: &RuntimeOwnedViewModelHandle, index: usize) -> Option<usize> {
-        if !owner.native_file().ptr_eq(&self.file) { return None; }
+    pub fn marker_property(
+        &self,
+        owner: &RuntimeOwnedViewModelHandle,
+        index: usize,
+    ) -> Option<usize> {
+        if !owner.native_file().ptr_eq(&self.file) {
+            return None;
+        }
         let model = owner.borrow().view_model_index();
-        self.markers.iter().find(|pair| pair.model == model && pair.value == index).map(|pair| pair.marker)
+        self.markers
+            .iter()
+            .find(|pair| pair.model == model && pair.value == index)
+            .map(|pair| pair.marker)
     }
 
     /// Replace the entire ordered rule table atomically. Model/property names
@@ -377,5 +400,5 @@ mod tests;
 
 #[path = "value_policy_operation.rs"]
 mod operation;
-pub use operation::*;
 pub(crate) use operation::capture_initial_policy_owner;
+pub use operation::*;

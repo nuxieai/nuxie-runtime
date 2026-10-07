@@ -215,6 +215,11 @@ class AbiAndElfContractTests(unittest.TestCase):
         self.assertIn("nux_player_layout_size_set", partitions["portable"])
         self.assertIn("nux_player_set_global_view_model", partitions["portable"])
         self.assertIn("nux_file_set_value_markers", partitions["portable"])
+        self.assertIn("nux_file_set_value_rules", partitions["portable"])
+        self.assertIn("nux_player_step_result_rule_report", partitions["portable"])
+        self.assertIn("nux_player_step_result_rule_report_list_item", partitions["portable"])
+        self.assertIn("nux_view_model_mutation_result_rule_report", partitions["portable"])
+        self.assertIn("nux_view_model_mutation_result_rule_report_list_item", partitions["portable"])
 
     def test_contract_fingerprint_covers_header_layout_and_all_four_partitions(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -74,6 +74,11 @@ impl WorkPool {
         !self.work_queue.is_empty()
     }
 
+    pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {
+        // Tasks leave this queue as they are delivered.
+        self.work_queue.iter().any(|task| task.owner_id() == owner_id)
+    }
+
     pub fn cancel_all_for_owner(&mut self, owner_id: u64) {
         // Polling delivers the single cancellation callback.
         for task in &self.work_queue {
@@ -101,6 +106,8 @@ impl Drop for WorkPool {
 struct QueueState {
     work_queue: VecDeque<Box<dyn DynWorkTask>>,
     cancelled_owners: HashMap<u64, u64>,
+    // Submitted but not yet delivered, including tasks running on a worker.
+    undelivered_by_owner: HashMap<u64, u32>,
     cancel_generation: u64,
     shutdown: bool,
 }
@@ -127,6 +134,7 @@ impl Default for WorkPool {
             queue: Mutex::new(QueueState {
                 work_queue: VecDeque::new(),
                 cancelled_owners: HashMap::new(),
+                undelivered_by_owner: HashMap::new(),
                 cancel_generation: 0,
                 shutdown: false,
             }),
@@ -208,6 +216,8 @@ impl WorkPool {
             task.set_submit_generation(queue.cancel_generation);
             handle = self.next_handle;
             self.next_handle += 1;
+            let undelivered = queue.undelivered_by_owner.entry(task.owner_id()).or_default();
+            *undelivered = undelivered.wrapping_add(1);
             queue.work_queue.push_back(task);
         }
         self.state.have_work.notify_one();
@@ -221,7 +231,13 @@ impl WorkPool {
                 break;
             };
             let owner_cancelled = {
-                let queue = self.state.queue.lock().unwrap();
+                let mut queue = self.state.queue.lock().unwrap();
+                if let Some(undelivered) = queue.undelivered_by_owner.get_mut(&task.owner_id()) {
+                    *undelivered = undelivered.wrapping_sub(1);
+                    if *undelivered == 0 {
+                        queue.undelivered_by_owner.remove(&task.owner_id());
+                    }
+                }
                 queue
                     .cancelled_owners
                     .get(&task.owner_id())
@@ -253,6 +269,15 @@ impl WorkPool {
             return true;
         }
         false
+    }
+
+    pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {
+        self.state
+            .queue
+            .lock()
+            .unwrap()
+            .undelivered_by_owner
+            .contains_key(&owner_id)
     }
 
     pub fn cancel_all_for_owner(&mut self, owner_id: u64) {

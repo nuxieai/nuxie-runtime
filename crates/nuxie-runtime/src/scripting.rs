@@ -2872,6 +2872,9 @@ impl<T: ScriptingVm + ?Sized> ScriptingVm for Rc<T> {
     fn poll_async_work(&self) -> Result<bool, ScriptError> {
         (**self).poll_async_work()
     }
+    fn has_pending_async_work(&self) -> bool {
+        (**self).has_pending_async_work()
+    }
     fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {
         (**self).perform_registration(modules)
     }
@@ -2950,6 +2953,11 @@ pub trait ScriptingVm {
     /// and before any root-frame script callbacks run.
     fn poll_async_work(&self) -> Result<bool, ScriptError> {
         Ok(false)
+    }
+
+    /// Undelivered work belonging to this VM, not another file's context.
+    fn has_pending_async_work(&self) -> bool {
+        false
     }
 
     fn perform_registration(&self, modules: &[ScriptModule<'_>]) -> Vec<ScriptModuleFailure> {

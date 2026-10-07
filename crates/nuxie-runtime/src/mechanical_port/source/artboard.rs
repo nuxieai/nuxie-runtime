@@ -2033,6 +2033,12 @@ impl Artboard {
         }
     }
 
+    pub fn has_pending_async_work(&self) -> bool {
+        self.scripting_vm
+            .as_ref()
+            .is_some_and(|vm| vm.has_pending_async_work())
+    }
+
     pub fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
         self.objects.get(id as usize)?.clone()
     }

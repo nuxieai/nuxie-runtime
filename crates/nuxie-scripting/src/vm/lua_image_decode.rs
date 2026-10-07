@@ -218,6 +218,26 @@ pub(super) fn start(lua: &Lua, encoded: Buffer) -> Result<AnyUserData> {
     Ok(promise)
 }
 
+pub(super) fn has_pending_work(lua: &Lua) -> bool {
+    let Some(owner) = lua.app_data_ref::<ImageDecodeRegistryOwner>() else {
+        return false;
+    };
+    // The wasm32-unknown-unknown lane uses the same Rust decoder and pool;
+    // there are no browser-native requests outside this owner to count.
+    // Pool callbacks hand off to the Lua-thread queue before settling promises.
+    if !lock_unpoisoned(&owner.0.completions).is_empty() {
+        return true;
+    }
+    nuxie_runtime::get_global_work_pool_if_exists()
+        .is_some_and(|pool| lock_unpoisoned(pool).has_pending_work_for_owner(owner.0.owner_id))
+}
+
+#[cfg(feature = "upstream-test-seams")]
+pub(super) fn upstream_test_owner_id(lua: &Lua) -> u64 {
+    install(lua);
+    registry(lua).expect("installed image decode registry").owner_id
+}
+
 pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
     let Some(registry) = lua
         .app_data_ref::<ImageDecodeRegistryOwner>()

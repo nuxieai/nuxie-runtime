@@ -4599,6 +4599,24 @@ fn player_step_body(
         runtime_settled = false;
     }
     let resolved_view_model_changes = match change_capture {
+        // A script refusal may need group output even after its capture rows
+        // were consumed. Skip graph resolution only when both are quiet.
+        Some(capture)
+            if capture.write_count().is_ok_and(|count| count == 0)
+                && match (rule_operation.as_ref(), policy) {
+                    (Some(operation), Some(policy)) => operation
+                        .borrow()
+                        .needs_policy_pass(policy, &capture, 0)
+                        .is_ok_and(|pending| !pending),
+                    _ => true,
+                } =>
+        {
+            if let Some(operation) = rule_operation.as_ref() {
+                rule_reports = operation.borrow().reports().to_vec();
+            }
+            drop(capture);
+            Vec::new()
+        }
         Some(capture) => {
             let mut roots = match player_view_models::scene_roots_across(
                 &artboard,
@@ -4772,16 +4790,18 @@ fn player_step_body(
         .map(|(owner, _)| owner.clone())
         .collect::<Vec<_>>();
     let mut subscribed_owners = retained_subscribed_owners;
-    for root in &subscribed_roots {
-        let Some(owners) = root.reachable_change_owner_snapshot() else {
-            player.artboard.poisoned.set(true);
-            return publish_player_step_failure(
-                out_result,
-                NuxStatus::RuntimeError,
-                "bound view-model subscription graph is invalid",
-            );
-        };
-        subscribed_owners.extend(owners);
+    if !resolved_view_model_changes.is_empty() {
+        for root in &subscribed_roots {
+            let Some(owners) = root.reachable_change_owner_snapshot() else {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    "bound view-model subscription graph is invalid",
+                );
+            };
+            subscribed_owners.extend(owners);
+        }
     }
     let view_model_changes = data_binding::own_view_model_changes(
         data_binding::NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,

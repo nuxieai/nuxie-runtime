@@ -505,7 +505,7 @@ impl RuntimeOwnedViewModelInstance {
             .with_downcast::<ViewModelInstanceString, _>(|_| ())?;
         Some(index)
     }
-    fn unique_boolean_property_index_by_name(&self, name: &str) -> Option<usize> {
+    pub(super) fn unique_boolean_property_index_by_name(&self, name: &str) -> Option<usize> {
         let index = self.unique_property_index_by_name(name)?;
         self.model()
             .with(|model| model.as_view_model().unwrap().property_at(index))??
@@ -1011,6 +1011,7 @@ impl RuntimeOwnedViewModelInstance {
             .with_downcast::<ViewModelInstanceString, _>(|property| property.value() == value)
             != Some(false)
         {
+            capture_unchanged_native_write(&property);
             return false;
         }
         mutate(|| {

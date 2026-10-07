@@ -555,3 +555,75 @@ fn settled_player_steps_make_no_policy_passes() {
         );
     }
 }
+
+#[test]
+fn group_install_rejects_bad_handles_and_member_arrays_atomically() {
+    let h = Handles::new();
+    h.install(false);
+    h.step();
+    unsafe {
+        assert_eq!(
+            nux_file_set_rule_groups(ptr::null_mut(), ptr::null(), 0),
+            NuxStatus::NullArgument
+        );
+        assert_eq!(
+            nux_file_set_rule_groups(h.first.cast(), ptr::null(), 0),
+            NuxStatus::HandleMismatch
+        );
+    }
+    for (group, expected) in [
+        (
+            NuxRuleGroup {
+                model: view("First"),
+                valid: view("valid"),
+                member_count: 1,
+                ..Default::default()
+            },
+            NuxStatus::NullArgument,
+        ),
+        (
+            NuxRuleGroup {
+                model: view("First"),
+                valid: view("valid"),
+                member_count: 4096,
+                ..Default::default()
+            },
+            NuxStatus::LimitExceeded,
+        ),
+        (
+            NuxRuleGroup {
+                model: view("Missing"),
+                valid: view("valid"),
+                ..Default::default()
+            },
+            NuxStatus::NotFound,
+        ),
+        (
+            NuxRuleGroup {
+                model: view("First"),
+                valid: view("trip_days"),
+                ..Default::default()
+            },
+            NuxStatus::InvalidArgument,
+        ),
+        (
+            NuxRuleGroup {
+                model: NuxStringView {
+                    data: ptr::null(),
+                    len: 1,
+                },
+                ..Default::default()
+            },
+            NuxStatus::NullArgument,
+        ),
+    ] {
+        assert_eq!(
+            unsafe { nux_file_set_rule_groups(h.file, &group, 1) },
+            expected
+        );
+        assert_eq!(h.step().view_model_change_count, 0);
+        assert!(!Snapshot::new(h.first).valid());
+    }
+    h.mutate(&[h.number(400.0)]);
+    assert!(!Snapshot::new(h.first).errors("trip_days").is_empty());
+}

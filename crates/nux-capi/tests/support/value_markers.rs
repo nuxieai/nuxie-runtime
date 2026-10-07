@@ -458,6 +458,14 @@ pub fn list_fixture() -> Vec<u8> {
 /// The first advance mounts 41 rows with 101 leaves each, crossing the
 /// scene-artboard bound while the view-model graph stays small and unchanged.
 pub fn quiet_scene_growth() -> Vec<u8> {
+    quiet_scene_growth_impl(false)
+}
+
+pub fn quiet_scene_growth_with_marker() -> Vec<u8> {
+    quiet_scene_growth_impl(true)
+}
+
+fn quiet_scene_growth_impl(with_marker: bool) -> Vec<u8> {
     let mut b = b"RIVE".to_vec();
     for value in [7, 0, 3593, 0] {
         push_var_uint(&mut b, value);
@@ -469,6 +477,11 @@ pub fn quiet_scene_growth() -> Vec<u8> {
     object(&mut b, "ViewModelPropertyNumber", |b| {
         string(b, "ViewModelPropertyNumber", "name", "n")
     });
+    if with_marker {
+        object(&mut b, "ViewModelPropertyBoolean", |b| {
+            string(b, "ViewModelPropertyBoolean", "name", "n_set")
+        });
+    }
     for _ in 0..41 {
         object(&mut b, "ViewModelInstance", |b| {
             uint(b, "ViewModelInstance", "viewModelId", 0)
@@ -476,6 +489,11 @@ pub fn quiet_scene_growth() -> Vec<u8> {
         object(&mut b, "ViewModelInstanceNumber", |b| {
             uint(b, "ViewModelInstanceNumber", "viewModelPropertyId", 0)
         });
+        if with_marker {
+            object(&mut b, "ViewModelInstanceBoolean", |b| {
+                uint(b, "ViewModelInstanceBoolean", "viewModelPropertyId", 1)
+            });
+        }
     }
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "Root")

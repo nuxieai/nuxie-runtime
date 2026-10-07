@@ -6,6 +6,8 @@ license.workspace = true
 repository.workspace = true
 
 [features]
+# Host test observability only; does not enable upstream TESTING behavior.
+policy-pass-counter = []
 testing = [] # Upstream TESTING observations; test harnesses only.
 # Mirrors upstream --no_ffp_contract for the strict unit/Silver lane.
 # Shipping consumers, including default-features=false hosts, keep the

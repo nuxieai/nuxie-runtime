@@ -7,18 +7,30 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `a68b6dabe1a30f15c1c36f79b7c66eee8b079b6e`
+- LAST_SYNCED_SHA: `f9d7e648a957e9683dc1d5ebe56b4f2311409a8f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `05d690ee5a8879d738679f8ebad17c4a61af50ac` (refreshed 2026-10-07 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Nine upstream commits remain after this checkpoint at the fetched target.
-  All 198 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (220 after `5892bb05`); this
+  Eight upstream commits remain after this checkpoint at the fetched target.
+  All 199 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (221 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `f9d7e648`, integrated atop downstream `1ab231ff46`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Eight existing live Lua image-decoder tests pass; source/pipeline tests
+  pass 12, manifest tests pass 27, and generated inventory is current. Structural
+  coverage is 1,065 mirrored/13 adapted owners. The extracted browser decoder
+  maps to the approved Rust codec/work-pool owner: asynchronous settlement,
+  cancellation, canonical error and premultiplication already match the shared
+  contract. This is not a claim of browser-native codec equivalence; JS startup
+  exception and malloc guards concern absent Emscripten glue. Guest browser VM,
+  typed calls, ABI/IDL/generated bridges, deferred File startup and guest tests
+  remain parked under UNIV-3728. No browser pixels, broad corpus or platform
+  rerun is claimed for this metadata-only change; earlier limitations remain.
 - Validation at `a68b6dab`, integrated atop downstream `1e53c494d0`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All three script-module asset tests pass, source/pipeline tests pass
@@ -376,6 +388,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `f9d7e648a957e9683dc1d5ebe56b4f2311409a8f` | Account for the shared browser-image decoder extraction through the approved live Rust codec/work-pool adaptation, not as a deferred owner. Guest browser VM, typed calls, ABI/IDL, generated bridges, guarded File/decodedFile/command-server startup and guest harnesses remain deferred. No private editor implementation is claimed. Both reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `a68b6dabe1a30f15c1c36f79b7c66eee8b079b6e` | Translate the shared AnimaScript module-name constant. Guest VM adoption/registration, mixed-backend Luau guards, WAMR and guest-browser binding changes remain parked. Existing omitted VM-presence assertions are not newly weakened; private editor code absent from the public delta is not claimed imported. Both independent reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `ae4e1776466164bfabd64ecedecf2d8f347fa0fc` | Translate host SMI completion polling before advance, per-file VM pending continuation and watermark internal-overload use; owner-scoped pool counts and all-thread network request lookup. Preserve Lua-thread completion handoff and count its undelivered queue along with the existing per-VM decoder/network owners. Port all five new upstream regressions. Browser decoding uses the approved Rust codec/pool; Emscripten symbol-glue fixes have no product counterpart and the common failure text already matches. Guest Wasm pending-work query remains parked. Private CLI changes absent from the public delta are not claimed. Both review passes and correction rereviews are clean; validation and the unchanged threaded-test race are recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `de3e86090892b68072e7d4505e8d979386fc9a30` | Translate scripted scroll targeting, local position/delta dispatch, pointer IDs through nested/list and scripted-artboard routes, handler-decline fallthrough, claimed-gesture latching, quiet timeout and collapse/cancel behavior. Add the live Lua ScrollEvent constructor, readonly fields, hit claim, global atoms and artboard method; anchor pointer/scroll userdata across protected calls. Preserve the legacy 21-bit serialized method default while adding opt-in bit 21. Wheel-disabled constraints now decline inertia cancellation. Port all six scripting tests and the runtime scroll regression; add a supplemental constructor C-string-boundary regression after source review. Source-equivalence and separate Rust-integration reviews are clean. The approved live luaur implementation owns Lua changes; excluded historical Lua mirrors are not a second execution backend. Guest Wasm VM calls, ABI/IDL/generated imports and browser guest forwarding remain parked; private editor-preview changes absent from the public delta are not claimed imported. Validation is recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

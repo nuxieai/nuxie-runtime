@@ -50,18 +50,34 @@ fn float(bytes: &mut Vec<u8>, kind: &str, name: &str, value: f32) {
 }
 
 fn video(bytes: &mut Vec<u8>, readiness: u32) {
+    video_with_presentation(bytes, readiness, false);
+}
+fn video_with_presentation(bytes: &mut Vec<u8>, readiness: u32, qualified: bool) {
     var(bytes, 60001);
     uint(bytes, "Component", "parentId", 0);
     var(bytes, 206);
     var(bytes, 0);
     var(bytes, 60011);
     var(bytes, readiness.into());
+    if qualified {
+        float(bytes, "Node", "x", 32.0);
+        float(bytes, "Node", "y", 16.0);
+        string(
+            bytes,
+            "Video",
+            "captions",
+            r#"{"version":1,"language":"en","cues":[{"start":0,"end":1,"text":"Red scene"},{"start":1,"end":2,"text":"Blue scene"}]}"#,
+        );
+    }
     var(bytes, 0);
 }
 fn asset(bytes: &mut Vec<u8>) {
+    asset_with_source(bytes, "assets/greeting.mp4");
+}
+fn asset_with_source(bytes: &mut Vec<u8>, source: &str) {
     var(bytes, 60000);
     var(bytes, 60000);
-    let name = b"assets/greeting.mp4";
+    let name = source.as_bytes();
     var(bytes, name.len() as u64);
     bytes.extend(name);
     for (key, value) in [(208, 64.0_f32), (207, 32.0)] {
@@ -78,16 +94,25 @@ fn binding(bytes: &mut Vec<u8>, key: u64, path: &[u8], flags: u64) {
     });
 }
 pub fn fixture(readiness: u32, timeline: bool) -> Vec<u8> {
+    fixture_impl(readiness, timeline, "assets/greeting.mp4", false)
+}
+
+/// Real decoder qualification retains the source, centered pixels and captions.
+pub fn qualification(source: &str) -> Vec<u8> {
+    fixture_impl(0, false, source, true)
+}
+
+fn fixture_impl(readiness: u32, timeline: bool, source: &str, qualified: bool) -> Vec<u8> {
     let mut b = b"RIVE".to_vec();
     for n in [7, 0, 3593, 0] {
         var(&mut b, n);
     }
     object(&mut b, "Backboard", |_| {});
-    asset(&mut b);
+    asset_with_source(&mut b, source);
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "VideoValues")
     });
-    let fields = [
+    let mut fields = vec![
         ("Boolean", "muted", 0.0),
         ("Number", "volume", 1.0),
         ("Boolean", "paused", 1.0),
@@ -99,7 +124,10 @@ pub fn fixture(readiness: u32, timeline: bool) -> Vec<u8> {
         ("Number", "state", 0.0),
         ("Number", "effectiveVolume", 0.0),
     ];
-    for (kind, name, _) in fields {
+    if qualified {
+        fields.push(("Boolean", "loop", 0.0));
+    }
+    for (kind, name, _) in &fields {
         let kind = format!("ViewModelProperty{kind}");
         object(&mut b, &kind, |b| string(b, &kind, "name", name));
     }
@@ -122,17 +150,18 @@ pub fn fixture(readiness: u32, timeline: bool) -> Vec<u8> {
         float(b, "Artboard", "width", 64.0);
         float(b, "Artboard", "height", 32.0);
     });
-    video(&mut b, readiness);
-    for (i, key) in [
+    video_with_presentation(&mut b, readiness, qualified);
+    let mut keys = vec![
         60005, 60006, 60016, 60017, 60017, 60018, 60016, 60019, 60020, 60006,
-    ]
-    .iter()
-    .enumerate()
-    {
+    ];
+    if qualified {
+        keys.push(60004);
+    }
+    for (i, key) in keys.iter().enumerate() {
         if timeline && i == 1 {
             continue;
         }
-        binding(&mut b, *key, &[0, i as u8], u64::from(i >= 4));
+        binding(&mut b, *key, &[0, i as u8], u64::from((4..10).contains(&i)));
     }
     object(&mut b, "StateMachine", |b| {
         string(b, "StateMachine", "name", "Main")

@@ -1,9 +1,12 @@
 //! Real AVFoundation -> public C ABI -> Metal readback qualification.
 //! Run on the main thread: cargo run -p nux-capi --features apple-metal --example video_apple
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+#[allow(dead_code)]
+#[path = "../tests/support/video_properties.rs"]
+mod video_properties;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 mod proof {
     use nux_capi::*;
-    use nuxie_binary::{FixtureProperty as P, FixtureRecord as R, FixtureValue as V};
     use nuxie_runtime::video::playback::DecoderAction;
     use nuxie_video_host::apple::{
         ApplePlayer, Frame, FramePixels, Observation, PixelBuffer, pump_run_loop,
@@ -84,20 +87,47 @@ mod proof {
         assert_eq!(status, NuxStatus::Ok);
     }
     fn scene(source: &str) -> Vec<u8> {
-        let record = |type_key, props: Vec<(u16, V)>| R {
-            type_key,
-            properties: props
-                .into_iter()
-                .map(|(key, value)| P { key, value })
-                .collect(),
-        };
-        nuxie_binary::encode_runtime_file(&nuxie_binary::RuntimeFile::from_fixture_records(vec![
-        record(23, vec![]),
-        record(60000, vec![(60000,V::String(source.into())),(208,V::Double(64.0)),(207,V::Double(32.0))]),
-        record(1, vec![(7,V::Double(64.0)),(8,V::Double(32.0))]),
-        record(60001, vec![(5,V::Uint(0)),(206,V::Uint(0)),(13,V::Double(32.0)),(14,V::Double(16.0)),
-            (60013,V::String(r#"{"version":1,"language":"en","cues":[{"start":0,"end":1,"text":"Red scene"},{"start":1,"end":2,"text":"Blue scene"}]}"#.into()))]),
-    ]).unwrap()).unwrap()
+        super::video_properties::qualification(source)
+    }
+    unsafe fn bind_values(artboard: *mut NuxArtboardInstance) -> *mut NuxViewModelInstance {
+        let mut values = ptr::null_mut();
+        unsafe {
+            ok(nux_view_model_instance_new_default(artboard, &mut values));
+            ok(nux_artboard_instance_bind_view_model(artboard, values));
+        }
+        values
+    }
+    unsafe fn settle_values(player: *mut NuxPlayer) {
+        let mut result = ptr::null_mut();
+        unsafe {
+            ok(nux_player_step(player, &NuxPlayerStep::default(), &mut result));
+            nux_player_step_result_free(result);
+        }
+    }
+    unsafe fn set_bool(
+        player: *mut NuxPlayer,
+        values: *mut NuxViewModelInstance,
+        name: &std::ffi::CStr,
+        value: bool,
+    ) {
+        unsafe {
+            ok(nux_view_model_instance_set_bool(
+                values,
+                name.as_ptr(),
+                value,
+            ));
+            settle_values(player);
+        }
+    }
+    unsafe fn seek(player: *mut NuxPlayer, values: *mut NuxViewModelInstance, seconds: f32) {
+        unsafe {
+            ok(nux_view_model_instance_set_number(
+                values,
+                c"seek".as_ptr(),
+                seconds,
+            ));
+            settle_values(player);
+        }
     }
     unsafe fn step(
         player: *mut NuxPlayer,
@@ -139,6 +169,7 @@ mod proof {
             nux_capi_result_free(result);
             let mut players = [ptr::null_mut(); 2];
             let mut decoders = Vec::new();
+            let mut controls = Vec::new();
             for player in &mut players {
                 let (mut file, mut artboard) = (ptr::null_mut(), ptr::null_mut());
                 ok(nux_file_import_metal(
@@ -154,11 +185,13 @@ mod proof {
                 ));
                 nux_capi_result_free(result);
                 ok(nux_artboard_instance_new(file, 0, &mut artboard));
-                ok(nux_player_new_static(artboard, player));
+                let values = bind_values(artboard);
+                ok(nux_player_new_default(artboard, player));
+                controls.push(values);
                 ok(nux_artboard_instance_free(artboard));
                 ok(nux_file_free(file));
                 decoders.push(ApplePlayer::open(&source, 0, 1024 * 1024).unwrap());
-                ok(nux_player_video_command(*player, 1, 5, 1.0, 0));
+                set_bool(*player, values, c"muted", true);
             }
             let members = players.map(|player| NuxVideoSyncMember {
                 player,
@@ -172,7 +205,7 @@ mod proof {
                 0.25,
                 &mut group,
             ));
-            ok(nux_player_video_command(players[0], 1, 0, 0.0, 0));
+            set_bool(players[0], controls[0], c"paused", false);
             let start = Instant::now();
             let mut follower_started = false;
             let mut frames = [0usize; 2];
@@ -197,9 +230,6 @@ mod proof {
                     let decoder = &mut decoders[index];
                     step(player, 1, 0, 0, 0.0, decoder);
                     let observation = decoder.poll().unwrap();
-                    if let Some(Observation::SelectedSeekFrame(ref frame)) = observation {
-                        step(player, 1, 7, frame.generation, frame.pts, decoder);
-                    }
                     match observation {
                         Some(Observation::Ready {
                             generation,
@@ -234,7 +264,7 @@ mod proof {
                         .clock()
                         .is_some_and(|clock| clock.playing && clock.seconds >= 0.4)
                 {
-                    ok(nux_player_video_command(players[1], 1, 0, 0.0, 0));
+                    set_bool(players[1], controls[1], c"paused", false);
                     follower_started = true;
                 }
                 let samples: Vec<_> = decoders
@@ -298,6 +328,9 @@ mod proof {
                 assert!(decoder.clock().is_none());
                 ok(nux_player_free(player));
             }
+            for values in controls {
+                ok(nux_view_model_instance_free(values));
+            }
             ok(nux_video_sync_group_free(group));
             ok(nux_renderer_free(renderer));
             println!(
@@ -338,7 +371,8 @@ mod proof {
             ));
             nux_capi_result_free(result);
             ok(nux_artboard_instance_new(file, 0, &mut artboard));
-            ok(nux_player_new_static(artboard, &mut player));
+            let values = bind_values(artboard);
+            ok(nux_player_new_default(artboard, &mut player));
             let mut catalog = Info::default();
             ok(nux_player_visit_videos(
                 player,
@@ -348,8 +382,8 @@ mod proof {
             assert_eq!(catalog.source, source);
             let mut decoder =
                 ApplePlayer::open(&catalog.source, catalog.generation, 1024 * 1024).unwrap();
-            ok(nux_player_video_command(player, catalog.id, 5, 1.0, 0));
-            ok(nux_player_video_command(player, catalog.id, 0, 0.0, 0));
+            set_bool(player, values, c"muted", true);
+            set_bool(player, values, c"paused", false);
             let mut device_pointer = ptr::null_mut();
             ok(nux_renderer_copy_metal_device(
                 renderer,
@@ -376,16 +410,6 @@ mod proof {
                 pump_run_loop(0.01).unwrap();
                 step(player, catalog.id, 0, catalog.generation, 0.0, &mut decoder);
                 let observation = decoder.poll().unwrap();
-                if let Some(Observation::SelectedSeekFrame(ref frame)) = observation {
-                    step(
-                        player,
-                        catalog.id,
-                        7,
-                        frame.generation,
-                        frame.pts,
-                        &mut decoder,
-                    );
-                }
                 match observation {
                     Some(Observation::Ready {
                         generation,
@@ -455,8 +479,8 @@ mod proof {
                                 ok(nux_player_video_set_loop_range(
                                     player, catalog.id, 1.3, 1.7,
                                 ));
-                                ok(nux_player_video_command(player, catalog.id, 9, 1.0, 0));
-                                ok(nux_player_video_command(player, catalog.id, 2, 1.3, 0));
+                                set_bool(player, values, c"loop", true);
+                                seek(player, values, 1.3);
                             }
                             red = true;
                         }
@@ -484,7 +508,7 @@ mod proof {
                     if event.kind == 2 {
                         loops += 1;
                         if loops == 2 {
-                            ok(nux_player_video_command(player, catalog.id, 9, 0.0, 0));
+                            set_bool(player, values, c"loop", false);
                         }
                     }
                 }
@@ -497,6 +521,7 @@ mod proof {
             ok(nux_player_video_command(player, catalog.id, 8, 0.0, 0));
             step(player, catalog.id, 0, catalog.generation, 0.0, &mut decoder);
             ok(nux_player_free(player));
+            ok(nux_view_model_instance_free(values));
             ok(nux_artboard_instance_free(artboard));
             ok(nux_file_free(file));
             ok(nux_renderer_free(renderer));

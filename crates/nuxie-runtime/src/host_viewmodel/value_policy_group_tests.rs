@@ -526,17 +526,17 @@ fn optional_empty_picks_start_valid_and_quiet_steps_skip_passes() {
         Some(true)
     );
     assert!(errors(&root, "picks_errors").is_empty());
-    assert!(policy.passes.replace(0) > 0);
+    assert!(RuntimeValuePolicy::take_test_pass_count() > 0);
     assert_eq!(run(&policy, roots, || {}, true), 0);
     assert_eq!(
-        policy.passes.replace(0),
+        RuntimeValuePolicy::take_test_pass_count(),
         0,
         "quiet step performs no policy pass"
     );
     policy.invalidate();
     assert_eq!(run(&policy, roots, || {}, true), 0);
     assert_eq!(
-        policy.passes.replace(0),
+        RuntimeValuePolicy::take_test_pass_count(),
         1,
         "invalidated roots recompute their initial outputs"
     );

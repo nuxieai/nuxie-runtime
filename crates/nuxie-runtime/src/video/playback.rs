@@ -153,9 +153,15 @@ impl Default for Playback {
 impl Playback {
     fn track_properties<R>(&mut self, operation: impl FnOnce(&mut Self) -> R) -> R {
         let before = self.property_values();
+        let clock_source = (self.generation(), self.has_pending_seek());
         let pending = self.property_changes;
         let result = operation(self);
         self.property_changes |= pending | before.changed(self.property_values());
+        // Changing generations or seek intent changes whether Video exposes its
+        // media clock, even when the frame-backed position stays the same.
+        if clock_source != (self.generation(), self.has_pending_seek()) {
+            self.mark_position_changed();
+        }
         result
     }
     pub(crate) fn property_commands(&self) -> impl Iterator<Item = &Command> {

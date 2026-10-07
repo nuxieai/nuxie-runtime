@@ -171,7 +171,9 @@ impl<D: Decoder> ScenePlayer<D> {
                 video.clear_frame();
                 Ok(generation)
             })
-            .ok_or(SceneError::InvalidOccurrence)??;
+            .ok_or(SceneError::InvalidOccurrence);
+        Video::flush_property_changes(&self.video);
+        let generation = generation??;
         self.gate = None;
         self.gate_generation = None;
         self.fallback = false;
@@ -185,7 +187,8 @@ impl<D: Decoder> ScenePlayer<D> {
         reason: SuspensionReason,
         suspended: bool,
     ) -> Result<(), SceneError<D::Error>> {
-        self.video
+        let result = self
+            .video
             .with_downcast_mut::<Video, _>(|video| {
                 let actions = video.playback.update_suspension(reason, suspended);
                 if let Some(decoder) = self.decoder.as_mut() {
@@ -203,7 +206,9 @@ impl<D: Decoder> ScenePlayer<D> {
             .ok_or_else(|| {
                 let _ = close_decoder(&mut self.decoder);
                 SceneError::InvalidOccurrence
-            })?
+            });
+        Video::flush_property_changes(&self.video);
+        result?
     }
     /// Close before admitting another occurrence. Safe even when the scene
     /// occurrence has been removed. A failed close retains native ownership
@@ -214,7 +219,8 @@ impl<D: Decoder> ScenePlayer<D> {
         self.gate = None;
         self.gate_generation = None;
         self.fallback = false;
-        self.video
+        let result = self
+            .video
             .with_downcast_mut::<Video, _>(|video| {
                 if had_decoder
                     && !matches!(
@@ -232,7 +238,9 @@ impl<D: Decoder> ScenePlayer<D> {
                 video.playback.drain_actions();
                 Ok(())
             })
-            .ok_or(SceneError::InvalidOccurrence)?
+            .ok_or(SceneError::InvalidOccurrence);
+        Video::flush_property_changes(&self.video);
+        result?
     }
     pub fn allocation(&self) -> Allocation {
         self.allocation
@@ -413,7 +421,11 @@ impl<D: Decoder> ScenePlayer<D> {
             .ok_or_else(|| {
                 let _ = close_decoder(&mut self.decoder);
                 SceneError::InvalidOccurrence
-            })??;
+            });
+        // Publish observations after releasing the occurrence borrow, including
+        // failure paths that cannot report a media clock.
+        Video::flush_property_changes(&self.video);
+        let result = result??;
         // Group correction errors remain observable through the authored group's
         // take_error interface; they do not turn an unrelated decoder into Failed.
         let _ = nuxie_runtime::video::sync::report_media_clock(

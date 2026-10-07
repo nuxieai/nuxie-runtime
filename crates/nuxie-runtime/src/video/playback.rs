@@ -168,12 +168,7 @@ impl Playback {
         self.commands.iter()
     }
     pub(crate) fn has_pending_seek(&self) -> bool {
-        self.commands.iter().any(|command| {
-            matches!(
-                command,
-                Command::Seek(_) | Command::Reenter | Command::Dispose
-            )
-        })
+        self.property_projection().1
     }
     pub(crate) fn take_property_changes(&mut self) -> u16 {
         std::mem::take(&mut self.property_changes)

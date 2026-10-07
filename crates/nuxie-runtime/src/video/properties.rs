@@ -82,9 +82,15 @@ impl Write {
 
 impl Playback {
     pub(crate) fn property_values(&self) -> Values {
+        self.property_projection().0
+    }
+    /// Read the ordered queue and whether it will invalidate the current clock.
+    pub(crate) fn property_projection(&self) -> (Values, bool) {
         let mut settings = self.settings();
         let mut paused = !self.wants_play();
         let mut position = self.position();
+        let mut invalidates_clock = false;
+        let mut ended = self.state() == PlaybackState::Ended;
         let clamp_loop = |position: f64, settings: &super::playback::PlaybackSettings| {
             let end = if settings.loop_end == 0.0 {
                 self.duration()
@@ -103,32 +109,58 @@ impl Playback {
         };
         for command in self.property_commands() {
             match *command {
-                Command::Play => paused = false,
-                Command::Pause | Command::Dispose => paused = true,
+                Command::Play => {
+                    paused = false;
+                    if ended {
+                        position = clamp_loop(0.0, &settings);
+                        invalidates_clock = true;
+                        ended = false;
+                    }
+                }
+                Command::Pause => paused = true,
+                Command::Dispose => {
+                    paused = true;
+                    invalidates_clock = true;
+                    break;
+                }
                 Command::Seek(value) => {
                     position =
                         clamp_loop(self.duration().map_or(value, |d| value.min(d)), &settings);
+                    invalidates_clock = true;
+                    ended = false;
                 }
                 Command::Rate(value) => settings.rate = value,
                 Command::Volume(value) => settings.volume = value,
                 Command::Mute(value) => settings.muted = value,
                 Command::Loop(value) => {
                     settings.looping = value;
-                    position = clamp_loop(position, &settings);
+                    let repaired = clamp_loop(position, &settings);
+                    if repaired != position {
+                        invalidates_clock = true;
+                        ended = false;
+                        position = repaired;
+                    }
                 }
                 Command::LoopRange { start, end } => {
                     settings.loop_start = start;
                     settings.loop_end = end;
-                    position = clamp_loop(position, &settings);
+                    let repaired = clamp_loop(position, &settings);
+                    if repaired != position {
+                        invalidates_clock = true;
+                        ended = false;
+                        position = repaired;
+                    }
                 }
                 Command::Reenter if settings.reentry == 0 => {
                     position = clamp_loop(0.0, &settings);
                     paused = !settings.autoplay;
+                    invalidates_clock = true;
+                    ended = false;
                 }
                 _ => {}
             }
         }
-        Values([
+        let values = Values([
             u8::from(settings.looping).into(),
             u8::from(settings.muted).into(),
             settings.volume.into(),
@@ -140,6 +172,7 @@ impl Playback {
             self.duration().unwrap_or(0.0),
             u8::from(self.state() == PlaybackState::Ended).into(),
             self.state() as u8 as f64,
-        ])
+        ]);
+        (values, invalidates_clock)
     }
 }

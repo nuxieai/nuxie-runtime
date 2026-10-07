@@ -426,6 +426,31 @@ impl RuntimeValuePolicyOperation {
         // Corrections use the ordinary native setters to dirty bindings. Their
         // rows are redundant with the kept writes and must not re-enter policy.
         capture.omit_writes(&omitted);
+        // A surviving value-only write still needs its implicit marker. A
+        // later refused value may suppress its own explicit marker, but must
+        // not suppress the marker pass for the earlier accepted value.
+        let mut last = BTreeMap::new();
+        for (order, (owner, change)) in changes.iter().enumerate() {
+            if !omitted.contains(&order) {
+                last.insert((owner.instance_identity(), change.property_index), order);
+            }
+        }
+        for (owner, change) in &changes {
+            let model = owner.borrow().view_model_index();
+            for pair in &policy.markers {
+                if pair.model != model || pair.value != change.property_index {
+                    continue;
+                }
+                let id = owner.instance_identity();
+                if last.get(&(id, pair.value)).is_some_and(|value| {
+                    last.get(&(id, pair.marker))
+                        .is_none_or(|marker| value > marker)
+                }) {
+                    self.suppressed.remove(&(id, pair.marker));
+                }
+            }
+        }
+
         self.cursor = changes
             .len()
             .checked_sub(omitted.len())

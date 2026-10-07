@@ -1084,3 +1084,62 @@ fn native_created_owner_needs_a_checkpoint_before_its_first_write() {
     );
     checkpoint.commit();
 }
+#[test]
+fn implicit_marker_after_accepted_then_refused_write_settles() {
+    let (mut policy, root, _file, _factory) = setup();
+    policy.set_markers(&[pair("n", "n_set")]).unwrap();
+    policy
+        .set_rules(&[installed_rule(
+            "n",
+            RuntimeValueRuleKind::NumberMaximum(365.0),
+            RuntimeValueRuleMode::Refuse,
+        )])
+        .unwrap();
+    let roots = std::slice::from_ref(&root);
+    let checkpoint = RuntimeOwnedViewModelGraphTransaction::begin(roots, 4096).unwrap();
+    let capture = RuntimeViewModelChangeCapture::begin().unwrap();
+    policy.prepare_capture(&capture);
+    let mut operation = policy.begin_rules(roots).unwrap();
+    root.borrow_mut().set_number_by_property_name("n", 300.0);
+    root.borrow_mut().set_number_by_property_name("n", 400.0);
+    let mut settled = false;
+    for _ in 0..16 {
+        let rules = operation.apply(&policy, &capture, roots).unwrap();
+        let markers = policy
+            .apply_markers(&capture, roots, |owner, index, value| {
+                Ok(owner
+                    .borrow_mut()
+                    .set_boolean_by_property_index(index, value))
+            })
+            .unwrap();
+        if !rules && !markers {
+            settled = true;
+            break;
+        }
+    }
+    assert!(
+        settled,
+        "accepted value's implicit marker must survive a later refusal"
+    );
+    assert_eq!(
+        root.borrow().number_value_by_property_name("n"),
+        Some(300.0)
+    );
+    assert_eq!(
+        root.borrow().boolean_value_by_property_name("n_set"),
+        Some(true)
+    );
+    assert_eq!(operation.reports().len(), 1);
+    let changes = root.resolve_change_capture(capture).unwrap();
+    assert!(
+        !changes
+            .iter()
+            .any(|change| change.value == RuntimeViewModelChangeValue::Number(400.0))
+    );
+    assert!(
+        changes.iter().any(|change| change.property_index == 1
+            && change.value == RuntimeViewModelChangeValue::Boolean(true)),
+        "implicit marker publishes its ordinary change row"
+    );
+    checkpoint.commit();
+}

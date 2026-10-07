@@ -75,7 +75,7 @@ fn label(bytes: &mut Vec<u8>) {
     });
     binding(bytes, "SemanticData", "label", &[0, 0], true);
 }
-pub fn fixture() -> Vec<u8> {
+pub fn fixture(listener: bool) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for n in [7, 0, 3593, 0] {
         var(&mut bytes, n);
@@ -151,6 +151,26 @@ pub fn fixture() -> Vec<u8> {
     object(&mut bytes, "StateMachine", |b| {
         string(b, "StateMachine", "name", "Main")
     });
+    if listener {
+        object(&mut bytes, "StateMachineListenerSingle", |b| {
+            uint(b, "StateMachineListener", "targetId", 1);
+            uint(b, "StateMachineListenerSingle", "listenerTypeValue", 2);
+        });
+        object(&mut bytes, "BindablePropertyBoolean", |b| {
+            uint(b, "BindablePropertyBoolean", "propertyValue", 1);
+        });
+        object(&mut bytes, "DataBindContext", |b| {
+            uint(
+                b,
+                "DataBind",
+                "propertyKey",
+                key("BindablePropertyBoolean", "propertyValue").into(),
+            );
+            uint(b, "DataBind", "flags", 1);
+            blob(b, "DataBindContext", "sourcePathIds", &[0, 0]);
+        });
+        object(&mut bytes, "ListenerViewModelChange", |_| {});
+    }
     object(&mut bytes, "LinearAnimation", |b| {
         string(b, "LinearAnimation", "name", "Timeline");
     });

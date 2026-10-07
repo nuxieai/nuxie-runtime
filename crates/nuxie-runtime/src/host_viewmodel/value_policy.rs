@@ -227,9 +227,25 @@ impl RuntimeValuePolicy {
                         RuntimeValueRuleKind::TextMaximum(b),
                     ) => a.encode_utf16().cmp(b.encode_utf16()).is_gt(),
                     (
-                        RuntimeValueRuleKind::PickedCount { property: a, .. },
-                        RuntimeValueRuleKind::PickedCount { property: b, .. },
-                    ) => a != b,
+                        RuntimeValueRuleKind::Length { minimum, .. },
+                        RuntimeValueRuleKind::Length { maximum, .. },
+                    )
+                    | (
+                        RuntimeValueRuleKind::ItemCount { minimum, .. },
+                        RuntimeValueRuleKind::ItemCount { maximum, .. },
+                    ) => minimum > maximum,
+                    (
+                        RuntimeValueRuleKind::PickedCount {
+                            property: a,
+                            minimum,
+                            ..
+                        },
+                        RuntimeValueRuleKind::PickedCount {
+                            property: b,
+                            maximum,
+                            ..
+                        },
+                    ) => a != b || minimum > maximum,
                     _ => false,
                 };
                 if reversed {

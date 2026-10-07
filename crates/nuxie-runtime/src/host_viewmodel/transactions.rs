@@ -584,6 +584,34 @@ impl RuntimeOwnedViewModelGraphTransaction {
         self.0.commit();
     }
 }
+pub(crate) fn capture_unchanged_native_write(property: &CoreHandle) {
+    if !crate::view_model_cell::is_capturing_view_model_changes() {
+        return;
+    }
+    let value = property.with(|property| {
+        let value = property.as_any();
+        if let Some(value) = value.downcast_ref::<ViewModelInstanceNumber>() {
+            Some(RuntimeViewModelChangeValue::Number(value.value()))
+        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceBoolean>() {
+            Some(RuntimeViewModelChangeValue::Boolean(value.value()))
+        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceColor>() {
+            Some(RuntimeViewModelChangeValue::Color(value.value() as u32))
+        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceEnum>() {
+            Some(RuntimeViewModelChangeValue::Enum(u64::from(value.base.property_value())))
+        } else if let Some(value) = value.downcast_ref::<ViewModelInstanceString>() {
+            Some(RuntimeViewModelChangeValue::String(Arc::from(value.value().as_bytes())))
+        } else {
+            None
+        }
+    }).flatten();
+    if let Some(value) = value {
+        crate::view_model_cell::capture_unchanged_view_model_write(
+            instance::identity(property) as usize,
+            value,
+        );
+    }
+}
+
 pub(crate) fn capture_native_change(owner: CoreHandle, value: RuntimeViewModelChangeValue) {
     if !crate::view_model_cell::is_capturing_view_model_changes() {
         return;
@@ -645,7 +673,10 @@ impl RuntimeOwnedViewModelHandle {
         roots: &[Self],
         capture: RuntimeViewModelChangeCapture,
     ) -> Option<Vec<(Self, RuntimeViewModelChange)>> {
-        Self::resolve_captured_changes(roots, capture.finish().ok()?)
+        Self::resolve_captured_changes(
+            roots,
+            capture.finish().ok()?.into_iter().filter(|change| change.publish).collect(),
+        )
     }
 
     pub(super) fn resolve_change_snapshot(

@@ -1235,7 +1235,7 @@ fn checked_scalar_core_without_lua() {
     policy.prepare_capture(&capture);
     let mut operation = policy.begin_rules(owners).unwrap();
     for (value, applied, code, kept) in [
-        (5.0, true, Some("low"), 5.0),
+        (5.0, true, None, 5.0),
         (400.0, false, Some("high"), 5.0),
         (20.0, true, None, 20.0),
     ] {

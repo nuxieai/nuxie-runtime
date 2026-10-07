@@ -125,7 +125,7 @@ fn registry_position_completion_does_not_notify_twice() {
 }
 
 #[test]
-fn a_loop_write_keeps_its_pending_position_notification() {
+fn a_registry_loop_write_notifies_position_without_a_host_flush() {
     let arena = CoreArena::default();
     let video = arena.insert(Video::default());
     video.with_downcast_mut::<Video, _>(|v| {
@@ -144,9 +144,10 @@ fn a_loop_write_keeps_its_pending_position_notification() {
     CoreRegistry::set_double_handle(&video, 60015, 5.0);
     CoreRegistry::set_double_handle(&video, 60014, 2.0);
     CoreRegistry::set_bool_handle(&video, 60004, true);
-    assert!(Video::flush_property_changes(&video));
+    assert_ne!(binding.with(|b| b.as_data_bind().unwrap().dirt()), Some(0));
     DataBind::update_data_bind_handle(&binding, true);
     assert_eq!(CoreRegistry::get_double_handle(&number, 575), Some(2.0));
+    assert!(!Video::flush_property_changes(&video));
 }
 
 #[test]
@@ -191,4 +192,96 @@ fn clamped_position_write_seeks_without_notifying_an_unchanged_value() {
             generation: 1
         }));
     });
+}
+
+fn assert_registry_position_change(replay: bool, borrowed: bool) {
+    use nuxie_runtime::video::playback::{Playback, PlaybackSettings};
+
+    let arena = CoreArena::default();
+    let video = arena.insert(Video::default());
+    let (initial, expected) = if replay { (12.5, 0.0) } else { (3.2, 4.0) };
+    video.with_downcast_mut::<Video, _>(|v| {
+        if !replay {
+            v.playback = Playback::new(PlaybackSettings {
+                looping: true,
+                loop_start: 2.0,
+                loop_end: 5.0,
+                ..PlaybackSettings::default()
+            });
+        }
+        v.playback.opened(0, 12.5);
+        assert!(v.playback.accept_frame(0, initial));
+        if replay {
+            v.playback.ended(0);
+        }
+    });
+    report_media_clock(
+        &video,
+        1.0,
+        Some(MediaClock {
+            generation: 0,
+            seconds: initial,
+            rate: 1.0,
+            playing: !replay,
+        }),
+    )
+    .unwrap();
+    let number = arena.insert(ViewModelInstanceNumber::default());
+    let binding = arena.insert(DataBind::new(TO_SOURCE, 60017, 0));
+    binding.with_mut(|b| {
+        let b = b.as_data_bind_mut().unwrap();
+        b.set_target(Some(video.clone()));
+        b.set_source(number.clone());
+    });
+    DataBind::bind_handle(&binding);
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(
+        CoreRegistry::get_double_handle(&number, 575),
+        Some(initial as f32)
+    );
+    assert_eq!(binding.with(|b| b.as_data_bind().unwrap().dirt()), Some(0));
+    if borrowed {
+        video.with_downcast_mut::<Video, _>(|v| {
+            if replay {
+                CoreRegistry::set_bool(v, 60016, false);
+            } else {
+                CoreRegistry::set_double(v, 60014, 4.0);
+            }
+        });
+    } else if replay {
+        CoreRegistry::set_bool_handle(&video, 60016, false);
+    } else {
+        CoreRegistry::set_double_handle(&video, 60014, 4.0);
+    }
+    assert_eq!(
+        CoreRegistry::get_double_handle(&video, 60017),
+        Some(expected)
+    );
+    assert_ne!(binding.with(|b| b.as_data_bind().unwrap().dirt()), Some(0));
+    DataBind::update_data_bind_handle(&binding, true);
+    assert_eq!(
+        CoreRegistry::get_double_handle(&number, 575),
+        Some(expected)
+    );
+    assert!(!Video::flush_property_changes(&video));
+}
+
+#[test]
+fn registry_replay_notifies_position_without_a_host_flush() {
+    assert_registry_position_change(true, false);
+}
+
+#[test]
+fn registry_range_repair_notifies_position_without_a_host_flush() {
+    assert_registry_position_change(false, false);
+}
+
+#[test]
+fn borrowed_registry_replay_notifies_position_without_a_host_flush() {
+    assert_registry_position_change(true, true);
+}
+
+#[test]
+fn borrowed_registry_range_repair_notifies_position_without_a_host_flush() {
+    assert_registry_position_change(false, true);
 }

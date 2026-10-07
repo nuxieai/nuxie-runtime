@@ -113,6 +113,7 @@ impl Video {
         value: bool,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
+        let position = self.property_number(super::properties::POSITION).unwrap() as f32;
         if self.property_bool(key) != Some(value)
             && self
                 .write_property(super::properties::Write::Bool(key, value))
@@ -120,6 +121,7 @@ impl Video {
         {
             self.playback.clear_property_change(key);
             completion.record(self.core(), key);
+            self.record_indirect_position_change(position, completion);
         }
     }
     pub(crate) fn set_property_number(
@@ -128,6 +130,7 @@ impl Video {
         value: f32,
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
+        let position = self.property_number(super::properties::POSITION).unwrap() as f32;
         let before = self.property_number(key).map(|v| v as f32);
         if before != Some(value)
             && self
@@ -140,6 +143,28 @@ impl Video {
                 self.notified_position = self.property_number(key).unwrap() as f32;
             }
             completion.record(self.core(), key);
+            if key != super::properties::POSITION {
+                self.record_indirect_position_change(position, completion);
+            }
+        }
+    }
+    fn record_indirect_position_change(
+        &mut self,
+        before: f32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
+        let position = self.property_number(super::properties::POSITION).unwrap() as f32;
+        if position != before {
+            self.playback
+                .clear_property_change(super::properties::POSITION);
+            self.notified_position = position;
+            if let Some(owner) = self.core().handle() {
+                // Observer metadata is independent of the Video borrow, so this
+                // also works for a registry setter called on a borrowed object.
+                completion.before_notification(owner, |owner| {
+                    owner.notify_property_changed(super::properties::POSITION);
+                });
+            }
         }
     }
     /// Notify native bindings after the mutable video borrow has ended.

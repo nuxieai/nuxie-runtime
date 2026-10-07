@@ -317,8 +317,8 @@ impl RuntimeValuePolicyOperation {
             return Ok(std::mem::take(&mut self.pending_flush));
         }
         policy.invalidate();
-        #[cfg(test)]
-        policy.passes.set(policy.passes.get().saturating_add(1));
+        #[cfg(any(test, feature = "policy-pass-counter"))]
+        RuntimeValuePolicy::record_test_pass();
         self.absorb_initial()?;
         self.retain(policy, roots)?;
         let retained = self.owners.values().cloned().collect::<Vec<_>>();

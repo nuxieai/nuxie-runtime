@@ -67,11 +67,25 @@ pub struct RuntimeValuePolicy {
     group_refusals: RefCell<BTreeMap<(u64, usize), Vec<usize>>>,
     revision: std::cell::Cell<u64>,
     settled_groups: RefCell<Option<operation::groups::SettledGroups>>,
-    #[cfg(test)]
-    passes: std::cell::Cell<usize>,
+}
+
+#[cfg(any(test, feature = "policy-pass-counter"))]
+thread_local! {
+    static POLICY_PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl RuntimeValuePolicy {
+    /// Read and reset the current test thread's rule, marker and group pass count.
+    #[cfg(any(test, feature = "policy-pass-counter"))]
+    pub fn take_test_pass_count() -> usize {
+        POLICY_PASSES.with(|passes| passes.replace(0))
+    }
+
+    #[cfg(any(test, feature = "policy-pass-counter"))]
+    fn record_test_pass() {
+        POLICY_PASSES.with(|passes| passes.set(passes.get().saturating_add(1)));
+    }
+
     pub fn new(file: RuntimeFileHandle) -> Self {
         Self {
             file,
@@ -81,8 +95,6 @@ impl RuntimeValuePolicy {
             group_refusals: RefCell::new(BTreeMap::new()),
             revision: std::cell::Cell::new(0),
             settled_groups: RefCell::new(None),
-            #[cfg(test)]
-            passes: std::cell::Cell::new(0),
         }
     }
 
@@ -422,8 +434,8 @@ impl RuntimeValuePolicy {
         {
             return Ok(false);
         }
-        #[cfg(test)]
-        self.passes.set(self.passes.get().saturating_add(1));
+        #[cfg(any(test, feature = "policy-pass-counter"))]
+        Self::record_test_pass();
         if roots
             .iter()
             .any(|root| !root.native_file().ptr_eq(&self.file))

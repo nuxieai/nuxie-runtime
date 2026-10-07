@@ -92,6 +92,8 @@ pub use nuxie_renderer::{RenderMode, RendererError};
 pub use nuxie_renderer::{WebGl2Factory, WebGl2Frame};
 
 pub use nuxie_runtime::RuntimeCheckedValueInput;
+pub use nuxie_runtime::RuntimeRuleGroup;
+pub use nuxie_runtime::RuntimeRuleGroupMember;
 pub use nuxie_runtime::RuntimeValueMarker;
 pub use nuxie_runtime::RuntimeValuePolicy;
 pub use nuxie_runtime::RuntimeValuePolicyError;

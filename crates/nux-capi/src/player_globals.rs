@@ -58,7 +58,7 @@ pub unsafe extern "C" fn nux_player_set_global_view_model(
             let PlayerInstance::StateMachine(machine) = &mut *selected else {
                 return NuxStatus::NotFound;
             };
-            let Ok(mut globals) = player.global_view_models.try_borrow_mut() else {
+            let Ok(mut globals) = player.global_view_models.values.try_borrow_mut() else {
                 return NuxStatus::ReentrantCall;
             };
             let retained = instance.map(|instance| instance.instance.clone());
@@ -70,7 +70,7 @@ pub unsafe extern "C" fn nux_player_set_global_view_model(
             } else {
                 globals.remove(&schema);
             }
-            player.observed_global_view_model_generation.set(
+            player.global_view_models.observed_generation.set(
                 globals
                     .values()
                     .map(RuntimeOwnedViewModelHandle::observable_mutation_generation)
@@ -85,10 +85,21 @@ pub unsafe extern "C" fn nux_player_set_global_view_model(
     })
 }
 
-impl NuxPlayer {
-    pub(super) fn refresh_global_view_model_invalidation(&self) -> Result<(), NuxStatus> {
+/// A player owns its overrides; the occurrence observes them weakly so every
+/// snapshot boundary sees host writes without extending the player's lifetime.
+#[derive(Default)]
+pub(super) struct GlobalViewModels {
+    pub(super) values: RefCell<std::collections::BTreeMap<usize, RuntimeOwnedViewModelHandle>>,
+    pub(super) observed_generation: Cell<u64>,
+}
+
+impl GlobalViewModels {
+    pub(super) fn refresh_invalidation(
+        &self,
+        occurrence: &ArtboardOccurrence,
+    ) -> Result<(), NuxStatus> {
         let globals = self
-            .global_view_models
+            .values
             .try_borrow()
             .map_err(|_| NuxStatus::ReentrantCall)?;
         let generation = globals
@@ -96,9 +107,9 @@ impl NuxPlayer {
             .map(RuntimeOwnedViewModelHandle::observable_mutation_generation)
             .max()
             .unwrap_or(0);
-        if generation != self.observed_global_view_model_generation.get() {
-            self.artboard.invalidate_render()?;
-            self.observed_global_view_model_generation.set(generation);
+        if generation != self.observed_generation.get() {
+            occurrence.invalidate_render()?;
+            self.observed_generation.set(generation);
         }
         Ok(())
     }

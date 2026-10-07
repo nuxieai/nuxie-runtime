@@ -376,6 +376,7 @@ struct ArtboardOccurrence {
     /// Explicit host binding operations, not mutations of the bound model.
     view_model_binding_revision: Cell<u64>,
     observed_bound_view_model_generation: Cell<u64>,
+    host_global_view_models: RefCell<Vec<std::rc::Weak<player_globals::GlobalViewModels>>>,
     has_script_assets: bool,
     #[cfg(any(
         all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
@@ -499,6 +500,11 @@ impl ArtboardOccurrence {
         if generation != self.observed_bound_view_model_generation.get() {
             self.invalidate_render()?;
             self.observed_bound_view_model_generation.set(generation);
+        }
+        let mut globals = self.host_global_view_models.borrow_mut();
+        globals.retain(|globals| globals.strong_count() != 0);
+        for globals in globals.iter().filter_map(std::rc::Weak::upgrade) {
+            globals.refresh_invalidation(self)?;
         }
         Ok(())
     }
@@ -806,8 +812,7 @@ impl Drop for ScriptEffectTransaction {
 /// Product-neutral selected player. This surface establishes selection,
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
-    global_view_models: RefCell<std::collections::BTreeMap<usize, RuntimeOwnedViewModelHandle>>,
-    observed_global_view_model_generation: Cell<u64>,
+    global_view_models: Rc<player_globals::GlobalViewModels>,
     video_occurrences: RefCell<video::VideoOccurrences>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
@@ -2839,6 +2844,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         bound_view_model: RefCell::new(None),
                         view_model_binding_revision: Cell::new(0),
                         observed_bound_view_model_generation: Cell::new(0),
+                        host_global_view_models: RefCell::new(Vec::new()),
                         has_script_assets: file_has_script_assets(&file.file),
                         #[cfg(any(
                             all(
@@ -3156,8 +3162,13 @@ fn publish_player(
 ) -> NuxStatus {
     unsafe {
         let handle = Box::into_raw(Box::new(NuxPlayer {
-            global_view_models: RefCell::new(std::collections::BTreeMap::new()),
-            observed_global_view_model_generation: Cell::new(0),
+            global_view_models: {
+                let globals = Rc::new(player_globals::GlobalViewModels::default());
+                let mut registered = artboard.occurrence.host_global_view_models.borrow_mut();
+                registered.retain(|globals| globals.strong_count() != 0);
+                registered.push(Rc::downgrade(&globals));
+                globals
+            },
             video_occurrences: RefCell::new(video::VideoOccurrences::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
@@ -4186,11 +4197,7 @@ fn player_step_body(
             "player render revision overflowed during renderer invalidation",
         );
     }
-    if let Err(status) = player
-        .artboard
-        .refresh_bound_view_model_invalidation()
-        .and_then(|()| player.refresh_global_view_model_invalidation())
-    {
+    if let Err(status) = player.artboard.refresh_bound_view_model_invalidation() {
         player.artboard.poisoned.set(true);
         return publish_player_step_failure(
             out_result,
@@ -4250,6 +4257,7 @@ fn player_step_body(
 
     let mut subscribed_roots = player
         .global_view_models
+        .values
         .borrow()
         .values()
         .cloned()
@@ -4648,9 +4656,10 @@ fn player_step_body(
                 0,
                 RuntimeOwnedViewModelHandle::observable_mutation_generation,
             ));
-        player.observed_global_view_model_generation.set(
+        player.global_view_models.observed_generation.set(
             player
                 .global_view_models
+                .values
                 .borrow()
                 .values()
                 .map(RuntimeOwnedViewModelHandle::observable_mutation_generation)
@@ -4797,11 +4806,7 @@ pub unsafe extern "C" fn nux_player_acknowledge_presented(
             player.artboard.poisoned.set(true);
             return status;
         }
-        if let Err(status) = player
-            .artboard
-            .refresh_bound_view_model_invalidation()
-            .and_then(|()| player.refresh_global_view_model_invalidation())
-        {
+        if let Err(status) = player.artboard.refresh_bound_view_model_invalidation() {
             player.artboard.poisoned.set(true);
             return status;
         }

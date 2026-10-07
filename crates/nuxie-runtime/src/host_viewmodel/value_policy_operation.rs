@@ -109,6 +109,9 @@ pub struct RuntimeValuePolicyOperation {
     values: BTreeMap<Key, RuntimeViewModelChangeValue>,
     native_lists: BTreeMap<Key, Vec<CoreHandle>>,
     suppressed: BTreeMap<Key, Vec<usize>>,
+    // Checked calls can run ahead of replay; their refusals must not suppress
+    // marker writes earlier in the native journal.
+    checked_suppressed: BTreeMap<Key, Vec<usize>>,
     cursor: usize,
     pending_flush: bool,
     reports: Vec<RuntimeValueRuleReport>,
@@ -141,6 +144,7 @@ impl RuntimeValuePolicy {
             values: BTreeMap::new(),
             native_lists: BTreeMap::new(),
             suppressed: BTreeMap::new(),
+            checked_suppressed: BTreeMap::new(),
             cursor: 0,
             pending_flush: false,
             reports: Vec::new(),
@@ -201,7 +205,7 @@ impl RuntimeValuePolicyOperation {
         }
         let (owner, index) = policy.resolve_property(root, path)?;
         let key = (owner.instance_identity(), index);
-        if let Some(rule_indices) = self.suppressed.get(&key) {
+        if let Some(rule_indices) = self.checked_suppressed.get(&key) {
             return Ok(RuntimeCheckedValueWrite {
                 applied: false,
                 rule_indices: rule_indices.clone(),
@@ -212,6 +216,7 @@ impl RuntimeValuePolicyOperation {
             values: BTreeMap::new(),
             native_lists: BTreeMap::new(),
             suppressed: BTreeMap::new(),
+            checked_suppressed: BTreeMap::new(),
             cursor: 0,
             pending_flush: false,
             reports: Vec::new(),
@@ -252,9 +257,10 @@ impl RuntimeValuePolicyOperation {
         }
         if let Some(marker_key) = marker_key {
             if refused {
-                self.suppressed.insert(marker_key, rule_indices.clone());
+                self.checked_suppressed
+                    .insert(marker_key, rule_indices.clone());
             } else {
-                self.suppressed.remove(&marker_key);
+                self.checked_suppressed.remove(&marker_key);
             }
         }
         if refused {
@@ -463,6 +469,7 @@ impl RuntimeValuePolicyOperation {
             .len()
             .checked_sub(omitted.len())
             .ok_or(RuntimeValuePolicyError::InvalidArgument)?;
+        self.checked_suppressed.clone_from(&self.suppressed);
         Ok(changed)
     }
 

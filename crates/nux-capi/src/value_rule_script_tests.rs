@@ -53,7 +53,13 @@ fn script_set_answers_synchronously_and_preserves_ordered_reports() {
     policy.prepare_capture(&capture);
     let vm = nuxie::ScriptVm::new();
     vm.install_rive_globals().unwrap();
-    let (extension, slot) = Extension::wrap(Arc::new(nuxie::NoopScriptHostExtension), false);
+    let command = HostCommandImportConfig::new(
+        "bridge",
+        ScriptExecutionLimits::new(),
+        HostCommandLimits::new(),
+    )
+    .unwrap();
+    let (extension, slot) = Extension::wrap(command.extension(), Some("bridge".into()));
     *slot.borrow_mut() = Some(native.downgrade());
     let _extension = extension.install(&vm).unwrap();
     let context = Rc::new(Context {
@@ -64,7 +70,8 @@ fn script_set_answers_synchronously_and_preserves_ordered_reports() {
     });
     let _guard = Guard(ACTIVE.with(|slot| slot.replace(Some(Rc::clone(&context)))));
     let _flags = luaur_common::ScopedAllFlags::enter(true);
-    let source = b"return function(root, path, value) return require('value_rules').set(root, path, value) end";
+    let source =
+        b"return function(root, path, value) return require('bridge').set(root, path, value) end";
     let mut size = 0;
     let code = luaur_compiler::functions::luau_compile::luau_compile(
         source.as_ptr().cast(),
@@ -108,4 +115,13 @@ fn script_set_answers_synchronously_and_preserves_ordered_reports() {
     unsafe {
         nux_file_free(file);
     }
+}
+
+#[test]
+fn no_command_module_leaves_file_module_names_available() {
+    let vm = nuxie::ScriptVm::new();
+    vm.install_rive_globals().unwrap();
+    let (extension, _) = Extension::wrap(Arc::new(nuxie::NoopScriptHostExtension), None);
+    let _installed = extension.install(&vm).unwrap();
+    assert!(vm.registered_module("value_rules").unwrap().is_nil());
 }

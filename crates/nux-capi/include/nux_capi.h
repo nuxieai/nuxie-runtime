@@ -82,7 +82,11 @@
  *    for the exact byte range passed to that call. Its caller-sized config and
  *    module name are copied synchronously. It installs no foreign callback;
  *    commands enqueue bounded owned values for the active player step.
- *    The value_rules module performs synchronous checked native value writes.
+ *    The configured command module also exposes set(root, path, value) for
+ *    synchronous checked native writes. No additional module name is reserved;
+ *    imports without a command module install no checked-write module.
+ *    An accepted set returns true and no code, including a marking breach.
+ *    A refused set returns false and the refusing rule's code.
  *    Ordinary nux_file_import remains script-inert.
  *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,
  *    caller-asserted trust boundary for exporter-authored WGSL. It performs no

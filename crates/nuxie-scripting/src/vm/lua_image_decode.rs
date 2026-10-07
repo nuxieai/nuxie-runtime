@@ -3,6 +3,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use luaur_rt::{AnyUserData, Buffer, Lua, RegistryKey, Result, Value};
@@ -14,6 +15,9 @@ use nuxie_runtime::{
 use super::lua_promise;
 
 const DECODE_ERROR: &str = "failed to decode image data";
+// Assigned by work-pool delivery, not background execution: separate VM
+// queues must retain the global callback order when the root drains them.
+static NEXT_COMPLETION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 trait ScriptImageDecoder: Send + Sync {
     fn decode_rgba(&self, encoded: &[u8]) -> Option<DecodedImageRgba>;
@@ -35,10 +39,12 @@ fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 enum DecodeCompletion {
     Success {
+        sequence: u64,
         request_id: u64,
         image: DecodedImageRgba,
     },
     Failure {
+        sequence: u64,
         request_id: u64,
         message: String,
     },
@@ -90,6 +96,7 @@ impl WorkCallbacks for ImageDecodeTask {
     fn on_complete(&mut self) {
         if let Some(image) = lock_unpoisoned(&self.decoded).take() {
             lock_unpoisoned(&self.completions).push_back(DecodeCompletion::Success {
+                sequence: NEXT_COMPLETION_SEQUENCE.fetch_add(1, Ordering::Relaxed),
                 request_id: self.request_id,
                 image,
             });
@@ -99,6 +106,7 @@ impl WorkCallbacks for ImageDecodeTask {
 
     fn on_error(&mut self, error: &str) {
         lock_unpoisoned(&self.completions).push_back(DecodeCompletion::Failure {
+            sequence: NEXT_COMPLETION_SEQUENCE.fetch_add(1, Ordering::Relaxed),
             request_id: self.request_id,
             message: error.to_owned(),
         });
@@ -239,15 +247,34 @@ pub(super) fn upstream_test_owner_id(lua: &Lua) -> u64 {
 }
 
 pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
+    poll_completed_limit(lua, usize::MAX)
+}
+
+pub(super) fn pending_completion_sequence(lua: &Lua) -> Option<u64> {
+    let owner = lua.app_data_ref::<ImageDecodeRegistryOwner>()?;
+    let completions = lock_unpoisoned(&owner.0.completions);
+    completions.front().map(|completion| match completion {
+        DecodeCompletion::Success { sequence, .. }
+        | DecodeCompletion::Failure { sequence, .. } => *sequence,
+    })
+}
+
+pub(super) fn poll_next_completed(lua: &Lua) -> Result<bool> {
+    poll_completed_limit(lua, 1)
+}
+
+fn poll_completed_limit(lua: &Lua, limit: usize) -> Result<bool> {
     let Some(registry) = lua
         .app_data_ref::<ImageDecodeRegistryOwner>()
         .map(|owner| Rc::clone(&owner.0))
     else {
         return Ok(false);
     };
-    let completions = lock_unpoisoned(&registry.completions)
-        .drain(..)
-        .collect::<Vec<_>>();
+    let completions = {
+        let mut queue = lock_unpoisoned(&registry.completions);
+        let count = queue.len().min(limit);
+        queue.drain(..count).collect::<Vec<_>>()
+    };
     let mut settled = false;
     for completion in completions {
         let request_id = match &completion {

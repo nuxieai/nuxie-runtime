@@ -136,14 +136,13 @@ impl RuntimeCompiledValueRule {
 
 fn calendar_day(text: &str) -> bool {
     let bytes = text.as_bytes();
-    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+    if bytes.len() != 10 || bytes.get(4) != Some(&b'-') || bytes.get(7) != Some(&b'-') {
         return false;
     }
     let number = |range: std::ops::Range<usize>| {
-        bytes[range].iter().try_fold(0u32, |value, digit| {
-            digit
-                .is_ascii_digit()
-                .then(|| value * 10 + u32::from(*digit - b'0'))
+        bytes.get(range)?.iter().try_fold(0u32, |value, digit| {
+            let digit = digit.checked_sub(b'0').filter(|digit| *digit <= 9)?;
+            value.checked_mul(10)?.checked_add(u32::from(digit))
         })
     };
     let (Some(year), Some(month), Some(day)) = (number(0..4), number(5..7), number(8..10)) else {

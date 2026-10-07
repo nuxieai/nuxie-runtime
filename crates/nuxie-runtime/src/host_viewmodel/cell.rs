@@ -140,6 +140,7 @@ pub enum RuntimeViewModelChangeValue {
 pub(crate) struct RuntimeViewModelCapturedChange {
     pub(crate) cell_identity: usize,
     pub(crate) publish: bool,
+    pub(crate) list_items: Option<Vec<crate::CoreHandle>>,
     pub(crate) value: RuntimeViewModelChangeValue,
 }
 
@@ -151,6 +152,7 @@ struct RuntimeViewModelChangeCaptureState {
     value_bytes: usize,
     overflowed: bool,
     track_unchanged: bool,
+    correcting: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,6 +184,7 @@ impl RuntimeViewModelChangeCapture {
                 value_bytes: 0,
                 overflowed: false,
                 track_unchanged: false,
+                correcting: None,
             });
             Some(Self { armed: true })
         })
@@ -225,6 +228,51 @@ impl RuntimeViewModelChangeCapture {
             }
         })
     }
+
+    pub(crate) fn omit_writes(&self, omitted: &BTreeSet<usize>) {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            if let Some(state) = slot.borrow_mut().as_mut() {
+                let mut index = 0usize;
+                state.changes.retain(|_| {
+                    let keep = !omitted.contains(&index);
+                    index = index.saturating_add(1);
+                    keep
+                });
+            }
+        });
+    }
+
+    pub(crate) fn set_write_publication(&self, index: usize, publish: bool) {
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            if let Some(change) = slot
+                .borrow_mut()
+                .as_mut()
+                .and_then(|state| state.changes.get_mut(index))
+            {
+                change.publish = publish;
+            }
+        });
+    }
+
+    pub(crate) fn correcting<R>(&self, cell_identity: usize, action: impl FnOnce() -> R) -> R {
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+                    if let Some(state) = slot.borrow_mut().as_mut() {
+                        state.correcting = None;
+                    }
+                });
+            }
+        }
+        VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
+            if let Some(state) = slot.borrow_mut().as_mut() {
+                state.correcting = Some(cell_identity);
+            }
+        });
+        let _reset = Reset;
+        action()
+    }
 }
 
 impl Drop for RuntimeViewModelChangeCapture {
@@ -238,24 +286,36 @@ impl Drop for RuntimeViewModelChangeCapture {
 }
 
 pub(crate) fn capture_view_model_change(cell_identity: usize, value: RuntimeViewModelChangeValue) {
-    capture_view_model_write(cell_identity, value, true);
+    capture_view_model_write(cell_identity, value, true, None);
 }
 
 pub(crate) fn capture_unchanged_view_model_write(
     cell_identity: usize,
     value: RuntimeViewModelChangeValue,
 ) {
-    capture_view_model_write(cell_identity, value, false);
+    capture_view_model_write(cell_identity, value, false, None);
+}
+
+pub(crate) fn capture_view_model_list_write(
+    cell_identity: usize,
+    value: RuntimeViewModelChangeValue,
+    items: &[crate::CoreHandle],
+) {
+    capture_view_model_write(cell_identity, value, true, Some(items));
 }
 
 fn capture_view_model_write(
     cell_identity: usize,
     value: RuntimeViewModelChangeValue,
     publish: bool,
+    list_items: Option<&[crate::CoreHandle]>,
 ) {
     VIEW_MODEL_CHANGE_CAPTURE.with(|slot| {
         if let Some(state) = slot.borrow_mut().as_mut() {
-            if state.overflowed || (!publish && !state.track_unchanged) {
+            if state.correcting == Some(cell_identity)
+                || state.overflowed
+                || (!publish && !state.track_unchanged)
+            {
                 return;
             }
             let value_bytes = match &value {
@@ -277,6 +337,11 @@ fn capture_view_model_write(
             state.changes.push(RuntimeViewModelCapturedChange {
                 cell_identity,
                 publish,
+                list_items: if state.track_unchanged {
+                    list_items.map(<[_]>::to_vec)
+                } else {
+                    None
+                },
                 value,
             });
         }

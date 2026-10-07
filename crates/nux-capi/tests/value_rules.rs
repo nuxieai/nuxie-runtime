@@ -160,6 +160,51 @@ fn refusal_keeps_other_writes_and_reports_attempts_in_order() {
     }
 }
 #[test]
+fn earlier_marker_write_survives_later_value_refusal() {
+    for initial in [0, 1] {
+        let h = Handles::new();
+        let marker_write = |value| NuxViewModelMutation {
+            instance: h.value,
+            path: view("n_set"),
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL,
+            bool_value: value,
+            ..Default::default()
+        };
+        let prime = h.mutate(&[marker_write(initial)]);
+        unsafe { nux_view_model_mutation_result_free(prime) };
+        let mut maximum = rule("n", NUX_VALUE_RULE_NUMBER_MAXIMUM, NUX_VALUE_RULE_REFUSE);
+        maximum.number_bound = 365.0;
+        assert_eq!(h.install(&[maximum]), NuxStatus::Ok);
+        let marker = NuxValueMarker {
+            model: view("Values"),
+            value: view("n"),
+            marker: view("n_set"),
+        };
+        assert_eq!(
+            unsafe { nux_file_set_value_markers(h.file, &marker, 1) },
+            NuxStatus::Ok
+        );
+        let expected = 1 - initial;
+        let result = h.mutate(&[marker_write(expected), h.write("n", 400.0)]);
+        let info = result_info(result);
+        assert_eq!(info.applied_count, 1);
+        assert_eq!(info.change_count, 1, "initial marker {initial}");
+        assert_eq!(info.rule_report_count, 1);
+        let mut row = NuxViewModelChangeView::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_change(result, 0, &mut row) },
+            NuxStatus::Ok
+        );
+        assert_eq!(row.bool_value, expected);
+        assert_eq!(report(result, 0).attempted.number_value, 400.0);
+        unsafe { nux_view_model_mutation_result_free(result) };
+        // Repeating the accepted marker must be a no-op in committed state.
+        let repeat = h.mutate(&[marker_write(expected)]);
+        assert_eq!(result_info(repeat).change_count, 0);
+        unsafe { nux_view_model_mutation_result_free(repeat) };
+    }
+}
+#[test]
 fn marker_replacement_preserves_rules_and_refusal_does_not_set_marker() {
     let h = Handles::new();
     let mut maximum = rule("n", NUX_VALUE_RULE_NUMBER_MAXIMUM, NUX_VALUE_RULE_REFUSE);

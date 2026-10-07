@@ -21,6 +21,8 @@ pub(crate) use instance::identity as view_model_identity;
 mod runtime;
 mod source_handles;
 mod transactions;
+mod value_policy;
+pub use value_policy::*;
 pub use context::*;
 pub use instance::*;
 pub use runtime::*;

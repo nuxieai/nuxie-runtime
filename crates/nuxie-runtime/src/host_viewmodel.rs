@@ -22,6 +22,7 @@ mod runtime;
 mod source_handles;
 mod transactions;
 mod value_policy;
+mod value_rules;
 pub use context::*;
 pub use instance::*;
 pub use runtime::*;
@@ -32,3 +33,4 @@ pub(crate) use transactions::{
     capture_unchanged_native_write,
 };
 pub use value_policy::*;
+pub use value_rules::*;

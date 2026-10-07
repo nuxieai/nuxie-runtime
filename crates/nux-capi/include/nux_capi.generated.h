@@ -974,6 +974,28 @@ typedef struct NuxFileImportConfig {
 #endif
 
 /**
+ * A checked member and its computed list. errors_path is slash-separated,
+ * relative to the group's model. Each list item has the named string fields.
+ */
+typedef struct NuxRuleGroupMember {
+  struct NuxStringView property;
+  struct NuxStringView errors_path;
+  struct NuxStringView item_model;
+  struct NuxStringView code_property;
+  struct NuxStringView message_property;
+} NuxRuleGroupMember;
+
+/**
+ * A model's computed boolean and ordered error lists. All strings are copied.
+ */
+typedef struct NuxRuleGroup {
+  struct NuxStringView model;
+  struct NuxStringView valid;
+  const struct NuxRuleGroupMember *members;
+  size_t member_count;
+} NuxRuleGroup;
+
+/**
  * One number, boolean, color or enum value and its boolean marker, named in
  * the file's catalog. Both properties belong to the named model.
  */
@@ -2299,6 +2321,21 @@ NuxStatus nux_file_import_with_video_capabilities(const uint8_t *bytes,
                                                   const struct NuxVideoPlaybackCapabilities *capabilities,
                                                   struct NuxFile **out_file,
                                                   struct NuxCapiResult **out_result);
+
+/**
+ * Atomically replace computed groups; NULL+0 removes them. Install rules and
+ * markers first, before the first step or mutation. Invalid names, kinds,
+ * duplicate outputs or output/input conflicts reject the entire table.
+ * At most 4096 groups plus members and 8 MiB of copied input are accepted.
+ * Each list contains all current failures and the latest refused write's
+ * refusing rules, deduplicated in rule installation order. An accepted write
+ * clears that refusal. The computed boolean depends only on kept values.
+ * Writes to outputs are corrected in the same operation; quiet outputs emit
+ * no rows. Replacing groups or rules clears retained refusal history.
+ */
+NuxStatus nux_file_set_rule_groups(struct NuxFile *file,
+                                   const struct NuxRuleGroup *entries,
+                                   size_t count);
 
 /**
  * Replace this file's whole marker table. NULL+0 removes all markers.

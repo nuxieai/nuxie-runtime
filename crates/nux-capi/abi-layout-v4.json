@@ -1151,6 +1151,56 @@
       ]
     },
     {
+      "name": "NuxRuleGroup",
+      "size": 48,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "model",
+          "offset": 0
+        },
+        {
+          "name": "valid",
+          "offset": 16
+        },
+        {
+          "name": "members",
+          "offset": 32
+        },
+        {
+          "name": "member_count",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxRuleGroupMember",
+      "size": 80,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "property",
+          "offset": 0
+        },
+        {
+          "name": "errors_path",
+          "offset": 16
+        },
+        {
+          "name": "item_model",
+          "offset": 32
+        },
+        {
+          "name": "code_property",
+          "offset": 48
+        },
+        {
+          "name": "message_property",
+          "offset": 64
+        }
+      ]
+    },
+    {
       "name": "NuxRuntimeInfo",
       "size": 40,
       "alignment": 8,

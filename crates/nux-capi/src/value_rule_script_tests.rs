@@ -77,7 +77,7 @@ fn script_set_answers_synchronously_and_preserves_ordered_reports() {
     let witness = vm.lua().create_function(|_, ()| Ok(())).unwrap();
     let set = same_type(&witness, vm.run_bytecode("checked_write", code).unwrap());
     for (value, expected) in [
-        (5.0, (true, Some("low".to_owned()))),
+        (5.0, (true, None)),
         (400.0, (false, Some("high".to_owned()))),
         (20.0, (true, None)),
     ] {

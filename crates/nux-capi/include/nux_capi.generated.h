@@ -2392,6 +2392,19 @@ NuxStatus nux_player_semantic_snapshot(const struct NuxPlayer *player,
                                        struct NuxSemanticSnapshot **out_snapshot);
 
 /**
+ * Set a named global on a state-machine player. The player retains the shared
+ * instance; NULL clears the override and binds a fresh file-authored default.
+ * Bindings observe the instance from the next step, including nested copies
+ * and list rows. This call invalidates the occurrence's render revision.
+ * Returns NOT_FOUND for an unknown or non-global name or a non-state-machine
+ * player; HANDLE_MISMATCH for a different file, model, or legacy occurrence.
+ * Thread and reentrancy restrictions are the same as a view-model bind.
+ */
+NuxStatus nux_player_set_global_view_model(struct NuxPlayer *player,
+                                           struct NuxStringView name,
+                                           const struct NuxViewModelInstance *instance);
+
+/**
  * Apply named input changes, pointers, and focus inputs in that order, then
  * advance exactly once. Focus inputs retain array order. Their listener events
  * and view-model writes are captured in this same step's result. The

@@ -187,3 +187,25 @@ impl RuntimeOwnedViewModelContextHandle {
     }
 }
 pub type RuntimeDataContext = RuntimeOwnedViewModelContext;
+
+impl crate::host_state_machine::StateMachineInstance {
+    /// Set a retained global override, then bind the scene's native context.
+    /// Clearing completes the slot with a fresh file-authored default.
+    /// The caller supplies an instance of the named model from this file.
+    pub fn bind_global_view_model_handle(
+        &mut self,
+        name: &str,
+        instance: Option<&RuntimeOwnedViewModelHandle>,
+    ) -> bool {
+        self.native_handle().with_instance_mut(|machine| {
+            if !machine.set_global_view_model_instance(
+                name,
+                instance.map(RuntimeOwnedViewModelHandle::native_handle),
+            ) {
+                return false;
+            }
+            machine.bind();
+            true
+        })
+    }
+}

@@ -208,6 +208,14 @@ pub struct NuxViewModelCatalog {
     enum_labels: Vec<Box<[u8]>>,
 }
 
+impl NuxViewModelCatalog {
+    pub(super) fn global_schema_named(&self, name: &str) -> Option<usize> {
+        self.schemas
+            .iter()
+            .position(|schema| schema.is_global && schema.name.as_ref() == name.as_bytes())
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxViewModelCatalogInfo {

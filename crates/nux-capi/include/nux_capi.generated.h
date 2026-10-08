@@ -969,6 +969,18 @@ typedef struct NuxPlayerInfo {
   struct NuxStringView name;
 } NuxPlayerInfo;
 
+/**
+ * The player's laid-out size in points, read after stepping.
+ */
+typedef struct NuxPlayerLayoutSize {
+  /**
+   * Initialize to `sizeof(NuxPlayerLayoutSize)`.
+   */
+  uint32_t struct_size;
+  float width;
+  float height;
+} NuxPlayerLayoutSize;
+
 typedef struct NuxPlayerInputChange {
   /**
    * One of the `NuxPlayerInputKind` constants. Stored as an integer so an
@@ -1539,7 +1551,9 @@ typedef uint32_t NuxRendererFit;
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef struct NuxMetalRenderOperation {
   /**
-   * Must be initialized to `sizeof(NuxMetalRenderOperation)`.
+   * Use `sizeof(NuxMetalRenderOperation)`: 72 bytes or more includes layout.
+   * The 64-byte prefix omits layout; sizes 65 through 71 are refused.
+   * Legacy prefixes through the fit field remain supported.
    */
   uint32_t struct_size;
   /**
@@ -1559,7 +1573,9 @@ typedef struct NuxMetalRenderOperation {
    */
   void *completion_context;
   /**
-   * Both completion fields must be null or non-null together.
+   * Both completion fields must be null or non-null together. A readable
+   * non-null pair transfers the context to this callback exactly once on
+   * every return path, including errors; never release it again on error.
    */
   void (*completion_callback)(void *context);
   /**
@@ -1579,6 +1595,11 @@ typedef struct NuxMetalRenderOperation {
    * The buffer must hold this stride times drawable.height bytes.
    */
   size_t readback_bytes_per_row;
+  /**
+   * Points-to-pixels scale for Rive's layout fit; finite and positive.
+   * Set the player's layout size first, then step by zero before drawing.
+   */
+  float layout_scale_factor;
 } NuxMetalRenderOperation;
 #endif
 
@@ -1811,6 +1832,15 @@ typedef struct NuxViewModelSnapshotValueView {
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 /**
+ * Draw with Rive's centered layout fit at `layout_scale_factor`.
+ * Set the player's layout size to the surface size divided by that scale,
+ * then step by zero before the first draw and after each size change.
+ */
+#define NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT 2
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
  * Preserve authored artboard coordinates without applying a viewport fit.
  */
 #define NUX_ANDROID_VULKAN_RENDERER_FIT_NONE 0
@@ -1897,6 +1927,15 @@ typedef struct NuxViewModelSnapshotValueView {
  * Uniformly scale and center the authored artboard inside the renderer surface.
  */
 #define NUX_RENDERER_FIT_CONTAIN_CENTER 1
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Draw with Rive's centered layout fit at `layout_scale_factor`.
+ * Set the player's layout size to the surface size divided by that scale,
+ * then step by zero before the first draw and after each size change.
+ */
+#define NUX_RENDERER_FIT_LAYOUT 2
 #endif
 
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
@@ -2242,6 +2281,21 @@ NuxStatus nux_player_free(struct NuxPlayer *player);
  * Read selected-player metadata into a versioned caller-owned struct.
  */
 NuxStatus nux_player_info(const struct NuxPlayer *player, struct NuxPlayerInfo *out_info);
+
+/**
+ * Read the laid-out root width and height in points into a caller-sized struct.
+ * After changing the layout size, step by zero before reading the settled size.
+ */
+NuxStatus nux_player_layout_size(const struct NuxPlayer *player,
+                                 struct NuxPlayerLayoutSize *out_size);
+
+/**
+ * Set the player's root layout size in points. Both dimensions must be finite
+ * and positive. The layout settles on the next `nux_player_step`; hosts must
+ * step by zero after each size change and before the first draw.
+ * A changed size invalidates the rendered frame.
+ */
+NuxStatus nux_player_layout_size_set(struct NuxPlayer *player, float width, float height);
 
 /**
  * Select the artboard's default scene using the pinned C++ order: authored
@@ -2706,6 +2760,7 @@ NuxStatus nux_renderer_android_vulkan_present_player(struct NuxAndroidVulkanRend
                                                      struct NuxPlayer *player,
                                                      uint32_t clear_color,
                                                      NuxAndroidVulkanRendererFit fit,
+                                                     float layout_scale_factor,
                                                      NuxAndroidVulkanPresentation *out_presentation,
                                                      struct NuxCapiResult **out_result);
 #endif
@@ -2720,6 +2775,7 @@ NuxStatus nux_renderer_android_vulkan_render_player(struct NuxAndroidVulkanRende
                                                     struct NuxPlayer *player,
                                                     uint32_t clear_color,
                                                     NuxAndroidVulkanRendererFit fit,
+                                                    float layout_scale_factor,
                                                     struct NuxAndroidVulkanFrame **out_frame,
                                                     struct NuxCapiResult **out_result);
 #endif
@@ -2797,7 +2853,11 @@ NuxStatus nux_renderer_reattach(struct NuxRenderer *renderer,
 /**
  * Renders the player's retained artboard into a caller-acquired
  * CAMetalDrawable and schedules presentation. The drawable is borrowed only
- * until this synchronous function returns.
+ * until this synchronous function returns. Once the operation supplies a
+ * readable non-null completion callback and context pair, completion is called
+ * exactly once on every path, including failure. Do not release that context
+ * again on an error return. This includes rejection of calls made from
+ * platform callbacks. Invocation is deferred, never inline.
  */
 NuxStatus nux_renderer_render_player(struct NuxRenderer *renderer,
                                      struct NuxPlayer *player,

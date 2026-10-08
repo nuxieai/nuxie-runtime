@@ -550,6 +550,135 @@ fn solid_fill_renders_authored_pixels_on_metal() {
 }
 
 #[test]
+fn layout_fit_renders_at_surface_scale() {
+    assert_layout_pixels(
+        64.0,
+        128.0,
+        2.0,
+        &[(64, 32, true), (64, 160, false), (112, 112, true)],
+    );
+}
+
+#[test]
+fn layout_fit_preserves_scale_when_layout_is_smaller_than_surface() {
+    assert_layout_pixels(
+        64.0,
+        64.0,
+        1.0,
+        &[(64, 128, true), (16, 128, false), (64, 80, false)],
+    );
+}
+
+fn assert_layout_pixels(width: f32, height: f32, scale: f32, samples: &[(usize, usize, bool)]) {
+    autoreleasepool(|_| {
+        let required = live_metal_test_required();
+        let bytes = solid_fill_artboard();
+        let mut renderer = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        let create_status =
+            unsafe { nux_renderer_new_metal(128, 256, &raw mut renderer, &raw mut result) };
+        if create_status != NuxStatus::Ok && !required {
+            if !result.is_null() {
+                assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
+            }
+            return;
+        }
+        assert_eq!(create_status, NuxStatus::Ok);
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut file = ptr::null_mut();
+        result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_file_import_metal(
+                    renderer,
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxFileImportConfig::default(),
+                    &raw mut file,
+                    &raw mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_player_new_static(artboard, &raw mut player) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_layout_size_set(player, width, height) },
+            NuxStatus::Ok
+        );
+        assert!(
+            scheduling(player, 0.0).render_required,
+            "the exact runtime requires an initial advance before its first draw"
+        );
+
+        let surface = readable_layer(renderer, 128, 256);
+        let Some(drawable) = surface.nextDrawable() else {
+            assert!(!required, "required live Metal drawable is unavailable");
+            assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+            assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+            assert_eq!(
+                unsafe { nux_artboard_instance_free(artboard) },
+                NuxStatus::Ok
+            );
+            assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+            return;
+        };
+        let stride = 512;
+        let length = stride * 256;
+        let buffer = surface
+            .device()
+            .expect("Metal device")
+            .newBufferWithLength_options(length, MTLResourceOptions::StorageModeShared)
+            .expect("shared readback buffer");
+        let mut request = operation(
+            NUX_METAL_DRAWABLE_STATE_AVAILABLE,
+            Retained::as_ptr(&drawable).cast_mut().cast(),
+        );
+        request.fit = NUX_RENDERER_FIT_LAYOUT;
+        request.layout_scale_factor = scale;
+        request.readback_buffer = Retained::as_ptr(&buffer).cast_mut().cast();
+        request.readback_bytes_per_row = stride;
+        let outcome = unsafe { render(renderer, player, request, NuxStatus::Ok) };
+        assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
+        assert!(outcome.draw_calls > 0, "solid fill must submit draw work");
+
+        let pixels =
+            unsafe { std::slice::from_raw_parts(buffer.contents().as_ptr().cast::<u8>(), length) };
+        for &(x, y, filled) in samples {
+            let offset = y * stride + x * 4;
+            let [blue, green, red, alpha] = pixels[offset..offset + 4].try_into().unwrap();
+            let actual = [red, green, blue, alpha];
+            let expected = if filled {
+                FILL_RGBA
+            } else {
+                [0x11, 0x22, 0x33, 0xff]
+            };
+            assert!(
+                actual.iter().zip(expected).all(|(a, e)| a.abs_diff(e) <= 2),
+                "layout {width}x{height} scale {scale}, pixel ({x}, {y}): {actual:?}, expected {expected:?}"
+            );
+        }
+
+        assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+    });
+}
+
+#[test]
 fn native_c_renderer_lifecycle_preserves_player_domain_and_player_lifetimes() {
     autoreleasepool(|_| {
         let first = renderer(4, 3);

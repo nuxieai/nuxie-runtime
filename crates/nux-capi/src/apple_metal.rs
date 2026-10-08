@@ -219,6 +219,10 @@ pub type NuxRendererFit = u32;
 pub const NUX_RENDERER_FIT_NONE: NuxRendererFit = 0;
 /// Uniformly scale and center the authored artboard inside the renderer surface.
 pub const NUX_RENDERER_FIT_CONTAIN_CENTER: NuxRendererFit = 1;
+/// Draw with Rive's centered layout fit at `layout_scale_factor`.
+/// Set the player's layout size to the surface size divided by that scale,
+/// then step by zero before the first draw and after each size change.
+pub const NUX_RENDERER_FIT_LAYOUT: NuxRendererFit = 2;
 
 pub type NuxMetalDrawableState = u32;
 pub const NUX_METAL_DRAWABLE_STATE_AVAILABLE: NuxMetalDrawableState = 0;
@@ -226,14 +230,19 @@ pub const NUX_METAL_DRAWABLE_STATE_TIMEOUT: NuxMetalDrawableState = 1;
 pub const NUX_METAL_DRAWABLE_STATE_OCCLUDED: NuxMetalDrawableState = 2;
 
 /// Called exactly once after Metal finishes using a submitted drawable, or
-/// after the operation is skipped or rejected. Invocation is always deferred
+/// after the operation is skipped or rejected. Once a readable non-null pair
+/// is supplied, every return path calls it exactly once, including errors.
+/// The caller must not release the context again when the call returns an error.
+/// Invocation is always deferred
 /// to a system dispatch queue and never occurs inline on the calling stack.
 type RendererCompletionCallback = unsafe extern "C" fn(context: *mut c_void);
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct NuxMetalRenderOperation {
-    /// Must be initialized to `sizeof(NuxMetalRenderOperation)`.
+    /// Use `sizeof(NuxMetalRenderOperation)`: 72 bytes or more includes layout.
+    /// The 64-byte prefix omits layout; sizes 65 through 71 are refused.
+    /// Legacy prefixes through the fit field remain supported.
     pub struct_size: u32,
     /// Swift-reported drawable availability; Rust never queries UI state.
     pub drawable_state: NuxMetalDrawableState,
@@ -243,7 +252,9 @@ pub struct NuxMetalRenderOperation {
     pub clear_color: u32,
     /// Caller-owned context consumed by `completion_callback`.
     pub completion_context: *mut c_void,
-    /// Both completion fields must be null or non-null together.
+    /// Both completion fields must be null or non-null together. A readable
+    /// non-null pair transfers the context to this callback exactly once on
+    /// every return path, including errors; never release it again on error.
     pub completion_callback: Option<unsafe extern "C" fn(context: *mut c_void)>,
     /// Optional viewport-fit policy. Older struct prefixes default to NONE.
     pub fit: NuxRendererFit,
@@ -256,6 +267,9 @@ pub struct NuxMetalRenderOperation {
     /// Destination row stride, a multiple of 256 and at least drawable.width * 4.
     /// The buffer must hold this stride times drawable.height bytes.
     pub readback_bytes_per_row: usize,
+    /// Points-to-pixels scale for Rive's layout fit; finite and positive.
+    /// Set the player's layout size first, then step by zero before drawing.
+    pub layout_scale_factor: f32,
 }
 
 pub const NUX_METAL_RENDER_OPERATION_V3_MIN_SIZE: usize =
@@ -274,6 +288,7 @@ impl Default for NuxMetalRenderOperation {
             fit: NUX_RENDERER_FIT_NONE,
             readback_buffer: ptr::null_mut(),
             readback_bytes_per_row: 0,
+            layout_scale_factor: 0.0,
         }
     }
 }
@@ -1173,14 +1188,6 @@ unsafe fn read_operation(
             "render operation struct_size is too small",
         ));
     }
-    let capture_offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
-    let full_size = std::mem::size_of::<NuxMetalRenderOperation>();
-    if caller_size as usize > capture_offset && (caller_size as usize) < full_size {
-        return Err(ApiFailure::new(
-            NuxStatus::InvalidStructSize,
-            "render operation contains an incomplete readback extension",
-        ));
-    }
     let mut value = NuxMetalRenderOperation::default();
     let read_len = usize::try_from(caller_size)
         .unwrap_or(usize::MAX)
@@ -1192,8 +1199,41 @@ unsafe fn read_operation(
             read_len,
         );
     }
-    match value.fit {
+    Ok(value)
+}
+
+fn validate_operation_extensions(operation: &NuxMetalRenderOperation) -> Result<(), ApiFailure> {
+    let caller_size = operation.struct_size;
+    let capture_offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
+    let capture_end = std::mem::offset_of!(NuxMetalRenderOperation, readback_bytes_per_row)
+        + std::mem::size_of::<usize>();
+    let full_size = std::mem::size_of::<NuxMetalRenderOperation>();
+    if caller_size as usize > capture_offset && (caller_size as usize) < capture_end {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidStructSize,
+            "render operation contains an incomplete readback extension",
+        ));
+    }
+    if caller_size as usize > capture_end && (caller_size as usize) < full_size {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidStructSize,
+            "render operation contains an incomplete layout extension",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_operation_fit(operation: &NuxMetalRenderOperation) -> Result<(), ApiFailure> {
+    match operation.fit {
         NUX_RENDERER_FIT_NONE | NUX_RENDERER_FIT_CONTAIN_CENTER => {}
+        NUX_RENDERER_FIT_LAYOUT => {
+            if !operation.layout_scale_factor.is_finite() || operation.layout_scale_factor <= 0.0 {
+                return Err(ApiFailure::new(
+                    NuxStatus::InvalidArgument,
+                    "layout scale must be finite and positive",
+                ));
+            }
+        }
         _ => {
             return Err(ApiFailure::new(
                 NuxStatus::InvalidArgument,
@@ -1201,7 +1241,7 @@ unsafe fn read_operation(
             ));
         }
     }
-    Ok(value)
+    Ok(())
 }
 
 fn centered_contain_transform(
@@ -1618,7 +1658,11 @@ pub unsafe extern "C" fn nux_renderer_reattach(
 
 /// Renders the player's retained artboard into a caller-acquired
 /// CAMetalDrawable and schedules presentation. The drawable is borrowed only
-/// until this synchronous function returns.
+/// until this synchronous function returns. Once the operation supplies a
+/// readable non-null completion callback and context pair, completion is called
+/// exactly once on every path, including failure. Do not release that context
+/// again on an error return. This includes rejection of calls made from
+/// platform callbacks. Invocation is deferred, never inline.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_renderer_render_player(
     renderer: *mut NuxRenderer,
@@ -1627,6 +1671,15 @@ pub unsafe extern "C" fn nux_renderer_render_player(
     out_outcome: *mut NuxRendererOutcome,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
+    if super::platform_callback_active() {
+        // The common firewall rejects reentry before its body runs. Consume
+        // only the readable completion pair here, without touching handles.
+        let _ = std::panic::catch_unwind(|| {
+            if let Ok(operation) = unsafe { read_operation(operation) } {
+                let _completion = PendingCompletion::new(&operation);
+            }
+        });
+    }
     ffi_guard_with_result(out_result, || {
         let operation = match unsafe { read_operation(operation) } {
             Ok(operation) => operation,
@@ -1636,6 +1689,12 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             Ok(completion) => completion,
             Err(failure) => return with_optional_failure_result(out_result, || Err(failure)),
         };
+        if let Err(failure) = validate_operation_extensions(&operation) {
+            return with_optional_failure_result(out_result, || Err(failure));
+        }
+        if let Err(failure) = validate_operation_fit(&operation) {
+            return with_optional_failure_result(out_result, || Err(failure));
+        }
         if unsafe { reject_aliased_outputs(out_outcome, out_result) } {
             return NuxStatus::InvalidArgument;
         }
@@ -1763,6 +1822,15 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     artboard.artboard_bounds(),
                     (state.pixel_width, state.pixel_height),
                 )?)
+            } else if operation.fit == NUX_RENDERER_FIT_LAYOUT {
+                Some(
+                    super::renderer_layout::layout_transform(
+                        artboard.artboard_bounds(),
+                        (state.pixel_width, state.pixel_height),
+                        operation.layout_scale_factor,
+                    )
+                    .map_err(|message| ApiFailure::new(NuxStatus::InvalidArgument, message))?,
+                )
             } else {
                 None
             };
@@ -1942,6 +2010,40 @@ mod tests {
     }
 
     #[test]
+    fn layout_fit_uses_points_to_pixels_and_artboard_origin() {
+        use crate::renderer_layout::layout_transform;
+        for (bounds, viewport, scale, expected) in [
+            (
+                (0.0, 0.0, 393.0, 852.0),
+                (1179, 2556),
+                3.0,
+                [3.0, 0.0, 0.0, 3.0, 0.0, 0.0],
+            ),
+            (
+                (0.0, 0.0, 375.0, 667.0),
+                (750, 1334),
+                2.0,
+                [2.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+            ),
+            (
+                (10.0, 20.0, 393.0, 852.0),
+                (1179, 2556),
+                3.0,
+                [3.0, 0.0, 0.0, 3.0, -30.0, -60.0],
+            ),
+        ] {
+            assert_eq!(
+                layout_transform(bounds, viewport, scale).unwrap(),
+                Mat2D(expected)
+            );
+        }
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert!(layout_transform((0.0, 0.0, 393.0, 852.0), (1179, 2556), scale).is_err());
+        }
+        assert!(layout_transform((0.0, 0.0, f32::MAX, f32::MAX), (1, 1), f32::MAX).is_err());
+    }
+
+    #[test]
     fn centered_contain_fit_scales_and_letterboxes_authored_bounds() {
         assert_eq!(NUX_RENDERER_FIT_NONE, 0);
         assert_eq!(NUX_RENDERER_FIT_CONTAIN_CENTER, 1);
@@ -2000,13 +2102,14 @@ mod tests {
             fit: u32::MAX,
             ..NuxMetalRenderOperation::default()
         };
-        assert!(unsafe { read_operation(&raw const invalid) }.is_err());
+        assert!(validate_operation_fit(&invalid).is_err());
     }
 
     #[test]
     fn readback_extension_requires_its_complete_prefix() {
         let offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
-        let size = std::mem::size_of::<NuxMetalRenderOperation>();
+        let size = std::mem::offset_of!(NuxMetalRenderOperation, readback_bytes_per_row)
+            + std::mem::size_of::<usize>();
         let mut operation = NuxMetalRenderOperation {
             fit: NUX_RENDERER_FIT_CONTAIN_CENTER,
             readback_buffer: ptr::dangling_mut(),
@@ -2020,13 +2123,136 @@ mod tests {
         assert_eq!(legacy.readback_bytes_per_row, 0);
         for partial in (offset + 1)..size {
             operation.struct_size = u32::try_from(partial).unwrap();
-            let error = unsafe { read_operation(&operation) }.expect_err("partial capture prefix");
+            let error =
+                validate_operation_extensions(&unsafe { read_operation(&operation) }.unwrap())
+                    .expect_err("partial capture prefix");
             assert_eq!(error.status, NuxStatus::InvalidStructSize);
         }
         operation.struct_size = u32::try_from(size).unwrap();
         let complete = unsafe { read_operation(&operation) }.expect("full capture prefix");
         assert_eq!(complete.readback_buffer, operation.readback_buffer);
         assert_eq!(complete.readback_bytes_per_row, 256);
+    }
+
+    #[test]
+    fn layout_operation_requires_a_complete_extension_and_positive_scale() {
+        let mut operation = NuxMetalRenderOperation {
+            struct_size: 64,
+            fit: NUX_RENDERER_FIT_CONTAIN_CENTER,
+            layout_scale_factor: 2.0,
+            ..NuxMetalRenderOperation::default()
+        };
+        let prefix = unsafe { read_operation(&operation) }.unwrap();
+        assert_eq!(prefix.layout_scale_factor, 0.0);
+        operation.fit = NUX_RENDERER_FIT_LAYOUT;
+        assert_eq!(
+            validate_operation_fit(&unsafe { read_operation(&operation) }.unwrap())
+                .unwrap_err()
+                .status,
+            NuxStatus::InvalidArgument
+        );
+        for partial in 65..72 {
+            operation.struct_size = partial;
+            assert_eq!(
+                validate_operation_extensions(&unsafe { read_operation(&operation) }.unwrap())
+                    .unwrap_err()
+                    .status,
+                NuxStatus::InvalidStructSize
+            );
+        }
+        operation.struct_size = 72;
+        assert_eq!(
+            unsafe { read_operation(&operation) }
+                .unwrap()
+                .layout_scale_factor,
+            2.0
+        );
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            operation.layout_scale_factor = scale;
+            assert_eq!(
+                validate_operation_fit(&unsafe { read_operation(&operation) }.unwrap())
+                    .unwrap_err()
+                    .status,
+                NuxStatus::InvalidArgument
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_layout_scale_releases_accepted_completion_once() {
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            let probe = Box::into_raw(Box::new(CompletionProbe {
+                calls: AtomicUsize::new(0),
+                inline: AtomicBool::new(false),
+            }));
+            let mut operation = operation_with_probe(probe);
+            operation.fit = NUX_RENDERER_FIT_LAYOUT;
+            operation.layout_scale_factor = scale;
+            let mut outcome = NuxRendererOutcome::default();
+            assert_eq!(
+                call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+                NuxStatus::InvalidArgument
+            );
+            wait_for_completion(unsafe { &*probe });
+            drop(unsafe { Box::from_raw(probe) });
+        }
+    }
+
+    #[test]
+    fn callback_reentry_releases_readable_completion_once() {
+        let probe = Box::into_raw(Box::new(CompletionProbe {
+            calls: AtomicUsize::new(0),
+            inline: AtomicBool::new(false),
+        }));
+        let mut outcome = NuxRendererOutcome::default();
+        let mut result = ptr::dangling_mut();
+        let status = crate::with_platform_callback(|| {
+            call_with_probe(
+                operation_with_probe(probe),
+                &raw mut outcome,
+                &raw mut result,
+            )
+        });
+        assert_eq!(status, NuxStatus::ReentrantCall);
+        assert!(result.is_null());
+        wait_for_completion(unsafe { &*probe });
+        drop(unsafe { Box::from_raw(probe) });
+    }
+
+    #[test]
+    fn unsupported_fit_releases_readable_completion_once() {
+        let probe = Box::into_raw(Box::new(CompletionProbe {
+            calls: AtomicUsize::new(0),
+            inline: AtomicBool::new(false),
+        }));
+        let mut operation = operation_with_probe(probe);
+        operation.fit = u32::MAX;
+        let mut outcome = NuxRendererOutcome::default();
+        assert_eq!(
+            call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+            NuxStatus::InvalidArgument
+        );
+        wait_for_completion(unsafe { &*probe });
+        drop(unsafe { Box::from_raw(probe) });
+    }
+
+    #[test]
+    fn incomplete_extensions_release_readable_completion_once() {
+        for size in [56, 68] {
+            let probe = Box::into_raw(Box::new(CompletionProbe {
+                calls: AtomicUsize::new(0),
+                inline: AtomicBool::new(false),
+            }));
+            let mut operation = operation_with_probe(probe);
+            operation.struct_size = size;
+            let mut outcome = NuxRendererOutcome::default();
+            assert_eq!(
+                call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+                NuxStatus::InvalidStructSize
+            );
+            wait_for_completion(unsafe { &*probe });
+            drop(unsafe { Box::from_raw(probe) });
+        }
     }
 
     #[test]

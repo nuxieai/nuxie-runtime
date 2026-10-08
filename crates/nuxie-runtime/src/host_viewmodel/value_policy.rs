@@ -63,15 +63,46 @@ pub struct RuntimeValuePolicy {
     file: RuntimeFileHandle,
     markers: Vec<Marker>,
     rules: Vec<Rule>,
+    groups: Vec<operation::groups::Group>,
+    group_refusals: RefCell<BTreeMap<(u64, usize), Vec<usize>>>,
+    revision: std::cell::Cell<u64>,
+    settled_groups: RefCell<Option<operation::groups::SettledGroups>>,
+}
+
+#[cfg(any(test, feature = "policy-pass-counter"))]
+thread_local! {
+    static POLICY_PASSES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 impl RuntimeValuePolicy {
+    /// Read and reset the current test thread's rule, marker and group pass count.
+    #[cfg(any(test, feature = "policy-pass-counter"))]
+    pub fn take_test_pass_count() -> usize {
+        POLICY_PASSES.with(|passes| passes.replace(0))
+    }
+
+    #[cfg(any(test, feature = "policy-pass-counter"))]
+    fn record_test_pass() {
+        POLICY_PASSES.with(|passes| passes.set(passes.get().saturating_add(1)));
+    }
+
     pub fn new(file: RuntimeFileHandle) -> Self {
         Self {
             file,
             markers: Vec::new(),
             rules: Vec::new(),
+            groups: Vec::new(),
+            group_refusals: RefCell::new(BTreeMap::new()),
+            revision: std::cell::Cell::new(0),
+            settled_groups: RefCell::new(None),
         }
+    }
+
+    /// Invalidate settled outputs after a bind, global replacement or host write.
+    /// Callers using ordinary native setters outside an operation must call this.
+    pub fn invalidate(&self) {
+        self.revision.set(self.revision.get().wrapping_add(1));
+        self.settled_groups.borrow_mut().take();
     }
 
     pub fn has_markers(&self) -> bool {
@@ -80,6 +111,10 @@ impl RuntimeValuePolicy {
 
     pub fn has_rules(&self) -> bool {
         !self.rules.is_empty()
+    }
+
+    pub fn has_groups(&self) -> bool {
+        !self.groups.is_empty()
     }
 
     pub fn rule(&self, index: usize) -> Option<&RuntimeValueRule> {
@@ -267,14 +302,17 @@ impl RuntimeValuePolicy {
                 }
             }
         }
+        self.validate_group_inputs(&rules, &self.markers)?;
+        self.invalidate();
         self.rules = rules;
+        self.group_refusals.borrow_mut().clear();
         Ok(())
     }
 
     /// Enable ordered host/script writes before an operation starts. A file
     /// without markers or rules keeps the ordinary change-only journal unchanged.
     pub fn prepare_capture(&self, capture: &RuntimeViewModelChangeCapture) {
-        if self.has_markers() || self.has_rules() {
+        if self.has_markers() || self.has_rules() || self.has_groups() {
             capture.track_unchanged_writes();
         }
     }
@@ -283,7 +321,8 @@ impl RuntimeValuePolicy {
     /// Call after a marker pass changes a value, then run the marker pass again
     /// to include any writes caused by those bindings in the same journal.
     pub fn flush_marker_bindings(&self, artboard: &crate::ArtboardInstance) -> bool {
-        (self.has_markers() || self.has_rules()) && artboard.native_handle().update_pass(true)
+        (self.has_markers() || self.has_rules() || self.has_groups())
+            && artboard.native_handle().update_pass(true)
     }
 
     pub fn set_markers(
@@ -322,6 +361,8 @@ impl RuntimeValuePolicy {
         if !values.is_disjoint(&targets) {
             return Err(RuntimeValuePolicyError::InvalidArgument);
         }
+        self.validate_group_inputs(&self.rules, &markers)?;
+        self.invalidate();
         self.markers = markers;
         Ok(())
     }
@@ -386,6 +427,15 @@ impl RuntimeValuePolicy {
         if self.markers.is_empty() {
             return Ok(false);
         }
+        if capture
+            .write_count()
+            .map_err(|_| RuntimeValuePolicyError::LimitExceeded)?
+            == 0
+        {
+            return Ok(false);
+        }
+        #[cfg(any(test, feature = "policy-pass-counter"))]
+        Self::record_test_pass();
         if roots
             .iter()
             .any(|root| !root.native_file().ptr_eq(&self.file))
@@ -432,3 +482,7 @@ mod tests;
 mod operation;
 pub(crate) use operation::capture_initial_policy_owner;
 pub use operation::*;
+
+#[cfg(test)]
+#[path = "value_policy_group_tests.rs"]
+mod group_tests;

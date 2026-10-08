@@ -8,6 +8,8 @@ repository.workspace = true
 [features]
 # Only stroke.cpp:89-101 WITH_RIVE_EDITOR guard; no shipped build enables this.
 editor = []
+# Host test observability only; does not enable upstream TESTING behavior.
+policy-pass-counter = []
 testing = [] # Upstream TESTING observations; test harnesses only.
 # Mirrors upstream --no_ffp_contract for the strict unit/Silver lane.
 # Shipping consumers, including default-features=false hosts, keep the

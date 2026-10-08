@@ -403,6 +403,19 @@ pub fn has_pending_work() -> bool {
         .values()
         .any(|e| e.thread == thread)
 }
+/// Pending requests for this owner, regardless of which thread started them.
+pub fn has_pending_work_for_owner(owner_id: u64) -> bool {
+    let net = instance();
+    if OUTSTANDING_COUNT.load(Ordering::Relaxed) == 0 {
+        return false;
+    }
+    net.lock()
+        .unwrap()
+        .outstanding
+        .values()
+        .any(|entry| entry.owner_id == owner_id)
+}
+
 pub fn complete(id: RequestId, response: HttpResponse) {
     let mut net = instance().lock().unwrap();
     if net.outstanding.get(&id).is_none_or(|e| e.settled) {

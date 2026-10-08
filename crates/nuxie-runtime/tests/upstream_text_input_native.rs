@@ -426,9 +426,25 @@ fn empty_shaped_text_has_no_selection_rectangles() {
 fn native_input_point_hit_respects_drawable_hidden_flag() {
     let (_file, artboard, input) = input_fixture();
     artboard.advance_default(0.0);
-    let point = with_input(&input, |input| {
-        *input.base.world_transform() * input.local_bounds().center()
-    });
+    // 0dd067f1 makes the scroll viewport authoritative. This fixture's text
+    // extends below its 50pt viewport, so its text center is not a hit point.
+    let viewport = artboard
+        .with_artboard(|artboard| {
+            artboard.objects().iter().flatten().find_map(|object| {
+                object
+                    .with(|object| object.as_scroll_constraint()?.viewport_handle())
+                    .flatten()
+            })
+        })
+        .expect("fixture scroll viewport");
+    let point = viewport
+        .with(|viewport| {
+            let viewport = viewport.as_layout_component().expect("layout viewport");
+            let center = viewport.local_bounds().center();
+            assert!(viewport.local_bounds().contains(center));
+            *viewport.world_transform() * center
+        })
+        .expect("live viewport");
     assert!(with_input(&input, |input| input.hit_test_point(point, false, true)));
     let flags = CoreRegistry::get_uint_handle(&input, 129).unwrap();
     let hidden = nuxie_runtime::source::drawable_flag::DrawableFlag::HIDDEN.0;

@@ -1,4 +1,4 @@
-//! Direct ports of the 13 cases in
+//! Direct ports of the 15 pool cases in
 //! pinned `tests/unit_tests/runtime/work_pool_test.cpp`.
 //!
 //! Native WorkTask owns task state and is boxed directly into WorkPool. Shared
@@ -479,4 +479,45 @@ fn empty_pool_has_no_pending_work() {
     assert_eq!(pool.submit(None), 0);
     assert!(!pool.has_pending_work());
     assert_eq!(pool.poll_completed_work(16), 0);
+}
+
+#[test]
+fn has_pending_work_for_owner_sees_only_that_owners_tasks() {
+    let mut pool = WorkPool::default();
+    let owner = WorkPool::next_owner_id();
+    let other = WorkPool::next_owner_id();
+    let task = Arc::new(TestTask::new());
+    let mut work = WorkTask::new(TestCallbacks(task.clone()));
+    work.set_owner_id(owner);
+    pool.submit(Some(Box::new(work)));
+
+    assert!(pool.has_pending_work_for_owner(owner));
+    assert!(!pool.has_pending_work_for_owner(other));
+
+    while pool.has_pending_work() {
+        pool.poll_completed_work(16);
+    }
+
+    assert!(task.completed.load(Ordering::Acquire));
+    assert!(!pool.has_pending_work_for_owner(owner));
+}
+
+#[test]
+fn has_pending_work_for_owner_holds_a_cancelled_task_until_it_is_delivered() {
+    let mut pool = WorkPool::default();
+    let owner = WorkPool::next_owner_id();
+    let task = Arc::new(TestTask::new());
+    let mut work = WorkTask::new(TestCallbacks(task.clone()));
+    work.set_owner_id(owner);
+    pool.submit(Some(Box::new(work)));
+    pool.cancel_all_for_owner(owner);
+
+    assert!(pool.has_pending_work_for_owner(owner));
+
+    while pool.has_pending_work() {
+        pool.poll_completed_work(16);
+    }
+
+    assert!(task.cancelled.load(Ordering::Acquire));
+    assert!(!pool.has_pending_work_for_owner(owner));
 }

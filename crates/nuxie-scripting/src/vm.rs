@@ -2398,6 +2398,20 @@ impl ScriptVm {
         &self.lua
     }
 
+    /// Context owner identity for literal upstream WorkPool host tests.
+    #[cfg(feature = "upstream-test-seams")]
+    #[doc(hidden)]
+    pub fn upstream_test_async_owner_id(&self) -> u64 {
+        lua_image_decode::upstream_test_owner_id(&self.lua)
+    }
+
+    /// Exercise the live decoder queue from cross-crate host integration tests.
+    #[cfg(feature = "upstream-test-seams")]
+    #[doc(hidden)]
+    pub fn upstream_test_decode_image(&self, encoded: &[u8]) -> Result<AnyUserData> {
+        lua_image_decode::start(&self.lua, self.lua.create_buffer(encoded)?)
+    }
+
     /// Exact `ScriptedRenderer::end()` result seam for literal upstream test
     /// ports that live outside this crate. This is deliberately absent from
     /// normal runtime builds.
@@ -3036,8 +3050,32 @@ impl RuntimeScriptingVm for ScriptVm {
         )))
     }
 
+    fn has_pending_async_work(&self) -> bool {
+        if lua_image_decode::has_pending_work(&self.lua) {
+            return true;
+        }
+        #[cfg(feature = "scriptnet")]
+        return lua_scriptnet::has_pending_work(&self.lua);
+        #[cfg(not(feature = "scriptnet"))]
+        false
+    }
+
     fn poll_async_work(&self) -> std::result::Result<bool, ScriptError> {
         match lua_image_decode::poll_completed(&self.lua) {
+            Ok(settled) => Ok(settled),
+            Err(error) => {
+                self.logging.log_error(&error);
+                Err(self.script_error(error))
+            }
+        }
+    }
+
+    fn pending_async_work_sequence(&self) -> Option<u64> {
+        lua_image_decode::pending_completion_sequence(&self.lua)
+    }
+
+    fn poll_next_async_work(&self) -> std::result::Result<bool, ScriptError> {
+        match lua_image_decode::poll_next_completed(&self.lua) {
             Ok(settled) => Ok(settled),
             Err(error) => {
                 self.logging.log_error(&error);

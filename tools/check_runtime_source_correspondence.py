@@ -23,6 +23,8 @@ RENAMED_OWNERS = {
 # 845a82a9 extracts these implementations from existing Lua owners. The Rust
 # backend-neutral traits and native Luau implementation already own this code.
 ADAPTED_OWNERS = {
+    # Browser helper extraction uses the approved Rust decoder/work-pool owner.
+    "async/browser_image_decode": Path("crates/nuxie-scripting/src/vm/lua_image_decode.rs"),
     "lua/lua_asset_reference": Path("crates/nuxie-scripting/src/vm/lua_blob.rs"),
     "lua/lua_atoms": Path("crates/nuxie-scripting/src/vm.rs"),
     "lua/lua_script_backend": Path("crates/nuxie-scripting/src/vm.rs"),
@@ -59,7 +61,7 @@ DEFERRED_OWNERS = {
     "wasm/artboard_wire", "wasm/browser_scripting_vm", "wasm/data_convert_wire",
     "wasm/gamepad_wire", "wasm/listener_wire", "wasm/module/gpu_proxy",
     "wasm/module/module_context", "wasm/module/render_proxy", "wasm/module_render",
-    "wasm/module_tier_ladder", "wasm/path_effect_wire", "wasm/prelinked_aot", "wasm/wamr_state_transplant",
+    "wasm/module_tier_ladder", "wasm/path_effect_wire", "wasm/prelinked_aot",
     "wasm/wasm_scripting_vm",
 }
 

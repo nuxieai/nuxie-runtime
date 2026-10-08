@@ -72,6 +72,18 @@ impl RuntimeScriptingVmHandle {
         self.with_vm_mut(|vm| vm.poll_async_work())
     }
 
+    pub fn pending_async_work_sequence(&self) -> Option<u64> {
+        self.with_vm_mut(|vm| vm.pending_async_work_sequence())
+    }
+
+    pub fn poll_next_async_work(&self) -> Result<bool, crate::scripting::ScriptError> {
+        self.with_vm_mut(|vm| vm.poll_next_async_work())
+    }
+
+    pub fn has_pending_async_work(&self) -> bool {
+        self.with_vm_mut(|vm| vm.has_pending_async_work())
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.inner, &other.inner)
     }

@@ -18,6 +18,9 @@ pub struct ScriptModuleAsset {
 }
 
 impl ScriptModuleAsset {
+    /// Shared writer name for an AnimaScript module asset; not execution support.
+    pub const ANIMA_SCRIPT_NAME: &'static str = "scripts_as";
+
     pub fn decode(&mut self, data: &mut Vec<u8>, _factory: &RuntimeFactoryHandle) -> bool {
         self.base.base.set_verified(false);
         let header = SignedContentHeader::new(data);

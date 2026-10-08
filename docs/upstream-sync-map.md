@@ -7,18 +7,111 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `de3e86090892b68072e7d4505e8d979386fc9a30`
+- LAST_SYNCED_SHA: `0dd067f18bc14139720ee348dfc222af0c744e4e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
-- Current target: `de3e86090892b68072e7d4505e8d979386fc9a30` (refreshed 2026-10-06 by the daily upstream sync).
+- Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Zero upstream commits remain after this checkpoint at the fetched target.
-  All 196 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (218 after `5892bb05`); this
+  Eight upstream commits remain after this checkpoint at the fetched target.
+  All 204 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (226 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `0dd067f1`, integrated atop downstream `cbf0fba095`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Runtime/text/input/scroll/focus suites pass 323 (two ignored), including
+  the new authored single-line/multiline viewport regression. Compilation found
+  two test-only borrowed-matrix dereferences, corrected without changing math.
+  The older hidden-flag test clicked the text center at y=108.896484 outside its
+  50pt viewport. Its setup now clicks the viewport center; all three visibility
+  assertions remain unchanged. Both corrections were rereviewed. Source/pipeline
+  tests pass 12, manifest tests pass 27, and generated inventory is current after
+  refreshing one producer line shifted by an upstream include. No classification
+  or tolerance changed. No broad Golden/Silver, browser pixels or physical-device
+  rerun is claimed; prior limitations and guest-execution deferral remain.
+- Validation at `8427a425`, integrated atop downstream `a09ff19c7a`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. The public executable delta is confined to the deferred guest AOT
+  cache owner on Nintendo NX. Source/pipeline tests pass 12, manifest tests
+  pass 27 and generated inventory is current. Structural correspondence is
+  1,065 mirrored/13 adapted/15 deferred owners, not semantic proof. No runtime,
+  dependency, fixture or assertion changed; no guest or hardware run is claimed.
+- Validation at `04104ce2`, integrated atop downstream `3856efcd95`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Rotation limits now compare within a turn centered on the configured
+  limits, preserving upstream f32 grouping and max-before-min order. Runtime,
+  rotation and IK-stacking tests pass 239 (two ignored), including all three
+  upstream rotation cases and all eight programmatic rows. Source/pipeline
+  tests pass 12, manifest tests pass 27 and generated inventory is current.
+  No tolerance changed. No broad corpus/platform rerun is claimed for this
+  bounded arithmetic change; prior limitations remain explicit.
+- Validation at `8092a195`, integrated atop downstream `55ffba4e9b`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including correction rereviews, are clean. Translate animation pre-apply
+  polling and continuation, current-file VM pending queries, foreign-file
+  identity and recursive hosted-artboard checks. Rust decoder callbacks queue
+  results for Lua-thread delivery, so the root also drains reachable foreign
+  VM queues. Integration review caught cross-VM reordering; delivery sequences
+  now preserve work-pool callback order instead of grouping callbacks by VM.
+  All five upstream host cases and a supplemental real two-VM decode-order
+  regression pass, both non-threaded and threaded (six cases in each lane).
+  Runtime/affected suites pass 258 (two ignored); scripting/host suites pass
+  378 (one ignored). WebGPU/WebGL2 wasm32 and Android arm64 Vulkan with
+  scripting/scriptnet compile. Source/pipeline tests pass 12, manifest tests
+  27 and generated inventory is current. No broad Golden/Silver/Metal or
+  browser-pixel/physical Android rerun is claimed; prior limitations remain.
+  Guest Wasm held-outcome registration remains deferred under UNIV-3728.
+- Validation at `84a3719f`, integrated atop downstream `cf8edf978d`:
+  independent source-scope and subsequent Rust-integration reviews are clean.
+  All public executable changes are deferred guest AOT boot/cache/Windows and
+  tier-transplant removal work. Remove only the deleted source owner's deferred
+  inventory entry; no Rust implementation existed to delete. Source/pipeline
+  tests pass 12, manifest tests pass 27, generated inventory is current, and
+  structural coverage is 1,065 mirrored/13 adapted/15 deferred owners. No Rust
+  behavior, dependency or assertion changed; no guest AOT or broad runtime
+  validation is claimed. Historical evidence and UNIV-3728 remain intact.
+- Validation at `f9d7e648`, integrated atop downstream `1ab231ff46`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Eight existing live Lua image-decoder tests pass; source/pipeline tests
+  pass 12, manifest tests pass 27, and generated inventory is current. Structural
+  coverage is 1,065 mirrored/13 adapted owners. The extracted browser decoder
+  maps to the approved Rust codec/work-pool owner: asynchronous settlement,
+  cancellation, canonical error and premultiplication already match the shared
+  contract. This is not a claim of browser-native codec equivalence; JS startup
+  exception and malloc guards concern absent Emscripten glue. Guest browser VM,
+  typed calls, ABI/IDL/generated bridges, deferred File startup and guest tests
+  remain parked under UNIV-3728. No browser pixels, broad corpus or platform
+  rerun is claimed for this metadata-only change; earlier limitations remain.
+- Validation at `a68b6dab`, integrated atop downstream `1e53c494d0`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All three script-module asset tests pass, source/pipeline tests pass
+  12, manifest tests pass 27, and the generated inventory is current. The shared
+  AnimaScript module-name constant is translated; this does not enable guest
+  execution. Guest VM adoption, registration, mixed-backend Luau guards, WAMR
+  and guest-browser bindings remain deferred under UNIV-3728. Existing omitted
+  VM-presence assertions were not removed or weakened by this update. Private
+  editor implementation is absent from the public delta and is not claimed
+  imported. Active pins advance together; historical evidence is unchanged.
+  No broad corpus/platform rerun is claimed for this constant-only change.
+- Validation at `ae4e1776`, integrated atop downstream `0af32351b6`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including missing VM-handle forwarding and receiver-coercion correction
+  rereviews. Runtime/work-pool/watermark/network tests pass 265 (two ignored);
+  scripting passes 375 (one ignored), including all three new host-loop cases.
+  Both new owner-pool cases pass in the non-threaded lane. Threaded validation
+  initially passed 14 and failed one new cancelled-owner case; the unchanged
+  serial repeat passes all 15. Both upstream and Rust have a preexisting
+  false-idle window between queue removal and in-flight publication, and this
+  upstream test drains through that older global query. This is a source-based
+  explanation, not a traced interleaving or reproduced C++ failure. No assertion
+  or algorithm was changed. Threaded host tests with scriptnet disabled pass
+  all three. WebGPU/WebGL2 wasm32 and Android arm64 Vulkan with scripting/scriptnet
+  compile. Source/pipeline tests pass 12, manifest tests 27 and generated inventory
+  is current; structural correspondence remains 1,065 mirrored/12 adapted owners.
+  No new full Golden/Silver/Metal, browser-pixel or physical Android run is claimed.
+  Guest Wasm execution remains deferred; broader historical failures stay below.
 - Validation at `de3e8609`, integrated atop downstream `f465a95aba`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including focused correction rereviews, are clean. Source review corrected
@@ -348,6 +441,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0dd067f18bc14139720ee348dfc222af0c744e4e` | Translate live scroll-viewport resolution and full-viewport text-input hit testing; preserve slot-expanded fallback and parent clipping order. Translate the single-line/multiline regression using the exact pinned upstream authored fixture. RML remains upstream fixture provenance; private Dart/editor implementation is absent from the public delta and is not claimed imported. | — |
+| `8427a425fd61d2adb4652eb12fdd74d0f7f3396b` | Deferred: the only public executable delta selects mkdir on Nintendo NX for the guest Wasm AOT cache directory. This owner remains parked with guest execution; no shared runtime, native Luau or renderer behavior changes. The private libhydrogen build change mentioned in the message is represented only by .rive_head, not public implementation to translate. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
+| `04104ce23473313d181489440c98fb087b991b68` | Translate limit-centered rotation wrapping across the half turn, preserving f32 expression grouping and max/min clamp order. Port all three upstream rotation cases, including the new authored fixture and eight programmatic rows; consume the pinned fixture without fallback. Both reviews and focused runtime/IK validation pass; no assertion or tolerance weakened. Private editor metadata is not implementation evidence. | — |
+| `8092a195ec9cd456e5199164565adb88887f737a` | Translate finished-animation async continuation/pre-apply polling, current-file and foreign-bound VM pending checks, recursive hosted-artboard traversal and shared foreign-file identity guard. Preserve global pool completion order across the approved Rust per-VM decoder handoff queues. Move the three existing host tests to upstream's new test owner and add both new upstream cases plus a real cross-VM callback-order regression. File's immutable getter was already equivalent; standalone C++ player polling removal is unshipped. Guest held-outcome registry remains deferred. Both reviews, correction rereviews and applicable validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
+| `84a3719f80a439ac5f3a7cc7bdc34b785544d5ac` | Guest AOT boot-time O3/O0 selection, synchronized caching, compiler/Windows support and removal of live tier transplantation remain deferred. Remove the exact obsolete deferred owner because upstream deletes its header/source; preserve historical provenance. No shared runtime/Luau/renderer changes or private editor implementation are claimed. Both reviews and inventory validation pass. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
+| `f9d7e648a957e9683dc1d5ebe56b4f2311409a8f` | Account for the shared browser-image decoder extraction through the approved live Rust codec/work-pool adaptation, not as a deferred owner. Guest browser VM, typed calls, ABI/IDL, generated bridges, guarded File/decodedFile/command-server startup and guest harnesses remain deferred. No private editor implementation is claimed. Both reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
+| `a68b6dabe1a30f15c1c36f79b7c66eee8b079b6e` | Translate the shared AnimaScript module-name constant. Guest VM adoption/registration, mixed-backend Luau guards, WAMR and guest-browser binding changes remain parked. Existing omitted VM-presence assertions are not newly weakened; private editor code absent from the public delta is not claimed imported. Both independent reviews and focused validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
+| `ae4e1776466164bfabd64ecedecf2d8f347fa0fc` | Translate host SMI completion polling before advance, per-file VM pending continuation and watermark internal-overload use; owner-scoped pool counts and all-thread network request lookup. Preserve Lua-thread completion handoff and count its undelivered queue along with the existing per-VM decoder/network owners. Port all five new upstream regressions. Browser decoding uses the approved Rust codec/pool; Emscripten symbol-glue fixes have no product counterpart and the common failure text already matches. Guest Wasm pending-work query remains parked. Private CLI changes absent from the public delta are not claimed. Both review passes and correction rereviews are clean; validation and the unchanged threaded-test race are recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `de3e86090892b68072e7d4505e8d979386fc9a30` | Translate scripted scroll targeting, local position/delta dispatch, pointer IDs through nested/list and scripted-artboard routes, handler-decline fallthrough, claimed-gesture latching, quiet timeout and collapse/cancel behavior. Add the live Lua ScrollEvent constructor, readonly fields, hit claim, global atoms and artboard method; anchor pointer/scroll userdata across protected calls. Preserve the legacy 21-bit serialized method default while adding opt-in bit 21. Wheel-disabled constraints now decline inertia cancellation. Port all six scripting tests and the runtime scroll regression; add a supplemental constructor C-string-boundary regression after source review. Source-equivalence and separate Rust-integration reviews are clean. The approved live luaur implementation owns Lua changes; excluded historical Lua mirrors are not a second execution backend. Guest Wasm VM calls, ABI/IDL/generated imports and browser guest forwarding remain parked; private editor-preview changes absent from the public delta are not claimed imported. Validation is recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `7aa93402a27c800db8a36acc8672612c100ea9b1` | Translate monotonic trigger/change sequences, per-state-machine windows and per-layer consumption, listener baselines and inactive ancestor markers; remove frame-tail view-model resets and detached Lua tracking. Translate component-trigger pending state, text-input caret/hit/undo corrections, component-list replacement/layout invalidation and clone changes. Add paint shader transforms across runtime/render API, GPU matrices, deferred commands, SRIV opcode 44, SVG, Lua, renderer FFI and C ABI; preserve optional callback prefix handling. Translate stroke-cap full-width spokes and regenerate affected backend shaders. Port all 15 new trigger-window tests and revised text/list/render tests; capture fresh C++ Metal GMs. C++ CoreGraphics/Skia/Canvas2D/test-host adapters are unshipped. Guest Wasm console/timer/render bindings remain parked; private .rive_head metadata is not implementation evidence. Reviews and validation are recorded above and in the PR. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `160085c654874d35ad654a750e782d7c78e050d9` | Translate layout-owned virtual grid contributions from every item, solved row/column lines and gaps, cached virtual inputs/item versions, original grid-cell pinning and sparse realized-item traversal. Remove the superseded runtime track-sizing model. Preserve Taffy through native contribution sizing at the approved layout boundary; the public Yoga dependency is the behavioral reference, not a runtime C dependency. Translate linear-time list updates, inline first-parent/LazyVector dependency storage, ordered symbol entries, append/reserve creation and nesting-stack changes. Core emptyId is already an associated constant. Port revised/new upstream tests; the upstream hidden scroll benchmark remains ignored and is not a performance campaign. Private .rive_head metadata is not claimed. Reviews and applicable validation are recorded in the PR. | — |

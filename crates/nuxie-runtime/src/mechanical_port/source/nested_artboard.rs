@@ -682,16 +682,7 @@ impl NestedArtboard {
                 })
                 .flatten()
         });
-        let source_file = self
-            .mounted_bindable
-            .as_ref()
-            .and_then(|bindable| bindable.file())
-            .and_then(|file| file.upgrade());
-        let from_other_file = source_file
-            .as_ref()
-            .zip(self.file.upgrade().as_ref())
-            .is_some_and(|(source, host)| !source.ptr_eq(host));
-        if self.base.is_stateful() && !from_other_file {
+        if self.base.is_stateful() && self.foreign_file().is_none() {
             let stateful_child = self.find_stateful_child_vmi();
             let artboard_view_model_id = artboard
                 .with_downcast::<Artboard, _>(|artboard| artboard.base.view_model_id())
@@ -1609,6 +1600,12 @@ impl NestedArtboard {
         self.file.clone()
     }
 
+    pub fn foreign_file(&self) -> Option<RuntimeFileWeakHandle> {
+        let host = self.file.upgrade()?;
+        let source = self.mounted_bindable.as_ref()?.file()?.upgrade()?;
+        (!source.ptr_eq(&host)).then(|| source.downgrade())
+    }
+
     pub fn set_file(&mut self, value: RuntimeFileWeakHandle) {
         self.file = value;
     }
@@ -1818,6 +1815,10 @@ impl ArtboardHost for NestedArtboard {
 
     fn file(&self) -> Option<RuntimeFileWeakHandle> {
         self.file.upgrade().map(|_| self.file.clone())
+    }
+
+    fn foreign_file(&self) -> Option<RuntimeFileWeakHandle> {
+        NestedArtboard::foreign_file(self)
     }
 
     fn host_component(&self) -> Option<CoreHandle> {

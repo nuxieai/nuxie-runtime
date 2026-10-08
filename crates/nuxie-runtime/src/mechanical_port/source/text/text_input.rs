@@ -135,21 +135,59 @@ impl TextInput {
     pub fn hit_test(&self) -> Option<CoreHandle> {
         None
     }
+    /// The scroll viewport the field is laid out in, if any.
+    fn field_viewport(&self) -> Option<CoreHandle> {
+        self.scroll_constraint.as_ref()?.with(|scroll| {
+            let scroll = scroll.as_scroll_constraint()?;
+            if !scroll.has_layout_parent() {
+                return None;
+            }
+            let content = scroll.content_handle()?;
+            let parent = content.with(|content| content.component_parent_handle())??;
+            if !parent.with(|parent| parent.as_layout_component().is_some())? {
+                return None;
+            }
+            scroll.viewport_handle()
+        })?
+    }
     pub fn hit_test_point(&mut self, position: Vec2D, skip: bool, primary: bool) -> bool {
-        let mut inverse_world = Mat2D::default();
-        if !self.base.world_transform().invert(&mut inverse_world) {
-            return false;
-        }
-        let mut bounds = self.local_bounds();
-        if !self.layout_width.is_nan() && !self.layout_height.is_nan() {
-            Aabb::expand_to_point(&mut bounds, Vec2D::new(0.0, 0.0));
-            Aabb::expand_to_point(
-                &mut bounds,
-                Vec2D::new(self.layout_width, self.layout_height),
-            );
-        }
-        if !bounds.contains(inverse_world * position) {
-            return false;
+        // The field is the whole viewport when the content hugs its text.
+        // Resolve its bounds live, since its transform can change independently.
+        if let Some(viewport) = self.field_viewport() {
+            let contains = viewport
+                .with(|viewport| {
+                    let viewport = viewport.as_layout_component()?;
+                    let mut inverse_viewport = Mat2D::default();
+                    if !viewport.world_transform().invert(&mut inverse_viewport) {
+                        return Some(false);
+                    }
+                    Some(
+                        viewport
+                            .local_bounds()
+                            .contains(inverse_viewport * position),
+                    )
+                })
+                .flatten()
+                .unwrap_or(false);
+            if !contains {
+                return false;
+            }
+        } else {
+            let mut inverse_world = Mat2D::default();
+            if !self.base.world_transform().invert(&mut inverse_world) {
+                return false;
+            }
+            let mut bounds = self.local_bounds();
+            if !self.layout_width.is_nan() && !self.layout_height.is_nan() {
+                Aabb::expand_to_point(&mut bounds, Vec2D::new(0.0, 0.0));
+                Aabb::expand_to_point(
+                    &mut bounds,
+                    Vec2D::new(self.layout_width, self.layout_height),
+                );
+            }
+            if !bounds.contains(inverse_world * position) {
+                return false;
+            }
         }
         self.base.base.hit_test_point(&position, skip, primary)
     }

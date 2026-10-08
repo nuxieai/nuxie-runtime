@@ -124,7 +124,7 @@ fn active_toolchain_matches_captured_artifacts() -> bool {
 fn pinned_resource_sources_match_generated_batch() {
     assert_eq!(
         fixture_value("current_generation_upstream_commit"),
-        Some("7aa93402a27c800db8a36acc8672612c100ea9b1")
+        Some("625454e362a27bb3168f00cd87e9487f54d39338")
     );
     let expected = fixture_entries("current_source:");
     let lengths = fixture_entries("current_bytes:");

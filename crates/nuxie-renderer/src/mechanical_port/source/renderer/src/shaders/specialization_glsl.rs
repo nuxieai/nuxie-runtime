@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/specialization.glsl.
  *
- * Upstream source revision: c14cb2510071bd4cfa08d52ba5cd44d98c362237
+ * Upstream source revision: 625454e362a27bb3168f00cd87e9487f54d39338
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c14cb2510071bd4cfa08d52ba5cd44d98c362237";
+pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "efbc2e65e159ae25f7cbd0f9859cd4809abafdc37429c87471041b29e2df3781";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 46;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2213;
+    "18528e3c245b10ef0680673d97530e6504fc565396fcf2792b9a2bccbe2e4543";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 48;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2321;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_SPECIALIZATION_GLSL_SOURCE: &str = r###"layout(constant_id = CLIPPING_SPECIALIZATION_IDX) const
@@ -47,6 +47,7 @@ layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
     bool LoadColorFromDstTexture = false;
 layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
     bool VulkanVendorARM = false;
+layout(constant_id = DS_STROKE_SPECIALIZATION_IDX) const bool DSStroke = false;
 
 #define @ENABLE_CLIPPING EnableClipping
 #define @ENABLE_CLIP_RECT EnableClipRect
@@ -64,6 +65,7 @@ layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
 #define @STORE_COLOR_CLEAR StoreColorClear
 #define @LOAD_COLOR_FROM_DST_TEXTURE LoadColorFromDstTexture
 #define @VULKAN_VENDOR_ARM VulkanVendorARM
+#define @DS_STROKE DSStroke
 "###;
 
 /// Stable source aliases.

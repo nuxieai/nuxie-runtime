@@ -45,6 +45,7 @@ mod wasm {
         let mode = match mode {
             "msaa" => RenderMode::Msaa,
             "clockwise-msaa1" => RenderMode::ClockwiseMsaa1,
+            "clockwise-inkbleed" => RenderMode::ClockwiseInkbleed,
             "clockwise-atomic" => RenderMode::ClockwiseAtomic,
             value => {
                 return Err(JsValue::from_str(&format!(

@@ -28,9 +28,10 @@ use std::sync::Arc;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const PLS_PLANE_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 15;
+const SPECIALIZATION_COUNT: usize = 16;
 
 fn shaderPermutationFlags(
+    drawType: DrawType,
     shaderFeatures: ShaderFeatures,
     shaderMiscFlags: ShaderMiscFlags,
     vendorID: u32,
@@ -51,6 +52,7 @@ fn shaderPermutationFlags(
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::storeColorClear)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::loadColorFromDstTexture)),
         u32::from(vendorID == vkutil_decl::ARM),
+        u32::from(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeIsDepthStencilStroke(drawType)),
     ]
 }
 
@@ -181,6 +183,7 @@ pub(crate) fn subpass_index(
         | DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::depthStrokes
+        | DrawType::depthAAStrokes
         | DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
@@ -253,7 +256,7 @@ impl DrawPipelineVulkan {
         );
 
         let shaderPermutationFlags =
-            shaderPermutationFlags(props.shaderFeatures, props.shaderMiscFlags, vendorID);
+            shaderPermutationFlags(props.drawType, props.shaderFeatures, props.shaderMiscFlags, vendorID);
         let permutationMapEntries: [vk::SpecializationMapEntry; SPECIALIZATION_COUNT] =
             std::array::from_fn(|i| vk::SpecializationMapEntry {
                 constant_id: i as u32,
@@ -415,8 +418,7 @@ impl DrawPipelineVulkan {
         let (vertexInputState, inputAssemblyState) = match props.drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
-            | DrawType::outerCurvePatches
-            | DrawType::depthStrokes => (
+            | DrawType::outerCurvePatches => (
                 &*layout::PATH_VERTEX_INPUT_STATE,
                 &*layout::INPUT_ASSEMBLY_TRIANGLE_LIST,
             ),
@@ -431,7 +433,9 @@ impl DrawPipelineVulkan {
             | DrawType::stencilMidpointFans
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
-            | DrawType::stencilMidpointFanCover => (
+            | DrawType::stencilMidpointFanCover
+            | DrawType::depthStrokes
+            | DrawType::depthAAStrokes => (
                 &*layout::EMPTY_VERTEX_INPUT_STATE,
                 &*layout::INPUT_ASSEMBLY_TRIANGLE_LIST,
             ),
@@ -552,7 +556,7 @@ mod tests {
             (ShaderFeatures::ENABLE_DITHER, 7),
             (ShaderFeatures::ENABLE_MODULATED_IMAGE, 8),
         ] {
-            let values = shaderPermutationFlags(feature, ShaderMiscFlags::none, 0);
+            let values = shaderPermutationFlags(DrawType::midpointFanPatches, feature, ShaderMiscFlags::none, 0);
             assert_eq!(values[expectedIndex], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }
@@ -563,17 +567,23 @@ mod tests {
             (ShaderMiscFlags::storeColorClear, 12),
             (ShaderMiscFlags::loadColorFromDstTexture, 13),
         ] {
-            let values = shaderPermutationFlags(ShaderFeatures::NONE, flag, 0);
+            let values = shaderPermutationFlags(DrawType::midpointFanPatches, ShaderFeatures::NONE, flag, 0);
             assert_eq!(values[expectedIndex], 1);
             assert_eq!(values.iter().sum::<u32>(), 1);
         }
         let values = shaderPermutationFlags(
+            DrawType::midpointFanPatches,
             ShaderFeatures::NONE,
             ShaderMiscFlags::none,
             vkutil_decl::ARM,
         );
         assert_eq!(values[14], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
+        for draw_type in [DrawType::depthStrokes, DrawType::depthAAStrokes] {
+            let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
+            assert_eq!(values[15], 1);
+            assert_eq!(values.iter().sum::<u32>(), 1);
+        }
     }
 
     #[test]

@@ -1,64 +1,64 @@
 #ifdef VERTEX
-c1(x3) K(0,c,PC);d1 c1(K3) K(1,c,QC);d1 c1(B1) K(M9,e,YB);K(N9,e,SB);K(O9,e,PB);K(P9,uint,ZB);K(Q9,uint,AC);K(R9,uint,BC);K(S9,uint,LC);K(aa,e,HC);d1
+f1(B3) K(0,c,PC);g1 f1(S3) K(1,c,QC);g1 f1(D1) K(ja,e,ZB);K(ka,e,SB);K(la,e,PB);K(ma,uint,AC);K(na,uint,BC);K(oa,uint,CC);K(pa,uint,LC);K(wa,e,HC);g1
 #endif
-l2 E0 V(0,c,V5);
+w2 F0 X(0,c,Z5);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT V(1,d,Z3);
+OPTIONALLY_FLAT X(1,d,e4);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-E0 V(2,e,R0);
+F0 X(2,e,W0);
 #endif
-OPTIONALLY_FLAT V(3,i,R1);
+OPTIONALLY_FLAT X(3,i,U1);
 #ifdef ENABLE_ADVANCED_BLEND
-Z2 V(4,Q,I1);
+g3 X(4,P,K1);
 #endif
-e2
+l2
 #ifdef VERTEX
-k4 l4 T6(RB,x3,y3,K3,L3,B1,h0,G){L(G,y3,PC,c);L(G,L3,QC,c);L(r,h0,YB,e);L(r,h0,SB,e);L(r,h0,PB,e);L(r,h0,ZB,uint);L(r,h0,AC,uint);L(r,h0,BC,uint);L(r,h0,LC,uint);L(r,h0,HC,e);T(V5,c);
+o4 p4 c7(RB,B3,C3,S3,x2,D1,j0,F){L(F,C3,PC,c);L(F,x2,QC,c);L(r,j0,ZB,e);L(r,j0,SB,e);L(r,j0,PB,e);L(r,j0,AC,uint);L(r,j0,BC,uint);L(r,j0,CC,uint);L(r,j0,LC,uint);L(r,j0,HC,e);V(Z5,c);
 #ifdef ENABLE_CLIPPING
-T(Z3,d);
+V(e4,d);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-T(R0,e);
+V(W0,e);
 #endif
-T(R1,i);
+V(U1,i);
 #ifdef ENABLE_ADVANCED_BLEND
-T(I1,Q);
+V(K1,P);
 #endif
-c k0=M0(n1(YB),PC)+PB.xy;V5=QC*HC.zw+HC.xy;
+c i0=y0(p1(ZB),PC)+PB.xy;Z5=QC*HC.zw+HC.xy;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){Z3=l6(AC,j.U4);}
+if(ENABLE_CLIPPING){e4=a9(BC,j.p6);}
 #endif
 #ifdef ENABLE_CLIP_RECT
 if(ENABLE_CLIP_RECT){
 #ifndef RENDER_MODE_DEPTH_STENCIL
-R0=h8(n1(SB),PB.zw,k0 Z4);
+W0=A8(p1(SB),PB.zw,i0 e5);
 #else
-Ha(n1(SB),PB.zw,k0 Z4);
+db(p1(SB),PB.zw,i0 e5);
 #endif
 }
 #endif
-e I=I3(k0);
+e I=Q3(i0);
 #ifdef POST_INVERT_Y
 I.y=-I.y;
 #endif
 #ifdef RENDER_MODE_DEPTH_STENCIL
-I.z=H8(LC,0xffu);
+I.z=c9(LC,0xffu);
 #endif
-R1=unpackUnorm4x8(ZB);
+U1=unpackUnorm4x8(AC);
 #ifdef ENABLE_ADVANCED_BLEND
-I1=Q1(BC);
+K1=T1(CC);
 #endif
-Z(V5);
+Z(Z5);
 #ifdef ENABLE_CLIPPING
-Z(Z3);
+Z(e4);
 #endif
 #if defined(ENABLE_CLIP_RECT)&&!defined(RENDER_MODE_DEPTH_STENCIL)
-Z(R0);
+Z(W0);
 #endif
-Z(R1);
+Z(U1);
 #ifdef ENABLE_ADVANCED_BLEND
-Z(I1);
+Z(K1);
 #endif
-x1(I);}
+y1(I);}
 #endif

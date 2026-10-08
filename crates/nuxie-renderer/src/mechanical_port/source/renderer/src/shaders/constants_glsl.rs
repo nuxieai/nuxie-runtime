@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 8398db3199cea4cd3eba53747aac562b5c0df3da
+ * Upstream source revision: 625454e362a27bb3168f00cd87e9487f54d39338
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "8398db3199cea4cd3eba53747aac562b5c0df3da";
+pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "4a3869ab3db7b4563e81f4dc827a0df96e685532f292d6e97515b4b9084c591a";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 398;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 17095;
+    "61e8555042a647ec9e263f428a53504cf3bbc5188a51e82f0e546ef5f95a15c0";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 418;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18278;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -35,7 +35,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE                             \
     (OUTER_CUBIC_PATCH_SEGMENT_SPAN + 1u)
 
-// depthStencil fills use repeating index patterns instead of instancing.
+// depthStencil draws use repeating index patterns instead of instancing.
 // Per-patch vertex IDs are aligned on pow2 strides, specifically so the
 // shader can decode gl_VertexID without divides and mods. (Using integer
 // division costs 10% total framerate on PowerVR and 3% on Adreno.)
@@ -44,21 +44,40 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 // and the beginning of another.
 #define DS_MIDPOINT_FAN_STRIDE_LOG2 4
 #define DS_OUTER_CUBIC_STRIDE_LOG2 5
-#define DS_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC)                                   \
+#define DS_FILL_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC)                              \
     ((IS_OUTER_CUBIC) ? DS_OUTER_CUBIC_STRIDE_LOG2                             \
                       : DS_MIDPOINT_FAN_STRIDE_LOG2)
-#define DS_PATCH_STRIDE(IS_OUTER_CUBIC)                                        \
-    (1 << DS_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC))
-#define DS_MIDPOINT_VERTEX_ID (int(MIDPOINT_FAN_PATCH_SEGMENT_SPAN) + 1)
+#define DS_FILL_PATCH_STRIDE(IS_OUTER_CUBIC)                                   \
+    (1 << DS_FILL_PATCH_STRIDE_LOG2(IS_OUTER_CUBIC))
+#define DS_STROKE_STRIDE_LOG2 5
+#define DS_AA_STROKE_STRIDE_LOG2 6
+#define DS_STROKE_PATCH_STRIDE_LOG2(IS_AA_STROKE)                              \
+    ((IS_AA_STROKE) ? DS_AA_STROKE_STRIDE_LOG2 : DS_STROKE_STRIDE_LOG2)
+#define DS_STROKE_PATCH_STRIDE(IS_AA_STROKE)                                   \
+    (1 << DS_STROKE_PATCH_STRIDE_LOG2(IS_AA_STROKE))
+// Normal strokes are a single triangle strip with 2 lanes of vertices (top,
+// bottom).
+// AA strokes have an AA band on top and bottom, making 4 lanes of vertices and
+// 3 bands of triangle strips (top AA ramp, body, bottom AA ramp).
+#define DS_STROKE_LANES_PER_SPOKE_LOG2(IS_AA_STROKE) ((IS_AA_STROKE) ? 2 : 1)
 
-// depthStencil fills encode some attributes as flags on gl_VertexID, in order
+// One vertex of the midpointFan pattern is reserved for the contour's midpoint
+// rather than tessellation points.
+#define DS_MIDPOINT_VERTEX_IDX (int(MIDPOINT_FAN_PATCH_SEGMENT_SPAN) + 1)
+
+// depthStencil draws encode some attributes as flags on gl_VertexID, in order
 // to avoid input attribs.
 // NOTE: vertexIDs are 16-bit in the index buffer, but they get offset per draw
 // into the tessellation texture. So these flags have to live above the entire
-// tessellation range. Hence a shift of 29 and not 16.
-#define VERTEX_FLAGS_SHIFT 29
-#define VERTEX_FLAG_DISABLE_COLOR_WRITE (1 << VERTEX_FLAGS_SHIFT)
-#define VERTEX_FLAG_OUTER_CUBIC (1 << (VERTEX_FLAGS_SHIFT + 1))
+// tessellation range. Hence a shift of 28 and not 16.
+#define VERTEX_FLAGS_SHIFT 28
+#define VERTEX_FLAG_DISABLE_COLOR_WRITE (0x1 << VERTEX_FLAGS_SHIFT)
+#define VERTEX_FLAG_OUTER_CUBIC_FILL (0x2 << VERTEX_FLAGS_SHIFT)
+// Strokes alias the outerCubic bit bc stroke vs. fill is decided by spec const.
+#define VERTEX_FLAG_AA_STROKE VERTEX_FLAG_OUTER_CUBIC_FILL
+// depthAAstrokes render in two passes: a depth-only pass followed by color.
+// We select the pass by vertex flags rather than pipeline state.
+#define VERTEX_FLAG_STROKE_DEPTH_PASS (0x4 << VERTEX_FLAGS_SHIFT)
 
 #define GRAD_TEXTURE_WIDTH float(512)
 #define GRAD_TEXTURE_INVERSE_WIDTH float(0.001953125)
@@ -390,7 +409,8 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 12
 #define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 13
 #define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 14
-#define SPECIALIZATION_COUNT 15
+#define DS_STROKE_SPECIALIZATION_IDX 15
+#define SPECIALIZATION_COUNT 16
 
 // When rendering to an r32i feather atlas, use 16:16 fixed point.
 #define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
@@ -438,20 +458,35 @@ pub const OUTER_CUBIC_PATCH_SEGMENT_SPAN: u32 = 16;
 pub const OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE: u32 = OUTER_CUBIC_PATCH_SEGMENT_SPAN + 1;
 pub const DS_MIDPOINT_FAN_STRIDE_LOG2: u32 = 4;
 pub const DS_OUTER_CUBIC_STRIDE_LOG2: u32 = 5;
-pub const fn DS_PATCH_STRIDE_LOG2(outer_cubic: bool) -> u32 {
+pub const fn DS_FILL_PATCH_STRIDE_LOG2(outer_cubic: bool) -> u32 {
     if outer_cubic {
         DS_OUTER_CUBIC_STRIDE_LOG2
     } else {
         DS_MIDPOINT_FAN_STRIDE_LOG2
     }
 }
-pub const fn DS_PATCH_STRIDE(outer_cubic: bool) -> u32 {
-    1 << DS_PATCH_STRIDE_LOG2(outer_cubic)
+pub const fn DS_FILL_PATCH_STRIDE(outer_cubic: bool) -> u32 {
+    1 << DS_FILL_PATCH_STRIDE_LOG2(outer_cubic)
 }
-pub const DS_MIDPOINT_VERTEX_ID: i32 = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 1;
-pub const VERTEX_FLAGS_SHIFT: i32 = 29;
+pub const DS_STROKE_STRIDE_LOG2: u32 = 5;
+pub const DS_AA_STROKE_STRIDE_LOG2: u32 = 6;
+pub const fn DS_STROKE_PATCH_STRIDE_LOG2(aa_stroke: bool) -> u32 {
+    if aa_stroke { DS_AA_STROKE_STRIDE_LOG2 } else { DS_STROKE_STRIDE_LOG2 }
+}
+pub const fn DS_STROKE_PATCH_STRIDE(aa_stroke: bool) -> u32 {
+    1 << DS_STROKE_PATCH_STRIDE_LOG2(aa_stroke)
+}
+pub const fn DS_STROKE_LANES_PER_SPOKE_LOG2(aa_stroke: bool) -> u32 {
+    if aa_stroke { 2 } else { 1 }
+}
+pub const DS_MIDPOINT_VERTEX_IDX: i32 = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 1;
+pub const VERTEX_FLAGS_SHIFT: i32 = 28;
 pub const VERTEX_FLAG_DISABLE_COLOR_WRITE: i32 = 1 << VERTEX_FLAGS_SHIFT;
-pub const VERTEX_FLAG_OUTER_CUBIC: i32 = 1 << (VERTEX_FLAGS_SHIFT + 1);
+pub const VERTEX_FLAG_OUTER_CUBIC_FILL: i32 = 2 << VERTEX_FLAGS_SHIFT;
+pub const VERTEX_FLAG_AA_STROKE: i32 = VERTEX_FLAG_OUTER_CUBIC_FILL;
+pub const VERTEX_FLAG_STROKE_DEPTH_PASS: i32 = 4 << VERTEX_FLAGS_SHIFT;
+pub const DS_STROKE_SPECIALIZATION_IDX: u32 = 15;
+pub const SPECIALIZATION_COUNT: u32 = 16;
 pub const PAINT_FLAG_LAYER_MASK: u32 = 0x1000;
 pub const PAINT_LAYER_MASK_MODE_SHIFT: u32 = 13;
 pub const PAINT_LAYER_MASK_MODE_MASK: u32 = 0x6000;

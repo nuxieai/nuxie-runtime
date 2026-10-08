@@ -110,8 +110,6 @@ embedded_shaders!(
     draw_depthstencil_path_frag,
     draw_depthstencil_path_fixedcolor_frag,
     draw_depthstencil_path_msaa_frag,
-    draw_depthstencil_fill_vert,
-    draw_depthstencil_fill_noclipdistance_vert,
     draw_depthstencil_path_noclipdistance_vert,
     draw_depthstencil_triangles_nocolor_vert,
     draw_depthstencil_triangles_nocolor_frag,
@@ -251,8 +249,6 @@ fn visit_hotload_shaders(
     read!(draw_depthstencil_path_frag);
     read!(draw_depthstencil_path_fixedcolor_frag);
     read!(draw_depthstencil_path_msaa_frag);
-    read!(draw_depthstencil_fill_vert);
-    read!(draw_depthstencil_fill_noclipdistance_vert);
     read!(draw_depthstencil_triangles_nocolor_vert);
     read!(draw_depthstencil_triangles_nocolor_frag);
     read!(draw_depthstencil_triangles_nocolor_fixedcolor_frag);

@@ -283,6 +283,12 @@ extern "C" int rive_ffi_context_begin_frame_mode_metrics(
         desc.msaaSampleCount = 1;
         desc.clockwiseFillOverride = true;
     }
+    else if (mode == 4)
+    {
+        desc.msaaSampleCount = 1;
+        desc.clockwiseFillOverride = true;
+        desc.inkbleedOverride = true;
+    }
     else if (mode != 0)
     {
         return 0;

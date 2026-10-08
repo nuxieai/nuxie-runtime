@@ -98,6 +98,7 @@ fn select_shader_pair(
             },
             DrawType::imageRect
             | DrawType::depthStrokes
+            | DrawType::depthAAStrokes
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -181,6 +182,7 @@ fn select_shader_pair(
                 }
             }
             DrawType::depthStrokes
+            | DrawType::depthAAStrokes
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -253,6 +255,7 @@ fn select_shader_pair(
                 },
                 DrawType::imageRect
                 | DrawType::depthStrokes
+                | DrawType::depthAAStrokes
                 | DrawType::stencilMidpointFanBorrowedCoverage
                 | DrawType::stencilDynamicMidpointFans
                 | DrawType::stencilDynamicOuterCubics
@@ -362,6 +365,7 @@ fn select_shader_pair(
                 },
                 DrawType::imageRect
                 | DrawType::depthStrokes
+                | DrawType::depthAAStrokes
                 | DrawType::stencilMidpointFanBorrowedCoverage
                 | DrawType::stencilDynamicMidpointFans
                 | DrawType::stencilDynamicOuterCubics
@@ -390,6 +394,7 @@ fn select_shader_pair(
             | DrawType::stencilOuterCubicCover
             | DrawType::stencilOuterCubics
             | DrawType::depthStrokes
+            | DrawType::depthAAStrokes
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -397,16 +402,10 @@ fn select_shader_pair(
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
             | DrawType::stencilMidpointFanCover => ShaderPair {
-                vert: if drawType == DrawType::depthStrokes {
-                    if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
-                        &spirv::draw_depthstencil_path_vert
-                    } else {
-                        &spirv::draw_depthstencil_path_noclipdistance_vert
-                    }
-                } else if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
-                    &spirv::draw_depthstencil_fill_vert
+                vert: if feature_is_set(shaderFeatures, ShaderFeatures::ENABLE_CLIP_RECT) {
+                    &spirv::draw_depthstencil_path_vert
                 } else {
-                    &spirv::draw_depthstencil_fill_noclipdistance_vert
+                    &spirv::draw_depthstencil_path_noclipdistance_vert
                 },
                 frag: if fixedFunctionColorOutput {
                     &spirv::draw_depthstencil_path_fixedcolor_frag
@@ -655,13 +654,12 @@ mod tests {
             DrawType::stencilMidpointFanWinding,
             DrawType::stencilMidpointFanCover,
             DrawType::depthStrokes,
+            DrawType::depthAAStrokes,
         ] {
             for clip_rect in [false, true] {
-                let vert = match (draw_type == DrawType::depthStrokes, clip_rect) {
-                    (true, true) => &spirv::draw_depthstencil_path_vert,
-                    (true, false) => &spirv::draw_depthstencil_path_noclipdistance_vert,
-                    (false, true) => &spirv::draw_depthstencil_fill_vert,
-                    (false, false) => &spirv::draw_depthstencil_fill_noclipdistance_vert,
+                let vert = match clip_rect {
+                    true => &spirv::draw_depthstencil_path_vert,
+                    false => &spirv::draw_depthstencil_path_noclipdistance_vert,
                 };
                 for (misc, frag) in [
                     (ShaderMiscFlags::none, &spirv::draw_depthstencil_path_frag),

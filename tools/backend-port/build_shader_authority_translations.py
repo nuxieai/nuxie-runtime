@@ -79,8 +79,8 @@ def render(repo: Path, upstream: Path) -> list[Output]:
             "ownership_unit": constant("OWNERSHIP_UNIT"),
             "target_path": str(target.relative_to(repo)),
         })
-    if len(shader_owners) != 81:
-        raise ValueError(f"pinned shader source owner count drift: {len(shader_owners)} != 81")
+    if len(shader_owners) != 83:
+        raise ValueError(f"pinned shader source owner count drift: {len(shader_owners)} != 83")
     outputs: list[Output] = []
     inventory_lines = [
         "//! @generated exact shader source-owner module inventory.",

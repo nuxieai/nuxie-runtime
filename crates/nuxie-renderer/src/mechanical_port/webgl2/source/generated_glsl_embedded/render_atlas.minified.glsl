@@ -1,63 +1,63 @@
 #ifdef BB
-c1(d0) K(0,e,WB);K(1,e,XB);d1
+f1(f0) K(0,e,XB);K(1,e,YB);g1
 #endif
-l2 E0 V(0,e,S);e2
+w2 F0 X(0,e,S);l2
 #ifdef BB
-w1(YF,d0,D,G,r){L(G,D,WB,e);L(G,D,XB,e);T(S,e);e I;uint a0;c k0;if(L9(WB,XB,r,a0,k0,S H3)){M W3=p0(LB,a0*4u+2u);O E7=uintBitsToFloat(W3.yzw);k0=k0*E7.x+E7.yz;I=E8(k0,j.Vd.x,j.Vd.y);
+x1(ZF,f0,B,F,r){L(F,B,XB,e);L(F,B,YB,e);V(S,e);e I;uint c0;c i0;if(ia(XB,YB,r,c0,i0,S P3)){O Z3=p0(KB,c0*4u+2u);M W7=uintBitsToFloat(Z3.yzw);i0=i0*W7.x+W7.yz;I=X8(i0,j.Ae.x,j.Ae.y);
 #ifdef MC
 I.y=-I.y;
 #endif
-}else{I=e(j.a3,j.a3,j.a3,j.a3);}Z(S);x1(I);}
+}else{I=e(j.h3,j.h3,j.h3,j.h3);}Z(S);y1(I);}
 #endif
-#ifdef FB
+#ifdef EB
 #ifdef NC
-f d K6(e U,bool ii S3){d n=p8(U k1);if(!ii) n=-n;return n;}
+f d T6(e T,bool Qi a4){d l=K8(T n1);if(!Qi) l=-l;return l;}
 #endif
-#ifdef YD
-layout(location=0) inout M w0;
+#ifdef ZD
+layout(location=0) inout O w0;
 #ifdef NC
-void main(){float n=uintBitsToFloat(w0.x);n+=K6(S,gl_FrontFacing k1);w0.x=floatBitsToUint(n);}
+void main(){float l=uintBitsToFloat(w0.x);l+=T6(S,gl_FrontFacing n1);w0.x=floatBitsToUint(l);}
 #endif
 #ifdef SC
-void main(){float n=uintBitsToFloat(w0.x);n=max(n,N4(S));w0.x=floatBitsToUint(n);}
+void main(){float l=uintBitsToFloat(w0.x);l=max(l,R4(S));w0.x=floatBitsToUint(l);}
 #endif
-#elif defined(ZD)
-__pixel_localEXT c2{layout(r32f) float w0;};
+#elif defined(AE)
+__pixel_localEXT i2{layout(r32f) float w0;};
 #ifdef NC
-void main(){w0+=K6(S,gl_FrontFacing k1);}
+void main(){w0+=T6(S,gl_FrontFacing n1);}
 #endif
 #ifdef SC
-void main(){w0=max(w0,N4(S));}
+void main(){w0=max(w0,R4(S));}
 #endif
 #elif defined(EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE)
 layout(binding=0,r32ui) uniform highp upixelLocalANGLE w0;
 #ifdef NC
-void main(){float n=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);n+=K6(S,gl_FrontFacing k1);pixelLocalStoreANGLE(w0,M(floatBitsToUint(n)));}
+void main(){float l=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);l+=T6(S,gl_FrontFacing n1);pixelLocalStoreANGLE(w0,O(floatBitsToUint(l)));}
 #endif
 #ifdef SC
-void main(){float n=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);n=max(n,N4(S));pixelLocalStoreANGLE(w0,M(floatBitsToUint(n)));}
+void main(){float l=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);l=max(l,R4(S));pixelLocalStoreANGLE(w0,O(floatBitsToUint(l)));}
 #endif
-#elif defined(AE)
-layout(binding=0,r32i) uniform highp coherent iimage2D p9;ivec2 re(){return ivec2(floor(f0));}int se(float n){return int(n*Cd);}
+#elif defined(BE)
+layout(binding=0,r32i) uniform highp coherent iimage2D R9;ivec2 Ve(){return ivec2(floor(d0));}int We(float l){return int(l*be);}
 #ifdef NC
-void main(){int n=se(K6(S,gl_FrontFacing k1));imageAtomicAdd(p9,re(),n);}
+void main(){int l=We(T6(S,gl_FrontFacing n1));imageAtomicAdd(R9,Ve(),l);}
 #endif
 #ifdef SC
-void main(){int n=se(N4(S));imageAtomicMax(p9,re(),n);}
+void main(){int l=We(R4(S));imageAtomicMax(R9,Ve(),l);}
 #endif
-#elif defined(AF)
+#elif defined(BF)
 #ifdef NC
-G6(i,BF){q(S,e);d n=K6(S,H6 k1);if(abs(n)>Eg-1e-3){P2(n>.0?I0(.0,.0,1./255.,.0):I0(.0,.0,.0,1./255.));}else{n*=1./Ta;P2(I0(max(n,.0),max(-n,.0),.0,.0));}}
+Q6(i,CF){q(S,e);d l=T6(S,R6 n1);if(abs(l)>ih-1e-3){K2(l>.0?H0(.0,.0,1./255.,.0):H0(.0,.0,.0,1./255.));}else{l*=1./sb;K2(H0(max(l,.0),max(-l,.0),.0,.0));}}
 #endif
 #ifdef SC
-j3(i,CF){q(S,e);d n=N4(S k1);n*=1./Ta;P2(I0(n,.0,.0,.0));}
+W2(i,DF){q(S,e);d l=R4(S n1);l*=1./sb;K2(H0(l,.0,.0,.0));}
 #endif
 #else
 #ifdef NC
-G6(float,BF){q(S,e);P2(K6(S,H6 k1));}
+Q6(float,CF){q(S,e);K2(T6(S,R6 n1));}
 #endif
 #ifdef SC
-j3(float,CF){q(S,e);P2(N4(S k1));}
+W2(float,DF){q(S,e);K2(R4(S n1));}
 #endif
 #endif
 #endif

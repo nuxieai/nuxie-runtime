@@ -24,10 +24,10 @@ use super::webgpu_cpp_decl::{
     SurfaceConfiguration, SurfaceTexture, TextureViewDimension,
 };
 use super::webgpu_decl::{
-    WGPUBufferDescriptor, WGPUExtent3D, WGPUFeatureLevel_Undefined, WGPUFuture, WGPUFutureWaitInfo,
-    WGPUOrigin3D, WGPURequestAdapterOptions, WGPUStringView, WGPUTexelCopyBufferInfo,
-    WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo, WGPUTextureAspect_All,
-    WGPUTextureDescriptor, WGPU_STRLEN,
+    WGPU_STRLEN, WGPUBufferDescriptor, WGPUExtent3D, WGPUFeatureLevel_Undefined, WGPUFuture,
+    WGPUFutureWaitInfo, WGPUOrigin3D, WGPURequestAdapterOptions, WGPUStringView,
+    WGPUTexelCopyBufferInfo, WGPUTexelCopyBufferLayout, WGPUTexelCopyTextureInfo,
+    WGPUTextureAspect_All, WGPUTextureDescriptor,
 };
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use super::webgpu_decl::{WGPUSurfaceDescriptor, WGPUTextureViewDescriptor};
@@ -547,14 +547,20 @@ impl ExactSourceBackend for WebGpuProductBackend {
     fn ore_target_desc(&self) -> nuxie_ore_metal::context::TargetDesc {
         let target = unsafe { &*self.target.get() };
         match target.framebufferFormat() {
-            TextureFormat::RGBA8Unorm => nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, false),
-            TextureFormat::BGRA8Unorm => nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, true),
+            TextureFormat::RGBA8Unorm => {
+                nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, false)
+            }
+            TextureFormat::BGRA8Unorm => {
+                nuxie_ore_metal::context::TargetDesc::color8(self.width, self.height, true)
+            }
             _ => Default::default(),
         }
     }
 
     fn ore_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
-        if self.ore_target_desc().width == 0 { return None; }
+        if self.ore_target_desc().width == 0 {
+            return None;
+        }
         Some(nuxie_ore_metal::context::RenderTargetInfo {
             target: self.target.get().cast(),
             width: self.width,
@@ -566,12 +572,13 @@ impl ExactSourceBackend for WebGpuProductBackend {
     fn set_target_preserved(&mut self, preserved: bool) {
         self.target_preserved = preserved;
         if self.active_frame {
-            unsafe { Pin::get_unchecked_mut(self.context_pin()) }.m_frame_descriptor.loadAction =
-                if preserved {
-                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
-                } else {
-                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
-                };
+            unsafe { Pin::get_unchecked_mut(self.context_pin()) }
+                .m_frame_descriptor
+                .loadAction = if preserved {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
+            } else {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
+            };
         }
     }
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
@@ -656,6 +663,11 @@ impl ExactSourceBackend for WebGpuProductBackend {
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
+            }
+            RenderMode::ClockwiseInkbleed => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+                descriptor.inkbleedOverride = true;
             }
         }
         unsafe { Pin::get_unchecked_mut(self.context_pin()) }.beginFrameExecutable(&descriptor);

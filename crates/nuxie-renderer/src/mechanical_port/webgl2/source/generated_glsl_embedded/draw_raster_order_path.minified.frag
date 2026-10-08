@@ -1,93 +1,93 @@
-#ifdef FB
-S1 B0(K2,n0);o1(c3,m0);B0(o6,C4);o1(U6,Q7);T1 U1(IB){q(a1,e);
+#ifdef EB
+V1 C0(U2,n0);q1(i3,m0);C0(w6,G4);q1(d7,j8);W1 Y1(IB){q(O0,e);
 #ifdef GB
-q(v1,O);
+q(V0,M);
 #endif
 #ifdef DB
-q(m1,d);
+q(o1,d);
 #else
-q(S,G2);
+q(S,Q2);
 #endif
-q(F0,d);
-#ifdef A
-q(l1,C);
+q(G0,d);
+#ifdef N
+q(j2,D);
 #endif
 #ifdef AB
-q(R0,e);
+q(W0,e);
 #endif
-#ifdef N
-q(Q0,d);
+#ifdef H
+q(P0,d);
 #endif
 #if!defined(DB)
-E2;
+O2;
 #endif
-C d5=unpackHalf2x16(h1(Q7));d E9=d5.y;d w0=E9==F0?d5.x:H0(.0);
+D k5=unpackHalf2x16(l1(j8));d ba=k5.y;d w0=ba==G0?k5.x:I0(.0);
 #ifdef DB
-w0+=m1;a2(Q7);
+w0+=o1;h2(j8);
 #else
-w0=aj(w0,S k1);j1(Q7,packHalf2x16(H2(w0,F0)));
+w0=Hj(w0,S n1);m1(j8,packHalf2x16(R2(w0,G0)));
 #endif
-d n;
-#ifdef GE
-if(GE){n=Ba(w0,H0(.0),H0(1.));}else
+d l;
+#ifdef HE
+if(HE){l=Xa(w0,I0(.0),I0(1.));}else
 #endif
-{n=abs(w0);
+{l=abs(w0);
 #ifdef XC
-if(XC&&F0<.0){n=1.-H0(abs(fract(n*.5)*2.+-1.));}
+if(XC&&G0<.0){l=1.-I0(abs(fract(l*.5)*2.+-1.));}
 #endif
-n=min(n,H0(1.));}
-#ifdef A
-if(A&&l1.x<.0){d X0=-l1.x;
-#ifdef AD
-if(AD){d F4=l1.y;if(F4!=.0){C T0=unpackHalf2x16(h1(m0));d P6=T0.y;d H4;if(P6!=X0){H4=P6==F4?T0.x:.0;
+l=min(l,I0(1.));}
+#ifdef N
+if(N&&j2.x<.0){d z1=-j2.x;
+#ifdef CD
+if(CD){d a6=j2.y;if(a6!=.0){D X0=unpackHalf2x16(l1(m0));d Y6=X0.y;d K4;if(Y6!=z1){K4=Y6==a6?X0.x:.0;
 #ifndef DB
-y0(C4,I0(H4,.0,.0,.0));
+z0(G4,H0(K4,.0,.0,.0));
 #endif
-}else{H4=N0(C4).x;
+}else{K4=R0(G4).x;
 #ifndef DB
-D2(C4);
+N2(G4);
 #endif
-}n=min(n,H4);}}
+}l=min(l,K4);}}
 #endif
-j1(m0,packHalf2x16(H2(n,X0)));D2(n0);}else
+m1(m0,packHalf2x16(R2(l,z1)));N2(n0);}else
 #endif
 {
-#ifdef A
-if(A){d X0=l1.x;if(X0!=.0){C T0=unpackHalf2x16(h1(m0));d P6=T0.y;n=(P6==X0)?min(T0.x,n):H0(.0);}}
+#ifdef N
+if(N){d z1=j2.x;if(z1!=.0){D X0=unpackHalf2x16(l1(m0));d Y6=X0.y;l=(Y6==z1)?min(X0.x,l):I0(.0);}}
 #endif
 #ifdef AB
-if(AB){d m5=w3(v5(R0));n=clamp(m5,H0(.0),n);}
+if(AB){d r5=A3(T4(W0));l=clamp(r5,I0(.0),l);}
 #endif
-i p=X7(
+i n=o8(
 #ifdef GB
-v1,
+V0,
 #endif
-#ifdef N
-k3(Q0),
+#ifdef H
+X2(P0),
 #endif
-a1 e3);i J1;if(E9!=F0){J1=N0(n0);
+O0 l3);i A1;if(ba!=G0){A1=R0(n0);
 #ifndef DB
-y0(C4,J1);
+z0(G4,A1);
 #endif
-}else{J1=N0(C4);
+}else{A1=R0(G4);
 #ifndef DB
-D2(C4);
+N2(G4);
 #endif
-}bool df=false;
+}bool Ef=false;
 #ifdef GB
-df=GB&&v1.z<.0;
+Ef=GB&&V0.z<.0;
 #endif
-if(df){
+if(Ef){
 #ifdef GB
-uint gj=uint(-v1.z-1.);d hj=Yi(p,gj);p=J1*mix(H0(1.),hj,n);y0(n0,p);a2(m0);
+uint Nj=uint(-V0.z-1.);d Oj=Gj(n,Nj);n=A1*mix(I0(1.),Oj,l);z0(n0,n);h2(m0);
 #endif
 }else{
-#ifdef N
-if(N&&Q0!=j6(M4)){p.xyz=h5(p.xyz,J1,k3(Q0))*p.w;}
+#ifdef H
+if(H&&P0!=D5(T3)){n.xyz=L4(n.xyz,A1,X2(P0))*n.w;}
 #endif
-p*=n;d n3=p.w;p+=J1*(1.-n3);p.xyz=M2(p.xyz,n3,f0.xy,j.M3,j.N3);y0(n0,p);a2(m0);}}
+n*=l;d w3=n.w;n+=A1*(1.-w3);n.xyz=I2(n.xyz,w3,d0.xy,j.E3,j.F3);z0(n0,n);h2(m0);}}
 #if!defined(DB)
-F2;
+P2;
 #endif
-h2;}
+p2;}
 #endif

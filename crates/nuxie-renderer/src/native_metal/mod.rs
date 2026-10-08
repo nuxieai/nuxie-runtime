@@ -3258,7 +3258,7 @@ fn select_native_metal_mode(
     requested: Option<RenderMode>,
 ) -> Result<RenderMode, RendererError> {
     match requested {
-        Some(RenderMode::Msaa | RenderMode::ClockwiseMsaa1) => Err(RendererError::Unsupported(
+        Some(RenderMode::Msaa | RenderMode::ClockwiseMsaa1 | RenderMode::ClockwiseInkbleed) => Err(RendererError::Unsupported(
             "native Metal does not implement depth/stencil rendering",
         )),
         Some(RenderMode::RasterOrdering) if !capabilities.supports_raster_ordering => Err(

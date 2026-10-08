@@ -3,13 +3,13 @@
 #[cfg(test)]
 use crate::gpu::TriangleVertex;
 use crate::gpu::{
-    AtlasTransform, BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK,
-    CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG, ContourData, CoverageBufferRange,
+    AtlasTransform, ContourData, CoverageBufferRange, PathData, TessVertexSpan,
+    BEVEL_JOIN_CONTOUR_FLAG, CONTOUR_ID_MASK, CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG,
     EMULATED_STROKE_CAP_CONTOUR_FLAG, FEATHER_JOIN_CONTOUR_FLAG, MAX_PARAMETRIC_SEGMENTS,
     MIDPOINT_FAN_PATCH_SEGMENT_SPAN, MITER_CLIP_JOIN_CONTOUR_FLAG, MITER_REVERT_JOIN_CONTOUR_FLAG,
     NEGATE_PATH_FILL_COVERAGE_FLAG, OUTER_CUBIC_PATCH_SEGMENT_SPAN,
-    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE, PARAMETRIC_PRECISION, POLAR_PRECISION, PathData,
-    RETROFIT_TRI_STRIP_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH, TessVertexSpan,
+    OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE, PARAMETRIC_PRECISION, POLAR_PRECISION,
+    RETROFIT_TRI_STRIP_CONTOUR_FLAG, ROUND_JOIN_CONTOUR_FLAG, TESS_TEXTURE_WIDTH,
 };
 use crate::gr_triangulator::{InnerFanTriangulator, WindingFaces};
 use bytemuck::Zeroable;
@@ -104,11 +104,9 @@ impl InteriorTessellation {
         for triangle in triangles.chunks_exact(3) {
             let weight = i16::try_from(triangle[0].weight_path_id >> 16)
                 .expect("interior triangle winding fits i16");
-            debug_assert!(
-                triangle
-                    .iter()
-                    .all(|vertex| vertex.weight_path_id >> 16 == i32::from(weight))
-            );
+            debug_assert!(triangle
+                .iter()
+                .all(|vertex| vertex.weight_path_id >> 16 == i32::from(weight)));
             if !faces.includes(weight) {
                 continue;
             }
@@ -275,6 +273,7 @@ pub(crate) fn build_stroke_tessellation_with_layout_forced_closed(
     join: StrokeJoin,
     cap: StrokeCap,
     force_closed: bool,
+    depth_stencil: bool,
 ) -> Option<StrokeTessellation> {
     build_stroke_or_feather_tessellation_using_scratch(
         path,
@@ -283,6 +282,7 @@ pub(crate) fn build_stroke_tessellation_with_layout_forced_closed(
         0.0,
         false,
         force_closed,
+        depth_stencil,
         &mut StrokePreparationScratch::default(),
     )
 }
@@ -300,6 +300,7 @@ pub(crate) fn build_stroke_tessellation_with_layout_using_scratch(
         transform,
         Some((thickness, join, cap)),
         0.0,
+        false,
         false,
         false,
         scratch,
@@ -586,6 +587,19 @@ pub(crate) fn clockwise_atomic_coverage_range_from_bounds(
     ))
 }
 
+fn fixed_join_segment_count(depth_stencil: bool, join: StrokeJoin) -> u32 {
+    debug_assert_ne!(join, StrokeJoin::Round);
+    if depth_stencil {
+        match join {
+            StrokeJoin::Bevel => 3,
+            StrokeJoin::Miter => 4,
+            StrokeJoin::Round => unreachable!(),
+        }
+    } else {
+        5
+    }
+}
+
 fn build_stroke_or_feather_tessellation(
     path: &RawPath,
     transform: Mat2D,
@@ -602,6 +616,7 @@ fn build_stroke_or_feather_tessellation(
         paint_feather,
         soften_feather_fill,
         force_closed,
+        false,
         &mut scratch,
     )
 }
@@ -613,6 +628,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
     paint_feather: f32,
     soften_feather_fill: bool,
     force_closed: bool,
+    depth_stencil: bool,
     scratch: &mut StrokePreparationScratch,
 ) -> Option<StrokeTessellation> {
     let matrix_scale = max_matrix_scale(transform);
@@ -670,7 +686,8 @@ fn build_stroke_or_feather_tessellation_using_scratch(
         StrokeCap::Round => (polar_segments_per_radian * std::f32::consts::PI)
             .ceil()
             .min(crate::gpu::MAX_POLAR_SEGMENTS as f32) as u32,
-        StrokeCap::Butt | StrokeCap::Square => 5,
+        StrokeCap::Butt => fixed_join_segment_count(depth_stencil, StrokeJoin::Bevel),
+        StrokeCap::Square => 5,
     };
     let cap_segments = (cap_segments + 2).min(crate::gpu::MAX_POLAR_SEGMENTS);
     let cap_flags = match cap {
@@ -892,7 +909,7 @@ fn build_stroke_or_feather_tessellation_using_scratch(
                             polar_segments_per_radian,
                         )
                     } else {
-                        5
+                        fixed_join_segment_count(depth_stencil, join)
                     };
                     (carried_join_tangent, segment_count, contour_id | join_flags)
                 };
@@ -1167,7 +1184,11 @@ fn append_cubic_at_uniform_rotation(
 fn angle_between(a: Vec2D, b: Vec2D) -> f32 {
     let denominator = (dot(a, a) * dot(b, b)).sqrt();
     let cosine = (dot(a, b) / denominator).clamp(-1.0, 1.0);
-    if cosine.is_nan() { 0.0 } else { cosine.acos() }
+    if cosine.is_nan() {
+        0.0
+    } else {
+        cosine.acos()
+    }
 }
 
 fn feather_max_screen_radius() -> f32 {
@@ -1576,10 +1597,9 @@ mod fast_acos_tests {
             0.867_381,
             0.983_536,
         ] {
-            assert!(
-                x.into_iter()
-                    .any(|value| (value - known_root).abs() < MATH_EPSILON)
-            );
+            assert!(x
+                .into_iter()
+                .any(|value| (value - known_root).abs() < MATH_EPSILON));
         }
     }
 }
@@ -2870,7 +2890,11 @@ fn max_transformed_cubic_second_difference(points: [Vec2D; 4], transform: Mat2D)
     };
     let first = transformed_second_difference(points[0], points[1], points[2]);
     let second = transformed_second_difference(points[1], points[2], points[3]);
-    if first < second { second } else { first }
+    if first < second {
+        second
+    } else {
+        first
+    }
 }
 
 #[cfg(test)]
@@ -3709,12 +3733,10 @@ mod tests {
         let tessellation = build_fill_tessellation(&path, Mat2D::IDENTITY).unwrap();
 
         assert!(tessellation.spans.iter().any(|span| span.y >= 16.0));
-        assert!(
-            tessellation
-                .spans
-                .iter()
-                .all(|span| span.x_range().0 >= -TESS_TEXTURE_WIDTH)
-        );
+        assert!(tessellation
+            .spans
+            .iter()
+            .all(|span| span.x_range().0 >= -TESS_TEXTURE_WIDTH));
     }
 
     #[test]
@@ -4014,10 +4036,8 @@ mod tests {
         assert_eq!(tessellation.contours[0].midpoint, [8.0, 2.0]);
         assert_eq!(tessellation.contours[0].vertex_index0, 64);
         assert_eq!(tessellation.instance_count % 2, 0);
-        assert!(
-            geometry_spans(&tessellation)
-                .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0)
-        );
+        assert!(geometry_spans(&tessellation)
+            .all(|span| span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG != 0));
     }
 
     #[test]
@@ -4039,12 +4059,10 @@ mod tests {
         assert!(tessellation.contours[0].midpoint[0].is_nan());
         assert!(tessellation.contours[0].midpoint[1].is_nan());
         assert_eq!(tessellation.contours[0].vertex_index0, 88);
-        assert!(
-            tessellation
-                .spans
-                .iter()
-                .any(|span| { span.contour_id_with_flags & CONTOUR_ID_MASK == 2 })
-        );
+        assert!(tessellation
+            .spans
+            .iter()
+            .any(|span| { span.contour_id_with_flags & CONTOUR_ID_MASK == 2 }));
     }
 
     #[test]
@@ -4136,13 +4154,11 @@ mod tests {
         .unwrap()
         .tessellation;
         assert_eq!(direct.contours[0].vertex_index0, 8);
-        assert!(
-            direct
-                .spans
-                .iter()
-                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-                .all(|span| span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0)
-        );
+        assert!(direct
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0));
 
         let atlas = build_feather_tessellation_with_direction(
             &path,
@@ -4156,16 +4172,14 @@ mod tests {
         let base = atlas.base_instance * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         let end = base + atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32;
         assert_eq!(atlas.contours[0].vertex_index0, end - 1);
-        assert!(
-            atlas
-                .spans
-                .iter()
-                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-                .all(|span| {
-                    let (x0, x1) = span.x_range();
-                    x0 > x1 && span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0
-                })
-        );
+        assert!(atlas
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| {
+                let (x0, x1) = span.x_range();
+                x0 > x1 && span.contour_id_with_flags & NEGATE_PATH_FILL_COVERAGE_FLAG != 0
+            }));
     }
 
     #[test]
@@ -4241,19 +4255,15 @@ mod tests {
             atlas.instance_count * MIDPOINT_FAN_PATCH_SEGMENT_SPAN as u32
                 > TESS_TEXTURE_WIDTH as u32
         );
-        assert!(
-            atlas
-                .spans
-                .iter()
-                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-                .all(|span| span.x_range().0 > span.x_range().1)
-        );
-        assert!(
-            atlas
-                .spans
-                .iter()
-                .any(|span| span.x_range().1 < 0 || span.x_range().0 > TESS_TEXTURE_WIDTH)
-        );
+        assert!(atlas
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| span.x_range().0 > span.x_range().1));
+        assert!(atlas
+            .spans
+            .iter()
+            .any(|span| span.x_range().1 < 0 || span.x_range().0 > TESS_TEXTURE_WIDTH));
     }
 
     #[test]
@@ -4408,10 +4418,8 @@ mod tests {
         assert_eq!(tessellation.path.stroke_radius, 5.0);
         assert_eq!(tessellation.path.feather_radius, 6.0);
         assert_eq!(tessellation.contours[0].vertex_index0, 8);
-        assert!(
-            geometry_spans(&tessellation)
-                .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 })
-        );
+        assert!(geometry_spans(&tessellation)
+            .all(|span| { span.contour_id_with_flags & FEATHER_JOIN_CONTOUR_FLAG == 0 }));
     }
 
     #[test]
@@ -4436,23 +4444,17 @@ mod tests {
             .iter()
             .position(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
             .unwrap();
-        assert!(
-            tessellation.spans[..first_geometry]
-                .iter()
-                .all(|span| span.contour_id_with_flags == 0)
-        );
-        assert!(
-            tessellation.spans[first_geometry..]
-                .iter()
-                .all(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-        );
-        assert!(
-            tessellation
-                .spans
-                .iter()
-                .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
-                .all(|span| span.segment_counts >> 20 == 5)
-        );
+        assert!(tessellation.spans[..first_geometry]
+            .iter()
+            .all(|span| span.contour_id_with_flags == 0));
+        assert!(tessellation.spans[first_geometry..]
+            .iter()
+            .all(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0));
+        assert!(tessellation
+            .spans
+            .iter()
+            .filter(|span| span.contour_id_with_flags & CONTOUR_ID_MASK != 0)
+            .all(|span| span.segment_counts >> 20 == 5));
     }
 
     #[test]
@@ -4573,12 +4575,10 @@ mod tests {
             assert_eq!(tessellation.spans.len(), 5);
             let geometry = geometry_spans(&tessellation).collect::<Vec<_>>();
             assert_eq!(geometry.len(), 2);
-            assert!(
-                geometry
-                    .iter()
-                    .flat_map(|span| span.points)
-                    .all(|point| point == [20.0, 30.0])
-            );
+            assert!(geometry
+                .iter()
+                .flat_map(|span| span.points)
+                .all(|point| point == [20.0, 30.0]));
             assert_eq!(
                 geometry[0].contour_id_with_flags,
                 1 | flags | EMULATED_STROKE_CAP_CONTOUR_FLAG
@@ -4634,12 +4634,10 @@ mod tests {
         )
         .unwrap();
         assert!(tessellation_texture_height(&tessellation.spans) > 1);
-        assert!(
-            tessellation
-                .spans
-                .iter()
-                .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0)
-        );
+        assert!(tessellation
+            .spans
+            .iter()
+            .all(|span| span.x_range().0 < TESS_TEXTURE_WIDTH && span.x_range().1 > 0));
         assert_post_contour_padding(&tessellation);
     }
 

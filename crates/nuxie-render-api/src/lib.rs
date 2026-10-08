@@ -2915,6 +2915,8 @@ pub struct RenderCanvasFrameMode {
     pub msaa_sample_count: u32,
     pub disable_raster_ordering: bool,
     pub clockwise_fill_override: bool,
+    /// Analytic stroke coverage, effective only with one depth/stencil sample.
+    pub inkbleed: bool,
 }
 
 /// A texture-backed 2D canvas that is also exposed as a normal render image.
@@ -5280,7 +5282,9 @@ fn write_paint_shader_transform(out: &mut String, transform: Mat2D) {
     if transform != Mat2D::IDENTITY {
         out.push_str(",shaderTransform=[");
         for (i, value) in transform.0.into_iter().enumerate() {
-            if i != 0 { out.push(','); }
+            if i != 0 {
+                out.push(',');
+            }
             write_float(out, value);
         }
         out.push(']');

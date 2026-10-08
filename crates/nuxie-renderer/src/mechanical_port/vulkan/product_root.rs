@@ -2,7 +2,7 @@
 
 #[cfg(feature = "native-ore-vulkan-experimental")]
 use std::any::Any;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{CStr, CString, c_void};
 #[cfg(target_os = "macos")]
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -17,8 +17,6 @@ use ash::vk::Handle;
 
 #[cfg(target_os = "android")]
 use super::hardware_buffer::{HardwareBufferConverter, VideoColor};
-#[cfg(target_os = "android")]
-use crate::video_frame_geometry::FrameRegion;
 use super::render_context_vulkan_decl::{ContextOptions, RenderContextVulkanImpl};
 use super::render_target_vulkan_decl::{RenderTargetVulkanApi, RenderTargetVulkanImpl};
 use super::vkutil_decl::{ImageAccess, ImageAccessAction};
@@ -32,6 +30,8 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::render_co
 };
 #[cfg(feature = "native-ore-vulkan-experimental")]
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
+#[cfg(target_os = "android")]
+use crate::video_frame_geometry::FrameRegion;
 use crate::{RenderMode, RendererError};
 #[cfg(feature = "native-ore-vulkan-experimental")]
 use nuxie_render_api::{
@@ -909,7 +909,9 @@ impl ExactSourceBackend for VulkanProductBackend {
     }
 
     fn ore_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
-        if self.ore_target_desc().width == 0 { return None; }
+        if self.ore_target_desc().width == 0 {
+            return None;
+        }
         Some(nuxie_ore_metal::context::RenderTargetInfo {
             target: self.target.get().cast(),
             width: self.width,
@@ -921,12 +923,13 @@ impl ExactSourceBackend for VulkanProductBackend {
     fn set_target_preserved(&mut self, preserved: bool) {
         self.target_preserved = preserved;
         if self.active_frame {
-            unsafe { Pin::get_unchecked_mut(self.context_pin()) }.m_frame_descriptor.loadAction =
-                if preserved {
-                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
-                } else {
-                    crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
-                };
+            unsafe { Pin::get_unchecked_mut(self.context_pin()) }
+                .m_frame_descriptor
+                .loadAction = if preserved {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::preserveRenderTarget
+            } else {
+                crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::LoadAction::clear
+            };
         }
     }
     fn context_mut(&mut self) -> Pin<&mut RenderContext> {
@@ -998,6 +1001,11 @@ impl ExactSourceBackend for VulkanProductBackend {
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
+            }
+            RenderMode::ClockwiseInkbleed => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+                descriptor.inkbleedOverride = true;
             }
         }
         let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
@@ -1881,9 +1889,11 @@ mod gpu_canvas_frame_number_tests {
             .expect("production wrapCanvasTexture result");
 
         assert!(wrapped.belongsTo(&expected_domain));
-        assert!(wrapped
-            .manager()
-            .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
+        assert!(
+            wrapped
+                .manager()
+                .is_some_and(|manager| manager.ptr_eq(&expected_manager))
+        );
         {
             let view = wrapped
                 .downcast_ref::<TextureViewVulkan>()
@@ -1894,9 +1904,11 @@ mod gpu_canvas_frame_number_tests {
 
             let retained_texture = view.texture();
             assert!(retained_texture.belongsTo(&expected_domain));
-            assert!(retained_texture
-                .manager()
-                .is_some_and(|manager| manager.ptr_eq(&expected_manager)));
+            assert!(
+                retained_texture
+                    .manager()
+                    .is_some_and(|manager| manager.ptr_eq(&expected_manager))
+            );
             assert_eq!(retained_texture.width(), Some(2));
             assert_eq!(retained_texture.height(), Some(2));
             assert_eq!(retained_texture.isRenderTarget(), Some(true));

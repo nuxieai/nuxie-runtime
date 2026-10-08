@@ -149,41 +149,41 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 // `*.exports.h` snapshots are frozen beside the minified GLSL and tests below
 // pin these values back to those generated outputs.
 const GLSL_VERTEX: &str = "BB";
-const GLSL_FRAGMENT: &str = "FB";
+const GLSL_FRAGMENT: &str = "EB";
 const GLSL_POST_INVERT_Y: &str = "MC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
-const GLSL_DRAW_PATH: &str = "MD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
+const GLSL_DRAW_PATH: &str = "OD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "CE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "DE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "DE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "SC";
-const GLSL_CLEAR_COLOR: &str = "XE";
-const GLSL_LOAD_COLOR: &str = "ZE";
-const GLSL_STORE_COLOR: &str = "EE";
-const GLSL_CLEAR_COVERAGE: &str = "FE";
-const GLSL_CLEAR_CLIP: &str = "XF";
-const GLSL_ENABLE_CLIPPING: &str = "A";
+const GLSL_CLEAR_COLOR: &str = "YE";
+const GLSL_LOAD_COLOR: &str = "AF";
+const GLSL_STORE_COLOR: &str = "FE";
+const GLSL_CLEAR_COVERAGE: &str = "GE";
+const GLSL_CLEAR_CLIP: &str = "YF";
+const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
-const GLSL_ENABLE_ADVANCED_BLEND: &str = "N";
+const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
 const GLSL_ENABLE_EVEN_ODD: &str = "XC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "AD";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "CD";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
 const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
 const GLSL_TARGET_SPIRV: &str = "DC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "SF";
-const GLSL_PLS_IMPL_NONE: &str = "UF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "TF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "TF";
+const GLSL_PLS_IMPL_NONE: &str = "VF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "UF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
-const GLSL_FEATHER_ATLAS_BLIT: &str = "EB";
-const GLSL_DRAW_IMAGE: &str = "ME";
-const GLSL_DRAW_IMAGE_RECT: &str = "BD";
+const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
+const GLSL_DRAW_IMAGE: &str = "NE";
+const GLSL_DRAW_IMAGE_RECT: &str = "DD";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "W";
-const GLSL_CLOCKWISE_FILL: &str = "GE";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
+const GLSL_CLOCKWISE_FILL: &str = "HE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
-const GLSL_OPTIONALLY_FLAT: &str = "KB";
+const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl/glsl.minified.glsl");
@@ -232,9 +232,9 @@ const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const PLS_PLANE_COUNT: usize = 4;
 const IMAGE_RECT_ATTRIB_COUNT: usize = 11;
 const IMAGE_MESH_ATTRIB_COUNT: usize = 8;
-const SPECIALIZATION_COUNT: usize = 15;
+const SPECIALIZATION_COUNT: usize = 16;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
 ];
 
 fn getWGPUVertexFormat(format: gpu::VertexElementFormat) -> super::webgpu_cpp_decl::VertexFormat {
@@ -392,6 +392,7 @@ fn buildConstantEntries(
 }
 
 fn shaderPermutationFlags(
+    drawType: gpu::DrawType,
     shaderFeatures: ShaderFeatures,
     shaderMiscFlags: ShaderMiscFlags,
 ) -> [f64; SPECIALIZATION_COUNT] {
@@ -413,6 +414,7 @@ fn shaderPermutationFlags(
         hasMisc(ShaderMiscFlags::storeColorClear) as u8 as f64,
         hasMisc(ShaderMiscFlags::loadColorFromDstTexture) as u8 as f64,
         0.0, // VULKAN_VENDOR_ARM — ignored for WebGPU.
+        gpu::drawTypeIsDepthStencilStroke(drawType) as u8 as f64,
     ]
 }
 
@@ -1506,8 +1508,7 @@ pub(crate) fn makeDrawPipeline(
     match drawType {
         DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches
-        | DrawType::outerCurvePatches
-        | DrawType::depthStrokes => {
+        | DrawType::outerCurvePatches => {
             for index in 0..2 {
                 let mut attribute = WGPUVertexAttribute::default();
                 attribute.format = super::webgpu_cpp_decl::VertexFormat::Float32x4.into();
@@ -1534,8 +1535,10 @@ pub(crate) fn makeDrawPipeline(
         | DrawType::stencilMidpointFans
         | DrawType::stencilMidpointFanReset
         | DrawType::stencilMidpointFanWinding
-        | DrawType::stencilMidpointFanCover => {
-            // Depth/stencil fills derive all attributes from the vertex index.
+        | DrawType::stencilMidpointFanCover
+        | DrawType::depthStrokes
+        | DrawType::depthAAStrokes => {
+            // Depth/stencil paths derive all attributes from the vertex index.
             assert!(attributes.is_empty());
             assert!(vertexBufferLayouts.is_empty());
             topology = super::webgpu_cpp_decl::PrimitiveTopology::TriangleList;
@@ -1661,7 +1664,7 @@ pub(crate) fn makeDrawPipeline(
         assert_eq!(colorAttachments.len(), PLS_PLANE_COUNT);
     }
 
-    let permutationFlags = shaderPermutationFlags(shaderFeatures, shaderMiscFlags);
+    let permutationFlags = shaderPermutationFlags(drawType, shaderFeatures, shaderMiscFlags);
     let vertexConstants = buildConstantEntries(vertexShaderSource, &permutationFlags);
     let fragmentConstants = buildConstantEntries(fragmentShaderSource, &permutationFlags);
 
@@ -2096,38 +2099,9 @@ pub(crate) fn newDrawPipeline(
                 | DrawType::stencilMidpointFans
                 | DrawType::stencilMidpointFanReset
                 | DrawType::stencilMidpointFanWinding
-                | DrawType::stencilMidpointFanCover => {
-                    let vertex = match (
-                        context.m_capabilities.polyfillVertexStorageBuffers,
-                        clipRect,
-                    ) {
-                        (true, true) => {
-                            include_str!("../../generated/draw_depthstencil_fill.webgpu_nossbo_vert.wgsl")
-                        }
-                        (true, false) => include_str!(
-                            "../../generated/draw_depthstencil_fill.webgpu_nossbo_noclipdistance_vert.wgsl"
-                        ),
-                        (false, true) => {
-                            include_str!("../../generated/draw_depthstencil_fill.webgpu_vert.wgsl")
-                        }
-                        (false, false) => include_str!(
-                            "../../generated/draw_depthstencil_fill.webgpu_noclipdistance_vert.wgsl"
-                        ),
-                    };
-                    (
-                        vertex,
-                        if fixedColor {
-                            include_str!(
-                                "../../generated/draw_depthstencil_path.webgpu_fixedcolor_frag.wgsl"
-                            )
-                        } else {
-                            include_str!("../../generated/draw_depthstencil_path.webgpu_frag.wgsl")
-                        },
-                        "draw_depthstencil_fill.webgpu.vert",
-                        "draw_depthstencil_path.webgpu.frag",
-                    )
-                }
-                DrawType::depthStrokes => {
+                | DrawType::stencilMidpointFanCover
+                | DrawType::depthStrokes
+                | DrawType::depthAAStrokes => {
                     let vertex = match (
                         context.m_capabilities.polyfillVertexStorageBuffers,
                         clipRect,
@@ -4070,8 +4044,7 @@ unsafe fn executeDrawList(
         match drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
-            | DrawType::outerCurvePatches
-            | DrawType::depthStrokes => unsafe {
+            | DrawType::outerCurvePatches => unsafe {
                 drawEncoder.SetVertexBuffer(
                     0,
                     context.m_pathPatchVertexBuffer.Get(),
@@ -4103,15 +4076,17 @@ unsafe fn executeDrawList(
             | DrawType::stencilMidpointFans
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
-            | DrawType::stencilMidpointFanCover => unsafe {
-                let indexOffset = gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(drawType));
+            | DrawType::stencilMidpointFanCover
+            | DrawType::depthStrokes
+            | DrawType::depthAAStrokes => unsafe {
+                let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
                 drawEncoder.SetIndexBuffer(
                     context.m_pathPatchIndexBuffer.Get(),
                     super::webgpu_cpp_decl::IndexFormat::Uint16.into(),
                     indexOffset as u64,
                     super::webgpu_decl::WGPU_WHOLE_SIZE,
                 );
-                for draw in crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::new(drawType, batch.elementCount, batch.baseElement, 0) {
+                for draw in crate::mechanical_port::source::renderer::include::rive::renderer::range_chunker_hpp::DSIndexRangeChunker::new(batch, 0) {
                     drawEncoder.DrawIndexed(draw.indexCount, 1, 0, draw.baseVertex, 0);
                 }
             },
@@ -4738,7 +4713,7 @@ mod tests {
             (ShaderFeatures::ENABLE_DITHER, 7),
             (ShaderFeatures::ENABLE_MODULATED_IMAGE, 8),
         ] {
-            let values = shaderPermutationFlags(feature, ShaderMiscFlags::none);
+            let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, feature, ShaderMiscFlags::none);
             assert_eq!(values[expectedIndex], 1.0);
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
@@ -4749,12 +4724,17 @@ mod tests {
             (ShaderMiscFlags::storeColorClear, 12),
             (ShaderMiscFlags::loadColorFromDstTexture, 13),
         ] {
-            let values = shaderPermutationFlags(ShaderFeatures::NONE, flag);
+            let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, ShaderFeatures::NONE, flag);
             assert_eq!(values[expectedIndex], 1.0);
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
-        let values = shaderPermutationFlags(ShaderFeatures::NONE, ShaderMiscFlags::none);
-        assert_eq!(values, [0.0; 15]);
+        let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, ShaderFeatures::NONE, ShaderMiscFlags::none);
+        assert_eq!(values, [0.0; 16]);
+        for draw_type in [gpu::DrawType::depthStrokes, gpu::DrawType::depthAAStrokes] {
+            let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none);
+            assert_eq!(values[15], 1.0);
+            assert_eq!(values.iter().sum::<f64>(), 1.0);
+        }
     }
 
     #[test]
@@ -4814,19 +4794,20 @@ mod tests {
 
     #[test]
     fn specialization_entries_keep_the_shifted_upstream_indices() {
-        // WebGPU shares the 15-slot specialization contract with Vulkan.
+        // WebGPU shares the 16-slot specialization contract with Vulkan.
         // Only declared slots are sent.
         let mut values = [0.0; SPECIALIZATION_COUNT];
         values[12] = 1.0;
         values[13] = 2.0;
         values[14] = 3.0;
+        values[15] = 4.0;
         let entries = buildConstantEntries(
-            Some("@id(12) override clear = false;\n@id(13) override load = false;\n@id(14) override arm = false;"),
+            Some("@id(12) override clear = false;\n@id(13) override load = false;\n@id(14) override arm = false;\n@id(15) override stroke = false;"),
             &values,
         );
-        assert_eq!(SPECIALIZATION_COUNT, 15);
-        assert_eq!(SPECIALIZATION_IDS, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]);
-        assert_eq!(entries.iter().map(|entry| entry.value).collect::<Vec<_>>(), [1.0, 2.0, 3.0]);
+        assert_eq!(SPECIALIZATION_COUNT, 16);
+        assert_eq!(SPECIALIZATION_IDS, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]);
+        assert_eq!(entries.iter().map(|entry| entry.value).collect::<Vec<_>>(), [1.0, 2.0, 3.0, 4.0]);
         assert!(buildConstantEntries(None, &values).is_empty());
     }
 

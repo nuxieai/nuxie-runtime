@@ -40,10 +40,10 @@ mod shader_source_owner_011;
 #[path = "shader-build-authority/renderer_src_shaders_draw_clockwise_path_frag__generated_input.rs"]
 mod shader_source_owner_012;
 
-#[path = "shader-build-authority/renderer_src_shaders_draw_depthstencil_fill_vert__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_draw_depthstencil_mesh_frag__generated_input.rs"]
 mod shader_source_owner_013;
 
-#[path = "shader-build-authority/renderer_src_shaders_draw_depthstencil_object_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_draw_depthstencil_path_glsl__generated_input.rs"]
 mod shader_source_owner_014;
 
 #[path = "shader-build-authority/renderer_src_shaders_draw_fullscreen_quad_vert__generated_input.rs"]
@@ -187,59 +187,65 @@ mod shader_source_owner_060;
 #[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_atlas_blit_main__generated_input.rs"]
 mod shader_source_owner_061;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_fill_vert__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_image_mesh_main__generated_input.rs"]
 mod shader_source_owner_062;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_image_mesh_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_path_main__generated_input.rs"]
 mod shader_source_owner_063;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_path_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_triangles_nocolor_main__generated_input.rs"]
 mod shader_source_owner_064;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_depthstencil_triangles_nocolor_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_fullscreen_quad_vert__generated_input.rs"]
 mod shader_source_owner_065;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_fullscreen_quad_vert__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_image_mesh_main__generated_input.rs"]
 mod shader_source_owner_066;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_image_mesh_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_input_attachment_frag__generated_input.rs"]
 mod shader_source_owner_067;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_input_attachment_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_interior_triangles_main__generated_input.rs"]
 mod shader_source_owner_068;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_interior_triangles_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs"]
 mod shader_source_owner_069;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_msaa_color_seed_attachment_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_msaa_resolve_frag__generated_input.rs"]
 mod shader_source_owner_070;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_msaa_resolve_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_path_main__generated_input.rs"]
 mod shader_source_owner_071;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_draw_path_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_init_clockwise_atomic_workaround_frag__generated_input.rs"]
 mod shader_source_owner_072;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_init_clockwise_atomic_workaround_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_vert__generated_input.rs"]
 mod shader_source_owner_073;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_vert__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_common_glsl__generated_input.rs"]
 mod shader_source_owner_074;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_common_glsl__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_fill_frag__generated_input.rs"]
 mod shader_source_owner_075;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_fill_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs"]
 mod shader_source_owner_076;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_render_atlas_stroke_frag__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_spirv_tessellate_main__generated_input.rs"]
 mod shader_source_owner_077;
 
-#[path = "shader-build-authority/renderer_src_shaders_spirv_tessellate_main__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs"]
 mod shader_source_owner_078;
 
-#[path = "shader-build-authority/renderer_src_shaders_stencil_draw_glsl__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_tessellate_glsl__generated_input.rs"]
 mod shader_source_owner_079;
 
-#[path = "shader-build-authority/renderer_src_shaders_tessellate_glsl__generated_input.rs"]
+#[path = "shader-build-authority/renderer_src_shaders_unreal_draw_depthstencil_atlas_blit_usf__generated_input.rs"]
 mod shader_source_owner_080;
+
+#[path = "shader-build-authority/renderer_src_shaders_unreal_draw_depthstencil_image_mesh_usf__generated_input.rs"]
+mod shader_source_owner_081;
+
+#[path = "shader-build-authority/renderer_src_shaders_unreal_draw_depthstencil_path_usf__generated_input.rs"]
+mod shader_source_owner_082;

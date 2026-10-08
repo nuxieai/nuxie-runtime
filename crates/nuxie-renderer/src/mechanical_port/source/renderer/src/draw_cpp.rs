@@ -803,7 +803,11 @@ impl PathDrawAllocation {
 // complete source-shaped owner for state that is not part of the GPU-facing
 // prefix.
 impl PathDraw {
-    pub fn calculatePixelBounds(matrix: Mat2D, path: &RiveRenderPath, paint: &dyn RiveRenderPaintContract) -> IAABB {
+    pub fn calculatePixelBounds(
+        matrix: Mat2D,
+        path: &RiveRenderPath,
+        paint: &dyn RiveRenderPaintContract,
+    ) -> IAABB {
         let stroke = paint.getIsStroked().then(|| paint.getStrokeParams());
         path.calculatePixelBounds(matrix, stroke.as_ref(), paint.getFeather())
     }
@@ -1385,7 +1389,11 @@ unsafe fn push_path(
             }
             let draw_type = if pass_count == 1 {
                 if owner.draw.isStroke() {
-                    gpu::DrawType::depthStrokes
+                    if flush_ref.frameDescriptor().inkbleedOverride {
+                        gpu::DrawType::depthAAStrokes
+                    } else {
+                        gpu::DrawType::depthStrokes
+                    }
                 } else if (owner.draw.base.draw_contents
                     & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
                     == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip)
@@ -1636,7 +1644,10 @@ pub unsafe fn make_path_draw_from_source(
         clockwise_fill_override,
     );
     let mut triangulator = None;
-    if !paint.getIsStroked() && paint.getFeather() == 0.0 {
+    if !paint.getIsStroked()
+        && paint.getFeather() == 0.0
+        && !context.frameDescriptor().inkbleedOverride
+    {
         let triangle_area = gpu_cpp::find_transformed_area(render_path.getBounds(), paint_matrix);
         let triangle_verb_count = path.verbs().len();
         let eligible = context
@@ -1700,6 +1711,7 @@ pub unsafe fn make_path_draw_from_source(
                 paint.getJoin(),
                 paint.getCap(),
                 paint.getForceClosed(),
+                coverage_type == PathCoverageType::depthStencil,
             )?,
         )
     } else {
@@ -1728,7 +1740,8 @@ pub unsafe fn make_path_draw_from_source(
         0.0
     };
     let mut draw_contents = gpu::DrawContents::none;
-    if paint.getIsOpaque() {
+    if paint.getIsOpaque() && !(context.frameDescriptor().inkbleedOverride && paint.getIsStroked())
+    {
         draw_contents |= gpu::DrawContents::opaquePaint;
     }
     if coverage_type != PathCoverageType::featherAtlas {

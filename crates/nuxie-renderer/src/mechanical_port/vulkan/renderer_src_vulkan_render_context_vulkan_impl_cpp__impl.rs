@@ -2859,6 +2859,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             | DrawType::stencilOuterCubicCover
             | DrawType::stencilOuterCubics
             | DrawType::depthStrokes
+            | DrawType::depthAAStrokes
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -4206,8 +4207,7 @@ fn submitDrawList(
         match batch.drawType {
             DrawType::midpointFanPatches
             | DrawType::midpointFanCenterAAPatches
-            | DrawType::outerCurvePatches
-            | DrawType::depthStrokes => {
+            | DrawType::outerCurvePatches => {
                 binder.bindVertexBuffer(
                     command,
                     0,
@@ -4256,13 +4256,14 @@ fn submitDrawList(
             | DrawType::stencilMidpointFans
             | DrawType::stencilMidpointFanReset
             | DrawType::stencilMidpointFanWinding
-            | DrawType::stencilMidpointFanCover => {
+            | DrawType::stencilMidpointFanCover
+            | DrawType::depthStrokes
+            | DrawType::depthAAStrokes => {
                 debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
                 pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {
                     continue;
                 }
-                let outer_cubic = drawTypeSubmitsOuterCubicPatches(batch.drawType);
                 binder.bindIndexBufferU16(
                     command,
                     implementation
@@ -4270,13 +4271,11 @@ fn submitDrawList(
                         .as_ref()
                         .unwrap()
                         .vkBuffer(),
-                    dsFillIndexOffset(outer_cubic) as vk::DeviceSize,
+                    batch.baseIndex as vk::DeviceSize * std::mem::size_of::<u16>() as vk::DeviceSize,
                 );
-                // Fills derive their vertex data from gl_VertexID, with no vertex buffer.
+                // Depth/stencil paths derive their vertex data from gl_VertexID, with no vertex buffer.
                 for draw in DSIndexRangeChunker::new(
-                    batch.drawType,
-                    batch.elementCount,
-                    batch.baseElement,
+                    batch,
                     0,
                 ) {
                     unsafe {
@@ -4301,7 +4300,6 @@ fn submitDrawList(
                         .m_workarounds
                         .needsInterruptibleRenderPasses()
                 );
-                let outer_cubic = drawTypeSubmitsOuterCubicPatches(batch.drawType);
                 binder.bindIndexBufferU16(
                     command,
                     implementation
@@ -4309,7 +4307,7 @@ fn submitDrawList(
                         .as_ref()
                         .unwrap()
                         .vkBuffer(),
-                    dsFillIndexOffset(outer_cubic) as vk::DeviceSize,
+                    batch.baseIndex as vk::DeviceSize * std::mem::size_of::<u16>() as vk::DeviceSize,
                 );
                 // Outer-cubic passes use identical dynamic state to their
                 // midpoint-fan counterparts, so both use these pass types.
@@ -4330,17 +4328,13 @@ fn submitDrawList(
                         );
                     assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(batch.drawType));
                     binder.setDynamicState(command, &state);
-                    let vertex_flags = if !state.colorWriteEnabled
-                        && !implementation.m_vk.features.colorWriteEnable
-                    {
+                    let vertex_flags = if !state.colorWriteEnabled {
                         VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
                     } else {
                         0
                     };
                     for draw in DSIndexRangeChunker::new(
-                        batch.drawType,
-                        batch.elementCount,
-                        batch.baseElement,
+                        batch,
                         vertex_flags,
                     ) {
                         unsafe {

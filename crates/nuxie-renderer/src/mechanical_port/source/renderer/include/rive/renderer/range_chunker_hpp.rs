@@ -89,38 +89,57 @@ pub struct Draw {
     pub indexCount: u32,
     pub baseVertex: i32,
 }
-#[derive(Clone, Copy, Debug)]
-pub struct DSIndexRangeIterator {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DSIndexRangeChunker {
+    patchCount: u32,
+    maxPatchesPerDraw: u32,
     indexCountPerPatch: u32,
     patchStrideLog2: u32,
-    vertexFlags: i32,
-    chunk: RangeIterator,
+    baseVertex: i32,
+    passFlags: [i32; 2],
+    passCount: u32,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct DSIndexRangeIterator {
+    chunker: DSIndexRangeChunker,
+    pass: u32,
+    basePatch: u32,
 }
 impl DSIndexRangeIterator {
+    fn chunkPatchCount(&self) -> u32 {
+        self.chunker
+            .patchCount
+            .wrapping_sub(self.basePatch)
+            .min(self.chunker.maxPatchesPerDraw)
+    }
     pub fn value(&self) -> Draw {
-        let Chunk { count, first } = self.chunk.value();
         Draw {
-            indexCount: count.wrapping_mul(self.indexCountPerPatch),
-            baseVertex: ((first as i32) << self.patchStrideLog2) | self.vertexFlags,
+            indexCount: self
+                .chunkPatchCount()
+                .wrapping_mul(self.chunker.indexCountPerPatch),
+            baseVertex: (self.chunker.baseVertex | self.chunker.passFlags[self.pass as usize])
+                .wrapping_add((self.basePatch as i32) << self.chunker.patchStrideLog2),
         }
     }
     pub fn advance(&mut self) {
-        self.chunk.advance();
+        self.basePatch += self.chunkPatchCount();
+        if self.basePatch == self.chunker.patchCount {
+            self.pass += 1;
+            self.basePatch = 0;
+        }
     }
 }
 impl PartialEq for DSIndexRangeIterator {
     fn eq(&self, other: &Self) -> bool {
-        debug_assert_eq!(self.indexCountPerPatch, other.indexCountPerPatch);
-        debug_assert_eq!(self.patchStrideLog2, other.patchStrideLog2);
-        debug_assert_eq!(self.vertexFlags, other.vertexFlags);
-        self.chunk == other.chunk
+        debug_assert_eq!(self.chunker, other.chunker);
+        self.pass == other.pass && self.basePatch == other.basePatch
     }
 }
 impl Eq for DSIndexRangeIterator {}
 impl Iterator for DSIndexRangeIterator {
     type Item = Draw;
     fn next(&mut self) -> Option<Draw> {
-        if self.chunk.current == self.chunk.end {
+        if self.pass == self.chunker.passCount {
             return None;
         }
         let value = self.value();
@@ -128,48 +147,47 @@ impl Iterator for DSIndexRangeIterator {
         Some(value)
     }
 }
-pub struct DSIndexRangeChunker {
-    chunker: RangeChunker,
-    indexCountPerPatch: u32,
-    patchStrideLog2: u32,
-    vertexFlags: i32,
-}
 impl DSIndexRangeChunker {
-    pub fn new(drawType: DrawType, patchCount: u32, firstPatch: u32, vertexFlags: i32) -> Self {
-        let outer = drawTypeSubmitsOuterCubicPatches(drawType);
-        let stride = if outer {
-            DSOuterCubicFillPatchStrideLog2
-        } else {
-            DSMidpointFanFillPatchStrideLog2
-        };
+    pub fn new(batch: &DrawBatch, vertexFlags: i32) -> Self {
+        let stride = dsPatchStrideLog2(batch.drawType);
         debug_assert!(
-            (firstPatch.wrapping_add(patchCount) << stride) <= (1u32 << DSFillVertexFlagsShift)
+            (batch.baseElement & ((1 << DSVertexFlagsShift) - 1)) + (batch.elementCount << stride)
+                <= 1 << DSVertexFlagsShift
         );
+        let aa = batch.drawType == DrawType::depthAAStrokes;
         Self {
-            chunker: RangeChunker::new(patchCount, firstPatch, dsFillPatchMaxReps(outer)),
-            indexCountPerPatch: dsFillPatchIndexCount(outer),
+            patchCount: batch.elementCount,
+            maxPatchesPerDraw: dsPatchMaxReps(batch.drawType),
+            indexCountPerPatch: batch.indexCountPerInstance,
             patchStrideLog2: stride,
-            vertexFlags: if outer {
-                vertexFlags | DSFillVertexFlagOuterCubic
+            baseVertex: batch.baseElement as i32 | vertexFlags,
+            passFlags: if aa {
+                [
+                    DSVertexFlag_StrokeDepthPass | DSVertexFlag_DisableColorWrite,
+                    0,
+                ]
             } else {
-                vertexFlags
+                [0, 0]
             },
+            passCount: if aa { 2 } else { 1 },
         }
     }
     pub fn begin(&self) -> DSIndexRangeIterator {
-        DSIndexRangeIterator {
-            indexCountPerPatch: self.indexCountPerPatch,
-            patchStrideLog2: self.patchStrideLog2,
-            vertexFlags: self.vertexFlags,
-            chunk: self.chunker.begin(),
+        if self.patchCount == 0 {
+            self.end()
+        } else {
+            DSIndexRangeIterator {
+                chunker: *self,
+                pass: 0,
+                basePatch: 0,
+            }
         }
     }
     pub fn end(&self) -> DSIndexRangeIterator {
         DSIndexRangeIterator {
-            indexCountPerPatch: self.indexCountPerPatch,
-            patchStrideLog2: self.patchStrideLog2,
-            vertexFlags: self.vertexFlags,
-            chunk: self.chunker.end(),
+            chunker: *self,
+            pass: self.passCount,
+            basePatch: 0,
         }
     }
 }
@@ -184,9 +202,6 @@ impl IntoIterator for DSIndexRangeChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
-        DS_PATCH_STRIDE_LOG2, VERTEX_FLAG_DISABLE_COLOR_WRITE, VERTEX_FLAG_OUTER_CUBIC,
-    };
     #[test]
     fn max_two_odd() {
         let c = RangeChunker::new(5, 0, 2);
@@ -257,91 +272,151 @@ mod tests {
             it.advance();
         }
     }
-    fn check_draw(draw: Draw, outer: bool, count: u32, first: u32, flags: i32) {
-        assert_eq!(draw.indexCount, count * dsFillPatchIndexCount(outer));
+    const DS_DRAW_TYPES: [DrawType; 4] = [
+        DrawType::stencilMidpointFans,
+        DrawType::stencilOuterCubics,
+        DrawType::depthStrokes,
+        DrawType::depthAAStrokes,
+    ];
+    fn patch_index_count(ty: DrawType) -> u32 {
+        match ty {
+            DrawType::stencilMidpointFans => DSMidpointFanFillPatchIndexCount,
+            DrawType::stencilOuterCubics => DSOuterCubicFillPatchIndexCount,
+            DrawType::depthStrokes => DSStrokePatchIndexCount,
+            DrawType::depthAAStrokes => DSAAStrokePatchIndexCount,
+            _ => unreachable!(),
+        }
+    }
+    fn patch_flags(ty: DrawType) -> i32 {
+        match ty {
+            DrawType::stencilOuterCubics => DSVertexFlag_OuterCubicFill,
+            DrawType::depthAAStrokes => DSVertexFlag_AAStroke,
+            _ => 0,
+        }
+    }
+    fn pass_flags(ty: DrawType) -> Vec<i32> {
+        if ty == DrawType::depthAAStrokes {
+            vec![
+                DSVertexFlag_StrokeDepthPass | DSVertexFlag_DisableColorWrite,
+                0,
+            ]
+        } else {
+            vec![0]
+        }
+    }
+    fn make_batch(ty: DrawType, count: u32, first: u32) -> DrawBatch {
+        let mut batch = DrawBatch::new(
+            ty,
+            ShaderMiscFlags::none,
+            DrawContents::none,
+            count,
+            (first << dsPatchStrideLog2(ty)) | patch_flags(ty) as u32,
+            nuxie_render_api::BlendMode::SrcOver,
+            ImageSampler::LinearClamp(),
+            BarrierFlags::none,
+        );
+        batch.indexCountPerInstance = patch_index_count(ty);
+        batch
+    }
+    fn check_draw(draw: Draw, ty: DrawType, count: u32, first: u32, flags: i32) {
+        assert_eq!(draw.indexCount, count * patch_index_count(ty));
         assert_eq!(
             draw.baseVertex,
-            ((first as i32) << DS_PATCH_STRIDE_LOG2(outer))
-                | flags
-                | if outer { VERTEX_FLAG_OUTER_CUBIC } else { 0 }
+            ((first as i32) << dsPatchStrideLog2(ty)) | patch_flags(ty) | flags
         );
-    }
-    fn draw_type(outer: bool) -> DrawType {
-        if outer {
-            DrawType::stencilOuterCubics
-        } else {
-            DrawType::stencilMidpointFans
-        }
     }
     #[test]
     fn one_chunk() {
-        for outer in [false, true] {
-            let c = DSIndexRangeChunker::new(draw_type(outer), 3, 7, 0);
+        for ty in DS_DRAW_TYPES {
+            let c = DSIndexRangeChunker::new(&make_batch(ty, 3, 7), 0);
             let mut it = c.begin();
-            assert_ne!(it, c.end());
-            check_draw(it.value(), outer, 3, 7, 0);
-            it.advance();
+            for flags in pass_flags(ty) {
+                assert_ne!(it, c.end());
+                check_draw(it.value(), ty, 3, 7, flags);
+                it.advance();
+            }
             assert_eq!(it, c.end());
         }
     }
     #[test]
     fn base_patch_zero() {
-        for outer in [false, true] {
-            let c = DSIndexRangeChunker::new(draw_type(outer), 1, 0, 0);
-            let it = c.begin();
-            assert_ne!(it, c.end());
-            assert_eq!(
-                it.value().baseVertex,
-                if outer { VERTEX_FLAG_OUTER_CUBIC } else { 0 }
-            );
-            check_draw(it.value(), outer, 1, 0, 0);
+        for ty in DS_DRAW_TYPES {
+            let c = DSIndexRangeChunker::new(&make_batch(ty, 1, 0), 0);
+            let mut it = c.begin();
+            for flags in pass_flags(ty) {
+                assert_ne!(it, c.end());
+                assert_eq!(it.value().baseVertex, patch_flags(ty) | flags);
+                check_draw(it.value(), ty, 1, 0, flags);
+                it.advance();
+            }
+            assert_eq!(it, c.end());
         }
     }
     #[test]
     fn empty_batch() {
-        for outer in [false, true] {
-            let c = DSIndexRangeChunker::new(draw_type(outer), 0, 4, 0);
+        for ty in DS_DRAW_TYPES {
+            let c = DSIndexRangeChunker::new(&make_batch(ty, 0, 4), 0);
             assert_eq!(c.begin(), c.end());
         }
     }
     #[test]
     fn splits_at_rep_count() {
-        for outer in [false, true] {
-            let max = dsFillPatchMaxReps(outer);
-            let c = DSIndexRangeChunker::new(draw_type(outer), max + 13, 0, 0);
+        for ty in DS_DRAW_TYPES {
+            let max = dsPatchMaxReps(ty);
+            let c = DSIndexRangeChunker::new(&make_batch(ty, max + 13, 0), 0);
             let mut it = c.begin();
-            assert_ne!(it, c.end());
-            check_draw(it.value(), outer, max, 0, 0);
-            it.advance();
-            assert_ne!(it, c.end());
-            check_draw(it.value(), outer, 13, max, 0);
-            it.advance();
+            for flags in pass_flags(ty) {
+                assert_ne!(it, c.end());
+                check_draw(it.value(), ty, max, 0, flags);
+                it.advance();
+                assert_ne!(it, c.end());
+                check_draw(it.value(), ty, 13, max, flags);
+                it.advance();
+            }
             assert_eq!(it, c.end());
         }
     }
     #[test]
     fn carries_color_write_flag() {
-        for outer in [false, true] {
-            let c =
-                DSIndexRangeChunker::new(draw_type(outer), 2, 5, VERTEX_FLAG_DISABLE_COLOR_WRITE);
-            let it = c.begin();
-            assert_ne!(it, c.end());
-            check_draw(it.value(), outer, 2, 5, VERTEX_FLAG_DISABLE_COLOR_WRITE);
-            assert_ne!(it.value().baseVertex & VERTEX_FLAG_DISABLE_COLOR_WRITE, 0);
+        for ty in DS_DRAW_TYPES {
+            let c = DSIndexRangeChunker::new(&make_batch(ty, 2, 5), DSVertexFlag_DisableColorWrite);
+            let mut it = c.begin();
+            for flags in pass_flags(ty) {
+                assert_ne!(it, c.end());
+                check_draw(it.value(), ty, 2, 5, flags | DSVertexFlag_DisableColorWrite);
+                assert_ne!(it.value().baseVertex & DSVertexFlag_DisableColorWrite, 0);
+                it.advance();
+            }
+            assert_eq!(it, c.end());
         }
     }
     #[test]
-    fn covers_every_patch_once() {
-        for outer in [false, true] {
-            let count = dsFillPatchMaxReps(outer) * 2 + 3;
+    fn aa_strokes_draw_depth_before_color() {
+        let c = DSIndexRangeChunker::new(&make_batch(DrawType::depthAAStrokes, 4, 2), 0);
+        let mut it = c.begin();
+        assert_ne!(it, c.end());
+        assert_ne!(it.value().baseVertex & DSVertexFlag_StrokeDepthPass, 0);
+        assert_ne!(it.value().baseVertex & DSVertexFlag_DisableColorWrite, 0);
+        it.advance();
+        assert_ne!(it, c.end());
+        assert_eq!(it.value().baseVertex & DSVertexFlag_StrokeDepthPass, 0);
+        assert_eq!(it.value().baseVertex & DSVertexFlag_DisableColorWrite, 0);
+        it.advance();
+        assert_eq!(it, c.end());
+    }
+    #[test]
+    fn covers_every_patch_once_per_pass() {
+        for ty in DS_DRAW_TYPES {
+            let count = dsPatchMaxReps(ty) * 2 + 3;
+            let pass_count = pass_flags(ty).len() as u32;
             let mut total = 0;
             let mut draws = 0;
-            for draw in DSIndexRangeChunker::new(draw_type(outer), count, 0, 0) {
+            for draw in DSIndexRangeChunker::new(&make_batch(ty, count, 0), 0) {
                 total += draw.indexCount;
                 draws += 1;
             }
-            assert_eq!(draws, 3);
-            assert_eq!(total, count * dsFillPatchIndexCount(outer));
+            assert_eq!(draws, 3 * pass_count);
+            assert_eq!(total, pass_count * count * patch_index_count(ty));
         }
     }
 }

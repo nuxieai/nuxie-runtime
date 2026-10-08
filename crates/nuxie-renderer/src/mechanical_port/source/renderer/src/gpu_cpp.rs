@@ -2726,14 +2726,28 @@ const _: () = {
     assert!(OuterCubicPatchSegmentSpanPlusBowtie == OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_BOWTIE);
     assert!(DSMidpointFanFillPatchStrideLog2 == DS_MIDPOINT_FAN_STRIDE_LOG2);
     assert!(DSOuterCubicFillPatchStrideLog2 == DS_OUTER_CUBIC_STRIDE_LOG2);
-    assert!(DSFillVertexFlagsShift == VERTEX_FLAGS_SHIFT);
-    assert!(DSFillVertexFlagDisableColorWrite == VERTEX_FLAG_DISABLE_COLOR_WRITE);
-    assert!(DSFillVertexFlagOuterCubic == VERTEX_FLAG_OUTER_CUBIC);
-    assert!(DS_MIDPOINT_VERTEX_ID == MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 1);
-    assert!(DS_MIDPOINT_VERTEX_ID < DS_PATCH_STRIDE(false) as i32);
-    assert!(OUTER_CUBIC_PATCH_SEGMENT_SPAN < DS_PATCH_STRIDE(true) as u32);
-    assert!(DS_PATCH_STRIDE(false) as u32 * DSMidpointFanFillPatchMaxReps == 1u32 << 16);
-    assert!(DS_PATCH_STRIDE(true) as u32 * DSOuterCubicFillPatchMaxReps == 1u32 << 16);
+    assert!(DSVertexFlagsShift == VERTEX_FLAGS_SHIFT);
+    assert!(DSVertexFlag_DisableColorWrite == VERTEX_FLAG_DISABLE_COLOR_WRITE);
+    assert!(DSVertexFlag_OuterCubicFill == VERTEX_FLAG_OUTER_CUBIC_FILL);
+    assert!(DS_MIDPOINT_VERTEX_IDX == MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 + 1);
+    assert!(DS_MIDPOINT_VERTEX_IDX < DS_FILL_PATCH_STRIDE(false) as i32);
+    assert!(OUTER_CUBIC_PATCH_SEGMENT_SPAN < DS_FILL_PATCH_STRIDE(true) as u32);
+    assert!(DS_FILL_PATCH_STRIDE(false) as u32 * DSMidpointFanFillPatchMaxReps == 1u32 << 16);
+    assert!(DS_FILL_PATCH_STRIDE(true) as u32 * DSOuterCubicFillPatchMaxReps == 1u32 << 16);
+    assert!(DSVertexFlag_StrokeDepthPass == VERTEX_FLAG_STROKE_DEPTH_PASS);
+    assert!(DSVertexFlag_AAStroke == VERTEX_FLAG_AA_STROKE);
+    assert!(DSStrokePatchStrideLog2 == DS_STROKE_STRIDE_LOG2);
+    assert!(DSAAStrokePatchStrideLog2 == DS_AA_STROKE_STRIDE_LOG2);
+    assert!(
+        (MIDPOINT_FAN_PATCH_SEGMENT_SPAN + 1) << DS_STROKE_LANES_PER_SPOKE_LOG2(false)
+            <= DS_STROKE_PATCH_STRIDE(false)
+    );
+    assert!(
+        (MIDPOINT_FAN_PATCH_SEGMENT_SPAN + 1) << DS_STROKE_LANES_PER_SPOKE_LOG2(true)
+            <= DS_STROKE_PATCH_STRIDE(true)
+    );
+    assert!(DS_STROKE_PATCH_STRIDE(false) as u32 * DSStrokePatchMaxReps == 1 << 16);
+    assert!(DS_STROKE_PATCH_STRIDE(true) as u32 * DSAAStrokePatchMaxReps == 1 << 16);
 };
 
 // Exact source-owned value from renderer/src/shaders/constants.glsl, which
@@ -2838,7 +2852,6 @@ fn get_valid_draw_types(mode: InterlockMode) -> &'static [DrawType] {
         InterlockMode::depthStencil => &[
             DrawType::featherAtlasBlit,
             DrawType::imageMesh,
-            DrawType::depthStrokes,
             DrawType::stencilMidpointFanBorrowedCoverage,
             DrawType::stencilMidpointFans,
             DrawType::stencilMidpointFanReset,
@@ -2851,6 +2864,8 @@ fn get_valid_draw_types(mode: InterlockMode) -> &'static [DrawType] {
             DrawType::stencilDynamicOuterCubics,
             DrawType::stencilOuterCubicWinding,
             DrawType::stencilOuterCubicCover,
+            DrawType::depthStrokes,
+            DrawType::depthAAStrokes,
             DrawType::clipReset,
             DrawType::renderPassInitialize,
             DrawType::renderPassResolve,
@@ -3046,8 +3061,7 @@ pub fn ShaderUniqueKey(
     let draw_type_key = match drawType {
         DrawType::midpointFanPatches
         | DrawType::midpointFanCenterAAPatches
-        | DrawType::outerCurvePatches
-        | DrawType::depthStrokes => 0,
+        | DrawType::outerCurvePatches => 0,
         DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilMidpointFans
@@ -3063,10 +3077,14 @@ pub fn ShaderUniqueKey(
             debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
             1
         }
-        DrawType::interiorTriangulation => 2,
-        DrawType::featherAtlasBlit => 3,
-        DrawType::imageRect => 4,
-        DrawType::imageMesh => 5,
+        DrawType::depthStrokes | DrawType::depthAAStrokes => {
+            debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
+            2
+        }
+        DrawType::interiorTriangulation => 3,
+        DrawType::featherAtlasBlit => 4,
+        DrawType::imageRect => 5,
+        DrawType::imageMesh => 6,
         DrawType::renderPassInitialize => {
             debug_assert!(matches!(
                 interlockMode,
@@ -3074,7 +3092,7 @@ pub fn ShaderUniqueKey(
                     | InterlockMode::depthStencil
                     | InterlockMode::clockwiseAtomic
             ));
-            7
+            8
         }
         DrawType::renderPassResolve => {
             debug_assert!(matches!(
@@ -3083,14 +3101,14 @@ pub fn ShaderUniqueKey(
                     | InterlockMode::atomics
                     | InterlockMode::depthStencil
             ));
-            8
+            9
         }
         DrawType::clipReset => {
             debug_assert!(matches!(
                 interlockMode,
                 InterlockMode::clockwiseAtomic | InterlockMode::depthStencil
             ));
-            6
+            7
         }
     };
     let mask = ShaderFeaturesMaskForDraw(drawType, interlockMode).0;
@@ -3290,13 +3308,13 @@ fn generate_buffer_data_for_patch_type(
     debug_assert!(index_count <= indices.len());
 }
 
-pub(crate) fn generateDepthStencilFillIndices(patchType: PatchType, indices: &mut [u16]) {
+pub(crate) fn generateDepthStencilFillIndices(drawType: DrawType, indices: &mut [u16]) {
     // The algorithm is shared with the cfg-independent host GPU adapter.
     // Keep its inputs tied to the exact source constants at compile time.
     const _: () = {
         use crate::gpu as host;
         use crate::mechanical_port::source::renderer::src::shaders::constants_glsl::{
-            DS_MIDPOINT_VERTEX_ID, DS_PATCH_STRIDE_LOG2,
+            DS_FILL_PATCH_STRIDE_LOG2, DS_MIDPOINT_VERTEX_IDX,
         };
         assert!(host::PATCH_INDEX_BUFFER_COUNT == kPatchIndexBufferCount as usize);
         assert!(host::DS_MIDPOINT_FILL_BASE_INDEX == DSMidpointFanFillBaseIndex as usize);
@@ -3307,12 +3325,15 @@ pub(crate) fn generateDepthStencilFillIndices(patchType: PatchType, indices: &mu
         assert!(host::DS_OUTER_FILL_INDEX_COUNT == DSOuterCubicFillPatchIndexCount as usize);
         assert!(host::MIDPOINT_FAN_PATCH_SEGMENT_SPAN == kMidpointFanPatchSegmentSpan as usize);
         assert!(host::OUTER_CUBIC_PATCH_SEGMENT_SPAN == OuterCubicPatchSegmentSpan as usize);
-        assert!(host::DS_MIDPOINT_FILL_STRIDE_LOG2 == DS_PATCH_STRIDE_LOG2(false));
-        assert!(host::DS_OUTER_FILL_STRIDE_LOG2 == DS_PATCH_STRIDE_LOG2(true));
-        assert!(host::MIDPOINT_FAN_PATCH_SEGMENT_SPAN + 1 == DS_MIDPOINT_VERTEX_ID as usize);
+        assert!(host::DS_MIDPOINT_FILL_STRIDE_LOG2 == DS_FILL_PATCH_STRIDE_LOG2(false));
+        assert!(host::DS_OUTER_FILL_STRIDE_LOG2 == DS_FILL_PATCH_STRIDE_LOG2(true));
+        assert!(host::MIDPOINT_FAN_PATCH_SEGMENT_SPAN + 1 == DS_MIDPOINT_VERTEX_IDX as usize);
     };
-    let outer = patchType == PatchType::outerCurves;
-    debug_assert!(outer || patchType == PatchType::midpointFan);
+    let outer = match drawType {
+        DrawType::stencilOuterCubics => true,
+        DrawType::stencilMidpointFans => false,
+        _ => unreachable!(),
+    };
     crate::gpu::generate_depth_stencil_fill_indices(outer, indices);
 }
 
@@ -3339,8 +3360,11 @@ pub unsafe extern "C" fn GeneratePatchBufferData(vertices: *mut PatchVertex, ind
         &mut indices[midpoint_indices + center_indices..],
         (midpoint_vertices + center_vertices) as u16,
     );
-    for patch_type in [PatchType::midpointFan, PatchType::outerCurves] {
-        generateDepthStencilFillIndices(patch_type, indices);
+    for draw_type in [DrawType::stencilMidpointFans, DrawType::stencilOuterCubics] {
+        generateDepthStencilFillIndices(draw_type, indices);
+    }
+    for aa in [false, true] {
+        crate::gpu::generate_depth_stencil_stroke_indices(aa, indices);
     }
 }
 
@@ -3377,7 +3401,7 @@ fn inverse_mat2d(m: Mat2D) -> Option<Mat2D> {
 
 #[cfg(test)]
 mod mat2d_owner_tests {
-    use super::{AABB, Mat2D, clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d};
+    use super::{clip_rect_inverse_matrix_reset, inverse_mat2d, multiply_mat2d, Mat2D, AABB};
 
     fn from_bits(bits: [u32; 6]) -> Mat2D {
         Mat2D(bits.map(f32::from_bits))
@@ -3971,7 +3995,7 @@ pub fn find_transformed_area(bounds: AABB, matrix: Mat2D) -> f32 {
 
 #[cfg(all(test, target_arch = "aarch64"))]
 mod map_points_caller_tests {
-    use super::{AABB, Mat2D, find_transformed_area};
+    use super::{find_transformed_area, Mat2D, AABB};
 
     #[test]
     fn transformed_area_preserves_pinned_batch_exceptional_classification() {
@@ -4152,7 +4176,9 @@ impl FlushUniforms {
             m_renderTargetBottomUp: renderTarget.bottomUp(platformFeatures) as u32,
             m_gradTextureYScale: 1.0 / flushDesc.gradTextureHeight as f32,
             m_gradTextureYBias: -0.5 / flushDesc.gradTextureHeight as f32,
-            m_padTo256Bytes: [0; 256 - 116],
+            m_gradTextureYScalePacked: (1.0 / flushDesc.gradTextureHeight as f32)
+                * 2.0f32.powi(-17),
+            m_padTo256Bytes: [0; 256 - 120],
         }
     }
 }
@@ -4265,7 +4291,7 @@ pub fn get_depth_state(
             depthTestEnabled: true,
             depthWriteEnabled: false,
         },
-        DrawType::depthStrokes => DepthState {
+        DrawType::depthStrokes | DrawType::depthAAStrokes => DepthState {
             depthTestEnabled: true,
             depthWriteEnabled: true,
         },
@@ -4310,7 +4336,9 @@ pub fn get_stencil_info(
     }
     let valid = true;
     match drawType {
-        DrawType::depthStrokes if has_u32(drawContents.0, DrawContents::clipUpdate.0) => {
+        DrawType::depthStrokes | DrawType::depthAAStrokes
+            if has_u32(drawContents.0, DrawContents::clipUpdate.0) =>
+        {
             StencilInfo {
                 stencilType: StencilType::clipStroke,
                 drawContentsMask: DrawContents(
@@ -4322,7 +4350,8 @@ pub fn get_stencil_info(
         DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::featherAtlasBlit
-        | DrawType::depthStrokes => {
+        | DrawType::depthStrokes
+        | DrawType::depthAAStrokes => {
             if has_u32(drawContents.0, DrawContents::activeClip.0) {
                 StencilInfo {
                     stencilType: StencilType::activeStencilClip,
@@ -4570,6 +4599,7 @@ pub fn get_cull_face(drawType: DrawType) -> CullFace {
         | DrawType::interiorTriangulation
         | DrawType::featherAtlasBlit
         | DrawType::depthStrokes
+        | DrawType::depthAAStrokes
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
         | DrawType::stencilMidpointFans
@@ -4991,7 +5021,9 @@ pub fn get_color_write_enable(
                 fixedFunctionColorOutput || interlockMode == InterlockMode::depthStencil
             }
         }
-        DrawType::depthStrokes => !has_u32(drawContents.0, DrawContents::clipUpdate.0),
+        DrawType::depthStrokes | DrawType::depthAAStrokes => {
+            !has_u32(drawContents.0, DrawContents::clipUpdate.0)
+        }
         DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilMidpointFanWinding
         | DrawType::stencilOuterCubicBorrowedCoverage
@@ -5130,6 +5162,7 @@ pub fn get_pipeline_state(
                     | InterlockMode::clockwiseAtomic
             )),
             DrawType::depthStrokes
+            | DrawType::depthAAStrokes
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilMidpointFans
             | DrawType::stencilMidpointFanBorrowedCoverage

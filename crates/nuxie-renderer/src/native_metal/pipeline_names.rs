@@ -69,6 +69,7 @@ pub(crate) fn precompiled_function_name(
         DrawType::ImageMesh => 'm',
         DrawType::ImageRect
         | DrawType::DepthStrokes
+        | DrawType::DepthAAStrokes
         | DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilMidpointFans
         | DrawType::StencilMidpointFanReset

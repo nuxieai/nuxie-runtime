@@ -117,8 +117,19 @@ fn dynamic_msaa_flush_commands(draw_type: gpu::DrawType) -> Vec<GLCommand> {
         gpu::ImageSampler::default(),
         gpu::BarrierFlags::none,
     );
-    batch.indexCountPerInstance = 12;
-    batch.baseIndex = 3;
+    let outer = draw_type == gpu::DrawType::stencilDynamicOuterCubics;
+    batch.indexCountPerInstance = if outer {
+        gpu::DSOuterCubicFillPatchIndexCount
+    } else {
+        gpu::DSMidpointFanFillPatchIndexCount
+    };
+    batch.baseIndex = if outer {
+        gpu::DSOuterCubicFillBaseIndex
+    } else {
+        gpu::DSMidpointFanFillBaseIndex
+    };
+    batch.baseElement = (7 << gpu::dsPatchStrideLog2(draw_type))
+        | if outer { gpu::DSVertexFlag_OuterCubicFill as u32 } else { 0 };
     batch.scissorRect = Some(gpu::AABBu16 {
         left: 2,
         top: 3,
@@ -167,20 +178,28 @@ fn dynamic_msaa_batches_use_three_exact_states_without_changing_draw_or_scissor(
                 commands[index],
                 GLCommand::DrawElements {
                     mode: GL_TRIANGLES,
-                    count: 5 * gpu::dsFillPatchIndexCount(gpu::drawTypeSubmitsOuterCubicPatches(draw_type)),
+                    count: 5 * if draw_type == gpu::DrawType::stencilDynamicOuterCubics {
+                        gpu::DSOuterCubicFillPatchIndexCount
+                    } else {
+                        gpu::DSMidpointFanFillPatchIndexCount
+                    },
                     type_: GL_UNSIGNED_SHORT,
-                    offset: gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(draw_type)) as u32,
+                    offset: 2 * if draw_type == gpu::DrawType::stencilDynamicOuterCubics {
+                        gpu::DSOuterCubicFillBaseIndex
+                    } else {
+                        gpu::DSMidpointFanFillBaseIndex
+                    },
                 }
             );
             assert_eq!(
                 commands[index - 1],
                 GLCommand::Uniform1iLocation {
                     location: 24,
-                    value: if gpu::drawTypeSubmitsOuterCubicPatches(draw_type) {
-                        (7 << gpu::DSOuterCubicFillPatchStrideLog2) | gpu::DSFillVertexFlagOuterCubic
+                    value: (if draw_type == gpu::DrawType::stencilDynamicOuterCubics {
+                        (7 << gpu::DSOuterCubicFillPatchStrideLog2) | gpu::DSVertexFlag_OuterCubicFill
                     } else {
                         7 << gpu::DSMidpointFanFillPatchStrideLog2
-                    }
+                    }) | if pass == 1 { 0 } else { gpu::DSVertexFlag_DisableColorWrite }
                 }
             );
             assert_eq!(

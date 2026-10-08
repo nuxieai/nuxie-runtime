@@ -2903,37 +2903,27 @@ pub const DSOuterCubicFillBaseIndex: u32 = (DSMidpointFanFillBaseIndex
     & !1;
 const _: () = assert!(DSMidpointFanFillBaseIndex * 2 % 4 == 0);
 const _: () = assert!(DSOuterCubicFillBaseIndex * 2 % 4 == 0);
-pub const fn dsFillPatchIndexCount(outerCubic: bool) -> u32 {
-    if outerCubic {
-        DSOuterCubicFillPatchIndexCount
-    } else {
-        DSMidpointFanFillPatchIndexCount
-    }
-}
-pub const fn dsFillPatchMaxReps(outerCubic: bool) -> u32 {
-    if outerCubic {
-        DSOuterCubicFillPatchMaxReps
-    } else {
-        DSMidpointFanFillPatchMaxReps
-    }
-}
-pub const fn dsFillBaseIndex(outerCubic: bool) -> u32 {
-    if outerCubic {
-        DSOuterCubicFillBaseIndex
-    } else {
-        DSMidpointFanFillBaseIndex
-    }
-}
+pub const DSStrokePatchIndexCount: u32 = kMidpointFanPatchSegmentSpan * 6;
+pub const DSStrokePatchMaxReps: u32 = 2048;
+pub const DSStrokePatchBaseIndex: u32 =
+    DSOuterCubicFillBaseIndex + DSOuterCubicFillPatchIndexCount * DSOuterCubicFillPatchMaxReps;
+pub const DSAAStrokePatchIndexCount: u32 = DSStrokePatchIndexCount * 3;
+pub const DSAAStrokePatchMaxReps: u32 = 1024;
+pub const DSAAStrokePatchBaseIndex: u32 =
+    DSStrokePatchBaseIndex + DSStrokePatchIndexCount * DSStrokePatchMaxReps;
+const _: () = assert!(DSStrokePatchBaseIndex * 2 % 4 == 0);
+const _: () = assert!(DSAAStrokePatchBaseIndex * 2 % 4 == 0);
 pub const DSMidpointFanFillPatchStrideLog2: u32 = 4;
 pub const DSOuterCubicFillPatchStrideLog2: u32 = 5;
-pub const DSFillVertexFlagsShift: i32 = 29;
-pub const DSFillVertexFlagDisableColorWrite: i32 = 1 << DSFillVertexFlagsShift;
-pub const DSFillVertexFlagOuterCubic: i32 = 1 << (DSFillVertexFlagsShift + 1);
-pub const fn dsFillIndexOffset(outerCubic: bool) -> u32 {
-    dsFillBaseIndex(outerCubic) * 2
-}
+pub const DSStrokePatchStrideLog2: u32 = 5;
+pub const DSAAStrokePatchStrideLog2: u32 = 6;
+pub const DSVertexFlagsShift: i32 = 28;
+pub const DSVertexFlag_DisableColorWrite: i32 = 0x1 << DSVertexFlagsShift;
+pub const DSVertexFlag_OuterCubicFill: i32 = 0x2 << DSVertexFlagsShift;
+pub const DSVertexFlag_AAStroke: i32 = DSVertexFlag_OuterCubicFill;
+pub const DSVertexFlag_StrokeDepthPass: i32 = 0x4 << DSVertexFlagsShift;
 pub const kPatchIndexBufferCount: u32 =
-    DSOuterCubicFillBaseIndex + DSOuterCubicFillPatchIndexCount * DSOuterCubicFillPatchMaxReps;
+    DSAAStrokePatchBaseIndex + DSAAStrokePatchIndexCount * DSAAStrokePatchMaxReps;
 
 extern "C" {
     pub fn GeneratePatchBufferData(vertices: *mut PatchVertex, indices: *mut u16);
@@ -2949,22 +2939,23 @@ pub enum DrawType {
     featherAtlasBlit = 4,
     imageRect = 5,
     imageMesh = 6,
-    depthStrokes = 7,
-    stencilMidpointFanBorrowedCoverage = 8,
-    stencilMidpointFans = 9,
-    stencilMidpointFanReset = 10,
-    stencilDynamicMidpointFans = 11,
-    stencilOuterCubicBorrowedCoverage = 12,
-    stencilOuterCubics = 13,
-    stencilOuterCubicReset = 14,
-    stencilDynamicOuterCubics = 15,
-    stencilMidpointFanWinding = 16,
-    stencilMidpointFanCover = 17,
-    stencilOuterCubicWinding = 18,
-    stencilOuterCubicCover = 19,
-    clipReset = 20,
-    renderPassInitialize = 21,
-    renderPassResolve = 22,
+    stencilMidpointFanBorrowedCoverage = 7,
+    stencilMidpointFans = 8,
+    stencilMidpointFanReset = 9,
+    stencilDynamicMidpointFans = 10,
+    stencilOuterCubicBorrowedCoverage = 11,
+    stencilOuterCubics = 12,
+    stencilOuterCubicReset = 13,
+    stencilDynamicOuterCubics = 14,
+    stencilMidpointFanWinding = 15,
+    stencilMidpointFanCover = 16,
+    stencilOuterCubicWinding = 17,
+    stencilOuterCubicCover = 18,
+    depthStrokes = 19,
+    depthAAStrokes = 20,
+    clipReset = 21,
+    renderPassInitialize = 22,
+    renderPassResolve = 23,
 }
 
 pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
@@ -2978,6 +2969,7 @@ pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
         | DrawType::imageRect
         | DrawType::imageMesh
         | DrawType::depthStrokes
+        | DrawType::depthAAStrokes
         | DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilMidpointFans
         | DrawType::stencilMidpointFanReset
@@ -2994,32 +2986,48 @@ pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
     }
 }
 
-pub const fn drawTypeSubmitsOuterCubicPatches(draw_type: DrawType) -> bool {
+pub const fn dsPatchMaxReps(draw_type: DrawType) -> u32 {
     match draw_type {
-        DrawType::outerCurvePatches
-        | DrawType::stencilDynamicOuterCubics
-        | DrawType::stencilOuterCubicBorrowedCoverage
-        | DrawType::stencilOuterCubics
-        | DrawType::stencilOuterCubicReset
-        | DrawType::stencilOuterCubicWinding
-        | DrawType::stencilOuterCubicCover => true,
-        DrawType::midpointFanPatches
-        | DrawType::midpointFanCenterAAPatches
-        | DrawType::interiorTriangulation
-        | DrawType::featherAtlasBlit
-        | DrawType::imageRect
-        | DrawType::imageMesh
-        | DrawType::depthStrokes
-        | DrawType::stencilDynamicMidpointFans
-        | DrawType::stencilMidpointFanBorrowedCoverage
+        DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilMidpointFans
         | DrawType::stencilMidpointFanReset
+        | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilMidpointFanWinding
-        | DrawType::stencilMidpointFanCover
-        | DrawType::clipReset
-        | DrawType::renderPassInitialize
-        | DrawType::renderPassResolve => false,
+        | DrawType::stencilMidpointFanCover => DSMidpointFanFillPatchMaxReps,
+        DrawType::stencilOuterCubicBorrowedCoverage
+        | DrawType::stencilOuterCubics
+        | DrawType::stencilOuterCubicReset
+        | DrawType::stencilDynamicOuterCubics
+        | DrawType::stencilOuterCubicWinding
+        | DrawType::stencilOuterCubicCover => DSOuterCubicFillPatchMaxReps,
+        DrawType::depthStrokes => DSStrokePatchMaxReps,
+        DrawType::depthAAStrokes => DSAAStrokePatchMaxReps,
+        _ => unreachable!(),
     }
+}
+
+pub const fn dsPatchStrideLog2(draw_type: DrawType) -> u32 {
+    match draw_type {
+        DrawType::stencilMidpointFanBorrowedCoverage
+        | DrawType::stencilMidpointFans
+        | DrawType::stencilMidpointFanReset
+        | DrawType::stencilDynamicMidpointFans
+        | DrawType::stencilMidpointFanWinding
+        | DrawType::stencilMidpointFanCover => DSMidpointFanFillPatchStrideLog2,
+        DrawType::stencilOuterCubicBorrowedCoverage
+        | DrawType::stencilOuterCubics
+        | DrawType::stencilOuterCubicReset
+        | DrawType::stencilDynamicOuterCubics
+        | DrawType::stencilOuterCubicWinding
+        | DrawType::stencilOuterCubicCover => DSOuterCubicFillPatchStrideLog2,
+        DrawType::depthStrokes => DSStrokePatchStrideLog2,
+        DrawType::depthAAStrokes => DSAAStrokePatchStrideLog2,
+        _ => unreachable!(),
+    }
+}
+
+pub const fn drawTypeIsDepthStencilStroke(draw_type: DrawType) -> bool {
+    matches!(draw_type, DrawType::depthStrokes | DrawType::depthAAStrokes)
 }
 
 // Source-name spellings used by the translated Metal unit.  These are
@@ -3034,6 +3042,7 @@ impl DrawType {
     pub const ImageRect: Self = Self::imageRect;
     pub const ImageMesh: Self = Self::imageMesh;
     pub const DepthStrokes: Self = Self::depthStrokes;
+    pub const DepthAAStrokes: Self = Self::depthAAStrokes;
     pub const StencilMidpointFanBorrowedCoverage: Self = Self::stencilMidpointFanBorrowedCoverage;
     pub const StencilMidpointFans: Self = Self::stencilMidpointFans;
     pub const StencilMidpointFanReset: Self = Self::stencilMidpointFanReset;
@@ -3236,6 +3245,7 @@ pub const fn ShaderFeaturesMaskForDraw(
         | DrawType::outerCurvePatches
         | DrawType::interiorTriangulation
         | DrawType::depthStrokes
+        | DrawType::depthAAStrokes
         | DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
@@ -3595,7 +3605,8 @@ pub struct FlushUniforms {
     pub m_renderTargetBottomUp: u32,
     pub m_gradTextureYScale: f32,
     pub m_gradTextureYBias: f32,
-    pub m_padTo256Bytes: [u8; 256 - 116],
+    pub m_gradTextureYScalePacked: f32,
+    pub m_padTo256Bytes: [u8; 256 - 120],
 }
 
 impl FlushUniforms {
@@ -4011,8 +4022,7 @@ impl<T> WriteOnlyMappedMemory<T> {
     /// The cursor must retain a live writable mapping, and zero bytes must be
     /// valid for the unwritten storage's eventual use.
     pub unsafe fn zero_unwritten(&mut self) {
-        let byte_count =
-            (self.m_mappingEnd as usize).wrapping_sub(self.m_nextMappedItem as usize);
+        let byte_count = (self.m_mappingEnd as usize).wrapping_sub(self.m_nextMappedItem as usize);
         unsafe { core::ptr::write_bytes(self.m_nextMappedItem.cast::<u8>(), 0, byte_count) };
     }
 }

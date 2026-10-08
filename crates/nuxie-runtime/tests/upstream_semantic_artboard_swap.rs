@@ -299,9 +299,11 @@ fn swapping_data_bound_nested_artboard_rehomes_semantic_subtree() {
         .with_downcast::<ViewModelInstance, _>(|vmi| vmi.property_value_named("artboardProp"))
         .flatten()
         .expect("artboardProp");
-    assert!(property
-        .with_downcast::<ViewModelInstanceArtboard, _>(|_| ())
-        .is_some());
+    assert!(
+        property
+            .with_downcast::<ViewModelInstanceArtboard, _>(|_| ())
+            .is_some()
+    );
     let swap = |name: &str| {
         let source = file
             .with_file(|file| file.bindable_artboard_named(name))
@@ -334,8 +336,8 @@ fn swapping_data_bound_nested_artboard_rehomes_semantic_subtree() {
 
 #[test]
 fn swapped_in_nested_subtree_builds_semantics_outside_outer_host_borrow() {
-    use nuxie_runtime::source::semantic::semantic_data::SemanticData;
     use nuxie_runtime::Artboard;
+    use nuxie_runtime::source::semantic::semantic_data::SemanticData;
     use std::rc::Rc;
 
     let (file, artboard, machine) = fixture();
@@ -404,11 +406,13 @@ fn swapped_in_nested_subtree_builds_semantics_outside_outer_host_borrow() {
         Rc::ptr_eq(&parent, &incoming_boundary),
         "grandchild boundary belongs under incoming boundary"
     );
-    assert!(incoming_boundary
-        .borrow()
-        .children()
-        .iter()
-        .any(|node| Rc::ptr_eq(node, &child_boundary)));
+    assert!(
+        incoming_boundary
+            .borrow()
+            .children()
+            .iter()
+            .any(|node| Rc::ptr_eq(node, &child_boundary))
+    );
 }
 
 #[test]

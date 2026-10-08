@@ -299,8 +299,7 @@ pub(super) fn source_metatable(
                     "'{key}' is not a valid index of {name}"
                 )));
             }
-            source_dispatcher(lua, &userdata, "__rive_source_index")?
-                .call::<Value>((userdata, key))
+            source_dispatcher(lua, &userdata, "__rive_source_index")?.call::<Value>((userdata, key))
         })?,
     )?;
     metatable.set(

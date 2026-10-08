@@ -25,8 +25,8 @@ use crate::mechanical_port::source::{
             bindable_property_string_base::BindablePropertyStringBase,
         },
     },
-    scripted::scripted_interpolator::ScriptedInterpolator,
     scene::{Scene, SceneBehavior},
+    scripted::scripted_interpolator::ScriptedInterpolator,
 };
 use std::{
     cell::{RefCell, RefMut},
@@ -306,7 +306,8 @@ impl LinearAnimationInstance {
             return Some(holder);
         }
         let source = self
-            .scene.artboard_instance()
+            .scene
+            .artboard_instance()
             .with_artboard(|artboard| artboard.base.artboard_source_handle())
             .flatten()?;
         let bind = source
@@ -368,7 +369,8 @@ impl LinearAnimationInstance {
             clone.with_mut(|object| object.as_data_bind_mut().unwrap().set_converter(converter));
         }
         let container = self
-            .scene.artboard_instance()
+            .scene
+            .artboard_instance()
             .with_artboard(|artboard| artboard.base.data_bind_container.clone())
             .expect("live animation artboard");
         self.ensure_binding_extras().bind_container = container.downgrade();
@@ -385,7 +387,8 @@ impl LinearAnimationInstance {
         binds: Vec<CoreHandle>,
     ) {
         let container = self
-            .scene.artboard_instance()
+            .scene
+            .artboard_instance()
             .with_artboard(|artboard| artboard.base.data_bind_container.downgrade());
         let mut extras = self.ensure_binding_extras();
         extras.scripted_interpolators.insert(key, value);
@@ -418,15 +421,18 @@ impl LinearAnimationInstance {
             ScriptUpdateRequestHost, ScriptedObject,
         };
         let owner = ScriptedInterpolator::clone_scripted_occurrence(&shared, |bind| {
-            self.scene.artboard_instance()
+            self.scene
+                .artboard_instance()
                 .with_artboard_mut(|artboard| artboard.add_data_bind(bind))
                 .expect("the animation retains its artboard while cloning an interpolator");
         })?;
         let context = self
-            .scene.artboard_instance()
+            .scene
+            .artboard_instance()
             .with_artboard(|artboard| artboard.data_context())?;
         self.ensure_binding_extras().bind_container = self
-            .scene.artboard_instance()
+            .scene
+            .artboard_instance()
             .with_artboard(|artboard| artboard.base.data_bind_container.downgrade())?;
         let (properties, needs_init) =
             owner.with_downcast_mut::<ScriptedInterpolator, _>(|clone| {
@@ -469,7 +475,8 @@ impl LinearAnimationInstance {
         }
         self.apply(1.0);
         if self
-            .scene.artboard_instance()
+            .scene
+            .artboard_instance()
             .upgrade()
             .is_some_and(|artboard| artboard.advance_default(seconds))
         {
@@ -622,7 +629,8 @@ impl LinearAnimationInstance {
         self.keep_going_with_multiplier(elapsed)
     }
     pub fn is_translucent(&self) -> bool {
-        self.scene.artboard_instance()
+        self.scene
+            .artboard_instance()
             .with_artboard(|artboard| artboard.is_animation_instance_translucent(self))
             .unwrap_or(false)
     }

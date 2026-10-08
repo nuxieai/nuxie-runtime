@@ -259,6 +259,8 @@ pub struct File {
     scroll_physics: Vec<CoreHandle>,
     artboards: Vec<CoreHandle>,
     #[cfg(feature = "tools")]
+    retired_artboards: Vec<CoreHandle>,
+    #[cfg(feature = "tools")]
     artboard_byte_ranges: Vec<ArtboardByteRange>,
     #[cfg(feature = "tools")]
     header: RuntimeHeader,
@@ -281,6 +283,8 @@ impl Drop for File {
         DEBUG_TOTAL_FILE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
         self.cleanup_scripting_vm();
         self.artboards.clear();
+        #[cfg(feature = "tools")]
+        self.retired_artboards.clear();
         // Upstream clears each model's raw File pointer here. Our existing
         // weak File edge is already non-upgradeable during final destruction;
         // do not reborrow a model that may itself be releasing the last File.
@@ -325,6 +329,8 @@ impl File {
             scripted_interpolators: Vec::new(),
             scroll_physics: Vec::new(),
             artboards: Vec::new(),
+            #[cfg(feature = "tools")]
+            retired_artboards: Vec::new(),
             #[cfg(feature = "tools")]
             artboard_byte_ranges: Vec::new(),
             #[cfg(feature = "tools")]
@@ -614,6 +620,8 @@ impl File {
                             artboard.set_factory(factory);
                             artboard.set_file(self.self_handle.clone());
                             artboard.set_scripting_vm(self.scripting_vm.clone());
+                            #[cfg(feature = "tools")]
+                            artboard.initialize_instance_count();
                         });
                         if whole_file {
                             #[cfg(feature = "tools")]
@@ -923,8 +931,9 @@ impl File {
             .unwrap_or_default()
     }
 
-    /// Re-import one artboard run. All instances of the outgoing artboard must
-    /// have been released by the caller; other artboard instances are unaffected.
+    /// Re-import one artboard run. The outgoing source is retired while any of
+    /// its instances live; those keep its old content. The next replacement
+    /// deletes retired sources with no remaining instances.
     /// The root keeps its host identity. Partial bytes do not identify canonical
     /// whole-file record offsets for replacement-local objects, so their optional
     /// authored-ID snapshots are unavailable rather than assigned invented IDs.
@@ -1008,8 +1017,16 @@ impl File {
                 self.scripted_interpolators.push(object.clone());
             }
         }
-        Artboard::dispose_source_for_replacement(&outgoing);
         self.artboards[index] = imported.clone();
+        self.delete_unused_retired_artboards();
+        if outgoing
+            .with_downcast::<Artboard, _>(Artboard::has_live_instances)
+            .expect("outgoing artboard")
+        {
+            self.retired_artboards.push(outgoing);
+        } else {
+            Artboard::dispose_source_for_replacement(&outgoing);
+        }
         for artboard in &self.artboards {
             let objects = artboard
                 .with_downcast::<Artboard, _>(|artboard| artboard.objects().to_vec())
@@ -1023,6 +1040,26 @@ impl File {
             }
         }
         ImportResult::Success
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn retired_artboard_count(&self) -> usize {
+        self.retired_artboards.len()
+    }
+
+    #[cfg(feature = "tools")]
+    fn delete_unused_retired_artboards(&mut self) {
+        self.retired_artboards.retain(|artboard| {
+            if artboard
+                .with_downcast::<Artboard, _>(Artboard::has_live_instances)
+                .expect("retired artboard")
+            {
+                true
+            } else {
+                Artboard::dispose_source_for_replacement(artboard);
+                false
+            }
+        });
     }
 
     pub fn add_file_view_model_instance(&mut self, instance: CoreHandle) {

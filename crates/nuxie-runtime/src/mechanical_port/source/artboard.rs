@@ -271,6 +271,10 @@ pub struct Artboard {
     draw_order_change_counter: u8,
     #[cfg(feature = "tools")]
     artboard_id: u16,
+    // The file source and every descendant instance share this independent
+    // lifetime counter, including an instance made from another instance.
+    #[cfg(feature = "tools")]
+    instance_count: Option<Rc<()>>,
     artboard_source: Option<CoreHandle>,
     runtime_self: RuntimeArtboardInstanceWeakHandle,
     audio_engine: Option<AudioEngineRef>,
@@ -356,6 +360,8 @@ impl Default for Artboard {
             draw_order_change_counter: 0,
             #[cfg(feature = "tools")]
             artboard_id: 0,
+            #[cfg(feature = "tools")]
+            instance_count: None,
             artboard_source: None,
             runtime_self: RuntimeArtboardInstanceWeakHandle::default(),
             audio_engine: None,
@@ -836,6 +842,22 @@ impl Artboard {
 
     pub fn set_artboard_source(&mut self, artboard: Option<CoreHandle>) {
         self.artboard_source = artboard;
+    }
+
+    pub fn hosts_artboards(&self) -> bool {
+        !self.artboard_hosts.is_empty()
+    }
+
+    #[cfg(feature = "tools")]
+    pub(crate) fn initialize_instance_count(&mut self) {
+        self.instance_count = Some(Rc::new(()));
+    }
+
+    #[cfg(feature = "tools")]
+    pub fn has_live_instances(&self) -> bool {
+        self.instance_count
+            .as_ref()
+            .is_some_and(|count| Rc::strong_count(count) > 1)
     }
 
     #[cfg(feature = "tools")]
@@ -5529,6 +5551,7 @@ impl Artboard {
         #[cfg(feature = "tools")]
         {
             clone.base.artboard_id = self.artboard_id;
+            clone.base.instance_count = self.instance_count.clone();
         }
         clone.base.artboard_source = if self.is_instance {
             self.artboard_source.clone()

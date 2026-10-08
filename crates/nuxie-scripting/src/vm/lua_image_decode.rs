@@ -243,7 +243,9 @@ pub(super) fn has_pending_work(lua: &Lua) -> bool {
 #[cfg(feature = "upstream-test-seams")]
 pub(super) fn upstream_test_owner_id(lua: &Lua) -> u64 {
     install(lua);
-    registry(lua).expect("installed image decode registry").owner_id
+    registry(lua)
+        .expect("installed image decode registry")
+        .owner_id
 }
 
 pub(super) fn poll_completed(lua: &Lua) -> Result<bool> {
@@ -254,8 +256,9 @@ pub(super) fn pending_completion_sequence(lua: &Lua) -> Option<u64> {
     let owner = lua.app_data_ref::<ImageDecodeRegistryOwner>()?;
     let completions = lock_unpoisoned(&owner.0.completions);
     completions.front().map(|completion| match completion {
-        DecodeCompletion::Success { sequence, .. }
-        | DecodeCompletion::Failure { sequence, .. } => *sequence,
+        DecodeCompletion::Success { sequence, .. } | DecodeCompletion::Failure { sequence, .. } => {
+            *sequence
+        }
     })
 }
 

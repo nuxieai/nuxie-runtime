@@ -338,9 +338,17 @@ impl ScriptArtboard for NativeScriptArtboard {
             let position = Vec2D::new(*x, *y);
             return machine.with_instance_mut(|machine| {
                 Ok(match method {
-                    ScriptMethod::PointerDown => machine.pointer_down(position, *pointer_id, crate::source::pointer_button::PointerButton::Primary),
+                    ScriptMethod::PointerDown => machine.pointer_down(
+                        position,
+                        *pointer_id,
+                        crate::source::pointer_button::PointerButton::Primary,
+                    ),
                     ScriptMethod::PointerMove => machine.pointer_move(position, 0.0, *pointer_id),
-                    ScriptMethod::PointerUp => machine.pointer_up(position, *pointer_id, crate::source::pointer_button::PointerButton::Primary),
+                    ScriptMethod::PointerUp => machine.pointer_up(
+                        position,
+                        *pointer_id,
+                        crate::source::pointer_button::PointerButton::Primary,
+                    ),
                     ScriptMethod::PointerExit => machine.pointer_exit(position, *pointer_id),
                     _ => return Err(ScriptError::new("invalid artboard pointer method")),
                 } as u32)

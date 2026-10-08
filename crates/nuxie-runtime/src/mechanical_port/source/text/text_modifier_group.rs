@@ -113,7 +113,11 @@ impl TextModifierGroup {
     }
     pub fn shape_modifier_changed(owner: &CoreHandle) {
         let text = owner
-            .with(|object| object.as_text_modifier_group().and_then(Self::text_component))
+            .with(|object| {
+                object
+                    .as_text_modifier_group()
+                    .and_then(Self::text_component)
+            })
             .flatten();
         if let Some(text) = text {
             // Text clears registered groups' range maps, including this group's.
@@ -202,7 +206,11 @@ impl TextModifierGroup {
         } else {
             owner
                 .with(|owner| {
-                    read(owner.as_text_modifier_group().expect("TextModifierGroup owner"))
+                    read(
+                        owner
+                            .as_text_modifier_group()
+                            .expect("TextModifierGroup owner"),
+                    )
                 })
                 .expect("live TextModifierGroup")
         };

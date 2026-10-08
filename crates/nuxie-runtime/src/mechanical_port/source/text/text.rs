@@ -97,9 +97,8 @@ pub fn draw_color_glyph_layer(
         renderer.draw_path(path.as_ref(), paint.as_ref());
         return;
     }
-    let shader = factory.with_factory_mut(|factory| {
-        factory.make_radial_gradient(0.0, 0.0, 1.0, &colors, &stops)
-    });
+    let shader = factory
+        .with_factory_mut(|factory| factory.make_radial_gradient(0.0, 0.0, 1.0, &colors, &stops));
     paint.shader(Some(shader.as_ref()));
     layer.path.transform_in_place(to_unit_circle);
     renderer.save();

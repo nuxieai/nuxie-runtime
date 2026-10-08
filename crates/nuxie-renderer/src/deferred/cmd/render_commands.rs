@@ -1,5 +1,5 @@
 //! renderer/cmd/render_commands.hpp at e949498e: pointer-free wire vocabulary.
-use super::command_stream::{WirePod, wire_pod};
+use super::command_stream::{wire_pod, WirePod};
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

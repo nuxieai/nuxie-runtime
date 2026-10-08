@@ -7,7 +7,7 @@ use nuxie_ore_metal::cmd::{
 };
 use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer::{OreCommandBuffer, SharedIdAllocator, SharedOreCommandBuffer},
-    ore_commands::{WrapCanvasViewMode, packTargetSize},
+    ore_commands::{packTargetSize, WrapCanvasViewMode},
     ore_deferred_resource::*,
     ore_handle::{INVALID_HANDLE, REAL_RESOURCE_FLAG, REAL_RESOURCE_MASK},
     ore_make_recording::*,

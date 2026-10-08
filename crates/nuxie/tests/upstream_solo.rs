@@ -385,7 +385,13 @@ fn hit_test_on_nested_artboards_in_solos() {
     advance_pointer(&machine, main_artboard, 0.1);
     assert!(!collapsed(&active));
     assert!(collapsed(&inactive));
-    machine.with_instance_mut(|machine| machine.pointer_up(Vec2D::new(200.0, 200.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(200.0, 200.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     machine.with_instance_mut(|machine| machine.advance(0.0, true));
     parent.advance_default(0.0);
     machine.with_instance_mut(|machine| machine.advance(0.1, true));
@@ -442,8 +448,16 @@ fn data_bound_solos_with_enums_work_in_both_directions() {
     artboard.draw(&mut renderer);
     silver.borrow_mut().add_frame();
     machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(425.0, 70.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
-        machine.pointer_up(Vec2D::new(425.0, 70.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(425.0, 70.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
+        machine.pointer_up(
+            Vec2D::new(425.0, 70.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     machine.advance_and_apply(0.016);
     artboard.draw(&mut renderer);

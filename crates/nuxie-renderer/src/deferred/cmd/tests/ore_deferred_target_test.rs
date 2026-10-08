@@ -2,7 +2,7 @@
 use super::*;
 use crate::deferred::{
     cmd::{
-        deferred_replayer::{DeferredReplayer, snapshot_frame},
+        deferred_replayer::{snapshot_frame, DeferredReplayer},
         deferred_session::DeferredSession,
     },
     ore::ore_deferred_context::DeferredOreContext,

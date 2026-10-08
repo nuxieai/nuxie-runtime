@@ -7,7 +7,9 @@ use crate::mechanical_port::source::math::raw_path::RawPath;
 use crate::mechanical_port::source::math::vec2d::Vec2D;
 use crate::mechanical_port::source::shapes::paint::color::ColorInt;
 use crate::mechanical_port::source::text::glyph_lookup::GlyphLookup;
-use nuxie_render_api::line_break::{compute_line_breaks, line_break_props, LineBreak, LineBreakClass};
+use nuxie_render_api::line_break::{
+    LineBreak, LineBreakClass, compute_line_breaks, line_break_props,
+};
 
 // No-break spaces U+00A0, U+2007 and U+202F are deliberately excluded.
 pub fn is_white_space(c: u32) -> bool {

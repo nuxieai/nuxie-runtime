@@ -2,7 +2,7 @@
 use super::{clipstrokes::rect, ore_gm_helper::*};
 use crate::deferred::cmd::{
     deferred_render_factory::DeferredFactory,
-    render_replay::{ReplayHooks, ResourceTable, replay_render_commands},
+    render_replay::{replay_render_commands, ReplayHooks, ResourceTable},
 };
 
 const CELL: f32 = 160.0;

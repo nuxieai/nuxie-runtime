@@ -1,7 +1,7 @@
 //! tests/gm/ore_deferred_target.cpp at 6a2e3ab7.
 use super::{ore_gm_helper::*, ore_gm_sink::GMFrameSink};
 use crate::deferred::cmd::{
-    deferred_replayer::{DeferredReplayer, snapshot_frame},
+    deferred_replayer::{snapshot_frame, DeferredReplayer},
     deferred_session::{DeferredSession, ReplayCaps},
 };
 

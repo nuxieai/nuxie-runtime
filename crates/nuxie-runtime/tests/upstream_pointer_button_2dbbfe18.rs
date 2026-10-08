@@ -290,37 +290,52 @@ fn listens_to_button_at_reports_buttons_under_point() {
     let inside = v(120.0, 310.0);
     let outside = v(-50.0, -50.0);
     let primary = DownScene::new(&[]);
-    assert!(primary
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(inside, B::Primary)));
-    assert!(!primary
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(inside, B::Secondary)));
-    assert!(!primary
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(outside, B::Primary)));
-    let s = DownScene::new(&[(L::Down, B::Secondary)]);
-    assert!(s
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(inside, B::Secondary)));
-    for b in [B::Primary, B::Middle] {
-        assert!(!s
+    assert!(
+        primary
             .machine
-            .with_instance_mut(|m| m.listens_to_button_at(inside, b)));
+            .with_instance_mut(|m| m.listens_to_button_at(inside, B::Primary))
+    );
+    assert!(
+        !primary
+            .machine
+            .with_instance_mut(|m| m.listens_to_button_at(inside, B::Secondary))
+    );
+    assert!(
+        !primary
+            .machine
+            .with_instance_mut(|m| m.listens_to_button_at(outside, B::Primary))
+    );
+    let s = DownScene::new(&[(L::Down, B::Secondary)]);
+    assert!(
+        s.machine
+            .with_instance_mut(|m| m.listens_to_button_at(inside, B::Secondary))
+    );
+    for b in [B::Primary, B::Middle] {
+        assert!(
+            !s.machine
+                .with_instance_mut(|m| m.listens_to_button_at(inside, b))
+        );
     }
-    assert!(!s
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(outside, B::Secondary)));
+    assert!(
+        !s.machine
+            .with_instance_mut(|m| m.listens_to_button_at(outside, B::Secondary))
+    );
     let legacy = ClickScene::new();
-    assert!(legacy
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(v(75.0, 75.0), B::Primary)));
-    assert!(!legacy
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(v(75.0, 75.0), B::Secondary)));
-    assert!(!legacy
-        .machine
-        .with_instance_mut(|m| m.listens_to_button_at(v(300.0, 75.0), B::Primary)));
+    assert!(
+        legacy
+            .machine
+            .with_instance_mut(|m| m.listens_to_button_at(v(75.0, 75.0), B::Primary))
+    );
+    assert!(
+        !legacy
+            .machine
+            .with_instance_mut(|m| m.listens_to_button_at(v(75.0, 75.0), B::Secondary))
+    );
+    assert!(
+        !legacy
+            .machine
+            .with_instance_mut(|m| m.listens_to_button_at(v(300.0, 75.0), B::Primary))
+    );
 }
 #[test]
 fn synthetic_drag_events_carry_dragging_button() {
@@ -434,7 +449,10 @@ fn exported_secondary_click_fixture_loads_pointer_button_input() {
         .unwrap();
     input
         .with(|i| {
-            assert!(CoreObject::is_type_of(i, ListenerInputTypePointerButton::TYPE_KEY));
+            assert!(CoreObject::is_type_of(
+                i,
+                ListenerInputTypePointerButton::TYPE_KEY
+            ));
             assert_eq!(i.listener_input_type_pointer_button(), Some(B::Secondary));
             assert_eq!(i.listener_input_type_value(), Some(L::Click as u32));
         })

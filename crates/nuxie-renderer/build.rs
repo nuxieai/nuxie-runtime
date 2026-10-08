@@ -516,7 +516,10 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
          pub fn source_function_literal(text: &str) -> Option<&'static objc2_foundation::NSString> {\n\
              Some(match text {\n",
     );
-    for name in REQUIRED_EXPORTS.iter().filter(|name| name.ends_with("Main")) {
+    for name in REQUIRED_EXPORTS
+        .iter()
+        .filter(|name| name.ends_with("Main"))
+    {
         let value = values[name];
         rust.push_str(&format!(
             "        {:?} => objc2_foundation::ns_string!({:?}),\n",

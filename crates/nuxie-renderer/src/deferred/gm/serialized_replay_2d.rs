@@ -1,8 +1,8 @@
 //! tests/gm/serialized_replay_2d.cpp at e949498e.
 use super::ore_gm_helper::*;
 use nuxie_render_api::{
+    serialized_replay::{replay_serialized_commands, SerializedReplayHooks},
     SerializingFactory,
-    serialized_replay::{SerializedReplayHooks, replay_serialized_commands},
 };
 
 fn shape() -> RawPath {

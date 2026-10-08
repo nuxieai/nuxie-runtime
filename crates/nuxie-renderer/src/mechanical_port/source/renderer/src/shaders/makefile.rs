@@ -2082,12 +2082,14 @@ pub const MAKE_WILDCARD_EXPRESSIONS: &[MakeExpression] = &[
     MakeExpression {
         source_line: 491,
         family: "d3d",
-        expression: "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.vert.h, $(wildcard d3d/*.hlsl))) \\",
+        expression:
+            "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.vert.h, $(wildcard d3d/*.hlsl))) \\",
     },
     MakeExpression {
         source_line: 492,
         family: "d3d",
-        expression: "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.frag.h, $(wildcard d3d/*.hlsl))) \\",
+        expression:
+            "\t $(addprefix $(OUT)/, $(patsubst %.hlsl, %.frag.h, $(wildcard d3d/*.hlsl))) \\",
     },
 ];
 

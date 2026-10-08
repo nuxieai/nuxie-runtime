@@ -30,7 +30,11 @@ macro_rules! semantic_trait_flag {
             self.$set_with_completion(value, &mut completion);
             completion.finish();
         }
-        pub(crate) fn $set_with_completion(&mut self, value: bool, completion: &mut crate::source::core::PropertySetterCompletion) {
+        pub(crate) fn $set_with_completion(
+            &mut self,
+            value: bool,
+            completion: &mut crate::source::core::PropertySetterCompletion,
+        ) {
             let flags = if value {
                 self.base.trait_flags() | SemanticDataBase::$mask
             } else {
@@ -55,7 +59,11 @@ macro_rules! semantic_state_flag {
             self.$set_with_completion(value, &mut completion);
             completion.finish();
         }
-        pub(crate) fn $set_with_completion(&mut self, value: bool, completion: &mut crate::source::core::PropertySetterCompletion) {
+        pub(crate) fn $set_with_completion(
+            &mut self,
+            value: bool,
+            completion: &mut crate::source::core::PropertySetterCompletion,
+        ) {
             let flags = if value {
                 self.base.state_flags() | SemanticDataBase::$mask
             } else {
@@ -664,55 +672,64 @@ impl SemanticData {
 
     semantic_trait_flag!(
         is_expandable,
-        set_is_expandable, set_is_expandable_with_completion,
+        set_is_expandable,
+        set_is_expandable_with_completion,
         IS_EXPANDABLE_BITMASK,
         IS_EXPANDABLE_PROPERTY_KEY
     );
     semantic_trait_flag!(
         is_selectable,
-        set_is_selectable, set_is_selectable_with_completion,
+        set_is_selectable,
+        set_is_selectable_with_completion,
         IS_SELECTABLE_BITMASK,
         IS_SELECTABLE_PROPERTY_KEY
     );
     semantic_trait_flag!(
         is_checkable,
-        set_is_checkable, set_is_checkable_with_completion,
+        set_is_checkable,
+        set_is_checkable_with_completion,
         IS_CHECKABLE_BITMASK,
         IS_CHECKABLE_PROPERTY_KEY
     );
     semantic_trait_flag!(
         is_toggleable,
-        set_is_toggleable, set_is_toggleable_with_completion,
+        set_is_toggleable,
+        set_is_toggleable_with_completion,
         IS_TOGGLEABLE_BITMASK,
         IS_TOGGLEABLE_PROPERTY_KEY
     );
     semantic_trait_flag!(
         is_requirable,
-        set_is_requirable, set_is_requirable_with_completion,
+        set_is_requirable,
+        set_is_requirable_with_completion,
         IS_REQUIRABLE_BITMASK,
         IS_REQUIRABLE_PROPERTY_KEY
     );
     semantic_trait_flag!(
         is_enablable,
-        set_is_enablable, set_is_enablable_with_completion,
+        set_is_enablable,
+        set_is_enablable_with_completion,
         IS_ENABLABLE_BITMASK,
         IS_ENABLABLE_PROPERTY_KEY
     );
     semantic_trait_flag!(
         is_focusable,
-        set_is_focusable, set_is_focusable_with_completion,
+        set_is_focusable,
+        set_is_focusable_with_completion,
         IS_FOCUSABLE_BITMASK,
         IS_FOCUSABLE_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_expanded,
-        set_is_expanded, set_is_expanded_with_completion,
+        set_is_expanded,
+        set_is_expanded_with_completion,
         IS_EXPANDED_BITMASK,
         IS_EXPANDED_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_selected,
-        set_is_selected, set_is_selected_with_completion,
+        set_is_selected,
+        set_is_selected_with_completion,
         IS_SELECTED_BITMASK,
         IS_SELECTED_PROPERTY_KEY
     );
@@ -747,61 +764,71 @@ impl SemanticData {
 
     semantic_state_flag!(
         is_toggled,
-        set_is_toggled, set_is_toggled_with_completion,
+        set_is_toggled,
+        set_is_toggled_with_completion,
         IS_TOGGLED_BITMASK,
         IS_TOGGLED_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_required,
-        set_is_required, set_is_required_with_completion,
+        set_is_required,
+        set_is_required_with_completion,
         IS_REQUIRED_BITMASK,
         IS_REQUIRED_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_disabled,
-        set_is_disabled, set_is_disabled_with_completion,
+        set_is_disabled,
+        set_is_disabled_with_completion,
         IS_DISABLED_BITMASK,
         IS_DISABLED_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_focused,
-        set_is_focused, set_is_focused_with_completion,
+        set_is_focused,
+        set_is_focused_with_completion,
         IS_FOCUSED_BITMASK,
         IS_FOCUSED_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_hidden,
-        set_is_hidden, set_is_hidden_with_completion,
+        set_is_hidden,
+        set_is_hidden_with_completion,
         IS_HIDDEN_BITMASK,
         IS_HIDDEN_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_live_region,
-        set_is_live_region, set_is_live_region_with_completion,
+        set_is_live_region,
+        set_is_live_region_with_completion,
         IS_LIVE_REGION_BITMASK,
         IS_LIVE_REGION_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_read_only,
-        set_is_read_only, set_is_read_only_with_completion,
+        set_is_read_only,
+        set_is_read_only_with_completion,
         IS_READ_ONLY_BITMASK,
         IS_READ_ONLY_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_modal,
-        set_is_modal, set_is_modal_with_completion,
+        set_is_modal,
+        set_is_modal_with_completion,
         IS_MODAL_BITMASK,
         IS_MODAL_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_obscured,
-        set_is_obscured, set_is_obscured_with_completion,
+        set_is_obscured,
+        set_is_obscured_with_completion,
         IS_OBSCURED_BITMASK,
         IS_OBSCURED_PROPERTY_KEY
     );
     semantic_state_flag!(
         is_multiline,
-        set_is_multiline, set_is_multiline_with_completion,
+        set_is_multiline,
+        set_is_multiline_with_completion,
         IS_MULTILINE_BITMASK,
         IS_MULTILINE_PROPERTY_KEY
     );

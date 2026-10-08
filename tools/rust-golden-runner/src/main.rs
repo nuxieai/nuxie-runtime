@@ -1934,11 +1934,19 @@ fn apply_input_event(
     machine.with_instance_mut(|machine| {
         let position = Vec2D::new(event.x, event.y);
         match event.kind {
-            InputKind::PointerDown => machine.pointer_down(position, event.pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary),
+            InputKind::PointerDown => machine.pointer_down(
+                position,
+                event.pointer_id,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            ),
             InputKind::PointerMove => {
                 machine.pointer_move(position, event.seconds, event.pointer_id)
             }
-            InputKind::PointerUp => machine.pointer_up(position, event.pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary),
+            InputKind::PointerUp => machine.pointer_up(
+                position,
+                event.pointer_id,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            ),
             InputKind::PointerExit => machine.pointer_exit(position, event.pointer_id),
             _ => HitResult::None,
         }
@@ -2317,7 +2325,6 @@ mod tests {
         .expect("parse active script import");
         assert!(active.execute_scripts);
     }
-
 
     #[cfg(feature = "scripting")]
     fn fixture_record(

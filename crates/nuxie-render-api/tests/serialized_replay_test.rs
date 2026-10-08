@@ -4,24 +4,46 @@ use nuxie_render_api::*;
 use std::{cell::RefCell, rc::Rc};
 
 fn record_instanced_mesh(factory: &mut SerializingFactory, renderer: &mut dyn Renderer) {
-    let path = std::path::PathBuf::from(std::env::var_os("RIVE_RUNTIME_DIR")
-        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()))
-        .join("tests/unit_tests/assets/open_source.jpg");
+    let path = std::path::PathBuf::from(
+        std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into()),
+    )
+    .join("tests/unit_tests/assets/open_source.jpg");
     let image = factory.decode_image(&std::fs::read(path).unwrap()).unwrap();
-    fn buffer(factory: &mut SerializingFactory, kind: RenderBufferType, bytes: &[u8]) -> Box<dyn RenderBuffer> {
+    fn buffer(
+        factory: &mut SerializingFactory,
+        kind: RenderBufferType,
+        bytes: &[u8],
+    ) -> Box<dyn RenderBuffer> {
         let mut buffer = factory.make_render_buffer(kind, RenderBufferFlags::None, bytes.len());
         buffer.map_mut().copy_from_slice(bytes);
         buffer.unmap();
         buffer
     }
-    let pts = buffer(factory, RenderBufferType::Vertex,
-        &[0.0f32, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0].into_iter()
-            .flat_map(f32::to_ne_bytes).collect::<Vec<_>>());
-    let uvs = buffer(factory, RenderBufferType::Vertex,
-        &[0.0f32, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0].into_iter()
-            .flat_map(f32::to_ne_bytes).collect::<Vec<_>>());
-    let indices = buffer(factory, RenderBufferType::Index,
-        &[0u16, 1, 2, 0, 2, 3].into_iter().flat_map(u16::to_ne_bytes).collect::<Vec<_>>());
+    let pts = buffer(
+        factory,
+        RenderBufferType::Vertex,
+        &[0.0f32, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0]
+            .into_iter()
+            .flat_map(f32::to_ne_bytes)
+            .collect::<Vec<_>>(),
+    );
+    let uvs = buffer(
+        factory,
+        RenderBufferType::Vertex,
+        &[0.0f32, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+            .into_iter()
+            .flat_map(f32::to_ne_bytes)
+            .collect::<Vec<_>>(),
+    );
+    let indices = buffer(
+        factory,
+        RenderBufferType::Index,
+        &[0u16, 1, 2, 0, 2, 3]
+            .into_iter()
+            .flat_map(u16::to_ne_bytes)
+            .collect::<Vec<_>>(),
+    );
     let instances = factory.make_image_mesh_instances(3);
     {
         let mut instances = instances.borrow_mut();
@@ -33,8 +55,16 @@ fn record_instanced_mesh(factory: &mut SerializingFactory, renderer: &mut dyn Re
         data[2].additiveness = 1.0;
         instances.end_edit();
     }
-    renderer.draw_image_mesh_instanced(Some(image.as_ref()), ImageSampler::LINEAR_CLAMP,
-        Some(pts.as_ref()), Some(uvs.as_ref()), Some(indices.as_ref()), 4, 6, Some(&instances));
+    renderer.draw_image_mesh_instanced(
+        Some(image.as_ref()),
+        ImageSampler::LINEAR_CLAMP,
+        Some(pts.as_ref()),
+        Some(uvs.as_ref()),
+        Some(indices.as_ref()),
+        4,
+        6,
+        Some(&instances),
+    );
 }
 
 #[derive(Default)]
@@ -51,12 +81,31 @@ impl Renderer for MeshRecordingRenderer {
     fn clip_path(&mut self, _: &dyn RenderPath) {}
     fn draw_image(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler, _: BlendMode, _: f32) {}
     fn modulate_opacity(&mut self, _: f32) {}
-    fn draw_image_mesh(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler,
-        _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>,
-        _: u32, _: u32, _: BlendMode, _: f32) { self.plain_draws += 1; }
-    fn draw_image_mesh_instanced(&mut self, _: Option<&dyn RenderImage>, _: ImageSampler,
-        _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>, _: Option<&dyn RenderBuffer>,
-        _: u32, _: u32, instances: Option<&ImageMeshInstancesHandle>) {
+    fn draw_image_mesh(
+        &mut self,
+        _: Option<&dyn RenderImage>,
+        _: ImageSampler,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: u32,
+        _: u32,
+        _: BlendMode,
+        _: f32,
+    ) {
+        self.plain_draws += 1;
+    }
+    fn draw_image_mesh_instanced(
+        &mut self,
+        _: Option<&dyn RenderImage>,
+        _: ImageSampler,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: Option<&dyn RenderBuffer>,
+        _: u32,
+        _: u32,
+        instances: Option<&ImageMeshInstancesHandle>,
+    ) {
         self.instanced_draws += 1;
         self.got = instances.unwrap().borrow().instance_data().to_vec();
     }
@@ -75,10 +124,17 @@ fn an_instanced_mesh_draw_replays_byte_identically() {
     let size_factory = b.clone();
     let mut hooks = SerializedReplayHooks {
         on_frame: Some(Box::new(move || frame_factory.borrow_mut().add_frame())),
-        on_frame_size: Some(Box::new(move |w, h| size_factory.borrow_mut().frame_size(w, h))),
+        on_frame_size: Some(Box::new(move |w, h| {
+            size_factory.borrow_mut().frame_size(w, h)
+        })),
         ..Default::default()
     };
-    assert!(replay_serialized_commands(&a.bytes(), &mut b, &mut renderer_b, &mut hooks));
+    assert!(replay_serialized_commands(
+        &a.bytes(),
+        &mut b,
+        &mut renderer_b,
+        &mut hooks
+    ));
     assert_eq!(&*a.bytes(), &*b.borrow().bytes());
 }
 
@@ -91,7 +147,12 @@ fn replayed_instances_keep_their_data() {
     record_instanced_mesh(&mut a, &mut renderer);
     let mut b = SerializingFactory::default();
     let mut sink = MeshRecordingRenderer::default();
-    assert!(replay_serialized_commands(&a.bytes(), &mut b, &mut sink, &mut Default::default()));
+    assert!(replay_serialized_commands(
+        &a.bytes(),
+        &mut b,
+        &mut sink,
+        &mut Default::default()
+    ));
     assert_eq!(sink.instanced_draws, 1);
     assert_eq!(sink.plain_draws, 0);
     assert_eq!(sink.got.len(), 3);
@@ -113,7 +174,9 @@ fn mesh_replay_drops_missing_buffers_and_consumes_unknown_instance_payloads() {
     let mut bytes = a.bytes().to_vec();
     // Unknown instances still consume all twelve float fields.
     bytes.extend([40, 99, 1]);
-    for _ in 0..12 { bytes.extend(0.0f32.to_le_bytes()); }
+    for _ in 0..12 {
+        bytes.extend(0.0f32.to_le_bytes());
+    }
     for ids in [[0, 1, 2], [99, 1, 2], [0, 99, 2], [0, 1, 99]] {
         bytes.extend([13, 0, 3]);
         bytes.extend(1.0f32.to_le_bytes());
@@ -121,7 +184,12 @@ fn mesh_replay_drops_missing_buffers_and_consumes_unknown_instance_payloads() {
     }
     let mut factory = SerializingFactory::default();
     let mut sink = MeshRecordingRenderer::default();
-    assert!(replay_serialized_commands(&bytes, &mut factory, &mut sink, &mut Default::default()));
+    assert!(replay_serialized_commands(
+        &bytes,
+        &mut factory,
+        &mut sink,
+        &mut Default::default()
+    ));
     assert_eq!(sink.instanced_draws, 1);
     assert_eq!(sink.plain_draws, 1);
 }

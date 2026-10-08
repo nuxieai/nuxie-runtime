@@ -2,12 +2,11 @@
 use super::super::{
     command_stream::CommandReader,
     deferred_session::DeferredSession,
-    render_commands::{RenderCmd, payload_size_of},
+    render_commands::{payload_size_of, RenderCmd},
 };
-use super::render_context_null::{ObservingFactory, observing_factory};
+use super::render_context_null::{observing_factory, ObservingFactory};
 use nuxie_render_api::*;
 use nuxie_runtime::{
-    RuntimeFactoryHandle,
     source::{
         advance_flags::AdvanceFlags,
         artboard::Artboard,
@@ -33,6 +32,7 @@ use nuxie_runtime::{
         },
         status_code::StatusCode,
     },
+    RuntimeFactoryHandle,
 };
 
 pub(super) fn uint(h: &CoreHandle, k: u16, v: u32) {
@@ -338,10 +338,9 @@ fn a_self_referential_mask_is_dropped_rather_than_recursing() {
     let mask = f.mask(&masked, &a);
     f.initialize();
     f.advance();
-    assert!(
-        mask.with_downcast::<LayerMask, _>(LayerMask::is_self_referential)
-            .unwrap()
-    );
+    assert!(mask
+        .with_downcast::<LayerMask, _>(LayerMask::is_self_referential)
+        .unwrap());
     assert_eq!(f.list_shape(), "S");
     assert_eq!(f.draw_count(), 1);
 }

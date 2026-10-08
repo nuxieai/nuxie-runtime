@@ -306,13 +306,25 @@ fn execute_until_concrete_parity_boundary(actions: &[Action]) {
                 live.machine
                     .as_ref()
                     .expect("StateMachineInstance")
-                    .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+                    .with_instance_mut(|machine| {
+                        machine.pointer_down(
+                            Vec2D::new(x, y),
+                            0,
+                            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+                        )
+                    });
             }
             Action::PointerUp(x, y) => {
                 live.machine
                     .as_ref()
                     .expect("StateMachineInstance")
-                    .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+                    .with_instance_mut(|machine| {
+                        machine.pointer_up(
+                            Vec2D::new(x, y),
+                            0,
+                            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+                        )
+                    });
             }
             Action::ExpectNested(name, expected) => {
                 let host = live

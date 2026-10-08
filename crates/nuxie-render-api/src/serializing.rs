@@ -1,8 +1,8 @@
 use super::{
-    encoded_image_dimensions, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError,
-    ImageSampler, LayerMaskMode, Mat2D, PathVerb, RawPath, RawPathRef, RenderBuffer,
-    RenderBufferFlags, RenderBufferType, RenderImage, RenderPaint, RenderPaintStyle, RenderPath,
-    RenderShader, Renderer, StrokeCap, StrokeJoin, StrokePosition,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageSampler, LayerMaskMode, Mat2D,
+    PathVerb, RawPath, RawPathRef, RenderBuffer, RenderBufferFlags, RenderBufferType, RenderImage,
+    RenderPaint, RenderPaintStyle, RenderPath, RenderShader, Renderer, StrokeCap, StrokeJoin,
+    StrokePosition, encoded_image_dimensions,
 };
 use crate::{
     DeferredCanvasHost, DeferredCanvasHostHandle, ImageMeshInstanceData, ImageMeshInstances,

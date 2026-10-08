@@ -235,15 +235,31 @@ fn scripted_audio_plays_and_updates_volume_from_the_pinned_fixture() {
     assert_eq!(engine.playing_sound_count(), 0);
 
     machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(25.0, 25.0), 1, nuxie_runtime::source::pointer_button::PointerButton::Primary);
-        machine.pointer_up(Vec2D::new(25.0, 25.0), 1, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(25.0, 25.0),
+            1,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
+        machine.pointer_up(
+            Vec2D::new(25.0, 25.0),
+            1,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     machine.advance_and_apply(0.016);
     assert_eq!(engine.playing_sound_count(), 1);
 
     machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(200.0, 200.0), 2, nuxie_runtime::source::pointer_button::PointerButton::Primary);
-        machine.pointer_up(Vec2D::new(200.0, 200.0), 2, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(200.0, 200.0),
+            2,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
+        machine.pointer_up(
+            Vec2D::new(200.0, 200.0),
+            2,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     machine.advance_and_apply(0.016);
     assert_eq!(

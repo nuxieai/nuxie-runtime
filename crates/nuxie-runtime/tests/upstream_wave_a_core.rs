@@ -298,8 +298,16 @@ impl StatefulFixture {
     }
     fn click(&mut self, y: f32) {
         self.machine.with_instance_mut(|machine| {
-            machine.pointer_down(Vec2D::new(50.0, y), 1, nuxie_runtime::source::pointer_button::PointerButton::Primary);
-            machine.pointer_up(Vec2D::new(50.0, y), 1, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            machine.pointer_down(
+                Vec2D::new(50.0, y),
+                1,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            );
+            machine.pointer_up(
+                Vec2D::new(50.0, y),
+                1,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            );
         });
         self.frames(1, 0.016);
     }

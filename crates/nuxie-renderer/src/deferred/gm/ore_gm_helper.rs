@@ -544,7 +544,10 @@ pub(super) fn triangle_bytes() -> Vec<u8> {
 pub(super) fn vertex_buffer(ctx: &mut dyn ContextApi, label: &str) -> AnyResourceHandle {
     try_vertex_buffer(ctx, label).expect("GM vertex buffer")
 }
-pub(super) fn try_vertex_buffer(ctx: &mut dyn ContextApi, label: &str) -> Option<AnyResourceHandle> {
+pub(super) fn try_vertex_buffer(
+    ctx: &mut dyn ContextApi,
+    label: &str,
+) -> Option<AnyResourceHandle> {
     let bytes = triangle_bytes();
     ctx.makeBuffer(&BufferDesc {
         usage: BufferUsage::vertex,

@@ -244,7 +244,9 @@ fn emit_gradient_transform(out: &mut String, transform: Mat2D, precision: i32) {
     if transform != Mat2D::IDENTITY {
         out.push_str(" gradientTransform=\"matrix(");
         for (i, value) in transform.0.into_iter().enumerate() {
-            if i != 0 { out.push(' '); }
+            if i != 0 {
+                out.push(' ');
+            }
             out.push_str(&format_float(value, precision));
         }
         out.push_str(")\"");
@@ -276,7 +278,9 @@ impl Default for SVGRenderPaint {
     }
 }
 impl SVGRenderPaint {
-    pub fn get_shader_transform(&self) -> Mat2D { self.shader_transform }
+    pub fn get_shader_transform(&self) -> Mat2D {
+        self.shader_transform
+    }
     pub fn is_stroke(&self) -> bool {
         self.is_stroke
     }
@@ -333,7 +337,9 @@ impl RenderPaint for SVGRenderPaint {
     fn shader(&mut self, value: Option<&dyn RenderShader>) {
         self.shader = value.map(RenderShader::retain_shader);
     }
-    fn shader_transform(&mut self, transform: Mat2D) { self.shader_transform = transform; }
+    fn shader_transform(&mut self, transform: Mat2D) {
+        self.shader_transform = transform;
+    }
     fn invalidate_stroke(&mut self) {}
     fn feather(&mut self, _value: f32) {}
 }

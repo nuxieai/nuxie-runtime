@@ -824,8 +824,13 @@ impl StateMachineInstance {
         })
     }
     pub fn pointer_down(&mut self, x: f32, y: f32, pointer_id: i32) -> RuntimeHitResult {
-        self.native
-            .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), pointer_id, crate::source::pointer_button::PointerButton::Primary))
+        self.native.with_instance_mut(|machine| {
+            machine.pointer_down(
+                Vec2D::new(x, y),
+                pointer_id,
+                crate::source::pointer_button::PointerButton::Primary,
+            )
+        })
     }
     pub fn pointer_down_with_event_context(
         &mut self,
@@ -840,8 +845,13 @@ impl StateMachineInstance {
         result
     }
     pub fn pointer_up(&mut self, x: f32, y: f32, pointer_id: i32) -> RuntimeHitResult {
-        self.native
-            .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), pointer_id, crate::source::pointer_button::PointerButton::Primary))
+        self.native.with_instance_mut(|machine| {
+            machine.pointer_up(
+                Vec2D::new(x, y),
+                pointer_id,
+                crate::source::pointer_button::PointerButton::Primary,
+            )
+        })
     }
     pub fn pointer_up_with_event_context(
         &mut self,

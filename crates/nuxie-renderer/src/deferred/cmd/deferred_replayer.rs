@@ -3,7 +3,7 @@ use super::{
     canvas_schedule::schedule_canvases,
     deferred_cmd::replay_render_commands_with_optional_factory,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{GpuCensus, take_gpu_census},
+    gpu_census::{take_gpu_census, GpuCensus},
     render_handle::{CANVAS_HANDLE_FLAG, CANVAS_HANDLE_MASK, INVALID_RENDER_HANDLE},
     render_replay::*,
 };
@@ -12,7 +12,7 @@ use nuxie_ore_metal::context::{RenderTargetInfo, ReplayCaps};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::ore_cmd::{
     ore_command_buffer::OreCommandReader,
-    ore_commands::{CommandType, DestroyResourcePOD, packTargetSize},
+    ore_commands::{packTargetSize, CommandType, DestroyResourcePOD},
 };
 use nuxie_render_api::*;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};

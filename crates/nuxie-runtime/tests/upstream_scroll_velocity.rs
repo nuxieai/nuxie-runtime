@@ -150,7 +150,11 @@ fn scroll_constraint_velocity_and_scroll_active_during_drag() {
 
     state_machine.with_instance_mut(|machine| {
         machine.pointer_move(Vec2D::new(50.0, 250.0), 0.0, 0);
-        machine.pointer_down(Vec2D::new(50.0, 250.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(50.0, 250.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     state_machine.advance_and_apply(0.1);
 
@@ -168,7 +172,11 @@ fn scroll_constraint_velocity_and_scroll_active_during_drag() {
     assert!(scroll_active(&fixture.scroll));
 
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_up(Vec2D::new(50.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_up(
+            Vec2D::new(50.0, 50.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     assert!(physics_running(&fixture.scroll));
     assert!(scroll_active(&fixture.scroll));
@@ -181,7 +189,11 @@ fn scroll_constraint_velocity_resets_after_physics_settles() {
 
     state_machine.with_instance_mut(|machine| {
         machine.pointer_move(Vec2D::new(50.0, 250.0), 0.0, 0);
-        machine.pointer_down(Vec2D::new(50.0, 250.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(50.0, 250.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     state_machine.advance_and_apply(0.1);
     state_machine.with_instance_mut(|machine| {
@@ -189,7 +201,11 @@ fn scroll_constraint_velocity_resets_after_physics_settles() {
     });
     state_machine.advance_and_apply(0.0);
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_up(Vec2D::new(50.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_up(
+            Vec2D::new(50.0, 50.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
 
     assert!(physics_running(&fixture.scroll));
@@ -215,7 +231,11 @@ fn scroll_constraint_horizontal_velocity() {
 
     state_machine.with_instance_mut(|machine| {
         machine.pointer_move(Vec2D::new(250.0, 50.0), 0.0, 0);
-        machine.pointer_down(Vec2D::new(250.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(250.0, 50.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     state_machine.advance_and_apply(0.1);
     state_machine.with_instance_mut(|machine| {
@@ -227,7 +247,11 @@ fn scroll_constraint_horizontal_velocity() {
     assert_eq!(velocity_y(&fixture.scroll), 0.0);
     assert!(scroll_active(&fixture.scroll));
     state_machine.with_instance_mut(|machine| {
-        machine.pointer_up(Vec2D::new(50.0, 50.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_up(
+            Vec2D::new(50.0, 50.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
 }
 

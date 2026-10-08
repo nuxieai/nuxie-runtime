@@ -21,6 +21,7 @@ pub(crate) use instance::identity as view_model_identity;
 mod runtime;
 mod source_handles;
 mod transactions;
+mod value_policy;
 pub use context::*;
 pub use instance::*;
 pub use runtime::*;
@@ -28,4 +29,6 @@ pub use source_handles::*;
 pub use transactions::*;
 pub(crate) use transactions::{
     capture_native_change, capture_native_list_change, capture_native_view_model_change,
+    capture_unchanged_native_write,
 };
+pub use value_policy::*;

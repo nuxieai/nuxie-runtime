@@ -1,0 +1,437 @@
+//! Handwritten shared vectors from project-runtime-host.md section 3.1 and
+//! its settled URL/calendar notes. This table can be copied by other hosts.
+use nuxie_render_api::{PersistentFactory, RecordingFactory};
+use nuxie_runtime::{
+    File, RuntimeCompiledValueRule, RuntimeFactoryHandle, RuntimeRuleValue as V,
+    RuntimeValuePolicy, RuntimeValueRule, RuntimeValueRuleKind as R, RuntimeValueRuleMode,
+};
+#[path = "support/value_policy_fixture.rs"]
+mod fixture;
+
+const EMAIL_PATTERN: &str = r"[a-zA-Z0-9\.\!\#\$\%\&'\*\+\/\=\?\^_\`\{\|\}\~\-]+@[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*";
+
+fn email_vectors() -> [(&'static str, bool); 16] {
+    [
+        ("a@b", true),
+        ("a+b@localhost", true),
+        ("first.last@example.com", true),
+        ("user/name@example.com", true),
+        ("a{b}@example.com", true),
+        ("a|b@example.com", true),
+        ("a-b@example-host.org", true),
+        (
+            "x@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+            true,
+        ),
+        ("o'neil@example.com", true),
+        ("~!#$%&*=?^_`@example.com", true),
+        ("a b@example.com", false),
+        ("@example.com", false),
+        ("a@", false),
+        ("a@-example.com", false),
+        ("a@example-.com", false),
+        (
+            "a@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.com",
+            false,
+        ),
+    ]
+}
+
+#[test]
+fn shared_vectors() {
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&fixture::fixture(), retained, None, None, None).unwrap();
+    let mut policy = RuntimeValuePolicy::new(file);
+    policy
+        .set_rules(&[RuntimeValueRule {
+            model: "Values".into(),
+            property: "text".into(),
+            kind: R::Pattern(EMAIL_PATTERN.into()),
+            mode: RuntimeValueRuleMode::Mark,
+            code: "email".into(),
+            message: "email format".into(),
+        }])
+        .expect("shared email pattern must install as a marking rule");
+    let mut cases = vec![
+        (
+            R::Length {
+                minimum: 2,
+                maximum: 2,
+            },
+            V::Text("e\u{301}"),
+            None,
+            true,
+        ),
+        (
+            R::Length {
+                minimum: 2,
+                maximum: 2,
+            },
+            V::Text("😀"),
+            None,
+            true,
+        ),
+        (
+            R::Length {
+                minimum: 1,
+                maximum: 1,
+            },
+            V::Text("😀"),
+            None,
+            false,
+        ),
+        (
+            R::Pattern("[A-Z]+|[0-9]{2}".into()),
+            V::Text("AB"),
+            None,
+            true,
+        ),
+        (
+            R::Pattern("[A-Z]+|[0-9]{2}".into()),
+            V::Text("12"),
+            None,
+            true,
+        ),
+        (
+            R::Pattern("[A-Z]+|[0-9]{2}".into()),
+            V::Text("aAB"),
+            None,
+            false,
+        ),
+        (
+            R::Pattern(r"[a\/\{\|\}\-]+".into()),
+            V::Text("a/{|}-"),
+            None,
+            true,
+        ),
+        (
+            R::Pattern(r"[a\/\{\|\}\-]+".into()),
+            V::Text("$"),
+            None,
+            false,
+        ),
+        (
+            R::Pattern(r"[\p{ASCII}&&\p{Letter}]+".into()),
+            V::Text("ABC"),
+            None,
+            true,
+        ),
+        (
+            R::Pattern(r"[\p{ASCII}&&\p{Letter}]+".into()),
+            V::Text("é"),
+            None,
+            false,
+        ),
+        (
+            R::Pattern(r"[[a-z]--[aeiou]]+".into()),
+            V::Text("bcdf"),
+            None,
+            true,
+        ),
+        (
+            R::Pattern(r"[[a-z]--[aeiou]]+".into()),
+            V::Text("ae"),
+            None,
+            false,
+        ),
+        (R::Pattern(r"[\q{ab|cd}]".into()), V::Text("ab"), None, true),
+        (
+            R::Pattern(r"[\q{ab|cd}]".into()),
+            V::Text("ac"),
+            None,
+            false,
+        ),
+        // Without the multiline flag JavaScript's $ requires the end of input.
+        (R::Pattern("a".into()), V::Text("a\n"), None, false),
+        (
+            R::TextMinimum("2026-01-01".into()),
+            V::Text("2026-01-01"),
+            None,
+            true,
+        ),
+        (
+            R::TextMinimum("2026-01-01".into()),
+            V::Text("2025-12-31"),
+            None,
+            false,
+        ),
+        (
+            R::TextMaximum("2026-01-01".into()),
+            V::Text("2026-01-02"),
+            None,
+            false,
+        ),
+        // A supplementary code point starts with a surrogate below U+E000.
+        (R::TextMaximum("\u{e000}".into()), V::Text("😀"), None, true),
+        (R::NumberMinimum(0.0), V::Number(f32::NAN), None, false),
+        (R::NumberMinimum(0.0), V::Number(f32::INFINITY), None, false),
+        (
+            R::NumberMinimum(0.0),
+            V::Number(f32::NEG_INFINITY),
+            None,
+            false,
+        ),
+        (R::NumberMinimum(0.0), V::Number(-0.0), None, true),
+        (R::NumberMaximum(1.1), V::Number(1.1f32), None, true),
+        (R::NumberMinimum(9.99), V::Number(9.99f32), None, true),
+        (R::NumberMaximum(0.0), V::Number(f32::NAN), None, false),
+        (R::NumberMaximum(0.0), V::Number(f32::INFINITY), None, false),
+        (
+            R::NumberMaximum(0.0),
+            V::Number(f32::NEG_INFINITY),
+            None,
+            false,
+        ),
+        (R::NumberMaximum(0.0), V::Number(-0.0), None, true),
+        (
+            R::AllowedValues(vec!["green".into()]),
+            V::Enum(Some("green")),
+            None,
+            true,
+        ),
+        (
+            R::AllowedValues(vec!["green".into()]),
+            V::Enum(Some("red")),
+            None,
+            false,
+        ),
+        (
+            R::AllowedValues(vec!["green".into()]),
+            V::Enum(None),
+            None,
+            false,
+        ),
+        (
+            R::AllowedValues(vec!["green".into()]),
+            V::Text("red"),
+            None,
+            false,
+        ),
+        (
+            R::ItemCount {
+                minimum: 1,
+                maximum: 2,
+            },
+            V::List {
+                items: 0,
+                picked: None,
+            },
+            None,
+            true,
+        ),
+        (
+            R::ItemCount {
+                minimum: 1,
+                maximum: 2,
+            },
+            V::List {
+                items: 2,
+                picked: None,
+            },
+            None,
+            true,
+        ),
+        (
+            R::ItemCount {
+                minimum: 1,
+                maximum: 2,
+            },
+            V::List {
+                items: 3,
+                picked: None,
+            },
+            None,
+            false,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 3,
+            },
+            V::List {
+                items: 5,
+                picked: Some(0),
+            },
+            None,
+            true,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 3,
+            },
+            V::List {
+                items: 5,
+                picked: Some(1),
+            },
+            None,
+            false,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 3,
+            },
+            V::List {
+                items: 5,
+                picked: Some(2),
+            },
+            None,
+            true,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 3,
+            },
+            V::List {
+                items: 5,
+                picked: Some(4),
+            },
+            None,
+            false,
+        ),
+        (R::Required, V::Scalar, Some(false), false),
+        (R::Required, V::Scalar, Some(true), true),
+        (R::Required, V::Scalar, None, true),
+        (
+            R::Required,
+            V::List {
+                items: 4,
+                picked: Some(0),
+            },
+            None,
+            false,
+        ),
+        (
+            R::Required,
+            V::List {
+                items: 0,
+                picked: None,
+            },
+            None,
+            false,
+        ),
+        (
+            R::Required,
+            V::List {
+                items: 4,
+                picked: Some(1),
+            },
+            None,
+            true,
+        ),
+        (R::Date, V::Text("2024-02-29"), None, true),
+        (R::Date, V::Text("2000-02-29"), None, true),
+        (R::Date, V::Text("1900-02-29"), None, false),
+        (R::Date, V::Text("2026-02-29"), None, false),
+        (R::Date, V::Text("2026-04-31"), None, false),
+        (R::Date, V::Text("2026-01-01"), None, true),
+        (R::Date, V::Text("0000-01-01"), None, false),
+        (R::Date, V::Text("2026-1-01"), None, false),
+        (R::Date, V::Text("2026-01-00"), None, false),
+        (R::Date, V::Text("２０２６-01-01"), None, false),
+        (R::Url, V::Text("https://example.org/a?b=c#d"), None, true),
+        (R::Url, V::Text("mailto:a@example.org"), None, true),
+        (R::Url, V::Text("https://例え.テスト/"), None, true),
+        (R::Url, V::Text("/relative"), None, false),
+        (R::Url, V::Text("https://[bad]/"), None, false),
+    ];
+    cases.extend(email_vectors().map(|(value, expected)| {
+        (
+            R::Pattern(EMAIL_PATTERN.into()),
+            V::Text(value),
+            None,
+            expected,
+        )
+    }));
+    for (index, (rule, value, marker, expected)) in cases.into_iter().enumerate() {
+        let rule = RuntimeCompiledValueRule::compile(rule).unwrap();
+        assert_eq!(
+            rule.holds(value, marker),
+            expected,
+            "vector {index}: {rule:?} {value:?}"
+        );
+    }
+}
+
+#[test]
+fn only_required_rejects_empty_text() {
+    for rule in [
+        R::TextMinimum("a".into()),
+        R::TextMaximum("a".into()),
+        R::AllowedValues(vec!["a".into()]),
+        R::Length {
+            minimum: 2,
+            maximum: 3,
+        },
+        R::Pattern("[A-Z]+".into()),
+        R::Url,
+        R::Date,
+    ] {
+        assert!(
+            RuntimeCompiledValueRule::compile(rule)
+                .unwrap()
+                .holds(V::Text(""), None)
+        );
+    }
+    assert!(
+        !RuntimeCompiledValueRule::compile(R::Required)
+            .unwrap()
+            .holds(V::Text(""), None)
+    );
+}
+
+/// Shared installation rows: a kind and whether installation accepts it.
+#[test]
+fn shared_installation_vectors() {
+    let cases = [
+        (R::NumberMinimum(f64::NAN), false),
+        (R::NumberMaximum(f64::INFINITY), false),
+        (
+            R::Length {
+                minimum: 2,
+                maximum: 1,
+            },
+            false,
+        ),
+        (
+            R::ItemCount {
+                minimum: 2,
+                maximum: 1,
+            },
+            false,
+        ),
+        (
+            R::PickedCount {
+                property: "picked".into(),
+                minimum: 2,
+                maximum: 1,
+            },
+            false,
+        ),
+        (
+            R::PickedCount {
+                property: "".into(),
+                minimum: 0,
+                maximum: 1,
+            },
+            false,
+        ),
+        (R::Pattern("[".into()), false),
+        (R::Pattern("[a|b]".into()), false),
+        (R::Pattern(EMAIL_PATTERN.into()), true),
+    ];
+    for (index, (rule, accepted)) in cases.into_iter().enumerate() {
+        assert_eq!(
+            RuntimeCompiledValueRule::compile(rule).is_ok(),
+            accepted,
+            "installation vector {index}"
+        );
+    }
+}

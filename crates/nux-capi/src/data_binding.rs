@@ -210,6 +210,11 @@ pub struct NuxViewModelCatalog {
 }
 
 impl NuxViewModelCatalog {
+    #[cfg(feature = "scripting")]
+    pub(super) fn global_schema_name(&self, index: usize) -> Option<&str> {
+        std::str::from_utf8(&self.schemas.get(index)?.name).ok()
+    }
+
     pub(super) fn global_schema_named(&self, name: &str) -> Option<usize> {
         self.schemas
             .iter()
@@ -1410,6 +1415,7 @@ pub struct NuxViewModelMutationResult {
     applied_count: usize,
     correlation_id: u64,
     changes: Vec<OwnedViewModelChange>,
+    rule_reports: Vec<nuxie::RuntimeValueRuleReport>,
     code: Box<[u8]>,
     message: Box<[u8]>,
 }
@@ -1426,6 +1432,7 @@ pub struct NuxViewModelMutationResultInfo {
     pub message: NuxStringView,
     pub correlation_id: u64,
     pub change_count: usize,
+    pub rule_report_count: usize,
 }
 
 impl Default for NuxViewModelMutationResultInfo {
@@ -1438,6 +1445,7 @@ impl Default for NuxViewModelMutationResultInfo {
             message: NuxStringView::default(),
             correlation_id: 0,
             change_count: 0,
+            rule_report_count: 0,
         }
     }
 }
@@ -2164,6 +2172,161 @@ fn apply_transaction_mutation(
     }
 }
 
+fn apply_checked_mutation(
+    policy: &nuxie::RuntimeValuePolicy,
+    operation: &mut nuxie::RuntimeValuePolicyOperation,
+    transaction: &mut RuntimeOwnedViewModelTransaction,
+    instances: &BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    mutation: &ResolvedMutation,
+    following: &[ResolvedMutation],
+) -> Result<bool, NuxStatus> {
+    let owner = instances
+        .get(&mutation.instance)
+        .ok_or(NuxStatus::HandleMismatch)?;
+    let Some(candidate) = mutation_candidate(owner, instances, mutation)? else {
+        apply_transaction_mutation(transaction, instances, mutation)?;
+        return Ok(true);
+    };
+    let (target, index) = policy
+        .resolve_property(owner, &mutation.path)
+        .map_err(value_policy::status)?;
+    let marker_index = policy.marker_property(&target, index);
+    let mut marker = None;
+    if let Some(marker_index) = marker_index {
+        for later in following {
+            let Some(later_root) = instances.get(&later.instance) else {
+                continue;
+            };
+            let Ok((later_owner, later_index)) = policy.resolve_property(later_root, &later.path)
+            else {
+                continue;
+            };
+            if !later_owner.ptr_eq(&target) {
+                continue;
+            }
+            if later_index == index {
+                break;
+            }
+            if later_index == marker_index && later.kind == NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL {
+                marker = Some(later.boolean);
+            }
+        }
+    }
+    let mut writer_status = None;
+    operation
+        .checked_write(policy, owner, &mutation.path, candidate, marker, || {
+            apply_transaction_mutation(transaction, instances, mutation).map_err(|status| {
+                writer_status = Some(status);
+                nuxie::RuntimeValuePolicyError::InvalidArgument
+            })
+        })
+        .map(|result| result.applied)
+        .map_err(|error| writer_status.unwrap_or_else(|| value_policy::status(error)))
+}
+
+fn mutation_candidate(
+    owner: &RuntimeOwnedViewModelHandle,
+    instances: &BTreeMap<usize, RuntimeOwnedViewModelHandle>,
+    mutation: &ResolvedMutation,
+) -> Result<Option<RuntimeViewModelChangeValue>, NuxStatus> {
+    use RuntimeViewModelChangeValue as Value;
+    let valid_kind = match mutation.kind {
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => owner
+            .borrow()
+            .number_source_handle_by_property_name_path(&mutation.path)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => owner
+            .borrow()
+            .boolean_source_handle_by_property_name_path(&mutation.path)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => owner
+            .borrow()
+            .string_source_handle_by_property_name_path(&mutation.path)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => owner
+            .borrow()
+            .color_source_handle_by_property_name_path(&mutation.path)
+            .is_some(),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => owner
+            .borrow()
+            .enum_source_handle_by_property_name_path(&mutation.path)
+            .is_some(),
+        _ => true,
+    };
+    if !valid_kind {
+        return Err(NuxStatus::NotFound);
+    }
+    Ok(Some(match mutation.kind {
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER => Value::Number(mutation.number),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_BOOL => Value::Boolean(mutation.boolean),
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING => {
+            Value::String(Arc::from(mutation.bytes.as_ref()))
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_COLOR => {
+            Value::Color(u32::try_from(mutation.integer).map_err(|_| NuxStatus::InvalidArgument)?)
+        }
+        NUX_VIEW_MODEL_MUTATION_KIND_SET_ENUM => Value::Enum(mutation.integer),
+        NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET
+        | NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => {
+            let mut items = owner
+                .list_items_by_property_name_path(&mutation.path)
+                .ok_or(NuxStatus::NotFound)?
+                .iter()
+                .map(RuntimeOwnedViewModelHandle::instance_identity)
+                .collect::<Vec<_>>();
+            match mutation.kind {
+                NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT => {
+                    if items.len() >= MAX_LIST_ITEMS {
+                        return Err(NuxStatus::LimitExceeded);
+                    }
+                    if mutation.index > items.len() {
+                        return Err(NuxStatus::InvalidArgument);
+                    }
+                    let item = mutation
+                        .related
+                        .and_then(|id| instances.get(&id))
+                        .ok_or(NuxStatus::HandleMismatch)?;
+                    items.insert(mutation.index, item.instance_identity());
+                }
+                NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE => {
+                    if mutation.index >= items.len() {
+                        return Err(NuxStatus::InvalidArgument);
+                    }
+                    items.remove(mutation.index);
+                }
+                NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP | NUX_VIEW_MODEL_MUTATION_KIND_LIST_MOVE => {
+                    if mutation.index >= items.len() || mutation.second_index >= items.len() {
+                        return Err(NuxStatus::InvalidArgument);
+                    }
+                    if mutation.kind == NUX_VIEW_MODEL_MUTATION_KIND_LIST_SWAP {
+                        items.swap(mutation.index, mutation.second_index);
+                    } else {
+                        let item = items.remove(mutation.index);
+                        items.insert(mutation.second_index, item);
+                    }
+                }
+                NUX_VIEW_MODEL_MUTATION_KIND_LIST_SET => {
+                    let item = mutation
+                        .related
+                        .and_then(|id| instances.get(&id))
+                        .ok_or(NuxStatus::HandleMismatch)?;
+                    *items
+                        .get_mut(mutation.index)
+                        .ok_or(NuxStatus::InvalidArgument)? = item.instance_identity();
+                }
+                NUX_VIEW_MODEL_MUTATION_KIND_LIST_CLEAR => items.clear(),
+                _ => return Err(NuxStatus::InvalidArgument),
+            }
+            Value::List(items)
+        }
+        _ => return Ok(None),
+    }))
+}
+
 fn publish_mutation_result(
     out_result: *mut *mut NuxViewModelMutationResult,
     status: NuxStatus,
@@ -2176,6 +2339,7 @@ fn publish_mutation_result(
             applied_count,
             correlation_id: 0,
             changes: Vec::new(),
+            rule_reports: Vec::new(),
             code: bounded_diagnostic_bytes(status_code(status)),
             message: bounded_diagnostic_bytes(message),
         },
@@ -2194,17 +2358,22 @@ fn publish_mutation_success_and_commit(
     out_result: *mut *mut NuxViewModelMutationResult,
     applied_count: usize,
     correlation_id: u64,
-    changes: Vec<OwnedViewModelChange>,
+    rows: (
+        Vec<OwnedViewModelChange>,
+        Vec<nuxie::RuntimeValueRuleReport>,
+    ),
     transaction: RuntimeOwnedViewModelTransaction,
     mutation_generation: Option<u64>,
     changed_owners: &[RuntimeOwnedViewModelHandle],
 ) {
+    let (changes, rule_reports) = rows;
     let pending = PendingHandlePublication::new(
         NuxViewModelMutationResult {
             status: NuxStatus::Ok,
             applied_count,
             correlation_id,
             changes,
+            rule_reports,
             code: bounded_diagnostic_bytes(status_code(NuxStatus::Ok)),
             message: Box::default(),
         },
@@ -2399,9 +2568,37 @@ pub unsafe extern "C" fn nux_view_model_mutate(
             if policy.is_some_and(nuxie::RuntimeValuePolicy::has_markers) {
                 roots = value_policy::retain_scope(&roots)?;
             }
+            let mut rule_operation = policy
+                .filter(|policy| policy.has_rules())
+                .map(|policy| policy.begin_rules(&roots))
+                .transpose()
+                .map_err(value_policy::status)?;
+            let mut applied_count = 0usize;
             for (index, mutation) in resolved.iter().enumerate() {
-                apply_transaction_mutation(&mut transaction, &live, mutation)?;
+                let applied =
+                    if let (Some(policy), Some(operation)) = (policy, rule_operation.as_mut()) {
+                        apply_checked_mutation(
+                            policy,
+                            operation,
+                            &mut transaction,
+                            &live,
+                            mutation,
+                            resolved
+                                .get(index.saturating_add(1)..)
+                                .ok_or(NuxStatus::RuntimeError)?,
+                        )?
+                    } else {
+                        apply_transaction_mutation(&mut transaction, &live, mutation)?;
+                        true
+                    };
+                applied_count = applied_count.saturating_add(usize::from(applied));
                 maybe_panic_during_vm_commit(index + 1);
+            }
+            if let (Some(policy), Some(operation)) = (policy, rule_operation.as_mut()) {
+                operation
+                    .apply(policy, &capture, &roots)
+                    .map_err(value_policy::status)?;
+                roots.extend(operation.retained_roots());
             }
             if policy.is_some_and(nuxie::RuntimeValuePolicy::has_markers) {
                 roots.extend(live.values().cloned());
@@ -2440,9 +2637,12 @@ pub unsafe extern "C" fn nux_view_model_mutate(
             );
             publish_mutation_success_and_commit(
                 out_result,
-                resolved.len(),
+                applied_count,
                 batch.correlation_id,
-                changes,
+                (
+                    changes,
+                    rule_operation.map_or_else(Vec::new, |operation| operation.reports().to_vec()),
+                ),
                 transaction,
                 mutation_generation,
                 &changed_owners,
@@ -2492,6 +2692,7 @@ pub unsafe extern "C" fn nux_view_model_mutation_result_info(
             message: owned_string_view(&result.message),
             correlation_id: result.correlation_id,
             change_count: result.changes.len(),
+            rule_report_count: result.rule_reports.len(),
             ..NuxViewModelMutationResultInfo::default()
         };
         unsafe {
@@ -3014,4 +3215,67 @@ mod transaction_tests {
             nux_file_free(file);
         }
     }
+}
+
+/// Read a rule report; refusing writes are excluded from applied_count.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_view_model_mutation_result_rule_report(
+    result: *const NuxViewModelMutationResult,
+    index: usize,
+    out: *mut NuxValueRuleReportView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        let _call = enter_status_handle!(result, HandleKind::ViewModelMutationResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        let Some(report) = result.rule_reports.get(index) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe {
+            value_rules::report_view(
+                report,
+                NUX_VIEW_MODEL_CHANGE_ORIGIN_CALLER,
+                result.correlation_id,
+                out,
+            )
+        }
+    })
+}
+
+/// Read one attempted list member's identity from a rule report.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_view_model_mutation_result_rule_report_list_item(
+    result: *const NuxViewModelMutationResult,
+    report_index: usize,
+    item_index: usize,
+    out_identity: *mut u64,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_identity.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe { *out_identity = 0 };
+        let _call = enter_status_handle!(result, HandleKind::ViewModelMutationResult);
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        if result.status != NuxStatus::Ok {
+            return result.status;
+        }
+        let Some(report) = result.rule_reports.get(report_index) else {
+            return NuxStatus::NotFound;
+        };
+        let RuntimeViewModelChangeValue::List(items) = &report.attempted else {
+            return NuxStatus::InvalidArgument;
+        };
+        let Some(identity) = items.get(item_index) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe { *out_identity = *identity };
+        NuxStatus::Ok
+    })
 }

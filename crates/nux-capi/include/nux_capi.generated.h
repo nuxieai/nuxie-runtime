@@ -214,6 +214,38 @@
 
 #define NUX_SEMANTIC_TRAIT_TOGGLEABLE (1 << 3)
 
+#define NUX_VALUE_RULE_ALLOWED_VALUES 5
+
+#define NUX_VALUE_RULE_DATE 12
+
+#define NUX_VALUE_RULE_HAS_MAXIMUM 2
+
+#define NUX_VALUE_RULE_HAS_MINIMUM 1
+
+#define NUX_VALUE_RULE_ITEM_COUNT 6
+
+#define NUX_VALUE_RULE_LENGTH 8
+
+#define NUX_VALUE_RULE_MARK 0
+
+#define NUX_VALUE_RULE_NUMBER_MAXIMUM 2
+
+#define NUX_VALUE_RULE_NUMBER_MINIMUM 1
+
+#define NUX_VALUE_RULE_PATTERN 9
+
+#define NUX_VALUE_RULE_PICKED_COUNT 7
+
+#define NUX_VALUE_RULE_REFUSE 1
+
+#define NUX_VALUE_RULE_REQUIRED 10
+
+#define NUX_VALUE_RULE_TEXT_MAXIMUM 4
+
+#define NUX_VALUE_RULE_TEXT_MINIMUM 3
+
+#define NUX_VALUE_RULE_URL 11
+
 
 
 
@@ -952,6 +984,30 @@ typedef struct NuxValueMarker {
 } NuxValueMarker;
 
 /**
+ * One ordered rule on a named model property. All strings are copied UTF-8.
+ * number_bound is used by numeric minimum/maximum; text by text bounds and
+ * pattern; values by allowed-values; picked_property by picked-count.
+ * Count and length bounds use bound_flags to select minimum/maximum.
+ * Unused operands must be zero or empty. code and message are caller-authored.
+ */
+typedef struct NuxValueRule {
+  struct NuxStringView model;
+  struct NuxStringView property;
+  uint32_t kind;
+  uint32_t mode;
+  double number_bound;
+  struct NuxStringView text;
+  const struct NuxStringView *values;
+  size_t value_count;
+  struct NuxStringView picked_property;
+  uint32_t bound_flags;
+  size_t minimum;
+  size_t maximum;
+  struct NuxStringView code;
+  struct NuxStringView message;
+} NuxValueRule;
+
+/**
  * Read-only caller-sized focus state for a state-machine player.
  */
 typedef struct NuxPlayerFocusState {
@@ -1156,7 +1212,43 @@ typedef struct NuxPlayerStepInfo {
   size_t host_command_count;
   size_t view_model_change_count;
   size_t focus_input_result_count;
+  size_t rule_report_count;
 } NuxPlayerStepInfo;
+
+/**
+ * One ordered after-value from an owned mutation or player-step result.
+ * Every borrowed field expires when that containing result is freed.
+ */
+typedef struct NuxViewModelChangeView {
+  uint32_t struct_size;
+  uint32_t origin;
+  uint64_t correlation_id;
+  uint64_t owner_instance_id;
+  size_t property_index;
+  uint32_t kind;
+  /**
+   * String after-value bytes borrowed from the containing result.
+   * Absent for other value kinds.
+   */
+  struct NuxByteView bytes_value;
+  float number_value;
+  uint64_t integer_value;
+  uint32_t bool_value;
+  uint64_t referenced_instance_id;
+  size_t list_item_count;
+} NuxViewModelChangeView;
+
+/**
+ * One rule failure in write order, then installer order. attempted names the
+ * written property and carries its attempted value. Refused writes never land
+ * in the operation's change rows. Bytes remain borrowed until result free.
+ */
+typedef struct NuxValueRuleReportView {
+  uint32_t struct_size;
+  size_t rule_index;
+  uint32_t refused;
+  struct NuxViewModelChangeView attempted;
+} NuxValueRuleReportView;
 
 /**
  * Product-neutral scheduling facts captured by one successful atomic player
@@ -1212,29 +1304,6 @@ typedef struct NuxPlayerStateChangeView {
    */
   uint32_t state_global_id;
 } NuxPlayerStateChangeView;
-
-/**
- * One ordered after-value from an owned mutation or player-step result.
- * Every borrowed field expires when that containing result is freed.
- */
-typedef struct NuxViewModelChangeView {
-  uint32_t struct_size;
-  uint32_t origin;
-  uint64_t correlation_id;
-  uint64_t owner_instance_id;
-  size_t property_index;
-  uint32_t kind;
-  /**
-   * String after-value bytes borrowed from the containing result.
-   * Absent for other value kinds.
-   */
-  struct NuxByteView bytes_value;
-  float number_value;
-  uint64_t integer_value;
-  uint32_t bool_value;
-  uint64_t referenced_instance_id;
-  size_t list_item_count;
-} NuxViewModelChangeView;
 
 /**
  * Native TextInput geometry for an exact presented semantic occurrence.
@@ -1770,6 +1839,7 @@ typedef struct NuxViewModelMutationResultInfo {
   struct NuxStringView message;
   uint64_t correlation_id;
   size_t change_count;
+  size_t rule_report_count;
 } NuxViewModelMutationResultInfo;
 
 typedef struct NuxViewModelSnapshotInfo {
@@ -2186,11 +2256,16 @@ NuxStatus nux_file_import_metal(struct NuxRenderer *renderer,
 #endif
 
 /**
- * Import exact caller-authenticated bytes and install one generic script
- * module named by `config`. The module exposes only
- * `command(name, payload)`. This function performs no package/signature
- * authentication; choosing this explicit import path is the caller's trust
- * assertion. Ordinary `nux_file_import` remains script-inert.
+ * Import exact caller-authenticated bytes and install the configured command
+ * module with `command(name, payload)` and `set(root, path, value)` for
+ * synchronous checked native writes. No additional module name is reserved;
+ * imports without a command module install no checked-write module.
+ * Empty root selects the bound model; other roots name host-installed globals.
+ * An accepted `set` returns true and no code, including a marking breach.
+ * A refused `set` returns false and the refusing rule's code.
+ * This function performs no package/signature authentication; choosing this
+ * explicit import path is the caller's trust assertion. Ordinary
+ * `nux_file_import` remains script-inert.
  *
  * No foreign callback is installed. Commands are returned only through a
  * successful `NuxPlayerStepResult` after its runtime transaction commits.
@@ -2237,6 +2312,31 @@ NuxStatus nux_file_import_with_video_capabilities(const uint8_t *bytes,
 NuxStatus nux_file_set_value_markers(struct NuxFile *file,
                                      const struct NuxValueMarker *entries,
                                      size_t count);
+
+/**
+ * Atomically replace this file's ordered rule table; NULL+0 removes it.
+ * Bad names/kinds/bounds or invalid patterns refuse the whole table.
+ * Use nux_file_set_value_rules_with_result to read an invalid pattern's code.
+ * Existing values never cause install failure or emit operation reports.
+ * Marker tables remain installed. Only explicitly named properties have rules.
+ */
+NuxStatus nux_file_set_value_rules(struct NuxFile *file,
+                                   const struct NuxValueRule *entries,
+                                   size_t count);
+
+/**
+ * Atomically replace rules with the same contract as nux_file_set_value_rules.
+ * An invalid pattern returns INVALID_ARGUMENT and an owned diagnostic whose
+ * code is the caller's rule code (bounded to 4096 UTF-8 bytes, as diagnostics
+ * normally are). The previous table remains installed. Read the diagnostic
+ * with nux_capi_result_diagnostic and release it with nux_capi_result_free.
+ * out_result is optional and cleared before validation; successful installs
+ * and non-pattern validation failures leave it NULL.
+ */
+NuxStatus nux_file_set_value_rules_with_result(struct NuxFile *file,
+                                               const struct NuxValueRule *entries,
+                                               size_t count,
+                                               struct NuxCapiResult **out_result);
 
 NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
                                       struct NuxViewModelCatalog **out_catalog);
@@ -2490,6 +2590,21 @@ NuxStatus nux_player_step_result_info(const struct NuxPlayerStepResult *result,
 NuxStatus nux_player_step_result_pointer(const struct NuxPlayerStepResult *result,
                                          size_t index,
                                          uint32_t *out_hit);
+
+/**
+ * Read a rule report from a successful step, in attempted-write order.
+ */
+NuxStatus nux_player_step_result_rule_report(const struct NuxPlayerStepResult *result,
+                                             size_t index,
+                                             struct NuxValueRuleReportView *out);
+
+/**
+ * Read one attempted list member's identity from a rule report.
+ */
+NuxStatus nux_player_step_result_rule_report_list_item(const struct NuxPlayerStepResult *result,
+                                                       size_t report_index,
+                                                       size_t item_index,
+                                                       uint64_t *out_identity);
 
 /**
  * Copy the product-neutral scheduling snapshot owned by one successful step.
@@ -3186,6 +3301,21 @@ NuxStatus nux_view_model_mutation_result_free(struct NuxViewModelMutationResult 
 
 NuxStatus nux_view_model_mutation_result_info(const struct NuxViewModelMutationResult *result,
                                               struct NuxViewModelMutationResultInfo *out_info);
+
+/**
+ * Read a rule report; refusing writes are excluded from applied_count.
+ */
+NuxStatus nux_view_model_mutation_result_rule_report(const struct NuxViewModelMutationResult *result,
+                                                     size_t index,
+                                                     struct NuxValueRuleReportView *out);
+
+/**
+ * Read one attempted list member's identity from a rule report.
+ */
+NuxStatus nux_view_model_mutation_result_rule_report_list_item(const struct NuxViewModelMutationResult *result,
+                                                               size_t report_index,
+                                                               size_t item_index,
+                                                               uint64_t *out_identity);
 
 NuxStatus nux_view_model_snapshot_free(struct NuxViewModelSnapshot *snapshot);
 

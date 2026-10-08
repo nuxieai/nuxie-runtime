@@ -86,6 +86,16 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.13 candidate carries the upstream-parity fixes, platform layout fit,
+globals, answered markers, value rules, form state, native text-field reads,
+and retained list-row access and insertion. It stops before the video
+properties layer. ABI v4 is retained; the step result, value change result,
+and Metal render operation each grow by eight bytes. Hosts must compile
+against the matching headers and follow the size-gated field contracts.
+The Metal and Vulkan present corrections are host-layer changes documented
+in their headers, including Vulkan's layout scale argument. Existing release
+size ceilings remain unchanged pending measurement.
+
 The v0.10.12 candidate adds `nux_player_video_present_metal_pixel_buffer`, which
 presents a decoded video frame without a CPU copy. Hosts pass an
 IOSurface-backed 32BGRA `CVPixelBuffer`, such as `AVPlayerItemVideoOutput` vends

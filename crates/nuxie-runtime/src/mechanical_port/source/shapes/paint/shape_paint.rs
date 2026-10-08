@@ -27,14 +27,29 @@ pub type RuntimeRenderPaintHandle = Rc<RefCell<Box<dyn RenderPaint>>>;
 /// dependent state is captured before the renderer has finished this call.
 pub enum ShapePaintRenderingInvalidation {
     Base,
+    #[cfg(feature = "editor")]
+    Skip,
     Stroke(RuntimeRenderPaintHandle),
 }
 
 impl ShapePaintRenderingInvalidation {
-    pub(crate) fn before_dirt(self) {
+    pub(crate) fn before_dirt(self) -> bool {
+        #[cfg(feature = "editor")]
+        if matches!(self, Self::Skip) {
+            return false;
+        }
         if let Self::Stroke(paint) = self {
             paint.borrow_mut().invalidate_stroke();
         }
+        true
+    }
+
+    pub(crate) fn stroke(paint: Option<RuntimeRenderPaintHandle>) -> Self {
+        #[cfg(feature = "editor")]
+        if paint.is_none() {
+            return Self::Skip;
+        }
+        Self::Stroke(paint.expect("initialized Stroke render paint"))
     }
 }
 
@@ -623,17 +638,17 @@ impl ShapePaint {
         // An explicit base projection still denotes the live Fill/Stroke.
         // The immutable class selects its override without reborrowing that
         // occurrence; Stroke's qualified superclass call uses the method below.
-        self.prepare_rendering_invalidation().before_dirt();
-        self.invalidate_rendering_base();
+        if self.prepare_rendering_invalidation().before_dirt() {
+            self.invalidate_rendering_base();
+        }
     }
 
     pub(crate) fn prepare_rendering_invalidation(&self) -> ShapePaintRenderingInvalidation {
         match self.paint_type() {
             ShapePaintType::Fill => ShapePaintRenderingInvalidation::Base,
-            ShapePaintType::Stroke => ShapePaintRenderingInvalidation::Stroke(
-                self.render_paint_handle()
-                    .expect("initialized Stroke render paint"),
-            ),
+            ShapePaintType::Stroke => {
+                ShapePaintRenderingInvalidation::stroke(self.render_paint_handle())
+            }
         }
     }
 

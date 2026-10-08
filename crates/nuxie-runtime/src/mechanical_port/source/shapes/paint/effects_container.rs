@@ -139,7 +139,9 @@ fn invalidate_rendering_handle_with_active(
     // Stroke calls the actual renderer before Super::invalidateRendering.
     // Release the Core receiver, and then the temporary render-paint identity,
     // before reading any dirt or dependent state after that callback.
-    action.before_dirt();
+    if !action.before_dirt() {
+        return;
+    }
     add_dirt_with_active(
         &ComponentOccurrenceHandle::Authored(paint.clone()),
         ComponentDirt::PATH,
@@ -248,6 +250,24 @@ mod tests {
     };
     use nuxie_render_api as render;
     use std::{cell::Cell, rc::Rc};
+
+    #[cfg(feature = "editor")]
+    #[test]
+    fn colorless_stroke_effect_invalidation_preserves_clean_dirt() {
+        let arena = CoreArena::default();
+        let stroke = arena.insert(Stroke::default());
+        stroke.with_mut(|owner| {
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE);
+        });
+        invalidate_rendering_handle(&stroke);
+        assert_eq!(
+            stroke.with(|owner| owner.as_component().unwrap().dirt()),
+            Some(ComponentDirt::NONE)
+        );
+    }
 
     struct InvalidationPaint {
         calls: Rc<Cell<usize>>,

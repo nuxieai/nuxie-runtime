@@ -1431,6 +1431,28 @@ and concrete evidence.
 - **A8 terminal-script-resource-limits:** terminal VM limit failures cannot be
   retried or allowed to continue traversal.
 
+The editor missing-paint guard is a port correction, not an adaptation:
+`editor` mirrors `WITH_RIVE_EDITOR` at pinned upstream
+`de3e86090892b68072e7d4505e8d979386fc9a30`,
+`src/shapes/paint/stroke.cpp:89-101`, returning before renderer invalidation
+and superclass dirt changes. Default runtime builds retain the assertion.
+This feature covers only that stroke invalidation guard, not the other upstream
+`WITH_RIVE_EDITOR` sites; no shipped build enables it.
+
+### Known gap: AutoHeight measured width in an exact slot
+
+At `de3e86090892b68072e7d4505e8d979386fc9a30`, `src/text/text.cpp:1598-1601`
+returns the stored width for AutoHeight. The C++ width probe records width 1
+with an exact offer of 354 (heights 267.521576 without a width owner and
+47.5215874 for fill/fixed participants). Rust main instead returns 354 at
+`crates/nuxie-runtime/src/mechanical_port/source/text/text.rs:2210-2212`,
+introduced by `9738049372`. The tests pin the observed C++ heights only.
+This is a known parity gap, not an approved host adaptation or a decision to
+keep the difference. Its disposition belongs to the audit in
+[UNIV-3932](https://universe.basis.dev/issue/UNIV-3932) and compiler work in
+[UNIV-3979](https://universe.basis.dev/issue/UNIV-3979). This branch does not
+change `Text::measure`.
+
 ## Named additive host extensions
 
 These extensions add host/editor integration without relaxing any mapped C++

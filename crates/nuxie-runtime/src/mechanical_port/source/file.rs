@@ -1029,6 +1029,14 @@ impl File {
         self.view_model_instances.borrow_mut().push(instance);
     }
 
+    /// Device pixels per layout point, passed to every script VM.
+    pub fn set_display_scale(&self, scale: f32) {
+        if let Some(vm) = self.scripting_vm.as_ref() {
+            vm.set_display_scale(scale);
+        }
+        // The upstream guest-Wasm VM loop remains deferred under UNIV-3728.
+    }
+
     fn register_scripts(
         file: &RuntimeFileHandle,
         make_vm: Option<&mut dyn FnMut(RuntimeFactoryHandle) -> RuntimeScriptingVmHandle>,

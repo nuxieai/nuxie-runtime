@@ -226,25 +226,60 @@ macro_rules! inherited_fields {
             fn is_type_of(&self, key: u16) -> bool {
                 Self::subtype(key)
             }
-            fn set_uint_with_completion(&mut self, f: CoreField, v: u32, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_uint_with_completion(
+                &mut self,
+                f: CoreField,
+                v: u32,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_uint_with_completion(f, v, completion);
             }
-            fn set_string_with_completion(&mut self, f: CoreField, v: String, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_string_with_completion(
+                &mut self,
+                f: CoreField,
+                v: String,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_string_with_completion(f, v, completion);
             }
-            fn set_color_with_completion(&mut self, f: CoreField, v: i32, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_color_with_completion(
+                &mut self,
+                f: CoreField,
+                v: i32,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_color_with_completion(f, v, completion);
             }
-            fn set_bool_with_completion(&mut self, f: CoreField, v: bool, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_bool_with_completion(
+                &mut self,
+                f: CoreField,
+                v: bool,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_bool_with_completion(f, v, completion);
             }
-            fn set_double_with_completion(&mut self, f: CoreField, v: f32, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_double_with_completion(
+                &mut self,
+                f: CoreField,
+                v: f32,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_double_with_completion(f, v, completion);
             }
-            fn set_int_with_completion(&mut self, f: CoreField, v: i32, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_int_with_completion(
+                &mut self,
+                f: CoreField,
+                v: i32,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_int_with_completion(f, v, completion);
             }
-            fn set_callback_with_completion(&mut self, f: CoreField, v: CallbackData<'_>, completion: &mut crate::source::core::PropertySetterCompletion) {
+            fn set_callback_with_completion(
+                &mut self,
+                f: CoreField,
+                v: CallbackData<'_>,
+                completion: &mut crate::source::core::PropertySetterCompletion,
+            ) {
                 self.$field.set_callback_with_completion(f, v, completion);
             }
             fn get_uint(&mut self, f: CoreField) -> u32 {
@@ -408,10 +443,7 @@ crate::mechanical_port::source::transform_component::impl_transform_update!(
 );
 
 impl CoreCapabilities for Video {
-    fn component_on_dirty(
-        &mut self,
-        _dirt: crate::source::component_dirt::ComponentDirt,
-    ) -> bool {
+    fn component_on_dirty(&mut self, _dirt: crate::source::component_dirt::ComponentDirt) -> bool {
         // Video inherits Image's empty Component::onDirty implementation.
         true
     }

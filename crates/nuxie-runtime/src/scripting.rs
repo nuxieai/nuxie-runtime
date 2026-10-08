@@ -1158,7 +1158,6 @@ impl ScriptViewModel {
         );
     }
 
-
     /// Read the retained runtime's structural parent topology.
     pub fn has_parents(&self) -> bool {
         let native = self.native();

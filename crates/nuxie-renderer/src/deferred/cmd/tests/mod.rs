@@ -10,10 +10,6 @@
     )
 ))]
 mod artboard_bitmap_cache_test;
-#[cfg(all(feature = "rive-decoders", any(feature = "native-vulkan-experimental", feature = "renderer-vulkan", feature = "renderer-webgpu", feature = "renderer-webgl2", feature = "renderer-metal")))]
-mod layer_mask_test;
-#[cfg(all(feature = "rive-decoders", any(feature = "native-vulkan-experimental", feature = "renderer-vulkan", feature = "renderer-webgpu", feature = "renderer-webgl2", feature = "renderer-metal")))]
-mod layer_mask_geometry_test;
 mod canvas_schedule_test;
 mod deferred_canvas_import_test;
 #[cfg(all(
@@ -51,7 +47,28 @@ mod deferred_source_equivalence_test;
 mod deferred_transform_shadow_test;
 mod foreign_image_registry_test;
 mod gpu_census_test;
-mod ore_deferred_target_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod layer_mask_geometry_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod layer_mask_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(
@@ -85,6 +102,7 @@ mod modulate_color_test;
     )
 ))]
 mod modulate_opacity_test;
+mod ore_deferred_target_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(

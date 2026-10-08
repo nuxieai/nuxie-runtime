@@ -130,7 +130,12 @@ impl SVGRenderer {
             if let Some(shader) = shader {
                 let id = format!("grad{}", self.gradient_id_counter);
                 self.gradient_id_counter += 1;
-                shader.emit_defs(&mut self.defs, &id, paint.get_shader_transform(), self.float_precision);
+                shader.emit_defs(
+                    &mut self.defs,
+                    &id,
+                    paint.get_shader_transform(),
+                    self.float_precision,
+                );
                 write!(out, " stroke=\"url(#{id})\"").unwrap();
             } else {
                 write!(out, " stroke=\"#{r:02x}{g:02x}{b:02x}\"").unwrap();
@@ -163,7 +168,12 @@ impl SVGRenderer {
             if let Some(shader) = shader {
                 let id = format!("grad{}", self.gradient_id_counter);
                 self.gradient_id_counter += 1;
-                shader.emit_defs(&mut self.defs, &id, paint.get_shader_transform(), self.float_precision);
+                shader.emit_defs(
+                    &mut self.defs,
+                    &id,
+                    paint.get_shader_transform(),
+                    self.float_precision,
+                );
                 write!(out, " fill=\"url(#{id})\"").unwrap();
             } else if r != 0 || g != 0 || b != 0 {
                 write!(out, " fill=\"#{r:02x}{g:02x}{b:02x}\"").unwrap();

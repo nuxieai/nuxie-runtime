@@ -193,8 +193,19 @@ impl DataConverterGroup {
     }
     pub fn may_advance(&self) -> bool {
         self.items.iter().any(|item| {
-            let converter = item.with(|item| item.as_data_converter_group_item().unwrap().converter()).flatten();
-            converter.is_some_and(|converter| converter.with(|converter| converter.as_data_converter_capability().unwrap().may_advance()).unwrap_or(false))
+            let converter = item
+                .with(|item| item.as_data_converter_group_item().unwrap().converter())
+                .flatten();
+            converter.is_some_and(|converter| {
+                converter
+                    .with(|converter| {
+                        converter
+                            .as_data_converter_capability()
+                            .unwrap()
+                            .may_advance()
+                    })
+                    .unwrap_or(false)
+            })
         })
     }
 
@@ -337,5 +348,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }
-    fn may_advance(&self) -> bool { Self::may_advance(self) }
+    fn may_advance(&self) -> bool {
+        Self::may_advance(self)
+    }
 }

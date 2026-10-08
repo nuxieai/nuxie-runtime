@@ -328,7 +328,8 @@ fn scripted_data_value_color_channels_keep_their_low_byte() {
     vm.install_rive_globals().unwrap();
     // Exercise the live Luau binding with upstream 93d8161d's ordered writes.
     let (red, blue, alpha): (u32, u32, u32) = vm
-        .eval(r#"
+        .eval(
+            r#"
         local color = DataValue.color()
         color.value = 0x80102030
         color.red = -1
@@ -337,7 +338,8 @@ fn scripted_data_value_color_channels_keep_their_low_byte() {
         local blue = color.value
         color.alpha = 0x1FF
         return red, blue, color.value
-    "#)
+    "#,
+        )
         .unwrap();
     assert_eq!(red, 0x80FF2030);
     assert_eq!(blue, 0x80FF202C);

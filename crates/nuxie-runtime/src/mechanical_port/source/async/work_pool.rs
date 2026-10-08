@@ -76,7 +76,9 @@ impl WorkPool {
 
     pub fn has_pending_work_for_owner(&self, owner_id: u64) -> bool {
         // Tasks leave this queue as they are delivered.
-        self.work_queue.iter().any(|task| task.owner_id() == owner_id)
+        self.work_queue
+            .iter()
+            .any(|task| task.owner_id() == owner_id)
     }
 
     pub fn cancel_all_for_owner(&mut self, owner_id: u64) {
@@ -216,7 +218,10 @@ impl WorkPool {
             task.set_submit_generation(queue.cancel_generation);
             handle = self.next_handle;
             self.next_handle += 1;
-            let undelivered = queue.undelivered_by_owner.entry(task.owner_id()).or_default();
+            let undelivered = queue
+                .undelivered_by_owner
+                .entry(task.owner_id())
+                .or_default();
             *undelivered = undelivered.wrapping_add(1);
             queue.work_queue.push_back(task);
         }

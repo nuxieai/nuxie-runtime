@@ -96,7 +96,11 @@ impl Fixture {
 
     fn pointer_down(&self, x: f32, y: f32) {
         self.state_machine.with_instance_mut(|machine| {
-            machine.pointer_down(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            machine.pointer_down(
+                Vec2D::new(x, y),
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            );
         });
     }
 
@@ -108,7 +112,11 @@ impl Fixture {
 
     fn pointer_up(&self, x: f32, y: f32) {
         self.state_machine.with_instance_mut(|machine| {
-            machine.pointer_up(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            machine.pointer_up(
+                Vec2D::new(x, y),
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            );
         });
     }
 }

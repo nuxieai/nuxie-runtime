@@ -78,5 +78,10 @@ fn ore_deferred_resource() {
         &immediate,
         &scene(ResMode::ReplayBuffer),
     );
-    assert_pixels_equal("ore_deferred_resource", 2, &immediate, &scene(ResMode::Unified));
+    assert_pixels_equal(
+        "ore_deferred_resource",
+        2,
+        &immediate,
+        &scene(ResMode::Unified),
+    );
 }

@@ -1476,7 +1476,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_transition_base::ScriptedTransitionBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ScriptedTransitionActiveComponentId => {
                 if self.base.set_active_component_id_value(value) {
@@ -1562,7 +1567,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -1590,13 +1600,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -1674,18 +1699,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -1737,10 +1770,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -1961,36 +2004,56 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::paint
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PaintImageImageAssetId => {
                 if self.base.set_image_asset_id_value(value) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_asset_id_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 415);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        415,
+                    );
                 }
             }
             CoreField::PaintImageImageSamplerFilter => {
                 if self.base.set_image_sampler_filter_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_sampler_filter_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 269);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        269,
+                    );
                 }
             }
             CoreField::PaintImageImageSamplerWrapX => {
                 if self.base.set_image_sampler_wrap_x_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_sampler_wrap_x_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 270);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        270,
+                    );
                 }
             }
             CoreField::PaintImageImageSamplerWrapY => {
                 if self.base.set_image_sampler_wrap_y_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_sampler_wrap_y_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 271);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        271,
+                    );
                 }
             }
             CoreField::PaintImageImageSizeMode => {
                 if self.base.set_image_size_mode_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_size_mode_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 412);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        412,
+                    );
                 }
             }
 
@@ -2003,7 +2066,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::paint
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -2014,51 +2082,91 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::paint
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PaintImageImageScaleX => {
                 if self.base.set_image_scale_x_value(value) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_scale_x_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 416);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        416,
+                    );
                 }
             }
             CoreField::PaintImageImageScaleY => {
                 if self.base.set_image_scale_y_value(value) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_scale_y_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 368);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        368,
+                    );
                 }
             }
             CoreField::PaintImageImageOffsetX => {
                 if self.base.set_image_offset_x_value(value) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_offset_x_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 369);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        369,
+                    );
                 }
             }
             CoreField::PaintImageImageOffsetY => {
                 if self.base.set_image_offset_y_value(value) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_offset_y_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 410);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        410,
+                    );
                 }
             }
             CoreField::PaintImageImageRotation => {
                 if self.base.set_image_rotation_value(value) {
                     <crate::mechanical_port::source::shapes::paint::paint_image::PaintImage as crate::mechanical_port::source::generated::shapes::paint::paint_image_base::PaintImageBaseCallbacks>::image_rotation_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 411);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        411,
+                    );
                 }
             }
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -2145,7 +2253,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -3204,7 +3316,9 @@ pub fn flush_scripted_transition_property_changes(handle: &CoreHandle) {
         } else {
             ScriptedTransition::list_source_changed_occurrence(handle);
         }
-        if let Some(observers) = handle.property_observers() { observers.notify(key); }
+        if let Some(observers) = handle.property_observers() {
+            observers.notify(key);
+        }
     }
 }
 
@@ -3219,8 +3333,12 @@ pub fn drawable_draw_handle(
     };
     // The concrete Shape uses the ordinary virtual draw, not an occurrence-
     // only protocol. Avoid probing unrelated protocols on this common owner.
-    if core_type == crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY {
-        return handle.with_mut(|owner| owner.drawable_draw(renderer)).unwrap_or(false);
+    if core_type
+        == crate::mechanical_port::source::generated::shapes::shape_base::ShapeBase::TYPE_KEY
+    {
+        return handle
+            .with_mut(|owner| owner.drawable_draw(renderer))
+            .unwrap_or(false);
     }
     if core_type == crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::TYPE_KEY {
         crate::mechanical_port::source::scripted::scripted_transition::ScriptedTransition::draw_occurrence(handle, renderer);
@@ -3376,12 +3494,17 @@ pub fn component_update_handle(
     match handler {
         Some(update) => update(handle, dirt),
         // Non-transform owners already expose the source virtual update.
-        None => handle.with_mut(|object| object.component_update(dirt)).unwrap_or(false),
+        None => handle
+            .with_mut(|object| object.component_update(dirt))
+            .unwrap_or(false),
     }
 }
 
 pub fn component_update_constraints_handle(handle: &CoreHandle) {
-    if let Some(update) = handle.with(|object| object.component_constraints_handler()).flatten() {
+    if let Some(update) = handle
+        .with(|object| object.component_constraints_handler())
+        .flatten()
+    {
         update(handle);
     }
 }
@@ -3414,7 +3537,10 @@ mod update_dispatch_tests {
             Box::new(crate::video::Video::default()),
         ];
         for owner in &mut owners {
-            owner.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+            owner
+                .as_component_mut()
+                .unwrap()
+                .set_dirt(ComponentDirt::NONE);
             assert!(owner.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
             assert_eq!(owner.as_component().unwrap().dirt(), ComponentDirt::NONE);
         }
@@ -3426,15 +3552,37 @@ mod update_dispatch_tests {
     fn artboard_dirty_override_does_not_run_layout_dirty_super() {
         let mut layout = crate::source::layout_component::LayoutComponent::default();
         layout.base.set_clip_value(true);
-        layout.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+        layout
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::NONE);
         assert!(layout.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
-        assert!(layout.as_component().unwrap().dirt().contains(ComponentDirt::PATH));
+        assert!(
+            layout
+                .as_component()
+                .unwrap()
+                .dirt()
+                .contains(ComponentDirt::PATH)
+        );
 
         let mut artboard = crate::source::artboard::Artboard::default();
-        artboard.as_layout_component_mut().unwrap().base.set_clip_value(true);
-        artboard.as_component_mut().unwrap().set_dirt(ComponentDirt::NONE);
+        artboard
+            .as_layout_component_mut()
+            .unwrap()
+            .base
+            .set_clip_value(true);
+        artboard
+            .as_component_mut()
+            .unwrap()
+            .set_dirt(ComponentDirt::NONE);
         assert!(artboard.component_on_dirty(ComponentDirt::WORLD_TRANSFORM));
-        assert!(!artboard.as_component().unwrap().dirt().contains(ComponentDirt::PATH));
+        assert!(
+            !artboard
+                .as_component()
+                .unwrap()
+                .dirt()
+                .contains(ComponentDirt::PATH)
+        );
         assert!(artboard.has_component_dirt());
     }
 
@@ -3442,10 +3590,20 @@ mod update_dispatch_tests {
     fn every_registered_transform_has_explicit_occurrence_dispatch() {
         let mut transforms = 0;
         for key in 0..=u16::MAX {
-            let Some(object) = CoreRegistry::make_core_box(i32::from(key)) else { continue; };
+            let Some(object) = CoreRegistry::make_core_box(i32::from(key)) else {
+                continue;
+            };
             let transform = object.as_transform_component().is_some();
-            assert_eq!(object.component_update_handler().is_some(), transform, "update registration {key}");
-            assert_eq!(object.component_constraints_handler().is_some(), transform, "constraint registration {key}");
+            assert_eq!(
+                object.component_update_handler().is_some(),
+                transform,
+                "update registration {key}"
+            );
+            assert_eq!(
+                object.component_constraints_handler().is_some(),
+                transform,
+                "constraint registration {key}"
+            );
             transforms += usize::from(transform);
         }
         assert!(transforms > 25, "exercise the whole concrete family");
@@ -3457,21 +3615,41 @@ mod update_dispatch_tests {
     #[test]
     fn text_input_drawables_inherit_node_without_a_text_input_tail() {
         use crate::mechanical_port::source::text::{
-            text_input_cursor::TextInputCursor, text_input_text::TextInputText,
-            text_input_selected_text::TextInputSelectedText, text_input_selection::TextInputSelection,
+            text_input_cursor::TextInputCursor, text_input_selected_text::TextInputSelectedText,
+            text_input_selection::TextInputSelection, text_input_text::TextInputText,
         };
         let arena = CoreArena::default();
-        let handles = [arena.insert(TextInputCursor::default()), arena.insert(TextInputText::default()),
-            arena.insert(TextInputSelectedText::default()), arena.insert(TextInputSelection::default())];
+        let handles = [
+            arena.insert(TextInputCursor::default()),
+            arena.insert(TextInputText::default()),
+            arena.insert(TextInputSelectedText::default()),
+            arena.insert(TextInputSelection::default()),
+        ];
         for owner in handles {
             // No TextInput parent is required to execute these inherited Node
             // operations. A mistaken TextInput tail would enter its owner API.
             owner.with_mut(|object| object.as_node_mut().unwrap().base.set_x_value(17.0));
-            assert!(component_update_handle(&owner, ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM | ComponentDirt::RENDER_OPACITY));
-            owner.with(|object| {
-                assert_eq!(object.as_world_transform_component().unwrap().world_transform()[4], 17.0);
-                assert_eq!(object.as_transform_component().unwrap().render_opacity(), 1.0);
-            }).unwrap();
+            assert!(component_update_handle(
+                &owner,
+                ComponentDirt::TRANSFORM
+                    | ComponentDirt::WORLD_TRANSFORM
+                    | ComponentDirt::RENDER_OPACITY
+            ));
+            owner
+                .with(|object| {
+                    assert_eq!(
+                        object
+                            .as_world_transform_component()
+                            .unwrap()
+                            .world_transform()[4],
+                        17.0
+                    );
+                    assert_eq!(
+                        object.as_transform_component().unwrap().render_opacity(),
+                        1.0
+                    );
+                })
+                .unwrap();
         }
     }
 
@@ -3483,12 +3661,20 @@ mod update_dispatch_tests {
         bone.base.set_y_value(29.0);
         let arena = CoreArena::default();
         let owner = arena.insert(bone);
-        assert!(component_update_handle(&owner, ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM));
-        owner.with(|object| {
-            assert!(object.as_node().is_none());
-            let world = object.as_world_transform_component().unwrap().world_transform();
-            assert_eq!((world[4], world[5]), (13.0,29.0));
-        }).unwrap();
+        assert!(component_update_handle(
+            &owner,
+            ComponentDirt::TRANSFORM | ComponentDirt::WORLD_TRANSFORM
+        ));
+        owner
+            .with(|object| {
+                assert!(object.as_node().is_none());
+                let world = object
+                    .as_world_transform_component()
+                    .unwrap()
+                    .world_transform();
+                assert_eq!((world[4], world[5]), (13.0, 29.0));
+            })
+            .unwrap();
     }
 
     #[test]
@@ -4534,7 +4720,9 @@ pub trait FileAssetCapability {
 }
 
 pub trait DataConverterCapability {
-    fn may_advance(&self) -> bool { false }
+    fn may_advance(&self) -> bool {
+        false
+    }
     fn convert(
         &mut self,
         input: &dyn crate::mechanical_port::source::data_bind::data_values::data_value::DataValue,
@@ -5484,7 +5672,8 @@ pub trait CoreCapabilities: Any {
     /// an already-borrowed receiver retain component_on_dirty's direct lane.
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         None
     }
     fn component_hit_test_point(
@@ -5603,7 +5792,11 @@ pub trait CoreCapabilities: Any {
         self.as_text()
             .and_then(|text| text.inferred_semantic_data())
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         None
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -6257,7 +6450,9 @@ pub trait CoreCapabilities: Any {
     fn layer_state_flags(&self) -> Option<u32> {
         None
     }
-    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> { None }
+    fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
+        None
+    }
     fn set_layer_state_settle_flags(&mut self, _safe: bool, _ignore_time: bool) {}
     fn layer_state_transition(
         &self,
@@ -6411,11 +6606,25 @@ pub trait CoreCapabilities: Any {
     fn listener_input_type_value(&self) -> Option<u32> {
         None
     }
-    fn listener_input_type_pointer_button(&self) -> Option<crate::mechanical_port::source::pointer_button::PointerButton> {
-        self.listener_input_type_value().map(|_| crate::mechanical_port::source::pointer_button::PointerButton::Primary)
+    fn listener_input_type_pointer_button(
+        &self,
+    ) -> Option<crate::mechanical_port::source::pointer_button::PointerButton> {
+        self.listener_input_type_value()
+            .map(|_| crate::mechanical_port::source::pointer_button::PointerButton::Primary)
     }
-    fn state_machine_listener_has_button(&self, _kind: crate::mechanical_port::source::listener_type::ListenerType, _button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { None }
-    fn state_machine_listener_listens_to_button(&self, _button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { None }
+    fn state_machine_listener_has_button(
+        &self,
+        _kind: crate::mechanical_port::source::listener_type::ListenerType,
+        _button: crate::mechanical_port::source::pointer_button::PointerButton,
+    ) -> Option<bool> {
+        None
+    }
+    fn state_machine_listener_listens_to_button(
+        &self,
+        _button: crate::mechanical_port::source::pointer_button::PointerButton,
+    ) -> Option<bool> {
+        None
+    }
     fn scripted_object_add_property(
         &mut self,
         _property: crate::mechanical_port::source::core::CoreHandle,
@@ -6800,47 +7009,89 @@ pub trait CoreRegistryObject: CoreCapabilities {
     fn as_registry_any_mut(&mut self) -> &mut dyn Any;
     fn is_type_of(&self, type_key: u16) -> bool;
     fn set_uint(&mut self, field: CoreField, value: u32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         self.set_uint_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn set_string(&mut self, field: CoreField, value: String) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         self.set_string_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn set_color(&mut self, field: CoreField, value: i32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         self.set_color_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn set_bool(&mut self, field: CoreField, value: bool) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         self.set_bool_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn set_double(&mut self, field: CoreField, value: f32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         self.set_double_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn set_callback(&mut self, field: CoreField, value: CallbackData<'_>) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         self.set_callback_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, value: CallbackData<'_>, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        value: CallbackData<'_>,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn set_int(&mut self, field: CoreField, value: i32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         self.set_int_with_completion(field, value, &mut completion);
         completion.finish();
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion);
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    );
     fn get_uint(&mut self, field: CoreField) -> u32;
     fn get_string(&mut self, field: CoreField) -> String;
     fn get_color(&mut self, field: CoreField) -> i32;
@@ -6861,7 +7112,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -6905,7 +7161,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -6931,13 +7192,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -7007,18 +7283,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -7077,10 +7361,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -7277,7 +7571,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_base::TextBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -7391,7 +7690,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -7417,10 +7721,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextFitFromBaseline => {
                 if self.base.set_fit_from_baseline_value(value) {
@@ -7437,7 +7751,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
             _ => (),
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -7507,18 +7826,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -7600,10 +7927,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -8121,11 +8458,17 @@ impl CoreRegistry {
         Some(factory.make(concrete_type))
     }
     pub fn set_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_id_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
-    pub fn set_id_with_completion<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    pub fn set_id_with_completion<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             459 => CoreField::LayerMaskSourceId,
             273 => CoreField::ScriptedTransitionActiveComponentId,
@@ -8219,11 +8562,17 @@ impl CoreRegistry {
         object.set_uint_with_completion(field, value, completion);
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_uint_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
-    pub fn set_uint_with_completion<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    pub fn set_uint_with_completion<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             459 => CoreField::LayerMaskSourceId,
             460 => CoreField::LayerMaskMaskFlags,
@@ -8536,15 +8885,22 @@ impl CoreRegistry {
         };
         object.set_uint_with_completion(field, value, completion);
     }
-    pub fn set_string<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: String) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+    pub fn set_string<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: String,
+    ) {
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_string_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
     pub fn set_string_with_completion<O: CoreRegistryObject + ?Sized>(
         object: &mut O,
         property_key: i32,
-        value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             557 => CoreField::ViewModelComponentName,
             4 => CoreField::ComponentName,
@@ -8574,15 +8930,22 @@ impl CoreRegistry {
         };
         object.set_string_with_completion(field, value, completion);
     }
-    pub fn set_color<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: i32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+    pub fn set_color<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: i32,
+    ) {
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_color_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
     pub fn set_color_with_completion<O: CoreRegistryObject + ?Sized>(
         object: &mut O,
         property_key: i32,
-        value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             447 => CoreField::SelectionStyleHighlightColor,
             555 => CoreField::ViewModelInstanceColorPropertyValue,
@@ -8596,15 +8959,22 @@ impl CoreRegistry {
         };
         object.set_color_with_completion(field, value, completion);
     }
-    pub fn set_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: bool) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
+    pub fn set_bool<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: bool,
+    ) {
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::borrowed_setter();
         Self::set_bool_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
     pub fn set_bool_with_completion<O: CoreRegistryObject + ?Sized>(
         object: &mut O,
         property_key: i32,
-        value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             456 => CoreField::LayerMaskIsVisible,
             457 => CoreField::LayerMaskSourceDraws,
@@ -8692,15 +9062,22 @@ impl CoreRegistry {
         };
         object.set_bool_with_completion(field, value, completion);
     }
-    pub fn set_double<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: f32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+    pub fn set_double<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: f32,
+    ) {
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_double_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
     pub fn set_double_with_completion<O: CoreRegistryObject + ?Sized>(
         object: &mut O,
         property_key: i32,
-        value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             458 => CoreField::LayerMaskResolution,
             462 => CoreField::LayerMaskBoundsX,
@@ -8950,15 +9327,22 @@ impl CoreRegistry {
         };
         object.set_double_with_completion(field, value, completion);
     }
-    pub fn set_callback<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: CallbackData<'_>) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+    pub fn set_callback<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: CallbackData<'_>,
+    ) {
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_callback_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
     pub fn set_callback_with_completion(
         object: &mut (impl CoreRegistryObject + ?Sized),
         property_key: i32,
-        value: CallbackData<'_>, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+        value: CallbackData<'_>,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             1016 => CoreField::ViewModelInstanceTriggerFire,
             869 => CoreField::CustomPropertyTriggerFire,
@@ -8969,11 +9353,17 @@ impl CoreRegistry {
         object.set_callback_with_completion(field, value, completion);
     }
     pub fn set_int<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: i32) {
-        let mut completion = crate::mechanical_port::source::core::PropertySetterCompletion::default();
+        let mut completion =
+            crate::mechanical_port::source::core::PropertySetterCompletion::default();
         Self::set_int_with_completion(object, property_key, value, &mut completion);
         completion.finish();
     }
-    pub fn set_int_with_completion<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    pub fn set_int_with_completion<O: CoreRegistryObject + ?Sized>(
+        object: &mut O,
+        property_key: i32,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let field = match property_key {
             1047 => CoreField::GridItemPlacementGridColumn,
             1048 => CoreField::GridItemPlacementGridRow,
@@ -9765,8 +10155,16 @@ impl CoreRegistry {
     /// Dispatch a generated unsigned property write through a stable object
     /// occurrence. A stale or currently borrowed occurrence is not writable.
     pub fn set_id_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
-        if property_key == 660 && handle.is_type_of(crate::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY) {
-            return crate::source::data_bind::data_bind::DataBind::set_uint_handle(handle, property_key as u16, value);
+        if property_key == 660
+            && handle.is_type_of(
+                crate::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY,
+            )
+        {
+            return crate::source::data_bind::data_bind::DataBind::set_uint_handle(
+                handle,
+                property_key as u16,
+                value,
+            );
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let pending = handle.with_mut(|object| {
@@ -9790,8 +10188,16 @@ impl CoreRegistry {
     }
 
     pub fn set_uint_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
-        if matches!(property_key, 586 | 587 | 660) && handle.is_type_of(crate::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY) {
-            return crate::source::data_bind::data_bind::DataBind::set_uint_handle(handle, property_key as u16, value);
+        if matches!(property_key, 586 | 587 | 660)
+            && handle.is_type_of(
+                crate::source::generated::data_bind::data_bind_base::DataBindBase::TYPE_KEY,
+            )
+        {
+            return crate::source::data_bind::data_bind::DataBind::set_uint_handle(
+                handle,
+                property_key as u16,
+                value,
+            );
         }
         use crate::source::generated::viewmodel::viewmodel_instance_trigger_base::ViewModelInstanceTriggerBase;
         if property_key == i32::from(ViewModelInstanceTriggerBase::PROPERTY_VALUE_PROPERTY_KEY)
@@ -9817,7 +10223,9 @@ impl CoreRegistry {
     pub fn set_string_handle(handle: &CoreHandle, property_key: i32, value: String) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
-            .with_mut(|object| Self::set_string_with_completion(object, property_key, value, &mut completion))
+            .with_mut(|object| {
+                Self::set_string_with_completion(object, property_key, value, &mut completion)
+            })
             .is_some();
         completion.finish();
         written
@@ -9826,7 +10234,9 @@ impl CoreRegistry {
     pub fn set_color_handle(handle: &CoreHandle, property_key: i32, value: i32) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
-            .with_mut(|object| Self::set_color_with_completion(object, property_key, value, &mut completion))
+            .with_mut(|object| {
+                Self::set_color_with_completion(object, property_key, value, &mut completion)
+            })
             .is_some();
         completion.finish();
         written
@@ -9853,7 +10263,9 @@ impl CoreRegistry {
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
-            .with_mut(|object| Self::set_bool_with_completion(object, property_key, value, &mut completion))
+            .with_mut(|object| {
+                Self::set_bool_with_completion(object, property_key, value, &mut completion)
+            })
             .is_some();
         completion.finish();
         written
@@ -9861,7 +10273,9 @@ impl CoreRegistry {
 
     pub fn set_double_handle(handle: &CoreHandle, property_key: i32, value: f32) -> bool {
         use crate::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase;
-        if matches!(property_key, 761 | 762 | 763) && handle.is_type_of(ScrollConstraintBase::TYPE_KEY) {
+        if matches!(property_key, 761 | 762 | 763)
+            && handle.is_type_of(ScrollConstraintBase::TYPE_KEY)
+        {
             return crate::source::constraints::scrolling::scroll_constraint::ScrollConstraint::set_scroll_value_occurrence(handle, property_key as u16, value);
         }
         if property_key == 575 && handle.is_type_of(crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_number_base::ViewModelInstanceNumberBase::TYPE_KEY) {
@@ -9919,7 +10333,9 @@ impl CoreRegistry {
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
-            .with_mut(|object| Self::set_double_with_completion(object, property_key, value, &mut completion))
+            .with_mut(|object| {
+                Self::set_double_with_completion(object, property_key, value, &mut completion)
+            })
             .is_some();
         completion.finish();
         written
@@ -9938,7 +10354,9 @@ impl CoreRegistry {
         }
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
-            .with_mut(|object| Self::set_callback_with_completion(object, property_key, value, &mut completion))
+            .with_mut(|object| {
+                Self::set_callback_with_completion(object, property_key, value, &mut completion)
+            })
             .is_some();
         completion.finish();
         written
@@ -9947,7 +10365,9 @@ impl CoreRegistry {
     pub fn set_int_handle(handle: &CoreHandle, property_key: i32, value: i32) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let written = handle
-            .with_mut(|object| Self::set_int_with_completion(object, property_key, value, &mut completion))
+            .with_mut(|object| {
+                Self::set_int_with_completion(object, property_key, value, &mut completion)
+            })
             .is_some();
         completion.finish();
         written
@@ -11370,10 +11790,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_component_base::ViewModelComponentBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.set_name_value(value) {
@@ -11384,19 +11814,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -11473,7 +11928,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
                 if self.base.set_symbol_type_value_value(value as u8) {
@@ -11490,7 +11950,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -11501,19 +11966,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -11688,7 +12178,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_value_base::ViewModelInstanceValueBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -11705,7 +12200,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -11716,19 +12216,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -11810,7 +12335,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_color_base::ViewModelInstanceColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -11827,7 +12357,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -11838,7 +12373,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelInstanceColorPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -11849,16 +12389,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -11942,7 +12502,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_property_enum_base::ViewModelPropertyEnumBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
                 if self.base.base.base.set_symbol_type_value_value(value as u8) {
@@ -11959,7 +12524,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -11970,19 +12540,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -12163,25 +12758,60 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::data_enum
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::data_enum_base::DataEnumBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -12253,10 +12883,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::data_enum_custom_base::DataEnumCustomBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataEnumCustomName => {
                 if self.base.set_name_value(value) {
@@ -12267,19 +12907,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -12447,7 +13112,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_enum_base::ViewModelInstanceEnumBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -12470,7 +13140,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -12481,19 +13156,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -12667,7 +13367,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_asset_base::ViewModelInstanceAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -12690,7 +13395,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -12701,19 +13411,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -13090,7 +13825,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_property_list_base::ViewModelPropertyListBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
                 if self.base.base.base.set_symbol_type_value_value(value as u8) {
@@ -13107,7 +13847,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -13118,19 +13863,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -13307,7 +14077,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_base::ViewModelBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelViewModelType => {
                 if self.base.set_view_model_type_value(value) {
@@ -13318,7 +14093,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -13329,19 +14109,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -13420,7 +14225,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_property_asset_base::ViewModelPropertyAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
                 if self.base.base.base.set_symbol_type_value_value(value as u8) {
@@ -13437,7 +14247,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -13448,19 +14263,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -13541,7 +14381,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::data_enum_system_base::DataEnumSystemBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataEnumSystemEnumType => {
                 if self.base.set_enum_type_value(value) {
@@ -13552,22 +14397,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -13833,7 +14708,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -13850,7 +14730,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -13861,19 +14746,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -14132,7 +15042,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_property_color_base::ViewModelPropertyColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
                 if self.base.base.base.set_symbol_type_value_value(value as u8) {
@@ -14149,7 +15064,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ViewModelComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -14160,19 +15080,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -14446,7 +15391,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::viewmodel_instance_list_base::ViewModelInstanceListBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -14469,7 +15419,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -14480,19 +15435,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -15349,10 +16329,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::viewmodel::data_enum_value_base::DataEnumValueBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataEnumValueKey => {
                 if self.base.set_key_value(value) {
@@ -15369,19 +16359,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -15459,11 +16474,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_trigger_base::CustomPropertyTriggerBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -15481,7 +16504,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -15492,16 +16520,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyTriggerFire => {
                 crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger::fire(
@@ -15511,7 +16559,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -15593,11 +16646,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::script_input_trigger_base::ScriptInputTriggerBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -15624,7 +16685,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -15644,16 +16710,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyTriggerFire => {
                 crate::mechanical_port::source::custom_property_trigger::CustomPropertyTrigger::fire(
@@ -15664,7 +16750,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -15742,7 +16833,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::draw_target::DrawTar
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -15765,7 +16861,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::draw_target::DrawTar
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -15776,19 +16877,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::draw_target::DrawTar
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -15871,11 +16997,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_number_base::CustomPropertyNumberBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -15887,7 +17021,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -15898,13 +17037,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNumberPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -15915,10 +17069,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -16091,7 +17255,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::distance_constraint_base::DistanceConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -16123,7 +17292,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -16143,13 +17317,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self.base.base.base.base.base.set_strength_value(value) {
@@ -16166,10 +17355,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -16253,7 +17452,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::follow_path_constraint_base::FollowPathConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -16293,7 +17497,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -16315,10 +17524,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FollowPathConstraintOrient => {
                 if self.base.set_orient_value(value) {
@@ -16335,7 +17554,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self
@@ -16361,10 +17585,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -16632,7 +17866,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::ik_constraint_base::IKConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -16664,7 +17903,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -16684,10 +17928,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::IKConstraintInvertDirection => {
                 if self.base.set_invert_direction_value(value) {
@@ -16698,7 +17952,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self.base.base.base.base.base.set_strength_value(value) {
@@ -16709,10 +17968,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -16797,7 +18066,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::translation_constraint_base::TranslationConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -16883,7 +18157,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -16909,10 +18188,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TransformComponentConstraintOffset => {
                 if self.base.base.base.base.base.set_offset_value(value) {
@@ -16959,7 +18248,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self
@@ -17019,10 +18313,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -17304,7 +18608,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -17348,13 +18657,21 @@ impl CoreRegistryObject
             CoreField::ScrollConstraintScrollFlags => {
                 if self.base.set_scroll_flags_value(value as u8) {
                     <Self as crate::mechanical_port::source::generated::constraints::scrolling::scroll_constraint_base::ScrollConstraintBaseCallbacks>::scroll_flags_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 466);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        466,
+                    );
                 }
             }
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -17374,10 +18691,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ScrollConstraintSnap => {
                 if self.base.set_snap_value(value) {
@@ -17419,7 +18746,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self.base.base.base.base.base.set_strength_value(value) {
@@ -17461,10 +18793,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -17801,7 +19143,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::transform_constraint_base::TransformConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -17841,7 +19188,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -17863,13 +19215,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self
@@ -17901,10 +19268,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -18015,7 +19392,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::scale_constraint_base::ScaleConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -18101,7 +19483,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -18127,10 +19514,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TransformComponentConstraintOffset => {
                 if self.base.base.base.base.base.set_offset_value(value) {
@@ -18177,7 +19574,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self
@@ -18237,10 +19639,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -18431,7 +19843,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::constraints::rotation_constraint_base::RotationConstraintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -18502,7 +19919,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -18526,10 +19948,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TransformComponentConstraintOffset => {
                 if self.base.base.base.set_offset_value(value) {
@@ -18558,7 +19990,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ConstraintStrength => {
                 if self
@@ -18598,10 +20035,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -18752,7 +20199,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::node_base::NodeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -18774,7 +20226,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -18796,13 +20253,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self.base.base.base.base.base.set_opacity_value(value) {
@@ -18835,7 +20307,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
                 }
             }
             CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(self, value, completion)
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    self, value, completion,
+                )
             }
             CoreField::NodeY => {
                 if self.base.set_y_value(value) {
@@ -18844,7 +20318,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
                 }
             }
             CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(self, value, completion)
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    self, value, completion,
+                )
             }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(self, value)
@@ -18873,10 +20349,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::node::Node {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -19009,7 +20495,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -19053,7 +20544,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -19079,13 +20575,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -19155,18 +20666,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -19218,10 +20737,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -19416,7 +20945,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::nested_artboard_base::NestedArtboardBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -19466,7 +21000,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -19492,10 +21031,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedArtboardIsPaused => {
                 if self.base.set_is_paused_value(value) {
@@ -19512,7 +21061,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -19582,18 +21136,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -19657,10 +21219,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -19859,7 +21431,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -19909,7 +21486,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -19935,13 +21517,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -20011,18 +21608,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -20074,10 +21679,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -20271,11 +21886,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_color_base::CustomPropertyColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -20287,7 +21910,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -20298,7 +21926,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyColorPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -20309,16 +21942,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -20399,7 +22052,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::solo_base::SoloBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -20429,7 +22087,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -20453,13 +22116,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -20501,7 +22179,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
                 }
             }
             CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(&mut self.base.base, value, completion)
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base,
+                    value,
+                    completion,
+                )
             }
             CoreField::NodeY => {
                 if self.base.base.base.set_y_value(value) {
@@ -20510,7 +22192,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
                 }
             }
             CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(&mut self.base.base, value, completion)
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base,
+                    value,
+                    completion,
+                )
             }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
@@ -20563,10 +22249,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::solo::Solo {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -20730,7 +22426,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_drawable_base::ScriptedDrawableBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -20780,7 +22481,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -20806,13 +22512,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -20882,18 +22603,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -20945,10 +22674,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -21142,7 +22881,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_data_converter_base::ScriptedDataConverterBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ScriptedDataConverterScriptAssetId => {
                 if self.base.set_script_asset_id_value(value) {
@@ -21153,7 +22897,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataConverterName => {
                 if self.base.base.base.set_name_value(value) {
@@ -21164,19 +22913,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -21252,7 +23026,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_interpolator_base::ScriptedInterpolatorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ScriptedInterpolatorScriptAssetId => {
                 if self.base.set_script_asset_id_value(value) {
@@ -21263,22 +23042,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -21352,7 +23161,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_layout_base::ScriptedLayoutBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -21425,7 +23239,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -21453,13 +23272,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -21537,18 +23371,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -21600,10 +23442,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -21821,7 +23673,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::scripted::scripted_path_effect_base::ScriptedPathEffectBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -21838,7 +23695,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -21849,19 +23711,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -21936,11 +23823,19 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_number:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::script_input_number_base::ScriptInputNumberBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -21961,7 +23856,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_number:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -21981,13 +23881,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_number:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNumberPropertyValue => {
                 if self.base.base.base.set_property_value_value(value) {
@@ -21998,10 +23913,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_number:
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -22084,7 +24009,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::nested_artboard_layout_base::NestedArtboardLayoutBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -22181,7 +24111,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -22209,10 +24144,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedArtboardIsPaused => {
                 if self.base.base.base.set_is_paused_value(value) {
@@ -22229,7 +24174,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -22307,18 +24257,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -22394,10 +24352,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -22639,7 +24607,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::n_slicer_tile_mode_base::NSlicerTileModeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -22662,7 +24635,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -22673,19 +24651,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -22764,7 +24767,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::grid_track::
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::grid_track_base::GridTrackBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -22793,7 +24801,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::grid_track::
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -22804,13 +24817,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::grid_track::
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::GridTrackTrackValue => {
                 if self.base.set_track_value_value(value) {
@@ -22827,10 +24855,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::grid_track::
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -22915,7 +24953,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::grid_item_placement_base::GridItemPlacementBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -22938,7 +24981,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -22949,19 +24997,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::GridItemPlacementGridColumn => {
                 if self.base.set_grid_column_value(value as i16) {
@@ -23059,7 +25132,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::layout_node_style_base::LayoutNodeStyleBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -23170,7 +25248,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -23181,10 +25264,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutSizingStyleHugUnbounded => {
                 if self.base.base.base.set_hug_unbounded_value(value) {
@@ -23195,7 +25288,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutSizingStyleMinWidth => {
                 if self.base.base.base.set_min_width_value(value) {
@@ -23248,10 +25346,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -23369,7 +25477,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::layout_participant_base::LayoutParticipantBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -23519,7 +25632,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -23539,10 +25657,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutSizingStyleHugUnbounded => {
                 if self.base.base.base.base.base.set_hug_unbounded_value(value) {
@@ -23553,7 +25681,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutSizingStyleMinWidth => {
                 if self.base.base.base.base.base.set_min_width_value(value) {
@@ -23606,10 +25739,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -23732,7 +25875,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_y::Axis
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -23743,7 +25891,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_y::Axis
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -23754,10 +25907,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_y::Axis
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AxisNormalized => {
                 if self.base.base.base.set_normalized_value(value) {
@@ -23768,7 +25931,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_y::Axis
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AxisOffset => {
                 if self.base.base.base.set_offset_value(value) {
@@ -23779,10 +25947,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_y::Axis
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -23868,7 +26046,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -24159,7 +26342,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -24170,10 +26358,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutSizingStyleHugUnbounded => {
                 if self.base.base.base.set_hug_unbounded_value(value) {
@@ -24196,7 +26394,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutSizingStyleMinWidth => {
                 if self.base.base.base.set_min_width_value(value) {
@@ -24375,10 +26578,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -24601,7 +26814,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_x::Axis
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -24612,7 +26830,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_x::Axis
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -24623,10 +26846,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_x::Axis
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AxisNormalized => {
                 if self.base.base.base.set_normalized_value(value) {
@@ -24637,7 +26870,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_x::Axis
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AxisOffset => {
                 if self.base.base.base.set_offset_value(value) {
@@ -24648,10 +26886,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::axis_x::Axis
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -24737,7 +26985,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_slicer::NS
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -24748,7 +27001,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_slicer::NS
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -24759,19 +27017,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_slicer::NS
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -24852,7 +27135,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout::n_sliced_node_base::NSlicedNodeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -24876,7 +27164,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -24900,13 +27193,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -24948,7 +27256,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
                 }
             }
             CoreField::NodeXArtboard => {
-                crate::mechanical_port::source::node::Node::set_x_with_completion(&mut self.base.base, value, completion)
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base,
+                    value,
+                    completion,
+                )
             }
             CoreField::NodeY => {
                 if self.base.base.base.set_y_value(value) {
@@ -24957,7 +27269,11 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
                 }
             }
             CoreField::NodeYArtboard => {
-                crate::mechanical_port::source::node::Node::set_y_with_completion(&mut self.base.base, value, completion)
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base,
+                    value,
+                    completion,
+                )
             }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
@@ -25034,10 +27350,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout::n_sliced_nod
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -25339,7 +27665,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::component_origin::Co
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::component_origin_base::ComponentOriginBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -25350,7 +27681,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::component_origin::Co
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -25361,13 +27697,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::component_origin::Co
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentOriginOriginX => {
                 if self.base.set_origin_x_value(value) {
@@ -25384,10 +27735,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::component_origin::Co
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -25469,7 +27830,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::listener_fire_event_base::ListenerFireEventBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.set_flags_value(value) {
@@ -25486,22 +27852,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -25785,7 +28181,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_uint_base::KeyFrameUintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -25814,22 +28215,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -25911,7 +28342,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::nested_simple_animation_base::NestedSimpleAnimationBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -25939,7 +28375,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -25961,10 +28402,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedSimpleAnimationIsPlaying => {
                 if self.base.set_is_playing_value(value) {
@@ -25975,7 +28426,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedLinearAnimationMix => {
                 if self.base.base.base.set_mix_value(value) {
@@ -25992,10 +28448,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26101,7 +28567,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::animation_state_base::AnimationStateBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -26118,16 +28589,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AdvanceableStateSpeed => {
                 if self.base.base.base.set_speed_value(value) {
@@ -26138,10 +28629,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26221,7 +28722,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::focus_action_clear_base::FocusActionClearBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -26232,22 +28738,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26326,7 +28862,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::nested_trigger_base::NestedTriggerBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -26343,7 +28884,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -26354,16 +28900,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedTriggerFire => {
                 crate::mechanical_port::source::animation::nested_trigger::NestedTrigger::fire(
@@ -26373,7 +28939,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26453,7 +29024,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.set_flags_value(value) {
@@ -26470,22 +29046,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26558,7 +29164,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyed_obj
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyed_object_base::KeyedObjectBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyedObjectObjectId => {
                 if self.base.set_object_id_value(value) {
@@ -26569,22 +29180,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyed_obj
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26659,10 +29300,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::animation
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::animation_base::AnimationBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AnimationName => {
                 if self.base.set_name_value(value) {
@@ -26673,19 +29324,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::animation
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -26760,7 +29436,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_int_base::KeyFrameIntBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -26783,22 +29464,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameIntValue => {
                 if self.base.set_value_value(value) {
@@ -26889,7 +29600,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::blend_animation_direct_base::BlendAnimationDirectBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BlendAnimationAnimationId => {
                 if self.base.base.base.set_animation_id_value(value) {
@@ -26912,16 +29628,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BlendAnimationDirectMixValue => {
                 if self.base.set_mix_value_value(value) {
@@ -26932,10 +29668,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -27016,10 +29762,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_number_base::StateMachineNumberBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -27030,13 +29786,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineNumberValue => {
                 if self.base.set_value_value(value) {
@@ -27047,10 +29818,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -27129,7 +29910,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineListenerTargetId => {
                 if self.base.set_target_id_value(value) {
@@ -27140,7 +29926,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -27151,19 +29942,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -27340,19 +30156,44 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::cubic_value_interpolator_base::CubicValueInterpolatorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CubicInterpolatorX1 => {
                 if self.base.base.base.set_x1_value(value) {
@@ -27381,10 +30222,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -27534,7 +30385,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyed_property_base::KeyedPropertyBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyedPropertyPropertyKey => {
                 if self.base.set_property_key_value(value) {
@@ -27545,22 +30401,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -27770,7 +30656,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_id_base::KeyFrameIdBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -27799,22 +30690,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -27894,7 +30815,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_bool_base::KeyFrameBoolBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -27917,13 +30843,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameBoolValue => {
                 if self.base.set_value_value(value) {
@@ -27934,13 +30875,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::keyframe_
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -28023,7 +30979,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::listener_bool_change_base::ListenerBoolChangeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -28052,22 +31013,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -28147,7 +31138,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::listener_align_target_base::ListenerAlignTargetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.set_flags_value(value) {
@@ -28164,13 +31160,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerAlignTargetPreserveOffset => {
                 if self.base.set_preserve_offset_value(value) {
@@ -28181,13 +31192,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -28721,7 +31747,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::any_state
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::any_state_base::AnyStateBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self.base.base.base.set_flags_value(value) {
@@ -28732,22 +31763,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::any_state
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -28821,7 +31882,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::blend_state_1d_input_base::BlendState1DInputBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self
@@ -28847,22 +31913,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29056,10 +32152,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_layer_base::StateMachineLayerBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -29070,19 +32176,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29156,7 +32287,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_string_base::KeyFrameStringBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -29179,7 +32315,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameStringValue => {
                 if self.base.set_value_value(value) {
@@ -29190,19 +32331,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29285,7 +32451,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::listener_number_change_base::ListenerNumberChangeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -29308,16 +32479,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerNumberChangeValue => {
                 if self.base.set_value_value(value) {
@@ -29328,10 +32519,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29412,7 +32613,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::focus_action_target_base::FocusActionTargetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -29429,22 +32635,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29522,19 +32758,44 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::cubic_ease_interpolator_base::CubicEaseInterpolatorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CubicInterpolatorX1 => {
                 if self.base.base.base.set_x1_value(value) {
@@ -29563,10 +32824,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29716,7 +32987,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_transition_base::StateTransitionBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateTransitionStateToId => {
                 if self.base.set_state_to_id_value(value) {
@@ -29763,22 +33039,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29859,7 +33165,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_bo
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::nested_bool_base::NestedBoolBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -29876,7 +33187,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_bo
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -29887,10 +33203,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_bo
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedBoolNestedValue => {
                 crate::mechanical_port::source::animation::nested_bool::NestedBool::set_nested_value(
@@ -29900,13 +33226,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_bo
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -29992,7 +33333,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_double_base::KeyFrameDoubleBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -30015,16 +33361,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameDoubleValue => {
                 if self.base.set_value_value(value) {
@@ -30035,10 +33401,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30121,7 +33497,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_color_base::KeyFrameColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.base.base.set_frame_value(value) {
@@ -30144,10 +33525,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameColorValue => {
                 if self.base.set_value_value(value) {
@@ -30158,16 +33549,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30250,7 +33661,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::focus_action_traversal_base::FocusActionTraversalBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -30267,22 +33683,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30358,10 +33804,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::state_mac
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_base::StateMachineBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AnimationName => {
                 if self.base.base.base.set_name_value(value) {
@@ -30372,19 +33828,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::state_mac
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30458,7 +33939,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_fire_event_base::StateMachineFireEventBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineFireActionOccursValue => {
                 if self.base.base.base.set_occurs_value_value(value as u8) {
@@ -30475,22 +33961,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30568,7 +34084,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::entry_sta
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::entry_state_base::EntryStateBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self.base.base.base.set_flags_value(value) {
@@ -30579,22 +34100,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::entry_sta
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30668,7 +34219,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::linear_animation_base::LinearAnimationBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LinearAnimationFps => {
                 if self.base.set_fps_value(value) {
@@ -30703,7 +34259,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AnimationName => {
                 if self.base.base.base.set_name_value(value) {
@@ -30714,10 +34275,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LinearAnimationEnableWorkArea => {
                 if self.base.set_enable_work_area_value(value) {
@@ -30734,7 +34305,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LinearAnimationSpeed => {
                 if self.base.set_speed_value(value) {
@@ -30745,10 +34321,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -30836,10 +34422,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_trigger_base::StateMachineTriggerBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -30850,19 +34446,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -31014,7 +34635,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::listener_trigger_change_base::ListenerTriggerChangeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ListenerActionFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -31037,22 +34663,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -31128,7 +34784,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::blend_state_direct_base::BlendStateDirectBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self.base.base.base.base.base.set_flags_value(value) {
@@ -31139,22 +34800,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -31473,7 +35164,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::nested_state_machine_base::NestedStateMachineBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -31499,7 +35195,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -31519,19 +35220,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -31608,7 +35334,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::elastic_interpolator_base::ElasticInterpolatorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ElasticInterpolatorEasingValue => {
                 if self.base.set_easing_value_value(value) {
@@ -31619,16 +35350,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ElasticInterpolatorAmplitude => {
                 if self.base.set_amplitude_value(value) {
@@ -31645,10 +35396,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -32244,7 +36005,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::exit_stat
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::exit_state_base::ExitStateBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self.base.base.base.set_flags_value(value) {
@@ -32255,22 +36021,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::exit_stat
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -32342,7 +36138,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_nu
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::nested_number_base::NestedNumberBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -32359,7 +36160,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_nu
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -32370,22 +36176,47 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::nested_nu
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedNumberNestedValue => crate::mechanical_port::source::animation::nested_number::NestedNumber::set_nested_value(self, value),
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -32544,7 +36375,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::keyframe_callback_base::KeyFrameCallbackBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyFrameFrame => {
                 if self.base.base.base.set_frame_value(value) {
@@ -32555,22 +36391,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -32790,7 +36656,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::nested_remap_animation_base::NestedRemapAnimationBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -32818,7 +36689,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -32840,13 +36716,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedLinearAnimationMix => {
                 if self.base.base.base.set_mix_value(value) {
@@ -32863,10 +36754,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33123,7 +37024,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::blend_state_1d_viewmodel_base::BlendState1DViewModelBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self
@@ -33143,22 +37049,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33239,7 +37175,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::blend_state_transition_base::BlendStateTransitionBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateTransitionStateToId => {
                 if self.base.base.base.set_state_to_id_value(value) {
@@ -33292,22 +37233,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33393,10 +37364,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::state_machine_bool_base::StateMachineBoolBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -33407,10 +37388,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StateMachineBoolValue => {
                 if self.base.set_value_value(value) {
@@ -33421,13 +37412,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33506,7 +37512,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::blend_animation_1d_base::BlendAnimation1DBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BlendAnimationAnimationId => {
                 if self.base.base.base.set_animation_id_value(value) {
@@ -33517,16 +37528,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BlendAnimation1DValue => {
                 if self.base.set_value_value(value) {
@@ -33537,10 +37568,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33619,7 +37660,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::group_effect_base::GroupEffectBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -33630,7 +37676,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -33641,19 +37692,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33734,7 +37810,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::target_effect_base::TargetEffectBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -33751,7 +37832,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -33762,19 +37848,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33852,7 +37963,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash_
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::dash_path_base::DashPathBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -33863,7 +37979,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash_
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -33874,10 +37995,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash_
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DashPathOffsetIsPercentage => {
                 if self.base.set_offset_is_percentage_value(value) {
@@ -33888,7 +38019,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash_
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DashPathOffset => {
                 if self.base.set_offset_value(value) {
@@ -33899,10 +38035,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash_
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -33985,7 +38131,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::linear_gradient_base::LinearGradientBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -33996,7 +38147,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -34007,13 +38163,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LinearGradientStartX => {
                 if self.base.set_start_x_value(value) {
@@ -34048,10 +38219,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -34136,7 +38317,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::radial_gradient_base::RadialGradientBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -34156,7 +38342,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -34176,13 +38367,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LinearGradientStartX => {
                 if self.base.base.base.set_start_x_value(value) {
@@ -34217,10 +38423,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -34302,7 +38518,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash:
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -34313,7 +38534,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -34324,10 +38550,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DashLengthIsPercentage => {
                 if self.base.set_length_is_percentage_value(value) {
@@ -34338,7 +38574,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash:
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DashLength => {
                 if self.base.set_length_value(value) {
@@ -34349,10 +38590,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::dash:
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -34435,7 +38686,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -34485,7 +38741,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -34505,10 +38766,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ShapePaintIsVisible => {
                 if self.base.base.base.set_is_visible_value(value) {
@@ -34525,7 +38796,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::StrokeThickness => {
                 if self.base.set_thickness_value(value) {
@@ -34536,10 +38812,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -34626,7 +38912,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::solid
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::solid_color_base::SolidColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -34637,7 +38928,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::solid
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -34648,7 +38944,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::solid
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::SolidColorColorValue => {
                 if self.base.set_color_value_value(value) {
@@ -34659,16 +38960,36 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::solid
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -34749,7 +39070,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::gradient_stop_base::GradientStopBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -34760,7 +39086,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -34771,7 +39102,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::GradientStopColorValue => {
                 if self.base.set_color_value_value(value) {
@@ -34782,10 +39118,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::GradientStopPosition => {
                 if self.base.set_position_value(value) {
@@ -34796,10 +39142,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -34880,7 +39236,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::feather_base::FeatherBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -34897,7 +39258,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -34908,10 +39274,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FeatherInner => {
                 if self.base.set_inner_value(value) {
@@ -34922,7 +39298,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FeatherStrength => {
                 if self.base.set_strength_value(value) {
@@ -34945,10 +39326,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::feath
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -35032,7 +39423,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::trim_
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::paint::trim_path_base::TrimPathBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -35049,7 +39445,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::trim_
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -35060,13 +39461,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::trim_
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TrimPathStart => {
                 if self.base.set_start_value(value) {
@@ -35089,10 +39505,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::trim_
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -35176,7 +39602,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -35214,7 +39645,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -35234,10 +39670,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ShapePaintIsVisible => {
                 if self.base.base.base.set_is_visible_value(value) {
@@ -35248,13 +39694,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -35338,7 +39799,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh_vertex:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::mesh_vertex_base::MeshVertexBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -35358,7 +39824,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh_vertex:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -35378,13 +39849,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh_vertex:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::VertexX => {
                 if self.base.base.base.set_x_value(value) {
@@ -35413,10 +39899,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh_vertex:
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -35500,7 +39996,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::straight_vertex_base::StraightVertexBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -35522,7 +40023,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -35544,13 +40050,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::VertexX => {
                 if self.base.base.base.base.base.set_x_value(value) {
@@ -35573,10 +40094,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -35680,7 +40211,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::cubic_asymmetric_vertex_base::CubicAsymmetricVertexBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -35704,7 +40240,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -35728,13 +40269,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::VertexX => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
@@ -35769,10 +40325,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -35904,7 +40470,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh::Mesh {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::mesh_base::MeshBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -35915,7 +40486,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh::Mesh {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -35926,19 +40502,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::mesh::Mesh {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -36012,7 +40613,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::points_path_base::PointsPathBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -36046,7 +40652,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -36074,10 +40685,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self.base.base.base.base.base.set_is_hole_value(value) {
@@ -36094,7 +40715,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -36172,18 +40798,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::points_path::PointsPath as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -36235,10 +40869,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::points_path:
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -36450,7 +41094,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::contour_mesh_vertex_base::ContourMeshVertexBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -36472,7 +41121,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -36494,13 +41148,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::VertexX => {
                 if self.base.base.base.base.base.set_x_value(value) {
@@ -36529,10 +41198,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -36634,7 +41313,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -36668,7 +41352,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -36696,10 +41385,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self.base.base.base.base.base.set_is_hole_value(value) {
@@ -36716,7 +41415,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -36794,18 +41498,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::rectangle::Rectangle as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -36905,10 +41617,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::rectangle::R
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -37133,7 +41855,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::cubic_mirrored_vertex_base::CubicMirroredVertexBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -37157,7 +41884,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -37181,13 +41913,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::VertexX => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
@@ -37216,10 +41963,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -37352,7 +42109,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -37386,7 +42148,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -37414,10 +42181,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self.base.base.base.base.base.set_is_hole_value(value) {
@@ -37428,7 +42205,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -37506,18 +42288,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::triangle::Triangle as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -37593,10 +42383,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::triangle::Tr
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -37813,7 +42613,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -37847,7 +42652,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -37875,10 +42685,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self.base.base.base.base.base.set_is_hole_value(value) {
@@ -37889,7 +42709,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -37967,18 +42792,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::ellipse::Ellipse as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -38054,10 +42887,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::ellipse::Ell
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -38274,7 +43117,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -38314,7 +43162,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -38342,10 +43195,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self.base.base.base.base.base.set_is_hole_value(value) {
@@ -38362,7 +43225,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -38440,18 +43308,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::list_path::ListPath as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -38503,10 +43379,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::list_path::L
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -38722,7 +43608,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::clipping_sha
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::clipping_shape_base::ClippingShapeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -38745,7 +43636,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::clipping_sha
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -38756,10 +43652,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::clipping_sha
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ClippingShapeIsVisible => {
                 if self.base.set_is_visible_value(value) {
@@ -38770,13 +43676,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::clipping_sha
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -38859,7 +43780,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -38899,7 +43825,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -38927,10 +43858,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self.base.base.base.base.base.set_is_hole_value(value) {
@@ -38941,7 +43882,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -39019,18 +43965,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::polygon::Polygon as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -39112,10 +44066,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::polygon::Pol
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -39335,7 +44299,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::star_base::StarBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -39386,7 +44355,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -39416,10 +44390,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::PathIsHole => {
                 if self
@@ -39439,7 +44423,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -39536,9 +44525,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self
                     .base
@@ -39556,9 +44549,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base.base.base,
@@ -39646,10 +44643,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::star::Star {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -39910,7 +44917,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -39984,7 +44996,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -40010,13 +45027,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -40086,18 +45118,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -40173,10 +45213,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -40376,7 +45426,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::shapes::cubic_detached_vertex_base::CubicDetachedVertexBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -40400,7 +45455,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -40424,13 +45484,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::VertexX => {
                 if self.base.base.base.base.base.base.base.set_x_value(value) {
@@ -40471,10 +45546,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -40609,7 +45694,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_group_base::CustomPropertyGroupBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -40620,7 +45710,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -40631,19 +45726,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -40722,7 +45842,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::event::Event {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::event_base::EventBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -40742,7 +45867,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::event::Event {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -40762,16 +45892,36 @@ impl CoreRegistryObject for crate::mechanical_port::source::event::Event {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::EventTrigger => {
                 crate::mechanical_port::source::event::Event::trigger(self, &mut value)
@@ -40779,7 +45929,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::event::Event {
             _ => {}
         }
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -40862,7 +46017,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::focus_data::FocusDat
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -40885,7 +46045,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::focus_data::FocusDat
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -40896,10 +46061,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::focus_data::FocusDat
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FocusDataCanFocus => {
                 let current = self.base.focus_flags();
@@ -40937,13 +46112,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::focus_data::FocusDat
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -41030,11 +46220,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_boolean_base::CustomPropertyBooleanBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -41046,7 +46244,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -41057,10 +46260,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyBooleanPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -41071,13 +46284,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -41160,11 +46388,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::script_input_boolean_base::ScriptInputBooleanBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -41185,7 +46421,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -41205,10 +46446,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyBooleanPropertyValue => {
                 if self.base.base.base.set_property_value_value(value) {
@@ -41219,13 +46470,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -41302,11 +46568,19 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_color::
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::script_input_color_base::ScriptInputColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -41327,7 +46601,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_color::
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -41347,7 +46626,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_color::
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyColorPropertyValue => {
                 if self.base.base.base.set_property_value_value(value) {
@@ -41358,16 +46642,36 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_color::
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -41446,7 +46750,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::draw_rules::DrawRule
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -41463,7 +46772,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::draw_rules::DrawRule
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -41474,19 +46788,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::draw_rules::DrawRule
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -41566,7 +46905,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -41616,7 +46960,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -41642,10 +46991,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutComponentClip => {
                 if self.base.set_clip_value(value) {
@@ -41656,7 +47015,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -41726,18 +47090,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -41813,10 +47185,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -42014,7 +47396,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::artboard_base::ArtboardBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -42099,7 +47486,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -42127,10 +47519,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayoutComponentClip => {
                 if self.base.base.base.set_clip_value(value) {
@@ -42141,7 +47543,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -42219,18 +47626,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -42318,10 +47733,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -42535,7 +47960,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::joystick::Joystick {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::joystick_base::JoystickBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -42570,7 +48000,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::joystick::Joystick {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -42581,13 +48016,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::joystick::Joystick {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::JoystickX => {
                 if self.base.set_x_value(value) {
@@ -42640,10 +48090,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::joystick::Joystick {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -42735,13 +48195,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::selection_style::Sel
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         if field == CoreField::SelectionStyleHighlightColor {
             if self.base.set_highlight_color_value(value) {
                 <Self as crate::source::generated::selection_style_base::SelectionStyleBaseCallbacks>::highlight_color_changed(self);
@@ -42749,10 +48224,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::selection_style::Sel
             }
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         if field == CoreField::SelectionStyleCornerRadius {
             if self.base.set_corner_radius_value(value) {
                 <Self as crate::source::generated::selection_style_base::SelectionStyleBaseCallbacks>::corner_radius_changed(self);
@@ -42760,10 +48245,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::selection_style::Sel
             }
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -42843,25 +48338,60 @@ impl CoreRegistryObject for crate::mechanical_port::source::backboard::Backboard
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -42935,7 +48465,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::open_url_event::Open
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -42963,7 +48498,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::open_url_event::Open
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -42991,16 +48531,36 @@ impl CoreRegistryObject for crate::mechanical_port::source::open_url_event::Open
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::EventTrigger => crate::mechanical_port::source::event::Event::trigger(
                 &mut self.base.base,
@@ -43009,7 +48569,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::open_url_event::Open
             _ => {}
         }
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -43111,7 +48676,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -43137,7 +48707,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase::TRAIT_FLAGS_PROPERTY_KEY);
                 }
             }
-            CoreField::SemanticDataIsChecked => self.set_is_checked_with_completion(value as u8, completion),
+            CoreField::SemanticDataIsChecked => {
+                self.set_is_checked_with_completion(value as u8, completion)
+            }
             CoreField::SemanticDataStateFlags => {
                 if self.base.set_state_flags_value(value) {
                     <crate::mechanical_port::source::semantic::semantic_data::SemanticData as crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBaseCallbacks>::state_flags_changed(self);
@@ -43147,7 +48719,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -43176,10 +48753,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::SemanticDataIsExpandable => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_expandable_with_completion(self, value, completion),
             CoreField::SemanticDataIsSelectable => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_selectable_with_completion(self, value, completion),
@@ -43203,13 +48790,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -43317,11 +48919,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_string_base::CustomPropertyStringBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -43333,7 +48943,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -43350,19 +48965,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -43442,11 +49082,19 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_string:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::script_input_string_base::ScriptInputStringBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -43467,7 +49115,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_string:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -43493,19 +49146,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::script_input_string:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -43658,16 +49336,36 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::data_bind_path_base::DataBindPathBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataBindPathIsRelative => {
                 if self.base.set_is_relative_value(value) {
@@ -43678,13 +49376,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -43980,7 +49693,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::data_bind
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::data_bind_base::DataBindBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataBindPropertyKey => {
                 if self.base.set_property_key_value(value) {
@@ -44003,22 +49721,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::data_bind::data_bind
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -44097,7 +49845,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::bindable_property_asset_base::BindablePropertyAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BindablePropertyIdPropertyValue => {
                 if self.base.base.base.set_property_value_value(value) {
@@ -44108,22 +49861,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -45674,25 +51457,60 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::converters::formula::formula_token_base::FormulaTokenBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -46548,7 +52366,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::data_bind_context_base::DataBindContextBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DataBindPropertyKey => {
                 if self.base.base.base.set_property_key_value(value) {
@@ -46571,22 +52394,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -46667,7 +52520,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::bindable_property_list_base::BindablePropertyListBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BindablePropertyListPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -46678,22 +52536,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -46770,10 +52658,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::bindable_property_string_base::BindablePropertyStringBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BindablePropertyStringPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -46784,19 +52682,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -46873,19 +52796,44 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::bindable_property_number_base::BindablePropertyNumberBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BindablePropertyNumberPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -46896,10 +52844,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -46976,7 +52934,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::bindable_property_enum_base::BindablePropertyEnumBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BindablePropertyEnumPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -46987,22 +52950,52 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -47079,13 +53072,28 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::data_bind::bindable_property_color_base::BindablePropertyColorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BindablePropertyColorPropertyValue => {
                 if self.base.set_property_value_value(value) {
@@ -47096,16 +53104,36 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -47255,7 +53283,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -47334,7 +53367,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -47362,10 +53400,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::NestedArtboardIsPaused => {
                 if self.base.base.base.set_is_paused_value(value) {
@@ -47388,7 +53436,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -47466,18 +53519,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -47553,10 +53614,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -47788,7 +53859,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::weight::Weigh
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -47811,7 +53887,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::weight::Weigh
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -47822,19 +53903,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::weight::Weigh
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -47915,7 +54021,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::bone::Bone {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::bones::bone_base::BoneBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -47939,7 +54050,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::bone::Bone {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -47963,13 +54079,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::bone::Bone {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -48013,10 +54144,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::bone::Bone {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -48152,7 +54293,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::root_bone::Ro
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -48178,7 +54324,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::root_bone::Ro
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -48204,13 +54355,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::root_bone::Ro
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -48295,10 +54461,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::root_bone::Ro
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -48450,7 +54626,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::skin::Skin {
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::bones::skin_base::SkinBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -48461,7 +54642,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::skin::Skin {
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -48472,13 +54658,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::skin::Skin {
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::SkinXx => {
                 if self.base.set_xx_value(value) {
@@ -48519,10 +54720,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::skin::Skin {
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -48609,7 +54820,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::tendon::Tendo
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -48626,7 +54842,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::tendon::Tendo
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -48637,13 +54858,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::tendon::Tendo
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TendonXx => {
                 if self.base.set_xx_value(value) {
@@ -48684,10 +54920,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::tendon::Tendo
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -48775,7 +55021,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::cubic_weight:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::bones::cubic_weight_base::CubicWeightBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -48822,7 +55073,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::cubic_weight:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -48833,19 +55089,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::bones::cubic_weight:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -48930,7 +55211,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_modifier_range_base::TextModifierRangeBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -48965,7 +55251,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -48976,10 +55267,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextModifierRangeClamp => {
                 if self.base.set_clamp_value(value) {
@@ -48990,7 +55291,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextModifierRangeModifyFrom => {
                 if self.base.set_modify_from_value(value) {
@@ -49031,10 +55337,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -49126,7 +55442,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_follow_path_modifier_base::TextFollowPathModifierBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -49152,7 +55473,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -49172,10 +55498,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextFollowPathModifierRadial => {
                 if self.base.set_radial_value(value) {
@@ -49192,7 +55528,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextFollowPathModifierStart => {
                 if self.base.set_start_value(value) {
@@ -49221,10 +55562,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -49312,7 +55663,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_input_cursor_base::TextInputCursorBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -49379,7 +55735,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -49407,13 +55768,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -49491,18 +55867,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -49554,10 +55938,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -49777,7 +56171,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_input_text_base::TextInputTextBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -49844,7 +56243,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -49872,13 +56276,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -49956,18 +56375,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -50019,10 +56446,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -50244,7 +56681,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_style_feature_base::TextStyleFeatureBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -50267,7 +56709,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -50278,19 +56725,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -50371,7 +56843,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_variation_modifier_base::TextVariationModifierBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -50397,7 +56874,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -50417,13 +56899,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextVariationModifierAxisValue => {
                 if self.base.set_axis_value_value(value) {
@@ -50434,10 +56931,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -50519,7 +57026,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_modifier_group_base::TextModifierGroupBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -50536,7 +57048,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -50547,13 +57064,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextModifierGroupOriginX => {
                 if self.base.set_origin_x_value(value) {
@@ -50606,10 +57138,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -50698,7 +57240,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -50715,7 +57262,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -50726,13 +57278,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextStyleFontSize => {
                 if self.base.set_font_size_value(value) {
@@ -50755,10 +57322,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style::Te
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -50839,7 +57416,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_style_paint_base::TextStylePaintBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -50865,7 +57447,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -50885,13 +57472,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextStyleFontSize => {
                 if self.base.base.base.set_font_size_value(value) {
@@ -50914,10 +57516,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_pai
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -50998,7 +57610,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_input_selected_text_base::TextInputSelectedTextBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -51065,7 +57682,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -51093,13 +57715,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -51177,18 +57814,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -51240,10 +57885,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -51465,18 +58120,29 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextInputAlignValue => {
                 if self.base.set_align_value_value(value) {
                     self.align_value_changed();
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 222);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        222,
+                    );
                 }
             }
             CoreField::TextInputVerticalAlignValue => {
                 if self.base.set_vertical_align_value_value(value) {
                     self.vertical_align_value_changed();
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 1094);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        1094,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -51521,7 +58187,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -51553,10 +58224,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextInputMultiline => {
                 if self.base.set_multiline_value(value) {
@@ -51567,14 +58248,24 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
             CoreField::TextInputObscured => {
                 if self.base.set_obscured_value(value) {
                     self.obscured_changed();
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 1095);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        1095,
+                    );
                 }
             }
-            CoreField::TextInputSelectAllOnFocus => self.set_select_all_on_focus_with_completion(value, completion),
+            CoreField::TextInputSelectAllOnFocus => {
+                self.set_select_all_on_focus_with_completion(value, completion)
+            }
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -51644,18 +58335,26 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base,
@@ -51713,10 +58412,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -51920,7 +58629,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_axi
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_style_axis_base::TextStyleAxisBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -51937,7 +58651,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_axi
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -51948,13 +58667,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_axi
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::TextStyleAxisAxisValue => {
                 if self.base.set_axis_value_value(value) {
@@ -51965,10 +58699,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_style_axi
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -52050,7 +58794,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_input_selection_base::TextInputSelectionBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -52117,7 +58866,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -52145,13 +58899,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::WorldTransformComponentOpacity => {
                 if self
@@ -52229,18 +58998,26 @@ impl CoreRegistryObject
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::X_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeXArtboard => crate::mechanical_port::source::node::Node::set_x_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeXArtboard => {
+                crate::mechanical_port::source::node::Node::set_x_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeY => {
                 if self.base.base.base.base.base.base.base.set_y_value(value) {
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks>::y_changed(self);
                     completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::node_base::NodeBase::Y_PROPERTY_KEY);
                 }
             }
-            CoreField::NodeYArtboard => crate::mechanical_port::source::node::Node::set_y_with_completion(
-                &mut self.base.base.base.base.base.base,
-                value, completion),
+            CoreField::NodeYArtboard => {
+                crate::mechanical_port::source::node::Node::set_y_with_completion(
+                    &mut self.base.base.base.base.base.base,
+                    value,
+                    completion,
+                )
+            }
             CoreField::NodeComputedLocalX => {
                 crate::mechanical_port::source::node::Node::set_computed_local_x(
                     &mut self.base.base.base.base.base.base,
@@ -52292,10 +59069,20 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -52515,7 +59302,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_value_run
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_value_run_base::TextValueRunBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -52532,7 +59324,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_value_run
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -52549,19 +59346,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_value_run
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -52642,7 +59464,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::artboard_list_map_rule_base::ArtboardListMapRuleBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -52665,7 +59492,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -52676,19 +59508,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -52769,11 +59626,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::custom_property_enum_base::CustomPropertyEnumBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -52797,7 +59662,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -52808,19 +59678,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -52900,7 +59795,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::blob_asset::
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::blob_asset_base::BlobAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.set_asset_id_value(value) {
@@ -52911,7 +59811,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::blob_asset::
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -52928,19 +59833,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::blob_asset::
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53024,7 +59954,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::script_asset
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::script_asset_base::ScriptAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.base.base.set_asset_id_value(value) {
@@ -53047,7 +59982,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::script_asset
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self
@@ -53079,10 +60019,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::script_asset
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ScriptAssetIsModule => {
                 if self.base.set_is_module_value(value) {
@@ -53093,13 +60043,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::script_asset
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53191,7 +60156,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::manifest_ass
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::manifest_asset_base::ManifestAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.set_asset_id_value(value) {
@@ -53202,7 +60172,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::manifest_ass
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -53219,19 +60194,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::manifest_ass
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53314,7 +60314,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::image_asset:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.base.base.set_asset_id_value(value) {
@@ -53343,7 +60348,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::image_asset:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self
@@ -53369,13 +60379,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::image_asset:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::DrawableAssetHeight => {
                 if self.base.base.base.set_height_value(value) {
@@ -53392,10 +60417,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::image_asset:
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53486,7 +60521,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::shader_asset
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.base.base.set_asset_id_value(value) {
@@ -53497,7 +60537,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::shader_asset
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self
@@ -53529,19 +60574,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::shader_asset
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53627,7 +60697,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::font_asset::
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.set_asset_id_value(value) {
@@ -53638,7 +60713,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::font_asset::
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -53655,19 +60735,44 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::font_asset::
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53750,7 +60855,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::audio_asset:
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::FileAssetAssetId => {
                 if self.base.base.base.base.base.set_asset_id_value(value) {
@@ -53761,7 +60871,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::audio_asset:
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self
@@ -53787,13 +60902,28 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::audio_asset:
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ExportAudioVolume => {
                 if self.base.base.base.set_volume_value(value) {
@@ -53804,10 +60934,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::assets::audio_asset:
             _ => {}
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53896,25 +61036,60 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::file_asset_contents_base::FileAssetContentsBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -53989,7 +61164,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self
@@ -54017,7 +61197,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self
@@ -54039,16 +61224,36 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::EventTrigger => crate::mechanical_port::source::event::Event::trigger(
                 &mut self.base.base,
@@ -54057,7 +61262,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::audio_event::AudioEv
             _ => {}
         }
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -54155,25 +61365,60 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::user_input::
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::inputs::user_input_base::UserInputBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -54243,7 +61488,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::gamepad_inpu
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::inputs::gamepad_input_base::GamepadInputBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::GamepadInputKind => {
                 if self.base.set_kind_value(value) {
@@ -54272,22 +61522,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::gamepad_inpu
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -54366,7 +61646,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::keyboard_inp
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::inputs::keyboard_input_base::KeyboardInputBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::KeyboardInputKeyType => {
                 if self.base.set_key_type_value(value) {
@@ -54389,22 +61674,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::keyboard_inp
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -54482,7 +61797,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::semantic_inp
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::inputs::semantic_input_base::SemanticInputBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::SemanticInputActionType => {
                 if self.base.set_action_type_value(value) {
@@ -54493,22 +61813,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::inputs::semantic_inp
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -54585,11 +61935,19 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::script_input_artboard_base::ScriptInputArtboardBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::CustomPropertyNameId => {
                 if self.base.base.base.set_name_id_value(value) {
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 449);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        449,
+                    );
                 }
             }
             CoreField::ComponentParentId => {
@@ -54607,7 +61965,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -54618,19 +61981,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -55936,7 +63324,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56004,7 +63393,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56118,7 +63508,8 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::list_foll
 impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56137,7 +63528,9 @@ impl CoreCapabilities for crate::mechanical_port::source::constraints::ik_constr
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::on_dirty(self, dirt);
+        crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::on_dirty(
+            self, dirt,
+        );
         true
     }
     fn constraint_apply(
@@ -56191,7 +63584,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56318,7 +63712,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     fn is_advancing_component(&self) -> bool {
@@ -56479,7 +63874,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56547,7 +63943,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56655,7 +64052,8 @@ impl CoreCapabilities
 {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::constraints::constraint::Constraint::on_dirty_occurrence)
     }
     // Preserve the lifecycle methods inherited by this source owner.
@@ -56725,7 +64123,11 @@ impl CoreCapabilities for crate::mechanical_port::source::node::Node {
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -56827,7 +64229,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -57031,7 +64437,11 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::Neste
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -57253,7 +64663,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -57553,7 +64967,11 @@ impl CoreCapabilities for crate::mechanical_port::source::solo::Solo {
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -57656,7 +65074,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -58065,7 +65487,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -58554,7 +65980,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -59397,7 +66827,11 @@ impl CoreCapabilities for crate::mechanical_port::source::layout::n_sliced_node:
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -59674,18 +67108,17 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        // The held uint branch is a generated setter. Complete its callbacks
-        // at that setter's released-borrow boundary, not in KeyedProperty.
-        if !CoreRegistry::is_interpolatable_uint(key as u32) {
-            return CoreRegistry::set_uint_handle(&object, key, self.base.value());
-        }
-        object
-            .with_mut(|object| {
-                self.apply_with_completion(object, key, mix, context, &mut completion);
-                true
-            })
-            .unwrap_or(false)
-
+            // The held uint branch is a generated setter. Complete its callbacks
+            // at that setter's released-borrow boundary, not in KeyedProperty.
+            if !CoreRegistry::is_interpolatable_uint(key as u32) {
+                return CoreRegistry::set_uint_handle(&object, key, self.base.value());
+            }
+            object
+                .with_mut(|object| {
+                    self.apply_with_completion(object, key, mix, context, &mut completion);
+                    true
+                })
+                .unwrap_or(false)
         };
         completion.finish();
         result
@@ -59701,21 +67134,28 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_ui
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        if !CoreRegistry::is_interpolatable_uint(key as u32) {
-            return CoreRegistry::set_uint_handle(&object, key, self.base.value());
-        }
-        next.with(|next| {
-            next.as_key_frame().is_some_and(|next| {
-                object
-                    .with_mut(|object| {
-                        self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion);
-                        true
-                    })
-                    .unwrap_or(false)
+            if !CoreRegistry::is_interpolatable_uint(key as u32) {
+                return CoreRegistry::set_uint_handle(&object, key, self.base.value());
+            }
+            next.with(|next| {
+                next.as_key_frame().is_some_and(|next| {
+                    object
+                        .with_mut(|object| {
+                            self.apply_interpolation_with_completion(
+                                object,
+                                key,
+                                time,
+                                next,
+                                mix,
+                                context,
+                                &mut completion,
+                            );
+                            true
+                        })
+                        .unwrap_or(false)
+                })
             })
-        })
-        .unwrap_or(false)
-
+            .unwrap_or(false)
         };
         completion.finish();
         result
@@ -59918,7 +67358,10 @@ impl CoreCapabilities
         Some(self.base.base.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -60125,13 +67568,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_in
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        object
-            .with_mut(|object| {
-                self.apply_with_completion(object, key, mix, context, &mut completion);
-                true
-            })
-            .unwrap_or(false)
-
+            object
+                .with_mut(|object| {
+                    self.apply_with_completion(object, key, mix, context, &mut completion);
+                    true
+                })
+                .unwrap_or(false)
         };
         completion.finish();
         result
@@ -60147,18 +67589,25 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_in
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        next.with(|next| {
-            next.as_key_frame().is_some_and(|next| {
-                object
-                    .with_mut(|object| {
-                        self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion);
-                        true
-                    })
-                    .unwrap_or(false)
+            next.with(|next| {
+                next.as_key_frame().is_some_and(|next| {
+                    object
+                        .with_mut(|object| {
+                            self.apply_interpolation_with_completion(
+                                object,
+                                key,
+                                time,
+                                next,
+                                mix,
+                                context,
+                                &mut completion,
+                            );
+                            true
+                        })
+                        .unwrap_or(false)
+                })
             })
-        })
-        .unwrap_or(false)
-
+            .unwrap_or(false)
         };
         completion.finish();
         result
@@ -60320,8 +67769,19 @@ impl CoreCapabilities
     ) -> Option<bool> {
         Some(crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener::has_listener(self, kind))
     }
-    fn state_machine_listener_has_button(&self, kind: crate::mechanical_port::source::listener_type::ListenerType, button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { Some(self.has_listener_button(kind, button)) }
-    fn state_machine_listener_listens_to_button(&self, button: crate::mechanical_port::source::pointer_button::PointerButton) -> Option<bool> { Some(self.listens_to_button(button)) }
+    fn state_machine_listener_has_button(
+        &self,
+        kind: crate::mechanical_port::source::listener_type::ListenerType,
+        button: crate::mechanical_port::source::pointer_button::PointerButton,
+    ) -> Option<bool> {
+        Some(self.has_listener_button(kind, button))
+    }
+    fn state_machine_listener_listens_to_button(
+        &self,
+        button: crate::mechanical_port::source::pointer_button::PointerButton,
+    ) -> Option<bool> {
+        Some(self.listens_to_button(button))
+    }
 }
 impl CoreCapabilities for crate::mechanical_port::source::animation::state_machine_listener_single::StateMachineListenerSingle {
     fn as_state_machine_listener(&self) -> Option<&crate::mechanical_port::source::animation::state_machine_listener::StateMachineListener> { Some(&self.base.base) }
@@ -60529,13 +67989,12 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_bo
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        object
-            .with_mut(|object| {
-                self.apply_with_completion(object, key, mix, context, &mut completion);
-                true
-            })
-            .unwrap_or(false)
-
+            object
+                .with_mut(|object| {
+                    self.apply_with_completion(object, key, mix, context, &mut completion);
+                    true
+                })
+                .unwrap_or(false)
         };
         completion.finish();
         result
@@ -60551,8 +68010,7 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::keyframe_bo
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        next.with_downcast::<crate::mechanical_port::source::animation::keyframe_bool::KeyFrameBool, _>(|next| object.with_mut(|object| { self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion); true }).unwrap_or(false)).unwrap_or(false)
-
+            next.with_downcast::<crate::mechanical_port::source::animation::keyframe_bool::KeyFrameBool, _>(|next| object.with_mut(|object| { self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion); true }).unwrap_or(false)).unwrap_or(false)
         };
         completion.finish();
         result
@@ -60879,7 +68337,10 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::any_state::
         Some(self.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -61000,7 +68461,10 @@ impl CoreCapabilities
         Some(self.base.base.base.base.base.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -61114,13 +68578,12 @@ impl CoreCapabilities
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        object
-            .with_mut(|object| {
-                self.apply_with_completion(object, key, mix, context, &mut completion);
-                true
-            })
-            .unwrap_or(false)
-
+            object
+                .with_mut(|object| {
+                    self.apply_with_completion(object, key, mix, context, &mut completion);
+                    true
+                })
+                .unwrap_or(false)
         };
         completion.finish();
         result
@@ -61136,8 +68599,7 @@ impl CoreCapabilities
     ) -> bool {
         let mut completion = crate::source::core::PropertySetterCompletion::default();
         let result = {
-        next.with_downcast::<crate::mechanical_port::source::animation::keyframe_string::KeyFrameString, _>(|next| object.with_mut(|object| { self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion); true }).unwrap_or(false)).unwrap_or(false)
-
+            next.with_downcast::<crate::mechanical_port::source::animation::keyframe_string::KeyFrameString, _>(|next| object.with_mut(|object| { self.apply_interpolation_with_completion(object, key, time, next, mix, context, &mut completion); true }).unwrap_or(false)).unwrap_or(false)
         };
         completion.finish();
         result
@@ -61676,7 +69138,10 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::entry_state
         Some(self.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -61872,7 +69337,10 @@ impl CoreCapabilities
         Some(self.base.base.base.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -62177,7 +69645,10 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::exit_state:
         Some(self.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -62514,7 +69985,10 @@ impl CoreCapabilities
         Some(self.base.base.base.base.base.base.base.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -63768,7 +71242,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::shape::Shape {
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -64259,17 +71737,25 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::mesh::Mesh {
 impl CoreCapabilities for crate::mechanical_port::source::shapes::points_path::PointsPath {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -64573,17 +72059,25 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::shapes::rectangle::Rectangle {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -64881,17 +72375,25 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Triangle {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -65105,17 +72607,25 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::triangle::Tria
 impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellipse {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -65329,17 +72839,25 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::ellipse::Ellip
 impl CoreCapabilities for crate::mechanical_port::source::shapes::list_path::ListPath {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -65629,17 +73147,25 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::clipping_shape
 impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polygon {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -65853,17 +73379,25 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::polygon::Polyg
 impl CoreCapabilities for crate::mechanical_port::source::shapes::star::Star {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::shapes::path::Path::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::shapes::path::Path::on_dirty(&mut self.base.base.base.base.base.base, dirt);
+        crate::mechanical_port::source::shapes::path::Path::on_dirty(
+            &mut self.base.base.base.base.base.base,
+            dirt,
+        );
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -66095,7 +73629,11 @@ impl CoreCapabilities for crate::mechanical_port::source::shapes::image::Image {
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -66832,7 +74370,11 @@ impl CoreCapabilities for crate::mechanical_port::source::draw_rules::DrawRules 
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::layout_component::LayoutComponent {
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -67125,7 +74667,11 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -68124,7 +75670,11 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -68433,7 +75983,11 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::bone::Bone {
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -68531,7 +76085,11 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -68698,7 +76256,8 @@ impl CoreCapabilities for crate::mechanical_port::source::bones::root_bone::Root
 impl CoreCapabilities for crate::mechanical_port::source::bones::skin::Skin {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::bones::skin::Skin::on_dirty_occurrence)
     }
     fn component_update(
@@ -69031,7 +76590,11 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_curso
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -69275,7 +76838,11 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input_text:
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -69697,7 +77264,8 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style::TextStyle {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -69791,14 +77359,18 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_style::Text
 impl CoreCapabilities for crate::mechanical_port::source::text::text_style_paint::TextStylePaint {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::text::text_style::TextStyle::on_dirty_occurrence)
     }
     fn component_on_dirty(
         &mut self,
         dirt: crate::mechanical_port::source::component_dirt::ComponentDirt,
     ) -> bool {
-        crate::mechanical_port::source::text::text_style::TextStyle::on_dirty(&mut self.base.base, dirt);
+        crate::mechanical_port::source::text::text_style::TextStyle::on_dirty(
+            &mut self.base.base,
+            dirt,
+        );
         true
     }
     fn as_file_asset_referencer_mut(
@@ -69936,7 +77508,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -70180,7 +77756,11 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text_input::Text
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -70433,7 +78013,11 @@ impl CoreCapabilities
     ) -> bool {
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -70673,7 +78257,8 @@ impl CoreCapabilities
 impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
     fn component_on_dirty_handler(
         &self,
-    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)> {
+    ) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt)>
+    {
         Some(crate::mechanical_port::source::text::text::Text::on_dirty_occurrence)
     }
     fn component_on_dirty(
@@ -70683,7 +78268,11 @@ impl CoreCapabilities for crate::mechanical_port::source::text::text::Text {
         crate::mechanical_port::source::text::text::Text::on_dirty(self, dirt);
         true
     }
-    fn component_update_handler(&self) -> Option<fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool> {
+    fn component_update_handler(
+        &self,
+    ) -> Option<
+        fn(&CoreHandle, crate::mechanical_port::source::component_dirt::ComponentDirt) -> bool,
+    > {
         Some(crate::mechanical_port::source::transform_component::update_occurrence::<Self>)
     }
     fn component_constraints_handler(&self) -> Option<fn(&CoreHandle)> {
@@ -71530,7 +79119,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::layer_sta
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::animation::layer_state_base::LayerStateBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerStateFlags => {
                 if self.base.set_flags_value(value) {
@@ -71541,22 +79135,52 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::layer_sta
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -71704,7 +79328,10 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::layer_state
         Some(self.flags())
     }
     fn layer_state_settle_flags(&self) -> Option<(bool, bool)> {
-        Some((self.transitions_settle_safe(), self.transitions_ignore_time()))
+        Some((
+            self.transitions_settle_safe(),
+            self.transitions_ignore_time(),
+        ))
     }
     fn set_layer_state_settle_flags(&mut self, safe: bool, ignore_time: bool) {
         self.set_transitions_settle_safe(safe);
@@ -72566,7 +80193,9 @@ impl
     for crate::mechanical_port::source::constraints::ik_constraint::IkConstraint
 {
     fn strength_changed(&mut self) {
-        crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::strength_changed(self);
+        crate::mechanical_port::source::constraints::ik_constraint::IKConstraint::strength_changed(
+            self,
+        );
     }
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::component::Component as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base.base.base, property_key)
@@ -79638,7 +87267,12 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.base.base.set_parent_id_value(value) {
@@ -79649,7 +87283,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -79660,13 +87299,28 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         if field == CoreField::TextStyleBackgroundCornerRadius
             && self.base.set_corner_radius_value(value)
         {
@@ -79674,10 +87328,20 @@ impl CoreRegistryObject
             completion.record(crate::source::core::CoreObject::core(self), 1071);
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -79885,12 +87549,20 @@ impl CoreRegistryObject
     fn is_type_of(&self, type_key: u16) -> bool {
         crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::is_type_of(type_key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ScriptModuleAssetLanguage => {
                 if self.base.set_language_value(value) {
                     <Self as crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBaseCallbacks>::language_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 1087);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        1087,
+                    );
                 }
             }
             CoreField::FileAssetAssetId => {
@@ -79902,7 +87574,12 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::AssetName => {
                 if self.base.base.base.base.base.set_name_value(value) {
@@ -79919,19 +87596,44 @@ impl CoreRegistryObject
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -80093,7 +87795,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bitmap_cache::Bitmap
             type_key,
         )
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
@@ -80110,7 +87817,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::bitmap_cache::Bitmap
             _ => {}
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentName => {
                 if self.base.base.base.set_name_value(value) {
@@ -80121,10 +87833,20 @@ impl CoreRegistryObject for crate::mechanical_port::source::bitmap_cache::Bitmap
             _ => {}
         }
     }
-    fn set_color_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_color_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::BitmapCacheCacheEnabled => {
                 let current = self.base.cache_flags();
@@ -80151,16 +87873,31 @@ impl CoreRegistryObject for crate::mechanical_port::source::bitmap_cache::Bitmap
             _ => {}
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         if field == CoreField::BitmapCacheResolution && self.base.set_resolution_value(value) {
             <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::resolution_changed(self);
             completion.record(crate::mechanical_port::source::core::CoreObject::core(self), crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::RESOLUTION_PROPERTY_KEY);
         }
     }
-    fn set_callback_with_completion(&mut self, field: CoreField, mut value: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_callback_with_completion(
+        &mut self,
+        field: CoreField,
+        mut value: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
-    fn set_int_with_completion(&mut self, field: CoreField, value: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_int_with_completion(
+        &mut self,
+        field: CoreField,
+        value: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         let _ = (field, value);
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
@@ -80302,30 +88039,47 @@ impl CoreRegistryObject for RegistryLayerMask {
     fn is_type_of(&self, key: u16) -> bool {
         LayerMaskBase::is_type_of(key)
     }
-    fn set_uint_with_completion(&mut self, field: CoreField, value: u32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_uint_with_completion(
+        &mut self,
+        field: CoreField,
+        value: u32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::ComponentParentId => {
                 if self.base.base.base.set_parent_id_value(value) {
                     <Self as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 5);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        5,
+                    );
                 }
             }
             CoreField::LayerMaskSourceId => {
                 if self.base.set_source_id_value(value) {
                     <Self as LayerMaskBaseCallbacks>::source_id_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 459);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        459,
+                    );
                 }
             }
             CoreField::LayerMaskMaskFlags => {
                 if self.base.set_mask_flags_value(value) {
                     <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 460);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        460,
+                    );
                 }
             }
             CoreField::LayerMaskMaskModeValue => {
                 if self.base.set_mask_mode_value_value(value as u8) {
                     <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 460);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        460,
+                    );
                 }
             }
             _ => {}
@@ -80340,24 +88094,38 @@ impl CoreRegistryObject for RegistryLayerMask {
             _ => 0,
         }
     }
-    fn set_bool_with_completion(&mut self, field: CoreField, value: bool, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_bool_with_completion(
+        &mut self,
+        field: CoreField,
+        value: bool,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerMaskIsVisible => {
                 if self.base.set_is_visible_value(value) {
                     <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 460);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        460,
+                    );
                 }
             }
             CoreField::LayerMaskSourceDraws => {
                 if self.base.set_source_draws_value(value) {
                     <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 460);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        460,
+                    );
                 }
             }
             CoreField::LayerMaskUseCustomBounds => {
                 if self.base.set_use_custom_bounds_value(value) {
                     <Self as LayerMaskBaseCallbacks>::mask_flags_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 460);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        460,
+                    );
                 }
             }
             _ => {}
@@ -80371,36 +88139,56 @@ impl CoreRegistryObject for RegistryLayerMask {
             _ => false,
         }
     }
-    fn set_double_with_completion(&mut self, field: CoreField, value: f32, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_double_with_completion(
+        &mut self,
+        field: CoreField,
+        value: f32,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         match field {
             CoreField::LayerMaskResolution => {
                 if self.base.set_resolution_value(value) {
                     <Self as LayerMaskBaseCallbacks>::resolution_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 458);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        458,
+                    );
                 }
             }
             CoreField::LayerMaskBoundsX => {
                 if self.base.set_bounds_x_value(value) {
                     <Self as LayerMaskBaseCallbacks>::bounds_x_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 462);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        462,
+                    );
                 }
             }
             CoreField::LayerMaskBoundsY => {
                 if self.base.set_bounds_y_value(value) {
                     <Self as LayerMaskBaseCallbacks>::bounds_y_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 463);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        463,
+                    );
                 }
             }
             CoreField::LayerMaskBoundsWidth => {
                 if self.base.set_bounds_width_value(value) {
                     <Self as LayerMaskBaseCallbacks>::bounds_width_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 464);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        464,
+                    );
                 }
             }
             CoreField::LayerMaskBoundsHeight => {
                 if self.base.set_bounds_height_value(value) {
                     <Self as LayerMaskBaseCallbacks>::bounds_height_changed(self);
-                    completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 465);
+                    completion.record(
+                        crate::mechanical_port::source::core::CoreObject::core(self),
+                        465,
+                    );
                 }
             }
             _ => {}
@@ -80416,10 +88204,18 @@ impl CoreRegistryObject for RegistryLayerMask {
             _ => 0.0,
         }
     }
-    fn set_string_with_completion(&mut self, field: CoreField, value: String, completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {
+    fn set_string_with_completion(
+        &mut self,
+        field: CoreField,
+        value: String,
+        completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
         if field == CoreField::ComponentName && self.base.base.base.set_name_value(value) {
             <Self as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
-            completion.record(crate::mechanical_port::source::core::CoreObject::core(self), 4);
+            completion.record(
+                crate::mechanical_port::source::core::CoreObject::core(self),
+                4,
+            );
         }
     }
     fn get_string(&mut self, field: CoreField) -> String {
@@ -80429,15 +88225,33 @@ impl CoreRegistryObject for RegistryLayerMask {
             String::new()
         }
     }
-    fn set_color_with_completion(&mut self, _: CoreField, _: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {}
+    fn set_color_with_completion(
+        &mut self,
+        _: CoreField,
+        _: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+    }
     fn get_color(&mut self, _: CoreField) -> i32 {
         0
     }
-    fn set_int_with_completion(&mut self, _: CoreField, _: i32, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {}
+    fn set_int_with_completion(
+        &mut self,
+        _: CoreField,
+        _: i32,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+    }
     fn get_int(&mut self, _: CoreField) -> i32 {
         0
     }
-    fn set_callback_with_completion(&mut self, _: CoreField, _: CallbackData<'_>, _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion) {}
+    fn set_callback_with_completion(
+        &mut self,
+        _: CoreField,
+        _: CallbackData<'_>,
+        _completion: &mut crate::mechanical_port::source::core::PropertySetterCompletion,
+    ) {
+    }
 }
 impl crate::mechanical_port::source::core::CoreObject for RegistryLayerMask {
     fn type_predicate(&self) -> fn(u16) -> bool {

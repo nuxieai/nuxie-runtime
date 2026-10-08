@@ -385,9 +385,13 @@ fn colrv1_radial_gradient_maps_to_glyph_space() {
     catch_approx(face.x1, 630.0 / 1024.0);
     catch_approx(face.y1, -360.0 / 1024.0);
     catch_approx(face.r1, 534.0 / 1024.0);
-    assert!(face.path.bounds().contains(
-        nuxie_runtime::source::math::vec2d::Vec2D::new(face.x1, face.y1)
-    ));
+    assert!(
+        face.path
+            .bounds()
+            .contains(nuxie_runtime::source::math::vec2d::Vec2D::new(
+                face.x1, face.y1
+            ))
+    );
 }
 
 #[test]
@@ -429,19 +433,24 @@ fn raw_text_draws_colrv1_gradient_layers_with_gradient_shaders() {
     // The existing recording factory counts the same allocation calls as
     // upstream's GradientCountingFactory, without introducing another factory.
     let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let mut raw_text = RawText::new(
-        RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"),
-    );
+    let mut raw_text =
+        RawText::new(RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory"));
     raw_text.append("🎉😀", None, font, 32.0, -1.0, 0.0, 0xff000000);
     let mut renderer = nuxie_render_api::NullRenderer::new();
     raw_text.render(&mut renderer, None);
     let stream = factory.borrow().stream();
     assert_eq!(
-        stream.lines().filter(|line| line.starts_with("makeLinearGradient ")).count(),
+        stream
+            .lines()
+            .filter(|line| line.starts_with("makeLinearGradient "))
+            .count(),
         1
     );
     assert_eq!(
-        stream.lines().filter(|line| line.starts_with("makeRadialGradient ")).count(),
+        stream
+            .lines()
+            .filter(|line| line.starts_with("makeRadialGradient "))
+            .count(),
         1
     );
 }

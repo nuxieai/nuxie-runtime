@@ -152,5 +152,10 @@ fn canvas_dag_chain() {
 }
 #[test]
 fn canvas_dag_cycle() {
-    assert_pixels_equal("canvas_dag_cycle", 1, &cycle_immediate_reference(), &cycle());
+    assert_pixels_equal(
+        "canvas_dag_cycle",
+        1,
+        &cycle_immediate_reference(),
+        &cycle(),
+    );
 }

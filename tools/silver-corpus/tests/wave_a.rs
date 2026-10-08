@@ -308,10 +308,14 @@ fn component_stateful_list_cleanup() {
     silver.machine.with_instance_mut(|machine| {
         machine.pointer_down(
             nuxie_runtime::source::math::vec2d::Vec2D::new(50.0, 73.0),
-            0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
         machine.pointer_up(
             nuxie_runtime::source::math::vec2d::Vec2D::new(50.0, 73.0),
-            0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     silver.machine.advance_and_apply(0.016);
     assert!(clicked_c.value());
@@ -323,10 +327,14 @@ fn component_stateful_list_cleanup() {
     silver.machine.with_instance_mut(|machine| {
         machine.pointer_down(
             nuxie_runtime::source::math::vec2d::Vec2D::new(50.0, 118.0),
-            0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
         machine.pointer_up(
             nuxie_runtime::source::math::vec2d::Vec2D::new(50.0, 118.0),
-            0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     silver.machine.advance_and_apply(0.016);
     assert!(clicked_b.value());

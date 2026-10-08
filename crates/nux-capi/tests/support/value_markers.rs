@@ -119,6 +119,7 @@ fn float(bytes: &mut Vec<u8>, kind: &str, name: &str, value: f32) {
 )]
 pub enum Action {
     Number(f32),
+    Text(&'static str),
     Marker(bool),
     Script,
 }
@@ -145,6 +146,29 @@ fn binding(
     });
 }
 pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8> {
+    fixture_input(script, actions, input, false)
+}
+
+pub fn text_input_fixture() -> Vec<u8> {
+    fixture_input(None, &[], true, true)
+}
+
+#[cfg(feature = "scripting")]
+pub fn fixture_with_value_rules_module(script: &[u8], module: &[u8]) -> Vec<u8> {
+    fixture_input_with_module(Some(script), &[Action::Script], false, false, Some(module))
+}
+
+fn fixture_input(script: Option<&[u8]>, actions: &[Action], input: bool, text: bool) -> Vec<u8> {
+    fixture_input_with_module(script, actions, input, text, None)
+}
+
+fn fixture_input_with_module(
+    script: Option<&[u8]>,
+    actions: &[Action],
+    input: bool,
+    text: bool,
+    module: Option<&[u8]>,
+) -> Vec<u8> {
     let mut b = values();
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "Aux");
@@ -162,6 +186,16 @@ pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8
         });
         object(&mut b, "FileAssetContents", |b| {
             blob(b, "FileAssetContents", "bytes", script)
+        });
+    }
+    if let Some(module) = module {
+        object(&mut b, "ScriptAsset", |b| {
+            uint(b, "ScriptAsset", "assetId", 1);
+            string(b, "ScriptAsset", "name", "value_rules");
+            uint(b, "ScriptAsset", "isModule", 1);
+        });
+        object(&mut b, "FileAssetContents", |b| {
+            blob(b, "FileAssetContents", "bytes", module)
         });
     }
     if input {
@@ -196,10 +230,11 @@ pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8
         object(&mut b, "TextInput", |b| {
             uint(b, "Component", "parentId", 1);
             string(b, "Component", "name", "editable");
-            string(b, "TextInput", "text", "0");
+            string(b, "TextInput", "text", if text { "" } else { "0" });
         }); // 4
-        binding(&mut b, "TextInput", "text", 0, Some(0), 0);
-        binding(&mut b, "TextInput", "text", 0, Some(1), 1);
+        let source = if text { 6 } else { 0 };
+        binding(&mut b, "TextInput", "text", source, (!text).then_some(0), 0);
+        binding(&mut b, "TextInput", "text", source, (!text).then_some(1), 1);
         object(&mut b, "FocusData", |b| {
             uint(b, "Component", "parentId", 4);
             uint(b, "FocusData", "focusFlags", 7);
@@ -228,6 +263,20 @@ pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8
                     "BindablePropertyNumber",
                     "propertyValue",
                     0,
+                    None,
+                    1,
+                );
+                object(&mut b, "ListenerViewModelChange", |_| {});
+            }
+            Action::Text(value) => {
+                object(&mut b, "BindablePropertyString", |b| {
+                    string(b, "BindablePropertyString", "propertyValue", value)
+                });
+                binding(
+                    &mut b,
+                    "BindablePropertyString",
+                    "propertyValue",
+                    6,
                     None,
                     1,
                 );
@@ -268,6 +317,14 @@ pub fn fixture(script: Option<&[u8]>, actions: &[Action], input: bool) -> Vec<u8
 
 #[cfg(feature = "scripting")]
 pub fn occurrences(script: &[u8]) -> Vec<u8> {
+    occurrences_bound(script, 1)
+}
+
+pub fn occurrences_values(script: &[u8]) -> Vec<u8> {
+    occurrences_bound(script, 0)
+}
+
+fn occurrences_bound(script: &[u8], label_source: u8) -> Vec<u8> {
     let mut b = values();
     object(&mut b, "ViewModel", |b| {
         string(b, "ViewModel", "name", "Root")
@@ -308,7 +365,7 @@ pub fn occurrences(script: &[u8]) -> Vec<u8> {
         uint(b, "Component", "parentId", 1);
         uint(b, "SemanticData", "role", 7);
     });
-    binding(&mut b, "SemanticData", "label", 1, Some(0), 0);
+    binding(&mut b, "SemanticData", "label", label_source, Some(0), 0);
     object(&mut b, "Fill", |b| uint(b, "Component", "parentId", 1));
     object(&mut b, "SolidColor", |b| {
         uint(b, "Component", "parentId", 4);
@@ -369,6 +426,31 @@ pub fn occurrences(script: &[u8]) -> Vec<u8> {
     });
     object(&mut b, "StateMachine", |b| {
         string(b, "StateMachine", "name", "Root")
+    });
+    b
+}
+
+#[allow(dead_code, reason = "shared fixture module used by several test files")]
+pub fn list_fixture() -> Vec<u8> {
+    let mut b = values();
+    object(&mut b, "ViewModel", |b| {
+        string(b, "ViewModel", "name", "Container")
+    });
+    object(&mut b, "ViewModelPropertyList", |b| {
+        string(b, "ViewModelPropertyList", "name", "rows")
+    });
+    object(&mut b, "ViewModelInstance", |b| {
+        uint(b, "ViewModelInstance", "viewModelId", 1)
+    });
+    object(&mut b, "ViewModelInstanceList", |b| {
+        uint(b, "ViewModelInstanceList", "viewModelPropertyId", 0)
+    });
+    object(&mut b, "ViewModelInstanceListItem", |b| {
+        uint(b, "ViewModelInstanceListItem", "viewModelId", 0);
+        uint(b, "ViewModelInstanceListItem", "viewModelInstanceId", 0);
+    });
+    object(&mut b, "Artboard", |b| {
+        uint(b, "Artboard", "viewModelId", 0)
     });
     b
 }

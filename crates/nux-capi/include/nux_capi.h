@@ -81,7 +81,12 @@
  * 11. nux_file_import_trusted_with_host_commands is an explicit trust boundary
  *    for the exact byte range passed to that call. Its caller-sized config and
  *    module name are copied synchronously. It installs no foreign callback;
- *    scripts only enqueue bounded owned values for the active player step.
+ *    commands enqueue bounded owned values for the active player step.
+ *    The configured command module also exposes set(root, path, value) for
+ *    synchronous checked native writes. No additional module name is reserved;
+ *    imports without a command module install no checked-write module.
+ *    An accepted set returns true and no code, including a marking breach.
+ *    A refused set returns false and the refusing rule's code.
  *    Ordinary nux_file_import remains script-inert.
  *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,
  *    caller-asserted trust boundary for exporter-authored WGSL. It performs no
@@ -159,6 +164,14 @@
  *    Polls retain surface resources; attachment, detach, and destruction drain
  *    outstanding native work. Detach before releasing the caller's window
  *    reference. CPU export remains available independently.
+ *
+ * 18. Installed value rules run inside each step and view-model mutation.
+ *    Refusing writes keep the last accepted value and its marker; marking
+ *    writes land. Refusals are successful operation results, not failures,
+ *    and never appear as committed change rows. Mutation applied_count counts
+ *    only accepted writes. Rule reports are ordered by attempted write, then
+ *    installer order, and borrow attempted bytes until their result is freed.
+ *    A file without rules retains ordinary native behavior.
  *
  * PANIC SAFETY
  *

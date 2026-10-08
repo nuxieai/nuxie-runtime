@@ -13,7 +13,8 @@ pub struct NuxValueMarker {
 pub(super) fn status(error: nuxie::RuntimeValuePolicyError) -> NuxStatus {
     match error {
         nuxie::RuntimeValuePolicyError::NotFound => NuxStatus::NotFound,
-        nuxie::RuntimeValuePolicyError::InvalidArgument => NuxStatus::InvalidArgument,
+        nuxie::RuntimeValuePolicyError::InvalidArgument
+        | nuxie::RuntimeValuePolicyError::InvalidPattern { .. } => NuxStatus::InvalidArgument,
         nuxie::RuntimeValuePolicyError::LimitExceeded => NuxStatus::LimitExceeded,
         nuxie::RuntimeValuePolicyError::BorrowConflict => NuxStatus::ReentrantCall,
     }
@@ -101,6 +102,11 @@ pub unsafe extern "C" fn nux_file_set_value_markers(
         let Ok(mut slot) = file.view_model_catalog.value_policy.try_borrow_mut() else {
             return NuxStatus::ReentrantCall;
         };
+        if let Some(policy) = slot.as_mut() {
+            return policy
+                .set_markers(&owned)
+                .map_or_else(status, |()| NuxStatus::Ok);
+        }
         let mut next = nuxie::RuntimeValuePolicy::new(file.file.clone());
         match next.set_markers(&owned) {
             Ok(()) => {

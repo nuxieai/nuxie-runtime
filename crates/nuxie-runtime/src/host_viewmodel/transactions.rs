@@ -657,7 +657,11 @@ pub(crate) fn capture_native_list_change(owner: CoreHandle, items: &[CoreHandle]
         })
         .map(|instance| instance::identity(&instance))
         .collect();
-    capture_native_change(owner, RuntimeViewModelChangeValue::List(values));
+    crate::view_model_cell::capture_view_model_list_write(
+        instance::identity(&owner) as usize,
+        RuntimeViewModelChangeValue::List(values),
+        items,
+    );
 }
 pub(crate) fn capture_native_view_model_change(owner: CoreHandle, value: Option<&CoreHandle>) {
     if !crate::view_model_cell::is_capturing_view_model_changes() {

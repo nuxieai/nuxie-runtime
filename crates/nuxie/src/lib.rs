@@ -91,9 +91,16 @@ pub use nuxie_renderer::{RenderMode, RendererError};
 ))]
 pub use nuxie_renderer::{WebGl2Factory, WebGl2Frame};
 
+pub use nuxie_runtime::RuntimeCheckedValueInput;
 pub use nuxie_runtime::RuntimeValueMarker;
 pub use nuxie_runtime::RuntimeValuePolicy;
 pub use nuxie_runtime::RuntimeValuePolicyError;
+pub use nuxie_runtime::RuntimeValuePolicyOperation;
+pub use nuxie_runtime::RuntimeValueRule;
+pub use nuxie_runtime::RuntimeValueRuleKind;
+pub use nuxie_runtime::RuntimeValueRuleMode;
+pub use nuxie_runtime::RuntimeValueRuleReport;
+pub use nuxie_runtime::runtime_checked_value_write;
 pub use nuxie_runtime::{
     ArtboardInstance, AudioDecodeError, AudioEngine, AudioEngineError, AudioFormat, AudioReader,
     AudioSound, AudioSource, LinearAnimationInstance, RuntimeAudioAssetOwners, RuntimeBlobAsset,

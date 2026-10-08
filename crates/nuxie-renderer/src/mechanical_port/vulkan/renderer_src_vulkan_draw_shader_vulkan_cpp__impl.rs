@@ -99,6 +99,7 @@ fn select_shader_pair(
             DrawType::imageRect
             | DrawType::depthStrokes
             | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -183,6 +184,7 @@ fn select_shader_pair(
             }
             DrawType::depthStrokes
             | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -256,6 +258,7 @@ fn select_shader_pair(
                 DrawType::imageRect
                 | DrawType::depthStrokes
                 | DrawType::depthAAStrokes
+                | DrawType::depthAAOuterHairline
                 | DrawType::stencilMidpointFanBorrowedCoverage
                 | DrawType::stencilDynamicMidpointFans
                 | DrawType::stencilDynamicOuterCubics
@@ -366,6 +369,7 @@ fn select_shader_pair(
                 DrawType::imageRect
                 | DrawType::depthStrokes
                 | DrawType::depthAAStrokes
+                | DrawType::depthAAOuterHairline
                 | DrawType::stencilMidpointFanBorrowedCoverage
                 | DrawType::stencilDynamicMidpointFans
                 | DrawType::stencilDynamicOuterCubics
@@ -395,6 +399,7 @@ fn select_shader_pair(
             | DrawType::stencilOuterCubics
             | DrawType::depthStrokes
             | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -655,6 +660,7 @@ mod tests {
             DrawType::stencilMidpointFanCover,
             DrawType::depthStrokes,
             DrawType::depthAAStrokes,
+            DrawType::depthAAOuterHairline,
         ] {
             for clip_rect in [false, true] {
                 let vert = match clip_rect {

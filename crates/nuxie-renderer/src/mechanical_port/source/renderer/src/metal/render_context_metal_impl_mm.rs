@@ -3459,6 +3459,7 @@ pub mod source_execution {
             DrawType::ImageMesh => gpu::DrawType::imageMesh,
             DrawType::DepthStrokes => gpu::DrawType::depthStrokes,
             DrawType::DepthAAStrokes => gpu::DrawType::depthAAStrokes,
+            DrawType::DepthAAOuterHairline => gpu::DrawType::depthAAOuterHairline,
             DrawType::StencilMidpointFanBorrowedCoverage => {
                 gpu::DrawType::stencilMidpointFanBorrowedCoverage
             }
@@ -6671,6 +6672,7 @@ pub mod source_execution {
                     }
                     DrawType::DepthStrokes
                     | DrawType::DepthAAStrokes
+                    | DrawType::DepthAAOuterHairline
                     | DrawType::StencilMidpointFanBorrowedCoverage
                     | DrawType::StencilDynamicMidpointFans
                     | DrawType::StencilDynamicOuterCubics
@@ -6870,6 +6872,7 @@ pub mod source_execution {
             | DrawType::InteriorTriangulation
             | DrawType::DepthStrokes
             | DrawType::DepthAAStrokes
+            | DrawType::DepthAAOuterHairline
             | DrawType::StencilMidpointFanBorrowedCoverage
             | DrawType::StencilDynamicMidpointFans
             | DrawType::StencilDynamicOuterCubics

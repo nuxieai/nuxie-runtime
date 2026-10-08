@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 154353] = [(); PINNED_SOURCE.len()];
+const _: [(); 154768] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -80,42 +80,43 @@ const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = gpu::ImageMeshInstance::LastAttribIdx
 // Exact export substitutions emitted by the frozen shader minifier.
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "SC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "BE";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "ZD";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "CE";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "AE";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "AE";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "BF";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "BE";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "CF";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
-const GLSL_CLEAR_COVERAGE: &str = "GE";
-const GLSL_CLOCKWISE_FILL: &str = "HE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "FD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
-const GLSL_DRAW_IMAGE: &str = "NE";
+const GLSL_CLEAR_COVERAGE: &str = "HE";
+const GLSL_CLOCKWISE_FILL: &str = "IE";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "GD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "SF";
+const GLSL_DRAW_IMAGE: &str = "OE";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_DRAW_IMAGE_RECT: &str = "DD";
+const GLSL_DRAW_IMAGE_RECT: &str = "ED";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
-const GLSL_DRAW_PATH: &str = "OD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "JF";
+const GLSL_DRAW_PATH: &str = "PD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "KF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "DE";
-const GLSL_DS_STROKE: &str = "AD";
-const GLSL_ENABLE_BASE_VERTEX: &str = "UE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "EE";
+const GLSL_DS_POLAR_STROKE: &str = "AD";
+const GLSL_DS_HAIRLINE_STROKE: &str = "BD";
+const GLSL_ENABLE_BASE_VERTEX: &str = "VE";
 const GLSL_DRAW_DEPTHSTENCIL_PATH: &str =
     include_str!("source/generated_glsl_embedded/draw_depthstencil_path.minified.glsl");
-const GLSL_ENABLE_KHR_BLEND: &str = "ME";
+const GLSL_ENABLE_KHR_BLEND: &str = "NE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
-const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "RD";
+const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "SD";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "VC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "SF";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "TF";
 const GLSL_FlushUniforms: &str = "VB";
-const GLSL_atlasRenderTexture: &str = "EF";
-const GLSL_contourBuffer: &str = "BD";
-const GLSL_dstColorTexture: &str = "JD";
-const GLSL_featherAtlasTexture: &str = "GD";
+const GLSL_atlasRenderTexture: &str = "FF";
+const GLSL_contourBuffer: &str = "CD";
+const GLSL_dstColorTexture: &str = "KD";
+const GLSL_featherAtlasTexture: &str = "HD";
 const GLSL_gaussianIntegralTexture: &str = "ZC";
 const GLSL_gradTexture: &str = "YC";
 const GLSL_imageTexture: &str = "TB";
@@ -173,6 +174,7 @@ fn isTessellationDraw(drawType: gpu::DrawType) -> bool {
             | gpu::DrawType::outerCurvePatches
             | gpu::DrawType::depthStrokes
             | gpu::DrawType::depthAAStrokes
+            | gpu::DrawType::depthAAOuterHairline
             | gpu::DrawType::stencilMidpointFanBorrowedCoverage
             | gpu::DrawType::stencilDynamicMidpointFans
             | gpu::DrawType::stencilDynamicOuterCubics
@@ -1633,7 +1635,7 @@ fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "H",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
         gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "CD",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "DD",
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "FC",
         gpu::ShaderFeatures::ENABLE_DITHER => "OB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
@@ -1729,9 +1731,12 @@ fn newDrawShader(
         | gpu::DrawType::stencilOuterCubicCover
         | gpu::DrawType::stencilOuterCubics
         | gpu::DrawType::depthStrokes
-        | gpu::DrawType::depthAAStrokes => {
-            if gpu::drawTypeIsDepthStencilStroke(drawType) {
-                defines.push(GLSL_DS_STROKE);
+        | gpu::DrawType::depthAAStrokes
+        | gpu::DrawType::depthAAOuterHairline => {
+            if gpu::drawTypeIsDepthStencilPolarStroke(drawType) {
+                defines.push(GLSL_DS_POLAR_STROKE);
+            } else if drawType == gpu::DrawType::depthAAOuterHairline {
+                defines.push(GLSL_DS_HAIRLINE_STROKE);
             }
             if shaderType == GL_VERTEX_SHADER {
                 defines.push(GLSL_ENABLE_BASE_VERTEX);
@@ -1827,7 +1832,8 @@ fn newDrawShader(
             | gpu::DrawType::stencilOuterCubicCover
             | gpu::DrawType::stencilOuterCubics
             | gpu::DrawType::depthStrokes
-            | gpu::DrawType::depthAAStrokes => {
+            | gpu::DrawType::depthAAStrokes
+            | gpu::DrawType::depthAAOuterHairline => {
                 sources.extend([GLSL_DRAW_PATH_COMMON, GLSL_DRAW_DEPTHSTENCIL_PATH]);
             }
             gpu::DrawType::interiorTriangulation | gpu::DrawType::featherAtlasBlit => {
@@ -3474,7 +3480,8 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 | gpu::DrawType::stencilOuterCubicCover
                 | gpu::DrawType::stencilOuterCubics
                 | gpu::DrawType::depthStrokes
-                | gpu::DrawType::depthAAStrokes => {
+                | gpu::DrawType::depthAAStrokes
+                | gpu::DrawType::depthAAOuterHairline => {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::depthStencil);
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
                     for draw in DSIndexRangeChunker::new(batch, 0) {
@@ -4474,8 +4481,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3954);
-        assert_eq!(PINNED_SOURCE.len(), 154353);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3961);
+        assert_eq!(PINNED_SOURCE.len(), 154768);
     }
 
     #[test]
@@ -4582,7 +4589,8 @@ mod tests {
             ("ENABLE_FEATHER", GLSL_ENABLE_FEATHER),
             ("ENABLE_INSTANCE_INDEX", GLSL_ENABLE_INSTANCE_INDEX),
             ("ENABLE_BASE_VERTEX", GLSL_ENABLE_BASE_VERTEX),
-            ("DS_STROKE", GLSL_DS_STROKE),
+            ("DS_POLAR_STROKE", GLSL_DS_POLAR_STROKE),
+            ("DS_HAIRLINE_STROKE", GLSL_DS_HAIRLINE_STROKE),
             ("ENABLE_KHR_BLEND", GLSL_ENABLE_KHR_BLEND),
             ("FEATHER_ATLAS_BLIT", GLSL_FEATHER_ATLAS_BLIT),
             (
@@ -4619,6 +4627,14 @@ mod tests {
     }
 
     #[test]
+    fn depth_aa_outer_hairline_uses_tessellation() {
+        assert!(isTessellationDraw(gpu::DrawType::depthAAOuterHairline));
+        assert!(isTessellationDraw(gpu::DrawType::depthAAStrokes));
+        assert!(isTessellationDraw(gpu::DrawType::depthStrokes));
+        assert!(!isTessellationDraw(gpu::DrawType::imageMesh));
+    }
+
+    #[test]
     fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
         let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
         let features = [
@@ -4642,7 +4658,7 @@ mod tests {
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "CD",
+                "DD",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",

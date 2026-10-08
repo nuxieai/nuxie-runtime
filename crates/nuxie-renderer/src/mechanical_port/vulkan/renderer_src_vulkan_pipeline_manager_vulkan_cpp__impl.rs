@@ -980,8 +980,9 @@ fn forEachUbershaderPermutation(
                     }
                 }
             }
-            for drawContents in bit_combinations_descending(validDrawContents) {
-                let drawContents = DrawContents(drawContents);
+            for drawContents in bit_combinations_descending(u32::from(validDrawContents)) {
+                // Every combination is a subset of the original u16 mask.
+                let drawContents = DrawContents(drawContents as u16);
                 if !get_stencil_info(interlockMode, drawType, drawContents).areDrawContentsValid {
                     continue;
                 }

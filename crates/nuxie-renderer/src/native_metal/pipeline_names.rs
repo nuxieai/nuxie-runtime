@@ -70,6 +70,7 @@ pub(crate) fn precompiled_function_name(
         DrawType::ImageRect
         | DrawType::DepthStrokes
         | DrawType::DepthAAStrokes
+        | DrawType::DepthAAOuterHairline
         | DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilMidpointFans
         | DrawType::StencilMidpointFanReset

@@ -2735,7 +2735,7 @@ const _: () = {
     assert!(DS_FILL_PATCH_STRIDE(false) as u32 * DSMidpointFanFillPatchMaxReps == 1u32 << 16);
     assert!(DS_FILL_PATCH_STRIDE(true) as u32 * DSOuterCubicFillPatchMaxReps == 1u32 << 16);
     assert!(DSVertexFlag_StrokeDepthPass == VERTEX_FLAG_STROKE_DEPTH_PASS);
-    assert!(DSVertexFlag_AAStroke == VERTEX_FLAG_AA_STROKE);
+    assert!(DSVertexFlag_AAPolarStroke == VERTEX_FLAG_AA_POLAR_STROKE);
     assert!(DSStrokePatchStrideLog2 == DS_STROKE_STRIDE_LOG2);
     assert!(DSAAStrokePatchStrideLog2 == DS_AA_STROKE_STRIDE_LOG2);
     assert!(
@@ -2782,18 +2782,18 @@ const FAN_VERTEX: i32 = 1;
 const FAN_MIDPOINT_VERTEX: i32 = 2;
 
 #[inline]
-fn has_u32(value: u32, mask: u32) -> bool {
-    value & mask != 0
+fn has_u32<T: Into<u32>>(value: T, mask: T) -> bool {
+    value.into() & mask.into() != 0
 }
 
 #[inline]
-fn any_u32(value: u32, mask: u32) -> bool {
-    value & mask != 0
+fn any_u32<T: Into<u32>>(value: T, mask: T) -> bool {
+    value.into() & mask.into() != 0
 }
 
 #[inline]
-fn no_u32(value: u32, mask: u32) -> bool {
-    value & mask == 0
+fn no_u32<T: Into<u32>>(value: T, mask: T) -> bool {
+    value.into() & mask.into() == 0
 }
 
 fn bit_combinations(mask: u32) -> impl Iterator<Item = u32> {
@@ -2866,6 +2866,7 @@ fn get_valid_draw_types(mode: InterlockMode) -> &'static [DrawType] {
             DrawType::stencilOuterCubicCover,
             DrawType::depthStrokes,
             DrawType::depthAAStrokes,
+            DrawType::depthAAOuterHairline,
             DrawType::clipReset,
             DrawType::renderPassInitialize,
             DrawType::renderPassResolve,
@@ -3081,10 +3082,14 @@ pub fn ShaderUniqueKey(
             debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
             2
         }
-        DrawType::interiorTriangulation => 3,
-        DrawType::featherAtlasBlit => 4,
-        DrawType::imageRect => 5,
-        DrawType::imageMesh => 6,
+        DrawType::depthAAOuterHairline => {
+            debug_assert_eq!(interlockMode, InterlockMode::depthStencil);
+            3
+        }
+        DrawType::interiorTriangulation => 4,
+        DrawType::featherAtlasBlit => 5,
+        DrawType::imageRect => 6,
+        DrawType::imageMesh => 7,
         DrawType::renderPassInitialize => {
             debug_assert!(matches!(
                 interlockMode,
@@ -3092,7 +3097,7 @@ pub fn ShaderUniqueKey(
                     | InterlockMode::depthStencil
                     | InterlockMode::clockwiseAtomic
             ));
-            8
+            9
         }
         DrawType::renderPassResolve => {
             debug_assert!(matches!(
@@ -3101,14 +3106,14 @@ pub fn ShaderUniqueKey(
                     | InterlockMode::atomics
                     | InterlockMode::depthStencil
             ));
-            9
+            10
         }
         DrawType::clipReset => {
             debug_assert!(matches!(
                 interlockMode,
                 InterlockMode::clockwiseAtomic | InterlockMode::depthStencil
             ));
-            7
+            8
         }
     };
     let mask = ShaderFeaturesMaskForDraw(drawType, interlockMode).0;
@@ -4291,10 +4296,12 @@ pub fn get_depth_state(
             depthTestEnabled: true,
             depthWriteEnabled: false,
         },
-        DrawType::depthStrokes | DrawType::depthAAStrokes => DepthState {
-            depthTestEnabled: true,
-            depthWriteEnabled: true,
-        },
+        DrawType::depthStrokes | DrawType::depthAAStrokes | DrawType::depthAAOuterHairline => {
+            DepthState {
+                depthTestEnabled: true,
+                depthWriteEnabled: true,
+            }
+        }
         DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
         | DrawType::stencilMidpointFans
@@ -4336,7 +4343,7 @@ pub fn get_stencil_info(
     }
     let valid = true;
     match drawType {
-        DrawType::depthStrokes | DrawType::depthAAStrokes
+        DrawType::depthStrokes | DrawType::depthAAStrokes | DrawType::depthAAOuterHairline
             if has_u32(drawContents.0, DrawContents::clipUpdate.0) =>
         {
             StencilInfo {
@@ -4351,7 +4358,8 @@ pub fn get_stencil_info(
         | DrawType::imageMesh
         | DrawType::featherAtlasBlit
         | DrawType::depthStrokes
-        | DrawType::depthAAStrokes => {
+        | DrawType::depthAAStrokes
+        | DrawType::depthAAOuterHairline => {
             if has_u32(drawContents.0, DrawContents::activeClip.0) {
                 StencilInfo {
                     stencilType: StencilType::activeStencilClip,
@@ -4600,6 +4608,7 @@ pub fn get_cull_face(drawType: DrawType) -> CullFace {
         | DrawType::featherAtlasBlit
         | DrawType::depthStrokes
         | DrawType::depthAAStrokes
+        | DrawType::depthAAOuterHairline
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
         | DrawType::stencilMidpointFans
@@ -5021,7 +5030,7 @@ pub fn get_color_write_enable(
                 fixedFunctionColorOutput || interlockMode == InterlockMode::depthStencil
             }
         }
-        DrawType::depthStrokes | DrawType::depthAAStrokes => {
+        DrawType::depthStrokes | DrawType::depthAAStrokes | DrawType::depthAAOuterHairline => {
             !has_u32(drawContents.0, DrawContents::clipUpdate.0)
         }
         DrawType::stencilMidpointFanBorrowedCoverage
@@ -5084,7 +5093,10 @@ pub fn getPipelineUniqueKey(
         draw_contents_mask
     );
     key = (key << DrawContentsForDepthStencilPipelineState.0.count_ones())
-        | compact_bits(effective, DrawContentsForDepthStencilPipelineState.0) as u64;
+        | compact_bits(
+            effective as u32,
+            DrawContentsForDepthStencilPipelineState.0 as u32,
+        ) as u64;
     let effective_blend = if interlockMode == InterlockMode::depthStencil
         && platformFeatures.supportsBlendAdvancedKHR
     {
@@ -5163,6 +5175,7 @@ pub fn get_pipeline_state(
             )),
             DrawType::depthStrokes
             | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilMidpointFans
             | DrawType::stencilMidpointFanBorrowedCoverage

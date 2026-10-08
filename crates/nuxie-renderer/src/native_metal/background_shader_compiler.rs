@@ -791,18 +791,22 @@ mod tests {
             Err(BackgroundShaderCompileError::SynthesizedShaderCompilation)
         );
 
-        compiler.push_job(job(DrawType::DepthStrokes));
-        assert!(matches!(
-            compiler
-                .pop_finished_job(true)
-                .expect("plan completion")
-                .result,
-            Err(BackgroundShaderCompileError::Plan(
-                BackgroundCompilePlanError::UnsupportedDrawType {
-                    draw_type: DrawType::DepthStrokes
-                }
-            ))
-        ));
+        for draw_type in [
+            DrawType::DepthStrokes,
+            DrawType::DepthAAStrokes,
+            DrawType::DepthAAOuterHairline,
+        ] {
+            compiler.push_job(job(draw_type));
+            assert!(matches!(
+                compiler
+                    .pop_finished_job(true)
+                    .expect("plan completion")
+                    .result,
+                Err(BackgroundShaderCompileError::Plan(
+                    BackgroundCompilePlanError::UnsupportedDrawType { draw_type: rejected }
+                )) if rejected == draw_type
+            ));
+        }
         assert_eq!(*lock_recovering_poison(&callback_count), 1);
     }
 

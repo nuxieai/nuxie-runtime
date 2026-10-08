@@ -7,9 +7,9 @@ namespace gpu {
 namespace glsl {
 const char draw_mesh_frag[] = R"===(#ifdef EB
 #if(defined(U)&&!defined(N))||defined(QB)
-#undef Gc
+#undef Ic
 #else
-#define Gc
+#define Ic
 #endif
 V1
 #ifndef U
@@ -43,7 +43,7 @@ Y1(IB)
 #endif
 {
 #ifdef FB
-q(O0,e);
+q(P0,e);
 #if defined(GB)
 q(V0,M);
 #endif
@@ -56,7 +56,7 @@ q(e4,d);
 q(W0,e);
 #endif
 #if defined(FB)&&defined(H)
-q(P0,d);
+q(Q0,d);
 #endif
 #ifdef NB
 q(Z5,c);q(U1,i);
@@ -65,32 +65,32 @@ q(K1,P);
 #endif
 #endif
 #ifdef FB
-i n=o8(
+i n=p8(
 #ifdef GB
 V0,
 #endif
 #ifdef H
-X2(P0),
+X2(Q0),
 #endif
-O0 l3);d l=clamp(o2(GD,Ja,T2,.0).x,I0(.0),I0(1.));
+P0 l3);d l=clamp(o2(HD,La,T2,.0).x,J0(.0),J0(1.));
 #endif
 #ifdef NB
-i n=c8(TB,S4,Z5,j.Be);d l=1.;
+i n=d8(TB,S4,Z5,j.Ee);d l=1.;
 #endif
 #ifdef AB
-if(AB){d r5=max(A3(T4(W0)),I0(.0));l=min(r5,l);}
+if(AB){d r5=max(A3(T4(W0)),J0(.0));l=min(r5,l);}
 #endif
-#ifdef Gc
+#ifdef Ic
 O2;
 #endif
 #if defined(N)
 if(N&&e4!=.0){d O3;
 #ifndef QB
-D X0=unpackHalf2x16(l1(m0));d Y6=X0.y;O3=max(Y6==e4?X0.x:I0(.0),I0(.0));
+D X0=unpackHalf2x16(l1(m0));d Y6=X0.y;O3=max(Y6==e4?X0.x:J0(.0),J0(.0));
 #else
 O3=R0(m0).x;
 #endif
-O3=max(O3,I0(.0));l=min(l,O3);}
+O3=max(O3,J0(.0));l=min(l,O3);}
 #endif
 #ifdef NB
 n*=U1;
@@ -99,7 +99,7 @@ n*=U1;
 i A1=R0(n0);
 #ifdef H
 #ifdef FB
-P X1=X2(P0);
+P X1=X2(Q0);
 #endif
 #ifdef NB
 P X1=K1;
@@ -121,7 +121,7 @@ h2(m0);h2(Z0);
 #else
 z0(m0,H0(.0));
 #endif
-#ifdef Gc
+#ifdef Ic
 P2;
 #endif
 #ifdef U

@@ -28,7 +28,7 @@ use std::sync::Arc;
 const COLOR_PLANE_IDX: usize = 0;
 const CLIP_PLANE_IDX: usize = 1;
 const PLS_PLANE_COUNT: usize = 4;
-const SPECIALIZATION_COUNT: usize = 16;
+const SPECIALIZATION_COUNT: usize = 17;
 
 fn shaderPermutationFlags(
     drawType: DrawType,
@@ -52,7 +52,8 @@ fn shaderPermutationFlags(
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::storeColorClear)),
         u32::from(shaderMiscFlags.has(ShaderMiscFlags::loadColorFromDstTexture)),
         u32::from(vendorID == vkutil_decl::ARM),
-        u32::from(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeIsDepthStencilStroke(drawType)),
+        u32::from(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeIsDepthStencilPolarStroke(drawType)),
+        u32::from(drawType == DrawType::depthAAOuterHairline),
     ]
 }
 
@@ -184,6 +185,7 @@ pub(crate) fn subpass_index(
         | DrawType::imageMesh
         | DrawType::depthStrokes
         | DrawType::depthAAStrokes
+        | DrawType::depthAAOuterHairline
         | DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
@@ -435,7 +437,8 @@ impl DrawPipelineVulkan {
             | DrawType::stencilMidpointFanWinding
             | DrawType::stencilMidpointFanCover
             | DrawType::depthStrokes
-            | DrawType::depthAAStrokes => (
+            | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline => (
                 &*layout::EMPTY_VERTEX_INPUT_STATE,
                 &*layout::INPUT_ASSEMBLY_TRIANGLE_LIST,
             ),
@@ -578,6 +581,9 @@ mod tests {
             vkutil_decl::ARM,
         );
         assert_eq!(values[14], 1);
+        assert_eq!(values.iter().sum::<u32>(), 1);
+        let values = shaderPermutationFlags(DrawType::depthAAOuterHairline, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);
+        assert_eq!(values[16], 1);
         assert_eq!(values.iter().sum::<u32>(), 1);
         for draw_type in [DrawType::depthStrokes, DrawType::depthAAStrokes] {
             let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none, 0);

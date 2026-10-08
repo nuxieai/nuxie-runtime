@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/specialization.glsl.
  *
- * Upstream source revision: 625454e362a27bb3168f00cd87e9487f54d39338
+ * Upstream source revision: c73593c3a868f87b5dcd328432255db33e3e2266
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c73593c3a868f87b5dcd328432255db33e3e2266";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/specialization.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "18528e3c245b10ef0680673d97530e6504fc565396fcf2792b9a2bccbe2e4543";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 48;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 2321;
+    "afd2d84e69cc09c49c66e524f89d0ad23435daf6e559b5142c0cef8a2de44add";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 52;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 2493;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_SPECIALIZATION_GLSL_SOURCE: &str = r###"layout(constant_id = CLIPPING_SPECIALIZATION_IDX) const
@@ -47,7 +47,10 @@ layout(constant_id = LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX) const
     bool LoadColorFromDstTexture = false;
 layout(constant_id = VULKAN_VENDOR_ARM_SPECIALIZATION_IDX) const
     bool VulkanVendorARM = false;
-layout(constant_id = DS_STROKE_SPECIALIZATION_IDX) const bool DSStroke = false;
+layout(constant_id = DS_POLAR_STROKE_SPECIALIZATION_IDX) const
+    bool DSPolarStroke = false;
+layout(constant_id = DS_HAIRLINE_STROKE_SPECIALIZATION_IDX) const
+    bool DSHairlineStroke = false;
 
 #define @ENABLE_CLIPPING EnableClipping
 #define @ENABLE_CLIP_RECT EnableClipRect
@@ -65,7 +68,8 @@ layout(constant_id = DS_STROKE_SPECIALIZATION_IDX) const bool DSStroke = false;
 #define @STORE_COLOR_CLEAR StoreColorClear
 #define @LOAD_COLOR_FROM_DST_TEXTURE LoadColorFromDstTexture
 #define @VULKAN_VENDOR_ARM VulkanVendorARM
-#define @DS_STROKE DSStroke
+#define @DS_POLAR_STROKE DSPolarStroke
+#define @DS_HAIRLINE_STROKE DSHairlineStroke
 "###;
 
 /// Stable source aliases.

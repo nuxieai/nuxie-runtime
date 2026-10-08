@@ -1144,6 +1144,7 @@ pub type DrawPushFn = unsafe fn(*mut Draw, *mut LogicalFlush, i32, u32) -> *mut 
 unsafe fn default_release_refs(_: *mut Draw) {}
 unsafe fn default_count_subpasses(draw: *mut Draw, _: &gpu::PlatformFeatures) {
     debug_assert!((*draw).prepass_count == 0 && (*draw).subpass_count == 1);
+    (*draw).pass_draw_contents[0] = (*draw).combined_draw_contents;
 }
 unsafe fn default_allocate_resources(_: *mut Draw, _: *mut LogicalFlush) -> bool {
     true
@@ -1175,7 +1176,8 @@ pub struct Draw {
     pub(crate) clip_id: u32,
     pub(crate) clip_rect_inverse_matrix: *const gpu::ClipRectInverseMatrix,
     pub(crate) scissor_rect: Option<AABBu16>,
-    pub(crate) draw_contents: gpu::DrawContents,
+    pub(crate) combined_draw_contents: gpu::DrawContents,
+    pub(crate) pass_draw_contents: [gpu::DrawContents; Draw::MaxSubpassCount],
     pub(crate) resource_counts: ResourceCounters,
     pub(crate) prepass_count: i32,
     pub(crate) subpass_count: i32,
@@ -1193,6 +1195,13 @@ pub enum DrawObjectType {
 }
 
 impl Draw {
+    pub const MaxSubpassCount: usize = 4;
+    pub fn subpassDrawContents(&self, signed_subpass_idx: i32) -> gpu::DrawContents {
+        assert!(
+            -self.prepass_count <= signed_subpass_idx && signed_subpass_idx < self.subpass_count
+        );
+        self.pass_draw_contents[(self.prepass_count + signed_subpass_idx) as usize]
+    }
     pub fn new() -> Self {
         Self {
             release_refs: default_release_refs,
@@ -1214,7 +1223,8 @@ impl Draw {
             clip_id: 0,
             clip_rect_inverse_matrix: core::ptr::null(),
             scissor_rect: None,
-            draw_contents: gpu::DrawContents::none,
+            combined_draw_contents: gpu::DrawContents::none,
+            pass_draw_contents: [gpu::DrawContents::none; Draw::MaxSubpassCount],
             resource_counts: ResourceCounters::default(),
             prepass_count: 0,
             subpass_count: 1,
@@ -1250,11 +1260,11 @@ impl Draw {
     pub fn subpassCount(&self) -> i32 {
         self.subpass_count
     }
-    pub fn drawContents(&self) -> gpu::DrawContents {
-        self.draw_contents
+    pub fn combinedDrawContents(&self) -> gpu::DrawContents {
+        self.combined_draw_contents
     }
     pub fn isOpaque(&self) -> bool {
-        (self.draw_contents.0 & gpu::DrawContents::opaquePaint.0) != 0
+        (self.combined_draw_contents.0 & gpu::DrawContents::opaquePaint.0) != 0
     }
     pub fn clipID(&self) -> u32 {
         self.clip_id
@@ -1263,13 +1273,13 @@ impl Draw {
         !self.clip_rect_inverse_matrix.is_null()
     }
     pub fn hasActiveClip(&self) -> bool {
-        (self.draw_contents.0 & gpu::DrawContents::activeClip.0) != 0
+        (self.combined_draw_contents.0 & gpu::DrawContents::activeClip.0) != 0
     }
     pub fn hasAdvancedBlend(&self) -> bool {
-        (self.draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0
+        (self.combined_draw_contents.0 & gpu::DrawContents::advancedBlend.0) != 0
     }
     pub fn isClipUpdate(&self) -> bool {
-        (self.draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
+        (self.combined_draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
     }
     pub fn additiveness(&self) -> f32 {
         self.additiveness
@@ -1316,11 +1326,11 @@ impl Draw {
     pub fn setClipID(&mut self, clip_id: u32) {
         self.clip_id = clip_id;
         // Clip updates write `clip_id`; they do not read it as an active clip.
-        if (self.draw_contents.0 & gpu::DrawContents::clipUpdate.0) == 0 {
+        if (self.combined_draw_contents.0 & gpu::DrawContents::clipUpdate.0) == 0 {
             if clip_id == 0 {
-                self.draw_contents &= !gpu::DrawContents::activeClip;
+                self.combined_draw_contents &= !gpu::DrawContents::activeClip;
             } else {
-                self.draw_contents |= gpu::DrawContents::activeClip;
+                self.combined_draw_contents |= gpu::DrawContents::activeClip;
             }
         }
     }
@@ -2766,7 +2776,12 @@ pub trait LogicalFlushContract {
     fn writeResources(&mut self);
     fn allocateMidpointFanTessVertices(&mut self, count: u32) -> u32;
     fn allocateOuterCubicTessVertices(&mut self, count: u32) -> u32;
-    unsafe fn pushPath(&mut self, draw: *const PathDraw, z_index: u32) -> u32;
+    unsafe fn pushPath(
+        &mut self,
+        draw: *const PathDraw,
+        draw_contents: gpu::DrawContents,
+        z_index: u32,
+    ) -> u32;
     fn pushContour(
         &mut self,
         path_id: u32,
@@ -2781,6 +2796,7 @@ pub trait LogicalFlushContract {
         &mut self,
         draw: *const PathDraw,
         draw_type: gpu::DrawType,
+        draw_contents: gpu::DrawContents,
         tess_vertex_count: u32,
         tess_location: u32,
         misc: gpu::ShaderMiscFlags,
@@ -2789,6 +2805,7 @@ pub trait LogicalFlushContract {
         &mut self,
         draw: *const PathDraw,
         draw_type: gpu::DrawType,
+        draw_contents: gpu::DrawContents,
         tess_vertex_count: u32,
         tess_location: u32,
         misc: gpu::ShaderMiscFlags,
@@ -2796,6 +2813,7 @@ pub trait LogicalFlushContract {
     unsafe fn pushInteriorTriangulationDraw(
         &mut self,
         draw: *const PathDraw,
+        draw_contents: gpu::DrawContents,
         path_id: u32,
         winding_faces: gpu::WindingFaces,
         #[cfg(debug_assertions)] vertex_counter: *mut usize,
@@ -2803,21 +2821,25 @@ pub trait LogicalFlushContract {
     unsafe fn pushFeatherAtlasBlit(
         &mut self,
         draw: *mut PathDraw,
+        draw_contents: gpu::DrawContents,
         path_id: u32,
     ) -> *mut gpu::DrawBatch;
     unsafe fn pushImageRectDraw(
         &mut self,
         draw: *mut ImageRectDraw,
+        draw_contents: gpu::DrawContents,
         z_index: u32,
     ) -> *mut gpu::DrawBatch;
     unsafe fn pushImageMeshDraw(
         &mut self,
         draw: *mut ImageMeshDraw,
+        draw_contents: gpu::DrawContents,
         z_index: u32,
     ) -> *mut gpu::DrawBatch;
     unsafe fn pushClipResetDraw(
         &mut self,
         draw: *mut ClipReset,
+        draw_contents: gpu::DrawContents,
         z_index: u32,
     ) -> *mut gpu::DrawBatch;
     fn getWritableClipInfo(&mut self, clip_id: u32) -> &mut ClipInfo;
@@ -2825,6 +2847,7 @@ pub trait LogicalFlushContract {
         &mut self,
         draw: *const PathDraw,
         draw_type: gpu::DrawType,
+        draw_contents: gpu::DrawContents,
         misc: gpu::ShaderMiscFlags,
         vertex_count: u32,
         base_vertex: u32,
@@ -2833,6 +2856,7 @@ pub trait LogicalFlushContract {
         &mut self,
         draw: *const Draw,
         draw_type: gpu::DrawType,
+        draw_contents: gpu::DrawContents,
         misc: gpu::ShaderMiscFlags,
         paint_type: gpu::PaintType,
         element_count: u32,

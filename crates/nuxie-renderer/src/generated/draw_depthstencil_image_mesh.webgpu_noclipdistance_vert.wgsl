@@ -1,29 +1,29 @@
 struct VB {
-    td: f32,
-    ze: f32,
-    Dg: f32,
-    Eg: f32,
+    vd: f32,
+    Ce: f32,
+    Gg: f32,
+    Hg: f32,
     L6_: u32,
-    va: u32,
-    pg: u32,
-    qg: u32,
-    B8_: vec4<i32>,
-    xi: vec2<f32>,
-    Ae: vec2<f32>,
+    xa: u32,
+    sg: u32,
+    tg: u32,
+    C8_: vec4<i32>,
+    Bi: vec2<f32>,
+    De: vec2<f32>,
     r2_: u32,
-    Bi: f32,
+    Fi: f32,
     p6_: u32,
     h3_: f32,
-    Be: f32,
-    jg: u32,
+    Ee: f32,
+    mg: u32,
     E3_: f32,
     F3_: f32,
-    Ce: f32,
-    ui: u32,
-    ua: u32,
-    ad: f32,
+    Fe: f32,
+    yi: u32,
+    wa: u32,
+    cd: f32,
     g7_: f32,
-    Bb: f32,
+    Db: f32,
 }
 
 struct gl_PerVertex {
@@ -41,7 +41,7 @@ struct VertexOutput {
     @builtin(position) gl_Position: vec4<f32>,
 }
 
-@id(0) override Ui: bool = true;
+@id(0) override Yi: bool = true;
 
 var<private> gl_VertexIndex_1: i32;
 var<private> ZB_1: vec4<f32>;
@@ -63,7 +63,7 @@ var<private> CC_1: u32;
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 1>(), array<f32, 1>());
 
 fn main_1() {
-    var phi_316_: f32;
+    var phi_317_: f32;
 
     let _e31 = ZB_1;
     let _e39 = PC_1;
@@ -72,19 +72,19 @@ fn main_1() {
     let _e44 = QC_1;
     let _e45 = HC_1;
     Z5_ = ((_e44 * _e45.zw) + _e45.xy);
-    if Ui {
+    if Yi {
         let _e50 = BC_1;
         let _e52 = j.p6_;
         if (_e50 == 0u) {
-            phi_316_ = 0f;
+            phi_317_ = 0f;
         } else {
-            phi_316_ = unpack2x16float(((_e50 + 1023u) * _e52)).x;
+            phi_317_ = unpack2x16float(((_e50 + 1023u) * _e52)).x;
         }
-        let _e59 = phi_316_;
+        let _e59 = phi_317_;
         e4_ = _e59;
     }
-    let _e61 = j.Dg;
-    let _e63 = j.Eg;
+    let _e61 = j.Gg;
+    let _e63 = j.Hg;
     let _e71 = vec4<f32>(((_e43.x * _e61) - 1f), ((_e43.y * _e63) - sign(_e63)), 0f, 1f);
     let _e72 = LC_1;
     let _e84 = AC_1;

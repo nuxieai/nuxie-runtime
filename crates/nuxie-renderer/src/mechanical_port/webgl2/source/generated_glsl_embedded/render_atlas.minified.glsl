@@ -3,7 +3,7 @@ f1(f0) K(0,e,XB);K(1,e,YB);g1
 #endif
 w2 F0 X(0,e,S);l2
 #ifdef BB
-x1(ZF,f0,B,F,r){L(F,B,XB,e);L(F,B,YB,e);V(S,e);e I;uint c0;c i0;if(ia(XB,YB,r,c0,i0,S P3)){O Z3=p0(KB,c0*4u+2u);M W7=uintBitsToFloat(Z3.yzw);i0=i0*W7.x+W7.yz;I=X8(i0,j.Ae.x,j.Ae.y);
+x1(AG,f0,B,F,r){L(F,B,XB,e);L(F,B,YB,e);V(S,e);e I;uint c0;c i0;if(ka(XB,YB,r,c0,i0,S P3)){O Z3=p0(KB,c0*4u+2u);M X7=uintBitsToFloat(Z3.yzw);i0=i0*X7.x+X7.yz;I=Y8(i0,j.De.x,j.De.y);
 #ifdef MC
 I.y=-I.y;
 #endif
@@ -11,9 +11,9 @@ I.y=-I.y;
 #endif
 #ifdef EB
 #ifdef NC
-f d T6(e T,bool Qi a4){d l=K8(T n1);if(!Qi) l=-l;return l;}
+f d T6(e T,bool Ui a4){d l=L8(T n1);if(!Ui) l=-l;return l;}
 #endif
-#ifdef ZD
+#ifdef AE
 layout(location=0) inout O w0;
 #ifdef NC
 void main(){float l=uintBitsToFloat(w0.x);l+=T6(S,gl_FrontFacing n1);w0.x=floatBitsToUint(l);}
@@ -21,7 +21,7 @@ void main(){float l=uintBitsToFloat(w0.x);l+=T6(S,gl_FrontFacing n1);w0.x=floatB
 #ifdef SC
 void main(){float l=uintBitsToFloat(w0.x);l=max(l,R4(S));w0.x=floatBitsToUint(l);}
 #endif
-#elif defined(AE)
+#elif defined(BE)
 __pixel_localEXT i2{layout(r32f) float w0;};
 #ifdef NC
 void main(){w0+=T6(S,gl_FrontFacing n1);}
@@ -37,27 +37,27 @@ void main(){float l=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);l+=T6(S,gl_FrontF
 #ifdef SC
 void main(){float l=uintBitsToFloat(pixelLocalLoadANGLE(w0).x);l=max(l,R4(S));pixelLocalStoreANGLE(w0,O(floatBitsToUint(l)));}
 #endif
-#elif defined(BE)
-layout(binding=0,r32i) uniform highp coherent iimage2D R9;ivec2 Ve(){return ivec2(floor(d0));}int We(float l){return int(l*be);}
+#elif defined(CE)
+layout(binding=0,r32i) uniform highp coherent iimage2D T9;ivec2 Ye(){return ivec2(floor(d0));}int Ze(float l){return int(l*de);}
 #ifdef NC
-void main(){int l=We(T6(S,gl_FrontFacing n1));imageAtomicAdd(R9,Ve(),l);}
+void main(){int l=Ze(T6(S,gl_FrontFacing n1));imageAtomicAdd(T9,Ye(),l);}
 #endif
 #ifdef SC
-void main(){int l=We(R4(S));imageAtomicMax(R9,Ve(),l);}
+void main(){int l=Ze(R4(S));imageAtomicMax(T9,Ye(),l);}
 #endif
-#elif defined(BF)
+#elif defined(CF)
 #ifdef NC
-Q6(i,CF){q(S,e);d l=T6(S,R6 n1);if(abs(l)>ih-1e-3){K2(l>.0?H0(.0,.0,1./255.,.0):H0(.0,.0,.0,1./255.));}else{l*=1./sb;K2(H0(max(l,.0),max(-l,.0),.0,.0));}}
+Q6(i,DF){q(S,e);d l=T6(S,R6 n1);if(abs(l)>lh-1e-3){K2(l>.0?H0(.0,.0,1./255.,.0):H0(.0,.0,.0,1./255.));}else{l*=1./ub;K2(H0(max(l,.0),max(-l,.0),.0,.0));}}
 #endif
 #ifdef SC
-W2(i,DF){q(S,e);d l=R4(S n1);l*=1./sb;K2(H0(l,.0,.0,.0));}
+W2(i,EF){q(S,e);d l=R4(S n1);l*=1./ub;K2(H0(l,.0,.0,.0));}
 #endif
 #else
 #ifdef NC
-Q6(float,CF){q(S,e);K2(T6(S,R6 n1));}
+Q6(float,DF){q(S,e);K2(T6(S,R6 n1));}
 #endif
 #ifdef SC
-W2(float,DF){q(S,e);K2(R4(S n1));}
+W2(float,EF){q(S,e);K2(R4(S n1));}
 #endif
 #endif
 #endif

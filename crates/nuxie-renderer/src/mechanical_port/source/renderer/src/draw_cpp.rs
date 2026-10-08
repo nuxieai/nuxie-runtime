@@ -18,7 +18,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::draw_hpp:
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp as gpu;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::{
-    AABBu16, LogicalFlush, RenderContext, IAABB,
+    AABBu16, IAABB, LogicalFlush, RenderContext,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp;
 use crate::mechanical_port::source::renderer::src::rive_render_path_hpp::RiveRenderPath;
@@ -32,13 +32,14 @@ pub fn resolve_path_pixel_bounds(
     precomputed_pixel_bounds: Option<IAABB>,
     paint_feather: f32,
     stroke: Option<nuxie_render_api::StrokeParams>,
+    inkbleed: bool,
 ) -> Option<IAABB> {
     #[cfg(not(debug_assertions))]
     if let Some(pixel_bounds) = precomputed_pixel_bounds {
         return Some(pixel_bounds);
     }
 
-    let pixel_bounds = path.calculatePixelBounds(matrix, stroke.as_ref(), paint_feather);
+    let pixel_bounds = path.calculatePixelBounds(matrix, stroke.as_ref(), paint_feather, inkbleed);
     #[cfg(debug_assertions)]
     if let Some(precomputed) = precomputed_pixel_bounds {
         debug_assert_eq!(pixel_bounds, precomputed);
@@ -354,6 +355,7 @@ pub struct PathDrawAllocation {
     image_texture: rcp<gpu::Texture>,
     gradient: rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::Gradient>,
     coverage_type: PathCoverageType,
+    has_hairline_pass: bool,
     contour_directions: gpu::ContourDirections,
     path_fill_rule: FillRule,
     triangulator_reverse_triangles: bool,
@@ -772,7 +774,7 @@ impl PathDrawAllocation {
         self.draw.strokeRadius().to_bits() | self.draw.featherRadius().to_bits() != 0
     }
     pub fn isOutermostClipUpdate(&self) -> bool {
-        (self.draw.base.draw_contents
+        (self.draw.base.combined_draw_contents
             & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
             == gpu::DrawContents::clipUpdate
     }
@@ -807,9 +809,15 @@ impl PathDraw {
         matrix: Mat2D,
         path: &RiveRenderPath,
         paint: &dyn RiveRenderPaintContract,
+        inkbleed: bool,
     ) -> IAABB {
         let stroke = paint.getIsStroked().then(|| paint.getStrokeParams());
-        path.calculatePixelBounds(matrix, stroke.as_ref(), paint.getFeather())
+        path.calculatePixelBounds(
+            matrix,
+            stroke.as_ref(),
+            paint.getFeather(),
+            inkbleed && paint.getType() != gpu::PaintType::clipUpdate,
+        )
     }
     fn allocation(&self) -> &PathDrawAllocation {
         unsafe { &*(self as *const PathDraw).cast::<PathDrawAllocation>() }
@@ -916,9 +924,11 @@ unsafe fn allocate_path_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> 
     debug_assert_eq!(owner.raw_path_mutation_id, unsafe {
         (&*owner.path_ref.get()).getRawPathMutationID()
     });
-    debug_assert!(!unsafe { (&*owner.path_ref.get()).getRawPath() }
-        .verbs()
-        .is_empty());
+    debug_assert!(
+        !unsafe { (&*owner.path_ref.get()).getRawPath() }
+            .verbs()
+            .is_empty()
+    );
     if !owner.gradient.get().is_null()
         && !unsafe {
             flush_ref.allocateGradientExecutable(
@@ -931,8 +941,8 @@ unsafe fn allocate_path_resources(draw: *mut Draw, flush: *mut LogicalFlush) -> 
     }
 
     let is_outermost_clip_update =
-        (owner.draw.base.draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
-            && (owner.draw.base.draw_contents.0 & gpu::DrawContents::activeClip.0) == 0;
+        (owner.draw.base.combined_draw_contents.0 & gpu::DrawContents::clipUpdate.0) != 0
+            && (owner.draw.base.combined_draw_contents.0 & gpu::DrawContents::activeClip.0) == 0;
     if owner.coverage_type != PathCoverageType::featherAtlas
         && (owner.coverage_type != PathCoverageType::clockwiseAtomic || is_outermost_clip_update)
     {
@@ -994,7 +1004,7 @@ unsafe fn path_allocation(draw: *mut Draw) -> *mut PathDrawAllocation {
 unsafe fn count_path_subpasses(draw: *mut Draw, features: &gpu::PlatformFeatures) {
     let owner = unsafe { &mut *path_allocation(draw) };
     let interior = matches!(&owner.geometry, PreparedPathGeometry::Interior(_));
-    let is_outermost_clip_update = (owner.draw.base.draw_contents
+    let is_outermost_clip_update = (owner.draw.base.combined_draw_contents
         & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
         == gpu::DrawContents::clipUpdate;
     owner.draw.base.prepass_count = 0;
@@ -1023,12 +1033,14 @@ unsafe fn count_path_subpasses(draw: *mut Draw, features: &gpu::PlatformFeatures
         }
         PathCoverageType::depthStencil => {
             if owner.draw.isStroke()
-                || ((owner.draw.base.draw_contents
+                || ((owner.draw.base.combined_draw_contents
                     & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
                     == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
             {
                 1
-            } else if (owner.draw.base.draw_contents.0 & gpu::DrawContents::evenOddFill.0) != 0 {
+            } else if (owner.draw.base.combined_draw_contents.0 & gpu::DrawContents::evenOddFill.0)
+                != 0
+            {
                 2
             } else if features.supportsPipelineDynamicState {
                 1
@@ -1039,12 +1051,21 @@ unsafe fn count_path_subpasses(draw: *mut Draw, features: &gpu::PlatformFeatures
     };
     if owner.coverage_type == PathCoverageType::depthStencil
         && owner.draw.base.isOpaque()
-        && (owner.draw.base.draw_contents.0
+        && (owner.draw.base.combined_draw_contents.0
             & (gpu::DrawContents::activeClip | gpu::DrawContents::clipUpdate).0)
             == 0
     {
         owner.draw.base.prepass_count = owner.draw.base.subpass_count;
         owner.draw.base.subpass_count = 0;
+    }
+    if owner.has_hairline_pass {
+        owner.draw.base.subpass_count += 1;
+    }
+    let pass_count = (owner.draw.base.prepass_count + owner.draw.base.subpass_count) as usize;
+    assert!(pass_count <= Draw::MaxSubpassCount);
+    owner.draw.base.pass_draw_contents[..pass_count].fill(owner.draw.base.combined_draw_contents);
+    if owner.has_hairline_pass {
+        owner.draw.base.pass_draw_contents[pass_count - 1] &= !gpu::DrawContents::opaquePaint;
     }
 }
 
@@ -1163,8 +1184,10 @@ unsafe fn push_path(
     if tess_vertex_count == 0 {
         return core::ptr::null_mut();
     }
+    let subpass_draw_contents = owner.draw.base.subpassDrawContents(subpass);
     if owner.path_id == 0 {
-        owner.path_id = unsafe { flush_ref.pushPathExecutable(&owner.draw, z_index) };
+        owner.path_id =
+            unsafe { flush_ref.pushPathExecutable(&owner.draw, subpass_draw_contents, z_index) };
     }
     let interior = matches!(&owner.geometry, PreparedPathGeometry::Interior(_));
     match owner.coverage_type {
@@ -1187,6 +1210,7 @@ unsafe fn push_path(
                         flush_ref.pushOuterCubicsDrawExecutable(
                             &owner.draw,
                             gpu::DrawType::outerCurvePatches,
+                            subpass_draw_contents,
                             tess_vertex_count,
                             owner.tess_location,
                             gpu::ShaderMiscFlags::none,
@@ -1202,6 +1226,7 @@ unsafe fn push_path(
                         flush_ref.pushMidpointFanDrawExecutable(
                             &owner.draw,
                             draw_type,
+                            subpass_draw_contents,
                             tess_vertex_count,
                             owner.tess_location,
                             gpu::ShaderMiscFlags::none,
@@ -1221,6 +1246,7 @@ unsafe fn push_path(
                 unsafe {
                     flush_ref.pushInteriorTriangulationDrawExecutable(
                         &owner.draw,
+                        subpass_draw_contents,
                         owner.path_id,
                         winding,
                         if subpass == 0 {
@@ -1253,6 +1279,7 @@ unsafe fn push_path(
                             flush_ref.pushOuterCubicsDrawExecutable(
                                 &owner.draw,
                                 gpu::DrawType::outerCurvePatches,
+                                subpass_draw_contents,
                                 tess_vertex_count,
                                 owner.prepass_tess_location,
                                 gpu::ShaderMiscFlags::borrowedCoveragePass,
@@ -1267,6 +1294,7 @@ unsafe fn push_path(
                                 } else {
                                     gpu::DrawType::midpointFanPatches
                                 },
+                                subpass_draw_contents,
                                 tess_vertex_count,
                                 owner.prepass_tess_location,
                                 gpu::ShaderMiscFlags::borrowedCoveragePass,
@@ -1297,6 +1325,7 @@ unsafe fn push_path(
                             flush_ref.pushOuterCubicsDrawExecutable(
                                 &owner.draw,
                                 gpu::DrawType::outerCurvePatches,
+                                subpass_draw_contents,
                                 tess_vertex_count,
                                 owner.tess_location,
                                 gpu::ShaderMiscFlags::none,
@@ -1313,6 +1342,7 @@ unsafe fn push_path(
                             flush_ref.pushMidpointFanDrawExecutable(
                                 &owner.draw,
                                 draw_type,
+                                subpass_draw_contents,
                                 tess_vertex_count,
                                 owner.tess_location,
                                 gpu::ShaderMiscFlags::none,
@@ -1323,6 +1353,7 @@ unsafe fn push_path(
                 -2 | 1 => unsafe {
                     flush_ref.pushInteriorTriangulationDrawExecutable(
                         &owner.draw,
+                        subpass_draw_contents,
                         owner.path_id,
                         if owner.draw.base.prepass_count == 0 {
                             gpu::WindingFaces::all
@@ -1344,7 +1375,12 @@ unsafe fn push_path(
             }
         }
         PathCoverageType::depthStencil => {
-            let pass_count = owner.draw.base.prepass_count | owner.draw.base.subpass_count;
+            debug_assert!(
+                owner.draw.base.prepass_count == 0
+                    || owner.draw.base.subpass_count == i32::from(owner.has_hairline_pass)
+            );
+            let pass_count = owner.draw.base.prepass_count + owner.draw.base.subpass_count
+                - i32::from(owner.has_hairline_pass);
             let pass_index = subpass + owner.draw.base.prepass_count;
             if pass_index == 0 {
                 owner.tess_location = if interior {
@@ -1355,9 +1391,24 @@ unsafe fn push_path(
                 owner.geometry.relocate_to(owner.tess_location);
                 unsafe { write_path_geometry(owner, flush) };
             }
+            if owner.has_hairline_pass && pass_index == pass_count {
+                debug_assert!(!interior);
+                return unsafe {
+                    flush_ref.pushMidpointFanDrawExecutable(
+                        &owner.draw,
+                        gpu::DrawType::depthAAOuterHairline,
+                        subpass_draw_contents,
+                        tess_vertex_count,
+                        owner.tess_location,
+                        gpu::ShaderMiscFlags::none,
+                    )
+                };
+            }
+            debug_assert!((1..=3).contains(&pass_count));
+            debug_assert!(pass_index < pass_count);
             if interior {
                 let draw_type = if pass_count == 1 {
-                    if (owner.draw.base.draw_contents
+                    if (owner.draw.base.combined_draw_contents
                         & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
                         == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip)
                     {
@@ -1381,6 +1432,7 @@ unsafe fn push_path(
                     flush_ref.pushOuterCubicsDrawExecutable(
                         &owner.draw,
                         draw_type,
+                        subpass_draw_contents,
                         tess_vertex_count,
                         owner.tess_location,
                         gpu::ShaderMiscFlags::none,
@@ -1394,7 +1446,7 @@ unsafe fn push_path(
                     } else {
                         gpu::DrawType::depthStrokes
                     }
-                } else if (owner.draw.base.draw_contents
+                } else if (owner.draw.base.combined_draw_contents
                     & (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip))
                     == (gpu::DrawContents::clipUpdate | gpu::DrawContents::activeClip)
                 {
@@ -1418,6 +1470,7 @@ unsafe fn push_path(
                 flush_ref.pushMidpointFanDrawExecutable(
                     &owner.draw,
                     draw_type,
+                    subpass_draw_contents,
                     tess_vertex_count,
                     owner.tess_location,
                     gpu::ShaderMiscFlags::none,
@@ -1425,7 +1478,11 @@ unsafe fn push_path(
             }
         }
         PathCoverageType::featherAtlas => unsafe {
-            flush_ref.pushFeatherAtlasBlitExecutable(&mut owner.draw, owner.path_id)
+            flush_ref.pushFeatherAtlasBlitExecutable(
+                &mut owner.draw,
+                subpass_draw_contents,
+                owner.path_id,
+            )
         },
     }
 }
@@ -1461,8 +1518,15 @@ unsafe fn push_image_rect(
     subpass: i32,
     z_index: u32,
 ) -> *mut gpu::DrawBatch {
+    let subpass_draw_contents = unsafe { (&*draw).subpassDrawContents(subpass) };
     debug_assert_eq!(subpass, 0);
-    unsafe { (&mut *flush).pushImageRectDrawExecutable(draw.cast::<ImageRectDraw>(), z_index) }
+    unsafe {
+        (&mut *flush).pushImageRectDrawExecutable(
+            draw.cast::<ImageRectDraw>(),
+            subpass_draw_contents,
+            z_index,
+        )
+    }
 }
 
 unsafe fn push_image_mesh(
@@ -1471,8 +1535,15 @@ unsafe fn push_image_mesh(
     subpass: i32,
     z_index: u32,
 ) -> *mut gpu::DrawBatch {
+    let subpass_draw_contents = unsafe { (&*draw).subpassDrawContents(subpass) };
     debug_assert_eq!(subpass, 0);
-    unsafe { (&mut *flush).pushImageMeshDrawExecutable(draw.cast::<ImageMeshDraw>(), z_index) }
+    unsafe {
+        (&mut *flush).pushImageMeshDrawExecutable(
+            draw.cast::<ImageMeshDraw>(),
+            subpass_draw_contents,
+            z_index,
+        )
+    }
 }
 
 unsafe fn push_clip_reset(
@@ -1481,8 +1552,15 @@ unsafe fn push_clip_reset(
     subpass: i32,
     z_index: u32,
 ) -> *mut gpu::DrawBatch {
+    let subpass_draw_contents = unsafe { (&*draw).subpassDrawContents(subpass) };
     debug_assert_eq!(subpass, 0);
-    unsafe { (&mut *flush).pushClipResetDrawExecutable(draw.cast::<ClipReset>(), z_index) }
+    unsafe {
+        (&mut *flush).pushClipResetDrawExecutable(
+            draw.cast::<ClipReset>(),
+            subpass_draw_contents,
+            z_index,
+        )
+    }
 }
 
 fn base_draw(
@@ -1494,7 +1572,7 @@ fn base_draw(
     additiveness: f32,
     image_texture: *mut gpu::Texture,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
-    draw_contents: gpu::DrawContents,
+    combined_draw_contents: gpu::DrawContents,
     clip_id: u32,
     scissor: Option<AABBu16>,
 ) -> Draw {
@@ -1511,9 +1589,9 @@ fn base_draw(
     draw.additiveness = additiveness.max(0.0).min(1.0);
     draw.image_texture = image_texture;
     draw.image_sampler = image_sampler;
-    draw.draw_contents = draw_contents;
+    draw.combined_draw_contents = combined_draw_contents;
     if blend_mode != BlendMode::SrcOver {
-        draw.draw_contents |= gpu::DrawContents::advancedBlend;
+        draw.combined_draw_contents |= gpu::DrawContents::advancedBlend;
     }
     draw.setClipID(clip_id);
     draw.scissor_rect = scissor;
@@ -1628,6 +1706,7 @@ pub unsafe fn make_path_draw_from_source(
         precomputed_pixel_bounds,
         paint.getFeather(),
         paint.getIsStroked().then_some(paint.getStrokeParams()),
+        context.frameDescriptor().inkbleedOverride && paint.getType() != gpu::PaintType::clipUpdate,
     )?;
     if context.isOutsideCurrentFrameExecutable(&pixel_bounds) {
         debug_assert!(precomputed_pixel_bounds.is_none());
@@ -1739,24 +1818,24 @@ pub unsafe fn make_path_draw_from_source(
     } else {
         0.0
     };
-    let mut draw_contents = gpu::DrawContents::none;
+    let mut combined_draw_contents = gpu::DrawContents::none;
     if paint.getIsOpaque() && !(context.frameDescriptor().inkbleedOverride && paint.getIsStroked())
     {
-        draw_contents |= gpu::DrawContents::opaquePaint;
+        combined_draw_contents |= gpu::DrawContents::opaquePaint;
     }
     if coverage_type != PathCoverageType::featherAtlas {
         if stroke_radius != 0.0 {
-            draw_contents |= gpu::DrawContents::stroke;
+            combined_draw_contents |= gpu::DrawContents::stroke;
         } else {
             if feather_radius != 0.0 {
-                draw_contents |= gpu::DrawContents::featheredFill;
+                combined_draw_contents |= gpu::DrawContents::featheredFill;
             }
             if initial_fill_rule == FillRule::Clockwise || clockwise_fill_override {
-                draw_contents |= gpu::DrawContents::clockwiseFill;
+                combined_draw_contents |= gpu::DrawContents::clockwiseFill;
             } else if initial_fill_rule == FillRule::NonZero {
-                draw_contents |= gpu::DrawContents::nonZeroFill;
+                combined_draw_contents |= gpu::DrawContents::nonZeroFill;
             } else {
-                draw_contents |= gpu::DrawContents::evenOddFill;
+                combined_draw_contents |= gpu::DrawContents::evenOddFill;
             }
         }
     }
@@ -1764,9 +1843,9 @@ pub unsafe fn make_path_draw_from_source(
     let paint_type = paint.getType();
     let mut simple_paint_value = paint.getSimpleValue();
     if paint_type == gpu::PaintType::clipUpdate {
-        draw_contents |= gpu::DrawContents::clipUpdate;
+        combined_draw_contents |= gpu::DrawContents::clipUpdate;
         if unsafe { simple_paint_value.outerClipID } != 0 {
-            draw_contents |= gpu::DrawContents::activeClip;
+            combined_draw_contents |= gpu::DrawContents::activeClip;
         }
     }
     if modulated_opacity != 1.0 || modulated_color != 0xffff_ffff {
@@ -1795,7 +1874,7 @@ pub unsafe fn make_path_draw_from_source(
             paint.getAdditiveness(),
             image_texture,
             paint.getImageSampler(),
-            draw_contents,
+            combined_draw_contents,
             0,
             None,
             geometry,
@@ -1819,6 +1898,12 @@ pub unsafe fn make_path_draw_from_source(
     } else {
         initial_fill_rule
     };
+    owner.has_hairline_pass = context.frameDescriptor().inkbleedOverride
+        && coverage_type == PathCoverageType::depthStencil
+        && owner.path_fill_rule == FillRule::Clockwise
+        && !paint.getIsStroked()
+        && paint.getFeather() == 0.0
+        && paint.getType() != gpu::PaintType::clipUpdate;
     owner.draw.base.is_layer_mask = paint.getIsLayerMask();
     owner.draw.base.layer_mask_mode = paint.getLayerMaskMode();
     owner.triangulator_reverse_triangles = crate::draw::mat2d_determinant(paint_matrix) < 0.0;
@@ -1830,10 +1915,90 @@ pub unsafe fn make_path_draw_from_source(
 #[cfg(test)]
 mod transformed_area_consumer_tests {
     use super::{
-        contour_directions_for_path, gpu, transformed_cubic_segment_count, FillRule, Mat2D,
-        PathCoverageType, RawPath,
+        Draw, PreparedPathGeometry, RiveRenderPath, build_source_fill_tessellation,
+        count_path_subpasses, make_path_draw, release_path_draw,
     };
+    use super::{
+        FillRule, Mat2D, PathCoverageType, RawPath, contour_directions_for_path, gpu,
+        transformed_cubic_segment_count,
+    };
+    use crate::mechanical_port::source::include::rive::refcnt_hpp::{make_rcp, rcp};
     use nuxie_render_api::Vec2D;
+
+    #[test]
+    fn inkbleed_fill_hairline_preserves_signed_pass_contents() {
+        for opaque in [false, true] {
+            let mut raw = RawPath::new();
+            raw.move_to(1.0, 1.0);
+            raw.line_to(10.0, 1.0);
+            raw.line_to(10.0, 10.0);
+            raw.close();
+            let geometry = PreparedPathGeometry::MidpointFan(
+                build_source_fill_tessellation(&raw, Mat2D::IDENTITY).unwrap(),
+            );
+            let path =
+                make_rcp(|| RiveRenderPath::new_with_raw_path(FillRule::Clockwise, &mut raw));
+            let contents = gpu::DrawContents::clockwiseFill
+                | if opaque {
+                    gpu::DrawContents::opaquePaint
+                } else {
+                    gpu::DrawContents::none
+                };
+            let mut owner = unsafe {
+                make_path_draw(
+                gpu::IAABB { left: 0, top: 0, right: 11, bottom: 11 },
+                path, Mat2D::IDENTITY, None, nuxie_render_api::BlendMode::SrcOver,
+                0.0, rcp::new(),
+                crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler::LinearClamp(),
+                contents, 0, None, geometry, PathCoverageType::depthStencil,
+                gpu::ContourDirections::forward, 1.0, rcp::new(), gpu::PaintType::solidColor,
+                Mat2D::IDENTITY, gpu::SimplePaintValue { color: 0xffff_ffff },
+                0.0, 0.0, gpu::AtlasTransform::default(), Default::default(), false,
+                gpu::CoverageBufferRange::default(),
+            )
+            };
+            owner.has_hairline_pass = true;
+            let features = gpu::PlatformFeatures {
+                supportsPipelineDynamicState: false,
+                ..Default::default()
+            };
+            unsafe {
+                count_path_subpasses(owner.draw_ptr(), &features);
+            }
+            assert_eq!(owner.draw.base.prepassCount(), if opaque { 3 } else { 0 });
+            assert_eq!(owner.draw.base.subpassCount(), if opaque { 1 } else { 4 });
+            assert_eq!(Draw::MaxSubpassCount, 4);
+            let first = -owner.draw.base.prepassCount();
+            for pass in first..first + 3 {
+                assert_eq!(owner.draw.base.subpassDrawContents(pass), contents);
+            }
+            assert_eq!(
+                owner.draw.base.subpassDrawContents(first + 3),
+                gpu::DrawContents::clockwiseFill
+            );
+            unsafe {
+                release_path_draw(owner.draw_ptr());
+            }
+        }
+    }
+
+    #[test]
+    fn inkbleed_bounds_expand_half_a_pixel_before_rounding() {
+        let mut raw = RawPath::new();
+        raw.move_to(1.0, 1.0);
+        raw.line_to(10.0, 10.0);
+        let path = RiveRenderPath::new_with_raw_path(FillRule::Clockwise, &mut raw);
+        let ordinary = path.calculatePixelBounds(Mat2D::IDENTITY, None, 0.0, false);
+        let inkbleed = path.calculatePixelBounds(Mat2D::IDENTITY, None, 0.0, true);
+        assert_eq!(
+            (ordinary.left, ordinary.top, ordinary.right, ordinary.bottom),
+            (1, 1, 10, 10)
+        );
+        assert_eq!(
+            (inkbleed.left, inkbleed.top, inkbleed.right, inkbleed.bottom),
+            (0, 0, 11, 11)
+        );
+    }
 
     #[test]
     fn source_path_draw_wang_vector_xform_preserves_pinned_segment_boundary() {
@@ -1908,7 +2073,7 @@ pub unsafe fn make_path_draw(
     additiveness: f32,
     image_texture: rcp<gpu::Texture>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
-    draw_contents: gpu::DrawContents,
+    combined_draw_contents: gpu::DrawContents,
     clip_id: u32,
     scissor: Option<AABBu16>,
     geometry: PreparedPathGeometry,
@@ -1953,7 +2118,7 @@ pub unsafe fn make_path_draw(
         additiveness,
         image_texture_ptr,
         image_sampler,
-        draw_contents,
+        combined_draw_contents,
         clip_id,
         scissor,
     );
@@ -1998,6 +2163,7 @@ pub unsafe fn make_path_draw(
         image_texture,
         gradient,
         coverage_type,
+        has_hairline_pass: false,
         contour_directions,
         path_fill_rule: FillRule::NonZero,
         triangulator_reverse_triangles: false,
@@ -2020,7 +2186,7 @@ pub unsafe fn make_image_rect_draw(
     image_texture: rcp<gpu::Texture>,
     gradient: rcp<super::gradient_hpp::Gradient>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
-    draw_contents: gpu::DrawContents,
+    combined_draw_contents: gpu::DrawContents,
     clip_id: u32,
     scissor: Option<AABBu16>,
     image_matrix: Mat2D,
@@ -2037,7 +2203,7 @@ pub unsafe fn make_image_rect_draw(
         additiveness,
         image_texture_ptr,
         image_sampler,
-        draw_contents,
+        combined_draw_contents,
         clip_id,
         scissor,
     );
@@ -2107,7 +2273,7 @@ pub unsafe fn make_image_mesh_draw(
     modulated_color: u32,
     image_texture: rcp<gpu::Texture>,
     image_sampler: crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler,
-    draw_contents: gpu::DrawContents,
+    combined_draw_contents: gpu::DrawContents,
     clip_id: u32,
     scissor: Option<AABBu16>,
     vertex_buffer: rcp<MechanicalRenderBuffer>,
@@ -2128,7 +2294,7 @@ pub unsafe fn make_image_mesh_draw(
         additiveness,
         image_texture_ptr,
         image_sampler,
-        draw_contents,
+        combined_draw_contents,
         clip_id,
         scissor,
     );
@@ -2207,11 +2373,11 @@ pub fn make_clip_reset(
     let fill_rule_flags = gpu::DrawContents::nonZeroFill
         | gpu::DrawContents::evenOddFill
         | gpu::DrawContents::clockwiseFill;
-    let mut draw_contents = previous_clip_draw_contents & fill_rule_flags;
+    let mut combined_draw_contents = previous_clip_draw_contents & fill_rule_flags;
     if reset_action == ClipResetAction::intersectPreviousClip {
-        draw_contents |= gpu::DrawContents::activeClip;
+        combined_draw_contents |= gpu::DrawContents::activeClip;
     }
-    draw_contents |= gpu::DrawContents::clipUpdate;
+    combined_draw_contents |= gpu::DrawContents::clipUpdate;
     let mut base = base_draw(
         DrawObjectType::stencilClipReset,
         pixel_bounds,
@@ -2221,7 +2387,7 @@ pub fn make_clip_reset(
         0.0,
         core::ptr::null_mut(),
         crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::ImageSampler::LinearClamp(),
-        draw_contents,
+        combined_draw_contents,
         0,
         None,
     );

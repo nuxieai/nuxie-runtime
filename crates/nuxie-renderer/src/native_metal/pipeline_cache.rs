@@ -193,6 +193,7 @@ pub(crate) fn shader_features_mask_for(
         | DrawType::AtlasBlit
         | DrawType::DepthStrokes
         | DrawType::DepthAAStrokes
+        | DrawType::DepthAAOuterHairline
         | DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilDynamicMidpointFans
         | DrawType::StencilDynamicOuterCubics
@@ -305,10 +306,14 @@ pub(crate) fn pipeline_key(
             debug_assert_eq!(interlock_mode, InterlockMode::DepthStencil);
             2
         }
-        DrawType::InteriorTriangulation => 3,
-        DrawType::AtlasBlit => 4,
-        DrawType::ImageRect => 5,
-        DrawType::ImageMesh => 6,
+        DrawType::DepthAAOuterHairline => {
+            debug_assert_eq!(interlock_mode, InterlockMode::DepthStencil);
+            3
+        }
+        DrawType::InteriorTriangulation => 4,
+        DrawType::AtlasBlit => 5,
+        DrawType::ImageRect => 6,
+        DrawType::ImageMesh => 7,
         DrawType::RenderPassInitialize => {
             if !matches!(
                 interlock_mode,
@@ -320,7 +325,7 @@ pub(crate) fn pipeline_key(
                     "render-pass initialize has an invalid interlock",
                 ));
             }
-            8
+            9
         }
         DrawType::RenderPassResolve => {
             if !matches!(
@@ -333,7 +338,7 @@ pub(crate) fn pipeline_key(
                     "render-pass resolve has an invalid interlock",
                 ));
             }
-            9
+            10
         }
         DrawType::ClipReset => {
             if !matches!(
@@ -344,7 +349,7 @@ pub(crate) fn pipeline_key(
                     "clip reset requires clockwise-atomic or MSAA",
                 ));
             }
-            7
+            8
         }
     };
     let interlock_key = match interlock_mode {
@@ -1195,8 +1200,8 @@ mod tests {
             )
             .map(PipelineKey::get),
             // gpu.cpp::ShaderUniqueKey compacts the atomic resolve flag to bit4,
-            // advanced-blend feature bit2, and renderPassResolve draw key9.
-            Ok((1 << (4 + 3 + 9 + 4)) | (1 << (9 + 4)) | (4 << 4) | 9)
+            // advanced-blend feature bit2, and renderPassResolve draw key10.
+            Ok((1 << (4 + 3 + 9 + 4)) | (1 << (9 + 4)) | (4 << 4) | 10)
         );
 
         let msaa_midpoint = PipelineRequest::new(
@@ -1257,6 +1262,7 @@ mod tests {
             (DrawType::OuterCurvePatches, 0),
             (DrawType::DepthStrokes, 2),
             (DrawType::DepthAAStrokes, 2),
+            (DrawType::DepthAAOuterHairline, 3),
             (DrawType::StencilMidpointFanBorrowedCoverage, 1),
             (DrawType::StencilDynamicMidpointFans, 1),
             (DrawType::StencilDynamicOuterCubics, 1),
@@ -1269,13 +1275,13 @@ mod tests {
             (DrawType::StencilOuterCubicWinding, 1),
             (DrawType::StencilOuterCubicCover, 1),
             (DrawType::StencilOuterCubics, 1),
-            (DrawType::InteriorTriangulation, 3),
-            (DrawType::AtlasBlit, 4),
-            (DrawType::ImageRect, 5),
-            (DrawType::ImageMesh, 6),
-            (DrawType::ClipReset, 7),
-            (DrawType::RenderPassInitialize, 8),
-            (DrawType::RenderPassResolve, 9),
+            (DrawType::InteriorTriangulation, 4),
+            (DrawType::AtlasBlit, 5),
+            (DrawType::ImageRect, 6),
+            (DrawType::ImageMesh, 7),
+            (DrawType::ClipReset, 8),
+            (DrawType::RenderPassInitialize, 9),
+            (DrawType::RenderPassResolve, 10),
         ] {
             assert_eq!(
                 pipeline_key(draw_type, 0, InterlockMode::DepthStencil, 0),
@@ -1326,7 +1332,7 @@ mod tests {
                 .iter()
                 .map(|spec| spec.key.get())
                 .collect::<Vec<_>>(),
-            vec![0x1ff0, 0x21ff0, 0x1ff3, 0x21ff3, 0x1c74, 0x0c76, 0x20c76]
+            vec![0x1ff0, 0x21ff0, 0x1ff4, 0x21ff4, 0x1c75, 0x0c77, 0x20c77]
         );
         assert_eq!(
             state

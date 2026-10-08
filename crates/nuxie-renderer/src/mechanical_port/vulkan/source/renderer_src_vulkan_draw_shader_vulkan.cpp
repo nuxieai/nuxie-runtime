@@ -75,7 +75,6 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                     break;
 
                 case DrawType::imageRect:
-                case DrawType::depthStrokes:
                 case DrawType::stencilMidpointFanBorrowedCoverage:
                 case DrawType::stencilDynamicMidpointFans:
                 case DrawType::stencilDynamicOuterCubics:
@@ -90,6 +89,9 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                 case DrawType::stencilOuterCubics:
                 case DrawType::clipReset:
                 case DrawType::renderPassInitialize:
+                case DrawType::depthStrokes:
+                case DrawType::depthAAStrokes:
+                case DrawType::depthAAOuterHairline:
                     RIVE_UNREACHABLE();
             }
             break;
@@ -159,7 +161,6 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                     }
                     break;
 
-                case DrawType::depthStrokes:
                 case DrawType::stencilMidpointFanBorrowedCoverage:
                 case DrawType::stencilDynamicMidpointFans:
                 case DrawType::stencilDynamicOuterCubics:
@@ -174,6 +175,9 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                 case DrawType::stencilOuterCubics:
                 case DrawType::clipReset:
                 case DrawType::renderPassInitialize:
+                case DrawType::depthStrokes:
+                case DrawType::depthAAStrokes:
+                case DrawType::depthAAOuterHairline:
                     RIVE_UNREACHABLE();
             }
             break;
@@ -236,7 +240,6 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                     break;
 
                 case DrawType::imageRect:
-                case DrawType::depthStrokes:
                 case DrawType::stencilMidpointFanBorrowedCoverage:
                 case DrawType::stencilDynamicMidpointFans:
                 case DrawType::stencilDynamicOuterCubics:
@@ -252,6 +255,9 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                 case DrawType::clipReset:
                 case DrawType::renderPassResolve:
                 case DrawType::renderPassInitialize:
+                case DrawType::depthStrokes:
+                case DrawType::depthAAStrokes:
+                case DrawType::depthAAOuterHairline:
                     RIVE_UNREACHABLE();
             }
             break;
@@ -386,7 +392,6 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                     break;
 
                 case DrawType::imageRect:
-                case DrawType::depthStrokes:
                 case DrawType::stencilMidpointFanBorrowedCoverage:
                 case DrawType::stencilDynamicMidpointFans:
                 case DrawType::stencilDynamicOuterCubics:
@@ -400,6 +405,9 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                 case DrawType::stencilOuterCubicCover:
                 case DrawType::stencilOuterCubics:
                 case DrawType::renderPassResolve:
+                case DrawType::depthStrokes:
+                case DrawType::depthAAStrokes:
+                case DrawType::depthAAOuterHairline:
                     RIVE_UNREACHABLE();
             }
             break;
@@ -422,7 +430,6 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                 case DrawType::stencilOuterCubicWinding:
                 case DrawType::stencilOuterCubicCover:
                 case DrawType::stencilOuterCubics:
-                case DrawType::depthStrokes:
                 case DrawType::stencilMidpointFanBorrowedCoverage:
                 case DrawType::stencilDynamicMidpointFans:
                 case DrawType::stencilDynamicOuterCubics:
@@ -430,39 +437,22 @@ DrawShaderVulkan::DrawShaderVulkan(Type type,
                 case DrawType::stencilMidpointFanReset:
                 case DrawType::stencilMidpointFanWinding:
                 case DrawType::stencilMidpointFanCover:
+                case DrawType::depthStrokes:
+                case DrawType::depthAAStrokes:
+                case DrawType::depthAAOuterHairline:
                 {
                     const bool clipRect =
                         enums::is_flag_set(shaderFeatures,
                                            ShaderFeatures::ENABLE_CLIP_RECT);
-                    if (drawType == DrawType::depthStrokes)
-                    {
-                        vertCode =
-                            clipRect
-                                ? spirv::draw_depthstencil_path_vert
-                                : spirv::
-                                      draw_depthstencil_path_noclipdistance_vert;
-                    }
-                    else
-                    {
-                        vertCode =
-                            clipRect
-                                ? spirv::draw_depthstencil_fill_vert
-                                : spirv::
-                                      draw_depthstencil_fill_noclipdistance_vert;
-                    }
-                    if (fixedFunctionColorOutput)
-                    {
-                        fragCode =
-                            spirv::draw_depthstencil_path_fixedcolor_frag;
-                    }
-                    else if (msaaDstRead)
-                    {
-                        fragCode = spirv::draw_depthstencil_path_msaa_frag;
-                    }
-                    else
-                    {
-                        fragCode = spirv::draw_depthstencil_path_frag;
-                    }
+                    vertCode =
+                        clipRect
+                            ? spirv::draw_depthstencil_path_vert
+                            : spirv::draw_depthstencil_path_noclipdistance_vert;
+                    fragCode =
+                        fixedFunctionColorOutput
+                            ? spirv::draw_depthstencil_path_fixedcolor_frag
+                        : msaaDstRead ? spirv::draw_depthstencil_path_msaa_frag
+                                      : spirv::draw_depthstencil_path_frag;
                     break;
                 }
 

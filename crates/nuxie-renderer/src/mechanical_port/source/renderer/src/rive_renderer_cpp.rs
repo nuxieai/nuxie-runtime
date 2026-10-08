@@ -1694,7 +1694,7 @@ impl RiveRenderer {
                 force_closed,
             )
         {
-            let pixel = path.calculatePixelBounds(state.matrix, stroke.as_ref(), feather);
+            let pixel = path.calculatePixelBounds(state.matrix, stroke.as_ref(), feather, false);
             let combined = state.overallClipPixelBounds.intersect(pixel);
             self.current_state_mut().overallClipPixelBounds = combined;
             if let Some(bounds) = bounds_out {
@@ -1874,7 +1874,7 @@ impl RiveRenderer {
                 return ApplyClipResult::failure;
             }
             clip.clipID = id;
-            let contents = owner.draw.drawContents();
+            let contents = owner.draw.combinedDrawContents();
             let mut ptr = own_path(owner);
             unsafe {
                 (&mut *ptr.0).setClipID(id);
@@ -2129,6 +2129,7 @@ impl RendererContract for RiveRenderer {
                         self.current_state().matrix,
                         Some(&stroke),
                         q.getFeather(),
+                        false,
                     );
                     let clip = invert_clockwise_path(
                         p,

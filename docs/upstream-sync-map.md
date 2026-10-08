@@ -7,18 +7,30 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `05d690ee5a8879d738679f8ebad17c4a61af50ac`
+- LAST_SYNCED_SHA: `b2c28dde1f8c51872a81ae4f9b4fbbceac1d23ed`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Five upstream commits remain after this checkpoint at the fetched target.
-  All 207 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (229 after `5892bb05`); this
+  Four upstream commits remain after this checkpoint at the fetched target.
+  All 208 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (230 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `b2c28dde`, integrated atop downstream `c14997d541`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. All ten scripting/layout tests pass, including the exact upstream file
+  display-scale regression through the approved live-VM import seam. All 25
+  WebGL2 ORE tests pass, including padded allocation/upload and binding-range
+  cases; both wasm32-unknown-unknown browser renderers compile. Source/pipeline
+  tests pass 12, manifest tests pass 27, and generated inventory is current (one
+  producer line shifted by ten). Compilation caught an old source-byte count;
+  both rereviews confirmed the new snapshot exactly matches upstream at 52,622
+  bytes before correcting the expected length. No assertion/classification was
+  weakened. No new browser pixels, native-device runs or broad Golden/Silver
+  execution are claimed; guest execution remains parked.
 - Validation at `05d690ee`, integrated atop downstream `9c5626ff47`:
   independent source-accounting and subsequent Rust-integration reviews are
   clean. Source/pipeline tests pass 12, manifest tests pass 27, and generated
@@ -470,6 +482,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `b2c28dde1f8c51872a81ae4f9b4fbbceac1d23ed` | Translate WebGL2 ORE std140 uniform allocation/range padding and exact source-byte upload, plus File display-scale forwarding to the existing Luau VM and its upstream regression. The guest-Wasm VM forwarding loop remains parked; D3D11 allocation padding is unshipped. Private implementation represented only by .rive_head is not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `05d690ee5a8879d738679f8ebad17c4a61af50ac` | Build-only: the public delta adds optional named shallow submodule initialization to the upstream Premake dependency helper. Rust/Cargo has no corresponding live helper; C++ source-oracle builds consume the helper directly from the advanced pin. No runtime or shader behavior changes. The coop_file service named in the message is private implementation absent from the public delta and is not claimed imported. | — |
 | `74dda58f80efd7310959305c284a136e5c5087ff` | Deferred: guest Wasm host-object release, value/asset lookup factoring and browser guest host-call table generation/binding. All public implementation changes are in the parked guest scripting owners and glue, not native Luau, shared runtime or browser rendering. Npm package-build and benchmark changes described in the message are absent from the public delta and are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `625454e362a27bb3168f00cd87e9487f54d39338` | Translate inkbleed strokes in single-sample depth/stencil mode: shared draw/index/chunking contracts, shader sources and generated artifacts, and supported Vulkan/WebGPU/WebGL2 execution. Preserve native Metal's unsupported depth-stroke boundary. Carry the frame policy through screen/canvas and replay-oracle interfaces; translate updated range-chunker cases. Upstream path-fiddle/testing-window controls map to existing replay tools; D3D execution and Dawn Windows Premake linkage are unshipped. Private editor implementation is absent from the public delta and is not claimed imported. | — |

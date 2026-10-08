@@ -483,6 +483,13 @@ fn makeBufferCurrent(context: &mut ContextGL, desc: &BufferDesc<'_>) -> Option<A
             GLCommand::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, previousEBO as GLuint),
         );
     } else {
+        // std140 rounds blocks to 16 bytes. Keep the logical buffer size,
+        // but allocate the complete block without reading beyond initial data.
+        let size = if desc.usage == BufferUsage::uniform {
+            desc.size.wrapping_add(15) & !15
+        } else {
+            desc.size
+        };
         submit(
             context,
             GLCommand::BindBuffer(GL_COPY_WRITE_BUFFER, buffer.m_glBuffer),
@@ -491,11 +498,18 @@ fn makeBufferCurrent(context: &mut ContextGL, desc: &BufferDesc<'_>) -> Option<A
             context,
             GLCommand::BufferData {
                 target: GL_COPY_WRITE_BUFFER,
-                size: desc.size as usize,
-                data,
+                size: size as usize,
+                data: None,
                 usage,
             },
         );
+        if let Some(data) = data {
+            submit(context, GLCommand::BufferSubData {
+                target: GL_COPY_WRITE_BUFFER,
+                offset: 0,
+                data,
+            });
+        }
         submit(context, GLCommand::BindBuffer(GL_COPY_WRITE_BUFFER, 0));
     }
 
@@ -1280,11 +1294,11 @@ fn makeBindGroupCurrent(
         group.m_glUBOs.push(GLUBOBinding {
             buffer: buffer.m_glBuffer,
             offset: entry.offset,
-            size: if entry.size != 0 {
+            size: (if entry.size != 0 {
                 entry.size
             } else {
                 buffer.size() - entry.offset
-            },
+            }).wrapping_add(15) & !15,
             binding: entry.slot,
             slot,
             hasDynamicOffset,
@@ -2122,7 +2136,7 @@ impl ContextApi for ContextGL {
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
 pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 24;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 51589] = [(); PINNED_SOURCE.len()];
+const _: [(); 52622] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -2610,7 +2624,7 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1427);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1446);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
         assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 24);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
@@ -2632,6 +2646,86 @@ mod tests {
             oreCompareFunctionToGL(CompareFunction::lessEqual),
             GL_LEQUAL
         );
+    }
+
+    #[test]
+    fn short_uniform_allocations_and_initial_uploads_follow_std140() {
+        for usage in [BufferUsage::uniform, BufferUsage::vertex] {
+            for (size, rounded) in [(4, 16), (16, 16), (20, 32)] {
+                for initialized in [false, true] {
+                    let (domain, state) = execution([701]);
+                    let mut context = context(&domain);
+                    clearTrace(&state);
+                    let data = vec![0x5a; size as usize];
+                    let buffer = makeBuffer(&mut context, &BufferDesc {
+                        usage,
+                        size,
+                        data: initialized.then_some(data.as_slice()),
+                        immutable: false,
+                        label: None,
+                    }).expect("buffer");
+                    assert_eq!(buffer.downcast_ref::<BufferGL>().unwrap().size(), size);
+                    let mut expected = vec![
+                        GLCommand::BindBuffer(GL_COPY_WRITE_BUFFER, 701),
+                        GLCommand::BufferData {
+                            target: GL_COPY_WRITE_BUFFER,
+                            size: if usage == BufferUsage::uniform { rounded } else { size as usize },
+                            data: None,
+                            usage: if initialized { GL_STATIC_DRAW } else { GL_DYNAMIC_DRAW },
+                        },
+                    ];
+                    if initialized {
+                        expected.push(GLCommand::BufferSubData {
+                            target: GL_COPY_WRITE_BUFFER,
+                            offset: 0,
+                            data,
+                        });
+                    }
+                    expected.push(GLCommand::BindBuffer(GL_COPY_WRITE_BUFFER, 0));
+                    assert_eq!(state.borrow().commands, expected);
+                    drop(buffer);
+                    drop(context);
+                    domain.shutdown();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn uniform_bind_ranges_round_explicit_and_remaining_sizes() {
+        use nuxie_ore_metal::types::UBOEntry;
+        let (domain, _) = execution([701]);
+        let mut context = context(&domain);
+        let buffer = makeBuffer(&mut context, &BufferDesc::uninitialized(BufferUsage::uniform, 20))
+            .expect("uniform buffer");
+        let entries = [BindGroupLayoutEntry {
+            binding: 0,
+            kind: BindingKind::uniformBuffer,
+            nativeSlotVS: 3,
+            ..BindGroupLayoutEntry::default()
+        }];
+        let layout = makeBindGroupLayout(&mut context, &BindGroupLayoutDesc {
+            entries: Some(&entries),
+            entryCount: 1,
+            ..BindGroupLayoutDesc::default()
+        }).expect("uniform layout");
+        for (offset, size, rounded) in [(0, 0, 32), (0, 4, 16), (0, 16, 16), (0, 20, 32), (16, 0, 16), (16, 4, 16)] {
+            let ubos = [UBOEntry { slot: 0, buffer: Some(&buffer), offset, size }];
+            let group = makeBindGroup(&mut context, &BindGroupDesc {
+                layout: Some(&layout),
+                ubos: &ubos,
+                uboCount: 1,
+                ..BindGroupDesc::default()
+            }).expect("uniform bind group");
+            assert_eq!(&*group.downcast_ref::<BindGroupGL>().unwrap().m_glUBOs, &[GLUBOBinding {
+                buffer: 701, offset, size: rounded, binding: 0, slot: 3, hasDynamicOffset: false,
+            }]);
+        }
+        assert_eq!(buffer.downcast_ref::<BufferGL>().unwrap().size(), 20);
+        drop(layout);
+        drop(buffer);
+        drop(context);
+        domain.shutdown();
     }
 
     #[test]

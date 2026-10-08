@@ -1,17 +1,43 @@
 #![cfg(feature = "luau")]
 
 use luaur_rt::{Function, Table, Value, Vector};
-use nuxie_render_api::{NullFactory, PersistentFactory};
+use nuxie_render_api::{NullFactory, PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     core::CoreArena,
     lua::scripting_vm::RuntimeScriptingVmHandle,
     scripted::scripted_layout::{LayoutDirection, LayoutScaleType, ScriptedLayout, Vec2},
 };
 use nuxie_runtime::{
-    NoopScriptHost, ScriptInstance, ScriptMethod, ScriptOptionalMethodResult, ScriptValue,
+    File, NoopScriptHost, RuntimeFactoryHandle, ScriptInstance, ScriptMethod,
+    ScriptOptionalMethodResult, ScriptValue,
 };
 use nuxie_scripting::vm::{LuaScriptInstance, ScriptVm};
 use std::rc::Rc;
+
+#[test]
+fn file_display_scale_reaches_its_scripting_vm() {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR").expect("pinned RIVE_RUNTIME_DIR");
+    let fixture =
+        std::path::PathBuf::from(root).join("tests/unit_tests/assets/script_layout_test.riv");
+    let bytes = std::fs::read(&fixture)
+        .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+    let mut silver = PersistentFactory::new(SerializingFactory::new());
+    // Rust's scripting crate supplies the live luaur VM at the native import seam.
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut silver).expect("retained native factory"),
+        None,
+        None,
+        Some(RuntimeScriptingVmHandle::new(Box::new(ScriptVm::new()))),
+    )
+    .expect("native fixture import");
+    file.with_file(|file| {
+        let vm = file.scripting_vm().expect("file has its scripting VM");
+        assert_eq!(vm.display_scale(), 1.0);
+        file.set_display_scale(2.0);
+        assert_eq!(vm.display_scale(), 2.0);
+    });
+}
 
 // Upstream scripting_layout_test.cpp's selfTable seam. The safe Lua API owns
 // stack restoration for chunk/getter calls; typed results also assert the

@@ -226,8 +226,16 @@ pub(crate) const DS_OUTER_FILL_BASE_INDEX: usize =
         & !1;
 pub(crate) const DS_MIDPOINT_FILL_STRIDE_LOG2: u32 = 4;
 pub(crate) const DS_OUTER_FILL_STRIDE_LOG2: u32 = 5;
-pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize =
+pub(crate) const DS_STROKE_INDEX_COUNT: usize = MIDPOINT_FAN_PATCH_SEGMENT_SPAN * 6;
+pub(crate) const DS_STROKE_MAX_REPS: usize = 2048;
+pub(crate) const DS_STROKE_BASE_INDEX: usize =
     DS_OUTER_FILL_BASE_INDEX + DS_OUTER_FILL_MAX_REPS * DS_OUTER_FILL_INDEX_COUNT;
+pub(crate) const DS_AA_STROKE_INDEX_COUNT: usize = DS_STROKE_INDEX_COUNT * 3;
+pub(crate) const DS_AA_STROKE_MAX_REPS: usize = 1024;
+pub(crate) const DS_AA_STROKE_BASE_INDEX: usize =
+    DS_STROKE_BASE_INDEX + DS_STROKE_INDEX_COUNT * DS_STROKE_MAX_REPS;
+pub(crate) const PATCH_INDEX_BUFFER_COUNT: usize =
+    DS_AA_STROKE_BASE_INDEX + DS_AA_STROKE_INDEX_COUNT * DS_AA_STROKE_MAX_REPS;
 pub(crate) const CONTOUR_ID_MASK: u32 = 0xffff;
 pub(crate) const CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG: u32 = 1 << 29;
 pub(crate) const RETROFIT_TRI_STRIP_CONTOUR_FLAG: u32 = 1 << 31;
@@ -266,9 +274,42 @@ pub(crate) fn generate_patch_buffer_data() -> (Vec<PatchVertex>, Vec<u16>) {
     for outer in [false, true] {
         generate_depth_stencil_fill_indices(outer, &mut indices);
     }
+    for aa in [false, true] {
+        generate_depth_stencil_stroke_indices(aa, &mut indices);
+    }
     debug_assert_eq!(vertices.len(), PATCH_VERTEX_BUFFER_COUNT);
     debug_assert_eq!(indices.len(), PATCH_INDEX_BUFFER_COUNT);
     (vertices, indices)
+}
+
+/// Shared translation of gpu.cpp::generateDepthStencilStrokeIndices.
+pub(crate) fn generate_depth_stencil_stroke_indices(aa: bool, indices: &mut [u16]) {
+    let (base, patches, stride, lanes) = if aa {
+        (DS_AA_STROKE_BASE_INDEX, DS_AA_STROKE_MAX_REPS, 6, 4)
+    } else {
+        (DS_STROKE_BASE_INDEX, DS_STROKE_MAX_REPS, 5, 2)
+    };
+    let indices = &mut indices[base..];
+    let mut count = 0;
+    for patch in 0..patches {
+        let patch_base = patch << stride;
+        for seg in 0..MIDPOINT_FAN_PATCH_SEGMENT_SPAN {
+            for band in 0..lanes - 1 {
+                let v0 = patch_base + seg * lanes + band;
+                let v1 = v0 + 1;
+                let v2 = v0 + lanes;
+                let v3 = v2 + 1;
+                for v in [v0, v1, v2, v2, v1, v3] {
+                    indices[count] = u16::try_from(v).expect("depth/stencil vertex fits uint16");
+                    count += 1;
+                }
+            }
+        }
+    }
+    debug_assert_eq!(
+        count,
+        patches * MIDPOINT_FAN_PATCH_SEGMENT_SPAN * 6 * (lanes - 1)
+    );
 }
 
 /// Shared translation of gpu.cpp::generateDepthStencilFillIndices.
@@ -478,7 +519,6 @@ pub(crate) enum DrawType {
     AtlasBlit,
     ImageRect,
     ImageMesh,
-    DepthStrokes,
     StencilMidpointFanBorrowedCoverage,
     StencilMidpointFans,
     StencilMidpointFanReset,
@@ -491,6 +531,8 @@ pub(crate) enum DrawType {
     StencilMidpointFanCover,
     StencilOuterCubicWinding,
     StencilOuterCubicCover,
+    DepthStrokes,
+    DepthAAStrokes,
     ClipReset,
     RenderPassInitialize,
     RenderPassResolve,
@@ -526,7 +568,8 @@ pub(crate) struct FlushUniforms {
     pub render_target_bottom_up: u32,
     pub grad_texture_y_scale: f32,
     pub grad_texture_y_bias: f32,
-    pub padding: [u8; 140],
+    pub grad_texture_y_scale_packed: f32,
+    pub padding: [u8; 136],
 }
 
 #[repr(C)]
@@ -946,7 +989,6 @@ mod tests {
             DrawType::AtlasBlit,
             DrawType::ImageRect,
             DrawType::ImageMesh,
-            DrawType::DepthStrokes,
             DrawType::StencilMidpointFanBorrowedCoverage,
             DrawType::StencilMidpointFans,
             DrawType::StencilMidpointFanReset,
@@ -959,6 +1001,8 @@ mod tests {
             DrawType::StencilMidpointFanCover,
             DrawType::StencilOuterCubicWinding,
             DrawType::StencilOuterCubicCover,
+            DrawType::DepthStrokes,
+            DrawType::DepthAAStrokes,
             DrawType::ClipReset,
             DrawType::RenderPassInitialize,
             DrawType::RenderPassResolve,

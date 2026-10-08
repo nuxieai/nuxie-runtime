@@ -1,33 +1,33 @@
+w2
+#ifdef HD
+F0 X(0,c,m2);
+#endif
 l2
-#ifdef GD
-E0 V(0,c,f2);
-#endif
-e2
 #ifdef BB
-k4 l4 Q4 R4 c1(d0) d1 w1(LF,d0,D,G,r){c y2;y2.x=(G&1)==0?-1.:1.;y2.y=(G&2)==0?-1.:1.;
-#ifdef GD
-T(f2,c);f2.x=y2.x*.5+.5;f2.y=y2.y*-.5+.5;Z(f2);
+o4 p4 W4 X4 f1(f0) g1 x1(MF,f0,B,F,r){c E2;E2.x=(F&1)==0?-1.:1.;E2.y=(F&2)==0?-1.:1.;
+#ifdef HD
+V(m2,c);m2.x=E2.x*.5+.5;m2.y=E2.y*-.5+.5;Z(m2);
 #endif
-e I=e(y2,0,1);x1(I);}
+e I=e(E2,0,1);y1(I);}
 #endif
-#ifdef FB
-O3
-#ifdef SD
-Zf(w5,m4,IC);
+#ifdef EB
+U3
+#ifdef UD
+zg(x5,q4,IC);
 #else
-i3(w5,m4,IC);
+p3(x5,q4,IC);
 #endif
-P3
-#ifdef GD
-x5 n4(ag) y5
+V3
+#ifdef HD
+y5 r4(Ag) z5
 #endif
-j3(i,PE){i B8;
-#ifdef GD
-q(f2,c);B8=i6(IC,ag,f2,.0);
-#elif defined(SD)
-B8=(C8(IC,0,e0(floor(f0.xy)))+C8(IC,1,e0(floor(f0.xy)))+C8(IC,2,e0(floor(f0.xy)))+C8(IC,3,e0(floor(f0.xy))))*0.25;
+W2(i,QE){i T8;
+#ifdef HD
+q(m2,c);T8=A5(IC,Ag,m2,.0);
+#elif defined(UD)
+T8=(U8(IC,0,g0(floor(d0.xy)))+U8(IC,1,g0(floor(d0.xy)))+U8(IC,2,g0(floor(d0.xy)))+U8(IC,3,g0(floor(d0.xy))))*0.25;
 #else
-B8=p1(IC,e0(floor(f0.xy)));
+T8=r1(IC,g0(floor(d0.xy)));
 #endif
-P2(B8);}
+K2(T8);}
 #endif

@@ -1,126 +1,126 @@
-#ifdef FB
-#if(defined(W)&&!defined(A))||defined(QB)
-#undef dc
+#ifdef EB
+#if(defined(U)&&!defined(N))||defined(QB)
+#undef Gc
 #else
-#define dc
+#define Gc
 #endif
-S1
-#ifndef W
-B0(K2,n0);
+V1
+#ifndef U
+C0(U2,n0);
 #endif
 #ifndef QB
-o1(c3,m0);
-#ifndef W
-B0(o6,C4);
+q1(i3,m0);
+#ifndef U
+C0(w6,G4);
 #endif
-o1(U6,V0);
+q1(d7,Z0);
 #else
-B0(c3,m0);
+C0(i3,m0);
 #endif
-T1
+W1
 #ifdef NB
-O3 i3(w5,m4,CC);P3 x5 n4(r5) y5 g4 h4
+U3 p3(x5,q4,TB);V3 y5 r4(S4) z5 k4 l4
 #endif
-#ifdef W
+#ifdef U
 #ifdef NB
-z2(IB)
+G2(IB)
 #else
-z2(IB)
+G2(IB)
 #endif
 #else
 #ifdef NB
-U1(IB)
+Y1(IB)
 #else
-U1(IB)
+Y1(IB)
 #endif
 #endif
 {
-#ifdef EB
-q(a1,e);
+#ifdef FB
+q(O0,e);
 #if defined(GB)
-q(v1,O);
+q(V0,M);
 #endif
-q(J2,c);
+q(T2,c);
 #endif
-#ifdef A
-q(Z3,d);
+#ifdef N
+q(e4,d);
 #endif
 #ifdef AB
-q(R0,e);
+q(W0,e);
 #endif
-#if defined(EB)&&defined(N)
-q(Q0,d);
+#if defined(FB)&&defined(H)
+q(P0,d);
 #endif
 #ifdef NB
-q(V5,c);q(R1,i);
-#ifdef N
-q(I1,Q);
+q(Z5,c);q(U1,i);
+#ifdef H
+q(K1,P);
 #endif
 #endif
-#ifdef EB
-i p=X7(
+#ifdef FB
+i n=o8(
 #ifdef GB
-v1,
+V0,
 #endif
-#ifdef N
-k3(Q0),
+#ifdef H
+X2(P0),
 #endif
-a1 e3);d n=clamp(o2(FD,na,J2,.0).x,H0(.0),H0(1.));
+O0 l3);d l=clamp(o2(GD,Ja,T2,.0).x,I0(.0),I0(1.));
 #endif
 #ifdef NB
-i p=J7(CC,r5,V5,j.Wd);d n=1.;
+i n=c8(TB,S4,Z5,j.Be);d l=1.;
 #endif
 #ifdef AB
-if(AB){d m5=max(w3(v5(R0)),H0(.0));n=min(m5,n);}
+if(AB){d r5=max(A3(T4(W0)),I0(.0));l=min(r5,l);}
 #endif
-#ifdef dc
-E2;
+#ifdef Gc
+O2;
 #endif
-#if defined(A)
-if(A&&Z3!=.0){d G3;
+#if defined(N)
+if(N&&e4!=.0){d O3;
 #ifndef QB
-C T0=unpackHalf2x16(h1(m0));d P6=T0.y;G3=max(P6==Z3?T0.x:H0(.0),H0(.0));
+D X0=unpackHalf2x16(l1(m0));d Y6=X0.y;O3=max(Y6==e4?X0.x:I0(.0),I0(.0));
 #else
-G3=N0(m0).x;
+O3=R0(m0).x;
 #endif
-G3=max(G3,H0(.0));n=min(n,G3);}
+O3=max(O3,I0(.0));l=min(l,O3);}
 #endif
 #ifdef NB
-p*=R1;
+n*=U1;
 #endif
-#if!defined(W)
-i J1=N0(n0);
-#ifdef N
-#ifdef EB
-Q z3=k3(Q0);
+#if!defined(U)
+i A1=R0(n0);
+#ifdef H
+#ifdef FB
+P X1=X2(P0);
 #endif
 #ifdef NB
-Q z3=I1;
+P X1=K1;
 #endif
-if(N&&z3!=M4){
+if(H&&X1!=T3){
 #ifdef NB
-p.xyz=Q6(p);
+n.xyz=f6(n);
 #endif
-p.xyz=h5(p.xyz,J1,z3)*p.w;}
+n.xyz=L4(n.xyz,A1,X1)*n.w;}
 #endif
-p*=n;p.xyz=M2(p.xyz,p.w,f0.xy,j.M3,j.N3);
+n*=l;n.xyz=I2(n.xyz,n.w,d0.xy,j.E3,j.F3);
 #ifndef QB
-p=J1*(1.-p.w)+p;
+n=A1*(1.-n.w)+n;
 #endif
-y0(n0,p);
+z0(n0,n);
 #endif
 #ifndef QB
-a2(m0);a2(V0);
+h2(m0);h2(Z0);
 #else
-y0(m0,I0(.0));
+z0(m0,H0(.0));
 #endif
-#ifdef dc
-F2;
+#ifdef Gc
+P2;
 #endif
-#ifdef W
-p=(p*n);p.xyz=M2(p.xyz,p.w,f0.xy,j.M3,j.N3);L1=p;A3
+#ifdef U
+n=(n*l);n.xyz=I2(n.xyz,n.w,d0.xy,j.E3,j.F3);N1=n;D3
 #else
-h2;
+p2;
 #endif
 }
 #endif

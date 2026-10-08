@@ -473,8 +473,8 @@ pub(crate) mod source {
                 pub(crate) mod draw_clockwise_atomic_path_frag;
                 pub(crate) mod draw_clockwise_clip_frag;
                 pub(crate) mod draw_clockwise_path_frag;
-                pub(crate) mod draw_depthstencil_object_frag;
-                pub(crate) mod draw_depthstencil_fill_vert;
+                pub(crate) mod draw_depthstencil_mesh_frag;
+                pub(crate) mod draw_depthstencil_path_glsl;
                 pub(crate) mod draw_fullscreen_quad_vert;
                 pub(crate) mod draw_image_mesh_vert;
                 pub(crate) mod draw_input_attachment_frag;

@@ -567,6 +567,7 @@ fn append_draw_defines(
             }
         }
         DrawType::DepthStrokes
+        | DrawType::DepthAAStrokes
         | DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilDynamicMidpointFans
         | DrawType::StencilDynamicOuterCubics
@@ -631,6 +632,7 @@ fn append_interlock_sources(
                 });
             }
             DrawType::DepthStrokes
+            | DrawType::DepthAAStrokes
             | DrawType::StencilMidpointFanBorrowedCoverage
             | DrawType::StencilDynamicMidpointFans
             | DrawType::StencilDynamicOuterCubics
@@ -1103,6 +1105,7 @@ mod tests {
     fn every_unreachable_draw_and_interlock_combination_is_typed() {
         for draw_type in [
             DrawType::DepthStrokes,
+            DrawType::DepthAAStrokes,
             DrawType::StencilMidpointFanBorrowedCoverage,
             DrawType::StencilMidpointFans,
             DrawType::StencilMidpointFanReset,

@@ -67,6 +67,8 @@ pub enum RenderMode {
     Msaa,
     /// Upstream cwmsaa1: single-sample depth/stencil with clockwise fill.
     ClockwiseMsaa1,
+    /// Upstream cwib: single-sample clockwise depth/stencil with inkbleed strokes.
+    ClockwiseInkbleed,
     ClockwiseAtomic,
 }
 
@@ -87,6 +89,12 @@ impl RenderMode {
             Self::ClockwiseAtomic => RenderCanvasFrameMode {
                 disable_raster_ordering: true,
                 clockwise_fill_override: true,
+                ..Default::default()
+            },
+            Self::ClockwiseInkbleed => RenderCanvasFrameMode {
+                msaa_sample_count: 1,
+                clockwise_fill_override: true,
+                inkbleed: true,
                 ..Default::default()
             },
         }

@@ -161,6 +161,7 @@ fn replay_native_webgpu(
     let mode = match mode {
         "msaa" => nuxie_renderer::RenderMode::Msaa,
         "clockwise-msaa1" => nuxie_renderer::RenderMode::ClockwiseMsaa1,
+        "clockwise-inkbleed" => nuxie_renderer::RenderMode::ClockwiseInkbleed,
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported exact WebGPU mode `{value}`").into()),
     };
@@ -183,6 +184,7 @@ fn replay_native_vulkan(
     let mode = match mode {
         "msaa" => nuxie_renderer::RenderMode::Msaa,
         "clockwise-msaa1" => nuxie_renderer::RenderMode::ClockwiseMsaa1,
+        "clockwise-inkbleed" => nuxie_renderer::RenderMode::ClockwiseInkbleed,
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported exact Vulkan mode `{value}`").into()),
     };
@@ -194,7 +196,10 @@ fn replay_native_vulkan(
 }
 
 fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
-    if !matches!(mode, "msaa" | "clockwise-atomic" | "clockwise-msaa1") {
+    if !matches!(
+        mode,
+        "msaa" | "clockwise-atomic" | "clockwise-msaa1" | "clockwise-inkbleed"
+    ) {
         return Err(format!("unsupported renderer mode `{mode}`"));
     }
     if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "msaa" {
@@ -203,7 +208,9 @@ fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "clockwise-msaa1" {
+    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic")
+        && matches!(mode, "clockwise-msaa1" | "clockwise-inkbleed")
+    {
         return Err("native Metal does not implement depth/stencil rendering".to_owned());
     }
     Ok(())
@@ -350,6 +357,7 @@ fn replay_ffi(
     let mode = match mode {
         "msaa" => FfiRenderMode::Msaa,
         "clockwise-msaa1" => FfiRenderMode::ClockwiseMsaa1,
+        "clockwise-inkbleed" => FfiRenderMode::ClockwiseInkbleed,
         "clockwise-atomic" => FfiRenderMode::ClockwiseAtomic,
         value => return Err(format!("unsupported renderer mode `{value}`").into()),
     };
@@ -430,7 +438,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-vulkan-exact|rust-webgpu-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic|clockwise-msaa1] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-vulkan-exact|rust-webgpu-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic|clockwise-msaa1|clockwise-inkbleed] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]
@@ -480,5 +488,17 @@ mod tests {
         validate_backend_mode("rust-metal", "clockwise-atomic").unwrap();
         validate_backend_mode("rust-metal-atomic", "clockwise-atomic").unwrap();
         validate_backend_mode("ffi-dawn", "msaa").unwrap();
+        for backend in ["ffi-metal", "rust-metal", "rust-metal-atomic"] {
+            assert!(validate_backend_mode(backend, "clockwise-inkbleed").is_err());
+        }
+        for backend in [
+            "ffi-dawn",
+            "ffi-vulkan",
+            "ffi-webgl2",
+            "rust-vulkan-exact",
+            "rust-webgpu-exact",
+        ] {
+            validate_backend_mode(backend, "clockwise-inkbleed").unwrap();
+        }
     }
 }

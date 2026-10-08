@@ -1990,6 +1990,7 @@ impl BackgroundShaderCompiler {
                     }
                 }
                 DrawType::depthStrokes
+                | DrawType::depthAAStrokes
                 | DrawType::stencilMidpointFanBorrowedCoverage
                 | DrawType::stencilDynamicMidpointFans
                 | DrawType::stencilDynamicOuterCubics
@@ -2079,6 +2080,7 @@ impl BackgroundShaderCompiler {
                     }
                     DrawType::imageRect
                     | DrawType::depthStrokes
+                    | DrawType::depthAAStrokes
                     | DrawType::stencilMidpointFanBorrowedCoverage
                     | DrawType::stencilDynamicMidpointFans
                     | DrawType::stencilDynamicOuterCubics

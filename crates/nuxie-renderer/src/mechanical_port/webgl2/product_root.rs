@@ -232,6 +232,11 @@ impl ExactSourceBackend for WebGl2ProductBackend {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
             }
+            RenderMode::ClockwiseInkbleed => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+                descriptor.inkbleedOverride = true;
+            }
         }
         unsafe { Pin::get_unchecked_mut(self.context_pin()) }.beginFrameExecutable(&descriptor);
         self.frame_number = self.frame_number.wrapping_add(1);

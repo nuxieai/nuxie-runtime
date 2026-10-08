@@ -1131,6 +1131,7 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B>
                 msaaSampleCount: mode.msaa_sample_count,
                 disableRasterOrdering: mode.disable_raster_ordering,
                 clockwiseFillOverride: mode.clockwise_fill_override,
+                inkbleedOverride: mode.inkbleed,
                 ..FrameDescriptor::default()
             });
             unsafe { RiveRenderer::new_from_context(context) }

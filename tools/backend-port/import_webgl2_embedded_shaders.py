@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 
-PINNED_UPSTREAM = "0dd067f18bc14139720ee348dfc222af0c744e4e"
+PINNED_UPSTREAM = "625454e362a27bb3168f00cd87e9487f54d39338"
 GENERATED_INPUTS = (
     "advanced_blend.minified.glsl",
     "atomic_draw.minified.glsl",
@@ -22,8 +22,8 @@ GENERATED_INPUTS = (
     "draw_clockwise_path.minified.frag",
     "draw_image_mesh.minified.vert",
     "draw_mesh.minified.frag",
-    "draw_depthstencil_object.minified.frag",
-    "draw_depthstencil_fill.minified.vert",
+    "draw_depthstencil_mesh.minified.frag",
+    "draw_depthstencil_path.minified.glsl",
     "draw_path.minified.vert",
     "draw_path_common.minified.glsl",
     "draw_raster_order_path.minified.frag",
@@ -74,6 +74,9 @@ def main() -> None:
         / "crates/nuxie-renderer/src/mechanical_port/webgl2/source/generated_glsl_embedded"
     )
     destination.mkdir(parents=True, exist_ok=True)
+    for stale in destination.glob("*.minified.*"):
+        if stale.name not in GENERATED_INPUTS:
+            stale.unlink()
     manifest = ["generated_input\theader_sha256\tembedded_sha256\tembedded_bytes"]
     for generated_input in GENERATED_INPUTS:
         header_path = generated / embedded_header_name(generated_input)

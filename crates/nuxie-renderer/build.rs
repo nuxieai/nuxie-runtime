@@ -239,10 +239,10 @@ fn generate_vulkan_spirv_module() -> io::Result<()> {
         .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("h"))
         .collect::<Vec<_>>();
     headers.sort();
-    if headers.len() != 98 {
+    if headers.len() != 96 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!("expected 98 frozen SPIR-V headers, found {}", headers.len()),
+            format!("expected 96 frozen SPIR-V headers, found {}", headers.len()),
         ));
     }
 
@@ -609,11 +609,11 @@ const TRANSLATED_SHADER_RUST_PATHS: &[&str] = &[
     "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs",
-    "src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_fill_vert.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_path_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs",
-    "src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_object_frag.rs",
+    "src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_mesh_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs",
     "src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs",
@@ -657,11 +657,11 @@ const TRANSLATED_SHADER_SOURCES: &[&str] = &[
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_clip_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_clockwise_path_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_fullscreen_quad_vert.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_fill_vert.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_path_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_image_mesh_vert.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_input_attachment_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_mesh_frag.rs"),
-    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_object_frag.rs"),
+    include_str!("src/mechanical_port/source/renderer/src/shaders/draw_depthstencil_mesh_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_msaa_resolve_frag.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_path_common_glsl.rs"),
     include_str!("src/mechanical_port/source/renderer/src/shaders/draw_path_vert.rs"),

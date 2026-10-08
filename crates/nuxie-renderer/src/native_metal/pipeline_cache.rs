@@ -192,6 +192,7 @@ pub(crate) fn shader_features_mask_for(
         | DrawType::ImageMesh
         | DrawType::AtlasBlit
         | DrawType::DepthStrokes
+        | DrawType::DepthAAStrokes
         | DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilDynamicMidpointFans
         | DrawType::StencilDynamicOuterCubics
@@ -284,8 +285,7 @@ pub(crate) fn pipeline_key(
     let draw_type_key = match draw_type {
         DrawType::MidpointFanPatches
         | DrawType::MidpointFanCenterAaPatches
-        | DrawType::OuterCurvePatches
-        | DrawType::DepthStrokes => 0,
+        | DrawType::OuterCurvePatches => 0,
         DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilDynamicMidpointFans
         | DrawType::StencilDynamicOuterCubics
@@ -301,10 +301,14 @@ pub(crate) fn pipeline_key(
             debug_assert_eq!(interlock_mode, InterlockMode::DepthStencil);
             1
         }
-        DrawType::InteriorTriangulation => 2,
-        DrawType::AtlasBlit => 3,
-        DrawType::ImageRect => 4,
-        DrawType::ImageMesh => 5,
+        DrawType::DepthStrokes | DrawType::DepthAAStrokes => {
+            debug_assert_eq!(interlock_mode, InterlockMode::DepthStencil);
+            2
+        }
+        DrawType::InteriorTriangulation => 3,
+        DrawType::AtlasBlit => 4,
+        DrawType::ImageRect => 5,
+        DrawType::ImageMesh => 6,
         DrawType::RenderPassInitialize => {
             if !matches!(
                 interlock_mode,
@@ -316,7 +320,7 @@ pub(crate) fn pipeline_key(
                     "render-pass initialize has an invalid interlock",
                 ));
             }
-            7
+            8
         }
         DrawType::RenderPassResolve => {
             if !matches!(
@@ -329,7 +333,7 @@ pub(crate) fn pipeline_key(
                     "render-pass resolve has an invalid interlock",
                 ));
             }
-            8
+            9
         }
         DrawType::ClipReset => {
             if !matches!(
@@ -340,7 +344,7 @@ pub(crate) fn pipeline_key(
                     "clip reset requires clockwise-atomic or MSAA",
                 ));
             }
-            6
+            7
         }
     };
     let interlock_key = match interlock_mode {
@@ -1191,8 +1195,8 @@ mod tests {
             )
             .map(PipelineKey::get),
             // gpu.cpp::ShaderUniqueKey compacts the atomic resolve flag to bit4,
-            // advanced-blend feature bit2, and renderPassResolve draw key8.
-            Ok((1 << (4 + 3 + 9 + 4)) | (1 << (9 + 4)) | (4 << 4) | 8)
+            // advanced-blend feature bit2, and renderPassResolve draw key9.
+            Ok((1 << (4 + 3 + 9 + 4)) | (1 << (9 + 4)) | (4 << 4) | 9)
         );
 
         let msaa_midpoint = PipelineRequest::new(
@@ -1251,7 +1255,8 @@ mod tests {
             (DrawType::MidpointFanPatches, 0),
             (DrawType::MidpointFanCenterAaPatches, 0),
             (DrawType::OuterCurvePatches, 0),
-            (DrawType::DepthStrokes, 0),
+            (DrawType::DepthStrokes, 2),
+            (DrawType::DepthAAStrokes, 2),
             (DrawType::StencilMidpointFanBorrowedCoverage, 1),
             (DrawType::StencilDynamicMidpointFans, 1),
             (DrawType::StencilDynamicOuterCubics, 1),
@@ -1264,13 +1269,13 @@ mod tests {
             (DrawType::StencilOuterCubicWinding, 1),
             (DrawType::StencilOuterCubicCover, 1),
             (DrawType::StencilOuterCubics, 1),
-            (DrawType::InteriorTriangulation, 2),
-            (DrawType::AtlasBlit, 3),
-            (DrawType::ImageRect, 4),
-            (DrawType::ImageMesh, 5),
-            (DrawType::ClipReset, 6),
-            (DrawType::RenderPassInitialize, 7),
-            (DrawType::RenderPassResolve, 8),
+            (DrawType::InteriorTriangulation, 3),
+            (DrawType::AtlasBlit, 4),
+            (DrawType::ImageRect, 5),
+            (DrawType::ImageMesh, 6),
+            (DrawType::ClipReset, 7),
+            (DrawType::RenderPassInitialize, 8),
+            (DrawType::RenderPassResolve, 9),
         ] {
             assert_eq!(
                 pipeline_key(draw_type, 0, InterlockMode::DepthStencil, 0),
@@ -1321,7 +1326,7 @@ mod tests {
                 .iter()
                 .map(|spec| spec.key.get())
                 .collect::<Vec<_>>(),
-            vec![0x1ff0, 0x21ff0, 0x1ff2, 0x21ff2, 0x1c73, 0x0c75, 0x20c75]
+            vec![0x1ff0, 0x21ff0, 0x1ff3, 0x21ff3, 0x1c74, 0x0c76, 0x20c76]
         );
         assert_eq!(
             state

@@ -2046,6 +2046,7 @@ pub struct RenderContextFrameDescriptor {
     pub strokesDisabled: bool,
     // bool clockwiseFillOverride = false;
     pub clockwiseFillOverride: bool,
+    pub inkbleedOverride: bool,
     #[cfg(feature = "with-rive-tools")]
     // gpu::SynthesizedFailureType synthesizedFailureType =
     //     gpu::SynthesizedFailureType::none;
@@ -2069,6 +2070,7 @@ impl Default for RenderContextFrameDescriptor {
             fillsDisabled: false,
             strokesDisabled: false,
             clockwiseFillOverride: false,
+            inkbleedOverride: false,
             #[cfg(feature = "with-rive-tools")]
             synthesizedFailureType: gpu::SynthesizedFailureType::none,
         }

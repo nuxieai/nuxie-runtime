@@ -80,49 +80,50 @@ const IMAGE_MESH_LAST_ATTRIB_IDX: GLuint = gpu::ImageMeshInstance::LastAttribIdx
 // Exact export substitutions emitted by the frozen shader minifier.
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "SC";
-const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "AE";
-const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "YD";
+const GLSL_ATLAS_RENDER_TARGET_R32I_ATOMIC_TEXTURE: &str = "BE";
+const GLSL_ATLAS_RENDER_TARGET_R32UI_FRAMEBUFFER_FETCH: &str = "ZD";
 const GLSL_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE: &str =
     "EXPORTED_ATLAS_RENDER_TARGET_R32UI_PLS_ANGLE";
-const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "ZD";
-const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "AF";
+const GLSL_ATLAS_RENDER_TARGET_R8_PLS_EXT: &str = "AE";
+const GLSL_ATLAS_RENDER_TARGET_RGBA8_UNORM: &str = "BF";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
-const GLSL_CLEAR_COVERAGE: &str = "FE";
-const GLSL_CLOCKWISE_FILL: &str = "GE";
-const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "DD";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "QF";
-const GLSL_DRAW_IMAGE: &str = "ME";
+const GLSL_CLEAR_COVERAGE: &str = "GE";
+const GLSL_CLOCKWISE_FILL: &str = "HE";
+const GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER: &str = "FD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
+const GLSL_DRAW_IMAGE: &str = "NE";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
-const GLSL_DRAW_IMAGE_RECT: &str = "BD";
+const GLSL_DRAW_IMAGE_RECT: &str = "DD";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
-const GLSL_DRAW_PATH: &str = "MD";
-const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "IF";
+const GLSL_DRAW_PATH: &str = "OD";
+const GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS: &str = "JF";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "CE";
-const GLSL_ENABLE_BASE_VERTEX: &str = "TE";
-const GLSL_DRAW_DEPTHSTENCIL_FILL_VERT: &str =
-    include_str!("source/generated_glsl_embedded/draw_depthstencil_fill.minified.vert");
-const GLSL_ENABLE_KHR_BLEND: &str = "LE";
-const GLSL_FEATHER_ATLAS_BLIT: &str = "EB";
-const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "W";
-const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "PD";
-const GLSL_OPTIONALLY_FLAT: &str = "KB";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "DE";
+const GLSL_DS_STROKE: &str = "AD";
+const GLSL_ENABLE_BASE_VERTEX: &str = "UE";
+const GLSL_DRAW_DEPTHSTENCIL_PATH: &str =
+    include_str!("source/generated_glsl_embedded/draw_depthstencil_path.minified.glsl");
+const GLSL_ENABLE_KHR_BLEND: &str = "ME";
+const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
+const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
+const GLSL_ENABLE_RENDER_TARGET_BOTTOM_UP: &str = "RD";
+const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "VC";
-const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "RF";
-const GLSL_FlushUniforms: &str = "UB";
-const GLSL_atlasRenderTexture: &str = "DF";
-const GLSL_contourBuffer: &str = "ZC";
-const GLSL_dstColorTexture: &str = "XD";
-const GLSL_featherAtlasTexture: &str = "FD";
-const GLSL_gaussianIntegralTexture: &str = "YC";
-const GLSL_gradTexture: &str = "ED";
-const GLSL_imageTexture: &str = "CC";
+const GLSL_USING_PLS_STORAGE_TEXTURES: &str = "SF";
+const GLSL_FlushUniforms: &str = "VB";
+const GLSL_atlasRenderTexture: &str = "EF";
+const GLSL_contourBuffer: &str = "BD";
+const GLSL_dstColorTexture: &str = "JD";
+const GLSL_featherAtlasTexture: &str = "GD";
+const GLSL_gaussianIntegralTexture: &str = "ZC";
+const GLSL_gradTexture: &str = "YC";
+const GLSL_imageTexture: &str = "TB";
 const GLSL_paintAuxBuffer: &str = "JB";
 const GLSL_paintBuffer: &str = "WC";
-const GLSL_pathBuffer: &str = "LB";
+const GLSL_pathBuffer: &str = "KB";
 const GLSL_sourceTexture: &str = "IC";
-const GLSL_tessVertexTexture: &str = "TB";
+const GLSL_tessVertexTexture: &str = "UB";
 
 const GLSL_GLSL: &str = include_str!("source/generated_glsl_embedded/glsl.minified.glsl");
 const GLSL_CONSTANTS: &str = include_str!("source/generated_glsl_embedded/constants.minified.glsl");
@@ -161,8 +162,8 @@ const GLSL_BLIT_TEXTURE_AS_DRAW: &str =
     include_str!("source/generated_glsl_embedded/blit_texture_as_draw.minified.glsl");
 const GLSL_STENCIL_DRAW: &str =
     include_str!("source/generated_glsl_embedded/stencil_draw.minified.glsl");
-const GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG: &str =
-    include_str!("source/generated_glsl_embedded/draw_depthstencil_object.minified.frag");
+const GLSL_DRAW_DEPTHSTENCIL_MESH_FRAG: &str =
+    include_str!("source/generated_glsl_embedded/draw_depthstencil_mesh.minified.frag");
 
 fn isTessellationDraw(drawType: gpu::DrawType) -> bool {
     matches!(
@@ -171,6 +172,7 @@ fn isTessellationDraw(drawType: gpu::DrawType) -> bool {
             | gpu::DrawType::midpointFanCenterAAPatches
             | gpu::DrawType::outerCurvePatches
             | gpu::DrawType::depthStrokes
+            | gpu::DrawType::depthAAStrokes
             | gpu::DrawType::stencilMidpointFanBorrowedCoverage
             | gpu::DrawType::stencilDynamicMidpointFans
             | gpu::DrawType::stencilDynamicOuterCubics
@@ -1626,12 +1628,12 @@ pub(crate) fn resizeAtomicCoverageBacking(
 
 fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
     match feature {
-        gpu::ShaderFeatures::ENABLE_CLIPPING => "A",
+        gpu::ShaderFeatures::ENABLE_CLIPPING => "N",
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "AB",
-        gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "N",
+        gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "H",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
         gpu::ShaderFeatures::ENABLE_EVEN_ODD => "XC",
-        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "AD",
+        gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING => "CD",
         gpu::ShaderFeatures::ENABLE_HSL_BLEND_MODES => "FC",
         gpu::ShaderFeatures::ENABLE_DITHER => "OB",
         gpu::ShaderFeatures::ENABLE_MODULATED_IMAGE => "GB",
@@ -1708,8 +1710,7 @@ fn newDrawShader(
     match drawType {
         gpu::DrawType::midpointFanPatches
         | gpu::DrawType::midpointFanCenterAAPatches
-        | gpu::DrawType::outerCurvePatches
-        | gpu::DrawType::depthStrokes => {
+        | gpu::DrawType::outerCurvePatches => {
             if shaderType == GL_VERTEX_SHADER {
                 defines.push(GLSL_ENABLE_INSTANCE_INDEX);
             }
@@ -1726,7 +1727,12 @@ fn newDrawShader(
         | gpu::DrawType::stencilOuterCubicReset
         | gpu::DrawType::stencilOuterCubicWinding
         | gpu::DrawType::stencilOuterCubicCover
-        | gpu::DrawType::stencilOuterCubics => {
+        | gpu::DrawType::stencilOuterCubics
+        | gpu::DrawType::depthStrokes
+        | gpu::DrawType::depthAAStrokes => {
+            if gpu::drawTypeIsDepthStencilStroke(drawType) {
+                defines.push(GLSL_DS_STROKE);
+            }
             if shaderType == GL_VERTEX_SHADER {
                 defines.push(GLSL_ENABLE_BASE_VERTEX);
             }
@@ -1819,33 +1825,25 @@ fn newDrawShader(
             | gpu::DrawType::stencilOuterCubicReset
             | gpu::DrawType::stencilOuterCubicWinding
             | gpu::DrawType::stencilOuterCubicCover
-            | gpu::DrawType::stencilOuterCubics => {
-                sources.extend([
-                    GLSL_DRAW_PATH_COMMON,
-                    GLSL_GRADIENT_PACKING_COMMON,
-                    if shaderType == GL_VERTEX_SHADER {
-                        GLSL_DRAW_DEPTHSTENCIL_FILL_VERT
-                    } else {
-                        GLSL_DRAW_PATH_VERT
-                    },
-                    GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG,
-                ]);
+            | gpu::DrawType::stencilOuterCubics
+            | gpu::DrawType::depthStrokes
+            | gpu::DrawType::depthAAStrokes => {
+                sources.extend([GLSL_DRAW_PATH_COMMON, GLSL_DRAW_DEPTHSTENCIL_PATH]);
             }
-            gpu::DrawType::depthStrokes
-            | gpu::DrawType::interiorTriangulation
+            gpu::DrawType::interiorTriangulation
             | gpu::DrawType::featherAtlasBlit => {
                 sources.extend([
                     GLSL_DRAW_PATH_COMMON,
                     GLSL_GRADIENT_PACKING_COMMON,
                     GLSL_DRAW_PATH_VERT,
-                    GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG,
+                    GLSL_DRAW_DEPTHSTENCIL_MESH_FRAG,
                 ]);
             }
             gpu::DrawType::clipReset => sources.push(GLSL_STENCIL_DRAW),
             gpu::DrawType::imageMesh => {
                 sources.extend([
                     GLSL_DRAW_IMAGE_MESH_VERT,
-                    GLSL_DRAW_DEPTHSTENCIL_OBJECT_FRAG,
+                    GLSL_DRAW_DEPTHSTENCIL_MESH_FRAG,
                 ]);
             }
             _ => panic!("unreachable MSAA draw shader"),
@@ -3448,8 +3446,7 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
             match drawType {
                 gpu::DrawType::midpointFanPatches
                 | gpu::DrawType::midpointFanCenterAAPatches
-                | gpu::DrawType::outerCurvePatches
-                | gpu::DrawType::depthStrokes => {
+                | gpu::DrawType::outerCurvePatches => {
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
                     if desc.interlockMode == gpu::InterlockMode::rasterOrdering {
                         withDetachedPixelLocalStorage(
@@ -3480,11 +3477,13 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 | gpu::DrawType::stencilOuterCubicReset
                 | gpu::DrawType::stencilOuterCubicWinding
                 | gpu::DrawType::stencilOuterCubicCover
-                | gpu::DrawType::stencilOuterCubics => {
+                | gpu::DrawType::stencilOuterCubics
+                | gpu::DrawType::depthStrokes
+                | gpu::DrawType::depthAAStrokes => {
                     assert_eq!(desc.interlockMode, gpu::InterlockMode::depthStencil);
                     context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
-                    for draw in DSIndexRangeChunker::new(drawType, batch.elementCount, batch.baseElement, 0) {
-                        let indexOffset = gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(drawType));
+                    for draw in DSIndexRangeChunker::new(batch, 0) {
+                        let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
                         recordGLCommand(GLCommand::Uniform1iLocation {
                             location: drawProgram.baseVertexUniformLocation(),
                             value: draw.baseVertex,
@@ -3516,14 +3515,18 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                             batch.firstBlendMode,
                             context.platformFeatures(),
                         );
-                        // Scissor was selected before this switch. GL uses
-                        // color masks here, not shader color-write emulation.
+                        // Preserve scissor and send the vertex color-write flag
+                        // even though GL color masks already suppress output:
+                        // the flag lets the shader skip paint fetches.
                         context.m_state.borrow_mut().setPipelineState(
                             &passState,
                             ScissorAction::ignore,
                         );
-                        for draw in DSIndexRangeChunker::new(drawType, batch.elementCount, batch.baseElement, 0) {
-                            let indexOffset = gpu::dsFillIndexOffset(gpu::drawTypeSubmitsOuterCubicPatches(drawType));
+                        let vertex_flags = if !passState.colorWriteEnabled {
+                            crate::mechanical_port::source::renderer::src::shaders::constants_glsl::VERTEX_FLAG_DISABLE_COLOR_WRITE as i32
+                        } else { 0 };
+                        for draw in DSIndexRangeChunker::new(batch, vertex_flags) {
+                            let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
                             recordGLCommand(GLCommand::Uniform1iLocation {
                                 location: drawProgram.baseVertexUniformLocation(),
                                 value: draw.baseVertex,
@@ -4535,6 +4538,7 @@ mod tests {
             ("ENABLE_FEATHER", GLSL_ENABLE_FEATHER),
             ("ENABLE_INSTANCE_INDEX", GLSL_ENABLE_INSTANCE_INDEX),
             ("ENABLE_BASE_VERTEX", GLSL_ENABLE_BASE_VERTEX),
+            ("DS_STROKE", GLSL_DS_STROKE),
             ("ENABLE_KHR_BLEND", GLSL_ENABLE_KHR_BLEND),
             ("FEATHER_ATLAS_BLIT", GLSL_FEATHER_ATLAS_BLIT),
             (
@@ -4574,7 +4578,7 @@ mod tests {
     fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
         let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
         let features = [
-            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "A"),
+            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "N"),
             (
                 "ENABLE_CLIP_RECT",
                 gpu::ShaderFeatures::ENABLE_CLIP_RECT,
@@ -4583,7 +4587,7 @@ mod tests {
             (
                 "ENABLE_ADVANCED_BLEND",
                 gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND,
-                "N",
+                "H",
             ),
             ("ENABLE_FEATHER", gpu::ShaderFeatures::ENABLE_FEATHER, "HB"),
             (
@@ -4594,7 +4598,7 @@ mod tests {
             (
                 "ENABLE_NESTED_CLIPPING",
                 gpu::ShaderFeatures::ENABLE_NESTED_CLIPPING,
-                "AD",
+                "CD",
             ),
             (
                 "ENABLE_HSL_BLEND_MODES",

@@ -4777,9 +4777,10 @@ fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
             gpu::kOuterCurvePatchIndexCount,
             gpu::kOuterCurvePatchBaseIndex,
         ),
-        depthStrokes => (
-            gpu::kMidpointFanPatchBorderIndexCount,
-            gpu::kMidpointFanPatchBaseIndex,
+        depthStrokes => (gpu::DSStrokePatchIndexCount, gpu::DSStrokePatchBaseIndex),
+        depthAAStrokes => (
+            gpu::DSAAStrokePatchIndexCount,
+            gpu::DSAAStrokePatchBaseIndex,
         ),
         stencilMidpointFanBorrowedCoverage
         | stencilDynamicMidpointFans
@@ -4787,8 +4788,8 @@ fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
         | stencilMidpointFanReset
         | stencilMidpointFanWinding
         | stencilMidpointFanCover => (
-            gpu::kMidpointFanPatchIndexCount - gpu::kMidpointFanPatchBorderIndexCount,
-            gpu::kMidpointFanPatchBaseIndex + gpu::kMidpointFanPatchBorderIndexCount,
+            gpu::DSMidpointFanFillPatchIndexCount,
+            gpu::DSMidpointFanFillBaseIndex,
         ),
         stencilOuterCubicBorrowedCoverage
         | stencilDynamicOuterCubics
@@ -4796,8 +4797,8 @@ fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
         | stencilOuterCubicReset
         | stencilOuterCubicWinding
         | stencilOuterCubicCover => (
-            gpu::kOuterCurvePatchIndexCount - gpu::kOuterCurvePatchBorderIndexCount,
-            gpu::kOuterCurvePatchBaseIndex + gpu::kOuterCurvePatchBorderIndexCount,
+            gpu::DSOuterCubicFillPatchIndexCount,
+            gpu::DSOuterCubicFillBaseIndex,
         ),
         imageRect => (gpu::kImageRectIndices.len() as u32, 0),
         imageMesh
@@ -4806,6 +4807,45 @@ fn patch_indices(draw_type: gpu::DrawType) -> (u32, u32) {
         | clipReset
         | renderPassInitialize
         | renderPassResolve => (0, 0),
+    }
+}
+
+fn draw_type_is_depth_stencil_index_pattern(draw_type: gpu::DrawType) -> bool {
+    matches!(
+        draw_type,
+        gpu::DrawType::stencilMidpointFanBorrowedCoverage
+            | gpu::DrawType::stencilMidpointFans
+            | gpu::DrawType::stencilMidpointFanReset
+            | gpu::DrawType::stencilDynamicMidpointFans
+            | gpu::DrawType::stencilMidpointFanWinding
+            | gpu::DrawType::stencilMidpointFanCover
+            | gpu::DrawType::stencilOuterCubicBorrowedCoverage
+            | gpu::DrawType::stencilOuterCubics
+            | gpu::DrawType::stencilOuterCubicReset
+            | gpu::DrawType::stencilDynamicOuterCubics
+            | gpu::DrawType::stencilOuterCubicWinding
+            | gpu::DrawType::stencilOuterCubicCover
+            | gpu::DrawType::depthStrokes
+            | gpu::DrawType::depthAAStrokes
+    )
+}
+fn ds_patch_vertex_flags(draw_type: gpu::DrawType) -> i32 {
+    match draw_type {
+        gpu::DrawType::stencilMidpointFanBorrowedCoverage
+        | gpu::DrawType::stencilMidpointFans
+        | gpu::DrawType::stencilMidpointFanReset
+        | gpu::DrawType::stencilDynamicMidpointFans
+        | gpu::DrawType::stencilMidpointFanWinding
+        | gpu::DrawType::stencilMidpointFanCover
+        | gpu::DrawType::depthStrokes => 0,
+        gpu::DrawType::stencilOuterCubicBorrowedCoverage
+        | gpu::DrawType::stencilOuterCubics
+        | gpu::DrawType::stencilOuterCubicReset
+        | gpu::DrawType::stencilDynamicOuterCubics
+        | gpu::DrawType::stencilOuterCubicWinding
+        | gpu::DrawType::stencilOuterCubicCover => gpu::DSVertexFlag_OuterCubicFill,
+        gpu::DrawType::depthAAStrokes => gpu::DSVertexFlag_AAStroke,
+        _ => unreachable!(),
     }
 }
 
@@ -5311,6 +5351,8 @@ impl RenderContext {
             });
             self.m_frame_descriptor.msaaSampleCount = 4;
         }
+        self.m_frame_descriptor.inkbleedOverride =
+            frame_descriptor.inkbleedOverride && self.m_frame_descriptor.msaaSampleCount == 1;
         self.m_frame_can_apply_layer_mask.store(
             self.m_frame_interlock_mode == gpu::InterlockMode::rasterOrdering,
             std::sync::atomic::Ordering::Relaxed,
@@ -6809,7 +6851,7 @@ impl LogicalFlush {
         mut misc: gpu::ShaderMiscFlags,
         paint_type: gpu::PaintType,
         count: u32,
-        base: u32,
+        mut base: u32,
     ) -> *mut gpu::DrawBatch {
         #[cfg(debug_assertions)]
         debug_assert!(self.m_has_done_layout);
@@ -6840,6 +6882,22 @@ impl LogicalFlush {
         {
             misc |= gpu::ShaderMiscFlags::fixedFunctionColorOutput;
         }
+        let element_stride_log2 = if draw_type_is_depth_stencil_index_pattern(draw_type) {
+            let stride = gpu::dsPatchStrideLog2(draw_type);
+            base = (base << stride) | ds_patch_vertex_flags(draw_type) as u32;
+            if !gpu_cpp::get_color_write_enable(
+                draw_type,
+                context.frameInterlockMode(),
+                misc,
+                self.m_flush_desc.fixedFunctionColorOutput,
+                draw.drawContents(),
+            ) {
+                base |= gpu::DSVertexFlag_DisableColorWrite as u32;
+            }
+            stride
+        } else {
+            0
+        };
         let mergeable_type = !matches!(
             draw_type,
             gpu::DrawType::imageRect
@@ -6873,7 +6931,9 @@ impl LogicalFlush {
             can_merge = current.drawType == draw_type
                 && (current.shaderMiscFlags & compare_mask) == (misc & compare_mask)
                 && images_combine;
-            if can_merge && current.baseElement + current.elementCount != base {
+            if can_merge
+                && current.baseElement + (current.elementCount << element_stride_log2) != base
+            {
                 debug_assert_eq!(
                     context.frameInterlockMode(),
                     gpu::InterlockMode::depthStencil
@@ -6912,7 +6972,10 @@ impl LogicalFlush {
         } else {
             let batch = previous;
             unsafe {
-                debug_assert_eq!((*batch).baseElement + (*batch).elementCount, base);
+                debug_assert_eq!(
+                    (*batch).baseElement + ((*batch).elementCount << element_stride_log2),
+                    base
+                );
                 (*batch).elementCount += count;
                 (*batch).shaderMiscFlags |= misc;
                 (*batch).drawContents |= draw.drawContents();
@@ -7056,11 +7119,13 @@ impl LogicalFlush {
             );
             for _ in 0..group_padding {
                 unsafe {
-                    context.m_triangle_vertex_data.emplace_back(gpu::TriangleVertex::new(
-                        nuxie_render_api::Vec2D::new(0.0, 0.0),
-                        0,
-                        0,
-                    ));
+                    context
+                        .m_triangle_vertex_data
+                        .emplace_back(gpu::TriangleVertex::new(
+                            nuxie_render_api::Vec2D::new(0.0, 0.0),
+                            0,
+                            0,
+                        ));
                 }
             }
         }

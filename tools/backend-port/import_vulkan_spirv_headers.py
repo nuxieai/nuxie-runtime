@@ -41,15 +41,15 @@ def main() -> None:
     checksums = {name: digest for digest, name in (
         line.split() for line in Path(__file__).with_name("vulkan-spirv.sha256").read_text().splitlines()
     )}
-    pinned_ref = "0dd067f18bc14139720ee348dfc222af0c744e4e"
+    pinned_ref = "625454e362a27bb3168f00cd87e9487f54d39338"
 
     includes = [
         match.decode("utf-8")
         for match in INCLUDE_RE.findall(source_cpp.read_bytes())
     ]
-    if len(includes) != 98 or len(set(includes)) != 98:
+    if len(includes) != 96 or len(set(includes)) != 96:
         raise SystemExit(
-            f"expected 98 unique vulkan_shaders.cpp headers, got "
+            f"expected 96 unique vulkan_shaders.cpp headers, got "
             f"{len(includes)} includes/{len(set(includes))} unique"
         )
 
@@ -72,6 +72,10 @@ def main() -> None:
             raise SystemExit(f"byte copy mismatch for {source_path}")
 
     destination.mkdir(parents=True, exist_ok=True)
+    # Removed upstream variants must not remain available as hidden fallbacks.
+    for stale in destination.glob("*.h"):
+        if stale.name not in includes:
+            stale.unlink()
     for name in includes:
         source = generated_root / name
         data = source.read_bytes()

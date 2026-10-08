@@ -1326,6 +1326,11 @@ impl MechanicalRenderContext {
                 descriptor.msaaSampleCount = 1;
                 descriptor.clockwiseFillOverride = true;
             }
+            RenderMode::ClockwiseInkbleed => {
+                descriptor.msaaSampleCount = 1;
+                descriptor.clockwiseFillOverride = true;
+                descriptor.inkbleedOverride = true;
+            }
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;
@@ -1338,6 +1343,7 @@ impl MechanicalRenderContext {
             descriptor.disableRasterOrdering = mode.disable_raster_ordering;
             descriptor.msaaSampleCount = mode.msaa_sample_count;
             descriptor.clockwiseFillOverride = mode.clockwise_fill_override;
+            descriptor.inkbleedOverride = mode.inkbleed;
         }
         let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
         unsafe { metal_impl_mut(context) }

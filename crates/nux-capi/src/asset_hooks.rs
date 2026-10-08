@@ -1,9 +1,9 @@
 //! Bounded, product-neutral asset hooks for the native C distribution.
 
 use super::{
+    HandleKind, NuxByteView, NuxCapiResult, NuxFile, NuxStatus, PendingHandlePublication,
     ffi_guard_with_handle_result, publish_result, register_handle, struct_size_supports,
-    with_platform_callback, HandleKind, NuxByteView, NuxCapiResult, NuxFile, NuxStatus,
-    PendingHandlePublication,
+    with_platform_callback,
 };
 use nuxie::render_api::RawPath;
 use nuxie::{
@@ -1265,10 +1265,10 @@ pub(crate) unsafe fn nux_file_import_with_assets(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{NuxStatus, NUX_CAPI_ABI_VERSION};
+    use crate::{NUX_CAPI_ABI_VERSION, NuxStatus};
     use std::cell::RefCell;
     use std::ffi::c_void;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[derive(Default)]
@@ -1311,9 +1311,11 @@ mod tests {
         let zero_probe = OwnershipProbe::default();
         let mut zero = retained(&[], &zero_probe);
         zero.data = std::ptr::null();
-        assert!(copy_retained_bytes(zero, 0)
-            .expect("empty bytes")
-            .is_empty());
+        assert!(
+            copy_retained_bytes(zero, 0)
+                .expect("empty bytes")
+                .is_empty()
+        );
         assert_eq!(zero_probe.retains.load(Ordering::Relaxed), 1);
         assert_eq!(zero_probe.releases.load(Ordering::Relaxed), 1);
 

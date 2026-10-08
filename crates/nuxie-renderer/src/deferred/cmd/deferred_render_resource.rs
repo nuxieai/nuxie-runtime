@@ -311,12 +311,24 @@ impl RenderPaint for DeferredRenderPaint {
         );
     }
     fn shader_transform(&mut self, transform: Mat2D) {
-        if self.transform == transform { return; }
+        if self.transform == transform {
+            return;
+        }
         self.transform = transform;
         self.resource.bump();
         let [xx, xy, yx, yy, tx, ty] = transform.0;
-        self.resource.base.append(RenderCmd::PaintShaderTransform,
-            &PaintMat2DPod { paint: self.resource.base.id, xx, xy, yx, yy, tx, ty });
+        self.resource.base.append(
+            RenderCmd::PaintShaderTransform,
+            &PaintMat2DPod {
+                paint: self.resource.base.id,
+                xx,
+                xy,
+                yx,
+                yy,
+                tx,
+                ty,
+            },
+        );
     }
     fn modulated_image(
         &mut self,

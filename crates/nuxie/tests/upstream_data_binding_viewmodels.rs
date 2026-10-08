@@ -78,8 +78,16 @@ fn advance_draw(
 
 fn click(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32) {
     machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
-        machine.pointer_up(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(x, y),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
+        machine.pointer_up(
+            Vec2D::new(x, y),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
 }
 

@@ -185,7 +185,9 @@ impl ListenerViewModelChange {
         }
         if let Some(to_target) = to_target {
             crate::source::data_bind::data_bind::DataBind::add_dirt_handle(
-                &to_target, ComponentDirt::BINDINGS.0 as u32, true,
+                &to_target,
+                ComponentDirt::BINDINGS.0 as u32,
+                true,
             );
         }
     }

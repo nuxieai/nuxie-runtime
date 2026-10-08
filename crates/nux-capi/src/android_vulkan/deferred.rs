@@ -1,5 +1,5 @@
 //! Android's recorded producer and native Vulkan replay boundary.
-use super::{renderer_failure, ApiFailure};
+use super::{ApiFailure, renderer_failure};
 use crate::NuxStatus;
 use nuxie::render_api::{
     BlendMode, ImageSampler, Mat2D, PersistentFactoryContext, RawPath, RenderCanvasFrame,
@@ -36,7 +36,10 @@ impl AndroidVulkanFactory {
             .unwrap_or_default();
         let mut session = DeferredSession::with_caps(caps);
         session.bind_render_context(native.persistent_context());
-        session.ore_context.borrow_mut().setTarget(native.borrow().ore_target_desc());
+        session
+            .ore_context
+            .borrow_mut()
+            .setTarget(native.borrow().ore_target_desc());
         Self {
             session,
             replayer: Rc::new(RefCell::new(DeferredReplayer::default())),
@@ -46,7 +49,10 @@ impl AndroidVulkanFactory {
 
     pub(super) fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
         self.native.borrow_mut().resize(width, height)?;
-        self.session.ore_context.borrow_mut().setTarget(self.native.borrow().ore_target_desc());
+        self.session
+            .ore_context
+            .borrow_mut()
+            .setTarget(self.native.borrow().ore_target_desc());
         Ok(())
     }
 

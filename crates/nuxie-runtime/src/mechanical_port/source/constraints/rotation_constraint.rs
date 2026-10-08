@@ -105,7 +105,8 @@ impl RotationConstraint {
                 self.base.min_value()
             };
             let mut rotation = self.components_b.rotation() - center;
-            rotation -= math_types::PI * 2.0
+            rotation -= math_types::PI
+                * 2.0
                 * ((rotation + math_types::PI) / (math_types::PI * 2.0)).floor();
             rotation += center;
             if self.base.max() && rotation > self.base.max_value() {

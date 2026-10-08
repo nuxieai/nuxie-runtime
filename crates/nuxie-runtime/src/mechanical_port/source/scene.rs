@@ -101,7 +101,12 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
 
     fn bind_view_model_instance(&mut self, _view_model_instance: RuntimeViewModelInstanceHandle) {}
 
-    fn pointer_down(&mut self, _position: Vec2D, _pointer_id: i32, _button: PointerButton) -> HitResult {
+    fn pointer_down(
+        &mut self,
+        _position: Vec2D,
+        _pointer_id: i32,
+        _button: PointerButton,
+    ) -> HitResult {
         HitResult::None
     }
 
@@ -109,7 +114,12 @@ pub trait SceneBehavior: KeyedCallbackReporter + CallbackContext {
         HitResult::None
     }
 
-    fn pointer_up(&mut self, _position: Vec2D, _pointer_id: i32, _button: PointerButton) -> HitResult {
+    fn pointer_up(
+        &mut self,
+        _position: Vec2D,
+        _pointer_id: i32,
+        _button: PointerButton,
+    ) -> HitResult {
         HitResult::None
     }
 

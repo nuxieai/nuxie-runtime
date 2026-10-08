@@ -1140,7 +1140,9 @@ impl<'a> PaintState<'a> {
             })
             .collect();
         stops.sort_by(|a, b| {
-            a.offset.partial_cmp(&b.offset).unwrap_or(std::cmp::Ordering::Equal)
+            a.offset
+                .partial_cmp(&b.offset)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         stops
     }

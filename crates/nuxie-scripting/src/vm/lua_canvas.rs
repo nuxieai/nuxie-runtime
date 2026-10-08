@@ -785,10 +785,12 @@ mod tests {
                 None,
             );
             if fail {
-                assert!(result
-                    .unwrap_err()
-                    .to_string()
-                    .contains("injected update failure"));
+                assert!(
+                    result
+                        .unwrap_err()
+                        .to_string()
+                        .contains("injected update failure")
+                );
             } else {
                 assert!(result.is_ok());
             }
@@ -833,9 +835,11 @@ mod tests {
             .load("canvas:beginFrame()")
             .exec()
             .expect_err("recorder gate");
-        assert!(outside
-            .to_string()
-            .contains("requires the deferred recorder"));
+        assert!(
+            outside
+                .to_string()
+                .contains("requires the deferred recorder")
+        );
 
         factory.borrow_mut().ore = Some(Rc::new(RefCell::new(
             nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
@@ -908,8 +912,10 @@ mod tests {
 
         let creation = ScriptedCanvas::create(vm.lua(), vm.renderer_bindings.clone(), 99, 7)
             .expect_err("injected initial allocation failure");
-        assert!(creation
-            .to_string()
-            .contains("context:canvas() failed to create RenderCanvas"));
+        assert!(
+            creation
+                .to_string()
+                .contains("context:canvas() failed to create RenderCanvas")
+        );
     }
 }

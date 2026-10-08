@@ -72,9 +72,10 @@ fn stateful_host_keeps_decoded_artboards_own_view_model() {
         .with_artboard(|artboard| artboard.find_all_handles::<NestedArtboard>())
         .pop()
         .unwrap();
-    assert!(slot
-        .with_downcast::<NestedArtboard, _>(|slot| slot.base.is_stateful())
-        .unwrap());
+    assert!(
+        slot.with_downcast::<NestedArtboard, _>(|slot| slot.base.is_stateful())
+            .unwrap()
+    );
     let stateful = slot
         .with_downcast::<NestedArtboard, _>(|slot| {
             slot.base

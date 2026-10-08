@@ -30,7 +30,9 @@ impl DataBindContainerOwner {
     pub fn data_context_changed(&self) {
         match self {
             Self::Authored(owner) => {
-                if let Some(dirty) = owner.artboard_dirty_handle() { dirty.wake_if_quiet_row(); }
+                if let Some(dirty) = owner.artboard_dirty_handle() {
+                    dirty.wake_if_quiet_row();
+                }
             }
             Self::StateMachine(owner) => owner.data_context_changed(),
         }
@@ -135,7 +137,8 @@ impl DataBindContainerOwner {
 
     pub fn add_dirty_data_bind(&self, bind: CoreHandle) {
         if let Some(container) = self.prepare_dirty_data_bind(|| {
-            bind.with(|owner| owner.as_data_bind().and_then(DataBind::target)).flatten()
+            bind.with(|owner| owner.as_data_bind().and_then(DataBind::target))
+                .flatten()
         }) {
             // Preserve the entered container, but read the child's live flags
             // after its converter parent's callback, as upstream does.
@@ -149,14 +152,15 @@ impl DataBindContainerOwner {
         }
     }
 
-    fn prepare_dirty_data_bind(&self, target: impl FnOnce() -> Option<CoreHandle>) -> Option<DataBindContainer> {
+    fn prepare_dirty_data_bind(
+        &self,
+        target: impl FnOnce() -> Option<CoreHandle>,
+    ) -> Option<DataBindContainer> {
         let container = self.container()?;
         if let Self::Authored(owner) = self {
             if let Some(dirty) = owner.artboard_dirty_handle() {
                 dirty.wake_if_quiet_row();
-                if let Some(order) = target()
-                    .and_then(|target| target.component_graph_order())
-                {
+                if let Some(order) = target().and_then(|target| target.component_graph_order()) {
                     dirty.on_component_dirty_at(order);
                 }
             } else {
@@ -167,7 +171,12 @@ impl DataBindContainerOwner {
                 if let Some(parent) = parent {
                     let dirt = parent.with(|owner| {
                         let parent = owner.as_data_bind().unwrap();
-                        DEPENDENTS | if parent.target_origin() { BINDINGS_TARGET } else { BINDINGS }
+                        DEPENDENTS
+                            | if parent.target_origin() {
+                                BINDINGS_TARGET
+                            } else {
+                                BINDINGS
+                            }
                     });
                     if let Some(dirt) = dirt {
                         DataBind::add_dirt_handle(&parent, dirt, false);
@@ -323,28 +332,47 @@ impl DataBindContainer {
 
     fn data_context_changed(&self) {
         let owner = self.0.borrow().owner.clone();
-        if let Some(owner) = owner { owner.data_context_changed(); }
+        if let Some(owner) = owner {
+            owner.data_context_changed();
+        }
     }
 
     pub fn has_data_bind_work(&self) -> bool {
         let state = self.0.borrow();
-        !state.dirty.is_empty() || state.queues.get().is_some_and(|queues| {
-            !queues.persisting.is_empty() || !queues.dirty_to_source.is_empty()
-                || !queues.pending_dirty_to_source.is_empty() || !queues.pending_dirty.is_empty()
-                || !queues.pending_additions.is_empty() || !queues.pending_removals.is_empty()
-                || !queues.pending_deletes.is_empty()
-        })
+        !state.dirty.is_empty()
+            || state.queues.get().is_some_and(|queues| {
+                !queues.persisting.is_empty()
+                    || !queues.dirty_to_source.is_empty()
+                    || !queues.pending_dirty_to_source.is_empty()
+                    || !queues.pending_dirty.is_empty()
+                    || !queues.pending_additions.is_empty()
+                    || !queues.pending_removals.is_empty()
+                    || !queues.pending_deletes.is_empty()
+            })
     }
 
     pub fn may_advance_data_binds(&self) -> bool {
         self.0.borrow().data_binds.iter().any(|bind| {
-            let converter = bind.with(|bind| bind.as_data_bind().unwrap().converter()).flatten();
-            converter.is_some_and(|converter| converter.with(|converter| converter.as_data_converter_capability().unwrap().may_advance()).unwrap_or(false))
+            let converter = bind
+                .with(|bind| bind.as_data_bind().unwrap().converter())
+                .flatten();
+            converter.is_some_and(|converter| {
+                converter
+                    .with(|converter| {
+                        converter
+                            .as_data_converter_capability()
+                            .unwrap()
+                            .may_advance()
+                    })
+                    .unwrap_or(false)
+            })
         })
     }
 
     #[cfg(any(test, feature = "testing"))]
-    pub fn data_bind_updates() -> u64 { SM_DATA_BIND_UPDATES.with(std::cell::Cell::get) }
+    pub fn data_bind_updates() -> u64 {
+        SM_DATA_BIND_UPDATES.with(std::cell::Cell::get)
+    }
 
     pub fn bind_data_binds_from_current_context(&self) {
         let binds = self.data_binds().to_vec();
@@ -452,13 +480,17 @@ impl DataBindContainer {
     pub fn update_data_binds(&self, apply_target_to_source: bool) {
         let state_machine_owner = {
             let state = self.0.borrow();
-            if state.is_processing { return; }
+            if state.is_processing {
+                return;
+            }
             match &state.owner {
                 Some(DataBindContainerOwner::StateMachine(owner)) => Some(owner.clone()),
                 _ => None,
             }
         };
-        if let Some(owner) = state_machine_owner { owner.data_binds_processing_started(); }
+        if let Some(owner) = state_machine_owner {
+            owner.data_binds_processing_started();
+        }
         let (persisting_count, dirty_to_source_count, dirty_count) = {
             let mut state = self.0.borrow_mut();
             if state.is_processing {
@@ -575,7 +607,9 @@ impl DataBindContainer {
 
     fn add_dirty_data_bind_borrowed(&self, bind: &mut DataBind) {
         let owner = self.0.borrow().owner.clone();
-        if let Some(DataBindContainerOwner::StateMachine(owner)) = owner { owner.data_bind_dirtied(); }
+        if let Some(DataBindContainerOwner::StateMachine(owner)) = owner {
+            owner.data_bind_dirtied();
+        }
         if bind.to_source() && bind.in_persisting_list() || bind.in_dirty_list() {
             return;
         }

@@ -1,5 +1,5 @@
 //! Remaining runtime/layer_mask_test.cpp cases (lines 505–1494), upstream 8398db31.
-use super::layer_mask_test::{Fixture, boolean, bounds, build_mask_fixture, number, uint};
+use super::layer_mask_test::{boolean, bounds, build_mask_fixture, number, uint, Fixture};
 use nuxie_render_api::Mat2D;
 use nuxie_runtime::source::{
     artboard::Artboard,

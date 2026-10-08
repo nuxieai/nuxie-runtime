@@ -9,7 +9,7 @@ use nuxie_runtime::source::{
         semantic_listener_group::SemanticActionType,
         state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
-    semantic::semantic_state::{has_semantic_state, SemanticState},
+    semantic::semantic_state::{SemanticState, has_semantic_state},
     semantic::{semantic_data::SemanticData, semantic_manager::RuntimeSemanticManagerHandle},
 };
 use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
@@ -192,10 +192,11 @@ fn full_snapshot_survives_diff_drain_and_tracks_authored_actions() {
     let diff = fixture
         .manager
         .with_semantic_manager_mut(|manager| manager.drain_diff());
-    assert!(diff
-        .updated_semantic
-        .iter()
-        .any(|node| node.id == fixture.button_id));
+    assert!(
+        diff.updated_semantic
+            .iter()
+            .any(|node| node.id == fixture.button_id)
+    );
     assert_eq!(
         fixture
             .manager
@@ -320,8 +321,16 @@ fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
         };
         let touch = || {
             fixture.machine.with_instance_mut(|machine| {
-                machine.pointer_down(point, 51, nuxie_runtime::source::pointer_button::PointerButton::Primary);
-                machine.pointer_up(point, 51, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+                machine.pointer_down(
+                    point,
+                    51,
+                    nuxie_runtime::source::pointer_button::PointerButton::Primary,
+                );
+                machine.pointer_up(
+                    point,
+                    51,
+                    nuxie_runtime::source::pointer_button::PointerButton::Primary,
+                );
             });
             for _ in 0..10 {
                 fixture.machine.advance_and_apply(0.1);
@@ -431,9 +440,10 @@ fn zero_opacity_controls_remain_in_semantic_tree_and_execute_actions() {
             .machine
             .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
         fixture.machine.advance_and_apply(0.0);
-        assert!(data
-            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
-            .unwrap());
+        assert!(
+            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap()
+        );
     }
 }
 
@@ -621,9 +631,10 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
         .machine
         .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
     fixture.machine.advance_and_apply(0.0);
-    assert!(data
-        .with_downcast::<SemanticData, _>(|data| data.is_expanded())
-        .unwrap());
+    assert!(
+        data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            .unwrap()
+    );
     assert!(CoreRegistry::set_double_handle(
         &position_owner,
         x_key,
@@ -666,9 +677,11 @@ fn assert_clipping_preserves_semantic_tree_membership(nested_layout: bool) {
         .machine
         .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
     fixture.machine.advance_and_apply(0.0);
-    assert!(!data
-        .with_downcast::<SemanticData, _>(|data| data.is_expanded())
-        .unwrap());
+    assert!(
+        !data
+            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            .unwrap()
+    );
 }
 
 #[test]

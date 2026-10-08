@@ -85,11 +85,23 @@ fn bind_view_model(
 }
 
 fn pointer_down(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32, pointer_id: i32) {
-    machine.with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(x, y),
+            pointer_id,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
 }
 
 fn pointer_up(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32, pointer_id: i32) {
-    machine.with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), pointer_id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(x, y),
+            pointer_id,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
 }
 
 #[test]

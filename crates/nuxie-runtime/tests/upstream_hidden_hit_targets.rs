@@ -74,10 +74,18 @@ fn list_clicked(artboard: &RuntimeArtboardInstanceHandle, name: &str) -> Clicked
 
 fn click(machine: &RuntimeStateMachineInstanceHandle) {
     machine.with_instance_mut(|machine| {
-        machine.pointer_down(Vec2D::new(100.0, 100.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_down(
+            Vec2D::new(100.0, 100.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     machine.with_instance_mut(|machine| {
-        machine.pointer_up(Vec2D::new(100.0, 100.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+        machine.pointer_up(
+            Vec2D::new(100.0, 100.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        );
     });
     machine.advance_and_apply(0.0);
 }

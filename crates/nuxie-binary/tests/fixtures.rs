@@ -4257,10 +4257,7 @@ fn runtime_data_bind_lifecycle_flags_match_cpp_polling_rules() {
     );
     assert_eq!(file.data_bind_add_effect(2, false, true), None);
     assert_eq!(file.data_bind_remove_effect(2, false, true, true), None);
-    assert_eq!(
-        file.data_bind_source_effect(2),
-        None
-    );
+    assert_eq!(file.data_bind_source_effect(2), None);
     assert_eq!(file.data_bind_clear_source_effect(2, true), None);
     assert_eq!(
         file.data_bind_bind_effect(

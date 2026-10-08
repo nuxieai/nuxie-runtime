@@ -2005,7 +2005,9 @@ impl ContextApi for ContextMetal {
     ) -> Option<AnyResourceHandle> {
         #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
         {
-            if target.target.is_null() { return None; }
+            if target.target.is_null() {
+                return None;
+            }
             unsafe { self.mtlWrapTarget(target.target.cast::<MetalRenderCanvasBridge>()) }
         }
         #[cfg(not(all(target_vendor = "apple", feature = "metal-backend")))]

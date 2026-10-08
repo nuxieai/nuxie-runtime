@@ -159,13 +159,18 @@ pub(super) fn auto_layouts(
         }
         // Source does not diagnose allocation here: null is passed to pipeline
         // validation for an automatically reflected layout.
-        layouts[group] =
-            makeBindGroupLayoutFromBindingMap(context, &binding_map, group as u32, &[], vertex, fragment).map(
-                |resource| Layout {
-                    resource,
-                    group: group as u32,
-                },
-            );
+        layouts[group] = makeBindGroupLayoutFromBindingMap(
+            context,
+            &binding_map,
+            group as u32,
+            &[],
+            vertex,
+            fragment,
+        )
+        .map(|resource| Layout {
+            resource,
+            group: group as u32,
+        });
     }
     Ok(layouts)
 }
@@ -228,8 +233,14 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
         };
         let binding_map = bindingMapForStages(shader.vertex_module(), fragment_module);
         let mut context = context.borrow_mut();
-        let resource =
-            makeBindGroupLayoutFromBindingMap(&mut *context, &binding_map, group, &dynamic, shader.vertex_module(), fragment_module);
+        let resource = makeBindGroupLayoutFromBindingMap(
+            &mut *context,
+            &binding_map,
+            group,
+            &dynamic,
+            shader.vertex_module(),
+            fragment_module,
+        );
         let Some(resource) = resource else {
             let error = context.lastError();
             context.clearLastError();

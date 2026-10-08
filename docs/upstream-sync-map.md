@@ -7,18 +7,29 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7fb595be56a899b4fc6eceb22a4222206383fe93`
+- LAST_SYNCED_SHA: `c4d2c6cbdeefd249a04eb7ade06cb7cf07a732f7`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Three upstream commits remain after this checkpoint at the fetched target.
-  All 209 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (231 after `5892bb05`); this
+  Two upstream commits remain after this checkpoint at the fetched target.
+  All 210 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (232 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `c4d2c6cb`, integrated atop downstream `2045e6af85`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Tools-enabled artboard replacement tests pass 12, including both new
+  lifetime regressions with real Luau execution. Runtime/change-window/audio/
+  core suites pass 249 (two ignored), including all 18 change-window cases.
+  That existing suite requires the testing observation feature; the initial
+  command omitted it and was corrected without source/assertion changes.
+  Runtime with tools compiles for wasm32-unknown-unknown. Source/pipeline tests
+  pass 12, manifest tests pass 27, and inventory/structural correspondence are
+  current. No new hardware, broad Golden/Silver or browser-pixel execution is
+  claimed; private editor code absent from the public delta is not imported.
 - Validation at `7fb595be`, integrated atop downstream `e738e272df`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including correction rereviews, are clean. Isolated current-build runtime
@@ -503,6 +514,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c4d2c6cbdeefd249a04eb7ade06cb7cf07a732f7` | Translate tools-only retirement of replaced source artboards while direct or copied instances remain alive, and cleanup on later replacement; translate thread-local advancing change-window inheritance and root-host bind tracking so newly made rows see pending fires without replaying earlier frames. Port both replacement and all three list-trigger regressions against the pinned public fixtures. Preserve safe Rust ownership and luaur; private editor invalidation/remount logic represented only by .rive_head is not claimed imported. | — |
 | `7fb595be56a899b4fc6eceb22a4222206383fe93` | Translate late-hosted audio-engine propagation with both authored-fixture regressions; shared core ancestry/property-owner dispatch and filtered generated change hooks; exact GL version scanning and full-recorder registry/bind ordering; direct UUID/color hex appends, fixed-number formatting and stateful contour comparators. Preserve existing Rust text/audio backends and pure-Rust numeric boundary. C++ HarfBuzz language-table flags and Emscripten-only AAT removal are build-specific: the approved Rust/unknown-unknown backend retains accepted AAT fonts, not parity with that support reduction. GL string assembly and ORE diagnostic formatting are already equivalent. Canvas2D/no-ORE recorder specialization is not a supported product configuration; private implementation absent from the public delta is not claimed imported. | — |
 | `b2c28dde1f8c51872a81ae4f9b4fbbceac1d23ed` | Translate WebGL2 ORE std140 uniform allocation/range padding and exact source-byte upload, plus File display-scale forwarding to the existing Luau VM and its upstream regression. The guest-Wasm VM forwarding loop remains parked; D3D11 allocation padding is unshipped. Private implementation represented only by .rive_head is not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `05d690ee5a8879d738679f8ebad17c4a61af50ac` | Build-only: the public delta adds optional named shallow submodule initialization to the upstream Premake dependency helper. Rust/Cargo has no corresponding live helper; C++ source-oracle builds consume the helper directly from the advanced pin. No runtime or shader behavior changes. The coop_file service named in the message is private implementation absent from the public delta and is not claimed imported. | — |

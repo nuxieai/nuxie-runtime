@@ -105,6 +105,37 @@ use std::{
     sync::atomic::Ordering,
 };
 
+const NOT_ADVANCING: u64 = u64::MAX;
+thread_local! {
+    // The innermost advancing machine's change window on this thread.
+    static ADVANCING_CHANGE_BASELINE: Cell<u64> = const { Cell::new(NOT_ADVANCING) };
+}
+
+struct AdvancingChangeWindow {
+    outer: Option<u64>,
+}
+
+impl AdvancingChangeWindow {
+    fn new(bindables: Option<&SMIBindables>) -> Self {
+        // Machines with no window leave an enclosing machine's window alone.
+        Self {
+            outer: bindables.map(|bindables| {
+                ADVANCING_CHANGE_BASELINE
+                    .with(|baseline| baseline.replace(bindables.change_baseline))
+            }),
+        }
+    }
+}
+
+impl Drop for AdvancingChangeWindow {
+    fn drop(&mut self) {
+        // Restore rather than pop, matching the upstream nested-scope guard.
+        if let Some(outer) = self.outer {
+            ADVANCING_CHANGE_BASELINE.with(|baseline| baseline.set(outer));
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeComparisonValue {
     Number(f32),
@@ -2827,6 +2858,9 @@ impl RuntimeStateMachineInstanceHandle {
         });
         let mut keep_going =
             self.with_instance_mut(|machine| machine.advance(seconds, true)) || seconds == 0.0;
+        // Artboard advances and updates also create machines in this frame.
+        let _change_window =
+            self.with_instance(|machine| AdvancingChangeWindow::new(machine.bindables.get()));
         let manager = self.with_instance(StateMachineInstance::focus_manager);
         if let Some(manager) = manager {
             manager.with_focus_manager_mut(FocusManager::drop_focus_if_focus_target_hidden);
@@ -3121,6 +3155,8 @@ impl StateMachineInstance {
     fn ensure_bindables(&mut self) -> &mut SMIBindables {
         if self.bindables.get().is_none() {
             self.bindables.ensure_allocated();
+            // Older changes are not pending beyond the frame this instance
+            // was made in; forget_view_model_changes inherits that frame.
             self.forget_view_model_changes();
         }
         self.bindables.get_mut().expect("allocated bindables")
@@ -4556,6 +4592,10 @@ impl StateMachineInstance {
                 bindables.changes_used.get_mut().clear();
                 bindables.listener_baseline.set(crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence());
             }
+        }
+        // Machines made or reset during this advance inherit its pending frame.
+        let _change_window = AdvancingChangeWindow::new(self.bindables.get());
+        if new_frame {
             // Capture before either queue so host drains retain focus and blur reports too.
             let queued_input_report_start = self
                 .reporting
@@ -4944,6 +4984,9 @@ impl StateMachineInstance {
         })
     }
 
+    /// A value stays pending through its searched frame until this layer uses
+    /// it. Creation/reset during another machine's advance inherits that
+    /// machine's window; otherwise changes from before creation/reset expire.
     pub fn view_model_value_changed(
         &self,
         value: &CoreHandle,
@@ -5010,8 +5053,15 @@ impl StateMachineInstance {
     fn forget_view_model_changes(&mut self) {
         if let Some(b) = self.bindables.get_mut() {
             let sequence = crate::source::viewmodel::viewmodel_instance_value::ViewModelInstanceValue::latest_change_sequence();
-            b.change_baseline = sequence;
-            b.change_searched = sequence;
+            // Outside advance, old changes are not pending. During advance,
+            // a new/reset machine starts in the enclosing machine's frame.
+            let baseline = ADVANCING_CHANGE_BASELINE.with(Cell::get);
+            b.change_baseline = if baseline != NOT_ADVANCING {
+                baseline
+            } else {
+                sequence
+            };
+            b.change_searched = b.change_baseline;
             b.listener_baseline.set(sequence);
             b.changes_used.get_mut().clear();
         }
@@ -5717,6 +5767,15 @@ impl StateMachineInstance {
     }
 
     fn internal_data_context(&mut self, data_context: RuntimeDataContextHandle) {
+        // Check at bind: nested artboards create machines before acquiring
+        // their host. A root host tracks a window even without own conditions.
+        if self
+            .artboard_instance
+            .with_artboard(|artboard| artboard.host().is_none() && artboard.hosts_artboards())
+            .expect("live state machine artboard")
+        {
+            self.ensure_bindables();
+        }
         self.data_bind_container
             .bind_data_binds_from_context(data_context.clone());
         for listener in self

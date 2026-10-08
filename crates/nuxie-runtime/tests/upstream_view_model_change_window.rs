@@ -1,4 +1,4 @@
-//! Literal cases from runtime/view_model_change_window_test.cpp at 7aa93402.
+//! Literal cases from runtime/view_model_change_window_test.cpp through c4d2c6cb.
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     animation::{
@@ -6,7 +6,9 @@ use nuxie_runtime::source::{
         nested_state_machine::NestedStateMachine,
         state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
+    artboard_component_list::ArtboardComponentList,
     custom_property_trigger::CustomPropertyTrigger,
+    data_bind::data_context::{DataContext, RuntimeDataContextHandle},
     event::Event,
     generated::{core_registry::CoreRegistry, nested_artboard_base::NestedArtboardBase},
     math::vec2d::Vec2D,
@@ -14,6 +16,8 @@ use nuxie_runtime::source::{
     viewmodel::{
         viewmodel::ViewModel, viewmodel_instance::ViewModelInstance,
         viewmodel_instance_boolean::ViewModelInstanceBoolean,
+        viewmodel_instance_list::ViewModelInstanceList,
+        viewmodel_instance_list_item::ViewModelInstanceListItem,
         viewmodel_instance_number::ViewModelInstanceNumber,
         viewmodel_instance_string::ViewModelInstanceString,
         viewmodel_instance_trigger::ViewModelInstanceTrigger,
@@ -513,4 +517,103 @@ fn component_fire_before_first_advance_reaches_new_machine() {
     component_fire(&press);
     fresh.advance_and_apply(0.0);
     assert_eq!(state(&fresh, 0), "pressed");
+}
+
+fn row_states(artboard: &RuntimeArtboardInstanceHandle) -> Vec<String> {
+    let list = artboard
+        .with_artboard(|artboard| artboard.find_handle::<ArtboardComponentList>("Rows"))
+        .expect("Rows list");
+    let count = list
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::artboard_count)
+        .unwrap();
+    (0..count)
+        .map(|index| {
+            let machine = list
+                .with_downcast::<ArtboardComponentList, _>(|list| {
+                    list.state_machine_instance(index as i32)
+                })
+                .unwrap();
+            machine.map_or_else(String::new, |machine| state(&machine, 0))
+        })
+        .collect()
+}
+
+#[test]
+fn fire_before_lists_first_advance_reaches_rows_it_creates() {
+    let file = read_file("list_item_parent_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let machine = artboard.state_machine_at(0).unwrap();
+    let view_model = default_vm(&file, &artboard);
+    bind(&machine, &view_model);
+    fire(&view_model, "play");
+    machine.advance_and_apply(0.0);
+    assert_eq!(state(&machine, 0), "played");
+    assert_eq!(row_states(&artboard), ["played", "played"]);
+}
+
+#[test]
+fn host_without_value_conditions_sets_rows_frame_through_both_binding_paths() {
+    let file = read_file("list_item_parent_trigger.riv");
+    for to_data_context in [false, true] {
+        let artboard = artboard(&file, "Quiet");
+        let machine = artboard.state_machine_at(0).unwrap();
+        let view_model = default_vm(&file, &artboard);
+        if to_data_context {
+            machine.with_instance_mut(|machine| {
+                machine.bind_data_context(RuntimeDataContextHandle::new(DataContext::new(Some(
+                    view_model.clone(),
+                ))));
+            });
+        } else {
+            bind(&machine, &view_model);
+        }
+        fire(&view_model, "play");
+        machine.advance_and_apply(0.0);
+        assert_eq!(
+            row_states(&artboard),
+            ["played", "played"],
+            "data-context binding: {to_data_context}"
+        );
+    }
+}
+
+#[test]
+fn fire_reaches_row_added_in_its_frame_but_not_later_frame() {
+    let file = read_file("list_item_parent_trigger.riv");
+    let artboard = artboard(&file, "Main");
+    let machine = artboard.state_machine_at(0).unwrap();
+    let view_model = default_vm(&file, &artboard);
+    bind(&machine, &view_model);
+    machine.advance_and_apply(0.0);
+    assert_eq!(row_states(&artboard), ["waiting", "waiting"]);
+
+    let items = property(&view_model, "items");
+    let add_row = || {
+        let item = items
+            .insert_sibling(ViewModelInstanceListItem::default())
+            .unwrap();
+        let instance = file
+            .with_file(|file| {
+                file.create_default_view_model_instance(file.view_model_named("Item").unwrap())
+            })
+            .unwrap();
+        item.with_downcast_mut::<ViewModelInstanceListItem, _>(|item| {
+            item.set_view_model_instance(Some(instance));
+        })
+        .unwrap();
+        items
+            .with_downcast_mut::<ViewModelInstanceList, _>(|items| items.add_item(item))
+            .unwrap();
+    };
+    fire(&view_model, "play");
+    add_row();
+    machine.advance_and_apply(0.016);
+    assert_eq!(row_states(&artboard), ["played", "played", "played"]);
+
+    add_row();
+    machine.advance_and_apply(0.016);
+    assert_eq!(
+        row_states(&artboard),
+        ["played", "played", "played", "waiting"]
+    );
 }

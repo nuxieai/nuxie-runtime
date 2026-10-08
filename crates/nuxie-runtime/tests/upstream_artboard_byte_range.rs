@@ -1,4 +1,4 @@
-//! All nine artboard_byte_range_test.cpp cases from upstream 1e979c62.
+//! artboard_byte_range_test.cpp, including the two c4d2c6cb retirement regressions.
 //! Replacement and byte-range access are the upstream tools-only surface.
 #![cfg(feature = "tools")]
 
@@ -14,13 +14,7 @@ use nuxie_runtime::{
 };
 
 fn load(name: &str) -> (Vec<u8>, RuntimeFileHandle, RecordingRenderer) {
-    let root = std::env::var_os("RIVE_RUNTIME_DIR")
-        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
-    let path = PathBuf::from(root)
-        .join("tests/unit_tests/assets")
-        .join(name);
-    let bytes = std::fs::read(&path)
-        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()));
+    let bytes = fixture(name);
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     let renderer = factory.borrow().make_renderer();
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
@@ -29,6 +23,125 @@ fn load(name: &str) -> (Vec<u8>, RuntimeFileHandle, RecordingRenderer) {
         .unwrap_or_else(|| panic!("{name} imports: {result:?}"));
     assert_eq!(result, ImportResult::Success);
     (bytes, file, renderer)
+}
+
+fn fixture(name: &str) -> Vec<u8> {
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let path = PathBuf::from(root)
+        .join("tests/unit_tests/assets")
+        .join(name);
+    std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
+}
+
+#[test]
+fn a_script_keeps_advancing_its_instances_of_a_replaced_artboard() {
+    use nuxie_render_api::SerializingFactory;
+    use nuxie_runtime::source::{
+        lua::scripting_vm::RuntimeScriptingVmHandle, script_input_artboard::ScriptInputArtboard,
+        scripted::scripted_drawable::ScriptedDrawable,
+    };
+    use nuxie_scripting::vm::{ScriptExecutionLimits, ScriptVm};
+
+    let bytes = fixture("script_artboard_test.riv");
+    let mut factory = PersistentFactory::new(SerializingFactory::new());
+    let mut renderer = factory.borrow().make_renderer();
+    let vm = RuntimeScriptingVmHandle::new(Box::new(
+        ScriptVm::new_with_execution_limits(ScriptExecutionLimits::default()).unwrap(),
+    ));
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        Some(vm),
+    )
+    .expect("script fixture imports");
+    let input_index = (0..file.with_file(File::artboard_count))
+        .flat_map(|index| objects(&file, index))
+        .find_map(|object| {
+            object.with_downcast::<ScriptInputArtboard, _>(
+                ScriptInputArtboard::referenced_artboard_id,
+            )
+        })
+        .expect("script Artboard input");
+    assert!(input_index >= 0);
+    let input_index = input_index as usize;
+    assert!(
+        file.with_file(|file| file.artboard_at_source(input_index))
+            .unwrap()
+            .with_downcast::<Artboard, _>(Artboard::default_state_machine_index)
+            .unwrap()
+            >= 0
+    );
+    let host = file
+        .with_file(|file| file.artboard_named("Artboard"))
+        .expect("host");
+    let machine = host.state_machine_at(0).expect("machine");
+    for _ in 0..10 {
+        machine.advance_and_apply(0.016);
+        host.draw(&mut renderer);
+    }
+    let replacement = run(&file, &bytes, input_index);
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(input_index, replacement)),
+        ImportResult::Success
+    );
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+    let scripted = host
+        .with_artboard(|artboard| {
+            artboard
+                .base
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| {
+                    object
+                        .with_downcast::<ScriptedDrawable, _>(|_| ())
+                        .is_some()
+                })
+                .cloned()
+        })
+        .expect("scripted drawable");
+    for _ in 0..10 {
+        scripted
+            .with_downcast_mut::<ScriptedDrawable, _>(ScriptedDrawable::wake_advance)
+            .unwrap();
+        machine.advance_and_apply(0.016);
+        host.draw(&mut renderer);
+    }
+}
+
+#[test]
+fn a_retired_artboard_is_deleted_once_its_last_instance_is_gone() {
+    let (bytes, file, mut renderer) = load("artboardclipping.riv");
+    assert!(file.with_file(File::artboard_count) > 1);
+    let target = 1;
+    let replacement = run(&file, &bytes, target);
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(target, replacement)),
+        ImportResult::Success
+    );
+    assert_eq!(file.with_file(File::retired_artboard_count), 0);
+    let instance = file
+        .with_file(|file| file.artboard_at(target))
+        .expect("instance");
+    let copy = instance.instance().expect("instance of instance");
+    drop(instance);
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(target, replacement)),
+        ImportResult::Success
+    );
+    assert_eq!(file.with_file(File::retired_artboard_count), 1);
+    copy.advance_default(0.016);
+    copy.draw(&mut renderer);
+    drop(copy);
+    assert_eq!(
+        file.with_file_mut(|file| file.replace_artboard(target, replacement)),
+        ImportResult::Success
+    );
+    assert_eq!(file.with_file(File::retired_artboard_count), 0);
 }
 
 // Read the header independently; do not derive its size from the ranges.

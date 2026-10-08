@@ -7,18 +7,24 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `74dda58f80efd7310959305c284a136e5c5087ff`
+- LAST_SYNCED_SHA: `05d690ee5a8879d738679f8ebad17c4a61af50ac`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Six upstream commits remain after this checkpoint at the fetched target.
-  All 206 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (228 after `5892bb05`); this
+  Five upstream commits remain after this checkpoint at the fetched target.
+  All 207 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (229 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `05d690ee`, integrated atop downstream `9c5626ff47`:
+  independent source-accounting and subsequent Rust-integration reviews are
+  clean. Source/pipeline tests pass 12, manifest tests pass 27, and generated
+  inventory/structural correspondence remain current. The public build-helper
+  delta has no runtime/shader counterpart; no executable Rust behavior changed
+  and no new runtime, guest or hardware validation is claimed.
 - Validation at `74dda58f`, integrated atop downstream `a5def1244b`:
   independent source-accounting and subsequent Rust-integration reviews are
   clean. The guest-only public delta remains deferred. Source/pipeline tests
@@ -464,6 +470,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `05d690ee5a8879d738679f8ebad17c4a61af50ac` | Build-only: the public delta adds optional named shallow submodule initialization to the upstream Premake dependency helper. Rust/Cargo has no corresponding live helper; C++ source-oracle builds consume the helper directly from the advanced pin. No runtime or shader behavior changes. The coop_file service named in the message is private implementation absent from the public delta and is not claimed imported. | — |
 | `74dda58f80efd7310959305c284a136e5c5087ff` | Deferred: guest Wasm host-object release, value/asset lookup factoring and browser guest host-call table generation/binding. All public implementation changes are in the parked guest scripting owners and glue, not native Luau, shared runtime or browser rendering. Npm package-build and benchmark changes described in the message are absent from the public delta and are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `625454e362a27bb3168f00cd87e9487f54d39338` | Translate inkbleed strokes in single-sample depth/stencil mode: shared draw/index/chunking contracts, shader sources and generated artifacts, and supported Vulkan/WebGPU/WebGL2 execution. Preserve native Metal's unsupported depth-stroke boundary. Carry the frame policy through screen/canvas and replay-oracle interfaces; translate updated range-chunker cases. Upstream path-fiddle/testing-window controls map to existing replay tools; D3D execution and Dawn Windows Premake linkage are unshipped. Private editor implementation is absent from the public delta and is not claimed imported. | — |
 | `0dd067f18bc14139720ee348dfc222af0c744e4e` | Translate live scroll-viewport resolution and full-viewport text-input hit testing; preserve slot-expanded fallback and parent clipping order. Translate the single-line/multiline regression using the exact pinned upstream authored fixture. RML remains upstream fixture provenance; private Dart/editor implementation is absent from the public delta and is not claimed imported. | — |

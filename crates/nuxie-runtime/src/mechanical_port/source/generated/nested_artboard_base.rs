@@ -7,11 +7,6 @@ pub trait NestedArtboardBaseCallbacks:
 {
     fn notify_property_changed(&mut self, property_key: u16);
     fn artboard_id_changed(&mut self) {}
-    fn data_bind_path_ids_changed(&mut self) {}
-    fn is_paused_changed(&mut self) {}
-    fn speed_changed(&mut self) {}
-    fn quantize_changed(&mut self) {}
-    fn is_stateful_changed(&mut self) {}
     fn decode_data_bind_path_ids(&mut self, value: &[u8]);
     fn copy_data_bind_path_ids(&mut self, object: &NestedArtboard);
 }
@@ -48,7 +43,11 @@ impl NestedArtboardBase {
     pub const IS_STATEFUL_PROPERTY_KEY: u16 = 1014;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -85,7 +84,6 @@ impl NestedArtboardBase {
         if !self.set_is_paused_value(value) {
             return;
         }
-        callbacks.is_paused_changed();
         NestedArtboardBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IS_PAUSED_PROPERTY_KEY,
@@ -106,7 +104,6 @@ impl NestedArtboardBase {
         if !self.set_speed_value(value) {
             return;
         }
-        callbacks.speed_changed();
         NestedArtboardBaseCallbacks::notify_property_changed(callbacks, Self::SPEED_PROPERTY_KEY);
     }
 
@@ -124,7 +121,6 @@ impl NestedArtboardBase {
         if !self.set_quantize_value(value) {
             return;
         }
-        callbacks.quantize_changed();
         NestedArtboardBaseCallbacks::notify_property_changed(
             callbacks,
             Self::QUANTIZE_PROPERTY_KEY,
@@ -149,7 +145,6 @@ impl NestedArtboardBase {
         if !self.set_is_stateful_value(value) {
             return;
         }
-        callbacks.is_stateful_changed();
         NestedArtboardBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IS_STATEFUL_PROPERTY_KEY,

@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 };
 
 pub trait DataConverterOperationViewModelBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_operation_base::DataConverterOperationBaseCallbacks {
-    fn source_path_ids_changed(&mut self) {}
     fn decode_source_path_ids(&mut self, value: &[u8]);
     fn copy_source_path_ids(&mut self, object: &DataConverterOperationViewModelBase);
 }
@@ -28,7 +27,11 @@ impl DataConverterOperationViewModelBase {
     pub const SOURCE_PATH_IDS_PROPERTY_KEY: u16 = 711;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 516 | 488)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

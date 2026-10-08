@@ -1,11 +1,10 @@
 use crate::mechanical_port::source::{
-    core::{binary_reader::BinaryReader, Core},
+    core::{Core, binary_reader::BinaryReader},
     selection_style::SelectionStyle,
 };
 
 pub trait SelectionStyleBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn highlight_color_changed(&mut self) {}
     fn corner_radius_changed(&mut self) {}
 }
 
@@ -27,8 +26,12 @@ impl SelectionStyleBase {
     pub const TYPE_KEY: u16 = 153;
     pub const HIGHLIGHT_COLOR_PROPERTY_KEY: u16 = 447;
     pub const CORNER_RADIUS_PROPERTY_KEY: u16 = 448;
-    pub fn is_type_of(key: u16) -> bool {
-        key == Self::TYPE_KEY
+    pub fn is_type_of(type_key: u16) -> bool {
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -59,7 +62,6 @@ impl SelectionStyleBase {
         callbacks: &mut impl SelectionStyleBaseCallbacks,
     ) {
         if self.set_highlight_color_value(value) {
-            callbacks.highlight_color_changed();
             callbacks.notify_property_changed(Self::HIGHLIGHT_COLOR_PROPERTY_KEY);
         }
     }

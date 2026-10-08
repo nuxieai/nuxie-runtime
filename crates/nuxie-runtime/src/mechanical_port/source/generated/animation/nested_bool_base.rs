@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 pub trait NestedBoolBaseCallbacks:
     crate::mechanical_port::source::generated::animation::nested_input_base::NestedInputBaseCallbacks
 {
-    fn nested_value_changed(&mut self) {}
     fn nested_value_bool(&mut self, value: bool);
 }
 
@@ -29,7 +28,11 @@ impl NestedBoolBase {
     pub const NESTED_VALUE_PROPERTY_KEY: u16 = 238;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 121 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

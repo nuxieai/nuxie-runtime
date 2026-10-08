@@ -5,9 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait BlendAnimationDirectBaseCallbacks: crate::mechanical_port::source::generated::animation::blend_animation_base::BlendAnimationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn input_id_changed(&mut self) {}
-    fn mix_value_changed(&mut self) {}
-    fn blend_source_changed(&mut self) {}
 }
 
 pub struct BlendAnimationDirectBase {
@@ -35,7 +32,11 @@ impl BlendAnimationDirectBase {
     pub const BLEND_SOURCE_PROPERTY_KEY: u16 = 298;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 74)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -51,7 +52,6 @@ impl BlendAnimationDirectBase {
         if !self.set_input_id_value(value) {
             return;
         }
-        callbacks.input_id_changed();
         BlendAnimationDirectBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INPUT_ID_PROPERTY_KEY,
@@ -76,7 +76,6 @@ impl BlendAnimationDirectBase {
         if !self.set_mix_value_value(value) {
             return;
         }
-        callbacks.mix_value_changed();
         BlendAnimationDirectBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MIX_VALUE_PROPERTY_KEY,
@@ -101,7 +100,6 @@ impl BlendAnimationDirectBase {
         if !self.set_blend_source_value(value) {
             return;
         }
-        callbacks.blend_source_changed();
         BlendAnimationDirectBaseCallbacks::notify_property_changed(
             callbacks,
             Self::BLEND_SOURCE_PROPERTY_KEY,

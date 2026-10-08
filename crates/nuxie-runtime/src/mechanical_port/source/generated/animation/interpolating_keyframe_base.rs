@@ -6,8 +6,6 @@ pub trait InterpolatingKeyFrameBaseCallbacks:
     crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn interpolation_type_changed(&mut self) {}
-    fn interpolator_id_changed(&mut self) {}
 }
 
 pub struct InterpolatingKeyFrameBase {
@@ -32,7 +30,11 @@ impl InterpolatingKeyFrameBase {
     pub const INTERPOLATOR_ID_PROPERTY_KEY: u16 = 69;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 29)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -48,7 +50,6 @@ impl InterpolatingKeyFrameBase {
         if !self.set_interpolation_type_value(value) {
             return;
         }
-        callbacks.interpolation_type_changed();
         InterpolatingKeyFrameBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERPOLATION_TYPE_PROPERTY_KEY,
@@ -73,7 +74,6 @@ impl InterpolatingKeyFrameBase {
         if !self.set_interpolator_id_value(value) {
             return;
         }
-        callbacks.interpolator_id_changed();
         InterpolatingKeyFrameBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERPOLATOR_ID_PROPERTY_KEY,

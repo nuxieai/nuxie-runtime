@@ -7,8 +7,6 @@ pub trait NSlicerTileModeBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn patch_index_changed(&mut self) {}
-    fn style_changed(&mut self) {}
 }
 
 pub struct NSlicerTileModeBase {
@@ -33,7 +31,11 @@ impl NSlicerTileModeBase {
     pub const STYLE_PROPERTY_KEY: u16 = 673;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -49,7 +51,6 @@ impl NSlicerTileModeBase {
         if !self.set_patch_index_value(value) {
             return;
         }
-        callbacks.patch_index_changed();
         NSlicerTileModeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::PATCH_INDEX_PROPERTY_KEY,
@@ -70,7 +71,6 @@ impl NSlicerTileModeBase {
         if !self.set_style_value(value) {
             return;
         }
-        callbacks.style_changed();
         NSlicerTileModeBaseCallbacks::notify_property_changed(callbacks, Self::STYLE_PROPERTY_KEY);
     }
 

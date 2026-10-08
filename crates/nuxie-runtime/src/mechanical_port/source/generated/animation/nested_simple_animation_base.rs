@@ -5,8 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait NestedSimpleAnimationBaseCallbacks: crate::mechanical_port::source::generated::animation::nested_linear_animation_base::NestedLinearAnimationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn speed_changed(&mut self) {}
-    fn is_playing_changed(&mut self) {}
 }
 
 pub struct NestedSimpleAnimationBase {
@@ -31,7 +29,11 @@ impl NestedSimpleAnimationBase {
     pub const IS_PLAYING_PROPERTY_KEY: u16 = 201;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 97 | 93 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -47,7 +49,6 @@ impl NestedSimpleAnimationBase {
         if !self.set_speed_value(value) {
             return;
         }
-        callbacks.speed_changed();
         NestedSimpleAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::SPEED_PROPERTY_KEY,
@@ -72,7 +73,6 @@ impl NestedSimpleAnimationBase {
         if !self.set_is_playing_value(value) {
             return;
         }
-        callbacks.is_playing_changed();
         NestedSimpleAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IS_PLAYING_PROPERTY_KEY,

@@ -55,7 +55,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 153408] = [(); PINNED_SOURCE.len()];
+const _: [(); 154353] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -1830,8 +1830,7 @@ fn newDrawShader(
             | gpu::DrawType::depthAAStrokes => {
                 sources.extend([GLSL_DRAW_PATH_COMMON, GLSL_DRAW_DEPTHSTENCIL_PATH]);
             }
-            gpu::DrawType::interiorTriangulation
-            | gpu::DrawType::featherAtlasBlit => {
+            gpu::DrawType::interiorTriangulation | gpu::DrawType::featherAtlasBlit => {
                 sources.extend([
                     GLSL_DRAW_PATH_COMMON,
                     GLSL_GRADIENT_PACKING_COMMON,
@@ -1841,10 +1840,7 @@ fn newDrawShader(
             }
             gpu::DrawType::clipReset => sources.push(GLSL_STENCIL_DRAW),
             gpu::DrawType::imageMesh => {
-                sources.extend([
-                    GLSL_DRAW_IMAGE_MESH_VERT,
-                    GLSL_DRAW_DEPTHSTENCIL_MESH_FRAG,
-                ]);
+                sources.extend([GLSL_DRAW_IMAGE_MESH_VERT, GLSL_DRAW_DEPTHSTENCIL_MESH_FRAG]);
             }
             _ => panic!("unreachable MSAA draw shader"),
         },
@@ -2326,7 +2322,6 @@ fn clearPipelineCache(context: &mut RenderContextGLImpl) {
     manager.m_fragmentShaderMap.clear();
     manager.m_vertexShaderMap.clear();
 }
-
 
 unsafe fn glBufferId(bufferRing: *mut BufferRing) -> GLuint {
     assert!(!bufferRing.is_null());
@@ -3780,53 +3775,47 @@ fn glString(bytes: &[u8]) -> &str {
     std::str::from_utf8(bytes).unwrap_or("")
 }
 
-fn parseVersionPair(text: &str, prefix: &str) -> (u32, u32) {
-    let Some(version) = text.strip_prefix(prefix) else {
-        return (0, 0);
-    };
-    let mut pieces = version.split(|character: char| !character.is_ascii_digit());
-    let major = pieces
-        .next()
-        .and_then(|piece| piece.parse().ok())
-        .unwrap_or(0);
-    let minor = pieces
-        .next()
-        .and_then(|piece| piece.parse().ok())
-        .unwrap_or(0);
-    (major, minor)
-}
-
-fn parsePowerVRVersion(text: &str) -> (u32, u32, u32, u32) {
-    let (major, minor) = parseVersionPair(text, "OpenGL ES ");
-    let Some(build) = text.split(" build ").nth(1) else {
-        return (major, minor, 0, 0);
-    };
-    let build = build.split('@').next().unwrap_or(build);
-    let mut pieces = build.split('.');
-    (
-        major,
-        minor,
-        pieces
-            .next()
-            .and_then(|piece| piece.parse().ok())
-            .unwrap_or(0),
-        pieces
-            .next()
-            .and_then(|piece| piece.parse().ok())
-            .unwrap_or(0),
-    )
-}
-
-fn parseAdrenoSeries(renderer: &str) -> u32 {
-    renderer
-        .strip_prefix("Adreno (TM) ")
-        .and_then(|suffix| {
-            suffix
-                .split(|character: char| !character.is_ascii_digit())
-                .next()
-        })
-        .and_then(|digits| digits.parse().ok())
-        .unwrap_or(0)
+// The upstream scanf subset: unsigned decimal fields, literal matching, and
+// C-locale whitespace. Writes completed fields even if a later literal fails.
+fn scanVersion(text: &str, format: &str, values: &mut [u32]) -> usize {
+    let text = text.as_bytes();
+    let format = format.as_bytes();
+    let mut input = 0;
+    let mut pattern = 0;
+    let mut count = 0;
+    let is_space = |byte: u8| matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c);
+    while let Some(&token) = format.get(pattern).filter(|&&token| token != 0) {
+        if token == b'%' {
+            pattern += 1; // The only conversion in the fixed formats is %u.
+            while text.get(input).is_some_and(|&byte| is_space(byte)) {
+                input += 1;
+            }
+            if !text.get(input).is_some_and(u8::is_ascii_digit) || count == values.len() {
+                break;
+            }
+            let mut number = 0u32;
+            while let Some(&digit) = text.get(input).filter(|digit| digit.is_ascii_digit()) {
+                number = number
+                    .wrapping_mul(10)
+                    .wrapping_add(u32::from(digit - b'0'));
+                input += 1;
+            }
+            values[count] = number;
+            count += 1;
+        } else if is_space(token) {
+            while text.get(input).is_some_and(|&byte| is_space(byte)) {
+                input += 1;
+            }
+        } else {
+            let actual = text.get(input).copied().unwrap_or(0);
+            input += 1;
+            if actual != token {
+                break;
+            }
+        }
+        pattern += 1;
+    }
+    count
 }
 
 fn makeContextOwnerInCurrent(
@@ -3855,19 +3844,20 @@ fn makeContextOwnerInCurrent(
     capabilities.setIsMali(renderer.contains("Mali"));
     capabilities.setIsPowerVR(renderer.contains("PowerVR"));
     capabilities.setIsIntel(renderer.contains("Intel"));
+    let mut versions = [0; 4];
     if capabilities.isPowerVR() {
-        let (major, minor, vendorMajor, vendorMinor) = parsePowerVRVersion(glVersion);
-        capabilities.contextVersionMajor = major;
-        capabilities.contextVersionMinor = minor;
-        capabilities.vendorDriverVersionMajor = vendorMajor;
-        capabilities.vendorDriverVersionMinor = vendorMinor;
+        scanVersion(glVersion, "OpenGL ES %u.%u build %u.%u@", &mut versions);
     } else {
-        let (major, minor) = parseVersionPair(glVersion, "OpenGL ES ");
-        capabilities.contextVersionMajor = major;
-        capabilities.contextVersionMinor = minor;
+        scanVersion(glVersion, "OpenGL ES %u.%u", &mut versions[..2]);
     }
+    capabilities.contextVersionMajor = versions[0];
+    capabilities.contextVersionMinor = versions[1];
+    capabilities.vendorDriverVersionMajor = versions[2];
+    capabilities.vendorDriverVersionMinor = versions[3];
     if capabilities.isAdreno() {
-        capabilities.adrenoSeries = parseAdrenoSeries(renderer);
+        let mut series = [0];
+        scanVersion(renderer, "Adreno (TM) %u", &mut series);
+        capabilities.adrenoSeries = series[0];
     }
     if !capabilities.isContextVersionAtLeast(3, 0) {
         eprintln!(
@@ -4399,12 +4389,11 @@ mod tests {
             &mut self,
             ingress: GLFinalReleaseIngress,
         ) -> std::sync::Arc<dyn nuxie_ore_metal::gpu_resource::ResourceFinalReleaseWake> {
-            assert!(
-                self.finalReleaseIngress
-                    .borrow_mut()
-                    .replace(ingress)
-                    .is_none()
-            );
+            assert!(self
+                .finalReleaseIngress
+                .borrow_mut()
+                .replace(ingress)
+                .is_none());
             self.finalReleaseWake.clone()
         }
 
@@ -4485,8 +4474,63 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 3914);
-        assert_eq!(PINNED_SOURCE.len(), 153408);
+        assert_eq!(PINNED_SOURCE.lines().count(), 3954);
+        assert_eq!(PINNED_SOURCE.len(), 154353);
+    }
+
+    #[test]
+    fn version_scanner_preserves_literals_partial_fields_and_unsigned_wrap() {
+        for (text, format, count, expected) in [
+            ("4.6 vendor", "%u.%u", 2, [4, 6, 99, 99]),
+            ("OpenGL ES 3.2", "OpenGL ES %u.%u", 2, [3, 2, 99, 99]),
+            (
+                "OpenGL\tES\n3.\u{b}2 build 1.13@abc",
+                "OpenGL ES %u.%u build %u.%u@",
+                4,
+                [3, 2, 1, 13],
+            ),
+            ("OpenGLES3.2", "OpenGL ES %u.%u", 2, [3, 2, 99, 99]),
+            (
+                "OpenGL ES 3x2 build 1.13@",
+                "OpenGL ES %u.%u build %u.%u@",
+                1,
+                [3, 99, 99, 99],
+            ),
+            (
+                "OpenGL ES 3.2 vendor build 1.13@",
+                "OpenGL ES %u.%u build %u.%u@",
+                2,
+                [3, 2, 99, 99],
+            ),
+            ("OpenGL ES +3.2", "OpenGL ES %u.%u", 0, [99; 4]),
+            ("OpenGL ES -3.2", "OpenGL ES %u.%u", 0, [99; 4]),
+            (
+                "OpenGL ES 4294967297.2",
+                "OpenGL ES %u.%u",
+                2,
+                [1, 2, 99, 99],
+            ),
+            (
+                "OpenGL ES 3.2\0 build 1.13@",
+                "OpenGL ES %u.%u build %u.%u@",
+                2,
+                [3, 2, 99, 99],
+            ),
+            (
+                "Adreno (TM) 740 suffix",
+                "Adreno (TM) %u",
+                1,
+                [740, 99, 99, 99],
+            ),
+            ("Adreno (TM) +740", "Adreno (TM) %u", 0, [99; 4]),
+        ] {
+            let mut values = [99; 4];
+            assert_eq!(scanVersion(text, format, &mut values), count, "{text:?}");
+            assert_eq!(values, expected, "{text:?}");
+        }
+        let mut value = [99];
+        assert_eq!(scanVersion("3.2", "%u.%u", &mut value), 1);
+        assert_eq!(value, [3]);
     }
 
     #[test]
@@ -4638,12 +4682,10 @@ mod tests {
         assert!(!commands.borrow().contains(&GLCommand::DeleteTexture(11)));
         execution.withCurrent(|| {});
         assert!(commands.borrow().contains(&GLCommand::DeleteTexture(11)));
-        assert!(
-            !commands
-                .borrow()
-                .iter()
-                .any(|command| matches!(command, GLCommand::DeleteFramebuffer(_)))
-        );
+        assert!(!commands
+            .borrow()
+            .iter()
+            .any(|command| matches!(command, GLCommand::DeleteFramebuffer(_))));
         drop(execution);
         domain.shutdown();
         assert!(finalReleaseIngress.borrow().is_some());

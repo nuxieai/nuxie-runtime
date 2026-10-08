@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait TransitionViewModelConditionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn op_value_changed(&mut self) {}
 }
 
 pub struct TransitionViewModelConditionBase {
@@ -28,7 +27,11 @@ impl TransitionViewModelConditionBase {
     pub const OP_VALUE_PROPERTY_KEY: u16 = 650;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 476)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +47,6 @@ impl TransitionViewModelConditionBase {
         if !self.set_op_value_value(value) {
             return;
         }
-        callbacks.op_value_changed();
         callbacks.notify_property_changed(Self::OP_VALUE_PROPERTY_KEY);
     }
 

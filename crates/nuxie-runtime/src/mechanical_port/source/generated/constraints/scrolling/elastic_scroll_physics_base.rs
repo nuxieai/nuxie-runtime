@@ -5,9 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait ElasticScrollPhysicsBaseCallbacks: crate::mechanical_port::source::generated::constraints::scrolling::scroll_physics_base::ScrollPhysicsBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn friction_changed(&mut self) {}
-    fn speed_multiplier_changed(&mut self) {}
-    fn elastic_factor_changed(&mut self) {}
 }
 
 pub struct ElasticScrollPhysicsBase {
@@ -35,7 +32,11 @@ impl ElasticScrollPhysicsBase {
     pub const ELASTIC_FACTOR_PROPERTY_KEY: u16 = 730;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 523 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -51,7 +52,6 @@ impl ElasticScrollPhysicsBase {
         if !self.set_friction_value(value) {
             return;
         }
-        callbacks.friction_changed();
         ElasticScrollPhysicsBaseCallbacks::notify_property_changed(
             callbacks,
             Self::FRICTION_PROPERTY_KEY,
@@ -76,7 +76,6 @@ impl ElasticScrollPhysicsBase {
         if !self.set_speed_multiplier_value(value) {
             return;
         }
-        callbacks.speed_multiplier_changed();
         ElasticScrollPhysicsBaseCallbacks::notify_property_changed(
             callbacks,
             Self::SPEED_MULTIPLIER_PROPERTY_KEY,
@@ -101,7 +100,6 @@ impl ElasticScrollPhysicsBase {
         if !self.set_elastic_factor_value(value) {
             return;
         }
-        callbacks.elastic_factor_changed();
         ElasticScrollPhysicsBaseCallbacks::notify_property_changed(
             callbacks,
             Self::ELASTIC_FACTOR_PROPERTY_KEY,

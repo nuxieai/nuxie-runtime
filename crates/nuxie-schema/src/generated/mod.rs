@@ -3,6 +3,7 @@
 // Refresh with:
 // `make schema`
 
+pub mod changed_callbacks;
 pub mod schema;
 
 pub use schema::{

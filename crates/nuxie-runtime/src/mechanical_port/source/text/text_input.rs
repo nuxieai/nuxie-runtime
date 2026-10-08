@@ -123,7 +123,6 @@ impl TextInput {
         completion: &mut crate::source::core::PropertySetterCompletion,
     ) {
         if self.base.set_select_all_on_focus_value(value) {
-            TextInputBaseCallbacks::select_all_on_focus_changed(self);
             completion.record(
                 crate::source::core::CoreObject::core(self),
                 TextInputBase::SELECT_ALL_ON_FOCUS_PROPERTY_KEY,

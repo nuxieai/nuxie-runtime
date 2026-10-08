@@ -10,11 +10,6 @@ pub trait ImageBaseCallbacks:
     fn origin_x_changed(&mut self) {}
     fn origin_y_changed(&mut self) {}
     fn fit_changed(&mut self) {}
-    fn alignment_x_changed(&mut self) {}
-    fn alignment_y_changed(&mut self) {}
-    fn sampler_filter_changed(&mut self) {}
-    fn sampler_wrap_x_changed(&mut self) {}
-    fn sampler_wrap_y_changed(&mut self) {}
 }
 
 pub struct ImageBase {
@@ -60,7 +55,11 @@ impl ImageBase {
     pub const SAMPLER_WRAP_Y_PROPERTY_KEY: u16 = 1078;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -144,7 +143,6 @@ impl ImageBase {
         if !self.set_alignment_x_value(value) {
             return;
         }
-        callbacks.alignment_x_changed();
         ImageBaseCallbacks::notify_property_changed(callbacks, Self::ALIGNMENT_X_PROPERTY_KEY);
     }
 
@@ -162,7 +160,6 @@ impl ImageBase {
         if !self.set_alignment_y_value(value) {
             return;
         }
-        callbacks.alignment_y_changed();
         ImageBaseCallbacks::notify_property_changed(callbacks, Self::ALIGNMENT_Y_PROPERTY_KEY);
     }
 
@@ -180,7 +177,6 @@ impl ImageBase {
         if !self.set_sampler_filter_value(value) {
             return;
         }
-        callbacks.sampler_filter_changed();
         ImageBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_FILTER_PROPERTY_KEY);
     }
 
@@ -198,7 +194,6 @@ impl ImageBase {
         if !self.set_sampler_wrap_x_value(value) {
             return;
         }
-        callbacks.sampler_wrap_x_changed();
         ImageBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_WRAP_X_PROPERTY_KEY);
     }
 
@@ -216,7 +211,6 @@ impl ImageBase {
         if !self.set_sampler_wrap_y_value(value) {
             return;
         }
-        callbacks.sampler_wrap_y_changed();
         ImageBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_WRAP_Y_PROPERTY_KEY);
     }
 

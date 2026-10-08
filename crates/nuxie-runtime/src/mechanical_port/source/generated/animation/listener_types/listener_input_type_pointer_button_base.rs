@@ -7,9 +7,7 @@ use crate::mechanical_port::source::{
     generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks,
 };
 
-pub trait ListenerInputTypePointerButtonBaseCallbacks: ListenerInputTypeBaseCallbacks {
-    fn pointer_button_value_changed(&mut self) {}
-}
+pub trait ListenerInputTypePointerButtonBaseCallbacks: ListenerInputTypeBaseCallbacks {}
 
 #[derive(Default)]
 pub struct ListenerInputTypePointerButtonBase {
@@ -21,7 +19,11 @@ impl ListenerInputTypePointerButtonBase {
     pub const TYPE_KEY: u16 = 155;
     pub const POINTER_BUTTON_VALUE_PROPERTY_KEY: u16 = 468;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 658)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -35,7 +37,6 @@ impl ListenerInputTypePointerButtonBase {
         callbacks: &mut impl ListenerInputTypePointerButtonBaseCallbacks,
     ) {
         if self.set_pointer_button_value_value(value) {
-            callbacks.pointer_button_value_changed();
             callbacks.notify_property_changed(Self::POINTER_BUTTON_VALUE_PROPERTY_KEY);
         }
     }

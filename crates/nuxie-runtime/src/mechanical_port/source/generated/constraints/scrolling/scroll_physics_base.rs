@@ -4,7 +4,6 @@ pub trait ScrollPhysicsBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn constraint_id_changed(&mut self) {}
 }
 
 pub struct ScrollPhysicsBase {
@@ -26,7 +25,11 @@ impl ScrollPhysicsBase {
     pub const CONSTRAINT_ID_PROPERTY_KEY: u16 = 731;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -42,7 +45,6 @@ impl ScrollPhysicsBase {
         if !self.set_constraint_id_value(value) {
             return;
         }
-        callbacks.constraint_id_changed();
         ScrollPhysicsBaseCallbacks::notify_property_changed(
             callbacks,
             Self::CONSTRAINT_ID_PROPERTY_KEY,

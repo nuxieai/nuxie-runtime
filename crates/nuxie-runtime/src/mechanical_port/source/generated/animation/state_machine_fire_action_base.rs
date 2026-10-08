@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait StateMachineFireActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn occurs_value_changed(&mut self) {}
 }
 
 pub struct StateMachineFireActionBase {
@@ -27,7 +26,11 @@ impl StateMachineFireActionBase {
     pub const OCCURS_VALUE_PROPERTY_KEY: u16 = 393;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl StateMachineFireActionBase {
         if !self.set_occurs_value_value(value) {
             return;
         }
-        callbacks.occurs_value_changed();
         callbacks.notify_property_changed(Self::OCCURS_VALUE_PROPERTY_KEY);
     }
 

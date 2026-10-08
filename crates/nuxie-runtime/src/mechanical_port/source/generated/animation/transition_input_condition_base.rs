@@ -4,7 +4,6 @@ use crate::mechanical_port::source::{
 
 pub trait TransitionInputConditionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn input_id_changed(&mut self) {}
 }
 
 pub struct TransitionInputConditionBase {
@@ -26,7 +25,11 @@ impl TransitionInputConditionBase {
     pub const INPUT_ID_PROPERTY_KEY: u16 = 155;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 476)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -42,7 +45,6 @@ impl TransitionInputConditionBase {
         if !self.set_input_id_value(value) {
             return;
         }
-        callbacks.input_id_changed();
         callbacks.notify_property_changed(Self::INPUT_ID_PROPERTY_KEY);
     }
 

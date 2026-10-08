@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 pub trait IKConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::targeted_constraint_base::TargetedConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
     fn invert_direction_changed(&mut self) {}
-    fn parent_bone_count_changed(&mut self) {}
 }
 
 pub struct IKConstraintBase {
@@ -31,7 +30,11 @@ impl IKConstraintBase {
     pub const PARENT_BONE_COUNT_PROPERTY_KEY: u16 = 175;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 80 | 79 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -72,7 +75,6 @@ impl IKConstraintBase {
         if !self.set_parent_bone_count_value(value) {
             return;
         }
-        callbacks.parent_bone_count_changed();
         IKConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::PARENT_BONE_COUNT_PROPERTY_KEY,

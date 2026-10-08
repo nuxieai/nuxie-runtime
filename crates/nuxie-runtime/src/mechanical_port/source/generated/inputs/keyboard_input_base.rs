@@ -4,9 +4,6 @@ use crate::mechanical_port::source::{
 };
 
 pub trait KeyboardInputBaseCallbacks {
-    fn key_type_changed(&mut self) {}
-    fn key_phase_changed(&mut self) {}
-    fn modifiers_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
 
@@ -34,7 +31,11 @@ impl KeyboardInputBase {
     pub const KEY_PHASE_PROPERTY_KEY: u16 = 972;
     pub const MODIFIERS_PROPERTY_KEY: u16 = 973;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 663)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -53,7 +54,6 @@ impl KeyboardInputBase {
         if !self.set_key_type_value(value) {
             return;
         }
-        c.key_type_changed();
         c.notify_property_changed(Self::KEY_TYPE_PROPERTY_KEY);
     }
 
@@ -68,7 +68,6 @@ impl KeyboardInputBase {
         if !self.set_key_phase_value(value) {
             return;
         }
-        c.key_phase_changed();
         c.notify_property_changed(Self::KEY_PHASE_PROPERTY_KEY);
     }
 
@@ -83,7 +82,6 @@ impl KeyboardInputBase {
         if !self.set_modifiers_value(value) {
             return;
         }
-        c.modifiers_changed();
         c.notify_property_changed(Self::MODIFIERS_PROPERTY_KEY);
     }
 

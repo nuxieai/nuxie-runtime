@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait FocusActionTargetBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn target_id_changed(&mut self) {}
 }
 
 pub struct FocusActionTargetBase {
@@ -27,7 +26,11 @@ impl FocusActionTargetBase {
     pub const TARGET_ID_PROPERTY_KEY: u16 = 952;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 671 | 125)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl FocusActionTargetBase {
         if !self.set_target_id_value(value) {
             return;
         }
-        callbacks.target_id_changed();
         FocusActionTargetBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TARGET_ID_PROPERTY_KEY,

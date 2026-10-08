@@ -1,6 +1,6 @@
 //! Native type predicates must remain usable while their owner is borrowed.
-//! Expected ancestry is the explicit switch in the pinned generated
-//! ShapeBase, NodeBase, and ArtboardBase headers, not a Rust predicate oracle.
+//! Expected ancestry comes from upstream generated types and the explicit
+//! local video extension, not a Rust predicate oracle.
 
 use nuxie_runtime::source::{
     artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
@@ -8,10 +8,20 @@ use nuxie_runtime::source::{
     node::Node,
     shapes::shape::Shape,
 };
+use nuxie_runtime::video::{Video, VideoAsset};
 
 const SHAPE_TYPES: &[u16] = &[3, 13, 2, 38, 91, 11, 10];
 const NODE_TYPES: &[u16] = &[2, 38, 91, 11, 10];
 const ARTBOARD_TYPES: &[u16] = &[1, 409, 13, 2, 38, 91, 11, 10];
+
+#[test]
+fn video_extensions_preserve_ancestry_under_owner_borrow() {
+    let arena = CoreArena::default();
+    let video = arena.insert(Video::default());
+    let asset = arena.insert(VideoAsset::default());
+    assert_types_during_mutable_borrow(&video, 60001, &[60001, 100, 13, 2, 38, 91, 11, 10]);
+    assert_types_during_mutable_borrow(&asset, 60000, &[60000, 104, 103, 99]);
+}
 
 fn assert_types_during_mutable_borrow(handle: &CoreHandle, leaf: u16, ancestry: &[u16]) {
     handle

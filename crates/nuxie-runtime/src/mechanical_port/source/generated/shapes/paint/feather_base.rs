@@ -7,11 +7,9 @@ pub trait FeatherBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn space_value_changed(&mut self) {}
     fn strength_changed(&mut self) {}
     fn offset_x_changed(&mut self) {}
     fn offset_y_changed(&mut self) {}
-    fn inner_changed(&mut self) {}
 }
 
 pub struct FeatherBase {
@@ -45,7 +43,11 @@ impl FeatherBase {
     pub const INNER_PROPERTY_KEY: u16 = 752;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -57,7 +59,6 @@ impl FeatherBase {
         if !self.set_space_value_value(value) {
             return;
         }
-        callbacks.space_value_changed();
         FeatherBaseCallbacks::notify_property_changed(callbacks, Self::SPACE_VALUE_PROPERTY_KEY);
     }
 
@@ -129,7 +130,6 @@ impl FeatherBase {
         if !self.set_inner_value(value) {
             return;
         }
-        callbacks.inner_changed();
         FeatherBaseCallbacks::notify_property_changed(callbacks, Self::INNER_PROPERTY_KEY);
     }
 

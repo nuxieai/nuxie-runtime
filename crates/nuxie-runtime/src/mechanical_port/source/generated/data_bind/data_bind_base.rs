@@ -4,9 +4,7 @@ use crate::mechanical_port::source::{
 
 pub trait DataBindBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn property_key_changed(&mut self) {}
     fn flags_changed(&mut self) {}
-    fn converter_id_changed(&mut self) {}
 }
 
 pub struct DataBindBase {
@@ -34,7 +32,11 @@ impl DataBindBase {
     pub const CONVERTER_ID_PROPERTY_KEY: u16 = 660;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -46,7 +48,6 @@ impl DataBindBase {
         if !self.set_property_key_value(value) {
             return;
         }
-        callbacks.property_key_changed();
         callbacks.notify_property_changed(Self::PROPERTY_KEY_PROPERTY_KEY);
     }
 
@@ -82,7 +83,6 @@ impl DataBindBase {
         if !self.set_converter_id_value(value) {
             return;
         }
-        callbacks.converter_id_changed();
         callbacks.notify_property_changed(Self::CONVERTER_ID_PROPERTY_KEY);
     }
 

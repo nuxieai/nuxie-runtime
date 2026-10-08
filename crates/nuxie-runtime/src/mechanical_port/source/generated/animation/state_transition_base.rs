@@ -5,13 +5,8 @@ use crate::mechanical_port::source::{
 
 pub trait StateTransitionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn state_to_id_changed(&mut self) {}
     fn flags_changed(&mut self) {}
     fn duration_changed(&mut self) {}
-    fn exit_time_changed(&mut self) {}
-    fn interpolation_type_changed(&mut self) {}
-    fn interpolator_id_changed(&mut self) {}
-    fn random_weight_changed(&mut self) {}
 }
 
 pub struct StateTransitionBase {
@@ -51,7 +46,11 @@ impl StateTransitionBase {
     pub const RANDOM_WEIGHT_PROPERTY_KEY: u16 = 537;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 66)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -67,7 +66,6 @@ impl StateTransitionBase {
         if !self.set_state_to_id_value(value) {
             return;
         }
-        callbacks.state_to_id_changed();
         callbacks.notify_property_changed(Self::STATE_TO_ID_PROPERTY_KEY);
     }
 
@@ -121,7 +119,6 @@ impl StateTransitionBase {
         if !self.set_exit_time_value(value) {
             return;
         }
-        callbacks.exit_time_changed();
         callbacks.notify_property_changed(Self::EXIT_TIME_PROPERTY_KEY);
     }
 
@@ -143,7 +140,6 @@ impl StateTransitionBase {
         if !self.set_interpolation_type_value(value) {
             return;
         }
-        callbacks.interpolation_type_changed();
         callbacks.notify_property_changed(Self::INTERPOLATION_TYPE_PROPERTY_KEY);
     }
 
@@ -165,7 +161,6 @@ impl StateTransitionBase {
         if !self.set_interpolator_id_value(value) {
             return;
         }
-        callbacks.interpolator_id_changed();
         callbacks.notify_property_changed(Self::INTERPOLATOR_ID_PROPERTY_KEY);
     }
 
@@ -187,7 +182,6 @@ impl StateTransitionBase {
         if !self.set_random_weight_value(value) {
             return;
         }
-        callbacks.random_weight_changed();
         callbacks.notify_property_changed(Self::RANDOM_WEIGHT_PROPERTY_KEY);
     }
 

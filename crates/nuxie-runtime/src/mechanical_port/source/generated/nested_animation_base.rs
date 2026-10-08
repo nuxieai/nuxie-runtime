@@ -6,7 +6,6 @@ pub trait NestedAnimationBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn animation_id_changed(&mut self) {}
 }
 
 pub struct NestedAnimationBase {
@@ -28,7 +27,11 @@ impl NestedAnimationBase {
     pub const ANIMATION_ID_PROPERTY_KEY: u16 = 198;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +47,6 @@ impl NestedAnimationBase {
         if !self.set_animation_id_value(value) {
             return;
         }
-        callbacks.animation_id_changed();
         NestedAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::ANIMATION_ID_PROPERTY_KEY,

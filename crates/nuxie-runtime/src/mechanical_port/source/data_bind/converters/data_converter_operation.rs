@@ -89,7 +89,6 @@ impl DataConverterOperation {
     pub fn new(operation: ArithmeticOperation) -> Self {
         let mut converter = Self::default();
         if converter.base.set_operation_type_value(operation as u32) {
-            DataConverterOperationBaseCallbacks::operation_type_changed(&mut converter);
             crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
                 .notify_property_changed(DataConverterOperationBase::OPERATION_TYPE_PROPERTY_KEY);
         }

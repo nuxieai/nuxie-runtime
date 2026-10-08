@@ -6,8 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait ViewModelPropertyBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_component_base::ViewModelComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn symbol_type_value_changed(&mut self) {}
-    fn component_props_changed(&mut self) {}
 }
 
 pub struct ViewModelPropertyBase {
@@ -32,7 +30,11 @@ impl ViewModelPropertyBase {
     pub const COMPONENT_PROPS_PROPERTY_KEY: u16 = 957;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 429)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -48,7 +50,6 @@ impl ViewModelPropertyBase {
         if !self.set_symbol_type_value_value(value) {
             return;
         }
-        callbacks.symbol_type_value_changed();
         ViewModelPropertyBaseCallbacks::notify_property_changed(
             callbacks,
             Self::SYMBOL_TYPE_VALUE_PROPERTY_KEY,
@@ -73,7 +74,6 @@ impl ViewModelPropertyBase {
         if !self.set_component_props_value(value) {
             return;
         }
-        callbacks.component_props_changed();
         ViewModelPropertyBaseCallbacks::notify_property_changed(
             callbacks,
             Self::COMPONENT_PROPS_PROPERTY_KEY,

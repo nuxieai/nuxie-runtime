@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait FocusActionTraversalBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn traversal_kind_changed(&mut self) {}
 }
 
 pub struct FocusActionTraversalBase {
@@ -27,7 +26,11 @@ impl FocusActionTraversalBase {
     pub const TRAVERSAL_KIND_PROPERTY_KEY: u16 = 1011;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 671 | 125)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl FocusActionTraversalBase {
         if !self.set_traversal_kind_value(value) {
             return;
         }
-        callbacks.traversal_kind_changed();
         FocusActionTraversalBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRAVERSAL_KIND_PROPERTY_KEY,

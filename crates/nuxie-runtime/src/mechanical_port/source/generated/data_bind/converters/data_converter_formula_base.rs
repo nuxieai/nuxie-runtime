@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait DataConverterFormulaBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn random_mode_value_changed(&mut self) {}
 }
 
 pub struct DataConverterFormulaBase {
@@ -27,7 +26,11 @@ impl DataConverterFormulaBase {
     pub const RANDOM_MODE_VALUE_PROPERTY_KEY: u16 = 887;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 488)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl DataConverterFormulaBase {
         if !self.set_random_mode_value_value(value) {
             return;
         }
-        callbacks.random_mode_value_changed();
         DataConverterFormulaBaseCallbacks::notify_property_changed(
             callbacks,
             Self::RANDOM_MODE_VALUE_PROPERTY_KEY,

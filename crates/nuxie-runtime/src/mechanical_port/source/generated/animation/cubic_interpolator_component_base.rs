@@ -7,10 +7,6 @@ pub trait CubicInterpolatorComponentBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn x1_changed(&mut self) {}
-    fn y1_changed(&mut self) {}
-    fn x2_changed(&mut self) {}
-    fn y2_changed(&mut self) {}
 }
 
 pub struct CubicInterpolatorComponentBase {
@@ -41,7 +37,11 @@ impl CubicInterpolatorComponentBase {
     pub const Y2_PROPERTY_KEY: u16 = 340;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -57,7 +57,6 @@ impl CubicInterpolatorComponentBase {
         if !self.set_x1_value(value) {
             return;
         }
-        callbacks.x1_changed();
         CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
             callbacks,
             Self::X1_PROPERTY_KEY,
@@ -82,7 +81,6 @@ impl CubicInterpolatorComponentBase {
         if !self.set_y1_value(value) {
             return;
         }
-        callbacks.y1_changed();
         CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
             callbacks,
             Self::Y1_PROPERTY_KEY,
@@ -107,7 +105,6 @@ impl CubicInterpolatorComponentBase {
         if !self.set_x2_value(value) {
             return;
         }
-        callbacks.x2_changed();
         CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
             callbacks,
             Self::X2_PROPERTY_KEY,
@@ -132,7 +129,6 @@ impl CubicInterpolatorComponentBase {
         if !self.set_y2_value(value) {
             return;
         }
-        callbacks.y2_changed();
         CubicInterpolatorComponentBaseCallbacks::notify_property_changed(
             callbacks,
             Self::Y2_PROPERTY_KEY,

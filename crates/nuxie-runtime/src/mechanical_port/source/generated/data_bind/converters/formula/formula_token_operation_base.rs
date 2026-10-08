@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait FormulaTokenOperationBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn operation_type_changed(&mut self) {}
 }
 
 pub struct FormulaTokenOperationBase {
@@ -27,7 +26,11 @@ impl FormulaTokenOperationBase {
     pub const OPERATION_TYPE_PROPERTY_KEY: u16 = 775;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 537)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl FormulaTokenOperationBase {
         if !self.set_operation_type_value(value) {
             return;
         }
-        callbacks.operation_type_changed();
         callbacks.notify_property_changed(Self::OPERATION_TYPE_PROPERTY_KEY);
     }
 

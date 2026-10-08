@@ -6,8 +6,6 @@ pub trait MeshVertexBaseCallbacks:
     crate::mechanical_port::source::generated::shapes::vertex_base::VertexBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn u_changed(&mut self) {}
-    fn v_changed(&mut self) {}
 }
 
 pub struct MeshVertexBase {
@@ -32,7 +30,11 @@ impl MeshVertexBase {
     pub const V_PROPERTY_KEY: u16 = 216;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 107 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +46,6 @@ impl MeshVertexBase {
         if !self.set_u_value(value) {
             return;
         }
-        callbacks.u_changed();
         MeshVertexBaseCallbacks::notify_property_changed(callbacks, Self::U_PROPERTY_KEY);
     }
 
@@ -62,7 +63,6 @@ impl MeshVertexBase {
         if !self.set_v_value(value) {
             return;
         }
-        callbacks.v_changed();
         MeshVertexBaseCallbacks::notify_property_changed(callbacks, Self::V_PROPERTY_KEY);
     }
 

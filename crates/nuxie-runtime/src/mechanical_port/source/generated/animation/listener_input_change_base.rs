@@ -4,8 +4,6 @@ use crate::mechanical_port::source::{
 
 pub trait ListenerInputChangeBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn input_id_changed(&mut self) {}
-    fn nested_input_id_changed(&mut self) {}
 }
 
 pub struct ListenerInputChangeBase {
@@ -30,7 +28,11 @@ impl ListenerInputChangeBase {
     pub const NESTED_INPUT_ID_PROPERTY_KEY: u16 = 400;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 125)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -46,7 +48,6 @@ impl ListenerInputChangeBase {
         if !self.set_input_id_value(value) {
             return;
         }
-        callbacks.input_id_changed();
         ListenerInputChangeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INPUT_ID_PROPERTY_KEY,
@@ -71,7 +72,6 @@ impl ListenerInputChangeBase {
         if !self.set_nested_input_id_value(value) {
             return;
         }
-        callbacks.nested_input_id_changed();
         ListenerInputChangeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::NESTED_INPUT_ID_PROPERTY_KEY,

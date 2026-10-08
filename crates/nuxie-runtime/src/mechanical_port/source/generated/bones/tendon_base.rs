@@ -10,13 +10,6 @@ use crate::mechanical_port::source::{
 pub trait TendonBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
-    fn bone_id_changed(&mut self) {}
-    fn xx_changed(&mut self) {}
-    fn yx_changed(&mut self) {}
-    fn xy_changed(&mut self) {}
-    fn yy_changed(&mut self) {}
-    fn tx_changed(&mut self) {}
-    fn ty_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
 
@@ -56,7 +49,11 @@ impl TendonBase {
     pub const TX_PROPERTY_KEY: u16 = 100;
     pub const TY_PROPERTY_KEY: u16 = 101;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -87,7 +84,6 @@ impl TendonBase {
         if !self.set_bone_id_value(value) {
             return;
         }
-        c.bone_id_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::BONE_ID_PROPERTY_KEY);
     }
 
@@ -102,7 +98,6 @@ impl TendonBase {
         if !self.set_xx_value(value) {
             return;
         }
-        c.xx_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::XX_PROPERTY_KEY);
     }
 
@@ -117,7 +112,6 @@ impl TendonBase {
         if !self.set_yx_value(value) {
             return;
         }
-        c.yx_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::YX_PROPERTY_KEY);
     }
 
@@ -132,7 +126,6 @@ impl TendonBase {
         if !self.set_xy_value(value) {
             return;
         }
-        c.xy_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::XY_PROPERTY_KEY);
     }
 
@@ -147,7 +140,6 @@ impl TendonBase {
         if !self.set_yy_value(value) {
             return;
         }
-        c.yy_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::YY_PROPERTY_KEY);
     }
 
@@ -162,7 +154,6 @@ impl TendonBase {
         if !self.set_tx_value(value) {
             return;
         }
-        c.tx_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::TX_PROPERTY_KEY);
     }
 
@@ -177,7 +168,6 @@ impl TendonBase {
         if !self.set_ty_value(value) {
             return;
         }
-        c.ty_changed();
         TendonBaseCallbacks::notify_property_changed(c, Self::TY_PROPERTY_KEY);
     }
 

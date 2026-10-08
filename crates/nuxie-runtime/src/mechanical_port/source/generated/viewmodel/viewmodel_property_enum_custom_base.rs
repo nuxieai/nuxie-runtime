@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait ViewModelPropertyEnumCustomBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn enum_id_changed(&mut self) {}
 }
 
 pub struct ViewModelPropertyEnumCustomBase {
@@ -28,7 +27,11 @@ impl ViewModelPropertyEnumCustomBase {
     pub const ENUM_ID_PROPERTY_KEY: u16 = 574;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 509 | 430 | 429)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +47,6 @@ impl ViewModelPropertyEnumCustomBase {
         if !self.set_enum_id_value(value) {
             return;
         }
-        callbacks.enum_id_changed();
         ViewModelPropertyEnumCustomBaseCallbacks::notify_property_changed(
             callbacks,
             Self::ENUM_ID_PROPERTY_KEY,

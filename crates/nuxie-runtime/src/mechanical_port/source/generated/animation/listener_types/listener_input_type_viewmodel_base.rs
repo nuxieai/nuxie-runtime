@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 };
 
 pub trait ListenerInputTypeViewModelBaseCallbacks: crate::mechanical_port::source::generated::animation::listener_types::listener_input_type_base::ListenerInputTypeBaseCallbacks {
-    fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
     fn copy_view_model_path_ids(&mut self, object: &ListenerInputTypeViewModel);
 }
@@ -28,7 +27,11 @@ impl ListenerInputTypeViewModelBase {
     pub const VIEW_MODEL_PATH_IDS_PROPERTY_KEY: u16 = 963;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 658)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

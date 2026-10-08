@@ -6,7 +6,6 @@ pub trait TextTargetModifierBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn target_id_changed(&mut self) {}
 }
 
 pub struct TextTargetModifierBase {
@@ -28,7 +27,11 @@ impl TextTargetModifierBase {
     pub const TARGET_ID_PROPERTY_KEY: u16 = 778;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 160 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +47,6 @@ impl TextTargetModifierBase {
         if !self.set_target_id_value(value) {
             return;
         }
-        callbacks.target_id_changed();
         TextTargetModifierBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TARGET_ID_PROPERTY_KEY,

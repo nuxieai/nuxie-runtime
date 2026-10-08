@@ -4,9 +4,7 @@ use crate::mechanical_port::source::{
     generated::assets::file_asset_base::FileAssetBaseCallbacks,
 };
 
-pub trait ExportAudioBaseCallbacks: FileAssetBaseCallbacks {
-    fn volume_changed(&mut self) {}
-}
+pub trait ExportAudioBaseCallbacks: FileAssetBaseCallbacks {}
 
 pub struct ExportAudioBase {
     pub base: FileAsset,
@@ -27,7 +25,11 @@ impl ExportAudioBase {
     pub const VOLUME_PROPERTY_KEY: u16 = 530;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 103 | 99)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
 
     pub fn core_type(&self) -> u16 {
@@ -50,7 +52,6 @@ impl ExportAudioBase {
         if !self.set_volume_value(value) {
             return;
         }
-        callbacks.volume_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::VOLUME_PROPERTY_KEY);
     }
     pub(crate) fn set_volume_value(&mut self, value: f32) -> bool {

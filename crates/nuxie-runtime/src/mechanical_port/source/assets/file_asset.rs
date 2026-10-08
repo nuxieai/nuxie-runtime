@@ -140,9 +140,9 @@ impl FileAsset {
         let indices = [3usize, 2, 1, 0, 5, 4, 7, 6, 9, 8, 15, 14, 13, 12, 11, 10];
         let mut result = String::with_capacity(36);
         for index in indices {
-            use std::fmt::Write;
-            write!(&mut result, "{:02x}", self.cdn_uuid[index])
-                .expect("writing to String cannot fail");
+            let byte = self.cdn_uuid[index];
+            result.push(b"0123456789abcdef"[(byte >> 4) as usize] as char);
+            result.push(b"0123456789abcdef"[(byte & 0xf) as usize] as char);
             if matches!(index, 0 | 4 | 6 | 8) {
                 result.push('-');
             }

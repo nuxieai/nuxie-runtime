@@ -10,7 +10,6 @@ pub trait TextInputBaseCallbacks:
     fn selection_radius_changed(&mut self) {}
     fn multiline_changed(&mut self) {}
     fn obscured_changed(&mut self) {}
-    fn select_all_on_focus_changed(&mut self) {}
     fn align_value_changed(&mut self) {}
     fn vertical_align_value_changed(&mut self) {}
 }
@@ -95,7 +94,11 @@ impl TextInputBase {
     }
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -191,7 +194,6 @@ impl TextInputBase {
         callbacks: &mut impl TextInputBaseCallbacks,
     ) {
         if self.set_select_all_on_focus_value(value) {
-            callbacks.select_all_on_focus_changed();
             TextInputBaseCallbacks::notify_property_changed(
                 callbacks,
                 Self::SELECT_ALL_ON_FOCUS_PROPERTY_KEY,

@@ -5,12 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait TransformComponentConstraintYBaseCallbacks: crate::mechanical_port::source::generated::constraints::transform_component_constraint_base::TransformComponentConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn copy_factor_y_changed(&mut self) {}
-    fn min_value_y_changed(&mut self) {}
-    fn max_value_y_changed(&mut self) {}
-    fn does_copy_y_changed(&mut self) {}
-    fn min_y_changed(&mut self) {}
-    fn max_y_changed(&mut self) {}
 }
 
 pub struct TransformComponentConstraintYBase {
@@ -47,7 +41,11 @@ impl TransformComponentConstraintYBase {
     pub const MAX_Y_PROPERTY_KEY: u16 = 194;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 85 | 90 | 80 | 79 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -63,7 +61,6 @@ impl TransformComponentConstraintYBase {
         if !self.set_copy_factor_y_value(value) {
             return;
         }
-        callbacks.copy_factor_y_changed();
         TransformComponentConstraintYBaseCallbacks::notify_property_changed(
             callbacks,
             Self::COPY_FACTOR_Y_PROPERTY_KEY,
@@ -88,7 +85,6 @@ impl TransformComponentConstraintYBase {
         if !self.set_min_value_y_value(value) {
             return;
         }
-        callbacks.min_value_y_changed();
         TransformComponentConstraintYBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MIN_VALUE_Y_PROPERTY_KEY,
@@ -113,7 +109,6 @@ impl TransformComponentConstraintYBase {
         if !self.set_max_value_y_value(value) {
             return;
         }
-        callbacks.max_value_y_changed();
         TransformComponentConstraintYBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MAX_VALUE_Y_PROPERTY_KEY,
@@ -138,7 +133,6 @@ impl TransformComponentConstraintYBase {
         if !self.set_does_copy_y_value(value) {
             return;
         }
-        callbacks.does_copy_y_changed();
         TransformComponentConstraintYBaseCallbacks::notify_property_changed(
             callbacks,
             Self::DOES_COPY_Y_PROPERTY_KEY,
@@ -163,7 +157,6 @@ impl TransformComponentConstraintYBase {
         if !self.set_min_y_value(value) {
             return;
         }
-        callbacks.min_y_changed();
         TransformComponentConstraintYBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MIN_Y_PROPERTY_KEY,
@@ -188,7 +181,6 @@ impl TransformComponentConstraintYBase {
         if !self.set_max_y_value(value) {
             return;
         }
-        callbacks.max_y_changed();
         TransformComponentConstraintYBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MAX_Y_PROPERTY_KEY,

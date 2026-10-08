@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait ScriptedTransitionConditionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn script_asset_id_changed(&mut self) {}
 }
 
 pub struct ScriptedTransitionConditionBase {
@@ -27,7 +26,11 @@ impl ScriptedTransitionConditionBase {
     pub const SCRIPT_ASSET_ID_PROPERTY_KEY: u16 = 931;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 476)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl ScriptedTransitionConditionBase {
         if !self.set_script_asset_id_value(value) {
             return;
         }
-        callbacks.script_asset_id_changed();
         callbacks.notify_property_changed(Self::SCRIPT_ASSET_ID_PROPERTY_KEY);
     }
 

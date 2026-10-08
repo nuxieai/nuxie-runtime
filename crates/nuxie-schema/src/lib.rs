@@ -169,11 +169,14 @@ impl Property {
     }
 
     pub fn cpp_generates_changed_hook(self) -> bool {
-        self.stores_data && self.bitmask_passthrough.is_none()
+        self.stores_data
+            && self.bitmask_passthrough.is_none()
+            && generated::changed_callbacks::changed_in_use(self.name)
     }
 
     pub fn cpp_generates_value_setter_body(self) -> bool {
-        self.cpp_generates_changed_hook()
+        self.stores_data
+            && self.bitmask_passthrough.is_none()
             && !self.encoded
             && !self.pure_virtual
             && self.runtime_type != FieldKind::Callback

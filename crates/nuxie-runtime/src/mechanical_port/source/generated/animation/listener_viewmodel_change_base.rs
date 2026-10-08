@@ -8,8 +8,6 @@ pub trait ListenerViewModelChangeBaseCallbacks:
     crate::mechanical_port::source::generated::animation::listener_action_base::ListenerActionBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn input_value_changed(&mut self) {}
-    fn input_value_index_changed(&mut self) {}
 }
 
 pub struct ListenerViewModelChangeBase {
@@ -34,7 +32,11 @@ impl ListenerViewModelChangeBase {
     pub const INPUT_VALUE_INDEX_PROPERTY_KEY: u16 = 454;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 125)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -53,7 +55,6 @@ impl ListenerViewModelChangeBase {
         if !self.set_input_value_value(value) {
             return;
         }
-        callbacks.input_value_changed();
         ListenerViewModelChangeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INPUT_VALUE_PROPERTY_KEY,
@@ -74,7 +75,6 @@ impl ListenerViewModelChangeBase {
         if !self.set_input_value_index_value(value) {
             return;
         }
-        callbacks.input_value_index_changed();
         ListenerViewModelChangeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INPUT_VALUE_INDEX_PROPERTY_KEY,

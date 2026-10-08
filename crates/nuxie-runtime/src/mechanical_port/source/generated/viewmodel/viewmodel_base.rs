@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait ViewModelBaseCallbacks: crate::mechanical_port::source::generated::viewmodel::viewmodel_component_base::ViewModelComponentBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn view_model_type_changed(&mut self) {}
 }
 
 pub struct ViewModelBase {
@@ -28,7 +27,11 @@ impl ViewModelBase {
     pub const VIEW_MODEL_TYPE_PROPERTY_KEY: u16 = 981;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 429)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -40,7 +43,6 @@ impl ViewModelBase {
         if !self.set_view_model_type_value(value) {
             return;
         }
-        callbacks.view_model_type_changed();
         ViewModelBaseCallbacks::notify_property_changed(
             callbacks,
             Self::VIEW_MODEL_TYPE_PROPERTY_KEY,

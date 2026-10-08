@@ -74,12 +74,8 @@ pub trait LayoutComponentStyleBaseCallbacks: crate::mechanical_port::source::gen
     fn position_bottom_units_value_changed(&mut self) {}
     fn flex_basis_changed(&mut self) {}
     fn aspect_ratio_changed(&mut self) {}
-    fn interpolator_id_changed(&mut self) {}
     fn interpolation_time_changed(&mut self) {}
-    fn flex_basis_units_value_changed(&mut self) {}
     fn layout_alignment_type_changed(&mut self) {}
-    fn animation_style_type_changed(&mut self) {}
-    fn interpolation_type_changed(&mut self) {}
     fn position_type_value_changed(&mut self) {}
     fn flex_direction_value_changed(&mut self) {}
     fn direction_value_changed(&mut self) {}
@@ -260,7 +256,11 @@ impl LayoutComponentStyleBase {
     pub const CORNER_RADIUS_BR_PROPERTY_KEY: u16 = 643;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 1056 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -904,7 +904,6 @@ impl LayoutComponentStyleBase {
         if !self.set_interpolator_id_value(value) {
             return;
         }
-        callbacks.interpolator_id_changed();
         LayoutComponentStyleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERPOLATOR_ID_PROPERTY_KEY,
@@ -954,7 +953,6 @@ impl LayoutComponentStyleBase {
         if !self.set_flex_basis_units_value_value(value) {
             return;
         }
-        callbacks.flex_basis_units_value_changed();
         LayoutComponentStyleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::FLEX_BASIS_UNITS_VALUE_PROPERTY_KEY,
@@ -1004,7 +1002,6 @@ impl LayoutComponentStyleBase {
         if !self.set_animation_style_type_value(value) {
             return;
         }
-        callbacks.animation_style_type_changed();
         LayoutComponentStyleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::ANIMATION_STYLE_TYPE_PROPERTY_KEY,
@@ -1029,7 +1026,6 @@ impl LayoutComponentStyleBase {
         if !self.set_interpolation_type_value(value) {
             return;
         }
-        callbacks.interpolation_type_changed();
         LayoutComponentStyleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERPOLATION_TYPE_PROPERTY_KEY,

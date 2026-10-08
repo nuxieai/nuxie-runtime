@@ -5,14 +5,7 @@ use crate::mechanical_port::source::{
 
 pub trait TransformComponentConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::transform_space_constraint_base::TransformSpaceConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn min_max_space_value_changed(&mut self) {}
-    fn copy_factor_changed(&mut self) {}
-    fn min_value_changed(&mut self) {}
-    fn max_value_changed(&mut self) {}
     fn offset_changed(&mut self) {}
-    fn does_copy_changed(&mut self) {}
-    fn min_changed(&mut self) {}
-    fn max_changed(&mut self) {}
 }
 
 pub struct TransformComponentConstraintBase {
@@ -55,7 +48,11 @@ impl TransformComponentConstraintBase {
     pub const MAX_PROPERTY_KEY: u16 = 191;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 90 | 80 | 79 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -71,7 +68,6 @@ impl TransformComponentConstraintBase {
         if !self.set_min_max_space_value_value(value) {
             return;
         }
-        callbacks.min_max_space_value_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MIN_MAX_SPACE_VALUE_PROPERTY_KEY,
@@ -96,7 +92,6 @@ impl TransformComponentConstraintBase {
         if !self.set_copy_factor_value(value) {
             return;
         }
-        callbacks.copy_factor_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::COPY_FACTOR_PROPERTY_KEY,
@@ -121,7 +116,6 @@ impl TransformComponentConstraintBase {
         if !self.set_min_value_value(value) {
             return;
         }
-        callbacks.min_value_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MIN_VALUE_PROPERTY_KEY,
@@ -146,7 +140,6 @@ impl TransformComponentConstraintBase {
         if !self.set_max_value_value(value) {
             return;
         }
-        callbacks.max_value_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MAX_VALUE_PROPERTY_KEY,
@@ -196,7 +189,6 @@ impl TransformComponentConstraintBase {
         if !self.set_does_copy_value(value) {
             return;
         }
-        callbacks.does_copy_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::DOES_COPY_PROPERTY_KEY,
@@ -229,7 +221,6 @@ impl TransformComponentConstraintBase {
             return;
         }
         self.min = value;
-        callbacks.min_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MIN_PROPERTY_KEY,
@@ -254,7 +245,6 @@ impl TransformComponentConstraintBase {
             return;
         }
         self.max = value;
-        callbacks.max_changed();
         TransformComponentConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::MAX_PROPERTY_KEY,

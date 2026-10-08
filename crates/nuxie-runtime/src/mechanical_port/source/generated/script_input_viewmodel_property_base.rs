@@ -9,7 +9,6 @@ pub trait ScriptInputViewModelPropertyBaseCallbacks:
 {
     fn decode_data_bind_path_ids(&mut self, value: &[u8]);
     fn copy_data_bind_path_ids(&mut self, object: &ScriptInputViewModelProperty);
-    fn data_bind_path_ids_changed(&mut self) {}
 }
 
 pub struct ScriptInputViewModelPropertyBase {
@@ -26,7 +25,11 @@ impl ScriptInputViewModelPropertyBase {
     pub const TYPE_KEY: u16 = 612;
     pub const DATA_BIND_PATH_IDS_PROPERTY_KEY: u16 = 866;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 167 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

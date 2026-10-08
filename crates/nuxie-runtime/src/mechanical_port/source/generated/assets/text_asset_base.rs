@@ -4,9 +4,7 @@ use crate::mechanical_port::source::{
     generated::assets::file_asset_base::FileAssetBaseCallbacks,
 };
 
-pub trait TextAssetBaseCallbacks: FileAssetBaseCallbacks {
-    fn folder_path_changed(&mut self) {}
-}
+pub trait TextAssetBaseCallbacks: FileAssetBaseCallbacks {}
 
 pub struct TextAssetBase {
     pub base: FileAsset,
@@ -27,7 +25,11 @@ impl TextAssetBase {
     pub const FOLDER_PATH_PROPERTY_KEY: u16 = 926;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 103 | 99)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
 
     pub fn core_type(&self) -> u16 {
@@ -50,7 +52,6 @@ impl TextAssetBase {
         if !self.set_folder_path_value(value) {
             return;
         }
-        callbacks.folder_path_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::FOLDER_PATH_PROPERTY_KEY);
     }
     pub(crate) fn set_folder_path_value(&mut self, value: String) -> bool {

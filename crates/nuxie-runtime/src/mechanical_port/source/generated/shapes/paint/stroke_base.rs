@@ -11,7 +11,6 @@ pub trait StrokeBaseCallbacks:
     fn thickness_changed(&mut self) {}
     fn cap_changed(&mut self) {}
     fn join_changed(&mut self) {}
-    fn transform_affects_stroke_changed(&mut self) {}
     fn position_changed(&mut self) {}
 }
 
@@ -46,7 +45,11 @@ impl StrokeBase {
     pub const POSITION_PROPERTY_KEY: u16 = 470;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 21 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -116,7 +119,6 @@ impl StrokeBase {
         if !self.set_transform_affects_stroke_value(value) {
             return;
         }
-        callbacks.transform_affects_stroke_changed();
         StrokeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY,

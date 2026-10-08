@@ -2,7 +2,7 @@
 use super::ore_gm_helper::*;
 use super::ore_gm_sink::GMFrameSink;
 use crate::deferred::cmd::{
-    deferred_replayer::{DeferredReplayer, snapshot_frame},
+    deferred_replayer::{snapshot_frame, DeferredReplayer},
     deferred_session::{DeferredSession, ReplayCaps},
 };
 fn record_clear(ctx: &mut dyn ContextApi, view: &AnyResourceHandle) {

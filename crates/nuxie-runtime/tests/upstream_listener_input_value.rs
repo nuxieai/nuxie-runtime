@@ -128,9 +128,13 @@ impl InputScene {
 #[test]
 fn pointer_listeners_write_the_pointer_position() {
     let scene = InputScene::new();
-    scene
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(120.0, 310.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    scene.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(120.0, 310.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     scene.advance();
     assert_eq!(scene.number("px"), 120.0);
     assert_eq!(scene.number("py"), 310.0);
@@ -177,9 +181,13 @@ fn gamepad_buttons_write_pressed_state_and_value() {
 #[test]
 fn input_values_of_another_type_go_through_the_converter() {
     let scene = InputScene::new();
-    scene
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(120.4, 310.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    scene.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(120.4, 310.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     scene.advance();
     assert_eq!(scene.string("pxText"), "120");
     let mut press = GamepadWire::new();

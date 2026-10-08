@@ -7,21 +7,24 @@ fn a_corner_radius_change_rebuilds_only_its_layout_path() {
     let f = Fixture::new("layout/layout_anim_bound.riv");
     f.advance(0.0);
     let layout = f.layout(LayoutAnimationStyle::Inherit);
-    assert!(layout
-        .with(|o| o.as_layout_component().unwrap().actual_direction() != LayoutDirection::Rtl)
-        .unwrap());
+    assert!(
+        layout
+            .with(|o| o.as_layout_component().unwrap().actual_direction() != LayoutDirection::Rtl)
+            .unwrap()
+    );
     let s = style(&layout);
     boolean(&s, Style::LINK_CORNER_RADIUS_PROPERTY_KEY, true);
     number(&s, Style::CORNER_RADIUS_TL_PROPERTY_KEY, 12.0);
-    assert!(!f
-        .artboard
-        .core_handle()
-        .with(|o| o
-            .as_component()
+    assert!(
+        !f.artboard
+            .core_handle()
+            .with(|o| o
+                .as_component()
+                .unwrap()
+                .dirt()
+                .contains(nuxie_runtime::source::component_dirt::ComponentDirt::LAYOUT_STYLE))
             .unwrap()
-            .dirt()
-            .contains(nuxie_runtime::source::component_dirt::ComponentDirt::LAYOUT_STYLE))
-        .unwrap());
+    );
     f.advance(0.0);
     assert!(local(&layout) == rounded_rect(&layout, [12.0; 4]));
     number(&s, Style::CORNER_RADIUS_TR_PROPERTY_KEY, 4.0);

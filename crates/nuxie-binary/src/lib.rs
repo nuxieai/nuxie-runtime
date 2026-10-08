@@ -8021,9 +8021,7 @@ fn cpp_data_bind_add_effect(
     }
 }
 
-fn cpp_data_bind_source_effect(
-    data_bind: &RuntimeObject,
-) -> RuntimeDataBindSourceEffect {
+fn cpp_data_bind_source_effect(data_bind: &RuntimeObject) -> RuntimeDataBindSourceEffect {
     RuntimeDataBindSourceEffect {
         adds_source_dependent: !cpp_data_bind_binds_once(data_bind),
         sets_source: true,

@@ -319,46 +319,68 @@ impl ScriptedRenderer {
 
 impl UserData for ScriptedRenderer {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("drawImageMeshInstanced", |_, this,
-            (image, sampler, vertices, uvs, indices, instances):
-                (AnyUserData, AnyUserData, AnyUserData, AnyUserData, AnyUserData, AnyUserData)| {
-            let sampler = sampler.borrow::<ScriptedImageSampler>()?;
-            let mut instances = instances.borrow_mut::<ScriptedImageMeshInstances>()?;
-            let vertex_count = vertices.borrow::<ScriptedVertexBuffer>()?.len();
-            let uv_count = uvs.borrow::<ScriptedVertexBuffer>()?.len();
-            let index_count = indices.borrow::<ScriptedTriangleBuffer>()?.len();
-            // Preserve the existing approved Rust host bounds boundary.
-            indices.borrow::<ScriptedTriangleBuffer>()?
-                .validate_for_vertices(vertex_count, uv_count)?;
-            let vertex_count = u32::try_from(vertex_count)
-                .map_err(|_| Error::runtime("vertex count exceeds u32"))?;
-            let index_count = u32::try_from(index_count)
-                .map_err(|_| Error::runtime("index count exceeds u32"))?;
-            this.bindings.with_factory(|factory| {
-                vertices.borrow_mut::<ScriptedVertexBuffer>()?.update(factory);
-                uvs.borrow_mut::<ScriptedVertexBuffer>()?.update(factory);
-                indices.borrow_mut::<ScriptedTriangleBuffer>()?.update(factory);
-                Ok(())
-            })?;
-            let vertices = vertices.borrow::<ScriptedVertexBuffer>()?;
-            let uvs = uvs.borrow::<ScriptedVertexBuffer>()?;
-            let indices = indices.borrow::<ScriptedTriangleBuffer>()?;
-            with_scripted_image(&image, |image| {
-                this.with_renderer_mut(|renderer| {
-                    // Validation above must succeed before staged writes reach
-                    // the renderer, once for all writes since its last draw.
-                    instances.commit();
-                    let committed_instances = instances.instances.clone();
-                    // The renderer may re-enter scripting. Its retained data
-                    // is independent of subsequent writes to the staging vec.
-                    drop(instances);
-                    renderer.draw_image_mesh_instanced(Some(image), sampler.0,
-                        vertices.render_buffer(), uvs.render_buffer(), indices.render_buffer(),
-                        vertex_count, index_count, Some(&committed_instances));
+        methods.add_method(
+            "drawImageMeshInstanced",
+            |_,
+             this,
+             (image, sampler, vertices, uvs, indices, instances): (
+                AnyUserData,
+                AnyUserData,
+                AnyUserData,
+                AnyUserData,
+                AnyUserData,
+                AnyUserData,
+            )| {
+                let sampler = sampler.borrow::<ScriptedImageSampler>()?;
+                let mut instances = instances.borrow_mut::<ScriptedImageMeshInstances>()?;
+                let vertex_count = vertices.borrow::<ScriptedVertexBuffer>()?.len();
+                let uv_count = uvs.borrow::<ScriptedVertexBuffer>()?.len();
+                let index_count = indices.borrow::<ScriptedTriangleBuffer>()?.len();
+                // Preserve the existing approved Rust host bounds boundary.
+                indices
+                    .borrow::<ScriptedTriangleBuffer>()?
+                    .validate_for_vertices(vertex_count, uv_count)?;
+                let vertex_count = u32::try_from(vertex_count)
+                    .map_err(|_| Error::runtime("vertex count exceeds u32"))?;
+                let index_count = u32::try_from(index_count)
+                    .map_err(|_| Error::runtime("index count exceeds u32"))?;
+                this.bindings.with_factory(|factory| {
+                    vertices
+                        .borrow_mut::<ScriptedVertexBuffer>()?
+                        .update(factory);
+                    uvs.borrow_mut::<ScriptedVertexBuffer>()?.update(factory);
+                    indices
+                        .borrow_mut::<ScriptedTriangleBuffer>()?
+                        .update(factory);
                     Ok(())
-                })
-            })?
-        });
+                })?;
+                let vertices = vertices.borrow::<ScriptedVertexBuffer>()?;
+                let uvs = uvs.borrow::<ScriptedVertexBuffer>()?;
+                let indices = indices.borrow::<ScriptedTriangleBuffer>()?;
+                with_scripted_image(&image, |image| {
+                    this.with_renderer_mut(|renderer| {
+                        // Validation above must succeed before staged writes reach
+                        // the renderer, once for all writes since its last draw.
+                        instances.commit();
+                        let committed_instances = instances.instances.clone();
+                        // The renderer may re-enter scripting. Its retained data
+                        // is independent of subsequent writes to the staging vec.
+                        drop(instances);
+                        renderer.draw_image_mesh_instanced(
+                            Some(image),
+                            sampler.0,
+                            vertices.render_buffer(),
+                            uvs.render_buffer(),
+                            indices.render_buffer(),
+                            vertex_count,
+                            index_count,
+                            Some(&committed_instances),
+                        );
+                        Ok(())
+                    })
+                })?
+            },
+        );
         methods.add_method("save", |_, this, ()| this.save());
         methods.add_method("modulateOpacity", |_, this, opacity: f32| {
             this.with_renderer_mut(|renderer| {
@@ -514,12 +536,46 @@ mod tests {
         fn save(&mut self) {}
         fn restore(&mut self) {}
         fn transform(&mut self, _: nuxie_render_api::Mat2D) {}
-        fn draw_path(&mut self, _: &dyn nuxie_render_api::RenderPath, _: &dyn nuxie_render_api::RenderPaint) {}
+        fn draw_path(
+            &mut self,
+            _: &dyn nuxie_render_api::RenderPath,
+            _: &dyn nuxie_render_api::RenderPaint,
+        ) {
+        }
         fn clip_path(&mut self, _: &dyn nuxie_render_api::RenderPath) {}
         fn modulate_opacity(&mut self, _: f32) {}
-        fn draw_image(&mut self, _: Option<&dyn nuxie_render_api::RenderImage>, _: nuxie_render_api::ImageSampler, _: nuxie_render_api::BlendMode, _: f32) {}
-        fn draw_image_mesh(&mut self, _: Option<&dyn nuxie_render_api::RenderImage>, _: nuxie_render_api::ImageSampler, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: u32, _: u32, _: nuxie_render_api::BlendMode, _: f32) {}
-        fn draw_image_mesh_instanced(&mut self, _: Option<&dyn nuxie_render_api::RenderImage>, _: nuxie_render_api::ImageSampler, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: Option<&dyn nuxie_render_api::RenderBuffer>, _: u32, _: u32, instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>) {
+        fn draw_image(
+            &mut self,
+            _: Option<&dyn nuxie_render_api::RenderImage>,
+            _: nuxie_render_api::ImageSampler,
+            _: nuxie_render_api::BlendMode,
+            _: f32,
+        ) {
+        }
+        fn draw_image_mesh(
+            &mut self,
+            _: Option<&dyn nuxie_render_api::RenderImage>,
+            _: nuxie_render_api::ImageSampler,
+            _: Option<&dyn nuxie_render_api::RenderBuffer>,
+            _: Option<&dyn nuxie_render_api::RenderBuffer>,
+            _: Option<&dyn nuxie_render_api::RenderBuffer>,
+            _: u32,
+            _: u32,
+            _: nuxie_render_api::BlendMode,
+            _: f32,
+        ) {
+        }
+        fn draw_image_mesh_instanced(
+            &mut self,
+            _: Option<&dyn nuxie_render_api::RenderImage>,
+            _: nuxie_render_api::ImageSampler,
+            _: Option<&dyn nuxie_render_api::RenderBuffer>,
+            _: Option<&dyn nuxie_render_api::RenderBuffer>,
+            _: Option<&dyn nuxie_render_api::RenderBuffer>,
+            _: u32,
+            _: u32,
+            instances: Option<&nuxie_render_api::ImageMeshInstancesHandle>,
+        ) {
             let instances = instances.unwrap().borrow();
             self.drew_while_editing |= instances.is_editing();
             self.draws.push(instances.instance_data().to_vec());
@@ -578,8 +634,16 @@ return instances
             vm.install_render_factory(&mut factory).unwrap();
             vm.install_rive_globals().unwrap();
             let instances: AnyUserData = vm.eval(MESH_INSTANCES_SOURCE).unwrap();
-            let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap().instances.clone();
-            Self { vm, factory, instances }
+            let instances = instances
+                .borrow::<ScriptedImageMeshInstances>()
+                .unwrap()
+                .instances
+                .clone();
+            Self {
+                vm,
+                factory,
+                instances,
+            }
         }
         fn commits(&self) -> usize {
             let instances = self.instances.borrow();
@@ -587,15 +651,31 @@ return instances
             instances.edit_count()
         }
         fn fill(&self, count: usize, opacity: f32) {
-            self.vm.lua().globals().get::<luaur_rt::Function>("fill").unwrap().call::<()>((count, opacity)).unwrap();
+            self.vm
+                .lua()
+                .globals()
+                .get::<luaur_rt::Function>("fill")
+                .unwrap()
+                .call::<()>((count, opacity))
+                .unwrap();
         }
         fn render(&mut self, recorder: &mut InstanceRecorder) {
             let lua = self.vm.lua();
             let (renderer, _scope) = ScriptedRenderer::create_call_scoped_userdata(
-                lua, recorder, self.vm.renderer_bindings.clone()).unwrap();
+                lua,
+                recorder,
+                self.vm.renderer_bindings.clone(),
+            )
+            .unwrap();
             let image = self.factory.borrow_mut().decode_image(&[1]).unwrap();
-            let image = lua.create_userdata(ScriptedImage::from_render_image(image)).unwrap();
-            lua.globals().get::<luaur_rt::Function>("render").unwrap().call::<()>((renderer.clone(), image)).unwrap();
+            let image = lua
+                .create_userdata(ScriptedImage::from_render_image(image))
+                .unwrap();
+            lua.globals()
+                .get::<luaur_rt::Function>("render")
+                .unwrap()
+                .call::<()>((renderer.clone(), image))
+                .unwrap();
             assert!(renderer.borrow::<ScriptedRenderer>().unwrap().end());
         }
     }
@@ -632,7 +712,13 @@ return instances
     fn mesh_instances_resize_keeps_earlier_sets_and_commits_once_per_draw() {
         let mut vm = MeshInstancesTest::new();
         let mut recorder = InstanceRecorder::default();
-        vm.vm.lua().globals().get::<luaur_rt::Function>("grow").unwrap().call::<()>(100).unwrap();
+        vm.vm
+            .lua()
+            .globals()
+            .get::<luaur_rt::Function>("grow")
+            .unwrap()
+            .call::<()>(100)
+            .unwrap();
         assert_eq!(vm.commits(), 0);
         vm.render(&mut recorder);
         assert_eq!(vm.commits(), 1);
@@ -647,8 +733,18 @@ return instances
     #[test]
     fn mesh_instances_set_rejects_an_index_past_the_end() {
         let vm = MeshInstancesTest::new();
-        let message = vm.vm.lua().globals().get::<luaur_rt::Function>("setPastEnd").unwrap().call::<String>(()).unwrap();
-        assert!(message.contains("index 2 is past the end of MeshInstances"), "{message}");
+        let message = vm
+            .vm
+            .lua()
+            .globals()
+            .get::<luaur_rt::Function>("setPastEnd")
+            .unwrap()
+            .call::<String>(())
+            .unwrap();
+        assert!(
+            message.contains("index 2 is past the end of MeshInstances"),
+            "{message}"
+        );
     }
 
     #[test]
@@ -658,15 +754,26 @@ return instances
         vm.install_render_factory(&mut factory).unwrap();
         vm.install_rive_globals().unwrap();
         let image = factory.borrow_mut().decode_image(&[1]).unwrap();
-        vm.lua().globals().set("image", vm.lua().create_userdata(
-            ScriptedImage::from_render_image(image)).unwrap()).unwrap();
-        let instances: AnyUserData = vm.eval(r#"
+        vm.lua()
+            .globals()
+            .set(
+                "image",
+                vm.lua()
+                    .create_userdata(ScriptedImage::from_render_image(image))
+                    .unwrap(),
+            )
+            .unwrap();
+        let instances: AnyUserData = vm
+            .eval(
+                r#"
             instances = MeshInstances()
             instances:resize(2)
             instances:set(0, Mat2D.withTranslation(10, 20))
             instances:set(1, Mat2D.identity(), 0.5, 0.25, Vector.xy(0.2, 0.3), Vector.xy(0.4, 0.6))
             return instances
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         {
             let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap();
             let data = instances.instances.borrow();
@@ -685,7 +792,9 @@ return instances
             end}
         "#).unwrap();
         let mut renderer = factory.borrow().make_renderer();
-        vm.renderer_bindings.call_draw(&table, &mut factory, &mut renderer, None).unwrap();
+        vm.renderer_bindings
+            .call_draw(&table, &mut factory, &mut renderer, None)
+            .unwrap();
         {
             let instances = instances.borrow::<ScriptedImageMeshInstances>().unwrap();
             let data = instances.instances.borrow();
@@ -699,7 +808,9 @@ return instances
         let stream = factory.borrow().stream();
         assert_eq!(stream.matches("drawImageMeshInstanced ").count(), 1);
         assert!(!stream.contains("drawImageMesh "));
-        assert!(stream.contains("transform=[1,0,0,1,10,20],uvTranslate=[0,0],uvScale=[1,1],opacity=1,additiveness=0"));
+        assert!(stream.contains(
+            "transform=[1,0,0,1,10,20],uvTranslate=[0,0],uvScale=[1,1],opacity=1,additiveness=0"
+        ));
     }
 
     #[test]

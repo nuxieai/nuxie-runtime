@@ -56,7 +56,9 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     fn advance(&mut self, elapsed: f32) -> bool {
         Self::advance(self, elapsed)
     }
-    fn may_advance(&self) -> bool { true }
+    fn may_advance(&self) -> bool {
+        true
+    }
 }
 
 #[derive(Default)]
@@ -273,7 +275,9 @@ impl ScriptedDataConverter {
         self.advance(if advance_nested { elapsed } else { 0.0 })
     }
 
-    pub fn may_advance(&self) -> bool { true }
+    pub fn may_advance(&self) -> bool {
+        true
+    }
 
     pub fn advance(&mut self, elapsed: f32) -> bool {
         if elapsed == 0.0 {

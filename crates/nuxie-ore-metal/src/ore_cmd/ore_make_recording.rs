@@ -294,7 +294,10 @@ pub fn recordTextureUpload(
     handle: ResourceHandle,
     desc: &TextureDataDesc<'_>,
 ) {
-    let size = desc.bytesPerRow.wrapping_mul(desc.rowsPerImage).wrapping_mul(desc.depth);
+    let size = desc
+        .bytesPerRow
+        .wrapping_mul(desc.rowsPerImage)
+        .wrapping_mul(desc.depth);
     let pod = TextureUploadPOD {
         handle,
         bytesPerRow: desc.bytesPerRow,

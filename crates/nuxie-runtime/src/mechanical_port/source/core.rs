@@ -746,7 +746,10 @@ impl PropertySetterCompletion {
     }
     pub(crate) fn record(&mut self, core: &Core, property_key: u16) {
         debug_assert!(self.notification.is_none());
-        self.notification = core.observers.as_ref().map(|head| (head.clone(), property_key));
+        self.notification = core
+            .observers
+            .as_ref()
+            .map(|head| (head.clone(), property_key));
     }
 
     pub fn finish(self) {

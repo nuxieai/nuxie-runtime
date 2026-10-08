@@ -220,7 +220,8 @@ impl ListenerGroup {
                 pointer.phase.set(GestureClickPhase::Clicked);
             }
         } else if (hit_event == ListenerType::Down || hit_event == ListenerType::Up)
-            && (pointer.phase.get() != GestureClickPhase::Down || pointer.button.get() == button) {
+            && (pointer.phase.get() != GestureClickPhase::Down || pointer.button.get() == button)
+        {
             pointer.phase.set(GestureClickPhase::Out);
         }
 
@@ -242,9 +243,15 @@ impl ListenerGroup {
         let mut should_perform_changes = false;
         let mut listener_type_matched = hit_event;
         let mut button_matched = button;
-        let has_button = |kind, button| listener.with(|value| {
-            value.state_machine_listener_has_button(kind, button).unwrap_or(false)
-        }).unwrap_or(false);
+        let has_button = |kind, button| {
+            listener
+                .with(|value| {
+                    value
+                        .state_machine_listener_has_button(kind, button)
+                        .unwrap_or(false)
+                })
+                .unwrap_or(false)
+        };
         if hover_change {
             if is_group_hovered
                 && state_machine_instance.listener_has(&listener, ListenerType::Enter)
@@ -275,7 +282,13 @@ impl ListenerGroup {
             listener_type_matched = ListenerType::Drag;
             button_matched = pointer.button.get();
             if !pointer.has_dragged.get() {
-                state_machine_instance.drag_start(position, time_stamp, false, pointer_id, pointer.button.get());
+                state_machine_instance.drag_start(
+                    position,
+                    time_stamp,
+                    false,
+                    pointer_id,
+                    pointer.button.get(),
+                );
                 pointer.has_dragged.set(true);
             }
         }
@@ -356,17 +369,28 @@ impl HitTarget {
 }
 
 pub trait ListenerGroupBehavior {
-    fn listener_handle(&self) -> Option<CoreHandle> { None }
-    fn pointer_button(&self, _id: i32) -> PointerButton { PointerButton::Primary }
+    fn listener_handle(&self) -> Option<CoreHandle> {
+        None
+    }
+    fn pointer_button(&self, _id: i32) -> PointerButton {
+        PointerButton::Primary
+    }
     fn scroll_proxy(&self) -> Option<Rc<RefCell<Box<dyn crate::mechanical_port::source::constraints::draggable_constraint::DraggableProxy>>>>{
         None
     }
     fn tracked_pointer_ids(&self) -> Vec<i32>;
     fn cancel_pointer(&self, pointer_id: i32, position: Vec2D, timestamp: f32) -> bool;
-    fn cancel_pointers(&self, position: Vec2D, timestamp: f32, drag_ended: &mut Vec<(i32, PointerButton)>) {
+    fn cancel_pointers(
+        &self,
+        position: Vec2D,
+        timestamp: f32,
+        drag_ended: &mut Vec<(i32, PointerButton)>,
+    ) {
         for id in self.tracked_pointer_ids() {
             let button = self.pointer_button(id);
-            if self.cancel_pointer(id, position, timestamp) && !drag_ended.iter().any(|ended| ended.0 == id) {
+            if self.cancel_pointer(id, position, timestamp)
+                && !drag_ended.iter().any(|ended| ended.0 == id)
+            {
                 drag_ended.push((id, button));
             }
         }
@@ -412,7 +436,9 @@ impl RuntimeListenerGroupHandle {
 }
 
 impl ListenerGroupBehavior for ListenerGroup {
-    fn listener_handle(&self) -> Option<CoreHandle> { self.listener.clone() }
+    fn listener_handle(&self) -> Option<CoreHandle> {
+        self.listener.clone()
+    }
     fn pointer_button(&self, id: i32) -> PointerButton {
         self.pointer_data(id).button.get()
     }

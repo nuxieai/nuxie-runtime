@@ -216,22 +216,21 @@ impl ScriptedTransition {
             } else {
                 // A direct Artboard collapse keeps that actual root borrowed.
                 // Resolve the selection against it instead of its arena slot.
-                let active_root_selection =
-                    active_layout.as_ref().and_then(|(active, handle)| {
-                        if this.component().artboard_handle().as_ref() != Some(*handle) {
-                            return None;
-                        }
-                        let ActiveLayoutOwner::Artboard(artboard) = active else {
-                            return None;
-                        };
-                        Some(
-                            artboard
-                                .resolve_handle(this.base.active_component_id())
-                                .filter(|selected| {
-                                    this.design_children().iter().any(|child| child == selected)
-                                }),
-                        )
-                    });
+                let active_root_selection = active_layout.as_ref().and_then(|(active, handle)| {
+                    if this.component().artboard_handle().as_ref() != Some(*handle) {
+                        return None;
+                    }
+                    let ActiveLayoutOwner::Artboard(artboard) = active else {
+                        return None;
+                    };
+                    Some(
+                        artboard
+                            .resolve_handle(this.base.active_component_id())
+                            .filter(|selected| {
+                                this.design_children().iter().any(|child| child == selected)
+                            }),
+                    )
+                });
                 active_root_selection.unwrap_or_else(|| this.active_component())
             };
             (active, this.children().to_vec())
@@ -257,8 +256,11 @@ impl ScriptedTransition {
                 !transition_child && Some(&child) != active.as_ref()
             };
             if let Some((active, active_handle)) = active_layout.as_mut() {
-                ComponentOccurrenceHandle::Authored(child)
-                    .collapse_from_layout(value, active, active_handle);
+                ComponentOccurrenceHandle::Authored(child).collapse_from_layout(
+                    value,
+                    active,
+                    active_handle,
+                );
             } else {
                 collapse_child(&child, value);
             }
@@ -813,7 +815,8 @@ impl ScriptedTransition {
             let child = Self::child_ref(owner, &current);
             renderer.save();
             renderer.transform(child.transform);
-            let host = Self::read(owner, |this| this.component().artboard_handle()).expect("transition artboard");
+            let host = Self::read(owner, |this| this.component().artboard_handle())
+                .expect("transition artboard");
             Artboard::draw_hosted_handle(&host, &instance.core_handle(), renderer);
             renderer.restore();
         }

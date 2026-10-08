@@ -537,7 +537,10 @@ fn with_rendered_player<T>(
             factory.native.clone(),
         )
     };
-    session.ore_context.borrow_mut().setTarget(native.borrow().ore_target_desc());
+    session
+        .ore_context
+        .borrow_mut()
+        .setTarget(native.borrow().ore_target_desc());
     session.record_ore_replay_marker();
     let mut recording = session.make_screen_renderer(0);
     recording.save();
@@ -663,7 +666,11 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_attach_surface(
         (state.pixel_width, state.pixel_height) = extent;
         {
             let factory = state.factory.borrow();
-            factory.session.ore_context.borrow_mut().setTarget(factory.native.borrow().ore_target_desc());
+            factory
+                .session
+                .ore_context
+                .borrow_mut()
+                .setTarget(factory.native.borrow().ore_target_desc());
         }
         unsafe { *out_attached = true };
         Ok(())

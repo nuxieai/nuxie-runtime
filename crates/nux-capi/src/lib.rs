@@ -15,8 +15,10 @@ pub use video::*;
 pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
+mod player_globals;
 mod player_view_models;
 pub use layout_size::*;
+pub use player_globals::*;
 mod render_callbacks;
 
 pub use asset_catalog::*;
@@ -374,6 +376,7 @@ struct ArtboardOccurrence {
     /// Explicit host binding operations, not mutations of the bound model.
     view_model_binding_revision: Cell<u64>,
     observed_bound_view_model_generation: Cell<u64>,
+    host_global_view_models: RefCell<Vec<std::rc::Weak<player_globals::GlobalViewModels>>>,
     has_script_assets: bool,
     #[cfg(any(
         all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
@@ -497,6 +500,11 @@ impl ArtboardOccurrence {
         if generation != self.observed_bound_view_model_generation.get() {
             self.invalidate_render()?;
             self.observed_bound_view_model_generation.set(generation);
+        }
+        let mut globals = self.host_global_view_models.borrow_mut();
+        globals.retain(|globals| globals.strong_count() != 0);
+        for globals in globals.iter().filter_map(std::rc::Weak::upgrade) {
+            globals.refresh_invalidation(self)?;
         }
         Ok(())
     }
@@ -804,6 +812,7 @@ impl Drop for ScriptEffectTransaction {
 /// Product-neutral selected player. This surface establishes selection,
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
+    global_view_models: Rc<player_globals::GlobalViewModels>,
     video_occurrences: RefCell<video::VideoOccurrences>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
@@ -2835,6 +2844,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         bound_view_model: RefCell::new(None),
                         view_model_binding_revision: Cell::new(0),
                         observed_bound_view_model_generation: Cell::new(0),
+                        host_global_view_models: RefCell::new(Vec::new()),
                         has_script_assets: file_has_script_assets(&file.file),
                         #[cfg(any(
                             all(
@@ -3152,6 +3162,13 @@ fn publish_player(
 ) -> NuxStatus {
     unsafe {
         let handle = Box::into_raw(Box::new(NuxPlayer {
+            global_view_models: {
+                let globals = Rc::new(player_globals::GlobalViewModels::default());
+                let mut registered = artboard.occurrence.host_global_view_models.borrow_mut();
+                registered.retain(|globals| globals.strong_count() != 0);
+                registered.push(Rc::downgrade(&globals));
+                globals
+            },
             video_occurrences: RefCell::new(video::VideoOccurrences::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
@@ -4238,10 +4255,19 @@ fn player_step_body(
         elapsed_seconds: step.elapsed_seconds,
     };
 
-    let scene_view_model_roots = match bound_view_model.as_ref() {
-        Some(view_model) => match player_view_models::scene_roots(
+    let mut subscribed_roots = player
+        .global_view_models
+        .values
+        .borrow()
+        .values()
+        .cloned()
+        .collect::<Vec<_>>();
+    subscribed_roots.extend(bound_view_model.iter().cloned());
+    let has_subscriptions = !subscribed_roots.is_empty();
+    let scene_view_model_roots = match has_subscriptions {
+        true => match player_view_models::scene_roots_across(
             &artboard,
-            view_model,
+            &subscribed_roots,
             MAX_PLAYER_STEP_STATE_CHANGES,
         ) {
             Ok(roots) => roots,
@@ -4253,10 +4279,10 @@ fn player_step_body(
                 );
             }
         },
-        None => Vec::new(),
+        false => Vec::new(),
     };
-    let mut view_model_transaction = match bound_view_model.as_ref() {
-        Some(_) => match RuntimeOwnedViewModelGraphTransaction::begin(
+    let mut view_model_transaction = match has_subscriptions {
+        true => match RuntimeOwnedViewModelGraphTransaction::begin(
             &scene_view_model_roots,
             MAX_PLAYER_STEP_STATE_CHANGES,
         ) {
@@ -4279,9 +4305,9 @@ fn player_step_body(
                 );
             }
         },
-        None => None,
+        false => None,
     };
-    let change_capture = if bound_view_model.is_some() {
+    let change_capture = if has_subscriptions {
         match RuntimeViewModelChangeCapture::begin_bounded(
             MAX_PLAYER_STEP_STATE_CHANGES,
             MAX_PLAYER_STEP_RESULT_BYTES,
@@ -4465,11 +4491,11 @@ fn player_step_body(
     let (host_commands, host_values) = flatten_host_commands(commands);
     #[cfg(not(feature = "scripting"))]
     let (host_commands, host_values) = (Vec::new(), Vec::new());
-    let resolved_view_model_changes = match (bound_view_model.as_ref(), change_capture) {
-        (Some(view_model), Some(capture)) => {
-            let roots = match player_view_models::scene_roots(
+    let resolved_view_model_changes = match change_capture {
+        Some(capture) => {
+            let roots = match player_view_models::scene_roots_across(
                 &artboard,
-                view_model,
+                &subscribed_roots,
                 MAX_PLAYER_STEP_STATE_CHANGES,
             ) {
                 Ok(roots) => roots,
@@ -4496,27 +4522,24 @@ fn player_step_body(
                 }
             }
         }
-        (None, None) => Vec::new(),
-        _ => unreachable!("capture exists exactly when a view model is bound"),
+        None => Vec::new(),
     };
     let changed_view_model_owners = resolved_view_model_changes
         .iter()
         .map(|(owner, _)| owner.clone())
         .collect::<Vec<_>>();
-    let subscribed_owners = match bound_view_model.as_ref() {
-        Some(root) => match root.reachable_change_owner_snapshot() {
-            Some(owners) => owners,
-            None => {
-                player.artboard.poisoned.set(true);
-                return publish_player_step_failure(
-                    out_result,
-                    NuxStatus::RuntimeError,
-                    "bound view-model subscription graph is invalid",
-                );
-            }
-        },
-        None => Vec::new(),
-    };
+    let mut subscribed_owners = Vec::new();
+    for root in &subscribed_roots {
+        let Some(owners) = root.reachable_change_owner_snapshot() else {
+            player.artboard.poisoned.set(true);
+            return publish_player_step_failure(
+                out_result,
+                NuxStatus::RuntimeError,
+                "bound view-model subscription graph is invalid",
+            );
+        };
+        subscribed_owners.extend(owners);
+    }
     let view_model_changes = data_binding::own_view_model_changes(
         data_binding::NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,
         step.correlation_id,
@@ -4633,6 +4656,16 @@ fn player_step_body(
                 0,
                 RuntimeOwnedViewModelHandle::observable_mutation_generation,
             ));
+        player.global_view_models.observed_generation.set(
+            player
+                .global_view_models
+                .values
+                .borrow()
+                .values()
+                .map(RuntimeOwnedViewModelHandle::observable_mutation_generation)
+                .max()
+                .unwrap_or(0),
+        );
     }
     unsafe { (*pending.handle).scheduling.settled = runtime_settled };
     if runtime_dirty {
@@ -5901,6 +5934,8 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
 mod event_source_tests;
 #[cfg(test)]
 mod focus_input_tests;
+#[cfg(test)]
+mod player_globals_tests;
 
 #[cfg(test)]
 mod firewall_tests {

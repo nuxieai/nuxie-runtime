@@ -14,9 +14,25 @@ pub(super) fn scene_roots(
     bound: &RuntimeOwnedViewModelHandle,
     limit: usize,
 ) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
+    scene_roots_across(artboard, std::slice::from_ref(bound), limit)
+}
+
+pub(super) fn scene_roots_across(
+    artboard: &ArtboardInstance,
+    subscribed: &[RuntimeOwnedViewModelHandle],
+    limit: usize,
+) -> Result<Vec<RuntimeOwnedViewModelHandle>, NuxStatus> {
     let file = artboard.native_file();
-    let mut roots = vec![bound.clone()];
-    let mut seen_roots = HashSet::from([bound.native_handle().identity_key()]);
+    let mut roots = Vec::new();
+    let mut seen_roots = HashSet::new();
+    for root in subscribed {
+        if seen_roots.insert(root.native_handle().identity_key()) {
+            if roots.len() >= limit {
+                return Err(NuxStatus::LimitExceeded);
+            }
+            roots.push(root.clone());
+        }
+    }
     let mut pending = vec![artboard.native_handle()];
     let mut seen_artboards = HashSet::new();
     let mut seen_contexts = Vec::new();

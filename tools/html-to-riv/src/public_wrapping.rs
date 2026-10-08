@@ -192,8 +192,31 @@ pub(super) fn compile(body: ElementRef<'_>, rules: &[css::Rule], input: &Compile
         .map_err(|e| unsupported("/0", format!("Wrapping dimension or structural proof is unresolved: {e:?}")))?;
     let derived = wrapping_composition::compose_original_with_bounds(domains, &alignments, 100_000)
         .map_err(|e| unsupported("/0", format!("Wrapping immutable-runtime graph proof is unresolved: {e:?}")))?;
+    // Select the existing cheapest certified route first. Constant paint folding
+    // is optional: failed fixed-source, geometry, matrix or output binding leaves
+    // the complete previously admitted Derived graph unchanged.
+    let folded = static_paint(&derived, parent, &roles, &pnum, &references, [full; 2]);
+    let output = folded.as_ref().map_or(derived.candidate().records(), |f| f.records());
     map.sort_by_cached_key(|n| n.path.split('/').skip(1).map(|p| p.parse::<usize>().expect("numeric DOM path")).collect::<Vec<_>>());
-    Ok(Some(CompileOutput { riv: wire::encode(derived.candidate().records())?, source_map: map }))
+    Ok(Some(CompileOutput { riv: wire::encode(output)?, source_map: map }))
+}
+
+/// Rebind the actual candidate base, including deliberately hidden source colors,
+/// to the same authored lengths. No viewport sample or measured geometry enters
+/// this optimization, and existing original/integral routes stay untouched.
+fn static_paint(
+    derived: &wrapping_composition::Derived, parent: u32, roles: &[(u32,u32)],
+    authored_parent: &LayoutStyle, authored_roles: &[(u32,&LayoutStyle)],
+    viewport: [MachineInterval; 2],
+) -> Option<super::fixed_paint_graph::Folded> {
+    let candidate = derived.candidate();
+    if candidate.original_paint().is_some() || !candidate.paint_trace().integral.is_empty() {
+        return None;
+    }
+    let base = candidate.records().get(..candidate.record_costs().0)?;
+    let domains = wrapping_domains::resolve_layout(base, parent, roles, authored_parent, authored_roles, viewport).ok()?;
+    let geometry = super::fixed_geometry::bind(&domains).ok()?;
+    super::fixed_paint_graph::fold(derived, &geometry).ok()
 }
 
 #[cfg(test)]
@@ -293,6 +316,72 @@ mod tests {
         let mut explicit = implicit.clone();
         explicit.css.push_str("#p,#a,#b,#c{flex-wrap:nowrap;align-content:normal}");
         assert_eq!(crate::compile(&implicit).unwrap(), crate::compile(&explicit).unwrap());
+    }
+
+    // Reconstruct the existing public wrapping base for request(), before the
+    // optional paint optimization. This compares public bytes to the original
+    // route rather than selecting a different private constructor.
+    fn unoptimized(width: f32, centered_middle: bool) ->
+        (wrapping_composition::Derived, u32, Vec<(u32,u32)>, LayoutStyle, Vec<(u32,LayoutStyle)>) {
+        let mut parent_numeric=numeric("60",60.);
+        parent_numeric.height=NumericSize::Pixels(Ok(ScalarProvenance::from_decimal("80",80.).unwrap()));
+        let pnum=layout(&parent_numeric,"/0").unwrap();
+        let mut child_numeric=numeric(if width==20.25 {"20.25"}else{"20"},width);
+        child_numeric.height=NumericSize::Pixels(Ok(ScalarProvenance::from_decimal("20",20.).unwrap()));
+        let dims=layout(&child_numeric,"/0/0").unwrap();
+        let mut records=vec![Record::new("Backboard"),Record::new("Artboard"),Record::new("LayoutComponentStyle")];
+        records[1].set("name",Value::String("HTML".into())).unwrap();
+        records[1].set("styleId",Value::Uint(1)).unwrap();
+        records[1].set("width",Value::Float(320.)).unwrap();records[1].set("height",Value::Float(200.)).unwrap();
+        paint(&mut records,0,0xffffffff).unwrap();let parent=node(&mut records,0,&pnum).unwrap();
+        records[parent as usize+2].set("flexWrapValue",Value::Uint(1)).unwrap();
+        records[parent as usize+2].set("flexDirectionValue",Value::Uint(2)).unwrap();
+        records[parent as usize+2].set("layoutAlignmentType",Value::Uint(0)).unwrap();
+        let mut roles=Vec::new();let mut authored=Vec::new();
+        for _ in 0..3 {
+            let slot=node(&mut records,parent,&dims).unwrap();let visible=node(&mut records,slot,&dims).unwrap();
+            paint(&mut records,visible,0xffff0000).unwrap();roles.push((slot,visible));authored.push((slot,dims.clone()));authored.push((visible,dims.clone()));
+        }
+        let refs=authored.iter().map(|(id,n)|(*id,n)).collect::<Vec<_>>();
+        let full=MachineInterval::new(0.,16384.).unwrap();
+        let domains=wrapping_domains::resolve_layout(&records,parent,&roles,&pnum,&refs,[full;2]).unwrap();
+        let derived=wrapping_composition::compose_original_with_bounds(domains,&[0.,if centered_middle{0.5}else{0.},0.],100_000).unwrap();
+        (derived,parent,roles,pnum,authored)
+    }
+    #[test]
+    fn eligible_public_fractional_paint_is_compact_with_unchanged_owner_map() {
+        let input=request("#a,#b,#c{width:20.25px}");let public=crate::compile(&input).unwrap();
+        let(d,parent,roles,pnum,authored)=unoptimized(20.25,false);
+        assert!(d.candidate().original_paint().is_none());assert!(d.candidate().paint_trace().integral.is_empty());
+        let refs=authored.iter().map(|(id,n)|(*id,n)).collect::<Vec<_>>();let full=MachineInterval::new(0.,16384.).unwrap();
+        let folded=static_paint(&d,parent,&roles,&pnum,&refs,[full;2]).expect("qualified constant paint graph");
+        assert_eq!(public.riv,wire::encode(folded.records()).unwrap());
+        assert!(folded.records().len()*10<d.candidate().records().len());
+        let start=folded.start();assert_eq!(wire::encode(&folded.records()[..start]).unwrap(),wire::encode(&d.candidate().records()[..start]).unwrap());
+        assert_eq!(public.source_map.iter().map(|n|n.object_id).collect::<Vec<_>>(),std::iter::once(parent).chain(roles.iter().map(|(_,v)|*v)).collect::<Vec<_>>());
+        assert_eq!(public.source_map.iter().map(|n|n.id.as_str()).collect::<Vec<_>>(),vec!["p","a","b","c"]);
+        assert_eq!(public,crate::compile(&input).unwrap());
+    }
+    #[test]
+    fn cheaper_original_and_mixed_integral_public_routes_keep_exact_bytes() {
+        for centered in [false,true] {
+            let input=request(if centered{"#b{align-self:center}"}else{""});
+            let(d,parent,roles,pnum,authored)=unoptimized(20.,centered);
+            if centered {assert!(d.candidate().original_paint().is_none());assert!(!d.candidate().paint_trace().integral.is_empty());}
+            else {assert!(d.candidate().original_paint().is_some());}
+            let refs=authored.iter().map(|(id,n)|(*id,n)).collect::<Vec<_>>();let full=MachineInterval::new(0.,16384.).unwrap();
+            assert!(static_paint(&d,parent,&roles,&pnum,&refs,[full;2]).is_none());
+            let public=crate::compile(&input).unwrap();assert_eq!(public.riv,wire::encode(d.candidate().records()).unwrap());
+            assert_eq!(public.source_map.iter().skip(1).map(|n|n.object_id).collect::<Vec<_>>(),roles.iter().map(|(_,v)|*v).collect::<Vec<_>>());
+        }
+    }
+    #[test]
+    fn failed_source_rebinding_leaves_the_original_candidate_untouched() {
+        let(d,parent,roles,pnum,mut authored)=unoptimized(20.25,false);let before=wire::encode(d.candidate().records()).unwrap();
+        authored[0].1.width=layout(&numeric("21",21.),"changed").unwrap().width;
+        let refs=authored.iter().map(|(id,n)|(*id,n)).collect::<Vec<_>>();let full=MachineInterval::new(0.,16384.).unwrap();
+        assert!(static_paint(&d,parent,&roles,&pnum,&refs,[full;2]).is_none());
+        assert_eq!(wire::encode(d.candidate().records()).unwrap(),before);
     }
 
 }

@@ -764,6 +764,66 @@ fn caret_blink_accounts_for_every_elapsed_phase() {
 }
 
 #[test]
+fn caret_blink_marks_the_artboard_changed() {
+    use nuxie_render_api::NullRenderer;
+    use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
+    let (_file, artboard, input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    let mut renderer = NullRenderer::new();
+    machine.advance_and_apply(0.0);
+    let find = |type_key| {
+        artboard
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .find(|object| object.is_type_of(type_key))
+                    .cloned()
+            })
+            .expect("authored child")
+    };
+    let cursor = find(TextInputCursor::TYPE_KEY);
+    let focus = find(FocusData::TYPE_KEY);
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    machine.advance_and_apply(0.0);
+    artboard.draw(&mut renderer);
+    assert!(!artboard.with_artboard(|artboard| artboard.did_change()));
+
+    // Mid-phase nothing moved, so there is nothing to redraw.
+    machine.advance_and_apply(0.2);
+    assert!(!artboard.with_artboard(|artboard| artboard.did_change()));
+
+    // Hiding and showing the caret both count as a change.
+    machine.advance_and_apply(0.3);
+    assert!(!cursor_has_local_path(&cursor));
+    assert!(artboard.with_artboard(|artboard| artboard.did_change()));
+    artboard.draw(&mut renderer);
+    machine.advance_and_apply(0.5);
+    assert!(cursor_has_local_path(&cursor));
+    assert!(artboard.with_artboard(|artboard| artboard.did_change()));
+    artboard.draw(&mut renderer);
+
+    // An even number of phases leaves the caret where it was.
+    machine.advance_and_apply(1.0);
+    assert!(cursor_has_local_path(&cursor));
+    assert!(!artboard.with_artboard(|artboard| artboard.did_change()));
+
+    // A selection hides the caret, so its toggles change nothing on screen.
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hello world".into());
+        input.raw_text_input().select_all();
+    });
+    machine.advance_and_apply(0.0);
+    artboard.draw(&mut renderer);
+    assert!(!artboard.with_artboard(|artboard| artboard.did_change()));
+    machine.advance_and_apply(0.5);
+    assert!(!artboard.with_artboard(|artboard| artboard.did_change()));
+}
+
+#[test]
 fn obscured_native_input_preserves_value_and_blocks_selection_export() {
     let (_file, artboard, input) = input_fixture();
     assert!(CoreRegistry::set_string_handle(

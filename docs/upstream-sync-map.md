@@ -7,18 +7,30 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8427a425fd61d2adb4652eb12fdd74d0f7f3396b`
+- LAST_SYNCED_SHA: `0dd067f18bc14139720ee348dfc222af0c744e4e`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Nine upstream commits remain after this checkpoint at the fetched target.
-  All 203 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (225 after `5892bb05`); this
+  Eight upstream commits remain after this checkpoint at the fetched target.
+  All 204 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (226 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `0dd067f1`, integrated atop downstream `cbf0fba095`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean. Runtime/text/input/scroll/focus suites pass 323 (two ignored), including
+  the new authored single-line/multiline viewport regression. Compilation found
+  two test-only borrowed-matrix dereferences, corrected without changing math.
+  The older hidden-flag test clicked the text center at y=108.896484 outside its
+  50pt viewport. Its setup now clicks the viewport center; all three visibility
+  assertions remain unchanged. Both corrections were rereviewed. Source/pipeline
+  tests pass 12, manifest tests pass 27, and generated inventory is current after
+  refreshing one producer line shifted by an upstream include. No classification
+  or tolerance changed. No broad Golden/Silver, browser pixels or physical-device
+  rerun is claimed; prior limitations and guest-execution deferral remain.
 - Validation at `8427a425`, integrated atop downstream `a09ff19c7a`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. The public executable delta is confined to the deferred guest AOT
@@ -429,6 +441,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `0dd067f18bc14139720ee348dfc222af0c744e4e` | Translate live scroll-viewport resolution and full-viewport text-input hit testing; preserve slot-expanded fallback and parent clipping order. Translate the single-line/multiline regression using the exact pinned upstream authored fixture. RML remains upstream fixture provenance; private Dart/editor implementation is absent from the public delta and is not claimed imported. | — |
 | `8427a425fd61d2adb4652eb12fdd74d0f7f3396b` | Deferred: the only public executable delta selects mkdir on Nintendo NX for the guest Wasm AOT cache directory. This owner remains parked with guest execution; no shared runtime, native Luau or renderer behavior changes. The private libhydrogen build change mentioned in the message is represented only by .rive_head, not public implementation to translate. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `04104ce23473313d181489440c98fb087b991b68` | Translate limit-centered rotation wrapping across the half turn, preserving f32 expression grouping and max/min clamp order. Port all three upstream rotation cases, including the new authored fixture and eight programmatic rows; consume the pinned fixture without fallback. Both reviews and focused runtime/IK validation pass; no assertion or tolerance weakened. Private editor metadata is not implementation evidence. | — |
 | `8092a195ec9cd456e5199164565adb88887f737a` | Translate finished-animation async continuation/pre-apply polling, current-file and foreign-bound VM pending checks, recursive hosted-artboard traversal and shared foreign-file identity guard. Preserve global pool completion order across the approved Rust per-VM decoder handoff queues. Move the three existing host tests to upstream's new test owner and add both new upstream cases plus a real cross-VM callback-order regression. File's immutable getter was already equivalent; standalone C++ player polling removal is unshipped. Guest held-outcome registry remains deferred. Both reviews, correction rereviews and applicable validation pass as recorded above. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

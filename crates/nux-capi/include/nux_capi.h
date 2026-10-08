@@ -69,7 +69,11 @@
  *    but are not reported as unrelated root-subscription rows. Host mutations
  *    are reported in their mutation result, not repeated by a later step.
  * 10. nux_player_step fully validates the bounded batch before mutation and
- *    executes under the shared artboard-occurrence gate. Reentrant access from
+ *    executes under the shared artboard-occurrence gate. With a nonempty host
+ *    table or explicit global and no captured writes, quiet scene growth past
+ *    the bound is reported by the next step as LIMIT_EXCEEDED before advancement,
+ *    without poisoning; removing all tables and globals restores validation
+ *    on the growing step. Reentrant access from
  *    any callback returns REENTRANT_CALL. An unexpected post-mutation failure
  *    rolls back pending external host effects and terminally poisons that
  *    occurrence; every later read, mutate, or draw fails with RUNTIME_ERROR,
@@ -87,6 +91,11 @@
  *    imports without a command module install no checked-write module.
  *    An accepted set returns true and no code, including a marking breach.
  *    A refused set returns false and the refusing rule's code.
+ *    root is an empty string for the bound root or an explicitly set global's
+ *    schema name; path is a slash-separated property path. The value must be a
+ *    matching scalar or nil (clear). Invalid roots, paths, types, unavailable
+ *    step context or exceeded limits raise a script error, not a refusal.
+ *    Arguments are consumed synchronously; no caller bytes are retained.
  *    Ordinary nux_file_import remains script-inert.
  *    On Android, nux_file_import_android_vulkan_with_trusted_wgsl is a separate,
  *    caller-asserted trust boundary for exporter-authored WGSL. It performs no
@@ -172,6 +181,12 @@
  *    only accepted writes. Rule reports are ordered by attempted write, then
  *    installer order, and borrow attempted bytes until their result is freed.
  *    A file without rules retains ordinary native behavior.
+ * 19. Installed rule groups write a computed boolean and ordered lists of
+ *    caller-authored rule codes/messages into ordinary view-model properties.
+ *    Latest refusal rules come first, then kept-value failures, with installed
+ *    order within each partition and no duplicates. An accepted write clears
+ *    the latest refusal. The boolean follows only kept values.
+ *    Install markers and rules before groups, before the first operation.
  *
  * PANIC SAFETY
  *

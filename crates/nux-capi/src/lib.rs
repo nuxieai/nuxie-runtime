@@ -16,8 +16,10 @@ pub use video_resources::*;
 pub use video_sync::*;
 mod layout_size;
 mod player_globals;
+mod rule_groups;
 mod value_policy;
 mod value_rules;
+pub use rule_groups::*;
 pub use value_policy::{NuxValueMarker, nux_file_set_value_markers};
 pub use value_rules::*;
 mod player_view_models;
@@ -4236,7 +4238,8 @@ fn player_step_body(
         }
     };
     let policy = policy.as_ref();
-    let has_value_policy = policy.is_some_and(|policy| policy.has_markers() || policy.has_rules());
+    let has_value_policy = policy
+        .is_some_and(|policy| policy.has_markers() || policy.has_rules() || policy.has_groups());
     let mut bound_view_model = match player.artboard.bound_view_model.try_borrow() {
         Ok(bound) => bound.clone(),
         Err(_) => {
@@ -4294,6 +4297,9 @@ fn player_step_body(
         .values()
         .cloned()
         .collect::<Vec<_>>();
+    // Preserve main's post-advance validation unless the host opted into
+    // a policy or an explicit global override.
+    let can_skip_quiet_graphs = has_value_policy || !subscribed_roots.is_empty();
     subscribed_roots.extend(bound_view_model.iter().cloned());
     let retained_subscribed_owners = if has_value_policy {
         match value_policy::retain_scope(&subscribed_roots) {
@@ -4385,7 +4391,7 @@ fn player_step_body(
         None
     };
     let rule_operation = match policy
-        .filter(|policy| policy.has_rules())
+        .filter(|policy| policy.has_rules() || policy.has_groups())
         .map(|policy| policy.begin_rules(&scene_view_model_roots))
         .transpose()
     {
@@ -4415,6 +4421,24 @@ fn player_step_body(
     if let (Some(policy), Some(capture)) = (policy, change_capture.as_ref()) {
         policy.prepare_capture(capture);
     }
+    let initial_groups_changed = match (policy, rule_operation.as_ref()) {
+        (Some(policy), Some(operation)) => match operation.borrow_mut().apply_initial_groups(
+            policy,
+            &scene_view_model_roots,
+            |_, _| Ok(()),
+        ) {
+            Ok(changed) => changed,
+            Err(error) => {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    value_policy::status(error),
+                    "initial rule group pass failed",
+                );
+            }
+        },
+        _ => false,
+    };
     let (mut keep_going, mut runtime_dirty, mut runtime_settled) = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
             // Upstream command_server.cpp separates bindViewModelInstance from
@@ -4572,7 +4596,31 @@ fn player_step_body(
     let (host_commands, host_values) = flatten_host_commands(commands);
     #[cfg(not(feature = "scripting"))]
     let (host_commands, host_values) = (Vec::new(), Vec::new());
+    if initial_groups_changed {
+        runtime_dirty = true;
+        keep_going = true;
+        runtime_settled = false;
+    }
     let resolved_view_model_changes = match change_capture {
+        // A script refusal may need group output even after its capture rows
+        // were consumed. Skip graph resolution only when both are quiet.
+        Some(capture)
+            if can_skip_quiet_graphs
+                && capture.write_count().is_ok_and(|count| count == 0)
+                && match (rule_operation.as_ref(), policy) {
+                    (Some(operation), Some(policy)) => operation
+                        .borrow()
+                        .needs_policy_pass(policy, &capture, 0)
+                        .is_ok_and(|pending| !pending),
+                    _ => true,
+                } =>
+        {
+            if let Some(operation) = rule_operation.as_ref() {
+                rule_reports = operation.borrow().reports().to_vec();
+            }
+            drop(capture);
+            Vec::new()
+        }
         Some(capture) => {
             let mut roots = match player_view_models::scene_roots_across(
                 &artboard,
@@ -4591,7 +4639,31 @@ fn player_step_body(
             };
             roots.extend(retained_policy_scope);
             if let Some(policy) = policy {
+                let mut policy_cursor = 0;
                 loop {
+                    let pending = match rule_operation.as_ref() {
+                        Some(operation) => {
+                            operation
+                                .borrow()
+                                .needs_policy_pass(policy, &capture, policy_cursor)
+                        }
+                        None => capture
+                            .write_count()
+                            .map(|count| count != policy_cursor)
+                            .map_err(|_| nuxie::RuntimeValuePolicyError::LimitExceeded),
+                    };
+                    match pending {
+                        Ok(false) => break,
+                        Ok(true) => {}
+                        Err(error) => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(
+                                out_result,
+                                value_policy::status(error),
+                                "value policy capture exceeds its bound",
+                            );
+                        }
+                    }
                     let rules_changed = match rule_operation
                         .as_ref()
                         .map(|operation| operation.borrow_mut().apply(policy, &capture, &roots))
@@ -4607,6 +4679,32 @@ fn player_step_body(
                             );
                         }
                     };
+                    policy_cursor = match capture.write_count() {
+                        Ok(count) => count,
+                        Err(_) => {
+                            player.artboard.poisoned.set(true);
+                            return publish_player_step_failure(
+                                out_result,
+                                NuxStatus::LimitExceeded,
+                                "value policy capture exceeds its bound",
+                            );
+                        }
+                    };
+                    if policy.has_groups()
+                        && let Some(operation) = rule_operation.as_ref()
+                    {
+                        let mut known = roots
+                            .iter()
+                            .map(RuntimeOwnedViewModelHandle::instance_identity)
+                            .collect::<std::collections::BTreeSet<_>>();
+                        roots.extend(
+                            operation
+                                .borrow()
+                                .retained_roots()
+                                .into_iter()
+                                .filter(|owner| known.insert(owner.instance_identity())),
+                        );
+                    }
                     let marker_result =
                         policy.apply_markers(&capture, &roots, |owner, index, value| {
                             let mut owner = owner
@@ -4614,7 +4712,19 @@ fn player_step_body(
                                 .map_err(|_| nuxie::RuntimeValuePolicyError::BorrowConflict)?;
                             Ok(owner.set_boolean_by_property_index(index, value))
                         });
-                    match marker_result.map(|changed| changed || rules_changed) {
+                    let group_result = marker_result.and_then(|markers_changed| {
+                        let groups_changed = rule_operation
+                            .as_ref()
+                            .map(|operation| {
+                                operation
+                                    .borrow_mut()
+                                    .apply_groups(policy, &roots, |_, _| Ok(()))
+                            })
+                            .transpose()?
+                            .unwrap_or(false);
+                        Ok(markers_changed || rules_changed || groups_changed)
+                    });
+                    match group_result {
                         Ok(false) => break,
                         Ok(true) => {
                             runtime_dirty = true;
@@ -4684,16 +4794,18 @@ fn player_step_body(
         .map(|(owner, _)| owner.clone())
         .collect::<Vec<_>>();
     let mut subscribed_owners = retained_subscribed_owners;
-    for root in &subscribed_roots {
-        let Some(owners) = root.reachable_change_owner_snapshot() else {
-            player.artboard.poisoned.set(true);
-            return publish_player_step_failure(
-                out_result,
-                NuxStatus::RuntimeError,
-                "bound view-model subscription graph is invalid",
-            );
-        };
-        subscribed_owners.extend(owners);
+    if !can_skip_quiet_graphs || !resolved_view_model_changes.is_empty() {
+        for root in &subscribed_roots {
+            let Some(owners) = root.reachable_change_owner_snapshot() else {
+                player.artboard.poisoned.set(true);
+                return publish_player_step_failure(
+                    out_result,
+                    NuxStatus::RuntimeError,
+                    "bound view-model subscription graph is invalid",
+                );
+            };
+            subscribed_owners.extend(owners);
+        }
     }
     let view_model_changes = data_binding::own_view_model_changes(
         data_binding::NUX_VIEW_MODEL_CHANGE_ORIGIN_RUNTIME,
@@ -4822,6 +4934,9 @@ fn player_step_body(
                 .max()
                 .unwrap_or(0),
         );
+    }
+    if let (Some(policy), Some(operation)) = (policy, rule_operation.as_ref()) {
+        operation.borrow_mut().commit_groups(policy);
     }
     unsafe { (*pending.handle).scheduling.settled = runtime_settled };
     if runtime_dirty {
@@ -6073,6 +6188,9 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         else {
             return NuxStatus::LimitExceeded;
         };
+        if let Some(policy) = instance.view_model_catalog.value_policy.borrow().as_ref() {
+            policy.invalidate();
+        }
         artboard.bind_owned_view_model_handle(view_model.instance.clone());
         *bound_view_model = Some(view_model.instance.clone());
         instance

@@ -289,10 +289,12 @@ size_t randomProviderTotalCalls();
 #define protected public
 #include "rive/text/text.hpp"
 #include "rive/text/font_hb.hpp"
+#include "rive/layout/layout_participant.hpp"
 #include "rive/text/raw_text.hpp"
 #include "rive/text/text_input_cursor.hpp"
 #include "rive/text/text_input_selected_text.hpp"
 #include "rive/text/text_input_selection.hpp"
+#include "rive/text/text_selection_controller.hpp"
 #include "rive/text/text_input_text.hpp"
 #include "rive/text/text_modifier.hpp"
 #include "rive/text/text_modifier_group.hpp"
@@ -17941,8 +17943,182 @@ void write_audio_riv_oracle(std::ostream& out,
 #endif
 } // namespace
 
+// Pin both width-owner cases with the same face and content as the Rust test.
+int text_measure_width_samples(const char* filePath, const char* fontPath,
+                               const char* content = "Choose",
+                               float offeredWidth = 354.0f, int firstMode = 0)
+{
+    std::cout << std::setprecision(9) << "[";
+    for (int mode = firstMode; mode < 3; ++mode)
+    {
+        rive::LayoutParticipant participant;
+        rive::ImportResult result;
+        auto file = open_file(filePath, &result, false);
+        if (!file || result != rive::ImportResult::success)
+        {
+            return 2;
+        }
+        auto board = file->artboardDefault();
+        auto font = HBFont::Decode(read_bytes(fontPath));
+        if (!board || !font)
+        {
+            return 2;
+        }
+        auto asset = rive::make_rcp<rive::FontAsset>();
+        asset->font(font);
+        rive::Text* text = nullptr;
+        bool firstRun = true;
+        for (auto* object : board->objects())
+        {
+            if (object->is<rive::Text>() && !text)
+            {
+                text = object->as<rive::Text>();
+            }
+            if (object->is<rive::TextStyle>())
+            {
+                auto* style = object->as<rive::TextStyle>();
+                style->setAsset(asset);
+                style->fontSize(40.0f);
+                style->lineHeight(44.0f);
+            }
+            if (object->is<rive::TextValueRun>())
+            {
+                object->as<rive::TextValueRun>()->text(firstRun ? content : "");
+                firstRun = false;
+            }
+        }
+        if (!text || text->layoutParticipant())
+        {
+            return 2;
+        }
+        text->sizingValue(1);
+        text->overflowValue(0);
+        text->wrapValue(0);
+        text->width(1.0f);
+        if (mode != 0)
+        {
+            participant.layoutWidthScaleType(
+                static_cast<uint32_t>(mode == 1 ? rive::LayoutScaleType::fill
+                                                : rive::LayoutScaleType::fixed));
+            participant.layoutHeightScaleType(
+                static_cast<uint32_t>(rive::LayoutScaleType::hug));
+            text->addChild(&participant);
+        }
+        const auto measured = text->measureLayout(
+            offeredWidth, rive::LayoutMeasureMode::exactly,
+            std::numeric_limits<float>::quiet_NaN(),
+            rive::LayoutMeasureMode::undefined);
+        if (mode != firstMode)
+        {
+            std::cout << ",";
+        }
+        std::cout << "{\"participant\":" << mode
+                  << ",\"width\":" << measured.x
+                  << ",\"height\":" << measured.y << "}";
+    }
+    std::cout << "]\n";
+    return 0;
+}
+
+// Supplemental cases, using the same embedded font and setup as Rust Scene.
+int text_selection_samples(const char* filePath)
+{
+    std::cout << "[";
+    const char* contents[] = {"a\r\nb", "a  \xe2\x80\x83" "a",
+                              "a\xe2\x80\x83\xe2\x80\x83\xe2\x80\x83" "a"};
+    for (int sample = 0; sample < 3; ++sample)
+    {
+        rive::ImportResult result;
+        auto file = open_file(filePath, &result, false);
+        if (!file || result != rive::ImportResult::success || !file->artboard())
+        {
+            return 2;
+        }
+        auto board = file->artboard()->instance();
+        auto texts = board->find<rive::Text>();
+        if (texts.size() < 4)
+        {
+            return 2;
+        }
+        const char* initial[] = {"Introduction", "Rive supports interactive graphics.",
+                                 "Learn more", "Outside the selected range"};
+        for (size_t i = 0; i < 4; ++i)
+        {
+            auto* text = texts[i];
+            auto runs = text->runs();
+            if (runs.empty())
+            {
+                return 2;
+            }
+            for (size_t j = 0; j < runs.size(); ++j)
+            {
+                runs[j]->text(j == 0 ? initial[i] : "");
+            }
+            text->x(0);
+            text->y(static_cast<float>(i) * 200);
+            text->originX(0);
+            text->originY(0);
+            text->sizingValue(0);
+            text->overflowValue(0);
+            for (auto* style : text->textStylePaints())
+            {
+                style->fontSize(24);
+            }
+        }
+        board->advance(0);
+        rive::TextSelectionController selection;
+        for (size_t i = 0; i < 4; ++i)
+        {
+            if (!selection.add(texts[i]))
+            {
+                return 2;
+            }
+        }
+        auto* text = texts.front();
+        text->runs().front()->text(contents[sample]);
+        text->wrapValue(sample == 0 ? 1 : 0);
+        if (sample != 0)
+        {
+            text->sizingValue(1);
+            text->width(8);
+        }
+        board->advance(0);
+        if (sample != 0)
+        {
+            std::cout << ",";
+        }
+        std::cout << "{\"sample\":" << sample;
+        if (sample == 0)
+        {
+            selection.setRange(text, 1, 2);
+            std::cout << ",\"crRects\":" << selection.selectionRects(text).size();
+            selection.setRange(text, 2, 3);
+            std::cout << ",\"lfRects\":" << selection.selectionRects(text).size();
+        }
+        std::cout << ",\"orderedLines\":" << text->orderedLines().size() << "}";
+    }
+    std::cout << "]\n";
+    return 0;
+}
+
 int main(int argc, const char* argv[])
 {
+    if (argc == 4 && std::strcmp(argv[1], "--text-measure-width-samples") == 0)
+    {
+        return text_measure_width_samples(argv[2], argv[3]);
+    }
+    if (argc == 3 && std::strcmp(argv[1], "--text-selection-samples") == 0)
+    {
+        return text_selection_samples(argv[2]);
+    }
+    if (argc == 4 && (std::strcmp(argv[1], "--text-measure-headline-samples") == 0 ||
+                     std::strcmp(argv[1], "--text-measure-headline-unbounded-samples") == 0))
+    {
+        const float offeredWidth = std::strcmp(argv[1], "--text-measure-headline-samples") == 0
+                                       ? 354.0f : std::numeric_limits<float>::max();
+        return text_measure_width_samples(argv[2], argv[3],
+            "Choose what deserves your attention.", offeredWidth, 1);
+    }
     const char* filename = nullptr;
     ProbeOptions options;
     bool converterSamples = false;

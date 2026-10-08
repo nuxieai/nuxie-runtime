@@ -5,8 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait DataConverterRangeMapperBaseCallbacks: crate::mechanical_port::source::generated::data_bind::converters::data_converter_base::DataConverterBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn interpolation_type_changed(&mut self) {}
-    fn interpolator_id_changed(&mut self) {}
     fn flags_changed(&mut self) {}
     fn min_input_changed(&mut self) {}
     fn max_input_changed(&mut self) {}
@@ -51,7 +49,11 @@ impl DataConverterRangeMapperBase {
     pub const MAX_OUTPUT_PROPERTY_KEY: u16 = 719;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 488)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -67,7 +69,6 @@ impl DataConverterRangeMapperBase {
         if !self.set_interpolation_type_value(value) {
             return;
         }
-        callbacks.interpolation_type_changed();
         DataConverterRangeMapperBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERPOLATION_TYPE_PROPERTY_KEY,
@@ -92,7 +93,6 @@ impl DataConverterRangeMapperBase {
         if !self.set_interpolator_id_value(value) {
             return;
         }
-        callbacks.interpolator_id_changed();
         DataConverterRangeMapperBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERPOLATOR_ID_PROPERTY_KEY,

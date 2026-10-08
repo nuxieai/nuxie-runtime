@@ -14,10 +14,6 @@ pub trait JoystickBaseCallbacks:
     fn origin_y_changed(&mut self) {}
     fn width_changed(&mut self) {}
     fn height_changed(&mut self) {}
-    fn x_id_changed(&mut self) {}
-    fn y_id_changed(&mut self) {}
-    fn joystick_flags_changed(&mut self) {}
-    fn handle_source_id_changed(&mut self) {}
 }
 
 pub struct JoystickBase {
@@ -72,7 +68,11 @@ impl JoystickBase {
     pub const HANDLE_SOURCE_ID_PROPERTY_KEY: u16 = 313;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -228,7 +228,6 @@ impl JoystickBase {
         if !self.set_x_id_value(value) {
             return;
         }
-        callbacks.x_id_changed();
         JoystickBaseCallbacks::notify_property_changed(callbacks, Self::X_ID_PROPERTY_KEY);
     }
 
@@ -246,7 +245,6 @@ impl JoystickBase {
         if !self.set_y_id_value(value) {
             return;
         }
-        callbacks.y_id_changed();
         JoystickBaseCallbacks::notify_property_changed(callbacks, Self::Y_ID_PROPERTY_KEY);
     }
 
@@ -264,7 +262,6 @@ impl JoystickBase {
         if !self.set_joystick_flags_value(value) {
             return;
         }
-        callbacks.joystick_flags_changed();
         JoystickBaseCallbacks::notify_property_changed(
             callbacks,
             Self::JOYSTICK_FLAGS_PROPERTY_KEY,
@@ -285,7 +282,6 @@ impl JoystickBase {
         if !self.set_handle_source_id_value(value) {
             return;
         }
-        callbacks.handle_source_id_changed();
         JoystickBaseCallbacks::notify_property_changed(
             callbacks,
             Self::HANDLE_SOURCE_ID_PROPERTY_KEY,

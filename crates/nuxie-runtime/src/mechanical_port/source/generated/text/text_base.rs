@@ -15,12 +15,9 @@ pub trait TextBaseCallbacks:
     fn origin_y_changed(&mut self) {}
     fn paragraph_spacing_changed(&mut self) {}
     fn origin_value_changed(&mut self) {}
-    fn wrap_value_changed(&mut self) {}
     fn word_break_value_changed(&mut self) {}
     fn vertical_align_value_changed(&mut self) {}
-    fn fit_from_baseline_changed(&mut self) {}
     fn fit_font_size_resizes_box_changed(&mut self) {}
-    fn text_run_list_source_changed(&mut self) {}
     fn vertical_trim_value_changed(&mut self) {}
 }
 
@@ -94,7 +91,11 @@ impl TextBase {
     pub const VERTICAL_TRIM_BOTTOM_VALUE_FIELD_MASK: u32 = 65280;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -268,7 +269,6 @@ impl TextBase {
         if !self.set_wrap_value_value(value) {
             return;
         }
-        callbacks.wrap_value_changed();
         TextBaseCallbacks::notify_property_changed(callbacks, Self::WRAP_VALUE_PROPERTY_KEY);
     }
 
@@ -325,7 +325,6 @@ impl TextBase {
         if !self.set_fit_from_baseline_value(value) {
             return;
         }
-        callbacks.fit_from_baseline_changed();
         TextBaseCallbacks::notify_property_changed(callbacks, Self::FIT_FROM_BASELINE_PROPERTY_KEY);
     }
 
@@ -368,7 +367,6 @@ impl TextBase {
         if !self.set_text_run_list_source_value(value) {
             return;
         }
-        callbacks.text_run_list_source_changed();
         TextBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TEXT_RUN_LIST_SOURCE_PROPERTY_KEY,

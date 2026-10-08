@@ -4,7 +4,6 @@ use crate::mechanical_port::source::{
 
 pub trait DataEnumValueBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn key_changed(&mut self) {}
     fn value_changed(&mut self) {}
 }
 
@@ -30,7 +29,11 @@ impl DataEnumValueBase {
     pub const VALUE_PROPERTY_KEY: u16 = 579;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -42,7 +45,6 @@ impl DataEnumValueBase {
         if !self.set_key_value(value) {
             return;
         }
-        callbacks.key_changed();
         callbacks.notify_property_changed(Self::KEY_PROPERTY_KEY);
     }
 

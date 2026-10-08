@@ -18,8 +18,8 @@ pub(crate) const PINNED_SOURCE: &str = include_str!("source/renderer_src_gl_gl_u
 use std::{
     collections::HashMap,
     sync::{
-        Mutex, OnceLock,
         atomic::{AtomicU32, Ordering},
+        Mutex, OnceLock,
     },
 };
 static ABANDONED_COUNT: AtomicU32 = AtomicU32::new(0);
@@ -543,7 +543,7 @@ mod tests {
             super::super::gl_utils_decl::PINNED_SOURCE.lines().count(),
             294
         );
-        assert_eq!(PINNED_SOURCE.lines().count(), 500);
+        assert_eq!(PINNED_SOURCE.lines().count(), 506);
         assert_eq!(GLSL_GLSL.as_bytes().len(), 10680);
     }
 

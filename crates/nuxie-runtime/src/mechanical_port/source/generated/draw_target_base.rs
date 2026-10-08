@@ -6,7 +6,6 @@ pub trait DrawTargetBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn drawable_id_changed(&mut self) {}
     fn placement_value_changed(&mut self) {}
 }
 
@@ -32,7 +31,11 @@ impl DrawTargetBase {
     pub const PLACEMENT_VALUE_PROPERTY_KEY: u16 = 120;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +47,6 @@ impl DrawTargetBase {
         if !self.set_drawable_id_value(value) {
             return;
         }
-        callbacks.drawable_id_changed();
         DrawTargetBaseCallbacks::notify_property_changed(callbacks, Self::DRAWABLE_ID_PROPERTY_KEY);
     }
 

@@ -6,7 +6,6 @@ pub trait AdvanceableStateBaseCallbacks:
     crate::mechanical_port::source::generated::animation::layer_state_base::LayerStateBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn speed_changed(&mut self) {}
 }
 
 pub struct AdvanceableStateBase {
@@ -28,7 +27,11 @@ impl AdvanceableStateBase {
     pub const SPEED_PROPERTY_KEY: u16 = 292;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 60 | 66)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -40,7 +43,6 @@ impl AdvanceableStateBase {
         if !self.set_speed_value(value) {
             return;
         }
-        callbacks.speed_changed();
         AdvanceableStateBaseCallbacks::notify_property_changed(callbacks, Self::SPEED_PROPERTY_KEY);
     }
 

@@ -1,4 +1,6 @@
-//! renderer/cmd/deferred_session.hpp at 8a494ced.
+//! renderer/cmd/deferred_session.hpp through 7fb595be.
+//! Supported Rust roots retain the scripting/ORE/canvas recorder branch.
+//! The upstream no-ORE Canvas2D build is not a product configuration here.
 use super::render_replay::RendererOwner;
 use super::{
     deferred_render_factory::*, deferred_render_resource::SharedRenderCommandBuffer,
@@ -487,15 +489,15 @@ impl DeferredSession {
                     .borrow_mut()
                     .register_canvas(canvas)
             })));
+        self.ore_context
+            .borrow_mut()
+            .setCanvasRegistry(Some(self.canvases()));
         self.factory
             .borrow()
             .buffer
             .lock()
             .unwrap()
             .bind_recording_thread();
-        self.ore_context
-            .borrow_mut()
-            .setCanvasRegistry(Some(self.canvases()));
     }
 }
 impl DeferredRouteHost for DeferredSession {

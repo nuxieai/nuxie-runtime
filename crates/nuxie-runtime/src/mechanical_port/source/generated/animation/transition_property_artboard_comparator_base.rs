@@ -6,7 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait TransitionPropertyArtboardComparatorBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn property_type_changed(&mut self) {}
 }
 
 pub struct TransitionPropertyArtboardComparatorBase {
@@ -28,7 +27,11 @@ impl TransitionPropertyArtboardComparatorBase {
     pub const PROPERTY_TYPE_PROPERTY_KEY: u16 = 677;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 478 | 477)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +47,6 @@ impl TransitionPropertyArtboardComparatorBase {
         if !self.set_property_type_value(value) {
             return;
         }
-        callbacks.property_type_changed();
         callbacks.notify_property_changed(Self::PROPERTY_TYPE_PROPERTY_KEY);
     }
 

@@ -6,9 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait StateMachineListenerSingleBaseCallbacks: crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn listener_type_value_changed(&mut self) {}
-    fn event_id_changed(&mut self) {}
-    fn view_model_path_ids_changed(&mut self) {}
     fn decode_view_model_path_ids(&mut self, value: &[u8]);
     fn copy_view_model_path_ids(&mut self, object: &StateMachineListenerSingle);
 }
@@ -36,7 +33,11 @@ impl StateMachineListenerSingleBase {
     pub const VIEW_MODEL_PATH_IDS_PROPERTY_KEY: u16 = 868;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 654 | 54)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -52,7 +53,6 @@ impl StateMachineListenerSingleBase {
         if !self.set_listener_type_value_value(value) {
             return;
         }
-        callbacks.listener_type_value_changed();
         StateMachineListenerSingleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::LISTENER_TYPE_VALUE_PROPERTY_KEY,
@@ -77,7 +77,6 @@ impl StateMachineListenerSingleBase {
         if !self.set_event_id_value(value) {
             return;
         }
-        callbacks.event_id_changed();
         StateMachineListenerSingleBaseCallbacks::notify_property_changed(
             callbacks,
             Self::EVENT_ID_PROPERTY_KEY,

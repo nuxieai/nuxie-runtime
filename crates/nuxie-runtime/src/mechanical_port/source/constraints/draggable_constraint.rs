@@ -154,7 +154,6 @@ impl DraggableConstraint {
                 .set_listener_type_value_value(ListenerType::ComponentProvided as u32)
             {
                 use crate::mechanical_port::source::generated::animation::state_machine_listener_single_base::{StateMachineListenerSingleBase, StateMachineListenerSingleBaseCallbacks};
-                StateMachineListenerSingleBaseCallbacks::listener_type_value_changed(&mut listener);
                 crate::mechanical_port::source::core::CoreObject::core_mut(&mut listener)
                     .notify_property_changed(
                         StateMachineListenerSingleBase::LISTENER_TYPE_VALUE_PROPERTY_KEY,
@@ -284,7 +283,12 @@ impl DraggableConstraintListenerGroup {
         {
             self.draggable.borrow_mut().end_drag(position, time_stamp);
             if self.scrolling_pointer_id.get() == pointer_id {
-                state_machine_instance.drag_end(position, time_stamp, pointer_id, PointerButton::Primary);
+                state_machine_instance.drag_end(
+                    position,
+                    time_stamp,
+                    pointer_id,
+                    PointerButton::Primary,
+                );
                 self.scrolling_pointer_id.set(-1);
                 return ProcessEventResult::Scroll;
             }
@@ -295,7 +299,13 @@ impl DraggableConstraintListenerGroup {
             let has_dragged = self.draggable.borrow_mut().drag(position, time_stamp);
             if has_dragged {
                 if self.scrolling_pointer_id.get() != pointer_id {
-                    state_machine_instance.drag_start(position, time_stamp, false, pointer_id, PointerButton::Primary);
+                    state_machine_instance.drag_start(
+                        position,
+                        time_stamp,
+                        false,
+                        pointer_id,
+                        PointerButton::Primary,
+                    );
                 }
                 self.scrolling_pointer_id.set(pointer_id);
                 return ProcessEventResult::Scroll;

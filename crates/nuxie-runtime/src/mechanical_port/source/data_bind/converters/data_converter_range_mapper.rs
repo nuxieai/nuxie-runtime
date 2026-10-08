@@ -66,7 +66,6 @@ impl DataConverterRangeMapper {
             .base
             .set_interpolation_type_value(interpolation_type)
         {
-            DataConverterRangeMapperBaseCallbacks::interpolation_type_changed(&mut converter);
             crate::mechanical_port::source::core::CoreObject::core_mut(&mut converter)
                 .notify_property_changed(
                     DataConverterRangeMapperBase::INTERPOLATION_TYPE_PROPERTY_KEY,

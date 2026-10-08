@@ -85,36 +85,42 @@ impl ColorConverter {
         self.s = (sat * 100.0).round() as i32;
     }
 
-    fn marker(&mut self, marker: char) -> Option<String> {
-        Some(match marker {
-            'r' => self.red().to_string(),
-            'g' => self.green().to_string(),
-            'b' => self.blue().to_string(),
-            'a' => self.alpha().to_string(),
-            'R' => format!("{:02X}", self.red()),
-            'G' => format!("{:02X}", self.green()),
-            'B' => format!("{:02X}", self.blue()),
-            'A' => format!("{:02X}", self.alpha()),
+    fn append_hex(output: &mut String, value: i32) {
+        output.push(b"0123456789ABCDEF"[(value >> 4) as usize] as char);
+        output.push(b"0123456789ABCDEF"[(value & 0xf) as usize] as char);
+    }
+
+    fn append_marker(&mut self, marker: char, output: &mut String) -> bool {
+        match marker {
+            'r' => output.push_str(&self.red().to_string()),
+            'g' => output.push_str(&self.green().to_string()),
+            'b' => output.push_str(&self.blue().to_string()),
+            'a' => output.push_str(&self.alpha().to_string()),
+            'R' => Self::append_hex(output, self.red()),
+            'G' => Self::append_hex(output, self.green()),
+            'B' => Self::append_hex(output, self.blue()),
+            'A' => Self::append_hex(output, self.alpha()),
             'h' => {
                 if self.h == -1 {
                     self.calculate_hsl();
                 }
-                self.h.to_string()
+                output.push_str(&self.h.to_string());
             }
             'l' => {
                 if self.l == -1 {
                     self.calculate_hsl();
                 }
-                self.l.to_string()
+                output.push_str(&self.l.to_string());
             }
             's' => {
                 if self.s == -1 {
                     self.calculate_hsl();
                 }
-                self.s.to_string()
+                output.push_str(&self.s.to_string());
             }
-            _ => return None,
-        })
+            _ => return false,
+        }
+        true
     }
 }
 
@@ -136,6 +142,10 @@ impl Default for DataConverterToString {
 
 impl DataConverterToString {
     fn cpp_to_string(value: f32) -> String {
+        Self::cpp_fixed(value, 6)
+    }
+
+    fn cpp_fixed(value: f32, precision: i32) -> String {
         if value.is_nan() {
             // Pinned std::to_string(float) delegates to the C `%f`
             // conversion, which spells both positive and negative NaNs as
@@ -146,7 +156,9 @@ impl DataConverterToString {
         } else if value == f32::NEG_INFINITY {
             "-inf".to_owned()
         } else {
-            format!("{value:.6}")
+            // `%.*f` treats a negative precision as omitted (six places).
+            let precision = if precision < 0 { 6 } else { precision as usize };
+            format!("{value:.precision$}")
         }
     }
 
@@ -191,7 +203,7 @@ impl DataConverterToString {
 
     fn convert_number(&mut self, value: f32) {
         let mut output = if self.base.flags() & ROUND == ROUND {
-            format!("{:.*}", self.base.decimals() as usize, value)
+            Self::cpp_fixed(value, self.base.decimals() as i32)
         } else {
             Self::cpp_to_string(value)
         };
@@ -230,9 +242,7 @@ impl DataConverterToString {
                 }
                 marker = true;
             } else if marker {
-                if let Some(replacement) = self.converter.marker(character) {
-                    output.push_str(&replacement);
-                } else {
+                if !self.converter.append_marker(character, &mut output) {
                     output.push('%');
                     output.push(character);
                 }
@@ -299,7 +309,29 @@ crate::impl_data_converter_capability_forward!(DataConverterToString, base.base)
 
 #[cfg(test)]
 mod tests {
-    use super::DataConverterToString;
+    use super::{ColorConverter, DataConverterToString};
+
+    #[test]
+    fn fixed_precision_uses_the_upstream_printf_contract() {
+        assert_eq!(DataConverterToString::cpp_fixed(4.5, 0), "4");
+        assert_eq!(DataConverterToString::cpp_fixed(-0.0, 2), "-0.00");
+        assert_eq!(DataConverterToString::cpp_fixed(1.25, -1), "1.250000");
+        assert_eq!(DataConverterToString::cpp_fixed(f32::NAN, 2), "nan");
+        assert_eq!(DataConverterToString::cpp_fixed(f32::INFINITY, 2), "inf");
+        assert_eq!(
+            DataConverterToString::cpp_fixed(f32::NEG_INFINITY, 2),
+            "-inf"
+        );
+    }
+
+    #[test]
+    fn channel_hex_appends_exactly_two_uppercase_digits() {
+        for value in 0..=255 {
+            let mut output = "prefix".to_owned();
+            ColorConverter::append_hex(&mut output, value);
+            assert_eq!(output, format!("prefix{value:02X}"));
+        }
+    }
 
     #[test]
     fn unrounded_non_finite_numbers_match_pinned_std_to_string() {

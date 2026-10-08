@@ -8,7 +8,6 @@ pub trait ArtboardBaseCallbacks:
     fn notify_property_changed(&mut self, property_key: u16);
     fn origin_x_changed(&mut self) {}
     fn origin_y_changed(&mut self) {}
-    fn default_state_machine_id_changed(&mut self) {}
     fn view_model_id_changed(&mut self) {}
 }
 
@@ -40,7 +39,11 @@ impl ArtboardBase {
     pub const VIEW_MODEL_ID_PROPERTY_KEY: u16 = 583;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 409 | 13 | 2 | 38 | 91 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -92,7 +95,6 @@ impl ArtboardBase {
         if !self.set_default_state_machine_id_value(value) {
             return;
         }
-        callbacks.default_state_machine_id_changed();
         ArtboardBaseCallbacks::notify_property_changed(
             callbacks,
             Self::DEFAULT_STATE_MACHINE_ID_PROPERTY_KEY,

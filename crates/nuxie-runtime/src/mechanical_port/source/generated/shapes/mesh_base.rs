@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 pub trait MeshBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
-    fn triangle_index_bytes_changed(&mut self) {}
     fn decode_triangle_index_bytes(&mut self, value: &[u8]);
     fn copy_triangle_index_bytes(&mut self, object: &MeshBase);
 }
@@ -27,7 +26,11 @@ impl MeshBase {
     pub const TRIANGLE_INDEX_BYTES_PROPERTY_KEY: u16 = 223;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

@@ -2351,6 +2351,15 @@ impl Artboard {
             host,
             parent_artboard,
         });
+        // Setting an engine only reaches artboards already hosted. Later list
+        // items and swapped nested artboards inherit their host's engine here.
+        if let Some(engine) = self.parent_artboard().and_then(|parent| {
+            parent
+                .with_downcast::<Artboard, _>(Artboard::audio_engine)
+                .flatten()
+        }) {
+            self.set_audio_engine(Some(engine));
+        }
         self.shares_layout_with_host()
             .then(|| self.parent_artboard())
             .flatten()

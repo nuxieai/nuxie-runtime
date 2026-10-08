@@ -6,8 +6,6 @@ pub trait NSlicedNodeBaseCallbacks:
     crate::mechanical_port::source::generated::node_base::NodeBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn initial_width_changed(&mut self) {}
-    fn initial_height_changed(&mut self) {}
     fn width_changed(&mut self) {}
     fn height_changed(&mut self) {}
 }
@@ -40,7 +38,11 @@ impl NSlicedNodeBase {
     pub const HEIGHT_PROPERTY_KEY: u16 = 700;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 2 | 38 | 91 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -52,7 +54,6 @@ impl NSlicedNodeBase {
         if !self.set_initial_width_value(value) {
             return;
         }
-        callbacks.initial_width_changed();
         NSlicedNodeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INITIAL_WIDTH_PROPERTY_KEY,
@@ -77,7 +78,6 @@ impl NSlicedNodeBase {
         if !self.set_initial_height_value(value) {
             return;
         }
-        callbacks.initial_height_changed();
         NSlicedNodeBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INITIAL_HEIGHT_PROPERTY_KEY,

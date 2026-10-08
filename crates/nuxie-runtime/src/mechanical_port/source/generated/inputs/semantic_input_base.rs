@@ -4,7 +4,6 @@ use crate::mechanical_port::source::{
 };
 
 pub trait SemanticInputBaseCallbacks {
-    fn action_type_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
 
@@ -27,7 +26,11 @@ impl SemanticInputBase {
     pub const ACTION_TYPE_PROPERTY_KEY: u16 = 1010;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 663)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
 
     pub fn core_type(&self) -> u16 {
@@ -45,7 +48,6 @@ impl SemanticInputBase {
         if !self.set_action_type_value(value) {
             return;
         }
-        callbacks.action_type_changed();
         callbacks.notify_property_changed(Self::ACTION_TYPE_PROPERTY_KEY);
     }
 

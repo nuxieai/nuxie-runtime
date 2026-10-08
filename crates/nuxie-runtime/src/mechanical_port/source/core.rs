@@ -83,7 +83,10 @@ pub trait CoreObject: CoreRegistryObject + Any {
     fn core(&self) -> &Core;
     fn core_mut(&mut self) -> &mut Core;
     fn core_type(&self) -> CoreTypeKey;
-    fn is_type_of(&self, type_key: CoreTypeKey) -> bool;
+    fn is_type_of(&self, type_key: CoreTypeKey) -> bool {
+        let concrete = self.core_type();
+        concrete == type_key || Core::has_ancestor(concrete, type_key)
+    }
     /// The generated type test is immutable vtable metadata. Retaining its
     /// function permits a base method to query its dynamic type while the
     /// concrete owner is already borrowed for that same method invocation.
@@ -746,7 +749,10 @@ impl PropertySetterCompletion {
     }
     pub(crate) fn record(&mut self, core: &Core, property_key: u16) {
         debug_assert!(self.notification.is_none());
-        self.notification = core.observers.as_ref().map(|head| (head.clone(), property_key));
+        self.notification = core
+            .observers
+            .as_ref()
+            .map(|head| (head.clone(), property_key));
     }
 
     pub fn finish(self) {
@@ -903,6 +909,10 @@ impl Core {
             .type_metadata
             .expect("dynamic type requires a concrete Core occurrence");
         predicate(type_key)
+    }
+
+    pub fn has_ancestor(concrete: u16, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::core_type_tree::has_ancestor(concrete, type_key)
     }
 
     pub fn deserialize(&mut self, _property_key: u16, _reader: &mut BinaryReader<'_>) -> bool {

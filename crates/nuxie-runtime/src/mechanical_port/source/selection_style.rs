@@ -10,7 +10,6 @@ pub struct SelectionStyle {
 impl SelectionStyle {
     pub fn set_highlight_color(&mut self, value: i32) {
         if self.base.set_highlight_color_value(value) {
-            self.highlight_color_changed();
             self.base
                 .base
                 .notify_property_changed(SelectionStyleBase::HIGHLIGHT_COLOR_PROPERTY_KEY);

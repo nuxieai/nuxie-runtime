@@ -15,7 +15,11 @@ impl Default for ScriptInputStringBase {
 impl ScriptInputStringBase {
     pub const TYPE_KEY: u16 = 627;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 130 | 167 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY

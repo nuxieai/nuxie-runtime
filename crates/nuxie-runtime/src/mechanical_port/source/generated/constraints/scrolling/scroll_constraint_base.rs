@@ -7,24 +7,8 @@ pub trait ScrollConstraintBaseCallbacks: crate::mechanical_port::source::generat
     fn notify_property_changed(&mut self, property_key: u16);
     fn scroll_offset_x_changed(&mut self) {}
     fn scroll_offset_y_changed(&mut self) {}
-    fn scroll_percent_x_changed(&mut self) {}
-    fn scroll_percent_y_changed(&mut self) {}
-    fn scroll_index_changed(&mut self) {}
-    fn snap_changed(&mut self) {}
-    fn physics_type_value_changed(&mut self) {}
-    fn physics_id_changed(&mut self) {}
     fn virtualize_changed(&mut self) {}
     fn virtualize_buffer_changed(&mut self) {}
-    fn infinite_changed(&mut self) {}
-    fn interactive_changed(&mut self) {}
-    fn threshold_changed(&mut self) {}
-    fn velocity_x_changed(&mut self) {}
-    fn velocity_y_changed(&mut self) {}
-    fn scroll_active_changed(&mut self) {}
-    fn drag_multiplier_changed(&mut self) {}
-    fn computed_content_width_changed(&mut self) {}
-    fn computed_content_height_changed(&mut self) {}
-    fn scroll_flags_changed(&mut self) {}
     fn set_scroll_percent_x(&mut self, value: f32);
     fn scroll_percent_x(&mut self) -> f32;
     fn set_scroll_percent_y(&mut self, value: f32);
@@ -105,7 +89,11 @@ impl ScrollConstraintBase {
     pub const WHEEL_INTERACTIVE_BITMASK: u8 = 1;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 520 | 79 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -167,7 +155,6 @@ impl ScrollConstraintBase {
         if !self.set_snap_value(value) {
             return;
         }
-        callbacks.snap_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(callbacks, Self::SNAP_PROPERTY_KEY);
     }
 
@@ -189,7 +176,6 @@ impl ScrollConstraintBase {
         if !self.set_physics_type_value_value(value) {
             return;
         }
-        callbacks.physics_type_value_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::PHYSICS_TYPE_VALUE_PROPERTY_KEY,
@@ -214,7 +200,6 @@ impl ScrollConstraintBase {
         if !self.set_physics_id_value(value) {
             return;
         }
-        callbacks.physics_id_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::PHYSICS_ID_PROPERTY_KEY,
@@ -292,7 +277,6 @@ impl ScrollConstraintBase {
         if !self.set_infinite_value(value) {
             return;
         }
-        callbacks.infinite_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INFINITE_PROPERTY_KEY,
@@ -317,7 +301,6 @@ impl ScrollConstraintBase {
         if !self.set_interactive_value(value) {
             return;
         }
-        callbacks.interactive_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::INTERACTIVE_PROPERTY_KEY,
@@ -342,7 +325,6 @@ impl ScrollConstraintBase {
         if !self.set_threshold_value(value) {
             return;
         }
-        callbacks.threshold_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::THRESHOLD_PROPERTY_KEY,
@@ -367,7 +349,6 @@ impl ScrollConstraintBase {
         if !self.set_drag_multiplier_value(value) {
             return;
         }
-        callbacks.drag_multiplier_changed();
         ScrollConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::DRAG_MULTIPLIER_PROPERTY_KEY,
@@ -397,7 +378,6 @@ impl ScrollConstraintBase {
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
         if self.set_scroll_flags_value(value) {
-            callbacks.scroll_flags_changed();
             ScrollConstraintBaseCallbacks::notify_property_changed(
                 callbacks,
                 Self::SCROLL_FLAGS_PROPERTY_KEY,
@@ -424,7 +404,6 @@ impl ScrollConstraintBase {
         callbacks: &mut impl ScrollConstraintBaseCallbacks,
     ) {
         if self.set_wheel_interactive_value(value) {
-            callbacks.scroll_flags_changed();
             ScrollConstraintBaseCallbacks::notify_property_changed(
                 callbacks,
                 Self::SCROLL_FLAGS_PROPERTY_KEY,

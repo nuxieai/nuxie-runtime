@@ -4,9 +4,7 @@ use crate::mechanical_port::source::{
     generated::assets::file_asset_base::FileAssetBaseCallbacks,
 };
 
-pub trait ScriptModuleAssetBaseCallbacks: FileAssetBaseCallbacks {
-    fn language_changed(&mut self) {}
-}
+pub trait ScriptModuleAssetBaseCallbacks: FileAssetBaseCallbacks {}
 
 #[derive(Default)]
 pub struct ScriptModuleAssetBase {
@@ -18,7 +16,11 @@ impl ScriptModuleAssetBase {
     pub const TYPE_KEY: u16 = 1071;
     pub const LANGUAGE_PROPERTY_KEY: u16 = 1087;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, 1071 | 103 | 99)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -39,7 +41,6 @@ impl ScriptModuleAssetBase {
         callbacks: &mut C,
     ) {
         if self.set_language_value(value) {
-            callbacks.language_changed();
             FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::LANGUAGE_PROPERTY_KEY);
         }
     }

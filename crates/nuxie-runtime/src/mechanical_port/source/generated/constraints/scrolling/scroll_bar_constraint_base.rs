@@ -6,8 +6,6 @@ use crate::mechanical_port::source::{
 
 pub trait ScrollBarConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::draggable_constraint_base::DraggableConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn scroll_constraint_id_changed(&mut self) {}
-    fn auto_size_changed(&mut self) {}
 }
 
 pub struct ScrollBarConstraintBase {
@@ -32,7 +30,11 @@ impl ScrollBarConstraintBase {
     pub const AUTO_SIZE_PROPERTY_KEY: u16 = 734;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 520 | 79 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -48,7 +50,6 @@ impl ScrollBarConstraintBase {
         if !self.set_scroll_constraint_id_value(value) {
             return;
         }
-        callbacks.scroll_constraint_id_changed();
         ScrollBarConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::SCROLL_CONSTRAINT_ID_PROPERTY_KEY,
@@ -73,7 +74,6 @@ impl ScrollBarConstraintBase {
         if !self.set_auto_size_value(value) {
             return;
         }
-        callbacks.auto_size_changed();
         ScrollBarConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::AUTO_SIZE_PROPERTY_KEY,

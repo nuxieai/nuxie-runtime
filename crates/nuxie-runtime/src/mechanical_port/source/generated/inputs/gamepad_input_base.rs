@@ -4,10 +4,6 @@ use crate::mechanical_port::source::{
 };
 
 pub trait GamepadInputBaseCallbacks {
-    fn kind_changed(&mut self) {}
-    fn mapping_changed(&mut self) {}
-    fn input_index_changed(&mut self) {}
-    fn button_phase_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
 }
 
@@ -38,7 +34,11 @@ impl GamepadInputBase {
     pub const INPUT_INDEX_PROPERTY_KEY: u16 = 1019;
     pub const BUTTON_PHASE_PROPERTY_KEY: u16 = 1020;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 663)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -60,7 +60,6 @@ impl GamepadInputBase {
         if !self.set_kind_value(value) {
             return;
         }
-        c.kind_changed();
         c.notify_property_changed(Self::KIND_PROPERTY_KEY);
     }
 
@@ -75,7 +74,6 @@ impl GamepadInputBase {
         if !self.set_mapping_value(value) {
             return;
         }
-        c.mapping_changed();
         c.notify_property_changed(Self::MAPPING_PROPERTY_KEY);
     }
 
@@ -90,7 +88,6 @@ impl GamepadInputBase {
         if !self.set_input_index_value(value) {
             return;
         }
-        c.input_index_changed();
         c.notify_property_changed(Self::INPUT_INDEX_PROPERTY_KEY);
     }
 
@@ -105,7 +102,6 @@ impl GamepadInputBase {
         if !self.set_button_phase_value(value) {
             return;
         }
-        c.button_phase_changed();
         c.notify_property_changed(Self::BUTTON_PHASE_PROPERTY_KEY);
     }
 

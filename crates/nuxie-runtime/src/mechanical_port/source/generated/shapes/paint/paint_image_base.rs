@@ -12,16 +12,6 @@ pub trait PaintImageBaseCallbacks:
     crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn image_asset_id_changed(&mut self) {}
-    fn image_sampler_filter_changed(&mut self) {}
-    fn image_sampler_wrap_x_changed(&mut self) {}
-    fn image_sampler_wrap_y_changed(&mut self) {}
-    fn image_scale_x_changed(&mut self) {}
-    fn image_scale_y_changed(&mut self) {}
-    fn image_offset_x_changed(&mut self) {}
-    fn image_offset_y_changed(&mut self) {}
-    fn image_rotation_changed(&mut self) {}
-    fn image_size_mode_changed(&mut self) {}
 }
 
 pub struct PaintImageBase {
@@ -67,7 +57,11 @@ impl PaintImageBase {
     pub const IMAGE_ROTATION_PROPERTY_KEY: u16 = 411;
     pub const IMAGE_SIZE_MODE_PROPERTY_KEY: u16 = 412;
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -83,7 +77,6 @@ impl PaintImageBase {
         if !self.set_image_asset_id_value(value) {
             return;
         }
-        callbacks.image_asset_id_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_ASSET_ID_PROPERTY_KEY,
@@ -107,7 +100,6 @@ impl PaintImageBase {
         if !self.set_image_sampler_filter_value(value) {
             return;
         }
-        callbacks.image_sampler_filter_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_SAMPLER_FILTER_PROPERTY_KEY,
@@ -131,7 +123,6 @@ impl PaintImageBase {
         if !self.set_image_sampler_wrap_x_value(value) {
             return;
         }
-        callbacks.image_sampler_wrap_x_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_SAMPLER_WRAP_X_PROPERTY_KEY,
@@ -155,7 +146,6 @@ impl PaintImageBase {
         if !self.set_image_sampler_wrap_y_value(value) {
             return;
         }
-        callbacks.image_sampler_wrap_y_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_SAMPLER_WRAP_Y_PROPERTY_KEY,
@@ -175,7 +165,6 @@ impl PaintImageBase {
         if !self.set_image_scale_x_value(value) {
             return;
         }
-        callbacks.image_scale_x_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_SCALE_X_PROPERTY_KEY,
@@ -195,7 +184,6 @@ impl PaintImageBase {
         if !self.set_image_scale_y_value(value) {
             return;
         }
-        callbacks.image_scale_y_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_SCALE_Y_PROPERTY_KEY,
@@ -219,7 +207,6 @@ impl PaintImageBase {
         if !self.set_image_offset_x_value(value) {
             return;
         }
-        callbacks.image_offset_x_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_OFFSET_X_PROPERTY_KEY,
@@ -243,7 +230,6 @@ impl PaintImageBase {
         if !self.set_image_offset_y_value(value) {
             return;
         }
-        callbacks.image_offset_y_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_OFFSET_Y_PROPERTY_KEY,
@@ -267,7 +253,6 @@ impl PaintImageBase {
         if !self.set_image_rotation_value(value) {
             return;
         }
-        callbacks.image_rotation_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_ROTATION_PROPERTY_KEY,
@@ -291,7 +276,6 @@ impl PaintImageBase {
         if !self.set_image_size_mode_value(value) {
             return;
         }
-        callbacks.image_size_mode_changed();
         PaintImageBaseCallbacks::notify_property_changed(
             callbacks,
             Self::IMAGE_SIZE_MODE_PROPERTY_KEY,

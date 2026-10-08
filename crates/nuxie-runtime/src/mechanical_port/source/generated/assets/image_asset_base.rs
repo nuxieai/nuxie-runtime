@@ -4,11 +4,7 @@ use crate::mechanical_port::source::{
     generated::assets::drawable_asset_base::DrawableAssetBaseCallbacks,
 };
 
-pub trait ImageAssetBaseCallbacks: DrawableAssetBaseCallbacks {
-    fn sampler_filter_changed(&mut self) {}
-    fn sampler_wrap_x_changed(&mut self) {}
-    fn sampler_wrap_y_changed(&mut self) {}
-}
+pub trait ImageAssetBaseCallbacks: DrawableAssetBaseCallbacks {}
 
 pub struct ImageAssetBase {
     pub base: DrawableAsset,
@@ -35,7 +31,11 @@ impl ImageAssetBase {
     pub const SAMPLER_WRAP_Y_PROPERTY_KEY: u16 = 1075;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 104 | 103 | 99)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -52,7 +52,6 @@ impl ImageAssetBase {
         if !self.set_sampler_filter_value(value) {
             return;
         }
-        callbacks.sampler_filter_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_FILTER_PROPERTY_KEY);
     }
 
@@ -72,7 +71,6 @@ impl ImageAssetBase {
         if !self.set_sampler_wrap_x_value(value) {
             return;
         }
-        callbacks.sampler_wrap_x_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_WRAP_X_PROPERTY_KEY);
     }
 
@@ -92,7 +90,6 @@ impl ImageAssetBase {
         if !self.set_sampler_wrap_y_value(value) {
             return;
         }
-        callbacks.sampler_wrap_y_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::SAMPLER_WRAP_Y_PROPERTY_KEY);
     }
 

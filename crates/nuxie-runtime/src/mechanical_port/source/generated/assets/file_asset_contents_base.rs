@@ -8,8 +8,6 @@ pub trait FileAssetContentsBaseCallbacks {
     fn copy_bytes(&mut self, object: &FileAssetContentsBase);
     fn decode_signature(&mut self, value: &[u8]);
     fn copy_signature(&mut self, object: &FileAssetContentsBase);
-    fn bytes_changed(&mut self) {}
-    fn signature_changed(&mut self) {}
 }
 
 #[derive(Default)]
@@ -23,7 +21,11 @@ impl FileAssetContentsBase {
     pub const SIGNATURE_PROPERTY_KEY: u16 = 911;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        type_key == Self::TYPE_KEY
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
 
     pub fn core_type(&self) -> u16 {

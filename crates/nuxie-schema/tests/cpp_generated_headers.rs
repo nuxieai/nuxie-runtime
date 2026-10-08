@@ -402,11 +402,20 @@ fn generated_rust_schema_matches_cpp_value_setters() {
                 let mask = property.bitmask_passthrough.unwrap();
                 let member = cpp_member_name(mask.target);
                 let bitmask = format!("{}Bitmask", property.name);
+                let changed = if property_owners().any(|(_, _, properties)| {
+                    properties.iter().any(|target| {
+                        target.name == mask.target && target.cpp_generates_changed_hook()
+                    })
+                }) {
+                    format!("{}Changed();", mask.target)
+                } else {
+                    String::new()
+                };
                 let expected = format!(
                     "const bool prev = (m_{member} & {bitmask}) != 0; \
                      if (prev == value) {{ return; }} \
                      m_{member} = value ? (m_{member} | {bitmask}) : (m_{member} & ~{bitmask}); \
-                     {target}Changed(); notifyPropertyChanged({target}PropertyKey);",
+                     {changed} notifyPropertyChanged({target}PropertyKey);",
                     target = mask.target,
                 );
                 assert_eq!(
@@ -424,6 +433,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
                 assert_cpp_passthrough_setter_body(
                     &actual,
                     property.name,
+                    property.cpp_generates_changed_hook(),
                     definition.name,
                     &header,
                 );
@@ -439,6 +449,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
                     &actual,
                     property.name,
                     &cpp_member_name(property.name),
+                    property.cpp_generates_changed_hook(),
                     definition.name,
                     &header,
                 );
@@ -946,7 +957,7 @@ fn generated_rust_schema_matches_cpp_deserialize_switches() {
 }
 
 #[test]
-fn generated_rust_schema_matches_cpp_is_type_of_switches() {
+fn generated_rust_schema_matches_cpp_shared_type_tree() {
     let runtime_dir = reference_runtime_dir();
     assert!(
         runtime_dir.exists(),
@@ -954,11 +965,28 @@ fn generated_rust_schema_matches_cpp_is_type_of_switches() {
         runtime_dir.display()
     );
 
-    let constants = parse_generated_class_constants(&runtime_dir);
-
+    let parents = parse_cpp_parent_type_keys(&runtime_dir);
     for definition in DEFINITIONS {
         let header = cpp_header_for(&runtime_dir, definition.file);
-        let cpp_type_keys = parse_cpp_is_type_of_type_keys(&header, &constants);
+        let source = read_cpp_runtime_source(&header).unwrap();
+        assert!(
+            !source.contains("bool isTypeOf("),
+            "per-class type switch survived"
+        );
+        let mut cpp_type_keys = BTreeSet::from([definition.type_key.int]);
+        let mut current = definition.type_key.int;
+        loop {
+            current = *parents
+                .get(current as usize)
+                .expect("parent table covers type");
+            if current == 0 {
+                break;
+            }
+            assert!(
+                cpp_type_keys.insert(current),
+                "cycle in generated type tree"
+            );
+        }
         let expected_type_keys = std::iter::once(definition.type_key.int)
             .chain(definition.ancestors.iter().map(|ancestor| {
                 DEFINITIONS
@@ -973,7 +1001,7 @@ fn generated_rust_schema_matches_cpp_is_type_of_switches() {
         assert_eq!(
             cpp_type_keys,
             expected_type_keys,
-            "{} isTypeOf switch in {}",
+            "{} shared isTypeOf ancestry in {}",
             definition.name,
             header.display()
         );
@@ -1332,17 +1360,20 @@ fn assert_cpp_stored_field_setter_body(
     actual: &[String],
     property_name: &str,
     member: &str,
+    changed_hook: bool,
     definition_name: &str,
     header: &Path,
 ) {
-    let prefix = vec![
+    let mut prefix = vec![
         format!("if (m_{member} == value)"),
         "{".to_owned(),
         "return;".to_owned(),
         "}".to_owned(),
         format!("m_{member} = value;"),
-        format!("{property_name}Changed();"),
     ];
+    if changed_hook {
+        prefix.push(format!("{property_name}Changed();"));
+    }
     assert_cpp_setter_body_with_optional_notify(
         actual,
         &prefix,
@@ -1355,17 +1386,20 @@ fn assert_cpp_stored_field_setter_body(
 fn assert_cpp_passthrough_setter_body(
     actual: &[String],
     property_name: &str,
+    changed_hook: bool,
     definition_name: &str,
     header: &Path,
 ) {
-    let prefix = vec![
+    let mut prefix = vec![
         format!("if ({property_name}() == value)"),
         "{".to_owned(),
         "return;".to_owned(),
         "}".to_owned(),
         format!("set{}(value);", cpp_member_name(property_name)),
-        format!("{property_name}Changed();"),
     ];
+    if changed_hook {
+        prefix.push(format!("{property_name}Changed();"));
+    }
     assert_cpp_setter_body_with_optional_notify(
         actual,
         &prefix,
@@ -1880,41 +1914,37 @@ fn parse_cpp_make_core_instance_type_keys(
     keys
 }
 
-fn parse_cpp_is_type_of_type_keys(
-    header: &Path,
-    constants: &BTreeMap<String, u16>,
-) -> BTreeSet<u16> {
-    let source = read_cpp_runtime_source(header)
-        .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
-    let mut keys = BTreeSet::new();
-    let mut in_is_type_of = false;
-
-    for line in source.lines() {
-        let line = line.trim();
-
-        if line.starts_with("bool isTypeOf(uint16_t typeKey) const override") {
-            in_is_type_of = true;
-            continue;
-        }
-        if !in_is_type_of {
-            continue;
-        }
-        if line.starts_with("uint16_t coreType()") {
-            break;
-        }
-
-        let Some(rest) = line.strip_prefix("case ") else {
-            continue;
-        };
-        let case = rest.trim_end_matches(':').trim();
-        let key = constants
-            .get(case)
-            .copied()
-            .unwrap_or_else(|| panic!("missing generated constant {case} in {}", header.display()));
-        keys.insert(key);
-    }
-
-    keys
+fn parse_cpp_parent_type_keys(runtime_dir: &Path) -> Vec<u16> {
+    let path = runtime_dir.join("src/generated/core_type_tree.cpp");
+    let source = read_cpp_runtime_source(&path).expect("generated core type tree");
+    let table = source
+        .split_once("static const uint16_t parentTypeKeys[")
+        .expect("parent table declaration")
+        .1;
+    let (count, table) = table.split_once("] = {").expect("parent table initializer");
+    let count: usize = count.parse().expect("parent table size");
+    let (table, implementation) = table.split_once("};").expect("parent table end");
+    let parents: Vec<u16> = table
+        .split(',')
+        .map(|key| key.trim().parse().expect("parent type key"))
+        .collect();
+    assert_eq!(parents.len(), count, "complete parent table");
+    assert_eq!(parents.first(), Some(&0), "zero terminates ancestry");
+    assert_eq!(
+        cpp_normalize_whitespace(implementation),
+        cpp_normalize_whitespace(&format!(
+            "bool Core::hasAncestor(uint16_t type, uint16_t typeKey) {{ while (type < {count} && (type = parentTypeKeys[type]) != 0) {{ if (type == typeKey) {{ return true; }} }} return false; }}"
+        ))
+    );
+    let core =
+        std::fs::read_to_string(runtime_dir.join("include/rive/core.hpp")).expect("Core header");
+    assert!(
+        cpp_normalize_whitespace(&core).contains(
+            "uint16_t type = coreType(); return type == typeKey || hasAncestor(type, typeKey);"
+        ),
+        "Core tests exact type before walking ancestors"
+    );
+    parents
 }
 
 fn parse_cpp_deserialize_property_keys(
@@ -2324,7 +2354,7 @@ fn parse_cpp_core_registry_callback_property_keys(
         if !in_function {
             continue;
         }
-        if line.starts_with("static bool objectSupportsProperty") {
+        if line.starts_with("static uint16_t propertyOwnerTypeKey") {
             break;
         }
 
@@ -2377,18 +2407,42 @@ fn parse_cpp_core_registry_object_supports_property(
     let mut pending_cases = Vec::<String>::new();
     let mut pending_class = None::<String>;
     let mut supports = BTreeMap::new();
+    let mut in_mixin_function = false;
+    let mut saw_zero_default = false;
+    let mut saw_owner_lookup = false;
+    let mut saw_dispatch = false;
 
     for line in source.lines() {
         let line = line.trim();
 
-        if line.starts_with("static bool objectSupportsProperty") {
+        if line.starts_with("static uint16_t propertyOwnerTypeKey") {
             in_function = true;
             continue;
         }
         if !in_function {
             continue;
         }
-        if line == "return false;" {
+        if line.starts_with("static bool objectSupportsProperty") {
+            assert!(
+                saw_zero_default,
+                "normal-owner function terminates with zero"
+            );
+            in_mixin_function = true;
+            continue;
+        }
+        if line == "return 0;" {
+            assert!(!in_mixin_function && pending_cases.is_empty() && pending_class.is_none());
+            saw_zero_default = true;
+            continue;
+        }
+        if line == "uint16_t owner = propertyOwnerTypeKey(propertyKey);" {
+            assert!(in_mixin_function);
+            saw_owner_lookup = true;
+            continue;
+        }
+        if line == "return owner != 0 && object->isTypeOf(owner);" {
+            assert!(saw_owner_lookup);
+            saw_dispatch = true;
             break;
         }
 
@@ -2410,16 +2464,21 @@ fn parse_cpp_core_registry_object_supports_property(
             }
         }
 
-        let owner = if let Some(rest) = line.strip_prefix("return object->is<") {
-            CppPropertyOwner::Core(
-                rest.strip_suffix(">();")
-                    .unwrap_or_else(|| panic!("bad objectSupportsProperty return line: {line}"))
-                    .to_owned(),
-            )
+        let owner = if let Some(owner) = line
+            .strip_prefix("return ")
+            .and_then(|rest| rest.strip_suffix("::typeKey;"))
+        {
+            assert!(!in_mixin_function, "normal owner in propertyOwnerTypeKey");
+            assert!(
+                constants.contains_key(&format!("{owner}::typeKey")),
+                "known owner {owner}"
+            );
+            CppPropertyOwner::Core(owner.to_owned())
         } else if let Some(owner) = line
             .strip_prefix("return ")
             .and_then(|rest| rest.strip_suffix("::from(object) != nullptr;"))
         {
+            assert!(in_mixin_function, "mixin owner in objectSupportsProperty");
             CppPropertyOwner::Mixin(owner.to_owned())
         } else {
             assert!(
@@ -2450,6 +2509,8 @@ fn parse_cpp_core_registry_object_supports_property(
         pending_class.is_none(),
         "unresolved objectSupportsProperty class"
     );
+    assert!(saw_dispatch, "complete property-owner/mixin dispatch");
+    assert!(!supports.is_empty(), "property support entries");
     supports
 }
 

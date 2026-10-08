@@ -5,9 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait ElasticInterpolatorBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn easing_value_changed(&mut self) {}
-    fn amplitude_changed(&mut self) {}
-    fn period_changed(&mut self) {}
 }
 
 pub struct ElasticInterpolatorBase {
@@ -35,7 +32,11 @@ impl ElasticInterpolatorBase {
     pub const PERIOD_PROPERTY_KEY: u16 = 407;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 175)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -51,7 +52,6 @@ impl ElasticInterpolatorBase {
         if !self.set_easing_value_value(value) {
             return;
         }
-        callbacks.easing_value_changed();
         callbacks.notify_property_changed(Self::EASING_VALUE_PROPERTY_KEY);
     }
 
@@ -73,7 +73,6 @@ impl ElasticInterpolatorBase {
         if !self.set_amplitude_value(value) {
             return;
         }
-        callbacks.amplitude_changed();
         callbacks.notify_property_changed(Self::AMPLITUDE_PROPERTY_KEY);
     }
 
@@ -95,7 +94,6 @@ impl ElasticInterpolatorBase {
         if !self.set_period_value(value) {
             return;
         }
-        callbacks.period_changed();
         callbacks.notify_property_changed(Self::PERIOD_PROPERTY_KEY);
     }
 

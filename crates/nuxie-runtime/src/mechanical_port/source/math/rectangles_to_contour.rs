@@ -129,6 +129,45 @@ impl RectEvent {
     }
 }
 
+struct RectEventAxisLess {
+    axis: u8,
+}
+
+impl RectEventAxisLess {
+    fn compare(&self, a: &RectEvent, b: &RectEvent) -> Ordering {
+        let a = a.get_value(self.axis);
+        let b = b.get_value(self.axis);
+        if a < b {
+            Ordering::Less
+        } else if b < a {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    }
+}
+
+struct PointLess {
+    major: usize,
+}
+
+impl PointLess {
+    fn compare(&self, a: &Vec2D, b: &Vec2D) -> Ordering {
+        compare_points(*a, *b, self.major, 1 - self.major)
+    }
+}
+
+// Keep one sort instantiation per element type; the axis is comparator data.
+fn sort_events_by_axis(events: &mut [RectEvent], axis: u8) {
+    let compare = RectEventAxisLess { axis };
+    events.sort_unstable_by(|a, b| compare.compare(a, b));
+}
+
+fn sort_points_by_axis(points: &mut [Vec2D], major: usize) {
+    let compare = PointLess { major };
+    points.sort_unstable_by(|a, b| compare.compare(a, b));
+}
+
 #[derive(Debug, Default)]
 pub struct RectanglesToContour {
     rect_events: Vec<RectEvent>,
@@ -264,10 +303,8 @@ impl RectanglesToContour {
             self.sorted_points_x.push(point.0);
             self.sorted_points_y.push(point.0);
         }
-        self.sorted_points_x
-            .sort_unstable_by(|a, b| compare_points(*a, *b, 0, 1));
-        self.sorted_points_y
-            .sort_unstable_by(|a, b| compare_points(*a, *b, 1, 0));
+        sort_points_by_axis(&mut self.sorted_points_x, 0);
+        sort_points_by_axis(&mut self.sorted_points_y, 1);
         self.edges_horizontal.clear();
         self.edges_vertical.clear();
         let mut index = 0;
@@ -347,28 +384,8 @@ fn sort_rect_events(
             output.push(event);
         }
     }
-    output[start..].sort_unstable_by(|a, b| {
-        let a = a.get_value(axis_b);
-        let b = b.get_value(axis_b);
-        if a < b {
-            Ordering::Less
-        } else if b < a {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    });
-    output[start..].sort_unstable_by(|a, b| {
-        let a = a.get_value(axis_a);
-        let b = b.get_value(axis_a);
-        if a < b {
-            Ordering::Less
-        } else if b < a {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    });
+    sort_events_by_axis(&mut output[start..], axis_b);
+    sort_events_by_axis(&mut output[start..], axis_a);
     start..output.len()
 }
 fn first_horizontal_key(map: &EdgeMap) -> Option<PointKey> {

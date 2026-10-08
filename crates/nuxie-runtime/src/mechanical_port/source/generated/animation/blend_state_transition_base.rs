@@ -5,7 +5,6 @@ use crate::mechanical_port::source::{
 
 pub trait BlendStateTransitionBaseCallbacks: crate::mechanical_port::source::generated::animation::state_transition_base::StateTransitionBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn exit_blend_animation_id_changed(&mut self) {}
 }
 
 pub struct BlendStateTransitionBase {
@@ -27,7 +26,11 @@ impl BlendStateTransitionBase {
     pub const EXIT_BLEND_ANIMATION_ID_PROPERTY_KEY: u16 = 171;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 65 | 66)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -43,7 +46,6 @@ impl BlendStateTransitionBase {
         if !self.set_exit_blend_animation_id_value(value) {
             return;
         }
-        callbacks.exit_blend_animation_id_changed();
         BlendStateTransitionBaseCallbacks::notify_property_changed(
             callbacks,
             Self::EXIT_BLEND_ANIMATION_ID_PROPERTY_KEY,

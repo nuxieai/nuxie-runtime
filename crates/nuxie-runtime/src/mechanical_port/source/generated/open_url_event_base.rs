@@ -6,8 +6,6 @@ pub trait OpenUrlEventBaseCallbacks:
     crate::mechanical_port::source::generated::event_base::EventBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn url_changed(&mut self) {}
-    fn target_value_changed(&mut self) {}
 }
 
 pub struct OpenUrlEventBase {
@@ -32,7 +30,11 @@ impl OpenUrlEventBase {
     pub const TARGET_VALUE_PROPERTY_KEY: u16 = 249;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 128 | 548 | 11 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -44,7 +46,6 @@ impl OpenUrlEventBase {
         if !self.set_url_value(value) {
             return;
         }
-        callbacks.url_changed();
         OpenUrlEventBaseCallbacks::notify_property_changed(callbacks, Self::URL_PROPERTY_KEY);
     }
 
@@ -62,7 +63,6 @@ impl OpenUrlEventBase {
         if !self.set_target_value_value(value) {
             return;
         }
-        callbacks.target_value_changed();
         OpenUrlEventBaseCallbacks::notify_property_changed(
             callbacks,
             Self::TARGET_VALUE_PROPERTY_KEY,

@@ -586,7 +586,7 @@ fn cpp_generated_value_setter_metadata_matches_generator_shapes() {
         .property_by_key(212)
         .expect("FileAssetContents.bytes");
     assert!(bytes.encoded);
-    assert!(bytes.cpp_generates_changed_hook());
+    assert!(!bytes.cpp_generates_changed_hook());
     assert!(!bytes.cpp_generates_value_setter_body());
     assert!(!bytes.cpp_generates_stored_field_getter_body());
     assert!(!bytes.cpp_generates_passthrough_getter_declaration());
@@ -613,7 +613,7 @@ fn cpp_generated_value_setter_metadata_matches_generator_shapes() {
         .property_by_key(238)
         .expect("NestedBool.nestedValue");
     assert!(nested_value.pure_virtual);
-    assert!(nested_value.cpp_generates_changed_hook());
+    assert!(!nested_value.cpp_generates_changed_hook());
     assert!(!nested_value.cpp_generates_value_setter_body());
     assert!(nested_value.cpp_generates_stored_field_getter_body());
     assert!(!nested_value.cpp_generates_passthrough_getter_declaration());

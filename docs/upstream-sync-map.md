@@ -7,18 +7,39 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `b2c28dde1f8c51872a81ae4f9b4fbbceac1d23ed`
+- LAST_SYNCED_SHA: `7fb595be56a899b4fc6eceb22a4222206383fe93`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Four upstream commits remain after this checkpoint at the fetched target.
-  All 208 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (230 after `5892bb05`); this
+  Three upstream commits remain after this checkpoint at the fetched target.
+  All 209 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (231 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `7fb595be`, integrated atop downstream `e738e272df`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including correction rereviews, are clean. Isolated current-build runtime
+  suites pass 239 tests (two ignored), including both upstream hosted-audio
+  regressions and exhaustive borrowed type queries for local video extensions.
+  Schema/dispatch tests pass 22; callback metadata reproduces from published
+  headers. Isolated parent and current builds both reproduce 19 existing
+  schema-header failures and two codegen count failures; no assertions were
+  weakened. Shared-target baseline artifacts initially proved unreliable, so
+  current and parent validation were repeated in separate build directories.
+  Three focused GL scanner/source-snapshot tests pass in the isolated build.
+  Both wasm32-unknown-unknown browser renderers compile; source/pipeline tests
+  pass 12, manifest tests pass 27, and inventory is current. Structural coverage
+  is 1,066 mirrored/13 adapted/15 deferred owners, not behavioral proof.
+  Integration corrections preserve explicit video ancestry and wire callback
+  regeneration into make schema. Compilation found 32 residual calls to removed
+  empty hooks; only those calls were removed. The new audio test needed inherited
+  NestedArtboard access rather than an exact Rust downcast; swap/engine identity
+  assertions remain intact. No new hardware, browser pixels, broad Golden/Silver
+  execution or guest execution coverage is claimed. Whole-workspace formatting
+  has unrelated existing differences; changed Rust files are formatted.
 - Validation at `b2c28dde`, integrated atop downstream `c14997d541`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. All ten scripting/layout tests pass, including the exact upstream file
@@ -482,6 +503,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `7fb595be56a899b4fc6eceb22a4222206383fe93` | Translate late-hosted audio-engine propagation with both authored-fixture regressions; shared core ancestry/property-owner dispatch and filtered generated change hooks; exact GL version scanning and full-recorder registry/bind ordering; direct UUID/color hex appends, fixed-number formatting and stateful contour comparators. Preserve existing Rust text/audio backends and pure-Rust numeric boundary. C++ HarfBuzz language-table flags and Emscripten-only AAT removal are build-specific: the approved Rust/unknown-unknown backend retains accepted AAT fonts, not parity with that support reduction. GL string assembly and ORE diagnostic formatting are already equivalent. Canvas2D/no-ORE recorder specialization is not a supported product configuration; private implementation absent from the public delta is not claimed imported. | — |
 | `b2c28dde1f8c51872a81ae4f9b4fbbceac1d23ed` | Translate WebGL2 ORE std140 uniform allocation/range padding and exact source-byte upload, plus File display-scale forwarding to the existing Luau VM and its upstream regression. The guest-Wasm VM forwarding loop remains parked; D3D11 allocation padding is unshipped. Private implementation represented only by .rive_head is not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `05d690ee5a8879d738679f8ebad17c4a61af50ac` | Build-only: the public delta adds optional named shallow submodule initialization to the upstream Premake dependency helper. Rust/Cargo has no corresponding live helper; C++ source-oracle builds consume the helper directly from the advanced pin. No runtime or shader behavior changes. The coop_file service named in the message is private implementation absent from the public delta and is not claimed imported. | — |
 | `74dda58f80efd7310959305c284a136e5c5087ff` | Deferred: guest Wasm host-object release, value/asset lookup factoring and browser guest host-call table generation/binding. All public implementation changes are in the parked guest scripting owners and glue, not native Luau, shared runtime or browser rendering. Npm package-build and benchmark changes described in the message are absent from the public delta and are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

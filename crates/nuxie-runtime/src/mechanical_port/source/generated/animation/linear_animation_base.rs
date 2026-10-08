@@ -7,14 +7,7 @@ pub trait LinearAnimationBaseCallbacks:
     crate::mechanical_port::source::generated::animation::animation_base::AnimationBaseCallbacks
 {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn fps_changed(&mut self) {}
     fn duration_changed(&mut self) {}
-    fn speed_changed(&mut self) {}
-    fn loop_value_changed(&mut self) {}
-    fn work_start_changed(&mut self) {}
-    fn work_end_changed(&mut self) {}
-    fn enable_work_area_changed(&mut self) {}
-    fn quantize_changed(&mut self) {}
 }
 
 pub struct LinearAnimationBase {
@@ -57,7 +50,11 @@ impl LinearAnimationBase {
     pub const QUANTIZE_PROPERTY_KEY: u16 = 376;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 27)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -69,7 +66,6 @@ impl LinearAnimationBase {
         if !self.set_fps_value(value) {
             return;
         }
-        callbacks.fps_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(callbacks, Self::FPS_PROPERTY_KEY);
     }
 
@@ -108,7 +104,6 @@ impl LinearAnimationBase {
         if !self.set_speed_value(value) {
             return;
         }
-        callbacks.speed_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(callbacks, Self::SPEED_PROPERTY_KEY);
     }
 
@@ -130,7 +125,6 @@ impl LinearAnimationBase {
         if !self.set_loop_value_value(value) {
             return;
         }
-        callbacks.loop_value_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::LOOP_VALUE_PROPERTY_KEY,
@@ -155,7 +149,6 @@ impl LinearAnimationBase {
         if !self.set_work_start_value(value) {
             return;
         }
-        callbacks.work_start_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::WORK_START_PROPERTY_KEY,
@@ -176,7 +169,6 @@ impl LinearAnimationBase {
         if !self.set_work_end_value(value) {
             return;
         }
-        callbacks.work_end_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::WORK_END_PROPERTY_KEY,
@@ -201,7 +193,6 @@ impl LinearAnimationBase {
         if !self.set_enable_work_area_value(value) {
             return;
         }
-        callbacks.enable_work_area_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::ENABLE_WORK_AREA_PROPERTY_KEY,
@@ -222,7 +213,6 @@ impl LinearAnimationBase {
         if !self.set_quantize_value(value) {
             return;
         }
-        callbacks.quantize_changed();
         LinearAnimationBaseCallbacks::notify_property_changed(
             callbacks,
             Self::QUANTIZE_PROPERTY_KEY,

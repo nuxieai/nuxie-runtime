@@ -884,7 +884,6 @@ impl Shape {
             use crate::mechanical_port::source::generated::drawable_base::{
                 DrawableBase, DrawableBaseCallbacks,
             };
-            DrawableBaseCallbacks::drawable_flags_changed(self);
             DrawableBaseCallbacks::notify_property_changed(
                 self,
                 DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY,

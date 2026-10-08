@@ -13,8 +13,6 @@ pub trait FileAssetBaseCallbacks:
     crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks
 {
     fn asset_id_changed(&mut self) {}
-    fn cdn_uuid_changed(&mut self) {}
-    fn cdn_base_url_changed(&mut self) {}
     fn notify_property_changed(&mut self, property_key: u16);
     fn decode_cdn_uuid(&mut self, value: &[u8]);
     fn copy_cdn_uuid(&mut self, object: &FileAssetBase);
@@ -43,7 +41,11 @@ impl FileAssetBase {
     pub const CDN_BASE_URL_PROPERTY_KEY: u16 = 362;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 99)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
 
     pub fn core_type(&self) -> u16 {
@@ -85,7 +87,6 @@ impl FileAssetBase {
         if !self.set_cdn_base_url_value(value) {
             return;
         }
-        callbacks.cdn_base_url_changed();
         FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::CDN_BASE_URL_PROPERTY_KEY);
     }
     pub(crate) fn set_cdn_base_url_value(&mut self, value: String) -> bool {

@@ -4,8 +4,6 @@ use crate::mechanical_port::source::{
 
 pub trait TransformSpaceConstraintBaseCallbacks: crate::mechanical_port::source::generated::constraints::targeted_constraint_base::TargetedConstraintBaseCallbacks {
     fn notify_property_changed(&mut self, property_key: u16);
-    fn source_space_value_changed(&mut self) {}
-    fn dest_space_value_changed(&mut self) {}
 }
 
 pub struct TransformSpaceConstraintBase {
@@ -30,7 +28,11 @@ impl TransformSpaceConstraintBase {
     pub const DEST_SPACE_VALUE_PROPERTY_KEY: u16 = 180;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 80 | 79 | 10)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
@@ -46,7 +48,6 @@ impl TransformSpaceConstraintBase {
         if !self.set_source_space_value_value(value) {
             return;
         }
-        callbacks.source_space_value_changed();
         TransformSpaceConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::SOURCE_SPACE_VALUE_PROPERTY_KEY,
@@ -71,7 +72,6 @@ impl TransformSpaceConstraintBase {
         if !self.set_dest_space_value_value(value) {
             return;
         }
-        callbacks.dest_space_value_changed();
         TransformSpaceConstraintBaseCallbacks::notify_property_changed(
             callbacks,
             Self::DEST_SPACE_VALUE_PROPERTY_KEY,

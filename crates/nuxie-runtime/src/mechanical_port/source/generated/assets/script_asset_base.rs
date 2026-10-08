@@ -7,11 +7,7 @@ use crate::mechanical_port::source::{
     generated::assets::text_asset_base::TextAssetBaseCallbacks,
 };
 
-pub trait ScriptAssetBaseCallbacks: TextAssetBaseCallbacks {
-    fn generator_function_ref_changed(&mut self) {}
-    fn is_module_changed(&mut self) {}
-    fn serialized_implemented_methods_changed(&mut self) {}
-}
+pub trait ScriptAssetBaseCallbacks: TextAssetBaseCallbacks {}
 
 pub struct ScriptAssetBase {
     pub base: TextAsset,
@@ -38,7 +34,11 @@ impl ScriptAssetBase {
     pub const SERIALIZED_IMPLEMENTED_METHODS_PROPERTY_KEY: u16 = 1022;
 
     pub fn is_type_of(type_key: u16) -> bool {
-        matches!(type_key, Self::TYPE_KEY | 971 | 103 | 99)
+        Self::TYPE_KEY == type_key
+            || crate::mechanical_port::source::generated::core_type_tree::has_ancestor(
+                Self::TYPE_KEY,
+                type_key,
+            )
     }
 
     pub fn core_type(&self) -> u16 {
@@ -57,7 +57,6 @@ impl ScriptAssetBase {
         if !self.set_generator_function_ref_value(value) {
             return;
         }
-        callbacks.generator_function_ref_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::GENERATOR_FUNCTION_REF_PROPERTY_KEY);
     }
     pub(crate) fn set_generator_function_ref_value(&mut self, value: u32) -> bool {
@@ -76,7 +75,6 @@ impl ScriptAssetBase {
         if !self.set_is_module_value(value) {
             return;
         }
-        callbacks.is_module_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::IS_MODULE_PROPERTY_KEY);
     }
     pub(crate) fn set_is_module_value(&mut self, value: bool) -> bool {
@@ -99,7 +97,6 @@ impl ScriptAssetBase {
         if !self.set_serialized_implemented_methods_value(value) {
             return;
         }
-        callbacks.serialized_implemented_methods_changed();
         crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::notify_property_changed(callbacks, Self::SERIALIZED_IMPLEMENTED_METHODS_PROPERTY_KEY);
     }
     pub(crate) fn set_serialized_implemented_methods_value(&mut self, value: u32) -> bool {

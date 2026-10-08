@@ -1040,7 +1040,10 @@ fn a_silver_factory_drives_the_cache_only_once_enabled() {
                 .enable_bitmap_cache(Some(render_context.persistent_context().unwrap()));
         }
         assert_eq!(silver.borrow_mut().render_context().is_some(), enabled);
-        assert_eq!(silver.borrow_mut().deferred_canvas_host().is_some(), enabled);
+        assert_eq!(
+            silver.borrow_mut().deferred_canvas_host().is_some(),
+            enabled
+        );
 
         let file = nuxie_runtime::File::import(
             &fixture(),

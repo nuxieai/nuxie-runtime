@@ -779,6 +779,68 @@ pub unsafe extern "C" fn nux_view_model_instance_share(
     })
 }
 
+/// Acquire a retained handle to the existing ViewModel instance at `index` of
+/// owner's list property. list_path uses reference-property path syntax, without
+/// list indices. The result preserves native identity, values and aliases and
+/// remains valid after move, removal or freeing owner. Release with
+/// nux_view_model_instance_free. Acquisition never creates an instance or artboard,
+/// mounts, changes membership/order, emits notifications, or advances/presents.
+/// Call on owner's runtime thread. On failure a valid out_instance is set to NULL.
+/// Compare the acquired identity with any earlier snapshot: indices are positions.
+/// Returns NULL_ARGUMENT for required null pointers; INVALID_ARGUMENT for invalid
+/// UTF-8 or empty/malformed paths; NOT_FOUND for absent/non-list properties,
+/// out-of-range indices or null children; HANDLE_MISMATCH for invalid/stale handles;
+/// WRONG_THREAD or REENTRANT_CALL for lane/borrow violations; LIMIT_EXCEEDED for
+/// paths over 4096 bytes; RUNTIME_ERROR for unexpected guarded failures.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_view_model_instance_list_item_acquire(
+    owner: *const NuxViewModelInstance,
+    list_path: NuxStringView,
+    index: usize,
+    out_instance: *mut *mut NuxViewModelInstance,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_instance.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe { *out_instance = ptr::null_mut() };
+        let _call = enter_status_handle!(owner, HandleKind::ViewModel);
+        let owner = unsafe { &*owner };
+        if list_path.len > MAX_PROPERTY_PATH_BYTES {
+            return NuxStatus::LimitExceeded;
+        }
+        let path = match with_utf8_view(list_path, str::to_owned) {
+            Ok(path) => path,
+            Err(status) => return status,
+        };
+        if path.split('/').any(str::is_empty) {
+            return NuxStatus::InvalidArgument;
+        }
+        let Ok(_borrow) = owner.instance.try_borrow() else {
+            return NuxStatus::ReentrantCall;
+        };
+        let Some(instance) = owner.instance.list_item_by_property_name_path(&path, index) else {
+            return NuxStatus::NotFound;
+        };
+        let schema_index = instance.borrow().view_model_index();
+        let identity = instance.instance_identity();
+        let handle = Box::into_raw(Box::new(NuxViewModelInstance {
+            instance,
+            file: owner.file.clone(),
+            view_model_catalog: Arc::clone(&owner.view_model_catalog),
+            schema_index,
+            identity,
+            owner_thread: owner.owner_thread,
+            file_provenance: Arc::clone(&owner.file_provenance),
+            binding_provenance: owner.binding_provenance.clone(),
+            provenance: Arc::clone(&owner.provenance),
+        }));
+        register_handle(handle, HandleKind::ViewModel, owner.owner_thread);
+        unsafe { *out_instance = handle };
+        NuxStatus::Ok
+    })
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_view_model_instance_identity(
     instance: *const NuxViewModelInstance,
@@ -3318,3 +3380,7 @@ pub unsafe extern "C" fn nux_view_model_mutation_result_rule_report_list_item(
         NuxStatus::Ok
     })
 }
+
+#[cfg(test)]
+#[path = "list_acquire_tests.rs"]
+mod list_acquire_tests;

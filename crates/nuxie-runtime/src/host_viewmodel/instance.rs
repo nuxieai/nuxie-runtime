@@ -1,11 +1,17 @@
 use super::*;
 use crate::mechanical_port::source::data_bind::data_values::data_value_integer::DataValueInteger;
 use crate::mechanical_port::source::viewmodel::{
+    runtime::{
+        viewmodel_instance_list_runtime::ViewModelInstanceListRuntime,
+        viewmodel_instance_runtime::ViewModelInstanceRuntime as NativeInstance,
+        viewmodel_instance_value_runtime::{DataType, ViewModelInstanceValueRuntime},
+    },
     viewmodel_instance_artboard::ViewModelInstanceArtboard,
     viewmodel_instance_asset_blob::ViewModelInstanceAssetBlob,
     viewmodel_instance_boolean::ViewModelInstanceBoolean,
     viewmodel_instance_color::ViewModelInstanceColor,
-    viewmodel_instance_enum::ViewModelInstanceEnum, viewmodel_instance_list::ViewModelInstanceList,
+    viewmodel_instance_enum::ViewModelInstanceEnum,
+    viewmodel_instance_list::ViewModelInstanceList,
     viewmodel_instance_list_item::ViewModelInstanceListItem,
     viewmodel_instance_number::ViewModelInstanceNumber,
     viewmodel_instance_string::ViewModelInstanceString,
@@ -218,6 +224,19 @@ impl RuntimeOwnedViewModelHandle {
             .map(|instance| Self::from_native(self.native_file(), instance))
             .collect()
     }
+    /// Retain the native child at this position, preserving null-item indices.
+    /// Mirrors upstream ViewModelInstanceListRuntime::instanceAt (9-31).
+    pub fn list_item_by_property_name_path(&self, path: &str, index: usize) -> Option<Self> {
+        let item = self
+            .list_property(path)?
+            .with_downcast::<ViewModelInstanceList, _>(|list| {
+                list.list_items().get(index).cloned()
+            })??;
+        let instance = item.with_downcast::<ViewModelInstanceListItem, _>(
+            ViewModelInstanceListItem::view_model_instance,
+        )??;
+        Self::from_native(self.native_file(), instance)
+    }
     pub fn list_items_by_property_name_path(&self, path: &str) -> Option<Vec<Self>> {
         self.testing_list_items_by_property_name(path)
     }
@@ -242,18 +261,34 @@ impl RuntimeOwnedViewModelHandle {
         if index > count {
             return false;
         }
-        let Some(list_item) = self
+        let Ok(index) = i32::try_from(index) else {
+            return false;
+        };
+        // Preserve the artboard-backed construction path: observers must see
+        // the completed item when add_item_at publishes the insertion.
+        if let Some(list_item) = self
             .native_file()
             .with_file_mut(|file| file.view_model_instance_list_item(item.native_handle()))
+        {
+            return mutate(|| {
+                property.with_downcast_mut::<ViewModelInstanceList, _>(|list| {
+                    list.add_item_at(list_item, index)
+                })
+            })
+            .unwrap_or(false);
+        }
+        // Native data-list insertion does not require an item artboard.
+        let Some(list) = ViewModelInstanceValueRuntime::new(property, DataType::List)
+            .and_then(ViewModelInstanceListRuntime::new)
         else {
             return false;
         };
         mutate(|| {
-            property.with_downcast_mut::<ViewModelInstanceList, _>(|list| {
-                list.add_item_at(list_item, index as i32)
-            })
+            list.add_instance_at(
+                NativeInstance::new(item.native_handle()).into_handle(),
+                index,
+            )
         })
-        .unwrap_or(false)
     }
     pub fn push_list_item_by_property_name_path(&self, path: &str, item: &Self) -> bool {
         let Some(property) = self.list_property(path) else {

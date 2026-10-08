@@ -5,10 +5,10 @@
 //! every product concept layered above a runtime-native player.
 
 use super::{
-    enter_handle, enter_occurrence, ffi_guard, ffi_guard_with_handle_result, ffi_guard_with_result,
-    publish_result, register_handle, remove_handle, struct_size_supports, write_caller_struct,
     HandleKind, NuxCapiResult, NuxPlayer, NuxStatus, RendererDomain, RendererDomainBinding,
-    RendererDomainCacheKey,
+    RendererDomainCacheKey, enter_handle, enter_occurrence, ffi_guard,
+    ffi_guard_with_handle_result, ffi_guard_with_result, publish_result, register_handle,
+    remove_handle, struct_size_supports, write_caller_struct,
 };
 use super::{NuxFile, NuxFileImportConfig};
 use dispatch2::{DispatchQueue, DispatchQueueGlobalPriority, GlobalQueueIdentifier};
@@ -23,7 +23,7 @@ use nuxie::{
     RenderPath, RenderShader, Renderer,
 };
 use nuxie_renderer::deferred::cmd::{
-    deferred_replayer::{take_frame, DeferredFrameSink, DeferredReplayer},
+    deferred_replayer::{DeferredFrameSink, DeferredReplayer, take_frame},
     deferred_session::{DeferredSession, ReplayCaps},
     render_replay::RendererOwner,
 };
@@ -40,8 +40,8 @@ use std::ffi::c_void;
 use std::ptr;
 use std::ptr::NonNull;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 
 /// Rust-only trust seam for the upper-leaf product adapter. This is kept out
@@ -410,7 +410,10 @@ impl AppleMetalFactory {
             .unwrap_or_default();
         let mut session = DeferredSession::with_caps(caps);
         session.bind_render_context(native.persistent_context());
-        session.ore_context.borrow_mut().setTarget(native.borrow().ore_target_desc());
+        session
+            .ore_context
+            .borrow_mut()
+            .setTarget(native.borrow().ore_target_desc());
         Ok(Self {
             session,
             replayer: Rc::new(RefCell::new(DeferredReplayer::default())),
@@ -894,7 +897,9 @@ impl<'a> AppleMetalFrameSink<'a> {
 
 impl DeferredFrameSink for AppleMetalFrameSink<'_> {
     fn target_render_target(&mut self) -> Option<nuxie_ore_metal::context::RenderTargetInfo> {
-        Some(NativeMetalFactory::ore_texture_target(self.drawable.texture()))
+        Some(NativeMetalFactory::ore_texture_target(
+            self.drawable.texture(),
+        ))
     }
 
     fn set_target_preserved(&mut self, preserved: bool) {
@@ -1557,7 +1562,10 @@ pub unsafe extern "C" fn nux_renderer_resize(
         } else {
             (0, 0)
         };
-        state.factory.borrow().declare_target(target_width, target_height);
+        state
+            .factory
+            .borrow()
+            .declare_target(target_width, target_height);
         let disposition = if pixel_width == 0 || pixel_height == 0 {
             NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
         } else {
@@ -1646,7 +1654,10 @@ pub unsafe extern "C" fn nux_renderer_reattach(
         state.pixel_width = pixel_width;
         state.pixel_height = pixel_height;
         state.attached = true;
-        state.factory.borrow().declare_target(pixel_width, pixel_height);
+        state
+            .factory
+            .borrow()
+            .declare_target(pixel_width, pixel_height);
         let disposition = if pixel_width == 0 || pixel_height == 0 {
             NUX_RENDERER_DISPOSITION_SKIPPED_ZERO_SIZE
         } else {
@@ -1810,9 +1821,16 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     factory.native.clone(),
                 )
             };
-            native.borrow().validate_drawable_texture(&drawable.texture()).map_err(renderer_failure)?;
+            native
+                .borrow()
+                .validate_drawable_texture(&drawable.texture())
+                .map_err(renderer_failure)?;
             session.ore_context.borrow_mut().setTarget(
-                nuxie_ore_metal::context::TargetDesc::color8(state.pixel_width, state.pixel_height, true),
+                nuxie_ore_metal::context::TargetDesc::color8(
+                    state.pixel_width,
+                    state.pixel_height,
+                    true,
+                ),
             );
             let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                 ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
@@ -1879,8 +1897,8 @@ mod tests {
     #[cfg(feature = "apple-authored-msl")]
     use nuxie::GpuCanvasShaderProfile;
     use std::cell::Cell;
-    use std::sync::atomic::{AtomicBool, AtomicUsize};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize};
     use std::time::{Duration, Instant};
 
     thread_local! {

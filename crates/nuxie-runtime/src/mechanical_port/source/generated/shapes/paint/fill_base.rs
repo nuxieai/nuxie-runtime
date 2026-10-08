@@ -1,5 +1,6 @@
 use crate::mechanical_port::source::{
-    core::binary_reader::BinaryReader, shapes::paint::fill::Fill,
+    core::binary_reader::BinaryReader,
+    shapes::paint::fill::Fill,
     shapes::paint::shape_paint::{ShapePaint, ShapePaintType},
 };
 

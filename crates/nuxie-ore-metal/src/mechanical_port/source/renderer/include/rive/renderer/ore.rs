@@ -5,8 +5,6 @@
 
 #[path = "ore/ore_bind_group_hpp.rs"]
 pub mod ore_bind_group_hpp;
-#[path = "ore/ore_deferred_bind_groups_hpp.rs"]
-pub mod ore_deferred_bind_groups_hpp;
 #[path = "ore/ore_bind_group_layout_hpp.rs"]
 pub mod ore_bind_group_layout_hpp;
 #[path = "ore/ore_binding_map_hpp.rs"]
@@ -18,6 +16,8 @@ pub mod ore_context_hpp;
 #[path = "ore/ore_context_metal_hpp.rs"]
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
 pub mod ore_context_metal_hpp;
+#[path = "ore/ore_deferred_bind_groups_hpp.rs"]
+pub mod ore_deferred_bind_groups_hpp;
 #[path = "ore/ore_pipeline_hpp.rs"]
 pub mod ore_pipeline_hpp;
 #[path = "ore/ore_render_pass_hpp.rs"]

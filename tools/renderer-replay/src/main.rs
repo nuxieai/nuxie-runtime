@@ -203,7 +203,9 @@ fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "clockwise-msaa1" {
+    if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic")
+        && mode == "clockwise-msaa1"
+    {
         return Err("native Metal does not implement depth/stencil rendering".to_owned());
     }
     Ok(())

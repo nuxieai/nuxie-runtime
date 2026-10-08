@@ -9,7 +9,9 @@ pub enum QuietState {
 
 pub trait AdvancingComponent {
     fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool;
-    fn quiet_state(&self) -> QuietState { QuietState::Never }
+    fn quiet_state(&self) -> QuietState {
+        QuietState::Never
+    }
 }
 
 /// Retains the actual owner while allowing its borrow to end during callbacks.
@@ -59,7 +61,9 @@ impl AdvancingComponentHandle {
 
 impl AdvancingComponent for AdvancingComponentHandle {
     fn quiet_state(&self) -> QuietState {
-        self.owner.with(|owner| owner.advancing_component_quiet_state()).expect("live advancing component")
+        self.owner
+            .with(|owner| owner.advancing_component_quiet_state())
+            .expect("live advancing component")
     }
     fn advance_component(&mut self, elapsed_seconds: f32, flags: AdvanceFlags) -> bool {
         (self.advance)(&self.owner, elapsed_seconds, flags)
@@ -141,8 +145,8 @@ impl dyn AdvancingComponent {
             scripted::scripted_data_converter_base::ScriptedDataConverterBase,
             scripted::scripted_drawable_base::ScriptedDrawableBase,
             scripted::scripted_layout_base::ScriptedLayoutBase,
-            scripted::scripted_transition_base::ScriptedTransitionBase,
             scripted::scripted_path_effect_base::ScriptedPathEffectBase,
+            scripted::scripted_transition_base::ScriptedTransitionBase,
             text::text_input_base::TextInputBase,
         };
         match component.core_type()? {

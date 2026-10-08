@@ -203,9 +203,11 @@ fn audio_sounds_stop_when_the_artboard_has_no_engine_assigned() {
         })
         .flatten()
         .expect("AudioEvent asset");
-    assert!(asset
-        .with_downcast::<AudioAsset, _>(AudioAsset::has_audio_source)
-        .expect("AudioAsset"));
+    assert!(
+        asset
+            .with_downcast::<AudioAsset, _>(AudioAsset::has_audio_source)
+            .expect("AudioAsset")
+    );
     event
         .with_downcast_mut::<AudioEvent, _>(AudioEvent::play)
         .expect("AudioEvent");

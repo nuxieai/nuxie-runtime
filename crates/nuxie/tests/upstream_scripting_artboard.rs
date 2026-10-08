@@ -110,10 +110,20 @@ impl Fixture {
     }
 
     fn click(&self, x: f32, y: f32) {
-        self.machine
-            .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-        self.machine
-            .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        self.machine.with_instance_mut(|machine| {
+            machine.pointer_down(
+                Vec2D::new(x, y),
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
+        self.machine.with_instance_mut(|machine| {
+            machine.pointer_up(
+                Vec2D::new(x, y),
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
     }
 
     fn view_model(&self) -> &RuntimeViewModelInstanceHandle {

@@ -4,14 +4,14 @@ use std::{cell::RefCell, rc::Rc};
 
 use luaur_rt::{Error, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
 use nuxie_render_api::{
-    BlendMode, ColorInt, Factory as RenderFactory, RenderPaint as RenderPaintTrait,
-    RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin, Mat2D,
+    BlendMode, ColorInt, Factory as RenderFactory, Mat2D, RenderPaint as RenderPaintTrait,
+    RenderPaintStyle, RenderShader, StrokeCap, StrokeJoin,
 };
 use nuxie_runtime::ScriptPaint as RuntimeScriptPaint;
 
+use super::lua_mat2d::ScriptedMat2D;
 use super::lua_renderer_library::RendererBindings;
 use super::renderer::ScriptedGradient;
-use super::lua_mat2d::ScriptedMat2D;
 
 impl RendererBindings {
     pub(super) fn install_paint_global(&self, lua: &Lua) -> Result<()> {
@@ -59,7 +59,9 @@ impl UserData for ScriptedPaintData {
         });
         fields.add_field_method_get("feather", |_, this| Ok(this.0.feather));
         fields.add_field_method_get("color", |_, this| Ok(this.0.color));
-        fields.add_field_method_get("gradientTransform", |lua, _| lua.create_userdata(ScriptedMat2D(Mat2D::IDENTITY)));
+        fields.add_field_method_get("gradientTransform", |lua, _| {
+            lua.create_userdata(ScriptedMat2D(Mat2D::IDENTITY))
+        });
     }
 }
 
@@ -177,7 +179,9 @@ impl ScriptedPaint {
 
     fn set_gradient(&mut self, gradient: Option<Rc<dyn RenderShader>>) {
         self.gradient = gradient;
-        self.render_paint.borrow_mut().shader(self.gradient.as_deref());
+        self.render_paint
+            .borrow_mut()
+            .shader(self.gradient.as_deref());
     }
 
     fn set_gradient_value(&mut self, value: Value) -> Result<()> {
@@ -202,7 +206,9 @@ impl ScriptedPaint {
 
     fn set_gradient_transform_value(&mut self, value: Value) -> Result<()> {
         let transform = match value {
-            Value::UserData(value) if value.is::<ScriptedMat2D>() => value.borrow::<ScriptedMat2D>()?.0,
+            Value::UserData(value) if value.is::<ScriptedMat2D>() => {
+                value.borrow::<ScriptedMat2D>()?.0
+            }
             _ => Mat2D::IDENTITY,
         };
         self.set_gradient_transform(transform);
@@ -258,8 +264,12 @@ impl UserData for ScriptedPaint {
         fields.add_field_method_set("gradient", |_, this, value: Value| {
             this.set_gradient_value(value)
         });
-        fields.add_field_method_get("gradientTransform", |lua, this| lua.create_userdata(ScriptedMat2D(this.gradient_transform)));
-        fields.add_field_method_set("gradientTransform", |_, this, value: Value| this.set_gradient_transform_value(value));
+        fields.add_field_method_get("gradientTransform", |lua, this| {
+            lua.create_userdata(ScriptedMat2D(this.gradient_transform))
+        });
+        fields.add_field_method_set("gradientTransform", |_, this, value: Value| {
+            this.set_gradient_transform_value(value)
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
@@ -486,7 +496,10 @@ mod upstream_blend_mode_tests {
 
     fn recorded(paint: &ScriptedPaint) -> std::cell::Ref<'_, RecordingPaint> {
         std::cell::Ref::map(paint.render_paint.borrow(), |paint| {
-            paint.as_any().downcast_ref::<RecordingPaint>().expect("recording render paint")
+            paint
+                .as_any()
+                .downcast_ref::<RecordingPaint>()
+                .expect("recording render paint")
         })
     }
 

@@ -337,3 +337,271 @@ fn nested_list_relation_revalidates_before_applying_any_boolean() {
             .can_apply_list_string_match_boolean(&secondary)
     );
 }
+
+fn product_ids(owner: &RuntimeOwnedViewModelHandle) -> Vec<String> {
+    owner
+        .list_items_by_property_name_path("products")
+        .unwrap()
+        .iter()
+        .map(|item| {
+            String::from_utf8(
+                item.borrow()
+                    .string_value_by_property_name("productId")
+                    .unwrap()
+                    .to_vec(),
+            )
+            .unwrap()
+        })
+        .collect()
+}
+
+fn insert_without_item_artboard(index: usize, expected: &[&str]) {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 2, 0).unwrap(),
+    );
+    assert!(
+        item.borrow_mut()
+            .set_string_by_property_name("productId", b"new")
+    );
+    assert!(owner.insert_list_item_by_property_name_path("products", index, &item));
+    assert_eq!(product_ids(&owner), expected);
+    assert_eq!(
+        owner.list_items_by_property_name_path("products").unwrap()[index].native_handle(),
+        item.native_handle()
+    );
+}
+
+#[test]
+fn insert_without_item_artboard_at_start() {
+    insert_without_item_artboard(0, &["new", "basic", "pro"]);
+}
+
+#[test]
+fn insert_without_item_artboard_at_middle() {
+    insert_without_item_artboard(1, &["basic", "new", "pro"]);
+}
+
+#[test]
+fn insert_without_item_artboard_at_end() {
+    insert_without_item_artboard(2, &["basic", "pro", "new"]);
+}
+
+#[test]
+fn insert_without_item_artboard_rolls_back_identity_and_values() {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let before: Vec<_> = owner
+        .list_items_by_property_name_path("products")
+        .unwrap()
+        .iter()
+        .map(|item| item.native_handle())
+        .collect();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 2, 0).unwrap(),
+    );
+    {
+        let mut transaction = nuxie_runtime::RuntimeOwnedViewModelTransaction::begin().unwrap();
+        assert!(transaction.list_insert(&owner, "products", 1, &item));
+        assert_eq!(product_ids(&owner), ["basic", "basic", "pro"]);
+    }
+    assert_eq!(product_ids(&owner), ["basic", "pro"]);
+    assert_eq!(
+        owner
+            .list_items_by_property_name_path("products")
+            .unwrap()
+            .iter()
+            .map(|item| item.native_handle())
+            .collect::<Vec<_>>(),
+        before
+    );
+}
+
+#[test]
+fn insert_with_item_artboard_preserves_association() {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file.clone(), 3, 0).unwrap(),
+    );
+    assert!(owner.insert_list_item_by_property_name_path("products", 1, &item));
+    assert_eq!(product_ids(&owner), ["basic", "other", "pro"]);
+    let property = owner
+        .native_handle()
+        .with(|instance| {
+            instance
+                .as_view_model_instance()
+                .unwrap()
+                .property_value_by_id(1)
+        })
+        .unwrap()
+        .unwrap();
+    let inserted = property
+        .with(|property| property.as_view_model_instance_list().unwrap().list_items()[1].clone())
+        .unwrap();
+    assert_eq!(
+        inserted
+            .with(|item| item.as_view_model_instance_list_item().unwrap().artboard())
+            .unwrap(),
+        file.with_file(|file| file.artboard_handle(1))
+    );
+}
+
+#[test]
+fn artboard_free_list_keeps_bounds_cycles_move_remove_and_refill() {
+    let (file, _factory, root) = import_nested_list_fixture();
+    let owner = root
+        .linked_view_model_by_property_name_path("primary")
+        .unwrap();
+    let item = RuntimeOwnedViewModelHandle::new(
+        RuntimeOwnedViewModelInstance::from_instance(file, 2, 0).unwrap(),
+    );
+    assert!(!owner.insert_list_item_by_property_name_path("products", 3, &item));
+    assert!(!owner.insert_list_item_by_property_name_path("products", usize::MAX, &item));
+    assert!(!owner.insert_list_item_by_property_name_path("products", 0, &owner));
+    assert!(!owner.insert_list_item_by_property_name_path("products", 0, &root));
+    assert_eq!(product_ids(&owner), ["basic", "pro"]);
+    assert!(owner.move_list_item_by_property_name_path("products", 0, 1));
+    assert_eq!(product_ids(&owner), ["pro", "basic"]);
+    assert!(owner.remove_list_item_by_property_name_path("products", 1));
+    assert!(owner.remove_list_item_by_property_name_path("products", 0));
+    assert_eq!(product_ids(&owner), Vec::<String>::new());
+    assert!(root.insert_list_item_by_property_name_path("primary/products", 0, &item));
+    assert_eq!(product_ids(&owner), ["basic"]);
+}
+
+#[cfg(feature = "tools")]
+mod insertion_observers {
+    use super::*;
+    use nuxie_runtime::source::{
+        core::CoreHandle, viewmodel::viewmodel_instance_list::ViewModelInstanceList,
+    };
+    use std::cell::Cell;
+
+    thread_local! {
+        static CALLS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    fn observe_artboard(list: &mut ViewModelInstanceList) {
+        CALLS.with(|calls| calls.set(calls.get() + 1));
+        let artboard = list.list_items()[1]
+            .with(|item| item.as_view_model_instance_list_item().unwrap().artboard())
+            .unwrap()
+            .expect("the observer must see the completed artboard association");
+        assert_eq!(
+            artboard.with(|value| value.as_artboard().unwrap().base.view_model_id()),
+            Some(3)
+        );
+    }
+
+    fn reorder(list: &mut ViewModelInstanceList) {
+        CALLS.with(|calls| calls.set(calls.get() + 1));
+        list.on_changed(None);
+        list.swap(1, 2);
+    }
+
+    fn association(item: &CoreHandle) -> Option<CoreHandle> {
+        item.with(|item| item.as_view_model_instance_list_item().unwrap().artboard())
+            .unwrap()
+    }
+
+    fn insertion_with_observer(callback: fn(&mut ViewModelInstanceList), reordered: bool) {
+        let (file, _factory, root) = import_nested_list_fixture();
+        let owner = root
+            .linked_view_model_by_property_name_path("primary")
+            .unwrap();
+        let property = owner
+            .native_handle()
+            .with(|instance| {
+                instance
+                    .as_view_model_instance()
+                    .unwrap()
+                    .property_value_by_id(1)
+            })
+            .unwrap()
+            .unwrap();
+        let before = property
+            .with(|value| {
+                value
+                    .as_view_model_instance_list()
+                    .unwrap()
+                    .list_items()
+                    .to_vec()
+            })
+            .unwrap();
+        let existing_artboard = file.with_file(|file| file.artboard_handle(0)).unwrap();
+        for old in &before {
+            old.with_mut(|value| {
+                value
+                    .as_view_model_instance_list_item_mut()
+                    .unwrap()
+                    .set_artboard(Some(existing_artboard.clone()))
+            });
+        }
+        let item = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(file.clone(), 3, 0).unwrap(),
+        );
+        CALLS.with(|calls| calls.set(0));
+        property.with_mut(|value| {
+            value
+                .as_view_model_instance_list_mut()
+                .unwrap()
+                .on_changed(Some(callback))
+        });
+        assert!(owner.insert_list_item_by_property_name_path("products", 1, &item));
+        assert_eq!(CALLS.with(Cell::get), 1);
+        let after = property
+            .with(|value| {
+                value
+                    .as_view_model_instance_list()
+                    .unwrap()
+                    .list_items()
+                    .to_vec()
+            })
+            .unwrap();
+        let inserted_index = if reordered { 2 } else { 1 };
+        assert_eq!(
+            product_ids(&owner),
+            if reordered {
+                vec!["basic", "pro", "other"]
+            } else {
+                vec!["basic", "other", "pro"]
+            }
+        );
+        assert_eq!(
+            after[inserted_index]
+                .with(|value| value
+                    .as_view_model_instance_list_item()
+                    .unwrap()
+                    .view_model_instance())
+                .unwrap(),
+            Some(item.native_handle())
+        );
+        assert_eq!(
+            association(&after[inserted_index]),
+            file.with_file(|file| file.artboard_handle(1))
+        );
+        assert_eq!(after[0], before[0]);
+        assert_eq!(after[if reordered { 1 } else { 2 }], before[1]);
+        for old in &before {
+            assert_eq!(association(old), Some(existing_artboard.clone()));
+        }
+    }
+
+    #[test]
+    fn callback_sees_matching_artboard_before_insert_returns() {
+        insertion_with_observer(observe_artboard, false);
+    }
+
+    #[test]
+    fn callback_reorder_preserves_each_items_identity_and_artboard() {
+        insertion_with_observer(reorder, true);
+    }
+}

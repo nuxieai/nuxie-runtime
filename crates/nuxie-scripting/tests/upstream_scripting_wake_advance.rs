@@ -174,7 +174,15 @@ fn scripted_drawable_pointer_events_report_their_type_and_timestamp() {
         ),
     ] {
         fixture.machine.with_instance_mut(|machine| {
-            hit.process_event(machine, position, hit_type, can_hit, timestamp, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary);
+            hit.process_event(
+                machine,
+                position,
+                hit_type,
+                can_hit,
+                timestamp,
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            );
         });
         assert_eq!(
             fixture

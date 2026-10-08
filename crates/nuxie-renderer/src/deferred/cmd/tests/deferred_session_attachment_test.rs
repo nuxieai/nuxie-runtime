@@ -1,7 +1,7 @@
 //! Attachment cases through upstream 115c4862, plus the shared Rust
 //! session-handle lifetime regression. Weak references replace raw pointers.
 use super::super::{
-    deferred_replayer::{DeferredFrameSink, DeferredReplayer, snapshot_frame},
+    deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},
     deferred_session::{DeferredSession, DeferredSessionAttachment},
     render_replay::RendererOwner,
 };
@@ -123,13 +123,12 @@ fn a_host_outliving_its_session_attaches_a_successor_cleanly() {
     assert!(a.session.borrow().is_none());
     let second = session();
     a.join(&second);
-    assert!(
-        a.session
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .ptr_eq(&Rc::downgrade(&second))
-    );
+    assert!(a
+        .session
+        .borrow()
+        .as_ref()
+        .unwrap()
+        .ptr_eq(&Rc::downgrade(&second)));
     assert_eq!(second.borrow().attachment_count(), 1);
     assert_eq!(second.borrow().attached_target_count(), 1);
     assert!(a.screen_renderer().is_some());

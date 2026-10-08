@@ -63,12 +63,19 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.10 release candidate
+## Immutable v0.4.11 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.10 candidate adds `nux_player_video_present_android_hardware_buffer`,
+The v0.4.11 candidate carries the upstream-parity fixes, platform layout fit,
+globals, answered markers, value rules, form state, native text-field reads,
+and retained list-row access and insertion. It stops before the video
+properties layer. ABI v4 is retained; hosts must use matching headers for the
+appended step-result and value-change fields and the Vulkan layout-scale
+argument. Existing release size ceilings remain unchanged pending measurement.
+
+The inherited v0.4.10 release adds `nux_player_video_present_android_hardware_buffer`,
 which presents a decoded video frame without a GPU readback or CPU copy. Hosts
 that decode into an `ImageReader` or `AImageReader` with GPU sampled usage pass
 the frame's `AHardwareBuffer` with its crop, rotation, display size and Y'CbCr
@@ -126,9 +133,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.10 <full-source-sha>
-git push origin android-runtime-v0.4.10
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.10
+git tag android-runtime-v0.4.11 <full-source-sha>
+git push origin android-runtime-v0.4.11
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.11
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

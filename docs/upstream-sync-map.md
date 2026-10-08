@@ -7,18 +7,35 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c4d2c6cbdeefd249a04eb7ade06cb7cf07a732f7`
+- LAST_SYNCED_SHA: `c73593c3a868f87b5dcd328432255db33e3e2266`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Two upstream commits remain after this checkpoint at the fetched target.
-  All 210 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (232 after `5892bb05`); this
+  One upstream commit remains after this checkpoint at the fetched target.
+  All 211 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (233 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `c73593c3`, integrated atop downstream `15d3d3c5bf`:
+  independent source-equivalence and subsequent Rust-integration reviews,
+  including correction rereviews, are clean. Required-live Metal passes 670
+  tests (six ignored), including all 57 pixel GMs without shader instrumentation;
+  four instrumented resource-shader tests pass. Three focused WebGL/Vulkan
+  dispatch/specialization tests pass; Vulkan and both wasm32-unknown-unknown
+  browser renderer products compile. Current shader reproduction is exact:
+  66 WGSL modules/56 headers, 96 SPIR-V headers, current GLSL/Metal inputs and
+  all 83 authority owners. Historical Metal combinations remain historical;
+  production builds regenerate current combinations, not those archived inputs.
+  Source/pipeline tests pass 12, manifest tests pass 27, inventory is current.
+  Integration corrected a misplaced/defaulted bounds argument; test compilation
+  corrected five unchanged-coordinate path calls. One exact expected resolve key
+  changed from 9 to upstream's 10 after the hairline-key insertion; assertions
+  and pixel tolerances remain unchanged. No new Vulkan/Android device coverage,
+  browser pixels, broad runtime Golden/Silver or upstream-only retrofit GM
+  execution is claimed; Metal still rejects unsupported depth/stencil modes.
 - Validation at `c4d2c6cb`, integrated atop downstream `2045e6af85`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean. Tools-enabled artboard replacement tests pass 12, including both new
@@ -514,6 +531,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `c73593c3a868f87b5dcd328432255db33e3e2266` | Translate clockwise-fill inkbleed outer-hairline subpasses, per-pass versus combined draw contents, signed pass sorting, expanded bounds, revised stroke index/AA-band order, GPU state/key routing and 17 specialization constants across supported backends. Regenerate current shader artifacts from pinned public source; preserve historical captures. Metal keeps upstream's unsupported depth/stencil rejection; D3D is unshipped. WebGPU's wgpucwib testing alias maps to the existing clockwise-inkbleed lane. The upstream-only retrofitcubictristrips GM has no existing Rust owner; no new Rust port of that handwritten GM or private implementation is claimed. | — |
 | `c4d2c6cbdeefd249a04eb7ade06cb7cf07a732f7` | Translate tools-only retirement of replaced source artboards while direct or copied instances remain alive, and cleanup on later replacement; translate thread-local advancing change-window inheritance and root-host bind tracking so newly made rows see pending fires without replaying earlier frames. Port both replacement and all three list-trigger regressions against the pinned public fixtures. Preserve safe Rust ownership and luaur; private editor invalidation/remount logic represented only by .rive_head is not claimed imported. | — |
 | `7fb595be56a899b4fc6eceb22a4222206383fe93` | Translate late-hosted audio-engine propagation with both authored-fixture regressions; shared core ancestry/property-owner dispatch and filtered generated change hooks; exact GL version scanning and full-recorder registry/bind ordering; direct UUID/color hex appends, fixed-number formatting and stateful contour comparators. Preserve existing Rust text/audio backends and pure-Rust numeric boundary. C++ HarfBuzz language-table flags and Emscripten-only AAT removal are build-specific: the approved Rust/unknown-unknown backend retains accepted AAT fonts, not parity with that support reduction. GL string assembly and ORE diagnostic formatting are already equivalent. Canvas2D/no-ORE recorder specialization is not a supported product configuration; private implementation absent from the public delta is not claimed imported. | — |
 | `b2c28dde1f8c51872a81ae4f9b4fbbceac1d23ed` | Translate WebGL2 ORE std140 uniform allocation/range padding and exact source-byte upload, plus File display-scale forwarding to the existing Luau VM and its upstream regression. The guest-Wasm VM forwarding loop remains parked; D3D11 allocation padding is unshipped. Private implementation represented only by .rive_head is not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

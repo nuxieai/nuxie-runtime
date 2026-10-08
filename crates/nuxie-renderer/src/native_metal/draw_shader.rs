@@ -5,7 +5,7 @@
 //! makes the source, hash, and compiled-function oracles independently testable.
 //!
 //! Upstream: `rive-app/rive-runtime` at
-//! Current minified sources: `625454e362a27bb3168f00cd87e9487f54d39338`.
+//! Current minified sources: `c73593c3a868f87b5dcd328432255db33e3e2266`.
 //! Primary source: `renderer/src/shaders/metal/draw.metal:1-42`.
 
 use objc2::runtime::{AnyObject, ProtocolObject};
@@ -18,7 +18,7 @@ use std::ptr::NonNull;
 
 /// Revision used to regenerate the current minified GLSL batch.
 /// The unchanged draw-combination capture retains its separately recorded provenance.
-pub const UPSTREAM_SHA: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
+pub const UPSTREAM_SHA: &str = "c73593c3a868f87b5dcd328432255db33e3e2266";
 
 /// The Cargo build-script output consumed by [`DrawShaderLibrary`]. This name
 /// intentionally differs from the existing tracer artifact.
@@ -79,15 +79,15 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/metal.minified.glsl",
         byte_len: 7316,
-        sha256: "2118c58508f111a59192af0ce64c38f93a32523c824f1381a770077331d06ad0",
+        sha256: "93a77411141cefa271753788eb0d6d53f65d56a9fe3f630aa9a0be1b0c8f03c0",
         bytes: include_bytes!("shaders/metal.minified.glsl"),
     },
     ShaderArtifact {
         name: "constants.minified.glsl",
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/constants.minified.glsl",
-        byte_len: 2675,
-        sha256: "b3f7daf493ccb54413c8c295084be8473cfd7f06cdf809fa4620f62cfc4b0843",
+        byte_len: 2689,
+        sha256: "1d7a4f9f2e455ee0c4399d8330b37ddfcdb04c16ae6cb56e6d43a59a4a4cbe16",
         bytes: include_bytes!("shaders/constants.minified.glsl"),
     },
     ShaderArtifact {
@@ -95,7 +95,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/flush_uniforms.minified.glsl",
         byte_len: 425,
-        sha256: "a05dc14bc88e9c4390ca113dd934dea3edd5f00e10fb3b6db622c79d08d7b3e1",
+        sha256: "e2e23b5c28d1606d48237409c6059391dc1227cc1122893c0c308f790b4f90c6",
         bytes: include_bytes!("shaders/flush_uniforms.minified.glsl"),
     },
     ShaderArtifact {
@@ -103,7 +103,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/common.minified.glsl",
         byte_len: 4525,
-        sha256: "bc17414b8d3da39bb3e6d7656e08400efbfd7c786c5ced558eb98f2ee2c97e41",
+        sha256: "1787758ff91781c50ba8155643b14820ddd71e4858c281ba4ef354301df26939",
         bytes: include_bytes!("shaders/common.minified.glsl"),
     },
     ShaderArtifact {
@@ -111,7 +111,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_path_common.minified.glsl",
         byte_len: 6676,
-        sha256: "2b129db4ad74ce22e900c87ce3d7e32aec39659ec0897e695539ad3949257c8b",
+        sha256: "1bf9554cdc43e32a96ef9407cb9a04cbb1a649fa029ee2e781edf406af1af1a4",
         bytes: include_bytes!("shaders/draw_path_common.minified.glsl"),
     },
     ShaderArtifact {
@@ -119,7 +119,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/render_atlas.minified.glsl",
         byte_len: 2366,
-        sha256: "5a501d1a5e56c4d50811ed44874c73dea1c01316d3d57bf1ef727469a0d91eb4",
+        sha256: "22fa4ef9dc1072f45a1e0e504b0b0fa96c90e342c4fb9cca1425086c45bfc5ee",
         bytes: include_bytes!("shaders/render_atlas.minified.glsl"),
     },
     ShaderArtifact {
@@ -127,7 +127,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::DirectInclude,
         upstream_path: "renderer/src/shaders/out/generated/advanced_blend.minified.glsl",
         byte_len: 2263,
-        sha256: "e4a9b3973e1a9f2ef1c8316fcc3cbd3ad0a4704840d91fc63dc1cc505d16b70f",
+        sha256: "695c138ce6b04d3c761747727e274722d05abe03ecc4a4fdf178c0b25fca33df",
         bytes: include_bytes!("shaders/advanced_blend.minified.glsl"),
     },
     ShaderArtifact {
@@ -143,7 +143,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::CombinationInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_path.minified.vert",
         byte_len: 5154,
-        sha256: "e8e2f88223b86257ddc365ba6c1ef49599cb8dbaf27516e9fdcb96523e137858",
+        sha256: "e02c1c2ed78cf8950dba622a618978223269c1db14a0b4530f7361de80290a82",
         bytes: include_bytes!("shaders/draw_path.minified.vert"),
     },
     ShaderArtifact {
@@ -151,7 +151,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::CombinationInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_raster_order_path.minified.frag",
         byte_len: 2098,
-        sha256: "bbe861117989403d0cc74b60e93a1372093d8532033ea3104f0e766f5d579706",
+        sha256: "b6667b656cdc273af4366f87a5747250686bc207ad729fccf2c0ee0a05024468",
         bytes: include_bytes!("shaders/draw_raster_order_path.minified.frag"),
     },
     ShaderArtifact {
@@ -159,7 +159,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::CombinationInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_mesh.minified.frag",
         byte_len: 2169,
-        sha256: "156f1c7fa1e0de73ed6202269cdd486f56da0e3c2cbcb49d6bd2bdbbb710494d",
+        sha256: "0741bc1701f604830de063ea06268dcdcba20593e0317d4b576760d9eab5bda1",
         bytes: include_bytes!("shaders/draw_mesh.minified.frag"),
     },
     ShaderArtifact {
@@ -167,7 +167,7 @@ pub static DRAW_SHADER_ARTIFACTS: &[ShaderArtifact] = &[
         kind: ArtifactKind::CombinationInclude,
         upstream_path: "renderer/src/shaders/out/generated/draw_image_mesh.minified.vert",
         byte_len: 1419,
-        sha256: "c8f60e5fb2dea99c0ec4128eae3b26dec83036d36f35d0d6f7cf234b6f36153a",
+        sha256: "faf83912b228a5c47622090588429dcdbfa5122af00741ec29394763ed3900ff",
         bytes: include_bytes!("shaders/draw_image_mesh.minified.vert"),
     },
 ];
@@ -341,7 +341,7 @@ mod tests {
 
     #[test]
     fn current_source_inventory_matches_regenerated_batch() {
-        assert_eq!(UPSTREAM_SHA, "625454e362a27bb3168f00cd87e9487f54d39338");
+        assert_eq!(UPSTREAM_SHA, "c73593c3a868f87b5dcd328432255db33e3e2266");
         let inventory = include_str!(
             "../../tests/fixtures/native_metal/offline_draw_shader/source_inventory.txt"
         );

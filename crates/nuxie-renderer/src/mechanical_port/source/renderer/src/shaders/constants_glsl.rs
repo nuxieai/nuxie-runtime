@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/constants.glsl.
  *
- * Upstream source revision: 625454e362a27bb3168f00cd87e9487f54d39338
+ * Upstream source revision: c73593c3a868f87b5dcd328432255db33e3e2266
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "625454e362a27bb3168f00cd87e9487f54d39338";
+pub const PINNED_UPSTREAM_COMMIT: &str = "c73593c3a868f87b5dcd328432255db33e3e2266";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/constants.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "61e8555042a647ec9e263f428a53504cf3bbc5188a51e82f0e546ef5f95a15c0";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 418;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18278;
+    "98875523b3c485c348f6ffcc8151c1bbb762bc32d9ab132438accc9fc0db5507";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 419;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18339;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
@@ -74,7 +74,7 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define VERTEX_FLAG_DISABLE_COLOR_WRITE (0x1 << VERTEX_FLAGS_SHIFT)
 #define VERTEX_FLAG_OUTER_CUBIC_FILL (0x2 << VERTEX_FLAGS_SHIFT)
 // Strokes alias the outerCubic bit bc stroke vs. fill is decided by spec const.
-#define VERTEX_FLAG_AA_STROKE VERTEX_FLAG_OUTER_CUBIC_FILL
+#define VERTEX_FLAG_AA_POLAR_STROKE VERTEX_FLAG_OUTER_CUBIC_FILL
 // depthAAstrokes render in two passes: a depth-only pass followed by color.
 // We select the pass by vertex flags rather than pipeline state.
 #define VERTEX_FLAG_STROKE_DEPTH_PASS (0x4 << VERTEX_FLAGS_SHIFT)
@@ -409,8 +409,9 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define STORE_COLOR_CLEAR_SPECIALIZATION_IDX 12
 #define LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX 13
 #define VULKAN_VENDOR_ARM_SPECIALIZATION_IDX 14
-#define DS_STROKE_SPECIALIZATION_IDX 15
-#define SPECIALIZATION_COUNT 16
+#define DS_POLAR_STROKE_SPECIALIZATION_IDX 15
+#define DS_HAIRLINE_STROKE_SPECIALIZATION_IDX 16
+#define SPECIALIZATION_COUNT 17
 
 // When rendering to an r32i feather atlas, use 16:16 fixed point.
 #define ATLAS_R32I_FIXED_POINT_FACTOR 65536.
@@ -483,10 +484,11 @@ pub const DS_MIDPOINT_VERTEX_IDX: i32 = MIDPOINT_FAN_PATCH_SEGMENT_SPAN as i32 +
 pub const VERTEX_FLAGS_SHIFT: i32 = 28;
 pub const VERTEX_FLAG_DISABLE_COLOR_WRITE: i32 = 1 << VERTEX_FLAGS_SHIFT;
 pub const VERTEX_FLAG_OUTER_CUBIC_FILL: i32 = 2 << VERTEX_FLAGS_SHIFT;
-pub const VERTEX_FLAG_AA_STROKE: i32 = VERTEX_FLAG_OUTER_CUBIC_FILL;
+pub const VERTEX_FLAG_AA_POLAR_STROKE: i32 = VERTEX_FLAG_OUTER_CUBIC_FILL;
 pub const VERTEX_FLAG_STROKE_DEPTH_PASS: i32 = 4 << VERTEX_FLAGS_SHIFT;
-pub const DS_STROKE_SPECIALIZATION_IDX: u32 = 15;
-pub const SPECIALIZATION_COUNT: u32 = 16;
+pub const DS_POLAR_STROKE_SPECIALIZATION_IDX: u32 = 15;
+pub const DS_HAIRLINE_STROKE_SPECIALIZATION_IDX: u32 = 16;
+pub const SPECIALIZATION_COUNT: u32 = 17;
 pub const PAINT_FLAG_LAYER_MASK: u32 = 0x1000;
 pub const PAINT_LAYER_MASK_MODE_SHIFT: u32 = 13;
 pub const PAINT_LAYER_MASK_MODE_MASK: u32 = 0x6000;

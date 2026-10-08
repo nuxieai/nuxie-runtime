@@ -683,8 +683,9 @@ impl RiveRenderPath {
         matrix: Mat2D,
         stroke: Option<&crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::StrokeParams>,
         feather: f32,
+        inkbleed: bool,
     ) -> nuxie_render_api::IntegerAabb {
-        calculate_pixel_bounds(self.getRawPath(), matrix, stroke, feather)
+        calculate_pixel_bounds(self.getRawPath(), matrix, stroke, feather, inkbleed)
     }
 
     pub fn implementation_source_identity() -> &'static str {
@@ -732,6 +733,7 @@ pub(crate) fn calculate_pixel_bounds(
     matrix: Mat2D,
     stroke: Option<&crate::mechanical_port::source::renderer::include::rive::renderer::rive_renderer_hpp::StrokeParams>,
     feather: f32,
+    inkbleed: bool,
 ) -> nuxie_render_api::IntegerAabb {
     let mut mapped_bounds = matrix.map_bounding_box(path.points());
     debug_assert!(mapped_bounds.width() >= 0.0);
@@ -748,6 +750,9 @@ pub(crate) fn calculate_pixel_bounds(
             stroke_pixel_outset.width() + 1.0,
             stroke_pixel_outset.height() + 1.0,
         );
+    }
+    if inkbleed {
+        mapped_bounds = mapped_bounds.outset(0.5, 0.5);
     }
     mapped_bounds.round_out()
 }

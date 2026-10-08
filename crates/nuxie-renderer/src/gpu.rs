@@ -296,9 +296,9 @@ pub(crate) fn generate_depth_stencil_stroke_indices(aa: bool, indices: &mut [u16
         for seg in 0..MIDPOINT_FAN_PATCH_SEGMENT_SPAN {
             for band in 0..lanes - 1 {
                 let v0 = patch_base + seg * lanes + band;
-                let v1 = v0 + 1;
-                let v2 = v0 + lanes;
-                let v3 = v2 + 1;
+                let v1 = v0 + lanes;
+                let v2 = v0 + 1;
+                let v3 = v1 + 1;
                 for v in [v0, v1, v2, v2, v1, v3] {
                     indices[count] = u16::try_from(v).expect("depth/stencil vertex fits uint16");
                     count += 1;
@@ -533,6 +533,7 @@ pub(crate) enum DrawType {
     StencilOuterCubicCover,
     DepthStrokes,
     DepthAAStrokes,
+    DepthAAOuterHairline,
     ClipReset,
     RenderPassInitialize,
     RenderPassResolve,
@@ -1003,6 +1004,7 @@ mod tests {
             DrawType::StencilOuterCubicCover,
             DrawType::DepthStrokes,
             DrawType::DepthAAStrokes,
+            DrawType::DepthAAOuterHairline,
             DrawType::ClipReset,
             DrawType::RenderPassInitialize,
             DrawType::RenderPassResolve,
@@ -1178,6 +1180,14 @@ mod tests {
         let (vertices, indices) = generate_patch_buffer_data();
         assert_eq!(vertices.len(), PATCH_VERTEX_BUFFER_COUNT);
         assert_eq!(indices.len(), PATCH_INDEX_BUFFER_COUNT);
+        assert_eq!(
+            &indices[DS_STROKE_BASE_INDEX..DS_STROKE_BASE_INDEX + 6],
+            &[0, 2, 1, 1, 2, 3]
+        );
+        assert_eq!(
+            &indices[DS_AA_STROKE_BASE_INDEX..DS_AA_STROKE_BASE_INDEX + 6],
+            &[0, 4, 1, 1, 4, 5]
+        );
         assert_eq!(&indices[..6], &[0, 1, 2, 2, 1, 3]);
         assert_eq!(
             indices[MIDPOINT_FAN_PATCH_INDEX_COUNT - 3..MIDPOINT_FAN_PATCH_INDEX_COUNT],

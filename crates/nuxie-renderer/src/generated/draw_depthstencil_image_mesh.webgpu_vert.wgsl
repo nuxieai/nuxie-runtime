@@ -8,31 +8,31 @@ struct gl_PerVertex {
 }
 
 struct VB {
-    td: f32,
-    ze: f32,
-    Dg: f32,
-    Eg: f32,
+    vd: f32,
+    Ce: f32,
+    Gg: f32,
+    Hg: f32,
     L6_: u32,
-    va: u32,
-    pg: u32,
-    qg: u32,
-    B8_: vec4<i32>,
-    xi: vec2<f32>,
-    Ae: vec2<f32>,
+    xa: u32,
+    sg: u32,
+    tg: u32,
+    C8_: vec4<i32>,
+    Bi: vec2<f32>,
+    De: vec2<f32>,
     r2_: u32,
-    Bi: f32,
+    Fi: f32,
     p6_: u32,
     h3_: f32,
-    Be: f32,
-    jg: u32,
+    Ee: f32,
+    mg: u32,
     E3_: f32,
     F3_: f32,
-    Ce: f32,
-    ui: u32,
-    ua: u32,
-    ad: f32,
+    Fe: f32,
+    yi: u32,
+    wa: u32,
+    cd: f32,
     g7_: f32,
-    Bb: f32,
+    Db: f32,
 }
 
 struct VertexOutput {
@@ -44,8 +44,8 @@ struct VertexOutput {
     @location(4) @interpolate(flat, either) member_3: u32,
 }
 
-@id(0) override Ui: bool = true;
-@id(1) override Vi: bool = true;
+@id(0) override Yi: bool = true;
+@id(1) override Zi: bool = true;
 
 var<private> unnamed: gl_PerVertex = gl_PerVertex(vec4<f32>(0f, 0f, 0f, 1f), 1f, array<f32, 4>(), array<f32, 1>());
 var<private> gl_VertexIndex_1: i32;
@@ -67,7 +67,7 @@ var<private> K1_: u32;
 var<private> CC_1: u32;
 
 fn main_1() {
-    var phi_407_: f32;
+    var phi_408_: f32;
 
     let _e36 = ZB_1;
     let _e44 = PC_1;
@@ -76,18 +76,18 @@ fn main_1() {
     let _e49 = QC_1;
     let _e50 = HC_1;
     Z5_ = ((_e49 * _e50.zw) + _e50.xy);
-    if Ui {
+    if Yi {
         let _e55 = BC_1;
         let _e57 = j.p6_;
         if (_e55 == 0u) {
-            phi_407_ = 0f;
+            phi_408_ = 0f;
         } else {
-            phi_407_ = unpack2x16float(((_e55 + 1023u) * _e57)).x;
+            phi_408_ = unpack2x16float(((_e55 + 1023u) * _e57)).x;
         }
-        let _e64 = phi_407_;
+        let _e64 = phi_408_;
         e4_ = _e64;
     }
-    if Vi {
+    if Zi {
         let _e65 = SB_1;
         if any((_e65 != vec4<f32>(0f, 0f, 0f, 0f))) {
             let _e77 = ((mat2x2<f32>(vec2<f32>(_e65.x, _e65.y), vec2<f32>(_e65.z, _e65.w)) * _e48) + _e46.zw);
@@ -103,8 +103,8 @@ fn main_1() {
             unnamed.gl_ClipDistance[0i] = _e93;
         }
     }
-    let _e103 = j.Dg;
-    let _e105 = j.Eg;
+    let _e103 = j.Gg;
+    let _e105 = j.Hg;
     let _e113 = vec4<f32>(((_e48.x * _e103) - 1f), ((_e48.y * _e105) - sign(_e105)), 0f, 1f);
     let _e114 = LC_1;
     let _e126 = AC_1;

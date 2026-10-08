@@ -1,36 +1,36 @@
 struct VB {
-    td: f32,
-    ze: f32,
-    Dg: f32,
-    Eg: f32,
+    vd: f32,
+    Ce: f32,
+    Gg: f32,
+    Hg: f32,
     L6_: u32,
-    va: u32,
-    pg: u32,
-    qg: u32,
-    B8_: vec4<i32>,
-    xi: vec2<f32>,
-    Ae: vec2<f32>,
+    xa: u32,
+    sg: u32,
+    tg: u32,
+    C8_: vec4<i32>,
+    Bi: vec2<f32>,
+    De: vec2<f32>,
     r2_: u32,
-    Bi: f32,
+    Fi: f32,
     p6_: u32,
     h3_: f32,
-    Be: f32,
-    jg: u32,
+    Ee: f32,
+    mg: u32,
     E3_: f32,
     F3_: f32,
-    Ce: f32,
-    ui: u32,
-    ua: u32,
-    ad: f32,
+    Fe: f32,
+    yi: u32,
+    wa: u32,
+    cd: f32,
     g7_: f32,
-    Bb: f32,
+    Db: f32,
 }
 
 @group(0) @binding(9)
 var ZC: texture_2d<f32>;
 @group(3) @binding(9)
-var Ta: sampler;
-var<private> Ei: f32;
+var Va: sampler;
+var<private> Ii: f32;
 var<private> S_1: vec4<f32>;
 var<private> gl_FrontFacing_1: bool;
 @group(0) @binding(0)
@@ -40,7 +40,7 @@ var YC: texture_2d<f32>;
 @group(1) @binding(11)
 var TB: texture_2d<f32>;
 @group(3) @binding(8)
-var H8_: sampler;
+var I8_: sampler;
 @group(1) @binding(13)
 var S4_: sampler;
 
@@ -53,7 +53,7 @@ fn main_1() {
     let _e26 = gl_FrontFacing_1;
     let _e29 = max(_e25.w, 0f);
     if (_e25.z >= 0f) {
-        let _e32 = textureSampleLevel(ZC, Ta, vec2<f32>(_e29, 0f), 0f);
+        let _e32 = textureSampleLevel(ZC, Va, vec2<f32>(_e29, 0f), 0f);
         phi_419_ = _e32.x;
     } else {
         phi_419_ = 0f;
@@ -65,10 +65,10 @@ fn main_1() {
         let _e44 = ((_e42 - _e29) * 0.5984134f);
         let _e47 = (vec4(_e29) + (vec4<f32>(0.20888568f, 0.62665707f, 1.0444285f, 1.4621998f) * _e44));
         let _e53 = ((_e47 * -(_e25.z)) + vec4(((_e42 * _e25.z) + (abs(_e25.x) - 0.25f))));
-        let _e56 = textureSampleLevel(ZC, Ta, vec2<f32>(_e53.x, 0f), 0f);
-        let _e59 = textureSampleLevel(ZC, Ta, vec2<f32>(_e53.y, 0f), 0f);
-        let _e62 = textureSampleLevel(ZC, Ta, vec2<f32>(_e53.z, 0f), 0f);
-        let _e65 = textureSampleLevel(ZC, Ta, vec2<f32>(_e53.w, 0f), 0f);
+        let _e56 = textureSampleLevel(ZC, Va, vec2<f32>(_e53.x, 0f), 0f);
+        let _e59 = textureSampleLevel(ZC, Va, vec2<f32>(_e53.y, 0f), 0f);
+        let _e62 = textureSampleLevel(ZC, Va, vec2<f32>(_e53.z, 0f), 0f);
+        let _e65 = textureSampleLevel(ZC, Va, vec2<f32>(_e53.w, 0f), 0f);
         let _e71 = (_e47 * 5.0959306f);
         phi_423_ = (_e35 + (dot(vec4<f32>(_e56.x, _e59.x, _e62.x, _e65.x), exp2(((vec4<f32>(2.5479653f, 2.5479653f, 2.5479653f, 2.5479653f) - _e71) * (_e71 + vec4<f32>(-2.5479653f, -2.5479653f, -2.5479653f, -2.5479653f))))) * _e44));
     }
@@ -79,7 +79,7 @@ fn main_1() {
         phi_424_ = -(_e83);
     }
     let _e87 = phi_424_;
-    Ei = _e87;
+    Ii = _e87;
     return;
 }
 
@@ -88,6 +88,6 @@ fn main(@location(0) S: vec4<f32>, @builtin(front_facing) gl_FrontFacing: bool) 
     S_1 = S;
     gl_FrontFacing_1 = gl_FrontFacing;
     main_1();
-    let _e5 = Ei;
+    let _e5 = Ii;
     return _e5;
 }

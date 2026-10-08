@@ -162,7 +162,6 @@ uint32_t subpass_index(gpu::DrawType drawType,
         case gpu::DrawType::featherAtlasBlit:
         case gpu::DrawType::imageRect:
         case gpu::DrawType::imageMesh:
-        case gpu::DrawType::depthStrokes:
         case gpu::DrawType::stencilMidpointFanBorrowedCoverage:
         case gpu::DrawType::stencilDynamicMidpointFans:
         case gpu::DrawType::stencilDynamicOuterCubics:
@@ -176,6 +175,9 @@ uint32_t subpass_index(gpu::DrawType drawType,
         case gpu::DrawType::stencilOuterCubicCover:
         case gpu::DrawType::stencilOuterCubics:
         case gpu::DrawType::clipReset:
+        case gpu::DrawType::depthStrokes:
+        case gpu::DrawType::depthAAStrokes:
+        case gpu::DrawType::depthAAOuterHairline:
             return mainSubpassIdx;
         case gpu::DrawType::renderPassResolve:
             return mainSubpassIdx + 1;
@@ -274,6 +276,8 @@ DrawPipelineVulkan::DrawPipelineVulkan(
         enums::is_flag_set(props.shaderMiscFlags,
                            gpu::ShaderMiscFlags::loadColorFromDstTexture),
         pipelineManager->vendorID() == vkutil::vendors::ARM,
+        gpu::drawTypeIsDepthStencilPolarStroke(props.drawType),
+        props.drawType == gpu::DrawType::depthAAOuterHairline,
     };
     static_assert(std::size(shaderPermutationFlags) == SPECIALIZATION_COUNT);
     static_assert(CLIPPING_SPECIALIZATION_IDX == 0);
@@ -291,7 +295,9 @@ DrawPipelineVulkan::DrawPipelineVulkan(
     static_assert(STORE_COLOR_CLEAR_SPECIALIZATION_IDX == 12);
     static_assert(LOAD_COLOR_FROM_DST_TEXTURE_SPECIALIZATION_IDX == 13);
     static_assert(VULKAN_VENDOR_ARM_SPECIALIZATION_IDX == 14);
-    static_assert(SPECIALIZATION_COUNT == 15);
+    static_assert(DS_POLAR_STROKE_SPECIALIZATION_IDX == 15);
+    static_assert(DS_HAIRLINE_STROKE_SPECIALIZATION_IDX == 16);
+    static_assert(SPECIALIZATION_COUNT == 17);
 
     VkSpecializationMapEntry permutationMapEntries[SPECIALIZATION_COUNT];
     for (uint32_t i = 0; i < SPECIALIZATION_COUNT; ++i)
@@ -546,7 +552,6 @@ DrawPipelineVulkan::DrawPipelineVulkan(
         case DrawType::midpointFanPatches:
         case DrawType::midpointFanCenterAAPatches:
         case DrawType::outerCurvePatches:
-        case DrawType::depthStrokes:
             pipelineCreateInfo.pVertexInputState =
                 &layout::PATH_VERTEX_INPUT_STATE;
             pipelineCreateInfo.pInputAssemblyState =
@@ -565,7 +570,11 @@ DrawPipelineVulkan::DrawPipelineVulkan(
         case DrawType::stencilMidpointFanReset:
         case DrawType::stencilMidpointFanWinding:
         case DrawType::stencilMidpointFanCover:
-            // depthStencil fills derive everything from the vertex index.
+        case DrawType::depthStrokes:
+        case DrawType::depthAAStrokes:
+        case DrawType::depthAAOuterHairline:
+            // depthStencil paths don't have vertex attributes. They derive
+            // everything from the vertex index.
             pipelineCreateInfo.pVertexInputState =
                 &layout::EMPTY_VERTEX_INPUT_STATE;
             pipelineCreateInfo.pInputAssemblyState =

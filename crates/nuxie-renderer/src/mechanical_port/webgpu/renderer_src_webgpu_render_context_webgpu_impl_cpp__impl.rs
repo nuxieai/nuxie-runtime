@@ -151,37 +151,37 @@ fn compileShaderModuleWagyuRaw(device: &Device, source: &str) -> ShaderModule {
 const GLSL_VERTEX: &str = "BB";
 const GLSL_FRAGMENT: &str = "EB";
 const GLSL_POST_INVERT_Y: &str = "MC";
-const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "RF";
-const GLSL_DRAW_PATH: &str = "OD";
+const GLSL_DISABLE_SHADER_STORAGE_BUFFERS: &str = "SF";
+const GLSL_DRAW_PATH: &str = "PD";
 const GLSL_ENABLE_FEATHER: &str = "HB";
-const GLSL_ENABLE_INSTANCE_INDEX: &str = "DE";
-const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "EE";
+const GLSL_ENABLE_INSTANCE_INDEX: &str = "EE";
+const GLSL_BASE_INSTANCE_UNIFORM_NAME: &str = "FE";
 const GLSL_ATLAS_FEATHERED_FILL: &str = "NC";
 const GLSL_ATLAS_FEATHERED_STROKE: &str = "SC";
-const GLSL_CLEAR_COLOR: &str = "YE";
-const GLSL_LOAD_COLOR: &str = "AF";
-const GLSL_STORE_COLOR: &str = "FE";
-const GLSL_CLEAR_COVERAGE: &str = "GE";
-const GLSL_CLEAR_CLIP: &str = "YF";
+const GLSL_CLEAR_COLOR: &str = "ZE";
+const GLSL_LOAD_COLOR: &str = "BF";
+const GLSL_STORE_COLOR: &str = "GE";
+const GLSL_CLEAR_COVERAGE: &str = "HE";
+const GLSL_CLEAR_CLIP: &str = "ZF";
 const GLSL_ENABLE_CLIPPING: &str = "N";
 const GLSL_ENABLE_CLIP_RECT: &str = "AB";
 const GLSL_ENABLE_ADVANCED_BLEND: &str = "H";
 const GLSL_ENABLE_EVEN_ODD: &str = "XC";
-const GLSL_ENABLE_NESTED_CLIPPING: &str = "CD";
+const GLSL_ENABLE_NESTED_CLIPPING: &str = "DD";
 const GLSL_ENABLE_HSL_BLEND_MODES: &str = "FC";
 const GLSL_ENABLE_DITHER: &str = "OB";
 const GLSL_ENABLE_MODULATED_IMAGE: &str = "GB";
 const GLSL_TARGET_SPIRV: &str = "DC";
-const GLSL_PLS_IMPL_EXT_NATIVE: &str = "TF";
-const GLSL_PLS_IMPL_NONE: &str = "VF";
-const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "UF";
+const GLSL_PLS_IMPL_EXT_NATIVE: &str = "UF";
+const GLSL_PLS_IMPL_NONE: &str = "WF";
+const GLSL_PLS_IMPL_SUBPASS_LOAD: &str = "VF";
 const GLSL_DRAW_INTERIOR_TRIANGLES: &str = "DB";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
-const GLSL_DRAW_IMAGE: &str = "NE";
-const GLSL_DRAW_IMAGE_RECT: &str = "DD";
+const GLSL_DRAW_IMAGE: &str = "OE";
+const GLSL_DRAW_IMAGE_RECT: &str = "ED";
 const GLSL_DRAW_IMAGE_MESH: &str = "NB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "U";
-const GLSL_CLOCKWISE_FILL: &str = "HE";
+const GLSL_CLOCKWISE_FILL: &str = "IE";
 const GLSL_BORROWED_COVERAGE_PASS: &str = "EC";
 const GLSL_OPTIONALLY_FLAT: &str = "MB";
 const BASE_INSTANCE_UNIFORM_NAME: &str = "nrdp_BaseInstance";
@@ -232,9 +232,9 @@ const SCRATCH_COLOR_PLANE_IDX: usize = 2;
 const PLS_PLANE_COUNT: usize = 4;
 const IMAGE_RECT_ATTRIB_COUNT: usize = 11;
 const IMAGE_MESH_ATTRIB_COUNT: usize = 8;
-const SPECIALIZATION_COUNT: usize = 16;
+const SPECIALIZATION_COUNT: usize = 17;
 const SPECIALIZATION_IDS: [&str; SPECIALIZATION_COUNT] = [
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
 ];
 
 fn getWGPUVertexFormat(format: gpu::VertexElementFormat) -> super::webgpu_cpp_decl::VertexFormat {
@@ -414,7 +414,8 @@ fn shaderPermutationFlags(
         hasMisc(ShaderMiscFlags::storeColorClear) as u8 as f64,
         hasMisc(ShaderMiscFlags::loadColorFromDstTexture) as u8 as f64,
         0.0, // VULKAN_VENDOR_ARM — ignored for WebGPU.
-        gpu::drawTypeIsDepthStencilStroke(drawType) as u8 as f64,
+        gpu::drawTypeIsDepthStencilPolarStroke(drawType) as u8 as f64,
+        (drawType == gpu::DrawType::depthAAOuterHairline) as u8 as f64,
     ]
 }
 
@@ -1537,7 +1538,8 @@ pub(crate) fn makeDrawPipeline(
         | DrawType::stencilMidpointFanWinding
         | DrawType::stencilMidpointFanCover
         | DrawType::depthStrokes
-        | DrawType::depthAAStrokes => {
+        | DrawType::depthAAStrokes
+        | DrawType::depthAAOuterHairline => {
             // Depth/stencil paths derive all attributes from the vertex index.
             assert!(attributes.is_empty());
             assert!(vertexBufferLayouts.is_empty());
@@ -2101,7 +2103,8 @@ pub(crate) fn newDrawPipeline(
                 | DrawType::stencilMidpointFanWinding
                 | DrawType::stencilMidpointFanCover
                 | DrawType::depthStrokes
-                | DrawType::depthAAStrokes => {
+                | DrawType::depthAAStrokes
+                | DrawType::depthAAOuterHairline => {
                     let vertex = match (
                         context.m_capabilities.polyfillVertexStorageBuffers,
                         clipRect,
@@ -4078,7 +4081,8 @@ unsafe fn executeDrawList(
             | DrawType::stencilMidpointFanWinding
             | DrawType::stencilMidpointFanCover
             | DrawType::depthStrokes
-            | DrawType::depthAAStrokes => unsafe {
+            | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline => unsafe {
                 let indexOffset = batch.baseIndex as usize * std::mem::size_of::<u16>();
                 drawEncoder.SetIndexBuffer(
                     context.m_pathPatchIndexBuffer.Get(),
@@ -4692,9 +4696,9 @@ pub(crate) fn MakeContext(
     <RenderContext as RenderContextContract>::new(implementation)
 }
 
-pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5032;
+pub(crate) const SOURCE_CPP_LINE_COUNT: usize = 5013;
 pub(crate) const SOURCE_TOP_LEVEL_HELPER_COUNT: usize = 14;
-const _: [(); 202643] = [(); PINNED_SOURCE.len()];
+const _: [(); 201484] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -4729,7 +4733,10 @@ mod tests {
             assert_eq!(values.iter().sum::<f64>(), 1.0);
         }
         let values = shaderPermutationFlags(gpu::DrawType::midpointFanPatches, ShaderFeatures::NONE, ShaderMiscFlags::none);
-        assert_eq!(values, [0.0; 16]);
+        assert_eq!(values, [0.0; 17]);
+        let values = shaderPermutationFlags(gpu::DrawType::depthAAOuterHairline, ShaderFeatures::NONE, ShaderMiscFlags::none);
+        assert_eq!(values[16], 1.0);
+        assert_eq!(values.iter().sum::<f64>(), 1.0);
         for draw_type in [gpu::DrawType::depthStrokes, gpu::DrawType::depthAAStrokes] {
             let values = shaderPermutationFlags(draw_type, ShaderFeatures::NONE, ShaderMiscFlags::none);
             assert_eq!(values[15], 1.0);
@@ -4794,20 +4801,21 @@ mod tests {
 
     #[test]
     fn specialization_entries_keep_the_shifted_upstream_indices() {
-        // WebGPU shares the 16-slot specialization contract with Vulkan.
+        // WebGPU shares the 17-slot specialization contract with Vulkan.
         // Only declared slots are sent.
         let mut values = [0.0; SPECIALIZATION_COUNT];
         values[12] = 1.0;
         values[13] = 2.0;
         values[14] = 3.0;
         values[15] = 4.0;
+        values[16] = 5.0;
         let entries = buildConstantEntries(
-            Some("@id(12) override clear = false;\n@id(13) override load = false;\n@id(14) override arm = false;\n@id(15) override stroke = false;"),
+            Some("@id(12) override clear = false;\n@id(13) override load = false;\n@id(14) override arm = false;\n@id(15) override polar = false;\n@id(16) override hairline = false;"),
             &values,
         );
-        assert_eq!(SPECIALIZATION_COUNT, 16);
-        assert_eq!(SPECIALIZATION_IDS, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"]);
-        assert_eq!(entries.iter().map(|entry| entry.value).collect::<Vec<_>>(), [1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(SPECIALIZATION_COUNT, 17);
+        assert_eq!(SPECIALIZATION_IDS, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"]);
+        assert_eq!(entries.iter().map(|entry| entry.value).collect::<Vec<_>>(), [1.0, 2.0, 3.0, 4.0, 5.0]);
         assert!(buildConstantEntries(None, &values).is_empty());
     }
 
@@ -4840,7 +4848,7 @@ mod tests {
                 .iter()
                 .map(|source| source.len())
                 .sum::<usize>(),
-            52_979
+            53_235
         );
     }
 

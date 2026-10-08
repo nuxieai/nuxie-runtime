@@ -1,37 +1,37 @@
 struct VB {
-    td: f32,
-    ze: f32,
-    Dg: f32,
-    Eg: f32,
+    vd: f32,
+    Ce: f32,
+    Gg: f32,
+    Hg: f32,
     L6_: u32,
-    va: u32,
-    pg: u32,
-    qg: u32,
-    B8_: vec4<i32>,
-    xi: vec2<f32>,
-    Ae: vec2<f32>,
+    xa: u32,
+    sg: u32,
+    tg: u32,
+    C8_: vec4<i32>,
+    Bi: vec2<f32>,
+    De: vec2<f32>,
     r2_: u32,
-    Bi: f32,
+    Fi: f32,
     p6_: u32,
     h3_: f32,
-    Be: f32,
-    jg: u32,
+    Ee: f32,
+    mg: u32,
     E3_: f32,
     F3_: f32,
-    Ce: f32,
-    ui: u32,
-    ua: u32,
-    ad: f32,
+    Fe: f32,
+    yi: u32,
+    wa: u32,
+    cd: f32,
     g7_: f32,
-    Bb: f32,
+    Db: f32,
 }
 
 var<private> U6_1: vec4<f32>;
 var<private> V6_1: vec4<f32>;
 var<private> i5_1: vec4<f32>;
-var<private> k8_1: u32;
+var<private> l8_1: u32;
 var<private> j5_1: vec3<f32>;
-var<private> Ei: vec4<u32>;
+var<private> Ii: vec4<u32>;
 @group(0) @binding(0)
 var<uniform> j: VB;
 
@@ -106,7 +106,7 @@ fn main_1() {
     let _e76 = u32(_e75);
     let _e81 = f32((_e76 >> bitcast<u32>(10i)));
     let _e83 = i5_1[3u];
-    let _e84 = k8_1;
+    let _e84 = l8_1;
     let _e85 = (_e73 - _e81);
     let _e86 = (_e71 <= _e85);
     if _e86 {
@@ -349,18 +349,18 @@ fn main_1() {
         phi_1231_ = vec4<u32>(_e347.x, _e347.y, (((bitcast<u32>(i32(round((_e332 * 10430.378f)))) & 65535u) << bitcast<u32>(16i)) | _e386), _e347.w);
     }
     let _e396 = phi_1231_;
-    Ei = vec4<u32>(_e396.x, _e396.y, _e396.z, _e149);
+    Ii = vec4<u32>(_e396.x, _e396.y, _e396.z, _e149);
     return;
 }
 
 @fragment
-fn main(@location(0) U6_: vec4<f32>, @location(1) V6_: vec4<f32>, @location(2) i5_: vec4<f32>, @location(4) @interpolate(flat, either) k8_: u32, @location(3) j5_: vec3<f32>) -> @location(0) vec4<u32> {
+fn main(@location(0) U6_: vec4<f32>, @location(1) V6_: vec4<f32>, @location(2) i5_: vec4<f32>, @location(4) @interpolate(flat, either) l8_: u32, @location(3) j5_: vec3<f32>) -> @location(0) vec4<u32> {
     U6_1 = U6_;
     V6_1 = V6_;
     i5_1 = i5_;
-    k8_1 = k8_;
+    l8_1 = l8_;
     j5_1 = j5_;
     main_1();
-    let _e11 = Ei;
+    let _e11 = Ii;
     return _e11;
 }

@@ -2920,7 +2920,7 @@ pub const DSAAStrokePatchStrideLog2: u32 = 6;
 pub const DSVertexFlagsShift: i32 = 28;
 pub const DSVertexFlag_DisableColorWrite: i32 = 0x1 << DSVertexFlagsShift;
 pub const DSVertexFlag_OuterCubicFill: i32 = 0x2 << DSVertexFlagsShift;
-pub const DSVertexFlag_AAStroke: i32 = DSVertexFlag_OuterCubicFill;
+pub const DSVertexFlag_AAPolarStroke: i32 = DSVertexFlag_OuterCubicFill;
 pub const DSVertexFlag_StrokeDepthPass: i32 = 0x4 << DSVertexFlagsShift;
 pub const kPatchIndexBufferCount: u32 =
     DSAAStrokePatchBaseIndex + DSAAStrokePatchIndexCount * DSAAStrokePatchMaxReps;
@@ -2953,9 +2953,10 @@ pub enum DrawType {
     stencilOuterCubicCover = 18,
     depthStrokes = 19,
     depthAAStrokes = 20,
-    clipReset = 21,
-    renderPassInitialize = 22,
-    renderPassResolve = 23,
+    depthAAOuterHairline = 21,
+    clipReset = 22,
+    renderPassInitialize = 23,
+    renderPassResolve = 24,
 }
 
 pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
@@ -2970,6 +2971,7 @@ pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
         | DrawType::imageMesh
         | DrawType::depthStrokes
         | DrawType::depthAAStrokes
+        | DrawType::depthAAOuterHairline
         | DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilMidpointFans
         | DrawType::stencilMidpointFanReset
@@ -3000,7 +3002,7 @@ pub const fn dsPatchMaxReps(draw_type: DrawType) -> u32 {
         | DrawType::stencilDynamicOuterCubics
         | DrawType::stencilOuterCubicWinding
         | DrawType::stencilOuterCubicCover => DSOuterCubicFillPatchMaxReps,
-        DrawType::depthStrokes => DSStrokePatchMaxReps,
+        DrawType::depthStrokes | DrawType::depthAAOuterHairline => DSStrokePatchMaxReps,
         DrawType::depthAAStrokes => DSAAStrokePatchMaxReps,
         _ => unreachable!(),
     }
@@ -3020,14 +3022,21 @@ pub const fn dsPatchStrideLog2(draw_type: DrawType) -> u32 {
         | DrawType::stencilDynamicOuterCubics
         | DrawType::stencilOuterCubicWinding
         | DrawType::stencilOuterCubicCover => DSOuterCubicFillPatchStrideLog2,
-        DrawType::depthStrokes => DSStrokePatchStrideLog2,
+        DrawType::depthStrokes | DrawType::depthAAOuterHairline => DSStrokePatchStrideLog2,
         DrawType::depthAAStrokes => DSAAStrokePatchStrideLog2,
         _ => unreachable!(),
     }
 }
 
-pub const fn drawTypeIsDepthStencilStroke(draw_type: DrawType) -> bool {
+pub const fn drawTypeIsDepthStencilPolarStroke(draw_type: DrawType) -> bool {
     matches!(draw_type, DrawType::depthStrokes | DrawType::depthAAStrokes)
+}
+
+pub const fn drawTypeIsDepthAAStroke(draw_type: DrawType) -> bool {
+    matches!(
+        draw_type,
+        DrawType::depthAAStrokes | DrawType::depthAAOuterHairline
+    )
 }
 
 // Source-name spellings used by the translated Metal unit.  These are
@@ -3043,6 +3052,7 @@ impl DrawType {
     pub const ImageMesh: Self = Self::imageMesh;
     pub const DepthStrokes: Self = Self::depthStrokes;
     pub const DepthAAStrokes: Self = Self::depthAAStrokes;
+    pub const DepthAAOuterHairline: Self = Self::depthAAOuterHairline;
     pub const StencilMidpointFanBorrowedCoverage: Self = Self::stencilMidpointFanBorrowedCoverage;
     pub const StencilMidpointFans: Self = Self::stencilMidpointFans;
     pub const StencilMidpointFanReset: Self = Self::stencilMidpointFanReset;
@@ -3246,6 +3256,7 @@ pub const fn ShaderFeaturesMaskForDraw(
         | DrawType::interiorTriangulation
         | DrawType::depthStrokes
         | DrawType::depthAAStrokes
+        | DrawType::depthAAOuterHairline
         | DrawType::stencilMidpointFanBorrowedCoverage
         | DrawType::stencilDynamicMidpointFans
         | DrawType::stencilDynamicOuterCubics
@@ -3347,7 +3358,7 @@ extern "C" {
 
 define_flag_type!(
     DrawContents,
-    u32,
+    u16,
     none = 0,
     opaquePaint = 1 << 0,
     featheredFill = 1 << 1,

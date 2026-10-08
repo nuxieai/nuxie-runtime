@@ -1,5 +1,5 @@
 #ifdef BB
-f1(B3) K(0,c,PC);g1 f1(S3) K(1,c,QC);g1 f1(D1) K(ja,e,ZB);K(ka,e,SB);K(la,e,PB);K(ma,uint,AC);K(na,uint,BC);K(oa,uint,CC);K(pa,uint,LC);K(wa,e,HC);g1
+f1(B3) K(0,c,PC);g1 f1(S3) K(1,c,QC);g1 f1(D1) K(la,e,ZB);K(ma,e,SB);K(na,e,PB);K(oa,uint,AC);K(pa,uint,BC);K(qa,uint,CC);K(ra,uint,LC);K(ya,e,HC);g1
 #endif
 w2 F0 X(0,c,Z5);
 #ifdef N
@@ -27,14 +27,14 @@ V(K1,P);
 #endif
 c i0=y0(p1(ZB),PC)+PB.xy;Z5=QC*HC.zw+HC.xy;
 #ifdef N
-if(N){e4=a9(BC,j.p6);}
+if(N){e4=c9(BC,j.p6);}
 #endif
 #ifdef AB
 if(AB){
 #ifndef CB
-W0=A8(p1(SB),PB.zw,i0 e5);
+W0=B8(p1(SB),PB.zw,i0 e5);
 #else
-db(p1(SB),PB.zw,i0 e5);
+fb(p1(SB),PB.zw,i0 e5);
 #endif
 }
 #endif
@@ -43,7 +43,7 @@ e I=Q3(i0);
 I.y=-I.y;
 #endif
 #ifdef CB
-I.z=c9(LC,0xffu);
+I.z=d9(LC,0xffu);
 #endif
 U1=unpackUnorm4x8(AC);
 #ifdef H

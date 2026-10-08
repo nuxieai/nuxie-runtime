@@ -765,6 +765,7 @@ impl Objc2MetalExecution {
                     DrawType::FeatherAtlasBlit
                     | DrawType::DepthStrokes
                     | DrawType::DepthAAStrokes
+                    | DrawType::DepthAAOuterHairline
                     | DrawType::StencilMidpointFanBorrowedCoverage
                     | DrawType::StencilMidpointFans
                     | DrawType::StencilDynamicMidpointFans

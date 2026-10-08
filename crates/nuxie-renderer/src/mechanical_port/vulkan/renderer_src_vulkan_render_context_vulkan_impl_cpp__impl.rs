@@ -2860,6 +2860,7 @@ pub(crate) unsafe fn flush(implementation: &mut RenderContextVulkanImpl, desc: &
             | DrawType::stencilOuterCubics
             | DrawType::depthStrokes
             | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline
             | DrawType::stencilMidpointFanBorrowedCoverage
             | DrawType::stencilDynamicMidpointFans
             | DrawType::stencilDynamicOuterCubics
@@ -4258,7 +4259,8 @@ fn submitDrawList(
             | DrawType::stencilMidpointFanWinding
             | DrawType::stencilMidpointFanCover
             | DrawType::depthStrokes
-            | DrawType::depthAAStrokes => {
+            | DrawType::depthAAStrokes
+            | DrawType::depthAAOuterHairline => {
                 debug_assert_eq!(desc.interlockMode, InterlockMode::depthStencil);
                 pending_tess_patches -= batch.elementCount;
                 if pipeline.is_none() {

@@ -568,6 +568,7 @@ fn append_draw_defines(
         }
         DrawType::DepthStrokes
         | DrawType::DepthAAStrokes
+        | DrawType::DepthAAOuterHairline
         | DrawType::StencilMidpointFanBorrowedCoverage
         | DrawType::StencilDynamicMidpointFans
         | DrawType::StencilDynamicOuterCubics
@@ -633,6 +634,7 @@ fn append_interlock_sources(
             }
             DrawType::DepthStrokes
             | DrawType::DepthAAStrokes
+            | DrawType::DepthAAOuterHairline
             | DrawType::StencilMidpointFanBorrowedCoverage
             | DrawType::StencilDynamicMidpointFans
             | DrawType::StencilDynamicOuterCubics
@@ -1106,6 +1108,7 @@ mod tests {
         for draw_type in [
             DrawType::DepthStrokes,
             DrawType::DepthAAStrokes,
+            DrawType::DepthAAOuterHairline,
             DrawType::StencilMidpointFanBorrowedCoverage,
             DrawType::StencilMidpointFans,
             DrawType::StencilMidpointFanReset,

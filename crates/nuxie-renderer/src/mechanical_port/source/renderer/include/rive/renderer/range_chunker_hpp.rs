@@ -154,7 +154,7 @@ impl DSIndexRangeChunker {
             (batch.baseElement & ((1 << DSVertexFlagsShift) - 1)) + (batch.elementCount << stride)
                 <= 1 << DSVertexFlagsShift
         );
-        let aa = batch.drawType == DrawType::depthAAStrokes;
+        let aa = drawTypeIsDepthAAStroke(batch.drawType);
         Self {
             patchCount: batch.elementCount,
             maxPatchesPerDraw: dsPatchMaxReps(batch.drawType),
@@ -272,17 +272,18 @@ mod tests {
             it.advance();
         }
     }
-    const DS_DRAW_TYPES: [DrawType; 4] = [
+    const DS_DRAW_TYPES: [DrawType; 5] = [
         DrawType::stencilMidpointFans,
         DrawType::stencilOuterCubics,
         DrawType::depthStrokes,
         DrawType::depthAAStrokes,
+        DrawType::depthAAOuterHairline,
     ];
     fn patch_index_count(ty: DrawType) -> u32 {
         match ty {
             DrawType::stencilMidpointFans => DSMidpointFanFillPatchIndexCount,
             DrawType::stencilOuterCubics => DSOuterCubicFillPatchIndexCount,
-            DrawType::depthStrokes => DSStrokePatchIndexCount,
+            DrawType::depthStrokes | DrawType::depthAAOuterHairline => DSStrokePatchIndexCount,
             DrawType::depthAAStrokes => DSAAStrokePatchIndexCount,
             _ => unreachable!(),
         }
@@ -290,12 +291,15 @@ mod tests {
     fn patch_flags(ty: DrawType) -> i32 {
         match ty {
             DrawType::stencilOuterCubics => DSVertexFlag_OuterCubicFill,
-            DrawType::depthAAStrokes => DSVertexFlag_AAStroke,
+            DrawType::depthAAStrokes => DSVertexFlag_AAPolarStroke,
             _ => 0,
         }
     }
     fn pass_flags(ty: DrawType) -> Vec<i32> {
-        if ty == DrawType::depthAAStrokes {
+        if matches!(
+            ty,
+            DrawType::depthAAStrokes | DrawType::depthAAOuterHairline
+        ) {
             vec![
                 DSVertexFlag_StrokeDepthPass | DSVertexFlag_DisableColorWrite,
                 0,

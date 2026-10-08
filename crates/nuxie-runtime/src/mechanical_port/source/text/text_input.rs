@@ -1,4 +1,5 @@
 use super::raw_text_input::{Flags, RawTextInput};
+use super::text_input_cursor::TextInputCursor;
 use super::{text_interface::TextInterface, text_style::TextStyle};
 use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
@@ -7,7 +8,7 @@ use crate::mechanical_port::source::{
     artboard::Artboard,
     component_dirt::ComponentDirt,
     constraints::scrolling::scroll_constraint::ScrollConstraint,
-    core::CoreHandle,
+    core::{CoreHandle, CoreType},
     core_context::CoreContext,
     focus_data::FocusData,
     generated::text::text_input_base::{TextInputBase, TextInputBaseCallbacks},
@@ -206,6 +207,9 @@ impl TextInput {
         self.cursor_blink_seconds = 0.0;
         self.cursor_blink_visible = true;
     }
+    /// Toggle the caret when the blink interval elapses, dirtying the cursor
+    /// drawables whenever that changes whether the caret shows. Returns true
+    /// while focused so frames keep coming and the caret keeps blinking.
     fn advance_cursor_blink(&mut self, elapsed_seconds: f32) -> bool {
         const CURSOR_BLINK_SECONDS: f32 = 0.5;
         if !self.focused {
@@ -219,10 +223,27 @@ impl TextInput {
             let phases = (self.cursor_blink_seconds / CURSOR_BLINK_SECONDS).floor();
             self.cursor_blink_seconds %= CURSOR_BLINK_SECONDS;
             if phases % 2.0 != 0.0 {
+                let was_visible = self.is_cursor_visible();
                 self.cursor_blink_visible = !self.cursor_blink_visible;
+                // The cursor reads visibility at draw time. Dirty it rather than
+                // mark_paint_dirty(), which restarts the blink and re-scrolls
+                // a scrolled field to the caret. A selection hides the caret,
+                // so its toggles change nothing.
+                if self.is_cursor_visible() != was_visible {
+                    for child in self.base.children() {
+                        if child.is_type_of(TextInputCursor::TYPE_KEY) {
+                            child.with_mut(|child| {
+                                child
+                                    .as_component_mut()
+                                    .expect("TextInputCursor component")
+                                    .add_dirt(ComponentDirt::PAINT, false);
+                            });
+                        }
+                    }
+                }
             }
         }
-        // The cursor reads visibility directly; toggling requires no dirt.
+        // Keep advancing while focused so the caret keeps toggling.
         true
     }
     pub fn align_value_changed(&mut self) {

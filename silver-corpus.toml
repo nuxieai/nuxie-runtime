@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "c73593c3a868f87b5dcd328432255db33e3e2266"
+upstream_ref = "dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97"
 expected_entries = 282
 expected_runtime = 231
 expected_scripted = 48
@@ -5624,7 +5624,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_input_test.cpp"
 provenance_test = "file with text input renders correctly"
-producer_line = 52
+producer_line = 53
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

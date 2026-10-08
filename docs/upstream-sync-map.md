@@ -7,18 +7,27 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `c73593c3a868f87b5dcd328432255db33e3e2266`
+- LAST_SYNCED_SHA: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  One upstream commit remains after this checkpoint at the fetched target.
-  All 211 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (233 after `5892bb05`); this
+  No upstream commits remain after this checkpoint at the fetched target.
+  All 212 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (234 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `dce52972`, integrated atop downstream `268b8015c0`:
+  independent source-equivalence and subsequent Rust-integration reviews are
+  clean, including the required CoreType trait-import correction. All 33 native
+  text-input tests pass, including the exact new caret didChange regression;
+  runtime compilation passes for wasm32-unknown-unknown. Source/pipeline tests
+  pass 12 and manifest tests pass 27 with the pinned RIVE_RUNTIME_DIR (the first
+  invocation used the stale default checkout and was corrected). Structural
+  correspondence and generated inventory are current. No assertions changed;
+  no new hardware, browser pixels or broad Golden/Silver execution is claimed.
 - Validation at `c73593c3`, integrated atop downstream `15d3d3c5bf`:
   independent source-equivalence and subsequent Rust-integration reviews,
   including correction rereviews, are clean. Required-live Metal passes 670
@@ -531,6 +540,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` | Dirty cursor drawables with Paint only when a blink phase changes effective caret visibility, preserving the blink clock and scrolled input position. Translate the upstream artboard didChange regression covering mid-phase, hide/show, even phases and selection-hidden carets. Public .rive_head metadata does not expose or establish any additional private implementation. | — |
 | `c73593c3a868f87b5dcd328432255db33e3e2266` | Translate clockwise-fill inkbleed outer-hairline subpasses, per-pass versus combined draw contents, signed pass sorting, expanded bounds, revised stroke index/AA-band order, GPU state/key routing and 17 specialization constants across supported backends. Regenerate current shader artifacts from pinned public source; preserve historical captures. Metal keeps upstream's unsupported depth/stencil rejection; D3D is unshipped. WebGPU's wgpucwib testing alias maps to the existing clockwise-inkbleed lane. The upstream-only retrofitcubictristrips GM has no existing Rust owner; no new Rust port of that handwritten GM or private implementation is claimed. | — |
 | `c4d2c6cbdeefd249a04eb7ade06cb7cf07a732f7` | Translate tools-only retirement of replaced source artboards while direct or copied instances remain alive, and cleanup on later replacement; translate thread-local advancing change-window inheritance and root-host bind tracking so newly made rows see pending fires without replaying earlier frames. Port both replacement and all three list-trigger regressions against the pinned public fixtures. Preserve safe Rust ownership and luaur; private editor invalidation/remount logic represented only by .rive_head is not claimed imported. | — |
 | `7fb595be56a899b4fc6eceb22a4222206383fe93` | Translate late-hosted audio-engine propagation with both authored-fixture regressions; shared core ancestry/property-owner dispatch and filtered generated change hooks; exact GL version scanning and full-recorder registry/bind ordering; direct UUID/color hex appends, fixed-number formatting and stateful contour comparators. Preserve existing Rust text/audio backends and pure-Rust numeric boundary. C++ HarfBuzz language-table flags and Emscripten-only AAT removal are build-specific: the approved Rust/unknown-unknown backend retains accepted AAT fonts, not parity with that support reduction. GL string assembly and ORE diagnostic formatting are already equivalent. Canvas2D/no-ORE recorder specialization is not a supported product configuration; private implementation absent from the public delta is not claimed imported. | — |

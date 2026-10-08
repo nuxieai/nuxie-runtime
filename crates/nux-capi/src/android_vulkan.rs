@@ -30,6 +30,10 @@ pub type NuxAndroidVulkanRendererFit = u32;
 pub const NUX_ANDROID_VULKAN_RENDERER_FIT_NONE: NuxAndroidVulkanRendererFit = 0;
 /// Uniformly scale and center the authored artboard inside the output frame.
 pub const NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER: NuxAndroidVulkanRendererFit = 1;
+/// Draw with Rive's centered layout fit at `layout_scale_factor`.
+/// Set the player's layout size to the surface size divided by that scale,
+/// then step by zero before the first draw and after each size change.
+pub const NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT: NuxAndroidVulkanRendererFit = 2;
 
 pub type NuxAndroidVulkanPixelFormat = u32;
 /// Tightly packed, top-row-first RGBA8 UNORM with premultiplied alpha.
@@ -453,6 +457,7 @@ fn with_rendered_player<T>(
     player: *mut NuxPlayer,
     clear_color: u32,
     fit: NuxAndroidVulkanRendererFit,
+    layout_scale_factor: f32,
     admit: impl FnOnce(&AndroidVulkanRendererState, &NuxPlayer) -> Result<Option<T>, ApiFailure>,
     complete: impl FnOnce(
         AndroidVulkanFrameSink,
@@ -461,10 +466,19 @@ fn with_rendered_player<T>(
 ) -> Result<T, ApiFailure> {
     if fit != NUX_ANDROID_VULKAN_RENDERER_FIT_NONE
         && fit != NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER
+        && fit != NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT
     {
         return Err(ApiFailure::new(
             NuxStatus::InvalidArgument,
             "unknown Android Vulkan renderer fit",
+        ));
+    }
+    if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT
+        && (!layout_scale_factor.is_finite() || layout_scale_factor <= 0.0)
+    {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidArgument,
+            "layout scale must be finite and positive",
         ));
     }
     let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
@@ -536,6 +550,15 @@ fn with_rendered_player<T>(
                 artboard.artboard_bounds(),
                 (state.pixel_width, state.pixel_height),
             )?)
+        } else if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT {
+            Some(
+                super::renderer_layout::layout_transform(
+                    artboard.artboard_bounds(),
+                    (state.pixel_width, state.pixel_height),
+                    layout_scale_factor,
+                )
+                .map_err(|message| ApiFailure::new(NuxStatus::InvalidArgument, message))?,
+            )
         } else {
             None
         };
@@ -691,6 +714,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
     player: *mut NuxPlayer,
     clear_color: u32,
     fit: NuxAndroidVulkanRendererFit,
+    layout_scale_factor: f32,
     out_presentation: *mut NuxAndroidVulkanPresentation,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
@@ -708,6 +732,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
                 player,
                 clear_color,
                 fit,
+                layout_scale_factor,
                 |state, player| {
                     state.validate_pending(player)?;
                     let factory = state.factory.borrow();
@@ -783,6 +808,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
     player: *mut NuxPlayer,
     clear_color: u32,
     fit: NuxAndroidVulkanRendererFit,
+    layout_scale_factor: f32,
     out_frame: *mut *mut NuxAndroidVulkanFrame,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
@@ -803,6 +829,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                     player,
                     clear_color,
                     fit,
+                    layout_scale_factor,
                     |state, _| {
                         state.discard_pending()?;
                         Ok(None)
@@ -1076,6 +1103,7 @@ mod tests {
                 player,
                 0xff112233,
                 NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                0.0,
                 |_, _| Ok(Some(42)),
                 |_, _| panic!("unavailable admission must not render"),
             )
@@ -1087,6 +1115,7 @@ mod tests {
                 player,
                 0,
                 999,
+                0.0,
                 |_, _| panic!("fit validation must precede admission"),
                 |_, _| unreachable!(),
             );
@@ -1096,6 +1125,7 @@ mod tests {
                 player,
                 0xff112233,
                 NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                0.0,
                 |_, _| Ok(None),
                 |sink, _| Ok((sink.finish()?, RenderDelivery::Completed)),
             )
@@ -1125,6 +1155,7 @@ mod tests {
                     player,
                     0xff112233,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    0.0,
                     |_, _| Ok(None),
                     |sink, _| {
                         sink.finish()?;
@@ -1140,6 +1171,7 @@ mod tests {
                         player,
                         0,
                         NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                        0.0,
                         |state, player| {
                             state.validate_pending(player)?;
                             Ok(Some(4))
@@ -1154,6 +1186,7 @@ mod tests {
                     other_player,
                     0,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    0.0,
                     |state, player| {
                         state.complete_pending(player)?;
                         Ok(Some(1))
@@ -1170,6 +1203,7 @@ mod tests {
                     player,
                     0,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    0.0,
                     |state, player| {
                         state.complete_pending(player)?;
                         Ok(Some(1))
@@ -1200,6 +1234,7 @@ mod tests {
                 player,
                 0,
                 NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                0.0,
                 |_, _| Ok(None),
                 |sink, _| {
                     sink.finish()?;
@@ -1224,6 +1259,7 @@ mod tests {
                     player,
                     0,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    0.0,
                     &mut cpu_frame,
                     ptr::null_mut()
                 ),
@@ -1241,6 +1277,57 @@ mod tests {
             nux_file_free(file);
             nux_renderer_android_vulkan_free(renderer);
         }
+    }
+
+    #[test]
+    fn layout_fit_refuses_invalid_scales_before_admission() {
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            let error = with_rendered_player::<()>(
+                ptr::null_mut(),
+                ptr::null_mut(),
+                0,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_LAYOUT,
+                scale,
+                |_, _| panic!("invalid scale reached admission"),
+                |_, _| panic!("invalid scale reached completion"),
+            )
+            .unwrap_err();
+            assert_eq!(error.status, NuxStatus::InvalidArgument);
+        }
+    }
+
+    #[test]
+    fn layout_fit_uses_points_to_pixels_and_artboard_origin() {
+        use crate::renderer_layout::layout_transform;
+        for (bounds, viewport, scale, expected) in [
+            (
+                (0.0, 0.0, 393.0, 852.0),
+                (1179, 2556),
+                3.0,
+                [3.0, 0.0, 0.0, 3.0, 0.0, 0.0],
+            ),
+            (
+                (0.0, 0.0, 375.0, 667.0),
+                (750, 1334),
+                2.0,
+                [2.0, 0.0, 0.0, 2.0, 0.0, 0.0],
+            ),
+            (
+                (10.0, 20.0, 393.0, 852.0),
+                (1179, 2556),
+                3.0,
+                [3.0, 0.0, 0.0, 3.0, -30.0, -60.0],
+            ),
+        ] {
+            assert_eq!(
+                layout_transform(bounds, viewport, scale).unwrap(),
+                Mat2D(expected)
+            );
+        }
+        for scale in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert!(layout_transform((0.0, 0.0, 393.0, 852.0), (1179, 2556), scale).is_err());
+        }
+        assert!(layout_transform((0.0, 0.0, f32::MAX, f32::MAX), (1, 1), f32::MAX).is_err());
     }
 
     #[test]

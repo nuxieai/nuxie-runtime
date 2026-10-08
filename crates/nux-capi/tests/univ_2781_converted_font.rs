@@ -173,6 +173,7 @@ fn android_product_import_applies_external_font_to_converter_bound_text() {
                 player,
                 0x0000_0000,
                 NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER,
+                0.0,
                 &mut frame,
                 &mut render_result,
             )

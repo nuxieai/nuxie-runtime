@@ -2461,6 +2461,18 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_layout_math_facade_symbols_are_scoped_to_the_layout_helper(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        owner = "crates/nux-capi/src/renderer_layout.rs"
+        for symbol in ("Aabb", "Fit", "Vec2D", "compute_alignment"):
+            with self.subTest(symbol=symbol):
+                source = f"use nuxie::render_api::{symbol};"
+                self.assertEqual(check(owner, source), [])
+                self.assertTrue(check("crates/nux-capi/src/other.rs", source))
+        self.assertTrue(check(owner, "use nuxie::render_api::UnknownMath;"))
+        self.assertTrue(check(owner, "use nuxie::render_api::*;"))
+        self.assertTrue(check(owner, "use nuxie::Aabb;"))
+
     def test_borrowed_raw_path_facade_symbol_is_exact(self) -> None:
         check = BOUNDARY_TOOL.portable_abi_facade_source_errors
         owner = "crates/nux-capi/src/render_callbacks.rs"

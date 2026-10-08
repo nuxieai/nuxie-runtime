@@ -14,7 +14,9 @@ mod video_sync;
 pub use video::*;
 pub use video_resources::*;
 pub use video_sync::*;
+mod layout_size;
 mod player_view_models;
+pub use layout_size::*;
 mod render_callbacks;
 
 pub use asset_catalog::*;
@@ -44,6 +46,12 @@ pub use android_product_import::nux_file_import_android_vulkan_with_trusted_wgsl
     feature = "android-vulkan"
 ))]
 mod asset_hooks;
+
+#[cfg(any(
+    all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+    feature = "android-vulkan"
+))]
+mod renderer_layout;
 
 #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
 pub use apple_metal::*;

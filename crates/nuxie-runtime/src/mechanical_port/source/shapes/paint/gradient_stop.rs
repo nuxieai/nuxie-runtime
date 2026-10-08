@@ -115,8 +115,17 @@ impl ColorChannels for GradientStop {
     fn color_value(&self) -> i32 {
         self.base.color_value()
     }
-    fn set_color_value_with_completion(&mut self, value: i32, completion: &mut crate::source::core::PropertySetterCompletion) {
-        crate::source::generated::core_registry::CoreRegistryObject::set_color_with_completion(self, crate::source::generated::core_registry::CoreField::GradientStopColorValue, value, completion);
+    fn set_color_value_with_completion(
+        &mut self,
+        value: i32,
+        completion: &mut crate::source::core::PropertySetterCompletion,
+    ) {
+        crate::source::generated::core_registry::CoreRegistryObject::set_color_with_completion(
+            self,
+            crate::source::generated::core_registry::CoreField::GradientStopColorValue,
+            value,
+            completion,
+        );
     }
     fn set_color_value(&mut self, value: i32) {
         GradientStop::set_color_value(self, value);

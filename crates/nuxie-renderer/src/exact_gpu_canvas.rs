@@ -13,14 +13,14 @@ use std::sync::{Arc, Weak};
 use nuxie_ore_metal::context::{ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::AnyResourceHandle;
 use nuxie_ore_metal::types::{
-    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BlendFactor, BlendOp,
-    BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment, ColorTargetState,
-    ColorWriteMask, CompareFunction, CullMode, DepthStencilAttachment, DepthStencilState, Filter,
-    IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology, RenderPassDesc, SampEntry, SampleType,
-    SamplerDesc, StageVisibility, StencilFaceState, StencilOp, StoreOp, TexEntry, TextureAspect,
-    TextureDataDesc, TextureDesc, TextureFormat, TextureType, TextureViewDesc,
-    TextureViewDimension, UBOEntry, VertexAttribute, VertexBufferLayout, VertexFormat,
-    VertexStepMode, WrapMode, kMaxBindGroups,
+    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
+    BlendFactor, BlendOp, BlendState, BufferDesc, BufferUsage, ClearColor, ColorAttachment,
+    ColorTargetState, ColorWriteMask, CompareFunction, CullMode, DepthStencilAttachment,
+    DepthStencilState, Filter, IndexFormat, LoadOp, PipelineDesc, PrimitiveTopology,
+    RenderPassDesc, SampEntry, SampleType, SamplerDesc, StageVisibility, StencilFaceState,
+    StencilOp, StoreOp, TexEntry, TextureAspect, TextureDataDesc, TextureDesc, TextureFormat,
+    TextureType, TextureViewDesc, TextureViewDimension, UBOEntry, VertexAttribute,
+    VertexBufferLayout, VertexFormat, VertexStepMode, WrapMode,
 };
 use nuxie_render_api::{
     GpuCanvasAttachmentView, GpuCanvasBlendState, GpuCanvasColorAttachment,

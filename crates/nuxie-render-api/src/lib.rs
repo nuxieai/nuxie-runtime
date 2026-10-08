@@ -5280,7 +5280,9 @@ fn write_paint_shader_transform(out: &mut String, transform: Mat2D) {
     if transform != Mat2D::IDENTITY {
         out.push_str(",shaderTransform=[");
         for (i, value) in transform.0.into_iter().enumerate() {
-            if i != 0 { out.push(','); }
+            if i != 0 {
+                out.push(',');
+            }
             write_float(out, value);
         }
         out.push(']');

@@ -306,10 +306,20 @@ impl BindingCycle {
         self.machine.advance_and_apply(elapsed);
     }
     fn click(&self, point: Vec2D) {
-        self.machine
-            .with_instance_mut(|machine| machine.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-        self.machine
-            .with_instance_mut(|machine| machine.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        self.machine.with_instance_mut(|machine| {
+            machine.pointer_down(
+                point,
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
+        self.machine.with_instance_mut(|machine| {
+            machine.pointer_up(
+                point,
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
     }
 }
 
@@ -479,8 +489,20 @@ fn binding_asset_index(property: &CoreHandle) -> usize {
 }
 
 fn binding_click(machine: &RuntimeStateMachineInstanceHandle, point: Vec2D) {
-    machine.with_instance_mut(|machine| machine.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-    machine.with_instance_mut(|machine| machine.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            point,
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            point,
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
 }
 
 fn binding_images(artboard: &RuntimeArtboardInstanceHandle) -> Vec<CoreHandle> {
@@ -1245,7 +1267,12 @@ fn wave_b_data_binding_test_003_direct_port_expected_red() {
     let trigger = binding_typed_property::<ViewModelInstanceTrigger>(&instance, "trigger-prop");
     machine.advance_and_apply(0.0);
     assert!(ViewModelInstanceTrigger::trigger_handle(&trigger));
-    assert_eq!(trigger.with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value()).unwrap(), 1);
+    assert_eq!(
+        trigger
+            .with_downcast::<ViewModelInstanceTrigger, _>(|trigger| trigger.base.property_value())
+            .unwrap(),
+        1
+    );
     machine.advance_and_apply_view_models(0.0, false);
     assert_eq!(
         trigger
@@ -1264,10 +1291,15 @@ fn wave_b_data_binding_test_003_direct_port_expected_red() {
 
 #[test]
 fn upstream_trigger_values_are_monotonic_counters_7aa93402() {
-    let (_file, artboard, instance) = binding_authored_instance("data_binding_test.riv", "artboard-2");
+    let (_file, artboard, instance) =
+        binding_authored_instance("data_binding_test.riv", "artboard-2");
     let machine = binding_default_machine(&artboard, &instance);
     let trigger = binding_typed_property::<ViewModelInstanceTrigger>(&instance, "trigger-prop");
-    let count = || trigger.with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value()).unwrap();
+    let count = || {
+        trigger
+            .with_downcast::<ViewModelInstanceTrigger, _>(|t| t.base.property_value())
+            .unwrap()
+    };
     machine.advance_and_apply(0.0);
     assert_eq!(count(), 0);
     for i in 1..=5 {
@@ -1799,14 +1831,22 @@ fn wave_b_data_binding_test_017_direct_port_expected_red() {
     fixture.advance(0.016);
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.artboard.draw(&mut renderer);
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(25.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(25.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.1);
     fixture.advance(1.0);
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(25.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(25.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.1);
     fixture.advance(1.0);
     fixture.silver.borrow_mut().add_frame();
@@ -2000,14 +2040,22 @@ fn wave_b_data_binding_test_024_direct_port_expected_red() {
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.artboard.draw(&mut renderer);
     for _ in 0..2 {
-        fixture
-            .machine
-            .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(225.0, 275.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        fixture.machine.with_instance_mut(|machine| {
+            machine.pointer_down(
+                Vec2D::new(225.0, 275.0),
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
         fixture.advance(0.1);
         fixture.advance(1.0);
-        fixture
-            .machine
-            .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(225.0, 275.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        fixture.machine.with_instance_mut(|machine| {
+            machine.pointer_up(
+                Vec2D::new(225.0, 275.0),
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
         fixture.advance(0.1);
         fixture.advance(1.0);
         fixture.silver.borrow_mut().add_frame();
@@ -2177,14 +2225,22 @@ fn wave_b_data_binding_test_028_direct_port_expected_red() {
     let mut renderer = fixture.silver.borrow().make_renderer();
     fixture.artboard.draw(&mut renderer);
 
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(25.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(25.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.advance(0.016);
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(25.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(25.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.advance(0.016);
     fixture.silver.borrow_mut().add_frame();
@@ -2196,14 +2252,22 @@ fn wave_b_data_binding_test_028_direct_port_expected_red() {
         fixture.artboard.draw(&mut renderer);
     }
 
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(425.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(425.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.advance(0.016);
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(425.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(425.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.advance(0.016);
     fixture.silver.borrow_mut().add_frame();
@@ -2214,14 +2278,22 @@ fn wave_b_data_binding_test_028_direct_port_expected_red() {
         fixture.artboard.draw(&mut renderer);
     }
 
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(25.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(25.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.advance(0.016);
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(25.0, 25.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(25.0, 25.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.advance(0.016);
     for _ in 0..frames {
@@ -3192,9 +3264,13 @@ fn wave_b_file_test_012_direct_port_expected_red() {
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     let width = || fixture.artboard.with_artboard(|artboard| artboard.width());
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(width() / 2.0, 400.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(width() / 2.0, 400.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     let frames = (0.25_f32 / 0.016_f32) as i32;
@@ -3212,9 +3288,13 @@ fn wave_b_file_test_012_direct_port_expected_red() {
     fixture.machine.with_instance_mut(|machine| {
         machine.pointer_move(Vec2D::new(width() / 2.0, y_pos), 0.016, 0)
     });
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(width() / 2.0, y_pos), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(width() / 2.0, y_pos),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     let frames = (1.0_f32 / 0.016_f32) as i32;
@@ -5312,12 +5392,20 @@ fn wave_b_focus_test_074_direct_port_expected_red() {
     fixture.silver.borrow_mut().add_frame();
 
     let click = |point: Vec2D| {
-        fixture
-            .machine
-            .with_instance_mut(|machine| machine.pointer_down(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-        fixture
-            .machine
-            .with_instance_mut(|machine| machine.pointer_up(point, 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+        fixture.machine.with_instance_mut(|machine| {
+            machine.pointer_down(
+                point,
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
+        fixture.machine.with_instance_mut(|machine| {
+            machine.pointer_up(
+                point,
+                0,
+                nuxie_runtime::source::pointer_button::PointerButton::Primary,
+            )
+        });
         fixture.advance(0.016);
     };
     click(Vec2D::new(180.0, 450.0));
@@ -5540,21 +5628,37 @@ fn wave_b_focus_test_079_direct_port_expected_red() {
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     fixture.silver.borrow_mut().add_frame();
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(55.0, 65.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(55.0, 65.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(55.0, 65.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(55.0, 65.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     fixture.silver.borrow_mut().add_frame();
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_down(Vec2D::new(442.0, 65.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
-    fixture
-        .machine
-        .with_instance_mut(|machine| machine.pointer_up(Vec2D::new(442.0, 65.0), 0, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(442.0, 65.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
+    fixture.machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(442.0, 65.0),
+            0,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
     fixture.advance(0.016);
     fixture.artboard.draw(&mut renderer);
     fixture.matches("focus_test");
@@ -6345,7 +6449,11 @@ fn owned_font_bytes_are_adopted_rather_than_copied() {
         (HbFont::decode_owned(bytes).expect("owned font"), data)
     };
     assert_eq!(
-        font.as_any().downcast_ref::<HbFont>().unwrap().bytes().as_ptr(),
+        font.as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .bytes()
+            .as_ptr(),
         data
     );
     assert_single_glyph_shapes_and_draws(&font, 'A');
@@ -6364,7 +6472,11 @@ fn factory_owned_font_bytes_keep_the_allocation_through_runtime_promotion() {
     assert_eq!(decoded.bytes().as_ptr(), data);
     let font = HbFont::from_decoded_font(decoded).expect("promoted factory font");
     assert_eq!(
-        font.as_any().downcast_ref::<HbFont>().unwrap().bytes().as_ptr(),
+        font.as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .bytes()
+            .as_ptr(),
         data
     );
     assert_single_glyph_shapes_and_draws(&font, 'A');
@@ -7216,11 +7328,23 @@ fn binding_hit_move(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32)
 }
 
 fn binding_hit_down(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32, id: i32) {
-    machine.with_instance_mut(|machine| machine.pointer_down(Vec2D::new(x, y), id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_down(
+            Vec2D::new(x, y),
+            id,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
 }
 
 fn binding_hit_up(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32, id: i32) {
-    machine.with_instance_mut(|machine| machine.pointer_up(Vec2D::new(x, y), id, nuxie_runtime::source::pointer_button::PointerButton::Primary));
+    machine.with_instance_mut(|machine| {
+        machine.pointer_up(
+            Vec2D::new(x, y),
+            id,
+            nuxie_runtime::source::pointer_button::PointerButton::Primary,
+        )
+    });
 }
 
 fn binding_hit_exit(machine: &RuntimeStateMachineInstanceHandle, x: f32, y: f32, id: i32) {

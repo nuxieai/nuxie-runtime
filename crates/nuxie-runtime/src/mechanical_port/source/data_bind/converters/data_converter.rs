@@ -411,11 +411,22 @@ impl DataConverter {
 
     pub fn mark_converter_dirty(&mut self) {
         if let Some(parent) = self.data_binds.parent_data_bind() {
-            let dirt = parent.with(|owner| owner.as_data_bind().map(|parent| {
-                DEPENDENTS | if parent.target_origin() { BINDINGS_TARGET } else { BINDINGS }
-            })).flatten();
+            let dirt = parent
+                .with(|owner| {
+                    owner.as_data_bind().map(|parent| {
+                        DEPENDENTS
+                            | if parent.target_origin() {
+                                BINDINGS_TARGET
+                            } else {
+                                BINDINGS
+                            }
+                    })
+                })
+                .flatten();
             if let Some(dirt) = dirt {
-                crate::source::data_bind::data_bind::DataBind::add_dirt_handle(&parent, dirt, false);
+                crate::source::data_bind::data_bind::DataBind::add_dirt_handle(
+                    &parent, dirt, false,
+                );
             }
         }
     }
@@ -464,7 +475,9 @@ impl DataConverter {
             .copy(&object.base, &mut DataConverterCopyCallbacks);
     }
 
-    pub fn may_advance(&self) -> bool { false }
+    pub fn may_advance(&self) -> bool {
+        false
+    }
 
     pub fn advance(&mut self, _elapsed_time: f32) -> bool {
         false

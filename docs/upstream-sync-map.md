@@ -7,18 +7,25 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `625454e362a27bb3168f00cd87e9487f54d39338`
+- LAST_SYNCED_SHA: `74dda58f80efd7310959305c284a136e5c5087ff`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `dce52972ec2c8c9e4a03b0f49a59b4e5e0f43c97` (refreshed 2026-10-08 by the daily upstream sync).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  Seven upstream commits remain after this checkpoint at the fetched target.
-  All 205 commits after the continuous goal's starting checkpoint `503eab63`
-  through this checkpoint are accounted for (227 after `5892bb05`); this
+  Six upstream commits remain after this checkpoint at the fetched target.
+  All 206 commits after the continuous goal's starting checkpoint `503eab63`
+  through this checkpoint are accounted for (228 after `5892bb05`); this
   excludes deferred execution and is not a claim that every validation harness
   is green. Refresh upstream after landing this checkpoint and continue if it
   advances. The broad validation results below remain separate from this count.
+- Validation at `74dda58f`, integrated atop downstream `a5def1244b`:
+  independent source-accounting and subsequent Rust-integration reviews are
+  clean. The guest-only public delta remains deferred. Source/pipeline tests
+  pass 12, manifest tests pass 27, generated inventory is current, and structural
+  correspondence remains 1,065 mirrored/13 adapted/15 deferred owners. Only
+  current pins/accounting changed; no runtime, shader, fixture or assertion
+  changes, and no new execution coverage is claimed.
 - Validation at `625454e3`, integrated atop downstream `5199217ddc`:
   independent source-equivalence and subsequent Rust-integration reviews are
   clean, including correction rereviews. Required-live Metal passes 668 tests
@@ -457,6 +464,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `74dda58f80efd7310959305c284a136e5c5087ff` | Deferred: guest Wasm host-object release, value/asset lookup factoring and browser guest host-call table generation/binding. All public implementation changes are in the parked guest scripting owners and glue, not native Luau, shared runtime or browser rendering. Npm package-build and benchmark changes described in the message are absent from the public delta and are not claimed imported. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `625454e362a27bb3168f00cd87e9487f54d39338` | Translate inkbleed strokes in single-sample depth/stencil mode: shared draw/index/chunking contracts, shader sources and generated artifacts, and supported Vulkan/WebGPU/WebGL2 execution. Preserve native Metal's unsupported depth-stroke boundary. Carry the frame policy through screen/canvas and replay-oracle interfaces; translate updated range-chunker cases. Upstream path-fiddle/testing-window controls map to existing replay tools; D3D execution and Dawn Windows Premake linkage are unshipped. Private editor implementation is absent from the public delta and is not claimed imported. | — |
 | `0dd067f18bc14139720ee348dfc222af0c744e4e` | Translate live scroll-viewport resolution and full-viewport text-input hit testing; preserve slot-expanded fallback and parent clipping order. Translate the single-line/multiline regression using the exact pinned upstream authored fixture. RML remains upstream fixture provenance; private Dart/editor implementation is absent from the public delta and is not claimed imported. | — |
 | `8427a425fd61d2adb4652eb12fdd74d0f7f3396b` | Deferred: the only public executable delta selects mkdir on Nintendo NX for the guest Wasm AOT cache directory. This owner remains parked with guest execution; no shared runtime, native Luau or renderer behavior changes. The private libhydrogen build change mentioned in the message is represented only by .rive_head, not public implementation to translate. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

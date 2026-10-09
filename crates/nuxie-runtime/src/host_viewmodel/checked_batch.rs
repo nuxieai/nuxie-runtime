@@ -4,6 +4,10 @@ use super::checked_write::checked_candidate;
 use super::*;
 use crate::mechanical_port::source::viewmodel::viewmodel_instance_list::ViewModelInstanceList;
 
+/// The most entries one checked batch accepts. Hosts that read batches from
+/// scripts bound their lists with this same value.
+pub const RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES: usize = 4096;
+
 /// One scalar candidate (or explicit clear), addressed through the caller's roots.
 pub struct RuntimeCheckedValueBatchEntry {
     pub root_name: String,
@@ -59,7 +63,7 @@ pub fn runtime_checked_value_write_batch(
     if !crate::view_model_cell::has_graph_transaction() {
         return Err(RuntimeValuePolicyError::BorrowConflict);
     }
-    if entries.len() > 4096 {
+    if entries.len() > RUNTIME_CHECKED_VALUE_BATCH_MAX_ENTRIES {
         return Err(RuntimeValuePolicyError::LimitExceeded);
     }
     let mut bytes = 0usize;
